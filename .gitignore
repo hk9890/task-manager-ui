@@ -4,3 +4,5 @@
 *.db
 .beads-credential-key
 .coder/
+.idea/
+bwb
