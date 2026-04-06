@@ -336,6 +336,10 @@ func loadSearchCmd(gateway beads.BeadsGateway, query domain.SearchIssuesQuery) t
 // CapturesShellKey reports whether active search input should consume a key
 // before shell-level keybindings are evaluated.
 func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
+	if msg.Type == tea.KeyTab {
+		return true
+	}
+
 	if m.focus != uisearch.FocusQuery {
 		return false
 	}

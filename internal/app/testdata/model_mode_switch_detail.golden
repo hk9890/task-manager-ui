@@ -1,6 +1,6 @@
 Beads Workbench
  1 Board   2 Search   3 Detail
-Detail: e editor · r refresh · esc back · 1/2/3 modes · ? help · q quit
+Detail: c/u/x/a mutate · e editor · n/p/l launchers · r refresh · esc back · ? help · q quit
 ╭─ Issue Detail ────────────────────────────────────────────────────────────────────────────────────────────── bw-9 ─╮
 │Ninth                                                                                                               │
 │bw-9 · open · task · P2                                                                                             │

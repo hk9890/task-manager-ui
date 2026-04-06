@@ -177,7 +177,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.focusedField == FieldCancel {
 				return m, func() tea.Msg { return CancelMsg{} }
 			}
-			if m.hasInputs {
+			if m.hasInputs && m.config.Required {
 				for _, input := range m.inputs {
 					if input.Value() == "" {
 						return m, nil
@@ -191,7 +191,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case msg.String() == "y":
 			if m.focusedInput == -1 || !m.hasInputs {
-				if m.hasInputs {
+				if m.hasInputs && m.config.Required {
 					for _, input := range m.inputs {
 						if input.Value() == "" {
 							return m, nil

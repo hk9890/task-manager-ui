@@ -11,8 +11,8 @@ func TestDefault_UsesEditorEnvForEditorAndLauncher(t *testing.T) {
 		t.Fatalf("expected editor command from EDITOR, got %q", cfg.Editor.Command)
 	}
 
-	if len(cfg.Launcher.Definitions) != 1 {
-		t.Fatalf("expected one default launcher definition, got %d", len(cfg.Launcher.Definitions))
+	if len(cfg.Launcher.Definitions) != 4 {
+		t.Fatalf("expected four default launcher definitions, got %d", len(cfg.Launcher.Definitions))
 	}
 
 	launcher := cfg.Launcher.Definitions[0]
@@ -24,6 +24,16 @@ func TestDefault_UsesEditorEnvForEditorAndLauncher(t *testing.T) {
 	}
 	if launcher.Args != nil {
 		t.Fatalf("expected nil default launcher args, got %#v", launcher.Args)
+	}
+
+	if cfg.Launcher.Definitions[1].Action != "nvim" {
+		t.Fatalf("expected second launcher action nvim, got %q", cfg.Launcher.Definitions[1].Action)
+	}
+	if cfg.Launcher.Definitions[2].Action != "opencode" {
+		t.Fatalf("expected third launcher action opencode, got %q", cfg.Launcher.Definitions[2].Action)
+	}
+	if cfg.Launcher.Definitions[3].Action != "shell-command" {
+		t.Fatalf("expected fourth launcher action shell-command, got %q", cfg.Launcher.Definitions[3].Action)
 	}
 }
 

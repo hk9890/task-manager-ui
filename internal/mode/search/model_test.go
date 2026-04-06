@@ -183,6 +183,35 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 }
 
+func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-7", Title: "Result", Status: "open", Type: "task", Priority: 1}}}}
+	m := initModel(t, gateway)
+
+	pressAndResolve(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected query focus after typing, got %v", m.focus)
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected tab to cycle query->results, got %v", m.focus)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusPreview {
+		t.Fatalf("expected tab to cycle results->preview, got %v", m.focus)
+	}
+
+	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
+		t.Fatalf("expected search mode to capture tab for shell-level routing")
+	}
+}
+
 func newSearchFakeGateway() *fakes.FakeBeadsGateway {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}

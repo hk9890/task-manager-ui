@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -75,7 +76,7 @@ func Render(state State) string {
 	}
 
 	columnWidths := distributeWidths(visibleAvailableWidth, len(visible))
-	columnHeight := maxInt(3, height-1)
+	columnHeight := renderhelpers.MaxInt(3, height-1)
 	renderedCols := make([]string, 0, len(visible))
 	for idx, col := range visible {
 		innerWidth := columnWidths[idx] - 2
@@ -209,9 +210,9 @@ func renderRowLine(row Row, maxWidth int) string {
 		title = "(untitled)"
 	}
 
-	idWidth := minInt(12, maxInt(7, maxWidth/5))
-	id := compactIssueID(row.ID, idWidth)
-	meta := strings.Join([]string{compactIssueType(row.Type), compactPriority(row.Priority), compactIssueState(row.Status), id}, " ")
+	idWidth := minInt(12, renderhelpers.MaxInt(7, maxWidth/5))
+	id := renderhelpers.CompactIssueID(row.ID, idWidth)
+	meta := strings.Join([]string{renderhelpers.CompactIssueType(row.Type), renderhelpers.CompactPriority(row.Priority), renderhelpers.CompactIssueState(row.Status), id}, " ")
 	titlePrefix := prefix + meta + " "
 	titleWidth := maxWidth - lipgloss.Width(titlePrefix)
 	if titleWidth < minTitleWidth {
@@ -221,103 +222,8 @@ func renderRowLine(row Row, maxWidth int) string {
 	return titlePrefix + styles.TruncateString(title, titleWidth)
 }
 
-func compactIssueType(issueType string) string {
-	switch normalizeToken(issueType) {
-	case "bug":
-		return "B"
-	case "task":
-		return "T"
-	case "feature":
-		return "F"
-	case "epic":
-		return "E"
-	case "chore":
-		return "C"
-	case "docs":
-		return "D"
-	case "spike":
-		return "S"
-	default:
-		return "?"
-	}
-}
-
-func compactPriority(priority int) string {
-	if priority < 0 {
-		priority = 0
-	}
-	return fmt.Sprintf("P%d", priority)
-}
-
-func compactIssueState(status string) string {
-	switch normalizeToken(status) {
-	case "blocked":
-		return "BLK"
-	case "in_progress":
-		return "IP"
-	case "open":
-		return "OPN"
-	case "closed":
-		return "CLS"
-	case "ready":
-		return "RDY"
-	default:
-		tok := normalizeToken(status)
-		if tok == "" {
-			return "---"
-		}
-		tok = strings.ToUpper(tok)
-		runes := []rune(tok)
-		if len(runes) > 3 {
-			return string(runes[:3])
-		}
-		return tok
-	}
-}
-
-func normalizeToken(raw string) string {
-	tok := strings.TrimSpace(strings.ToLower(raw))
-	tok = strings.ReplaceAll(tok, "-", "_")
-	tok = strings.ReplaceAll(tok, " ", "_")
-	return tok
-}
-
-func compactIssueID(id string, maxWidth int) string {
-	trimmed := strings.TrimSpace(id)
-	if lipgloss.Width(trimmed) <= maxWidth {
-		return trimmed
-	}
-
-	const repoPrefix = "beads-workbench-"
-	if strings.HasPrefix(trimmed, repoPrefix) {
-		trimmed = strings.TrimPrefix(trimmed, repoPrefix)
-		if lipgloss.Width(trimmed) <= maxWidth {
-			return trimmed
-		}
-	}
-
-	if maxWidth <= 1 {
-		return styles.TruncateString(trimmed, maxWidth)
-	}
-
-	runes := []rune(trimmed)
-	suffixWidth := maxWidth - 1
-	if suffixWidth <= 0 || len(runes) <= suffixWidth {
-		return trimmed
-	}
-
-	return "…" + string(runes[len(runes)-suffixWidth:])
-}
-
 func minInt(a, b int) int {
 	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
 		return a
 	}
 	return b

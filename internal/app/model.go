@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +44,42 @@ type launchActionResultMsg struct {
 	err    error
 }
 
+type mutationKind string
+
+const (
+	mutationCreate  mutationKind = "create"
+	mutationUpdate  mutationKind = "update"
+	mutationClose   mutationKind = "close"
+	mutationComment mutationKind = "comment"
+)
+
+type mutationCatalogsLoadedMsg struct {
+	kind     mutationKind
+	issue    domain.IssueSummary
+	statuses []domain.StatusOption
+	types    []domain.TypeOption
+	labels   []domain.LabelOption
+	err      error
+}
+
+type mutationResultMsg struct {
+	kind      mutationKind
+	issueID   string
+	createdID string
+	err       error
+}
+
+type mutationDialogState struct {
+	kind        mutationKind
+	issue       domain.IssueSummary
+	statusNames map[string]struct{}
+	typeNames   map[string]struct{}
+	labelNames  map[string]struct{}
+	statusList  string
+	typeList    string
+	labelList   string
+}
+
 // Model is the root Bubble Tea shell for Beads Workbench.
 //
 // v1 detail presentation model keeps browse and full detail separated:
@@ -65,6 +102,10 @@ type Model struct {
 
 	help     modal.Model
 	showHelp bool
+
+	actionModal     modal.Model
+	showActionModal bool
+	actionState     mutationDialogState
 
 	width  int
 	height int
@@ -103,9 +144,35 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles root-level shell messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	modeCmd := m.forwardModeMessages(msg)
+	modeCmd := tea.Cmd(nil)
+	if !m.shouldCaptureKeyForOverlay(msg) {
+		modeCmd = m.forwardModeMessages(msg)
+	}
 	if m.syncSelectionFromControllers() {
 		modeCmd = batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+	}
+
+	if m.showActionModal {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.width = size.Width
+			m.height = size.Height
+			m.actionModal.SetSize(m.width, m.height)
+			return m, modeCmd
+		}
+
+		if _, ok := msg.(modal.CancelMsg); ok {
+			m.showActionModal = false
+			return m, modeCmd
+		}
+
+		if submit, ok := msg.(modal.SubmitMsg); ok {
+			m.showActionModal = false
+			return m, batchCmds(modeCmd, submitMutationCmd(m.services, m.actionState, submit.Values))
+		}
+
+		nextModal, cmd := m.actionModal.Update(msg)
+		m.actionModal = nextModal
+		return m, batchCmds(modeCmd, cmd)
 	}
 
 	if m.showHelp {
@@ -184,7 +251,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launcher action %q failed: %v", msg.action, msg.err), toaster.StyleError))
 		}
-		return m, modeCmd
+		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q", msg.action), toaster.StyleSuccess))
+	case mutationCatalogsLoadedMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load mutation catalogs: %v", msg.err), toaster.StyleError))
+		}
+
+		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
+		m.actionState = dialog
+		m.actionModal = mutationModal(dialog)
+		m.actionModal.SetSize(m.width, m.height)
+		m.showActionModal = true
+		return m, batchCmds(modeCmd, m.actionModal.Init())
+	case mutationResultMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(msg.err.Error(), toaster.StyleError))
+		}
+
+		switch msg.kind {
+		case mutationCreate:
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Created issue %s", emptyFallback(msg.createdID, "(unknown)")), toaster.StyleSuccess))
+		case mutationUpdate:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+			)
+		case mutationClose:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Closed issue %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+			)
+		case mutationComment:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+			)
+		default:
+			return m, modeCmd
+		}
 	case mode.SelectionChangedMsg:
 		if msg.Mode != mode.Board && msg.Mode != mode.Search {
 			return m, modeCmd
@@ -301,11 +405,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detail.Error = ""
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 		case "e":
-			issueContext, ok := m.selectedIssueContext()
+			issueID, ok := m.selectedIssueID()
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
 			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.services, "editor", issueContext))
+			return m, batchCmds(modeCmd, editIssueCmd(m.services, issueID))
+		case "c":
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationCreate, domain.IssueSummary{}))
+		case "u":
+			selection := m.currentSelection()
+			if selection == nil || selection.Issue.ID == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationUpdate, selection.Issue))
+		case "x":
+			selection := m.currentSelection()
+			if selection == nil || selection.Issue.ID == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
+			}
+			m.actionState = mutationDialogState{kind: mutationClose, issue: selection.Issue}
+			m.actionModal = mutationModal(m.actionState)
+			m.actionModal.SetSize(m.width, m.height)
+			m.showActionModal = true
+			return m, batchCmds(modeCmd, m.actionModal.Init())
+		case "a":
+			selection := m.currentSelection()
+			if selection == nil || selection.Issue.ID == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
+			}
+			m.actionState = mutationDialogState{kind: mutationComment, issue: selection.Issue}
+			m.actionModal = mutationModal(m.actionState)
+			m.actionModal.SetSize(m.width, m.height)
+			m.showActionModal = true
+			return m, batchCmds(modeCmd, m.actionModal.Init())
+		case "n":
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			issueContext, ok := m.selectedIssueContext()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, launchActionCmd(m.services, "nvim", issueContext))
+		case "p":
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			issueContext, ok := m.selectedIssueContext()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, launchActionCmd(m.services, "opencode", issueContext))
+		case "l":
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			issueContext, ok := m.selectedIssueContext()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, launchActionCmd(m.services, "shell-command", issueContext))
 		}
 	}
 
@@ -363,6 +522,9 @@ func (m Model) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 	if m.toast.Visible() {
 		view = m.toast.Overlay(view, m.width, m.height)
+	}
+	if m.showActionModal {
+		view = m.actionModal.Overlay(view)
 	}
 	if m.showHelp {
 		view = m.help.Overlay(view)
@@ -425,7 +587,7 @@ func (m Model) renderHeader() string {
 		tab(mode.Detail, "3 Detail"),
 	}, " ")
 
-	keys := "Modes: [1/2/3 ctrl+space tab]  Search: [type / j/k h/l esc]  Detail: [enter o esc]  Actions: [e edit-in-editor r refresh ? help q quit]"
+	keys := "Modes: [1/2/3 ctrl+space tab]  Search: [type / j/k h/l esc]  Detail: [enter o esc]  Actions: [c create u update x close a comment e editor n/p/l launch r refresh ? help q quit]"
 	if !m.services.Config.UI.ShowModeSwitcherHelp {
 		keys = ""
 	}
@@ -679,18 +841,20 @@ func shellKeyHelp() string {
 		"",
 		"Selection:",
 		"  Board: h/l (or ←/→) switch columns, j/k (or ↓/↑) move within a column",
-		"  Search: use f / shift+tab to move filter focus; when focused on results, j/k moves selection",
-		"",
-		"Search filters:",
-		"  Text + assignee: type to edit, backspace to delete",
-		"  Status/type/label/priority: h/l (or ←/→) cycle values",
-		"  Ready/Blocked: space/enter toggles (mutually exclusive)",
+		"  Search: type to query; tab from query focuses results; h/l switch panes; j/k moves results",
 		"",
 		"Actions:",
+		"  c = create issue (inline modal)",
+		"  u = update selected issue metadata",
+		"  x = close selected issue",
+		"  a = add comment to selected issue",
 		"  e = edit selected issue in external editor",
+		"  n = launch nvim action (detail mode)",
+		"  p = launch opencode action (detail mode)",
+		"  l = launch shell-command action (detail mode)",
 		"  enter or o = open selected issue in detail mode",
 		"  r = reload detail mode from gateway",
-		"  esc = exit detail mode / dismiss toast",
+		"  esc = return from detail/search to browse / dismiss toast",
 		"  ? = toggle help",
 		"  q = quit",
 		"",
@@ -711,7 +875,7 @@ func headerHelpLines(active mode.ID, width int) []string {
 		case mode.Search:
 			return []string{"Search: type to query · / focus · h/l panes · j/k results · esc board · ? help · q quit"}
 		case mode.Detail:
-			return []string{"Detail: e editor · r refresh · esc back · 1/2/3 modes · ? help · q quit"}
+			return []string{"Detail: c/u/x/a mutate · e editor · n/p/l launchers · r refresh · esc back · ? help · q quit"}
 		default:
 			return []string{"Board: h/l cols · j/k issues · enter detail · ctrl+space search · ? help · q quit"}
 		}
@@ -721,10 +885,295 @@ func headerHelpLines(active mode.ID, width int) []string {
 	case mode.Search:
 		return []string{modeLine, "Search: type to query · / focus query · h/l move panes · j/k results · enter detail · esc board"}
 	case mode.Detail:
-		return []string{modeLine, "Detail: e editor · r refresh detail · esc back to browse"}
+		return []string{modeLine, "Detail: c/u/x/a mutate · e editor · n/p/l launchers · r refresh detail · esc back to browse"}
 	default:
 		return []string{modeLine, "Board: h/l switch columns · j/k move issues · enter detail · ctrl+space search"}
 	}
+}
+
+func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
+	if !m.showHelp && !m.showActionModal {
+		return false
+	}
+	_, isKey := msg.(tea.KeyMsg)
+	return isKey
+}
+
+func loadMutationCatalogsCmd(services Services, kind mutationKind, issue domain.IssueSummary) tea.Cmd {
+	return func() tea.Msg {
+		statuses, err := services.Gateway.StatusCatalog(context.Background())
+		if err != nil {
+			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("status catalog: %w", err)}
+		}
+
+		types, err := services.Gateway.TypeCatalog(context.Background())
+		if err != nil {
+			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("type catalog: %w", err)}
+		}
+
+		labels, err := services.Gateway.LabelCatalog(context.Background())
+		if err != nil {
+			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("label catalog: %w", err)}
+		}
+
+		return mutationCatalogsLoadedMsg{kind: kind, issue: issue, statuses: statuses, types: types, labels: labels}
+	}
+}
+
+func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) mutationDialogState {
+	statusNames := make(map[string]struct{}, len(statuses))
+	typeNames := make(map[string]struct{}, len(types))
+	labelNames := make(map[string]struct{}, len(labels))
+
+	statusList := make([]string, 0, len(statuses))
+	typeList := make([]string, 0, len(types))
+	labelList := make([]string, 0, len(labels))
+
+	for _, option := range statuses {
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			continue
+		}
+		statusNames[name] = struct{}{}
+		statusList = append(statusList, name)
+	}
+
+	for _, option := range types {
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			continue
+		}
+		typeNames[name] = struct{}{}
+		typeList = append(typeList, name)
+	}
+
+	for _, option := range labels {
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			continue
+		}
+		labelNames[name] = struct{}{}
+		labelList = append(labelList, name)
+	}
+
+	return mutationDialogState{
+		kind:        kind,
+		issue:       issue,
+		statusNames: statusNames,
+		typeNames:   typeNames,
+		labelNames:  labelNames,
+		statusList:  strings.Join(statusList, ", "),
+		typeList:    strings.Join(typeList, ", "),
+		labelList:   strings.Join(labelList, ", "),
+	}
+}
+
+func mutationModal(state mutationDialogState) modal.Model {
+	switch state.kind {
+	case mutationCreate:
+		return modal.New(modal.Config{
+			Title:       "Create Issue",
+			Message:     fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
+			ConfirmText: "Create",
+			MinWidth:    92,
+			Required:    false,
+			Inputs: []modal.InputConfig{
+				{Key: "title", Label: "Title", Placeholder: "Issue title"},
+				{Key: "type", Label: "Type", Placeholder: emptyFallback(state.typeList, "task")},
+				{Key: "priority", Label: "Priority", Placeholder: "0-3"},
+				{Key: "assignee", Label: "Assignee", Placeholder: "username"},
+				{Key: "labels", Label: "Labels", Placeholder: "comma,separated"},
+				{Key: "description", Label: "Description", Placeholder: "Short description"},
+			},
+		})
+	case mutationUpdate:
+		return modal.New(modal.Config{
+			Title:       fmt.Sprintf("Update Issue %s", state.issue.ID),
+			Message:     fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
+			ConfirmText: "Update",
+			MinWidth:    92,
+			Required:    false,
+			Inputs: []modal.InputConfig{
+				{Key: "title", Label: "Title", Value: state.issue.Title, Placeholder: "Leave unchanged"},
+				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
+				{Key: "type", Label: "Type", Value: state.issue.Type, Placeholder: emptyFallback(state.typeList, state.issue.Type)},
+				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-3"},
+				{Key: "assignee", Label: "Assignee", Value: state.issue.Assignee, Placeholder: "username"},
+				{Key: "labels", Label: "Labels", Value: strings.Join(state.issue.Labels, ","), Placeholder: "comma,separated"},
+			},
+		})
+	case mutationClose:
+		return modal.New(modal.Config{
+			Title:          fmt.Sprintf("Close Issue %s", state.issue.ID),
+			Message:        "Provide an optional close reason.",
+			ConfirmText:    "Close",
+			ConfirmVariant: modal.ButtonDanger,
+			Required:       false,
+			MinWidth:       72,
+			Inputs: []modal.InputConfig{
+				{Key: "reason", Label: "Reason", Placeholder: "completed"},
+			},
+		})
+	case mutationComment:
+		return modal.New(modal.Config{
+			Title:       fmt.Sprintf("Comment on %s", state.issue.ID),
+			Message:     "Add a comment for the selected issue.",
+			ConfirmText: "Add comment",
+			Required:    false,
+			MinWidth:    72,
+			Inputs: []modal.InputConfig{
+				{Key: "body", Label: "Comment", Placeholder: "Comment text"},
+			},
+		})
+	default:
+		return modal.New(modal.Config{Title: "Action", Message: "Unsupported action", Required: false})
+	}
+}
+
+func submitMutationCmd(services Services, state mutationDialogState, values map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		switch state.kind {
+		case mutationCreate:
+			title := strings.TrimSpace(values["title"])
+			if title == "" {
+				return mutationResultMsg{kind: mutationCreate, err: fmt.Errorf("create issue failed: title is required")}
+			}
+
+			priority, err := parsePriority(values["priority"])
+			if err != nil {
+				return mutationResultMsg{kind: mutationCreate, err: fmt.Errorf("create issue failed: %w", err)}
+			}
+
+			labels := parseCommaList(values["labels"])
+			result, err := services.Gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
+				Title:       title,
+				Description: strings.TrimSpace(values["description"]),
+				Type:        strings.TrimSpace(values["type"]),
+				Priority:    priority,
+				Assignee:    strings.TrimSpace(values["assignee"]),
+				Labels:      labels,
+			})
+			if err != nil {
+				return mutationResultMsg{kind: mutationCreate, err: fmt.Errorf("create issue failed: %w", err)}
+			}
+
+			return mutationResultMsg{kind: mutationCreate, createdID: result.IssueID}
+		case mutationUpdate:
+			status := strings.TrimSpace(values["status"])
+			if status != "" {
+				if _, ok := state.statusNames[status]; len(state.statusNames) > 0 && !ok {
+					return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: unknown status %q", status)}
+				}
+			}
+
+			issueType := strings.TrimSpace(values["type"])
+			if issueType != "" {
+				if _, ok := state.typeNames[issueType]; len(state.typeNames) > 0 && !ok {
+					return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: unknown type %q", issueType)}
+				}
+			}
+
+			priority, err := parseRequiredPriority(values["priority"])
+			if err != nil {
+				return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: %w", err)}
+			}
+
+			labels := parseCommaList(values["labels"])
+			for _, label := range labels {
+				if _, ok := state.labelNames[label]; len(state.labelNames) > 0 && !ok {
+					return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: unknown label %q", label)}
+				}
+			}
+
+			title := strings.TrimSpace(values["title"])
+			assignee := strings.TrimSpace(values["assignee"])
+			input := domain.UpdateIssueInput{}
+			if title != "" {
+				input.Title = &title
+			}
+			if status != "" {
+				input.Status = &status
+			}
+			if issueType != "" {
+				input.Type = &issueType
+			}
+			if priority != nil {
+				input.Priority = priority
+			}
+			if assignee != "" {
+				input.Assignee = &assignee
+			}
+			if len(labels) > 0 {
+				input.Labels = labels
+			} else {
+				input.ClearLabels = true
+			}
+
+			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, input); err != nil {
+				return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: %w", err)}
+			}
+
+			return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID}
+		case mutationClose:
+			reason := strings.TrimSpace(values["reason"])
+			if err := services.Gateway.CloseIssue(context.Background(), state.issue.ID, domain.CloseIssueInput{Reason: reason}); err != nil {
+				return mutationResultMsg{kind: mutationClose, issueID: state.issue.ID, err: fmt.Errorf("close issue failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationClose, issueID: state.issue.ID}
+		case mutationComment:
+			body := strings.TrimSpace(values["body"])
+			if body == "" {
+				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: body is required")}
+			}
+			if err := services.Gateway.AddComment(context.Background(), state.issue.ID, domain.AddCommentInput{Body: body}); err != nil {
+				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID}
+		default:
+			return mutationResultMsg{kind: state.kind, issueID: state.issue.ID, err: fmt.Errorf("unsupported mutation action")}
+		}
+	}
+}
+
+func parseCommaList(value string) []string {
+	parts := strings.Split(value, ",")
+	labels := make([]string, 0, len(parts))
+	for _, part := range parts {
+		label := strings.TrimSpace(part)
+		if label == "" {
+			continue
+		}
+		labels = append(labels, label)
+	}
+	return labels
+}
+
+func parsePriority(value string) (*int, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("priority must be an integer")
+	}
+
+	return &parsed, nil
+}
+
+func parseRequiredPriority(value string) (*int, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, fmt.Errorf("priority is required")
+	}
+
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("priority must be an integer")
+	}
+
+	return &parsed, nil
 }
 
 func emptyFallback(value, fallback string) string {

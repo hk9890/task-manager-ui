@@ -140,6 +140,40 @@ func TestServiceLaunchReturnsErrorForUnknownAction(t *testing.T) {
 	}
 }
 
+func TestServiceBuiltInDefinitionsForV1Actions(t *testing.T) {
+	t.Parallel()
+
+	runner := &recordingRunner{}
+	service, err := NewService([]Definition{
+		{Action: "nvim", Command: "nvim", Args: []string{"[{{issue.id}}]", "{{issue.title}}"}},
+		{Action: "opencode", Command: "opencode", Args: []string{"run", "--issue", "{{issue.id}}", "--title", "{{issue.title}}"}},
+		{Action: "shell-command", Command: "sh", Args: []string{"-lc", "echo {{issue.id}}"}},
+	}, "/repo/root", runner)
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	issue := domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-42", Title: "Launcher task"}}
+
+	if err := service.Launch(context.Background(), "nvim", issue); err != nil {
+		t.Fatalf("Launch nvim returned error: %v", err)
+	}
+	if err := service.Launch(context.Background(), "opencode", issue); err != nil {
+		t.Fatalf("Launch opencode returned error: %v", err)
+	}
+	if err := service.Launch(context.Background(), "shell-command", issue); err != nil {
+		t.Fatalf("Launch shell-command returned error: %v", err)
+	}
+
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected three launch calls, got %d", len(runner.calls))
+	}
+
+	if runner.calls[0].command != "nvim" || runner.calls[1].command != "opencode" || runner.calls[2].command != "sh" {
+		t.Fatalf("unexpected built-in launcher commands: %#v", runner.calls)
+	}
+}
+
 func TestNewServiceValidatesInputs(t *testing.T) {
 	t.Parallel()
 

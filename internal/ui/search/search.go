@@ -8,6 +8,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -62,7 +63,7 @@ func Render(state State) string {
 
 	leftWidth, rightWidth := splitWidths(width)
 	queryHeight := 3
-	resultsHeight := maxInt(6, height-queryHeight-1)
+	resultsHeight := renderhelpers.MaxInt(6, height-queryHeight-1)
 	previewHeight := height
 
 	queryContent := renderQueryContent(state.Query, state.Focus == FocusQuery)
@@ -174,10 +175,10 @@ func renderResultsContent(state State, width int) []string {
 		}
 
 		meta := strings.Join([]string{
-			compactIssueType(issue.Type),
-			compactPriority(issue.Priority),
-			compactIssueState(issue.Status),
-			compactIssueID(issue.ID, maxInt(7, width/5)),
+			renderhelpers.CompactIssueType(issue.Type),
+			renderhelpers.CompactPriority(issue.Priority),
+			renderhelpers.CompactIssueState(issue.Status),
+			renderhelpers.CompactIssueID(issue.ID, renderhelpers.MaxInt(7, width/5)),
 		}, " ")
 		base := prefix + meta + " "
 		titleWidth := width - lipgloss.Width(base)
@@ -228,89 +229,6 @@ func renderPreviewContent(state State, width int) []string {
 	}), "\n")
 }
 
-func compactIssueType(issueType string) string {
-	switch normalizeToken(issueType) {
-	case "bug":
-		return "B"
-	case "task":
-		return "T"
-	case "feature":
-		return "F"
-	case "epic":
-		return "E"
-	case "chore":
-		return "C"
-	case "docs":
-		return "D"
-	case "spike":
-		return "S"
-	default:
-		return "?"
-	}
-}
-
-func compactPriority(priority int) string {
-	if priority < 0 {
-		priority = 0
-	}
-	return fmt.Sprintf("P%d", priority)
-}
-
-func compactIssueState(status string) string {
-	switch normalizeToken(status) {
-	case "blocked":
-		return "BLK"
-	case "in_progress":
-		return "IP"
-	case "open":
-		return "OPN"
-	case "closed":
-		return "CLS"
-	case "ready":
-		return "RDY"
-	default:
-		tok := strings.ToUpper(normalizeToken(status))
-		if tok == "" {
-			return "---"
-		}
-		runes := []rune(tok)
-		if len(runes) > 3 {
-			return string(runes[:3])
-		}
-		return tok
-	}
-}
-
-func compactIssueID(id string, maxWidth int) string {
-	trimmed := strings.TrimSpace(id)
-	if lipgloss.Width(trimmed) <= maxWidth {
-		return trimmed
-	}
-	const repoPrefix = "beads-workbench-"
-	if strings.HasPrefix(trimmed, repoPrefix) {
-		trimmed = strings.TrimPrefix(trimmed, repoPrefix)
-		if lipgloss.Width(trimmed) <= maxWidth {
-			return trimmed
-		}
-	}
-	if maxWidth <= 1 {
-		return styles.TruncateString(trimmed, maxWidth)
-	}
-	runes := []rune(trimmed)
-	suffixWidth := maxWidth - 1
-	if suffixWidth <= 0 || len(runes) <= suffixWidth {
-		return trimmed
-	}
-	return "…" + string(runes[len(runes)-suffixWidth:])
-}
-
-func normalizeToken(raw string) string {
-	tok := strings.TrimSpace(strings.ToLower(raw))
-	tok = strings.ReplaceAll(tok, "-", "_")
-	tok = strings.ReplaceAll(tok, " ", "_")
-	return tok
-}
-
 func splitWidths(total int) (left, right int) {
 	available := total - searchColumnGap
 	if available < minLeftPaneWidth+minRightPaneWidth {
@@ -327,11 +245,4 @@ func splitWidths(total int) (left, right int) {
 		left = available - right
 	}
 	return left, right
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

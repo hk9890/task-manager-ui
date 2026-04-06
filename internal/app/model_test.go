@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/beads-workbench/internal/ui/modal"
 )
 
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
@@ -297,7 +298,7 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 	}
 }
 
-func TestModelLaunchEditorActionUsesLauncherService(t *testing.T) {
+func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Assignee: "hans", Labels: []string{"infra"}, Priority: 1}}
 	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
@@ -305,10 +306,12 @@ func TestModelLaunchEditorActionUsesLauncherService(t *testing.T) {
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	fakeLauncher := &fakes.FakeLauncher{}
+	fakeEditor := &fakes.FakeEditor{}
 	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
 	if err != nil {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}
+	services.Editor = fakeEditor
 
 	m := NewModel(services)
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -317,34 +320,32 @@ func TestModelLaunchEditorActionUsesLauncherService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeLauncher.Calls) != 1 {
-		t.Fatalf("expected one launcher call, got %d", len(fakeLauncher.Calls))
+	if len(fakeEditor.Calls) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	}
+	if fakeEditor.Calls[0].IssueID != "bw-1" {
+		t.Fatalf("expected selected issue bw-1, got %q", fakeEditor.Calls[0].IssueID)
 	}
 
-	call := fakeLauncher.Calls[0]
-	if call.Action != "editor" {
-		t.Fatalf("expected launcher action editor, got %q", call.Action)
-	}
-	if call.Issue.Summary.ID != "bw-1" {
-		t.Fatalf("expected selected issue bw-1, got %q", call.Issue.Summary.ID)
-	}
-	if call.Issue.Summary.Title != "Ready first" {
-		t.Fatalf("expected selected issue title to be passed, got %q", call.Issue.Summary.Title)
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected edit hotkey to avoid launcher service, got %#v", fakeLauncher.Calls)
 	}
 }
 
-func TestModelLaunchEditorActionShowsErrorToastWhenLauncherFails(t *testing.T) {
+func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
 	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
-	fakeLauncher := &fakes.FakeLauncher{Err: errors.New("launcher boom")}
+	fakeLauncher := &fakes.FakeLauncher{}
+	fakeEditor := &fakes.FakeEditor{Err: errors.New("editor boom")}
 	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
 	if err != nil {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}
+	services.Editor = fakeEditor
 
 	m := NewModel(services)
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -360,8 +361,192 @@ func TestModelLaunchEditorActionShowsErrorToastWhenLauncherFails(t *testing.T) {
 	m = next.(Model)
 
 	view := m.View()
-	if !strings.Contains(view, "Launcher action \"editor\" failed") {
-		t.Fatalf("expected launcher error toast, got:\n%s", view)
+	if !strings.Contains(view, "Failed to edit issue bw-1") {
+		t.Fatalf("expected editor failure toast, got:\n%s", view)
+	}
+
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected no launcher calls when editor fails, got %#v", fakeLauncher.Calls)
+	}
+}
+
+func TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}}
+	gateway.TypeCatalogResponse = []domain.TypeOption{{Name: "task"}, {Name: "bug"}}
+	gateway.LabelCatalogResponse = []domain.LabelOption{{Name: "ui"}, {Name: "infra"}}
+	gateway.CreateIssueResponse = domain.CreateIssueResult{IssueID: "bw-99"}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = next.(Model)
+
+	if cmd == nil {
+		t.Fatalf("expected command for create flow")
+	}
+
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+
+	if !m.showActionModal {
+		t.Fatalf("expected action modal to open for create")
+	}
+
+	submit := modal.SubmitMsg{Values: map[string]string{
+		"title":       "Create from modal",
+		"type":        "task",
+		"priority":    "2",
+		"assignee":    "hans",
+		"labels":      "ui,infra",
+		"description": "created from test",
+	}}
+	next, cmd = m.Update(submit)
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected submit mutation command")
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if !hasGatewayCall(gateway.Calls, fakes.MethodStatusCatalog) || !hasGatewayCall(gateway.Calls, fakes.MethodTypeCatalog) || !hasGatewayCall(gateway.Calls, fakes.MethodLabelCatalog) {
+		t.Fatalf("expected status/type/label catalogs to be queried, calls=%#v", gateway.Calls)
+	}
+
+	if !hasGatewayCall(gateway.Calls, fakes.MethodCreateIssue) {
+		t.Fatalf("expected create issue gateway call, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelUpdateCloseAndCommentFlowsUseGatewayWrites(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}
+	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}}
+	gateway.TypeCatalogResponse = []domain.TypeOption{{Name: "task"}, {Name: "bug"}}
+	gateway.LabelCatalogResponse = []domain.LabelOption{{Name: "ui"}, {Name: "infra"}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	m = next.(Model)
+
+	if cmd == nil {
+		t.Fatalf("expected command for update flow")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{
+		"title":    "Updated title",
+		"status":   "in_progress",
+		"type":     "task",
+		"priority": "2",
+		"assignee": "hans",
+		"labels":   "ui,infra",
+	}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected update mutation command")
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected modal init command for close flow")
+	}
+	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{"reason": "done"}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected close mutation command")
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected modal init command for comment flow")
+	}
+	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{"body": "looks good"}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected comment mutation command")
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if !hasGatewayCall(gateway.Calls, fakes.MethodUpdateIssue) {
+		t.Fatalf("expected update issue call, calls=%#v", gateway.Calls)
+	}
+	if !hasGatewayCall(gateway.Calls, fakes.MethodCloseIssue) {
+		t.Fatalf("expected close issue call, calls=%#v", gateway.Calls)
+	}
+	if !hasGatewayCall(gateway.Calls, fakes.MethodAddComment) {
+		t.Fatalf("expected add comment call, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(fakeLauncher.Calls) != 3 {
+		t.Fatalf("expected 3 launcher calls, got %d", len(fakeLauncher.Calls))
+	}
+
+	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
+	if actions[0] != "nvim" || actions[1] != "opencode" || actions[2] != "shell-command" {
+		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
 	}
 }
 
@@ -502,8 +687,12 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 	gateway.ResetCalls()
 
-	resultMsg := editIssueCmd(m.services, "bw-9")()
-	next, cmd := m.Update(resultMsg)
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected edit command from edit hotkey")
+	}
+	next, cmd = m.Update(cmd())
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected reload command after successful editor update")
@@ -529,7 +718,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 }
 
-func TestModelEditIssueActionUsesLauncherServiceFromDetailSelection(t *testing.T) {
+func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
@@ -546,6 +735,8 @@ func TestModelEditIssueActionUsesLauncherServiceFromDetailSelection(t *testing.T
 	if err != nil {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}
+	fakeEditor := &fakes.FakeEditor{}
+	services.Editor = fakeEditor
 
 	m := NewModel(services)
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -559,20 +750,21 @@ func TestModelEditIssueActionUsesLauncherServiceFromDetailSelection(t *testing.T
 	m = next.(Model)
 
 	if cmd == nil {
-		t.Fatalf("expected launcher command from edit hotkey")
+		t.Fatalf("expected editor command from edit hotkey")
 	}
 
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if len(fakeLauncher.Calls) != 1 {
-		t.Fatalf("expected one launcher call, got %d", len(fakeLauncher.Calls))
+	if len(fakeEditor.Calls) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
 	}
-	if fakeLauncher.Calls[0].Action != "editor" {
-		t.Fatalf("expected launcher action editor, got %q", fakeLauncher.Calls[0].Action)
+	if fakeEditor.Calls[0].IssueID != "bw-9" {
+		t.Fatalf("expected selected detail issue bw-9, got %q", fakeEditor.Calls[0].IssueID)
 	}
-	if fakeLauncher.Calls[0].Issue.Summary.ID != "bw-9" {
-		t.Fatalf("expected selected detail issue bw-9, got %q", fakeLauncher.Calls[0].Issue.Summary.ID)
+
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls)
 	}
 
 	if hasGatewayCall(gateway.Calls, fakes.MethodShowIssue) {
@@ -631,6 +823,64 @@ func TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "Issue Detail") || !strings.Contains(view, "Blocked bug for fixture") {
 		t.Fatalf("expected dedicated detail rendering for fixture issue, got:\n%s", view)
+	}
+}
+
+func TestModelEmbeddedFixtureDetailEditHotkeyUsesEditorService(t *testing.T) {
+	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
+		t.Skip("requires bd, jq, and git on PATH")
+	}
+	t.Setenv("BEADS_ACTOR", "fixture-user")
+
+	repoPath := embeddedfixture.TempRepoPath(t)
+	embeddedfixture.Seed(t, repoPath)
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		WorkDir: repoPath,
+		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
+	})
+	gateway := beads.NewGateway(runner)
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+	fakeEditor := &fakes.FakeEditor{}
+	services.Editor = fakeEditor
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if got := firstSelectionID(m, mode.Board); got != "bwf-2" {
+		t.Fatalf("expected startup board selection bwf-2 from fixture seed, got %q", got)
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected detail mode after enter, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected edit command from detail edit hotkey")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if len(fakeEditor.Calls) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	}
+	if fakeEditor.Calls[0].IssueID != "bwf-2" {
+		t.Fatalf("expected editor issue bwf-2 from embedded fixture, got %q", fakeEditor.Calls[0].IssueID)
+	}
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected no launcher call from detail edit hotkey, got %#v", fakeLauncher.Calls)
 	}
 }
 

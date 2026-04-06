@@ -19,9 +19,6 @@ type Editor struct {
 }
 
 // Launcher contains launcher action definitions used by the shell.
-//
-// v1 keeps this intentionally small: one built-in editor action that can be
-// expanded by later launcher tasks.
 type Launcher struct {
 	Definitions []LauncherDefinition
 }
@@ -54,6 +51,48 @@ func Default() Model {
 				Action:  "editor",
 				Command: editor,
 				Args:    nil,
+			},
+			{
+				Action:  "nvim",
+				Command: "nvim",
+				Args: []string{
+					"+normal! gg",
+					"+setlocal nomodifiable",
+					"+file [Issue {{issue.id}}]",
+					"+call append(0, [\"Issue: {{issue.id}}\", \"Title: {{issue.title}}\", \"Assignee: {{issue.assignee}}\", \"Labels: {{issue.labels}}\"])",
+				},
+			},
+			{
+				Action:  "opencode",
+				Command: "opencode",
+				Args: []string{
+					"run",
+					"--issue",
+					"{{issue.id}}",
+					"--title",
+					"{{issue.title}}",
+					"--assignee",
+					"{{issue.assignee}}",
+					"--labels",
+					"{{issue.labels}}",
+				},
+				Env: []string{
+					"BWB_ISSUE_ID={{issue.id}}",
+					"BWB_ISSUE_TITLE={{issue.title}}",
+					"BWB_ISSUE_ASSIGNEE={{issue.assignee}}",
+					"BWB_ISSUE_LABELS={{issue.labels}}",
+					"BWB_PROJECT_ROOT={{project.root}}",
+				},
+				WorkDir: "{{project.root}}",
+			},
+			{
+				Action:  "shell-command",
+				Command: "sh",
+				Args: []string{
+					"-lc",
+					"printf 'issue=%s\\ntitle=%s\\nassignee=%s\\nlabels=%s\\n' \"{{issue.id}}\" \"{{issue.title}}\" \"{{issue.assignee}}\" \"{{issue.labels}}\"",
+				},
+				WorkDir: "{{project.root}}",
 			},
 		}},
 		UI: UI{ShowModeSwitcherHelp: true},

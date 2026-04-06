@@ -104,9 +104,6 @@ func renderCompact(detail domain.IssueDetail, width int) string {
 
 	out = append(out, "")
 	out = append(out, fmt.Sprintf("Comments: %d", len(detail.Comments)))
-	if len(detail.BlockedBy) > 0 {
-		out = append(out, styles.TruncateString(fmt.Sprintf("Blocked by: %s", summarizeReferenceTitles(detail.BlockedBy, width-12)), width))
-	}
 	out = append(out, summarizeReferences(detail, width)...)
 
 	return strings.Join(out, "\n")
@@ -126,26 +123,6 @@ func renderPreviewLines(text, fallback string, width, maxLines int) []string {
 func summarizeReferences(detail domain.IssueDetail, width int) []string {
 	line := fmt.Sprintf("Blocked by: %d  Blocks: %d  Related: %d", len(detail.BlockedBy), len(detail.Blocks), len(detail.Related))
 	return []string{styles.TruncateString(line, width)}
-}
-
-func summarizeReferenceTitles(refs []domain.IssueReference, width int) string {
-	if len(refs) == 0 {
-		return "(none)"
-	}
-	titles := make([]string, 0, len(refs))
-	for _, ref := range refs {
-		title := strings.TrimSpace(ref.Title)
-		if title == "" {
-			title = strings.TrimSpace(ref.ID)
-		}
-		if title != "" {
-			titles = append(titles, title)
-		}
-	}
-	if len(titles) == 0 {
-		return "(none)"
-	}
-	return styles.TruncateString(strings.Join(titles, ", "), width)
 }
 
 func renderLabels(labels []string) string {
