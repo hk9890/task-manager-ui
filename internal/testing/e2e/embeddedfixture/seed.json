@@ -1,0 +1,49 @@
+{
+  "prefix": "bwf",
+  "issues": [
+    {
+      "id": "bwf-1",
+      "title": "Seed fixture root task",
+      "description": "Root task used by integration and e2e smoke tests.",
+      "type": "task",
+      "priority": 1,
+      "status": "open",
+      "assignee": "alice",
+      "labels": ["fixture", "ui"],
+      "comments": [
+        "Fixture comment on bwf-1"
+      ]
+    },
+    {
+      "id": "bwf-2",
+      "title": "Blocked bug for fixture",
+      "description": "Used to validate blocked/ready and dependency reads.",
+      "type": "bug",
+      "priority": 0,
+      "status": "blocked",
+      "assignee": "bob",
+      "labels": ["fixture", "blocking"],
+      "comments": [
+        "Needs dependency resolution",
+        "Second deterministic comment"
+      ]
+    },
+    {
+      "id": "bwf-3",
+      "title": "Closed fixture chore",
+      "description": "Closed issue to validate status-filtered reads.",
+      "type": "chore",
+      "priority": 3,
+      "status": "closed",
+      "assignee": "carol",
+      "labels": ["fixture", "docs"],
+      "comments": []
+    }
+  ],
+  "dependencies": [
+    {
+      "blocker_id": "bwf-1",
+      "blocked_id": "bwf-2"
+    }
+  ]
+}

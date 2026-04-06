@@ -246,6 +246,16 @@ v1 search should be built from:
 - structured filters exposed by the gateway
 - optional local narrowing of the currently loaded result set
 
+### Search filter contract note (Phase 1)
+
+The gateway-level search query model includes `priority` and work-state narrowing
+(`ready` / `blocked`) so UI layers can issue one structured query contract.
+
+- Priority maps directly to official `bd search` filters (`--priority-min` / `--priority-max`).
+- Ready/blocked do not have direct `bd search` flags today. Gateway implementations should
+  route through official queue commands (`bd ready --json` / `bd blocked --json`) and apply
+  any additional structured filters in-memory rather than requiring UI code to shell out.
+
 Search should **not** depend on:
 
 - BQL parsing

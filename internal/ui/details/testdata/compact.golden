@@ -1,0 +1,11 @@
+Full detail sample
+bw-22 · in_progress · feature · P2
+Assignee: alice  Labels: backend, ui
+
+Description
+Ship issue detail rendering for standalone mode.
+Keep shell-owned selection state.
+
+Comments: 1
+Blocked by: Data model update
+Blocked by: 1  Blocks: 1  Related: 1

@@ -1,0 +1,22 @@
+Full detail sample
+bw-22 · in_progress · feature · P2
+Assignee: alice  Labels: backend, ui
+
+Description
+Ship issue detail rendering for standalone mode.
+Keep shell-owned selection state.
+
+Notes
+Reference donor rendering patterns only.
+
+Comments (1)
+reviewer · 2026-04-05 11:00
+  Looks good to me
+
+Related Work
+Blocked by (1)
+bw-10 · Data model update
+Blocks (1)
+bw-30 · Integration checks
+Related (1)
+bw-44 · Renderer cleanup

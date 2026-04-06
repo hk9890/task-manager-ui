@@ -1,0 +1,31 @@
+Beads Workbench
+ 1 Board   2 Search   3 Detail
+Board: h/l cols · j/k issues · enter detail · ctrl+space search · ? help · q quit
+Default · cols 2-4/4
+╭─ Ready ──────────────────────── 1 ─╮  ╭─ In Progress ────────────────── 1 ─╮  ╭─ Done ───────────────────────── 1 ─╮
+│  T P1 OPN bw-1 Ready first         │  │› T P1 IP bw-2 In progress one      │  │  T P1 IP bw-2 In progress one      │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+│                                    │  │                                    │  │                                    │
+╰────────────────────────────────────╯  ╰────────────────────────────────────╯  ╰────────────────────────────────────╯
+Selected: bw-2 (in_progress)  ·  Idle

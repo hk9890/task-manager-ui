@@ -1,0 +1,28 @@
+Default · cols 1-2/4
+╭─ Not Ready ───────────────────── 2 ─╮  ╭─ Ready ───────────────────────── 3 ─╮
+│› B P0 BLK bw-3 Blocked: API contr...│  │  T P1 OPN bw-1 Ready fix login pr...│
+│  T P1 BLK bw-9 Blocked: migration...│  │  T P2 OPN bw-5 Ready improve docs...│
+│                                     │  │  C P2 OPN bw-6 Ready triage inbox   │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+│                                     │  │                                     │
+╰─────────────────────────────────────╯  ╰─────────────────────────────────────╯

@@ -1,0 +1,18 @@
+Beads Workbench
+ 1 Board   2 Search   3 Detail
+Modes: [1/2/3 b/s tab]  Select: [j/k ↑/↓]  Detail: [enter o esc]  Actions: [r refresh ? help q quit]
+
+╭─ Board ─────────────────────────────────────────── 2 issues ─╮  ╭─ Detail Pane (v1) ───────────────────────────────╮
+│› bw-1 · P1 · First                                           │  │ID: bw-1                                          │
+│  bw-2 · P2 · Second                                          │  │Status: open                                      │
+╰──────────────────────────────────────────────────────────────╯  │Type:                                             │
+                                                                  │Priority: P1                                      │
+                                                                  │Assignee: (unassigned)                            │
+                                                                  │Comments: 0                                       │
+                                                                  │                                                  │
+                                                                  │Title: First                                      │
+                                                                  │Description: First detail                         │
+                                                                  ╰──────────────────────────────────────────────────╯
+
+Selected: bw-1 (open)
+Idle
