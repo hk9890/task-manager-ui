@@ -204,8 +204,12 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 	}
 
 	args = append(args, "--json")
+	filterStatuses := query.Statuses
+	if len(filterStatuses) == 0 {
+		filterStatuses = []string{"all"}
+	}
 	args = append(args, buildFilterArgs(issueFilterArgs{
-		Statuses:    query.Statuses,
+		Statuses:    filterStatuses,
 		Types:       query.Types,
 		PriorityMin: query.PriorityMin,
 		PriorityMax: query.PriorityMax,
@@ -237,6 +241,9 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 
 func (g *Gateway) searchIssuesFromList(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	args := []string{"list", "--json"}
+	if len(query.Statuses) == 0 {
+		args = append(args, "--all")
+	}
 	args = append(args, buildFilterArgs(issueFilterArgs{
 		Statuses:    query.Statuses,
 		Types:       query.Types,

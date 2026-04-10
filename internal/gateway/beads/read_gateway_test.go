@@ -179,7 +179,7 @@ func TestGatewaySearchIssuesEmptyTextUsesListCommandFallback(t *testing.T) {
 	t.Parallel()
 
 	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--limit", "2"}): {
+		argsKey([]string{"list", "--json", "--all", "--limit", "2"}): {
 			result: ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
