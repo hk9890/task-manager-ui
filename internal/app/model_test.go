@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -90,12 +91,16 @@ func TestModelStartupSynchronizesSelectionWhenBoardContentBecomesVisible(t *test
 		if !observedVisibleBoardState && !m.boardIsLoading() {
 			body := m.renderBody()
 			if strings.Contains(body, "Ready first") {
-				footer := m.renderFooter()
-				if strings.Contains(footer, "Selected: none") {
-					t.Fatalf("expected startup footer selection to sync once board content is visible, got footer:\n%s\nbody:\n%s", footer, body)
+				header := m.renderHeader()
+				if strings.Contains(header, "Selected: none") {
+					t.Fatalf("expected startup header selection to sync once board content is visible, got header:\n%s\nbody:\n%s", header, body)
 				}
-				if !strings.Contains(footer, "Selected: bw-1 (open)") {
-					t.Fatalf("expected startup footer to show active board selection, got:\n%s", footer)
+				if !strings.Contains(header, "Selected: bw-1 (open)") {
+					t.Fatalf("expected startup header to show active board selection, got:\n%s", header)
+				}
+				footer := m.renderFooter()
+				if !strings.Contains(footer, "Board:") {
+					t.Fatalf("expected mode-specific help footer in board mode, got:\n%s", footer)
 				}
 				observedVisibleBoardState = true
 			}
@@ -214,10 +219,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 		t.Fatalf("expected active mode to stay search while typing, got %s", m.active)
 	}
 
-	query := latestSearchQuery(t, gateway.Calls)
-	if query.Text != "b" {
-		t.Fatalf("expected typed text to reach search query, got %q", query.Text)
-	}
+	ui.AssertLatestSearchQueryText(t, gateway.Calls, "b")
 }
 
 func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
@@ -246,7 +248,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if view := m.View(); !strings.Contains(view, "Search failed") || !strings.Contains(view, "search boom") {
+	if view := m.View(); !strings.Contains(view, "search boom") {
 		t.Fatalf("expected search error state in shell view, got:\n%s", view)
 	}
 
@@ -295,6 +297,168 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 	}
 	if m.lastBrowse != mode.Board {
 		t.Fatalf("expected lastBrowse to return to board, got %s", m.lastBrowse)
+	}
+}
+
+func TestModelTabAndShiftTabCycleOnlyBoardAndSearch(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected shift+tab from board to switch to search, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Board {
+		t.Fatalf("expected esc from search to return to board before detail open, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Detail {
+		t.Fatalf("expected detail mode after hotkey 3, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Board && m.active != mode.Search {
+		t.Fatalf("expected tab from detail to cycle to board/search set, got %s", m.active)
+	}
+	if m.active == mode.Detail {
+		t.Fatalf("expected tab cycle to exclude detail mode")
+	}
+}
+
+func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	cfg := config.Default()
+	cfg.UI.ShowModeSwitcherHelp = false
+
+	services, err := NewServices(gateway, cfg, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if footer := m.renderFooter(); strings.TrimSpace(footer) != "" {
+		t.Fatalf("expected footer help hidden when ShowModeSwitcherHelp is false, got:\n%s", footer)
+	}
+}
+
+func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}, Description: "detail"}
+
+	cfg := config.Default()
+	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
+		Shell: map[string][]string{
+			config.ShellActionHelp:         {"F1"},
+			config.ShellActionModeSearch:   {"/"},
+			config.ShellActionToggleSearch: {"ctrl+s"},
+			config.ShellActionQuit:         {"ctrl+q"},
+		},
+		Board: map[string][]string{
+			config.BoardActionMoveRight: {"d"},
+			config.BoardActionMoveDown:  {"s"},
+		},
+	})
+
+	services, err := NewServices(gateway, cfg, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if footer := m.renderFooter(); !strings.Contains(footer, "ctrl+s search") || !strings.Contains(footer, "ctrl+q quit") {
+		t.Fatalf("expected footer to reflect configured bindings, got:\n%s", footer)
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected configured mode_search key to switch to search, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Board {
+		t.Fatalf("expected configured toggle_search key to return to board, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if got := firstSelectionID(m, mode.Board); got != "bw-2" {
+		t.Fatalf("expected configured board move-right key to select bw-2, got %q", got)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = next.(Model)
+	if m.showHelp {
+		t.Fatal("expected default help key to stop working after override")
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("F")})
+	m = next.(Model)
+	if m.showHelp {
+		t.Fatal("expected plain F rune not to trigger help")
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	m = next.(Model)
+	if !m.showHelp {
+		t.Fatal("expected configured help key to show help")
+	}
+	m.showHelp = false
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected configured quit key to return quit command")
+	}
+	msgs := runBatch(cmd)
+	foundQuit := false
+	for _, msg := range msgs {
+		if _, ok := msg.(tea.QuitMsg); ok {
+			foundQuit = true
+			break
+		}
+	}
+	if !foundQuit {
+		t.Fatalf("expected quit command batch, got %#v", msgs)
 	}
 }
 
@@ -533,6 +697,13 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(fakeLauncher.Calls) != 1 || fakeLauncher.Calls[0].Action != "nvim" {
+		t.Fatalf("expected nvim launcher call before toast assertion, got %#v", fakeLauncher.Calls)
+	}
+
+	next, _ = m.Update(launchActionResultMsg{action: "nvim", err: nil})
+	m = next.(Model)
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -547,6 +718,88 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
 	if actions[0] != "nvim" || actions[1] != "opencode" || actions[2] != "shell-command" {
 		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
+	}
+}
+
+func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
+	t.Parallel()
+
+	longLines := make([]string, 0, 80)
+	for i := 1; i <= 80; i++ {
+		longLines = append(longLines, "Line "+strconv.Itoa(i))
+	}
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
+		Description: strings.Join(longLines, "\n"),
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 90
+	m.height = 16
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	viewTop := m.View()
+	if !strings.Contains(viewTop, "Line 1") {
+		t.Fatalf("expected top lines in initial detail view, got:\n%s", viewTop)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	viewPaged := m.View()
+	if viewPaged == viewTop {
+		t.Fatalf("expected detail view to change after page down")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	viewEnd := m.View()
+	if !strings.Contains(viewEnd, "Line 80") {
+		t.Fatalf("expected to reach bottom content after end key, got:\n%s", viewEnd)
+	}
+}
+
+func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, _ := m.Update(launchActionResultMsg{action: "nvim", err: nil})
+	m = next.(Model)
+
+	view := m.View()
+	if !strings.Contains(view, "background (no return flow)") || !strings.Contains(view, "Use e for edit/save round-trip") {
+		t.Fatalf("expected launcher lifecycle guidance toast, got:\n%s", view)
 	}
 }
 
@@ -625,7 +878,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	}
 }
 
-func TestModelBoardHeaderUsesCompactHelpAt120Cols(t *testing.T) {
+func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
@@ -645,11 +898,16 @@ func TestModelBoardHeaderUsesCompactHelpAt120Cols(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	header := m.renderHeader()
-	if strings.Contains(header, "Search filters: [f/shift+tab, h/l, type]") {
-		t.Fatalf("expected old overlong help line to be absent, got:\n%s", header)
+	if strings.Contains(header, "\n") {
+		t.Fatalf("expected single-line header, got:\n%s", header)
 	}
-	if !strings.Contains(header, "ctrl+space search") {
-		t.Fatalf("expected compact board help line, got:\n%s", header)
+	if strings.Contains(header, "Detail") {
+		t.Fatalf("expected detail to be contextual and absent from top tabs, got:\n%s", header)
+	}
+
+	footer := m.renderFooter()
+	if !strings.Contains(footer, "ctrl+space search") {
+		t.Fatalf("expected board footer help with ctrl+space hint, got:\n%s", footer)
 	}
 }
 
@@ -923,6 +1181,37 @@ func TestModelEmbeddedFixtureFullBoardCaptureGolden(t *testing.T) {
 	ui.AssertMatchesGoldenNormalized(t, []byte(view), "model_embedded_board_w120.golden")
 }
 
+func TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors(t *testing.T) {
+	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
+		t.Skip("requires bd, jq, and git on PATH")
+	}
+	t.Setenv("BEADS_ACTOR", "fixture-user")
+
+	repoPath := embeddedfixture.TempRepoPath(t)
+	embeddedfixture.Seed(t, repoPath)
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		WorkDir: repoPath,
+		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
+	})
+	gateway := beads.NewGateway(runner)
+
+	services, err := NewServices(gateway, config.Default(), repoPath)
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 120
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	view := m.View()
+	ui.AssertStartupBoardLayoutSanity(t, view)
+	ui.AssertContainsAll(t, view, "bwf-1")
+	ui.AssertNoObviousRuntimeErrorPanels(t, view)
+}
+
 func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	t.Parallel()
 
@@ -1058,27 +1347,6 @@ func firstSelectionID(m Model, modeID mode.ID) string {
 		return ""
 	}
 	return sel.Issue.ID
-}
-
-func latestSearchQuery(t *testing.T, calls []fakes.GatewayCall) domain.SearchIssuesQuery {
-	t.Helper()
-
-	for i := len(calls) - 1; i >= 0; i-- {
-		call := calls[i]
-		if call.Method != fakes.MethodSearchIssues {
-			continue
-		}
-
-		input, ok := call.Input.(fakes.SearchIssuesCall)
-		if !ok {
-			t.Fatalf("expected SearchIssuesCall payload, got %T", call.Input)
-		}
-
-		return input.Query
-	}
-
-	t.Fatalf("no search calls recorded: %#v", calls)
-	return domain.SearchIssuesQuery{}
 }
 
 func hasExecutable(name string) bool {

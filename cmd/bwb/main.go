@@ -11,7 +11,16 @@ import (
 )
 
 func main() {
-	cfg := config.Default()
+	configResult, err := config.Load()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+	for _, warning := range configResult.Warnings {
+		_, _ = fmt.Fprintf(os.Stderr, "bwb config warning: %s\n", warning)
+	}
+
+	cfg := configResult.Config
 	gateway := beads.NewGateway(beads.NewCommandRunner(beads.RunnerConfig{}))
 	projectRoot, err := os.Getwd()
 	if err != nil {

@@ -51,9 +51,12 @@ func (m *Model) ID() mode.ID {
 	return mode.Search
 }
 
-// Init returns nil because search loads on demand when text is entered.
+// Init loads default all-issues search results for empty query.
 func (m *Model) Init() tea.Cmd {
-	return nil
+	m.loading = true
+	m.errText = ""
+	m.typing = false
+	return loadSearchCmd(m.gateway, domain.SearchIssuesQuery{Limit: defaultSearchLimit, Offset: 0})
 }
 
 // Update processes search-specific messages and keybindings.
@@ -134,6 +137,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
 	case tea.KeyShiftTab, tea.KeyCtrlK:
 		return m.cycleFocus(-1), nil
 	case tea.KeyRunes:
+		if m.focus == uisearch.FocusQuery {
+			m.query += string(msg.Runes)
+			m.typing = true
+			return m.triggerSearch()
+		}
+
 		switch string(msg.Runes) {
 		case "j":
 			if m.focus == uisearch.FocusResults && m.moveSelection(1) {
@@ -156,12 +165,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
 			return m.triggerSearch()
 		}
 
-		if m.focus != uisearch.FocusQuery {
-			return m, nil
-		}
-		m.query += string(msg.Runes)
-		m.typing = true
-		return m.triggerSearch()
+		return m, nil
 	default:
 		return m, nil
 	}
@@ -219,17 +223,7 @@ func (m *Model) triggerSearch() (mode.Controller, tea.Cmd) {
 		Limit:  defaultSearchLimit,
 		Offset: 0,
 	}
-	if strings.TrimSpace(query.Text) == "" {
-		m.loading = false
-		m.errText = ""
-		m.results = nil
-		m.selectedRow = 0
-		m.focus = uisearch.FocusQuery
-		m.typing = false
-		return m, m.selectionChangedCmd()
-	}
-
-	m.loading = false
+	m.loading = true
 	m.errText = ""
 	return m, loadSearchCmd(m.gateway, query)
 }

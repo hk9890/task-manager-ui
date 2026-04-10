@@ -175,6 +175,65 @@ func TestGatewaySearchIssuesBuildsCommandAndReturnsPage(t *testing.T) {
 	}
 }
 
+func TestGatewaySearchIssuesEmptyTextUsesListCommandFallback(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"list", "--json", "--limit", "2"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
+				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if got.Total != 2 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" {
+		t.Fatalf("unexpected fallback search result page: %#v", got)
+	}
+}
+
+func TestGatewaySearchIssuesEmptyTextWithFiltersUsesListCommandFallback(t *testing.T) {
+	t.Parallel()
+
+	priorityMin := 1
+	priorityMax := 2
+	routes := map[string]routeResponse{
+		argsKey([]string{"list", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
+				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		Statuses:    []string{"open"},
+		Types:       []string{"task"},
+		PriorityMin: &priorityMin,
+		PriorityMax: &priorityMax,
+		Assignee:    "alice",
+		Labels:      []string{"ui"},
+		Limit:       1,
+		Offset:      1,
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if got.Total != 2 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" {
+		t.Fatalf("unexpected filtered fallback search result page: %#v", got)
+	}
+}
+
 func TestGatewaySearchIssuesWorkStateReadyUsesReadyAndLocalFilters(t *testing.T) {
 	t.Parallel()
 

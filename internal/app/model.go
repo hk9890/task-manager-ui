@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
@@ -87,6 +88,7 @@ type mutationDialogState struct {
 //   - Full issue inspection stays in dedicated detail mode.
 type Model struct {
 	services Services
+	keys     config.ResolvedKeyBindings
 
 	active     mode.ID
 	lastBrowse mode.ID
@@ -113,9 +115,15 @@ type Model struct {
 
 // NewModel builds the root shell model.
 func NewModel(services Services) Model {
+	keys, err := config.ResolveKeyBindings(services.Config.KeyBindings)
+	if err != nil {
+		panic(fmt.Sprintf("invalid resolved keybindings in app model: %v", err))
+	}
+
+	helpText := shellKeyHelp(keys)
 	help := modal.New(modal.Config{
 		Title:       "Keyboard Help",
-		Message:     shellKeyHelp(),
+		Message:     helpText,
 		HideButtons: true,
 		Required:    false,
 		MinWidth:    72,
@@ -123,10 +131,11 @@ func NewModel(services Services) Model {
 
 	return Model{
 		services:       services,
+		keys:           keys,
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		board:          boardmode.NewModel(services.Gateway, dashboard.NewBuiltInProvider()),
+		board:          boardmode.NewModel(services.Gateway, dashboard.NewBuiltInProvider(), keys),
 		search:         searchmode.NewModel(services.Gateway),
 		toast:          toaster.New(),
 		help:           help,
@@ -209,6 +218,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.SetSize(m.width, m.height)
 		m.search.SetSize(m.width, m.height)
 		m.help.SetSize(m.width, m.height)
+		m.detail.ClampScroll(m.detailViewportHeight())
 		return m, modeCmd
 	case detailLoadedMsg:
 		if msg.issueID != m.detail.TargetID {
@@ -224,6 +234,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.detail.Error = ""
 		m.detail.Detail = msg.detail
+		m.detail.ClampScroll(m.detailViewportHeight())
 		return m, modeCmd
 	case editIssueResultMsg:
 		if msg.err != nil {
@@ -251,7 +262,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launcher action %q failed: %v", msg.action, msg.err), toaster.StyleError))
 		}
-		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q", msg.action), toaster.StyleSuccess))
+		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow). Use e for edit/save round-trip.", msg.action), toaster.StyleInfo))
 	case mutationCatalogsLoadedMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load mutation catalogs: %v", msg.err), toaster.StyleError))
@@ -324,18 +335,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		switch msg.String() {
-		case "q", "ctrl+c":
+		if m.active == mode.Detail && m.detail.HandleKey(msg, m.detailViewportHeight()) {
+			return m, modeCmd
+		}
+
+		switch {
+		case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
 			return m, batchCmds(modeCmd, tea.Quit)
-		case "?":
+		case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
 			m.showHelp = true
 			m.help.SetSize(m.width, m.height)
 			return m, modeCmd
-		case "1", "b":
+		case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
 			m.active = mode.Board
 			m.lastBrowse = mode.Board
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "ctrl+@":
+		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
+			m.active = mode.Search
+			m.lastBrowse = mode.Search
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
 			if m.active == mode.Detail {
 				m.active = mode.Board
 				m.lastBrowse = mode.Board
@@ -349,40 +368,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.active = mode.Search
 			m.lastBrowse = mode.Search
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "2", "s":
-			m.active = mode.Search
-			m.lastBrowse = mode.Search
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "3":
+		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
+			if m.active == mode.Board || m.active == mode.Search {
+				m.lastBrowse = m.active
+			}
 			if m.currentSelection() == nil {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
 			}
 			m.active = mode.Detail
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "tab":
-			if m.active == mode.Board {
-				return m, modeCmd
-			}
-			m.active = nextMode(m.active)
-			if m.active == mode.Board || m.active == mode.Search {
-				m.lastBrowse = m.active
-			}
-			if m.active == mode.Detail && m.currentSelection() == nil {
-				m.active = mode.Board
-				m.lastBrowse = mode.Board
-			}
+		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
+			m.active = nextMode(m.active, m.lastBrowse)
+			m.lastBrowse = m.active
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "shift+tab":
-			m.active = prevMode(m.active)
-			if m.active == mode.Board || m.active == mode.Search {
-				m.lastBrowse = m.active
-			}
-			if m.active == mode.Detail && m.currentSelection() == nil {
-				m.active = mode.Search
-				m.lastBrowse = mode.Search
-			}
+		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
+			m.active = prevMode(m.active, m.lastBrowse)
+			m.lastBrowse = m.active
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "esc":
+		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
 			if m.active == mode.Detail {
 				m.active = m.lastBrowse
 				return m, modeCmd
@@ -394,7 +397,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.toast = m.toast.Hide()
 			return m, modeCmd
-		case "r":
+		case m.keys.Match(config.ShellContext, config.ShellActionReloadDetail, msg):
 			if m.active != mode.Detail {
 				return m, modeCmd
 			}
@@ -404,21 +407,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detail.Loading = true
 			m.detail.Error = ""
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case "e":
+		case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
 			issueID, ok := m.selectedIssueID()
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
 			}
 			return m, batchCmds(modeCmd, editIssueCmd(m.services, issueID))
-		case "c":
+		case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
 			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationCreate, domain.IssueSummary{}))
-		case "u":
+		case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
 			selection := m.currentSelection()
 			if selection == nil || selection.Issue.ID == "" {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
 			}
 			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationUpdate, selection.Issue))
-		case "x":
+		case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
 			selection := m.currentSelection()
 			if selection == nil || selection.Issue.ID == "" {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
@@ -428,7 +431,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.actionModal.SetSize(m.width, m.height)
 			m.showActionModal = true
 			return m, batchCmds(modeCmd, m.actionModal.Init())
-		case "a":
+		case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
 			selection := m.currentSelection()
 			if selection == nil || selection.Issue.ID == "" {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
@@ -438,7 +441,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.actionModal.SetSize(m.width, m.height)
 			m.showActionModal = true
 			return m, batchCmds(modeCmd, m.actionModal.Init())
-		case "n":
+		case m.keys.Match(config.ShellContext, config.ShellActionLaunchNvim, msg):
 			if m.active != mode.Detail {
 				return m, modeCmd
 			}
@@ -447,7 +450,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 			}
 			return m, batchCmds(modeCmd, launchActionCmd(m.services, "nvim", issueContext))
-		case "p":
+		case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
 			if m.active != mode.Detail {
 				return m, modeCmd
 			}
@@ -456,7 +459,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 			}
 			return m, batchCmds(modeCmd, launchActionCmd(m.services, "opencode", issueContext))
-		case "l":
+		case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
 			if m.active != mode.Detail {
 				return m, modeCmd
 			}
@@ -555,6 +558,9 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 		return nil
 	}
 
+	if m.detail.SelectionID != selection.Issue.ID {
+		m.detail.ScrollOffset = 0
+	}
 	m.detail.SelectionID = selection.Issue.ID
 
 	if m.detail.Loading && m.detail.TargetID == selection.Issue.ID {
@@ -571,37 +577,43 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 }
 
 func (m Model) renderHeader() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(styles.TextPrimaryColor).Render("Beads Workbench")
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render("Beads Workbench")
 
 	tab := func(id mode.ID, label string) string {
 		base := lipgloss.NewStyle().Padding(0, 1)
 		if m.active == id {
-			return base.Foreground(styles.ButtonTextColor).Background(styles.ButtonPrimaryFocusBgColor).Bold(true).Render(label)
+			return base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true).Render(label)
 		}
-		return base.Foreground(styles.TextMutedColor).Render(label)
+		return base.Foreground(styles.ShellTabInactiveColor).Render(label)
 	}
 
-	tabs := strings.Join([]string{
-		tab(mode.Board, "1 Board"),
-		tab(mode.Search, "2 Search"),
-		tab(mode.Detail, "3 Detail"),
-	}, " ")
+	left := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		title,
+		"  ",
+		tab(mode.Board, "Board"),
+		" ",
+		tab(mode.Search, "Search"),
+	)
 
-	keys := "Modes: [1/2/3 ctrl+space tab]  Search: [type / j/k h/l esc]  Detail: [enter o esc]  Actions: [c create u update x close a comment e editor n/p/l launch r refresh ? help q quit]"
-	if !m.services.Config.UI.ShowModeSwitcherHelp {
-		keys = ""
+	context := lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(m.headerContext())
+	if m.width <= 0 {
+		return left
 	}
 
-	lines := []string{title, tabs}
-	if keys == "" {
-		return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	leftWidth := lipgloss.Width(left)
+	contextWidth := lipgloss.Width(context)
+	if leftWidth+1+contextWidth > m.width {
+		available := maxInt(0, m.width-leftWidth-1)
+		if available <= 0 {
+			return left
+		}
+		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(styles.TruncateString(m.headerContext(), available))
+		contextWidth = lipgloss.Width(context)
 	}
 
-	for _, line := range headerHelpLines(m.active, m.width) {
-		lines = append(lines, lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(line))
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	spacer := strings.Repeat(" ", maxInt(1, m.width-leftWidth-contextWidth))
+	return left + spacer + context
 }
 
 func (m Model) renderBody() string {
@@ -610,7 +622,7 @@ func (m Model) renderBody() string {
 			Width:              maxInt(60, m.width-2),
 			TopLeft:            "Issue Detail",
 			TopRight:           detailHeaderID(m.detail),
-			Content:            strings.Split(m.detail.View(maxInt(40, m.width-8), false), "\n"),
+			Content:            strings.Split(m.detail.View(maxInt(40, m.width-8), m.detailViewportHeight(), false), "\n"),
 			Focused:            true,
 			FocusedBorderColor: styles.BorderHighlightFocusColor,
 		})
@@ -631,28 +643,16 @@ func (m Model) renderBody() string {
 	return browse
 }
 
+func (m Model) detailViewportHeight() int {
+	return maxInt(1, maxInt(14, m.height-7)-2)
+}
+
 func (m Model) renderFooter() string {
-	selectionText := "Selected: none"
-	if sel := m.currentSelection(); sel != nil {
-		selectionText = fmt.Sprintf("Selected: %s (%s)", sel.Issue.ID, sel.Issue.Status)
+	if !m.services.Config.UI.ShowModeSwitcherHelp {
+		return ""
 	}
 
-	loadingStates := make([]loading.State, 0, 3)
-	if m.boardIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeBoard})
-	}
-	if m.searchIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
-	}
-	if m.detail.Loading {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID})
-	}
-
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Render(selectionText),
-		lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("  ·  "+loading.Summary(loadingStates)),
-	)
+	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(footerHelpText(m.active, m.width, m.keys))
 }
 
 func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
@@ -767,27 +767,36 @@ func batchCmds(cmds ...tea.Cmd) tea.Cmd {
 	return tea.Batch(filtered...)
 }
 
-func nextMode(current mode.ID) mode.ID {
-	order := []mode.ID{mode.Board, mode.Search, mode.Detail}
-	for i, id := range order {
-		if id == current {
-			return order[(i+1)%len(order)]
+func nextMode(current mode.ID, lastBrowse mode.ID) mode.ID {
+	switch current {
+	case mode.Board:
+		return mode.Search
+	case mode.Search:
+		return mode.Board
+	case mode.Detail:
+		if lastBrowse == mode.Search {
+			return mode.Board
 		}
+		return mode.Search
+	default:
+		return mode.Board
 	}
-	return mode.Board
 }
 
-func prevMode(current mode.ID) mode.ID {
-	order := []mode.ID{mode.Board, mode.Search, mode.Detail}
-	for i, id := range order {
-		if id == current {
-			if i == 0 {
-				return order[len(order)-1]
-			}
-			return order[i-1]
+func prevMode(current mode.ID, lastBrowse mode.ID) mode.ID {
+	switch current {
+	case mode.Board:
+		return mode.Search
+	case mode.Search:
+		return mode.Board
+	case mode.Detail:
+		if lastBrowse == mode.Search {
+			return mode.Board
 		}
+		return mode.Search
+	default:
+		return mode.Search
 	}
-	return mode.Search
 }
 
 func loadDetailCmd(services Services, issueID string) tea.Cmd {
@@ -833,61 +842,166 @@ func (m Model) selectedIssueContext() (domain.IssueDetail, bool) {
 	return domain.IssueDetail{Summary: selection.Issue}, true
 }
 
-func shellKeyHelp() string {
+func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 	return strings.Join([]string{
 		"Mode switching:",
-		"  1/b = Board, 2/s = Search, 3 = Detail",
-		"  tab / shift+tab = cycle modes",
+		fmt.Sprintf("  %s = Board, %s = Search", keys.DisplayLabel(config.ShellContext, config.ShellActionModeBoard), combineDisplayLabels(keys, config.ShellContext, config.ShellActionModeSearch, config.ShellActionToggleSearch)),
+		fmt.Sprintf("  %s / %s = cycle Board/Search", keys.DisplayLabel(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayLabel(config.ShellContext, config.ShellActionModeCyclePrev)),
+		fmt.Sprintf("  %s = open selected issue detail", keys.DisplayLabel(config.ShellContext, config.ShellActionModeDetail)),
 		"",
 		"Selection:",
-		"  Board: h/l (or ←/→) switch columns, j/k (or ↓/↑) move within a column",
+		fmt.Sprintf("  Board: %s switch columns, %s move within a column", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
 		"  Search: type to query; tab from query focuses results; h/l switch panes; j/k moves results",
 		"",
 		"Actions:",
-		"  c = create issue (inline modal)",
-		"  u = update selected issue metadata",
-		"  x = close selected issue",
-		"  a = add comment to selected issue",
-		"  e = edit selected issue in external editor",
-		"  n = launch nvim action (detail mode)",
-		"  p = launch opencode action (detail mode)",
-		"  l = launch shell-command action (detail mode)",
-		"  enter or o = open selected issue in detail mode",
-		"  r = reload detail mode from gateway",
-		"  esc = return from detail/search to browse / dismiss toast",
-		"  ? = toggle help",
-		"  q = quit",
+		fmt.Sprintf("  %s = create issue (inline modal)", keys.DisplayLabel(config.ShellContext, config.ShellActionCreateIssue)),
+		fmt.Sprintf("  %s = update selected issue metadata", keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue)),
+		fmt.Sprintf("  %s = close selected issue", keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue)),
+		fmt.Sprintf("  %s = add comment to selected issue", keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue)),
+		fmt.Sprintf("  %s = edit selected issue in external editor", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
+		fmt.Sprintf("  %s/%s/%s = launch external tools (detail mode, background fire-and-forget)", keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchNvim), keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchOpencode), keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchShell)),
+		"  launcher actions do not provide in-app return/save handling",
+		fmt.Sprintf("  use %s for edit/save round-trip that reloads detail", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
+		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
+		"  detail scroll: j/k or ↑/↓, pgup/pgdn, home/end",
+		fmt.Sprintf("  %s = reload detail mode from gateway", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
+		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
+		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
+		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
 		"Detail presentation model (v1): dedicated detail mode",
 		"  - Board/Search prioritize overview triage density",
-		"  - enter or o opens full issue detail view",
+		fmt.Sprintf("  - %s opens full issue detail view", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
 	}, "\n")
 }
 
+func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, second string) string {
+	left := keys.DisplayLabel(context, first)
+	right := keys.DisplayLabel(context, second)
+	if left == "" {
+		return right
+	}
+	if right == "" {
+		return left
+	}
+	return left + " or " + right
+}
+
 func headerHelpLines(active mode.ID, width int) []string {
-	if width < 110 {
-		return []string{"Keys: enter detail · e editor · ? help · q quit"}
+	_ = active
+	_ = width
+	return nil
+}
+
+func (m Model) modeSwitchKey() string {
+	if m.active == mode.Search {
+		return m.keys.Primary(config.ShellContext, config.ShellActionModeBoard)
+	}
+	return m.keys.Primary(config.ShellContext, config.ShellActionModeSearch)
+}
+
+func (m Model) headerContext() string {
+	variants := m.headerContextVariants()
+	if len(variants) == 0 {
+		return ""
 	}
 
-	modeLine := "Modes: 1 Board · 2 Search · 3 Detail · Tab cycle · ? help · q quit"
-	if width < 145 {
+	if m.width <= 0 {
+		return variants[0]
+	}
+
+	for _, v := range variants {
+		if lipgloss.Width(v) <= m.width/2 {
+			return v
+		}
+	}
+
+	return variants[len(variants)-1]
+}
+
+func (m Model) headerContextVariants() []string {
+	if m.active == mode.Detail {
+		id := strings.TrimSpace(m.detail.Detail.Summary.ID)
+		if id == "" {
+			id = strings.TrimSpace(m.detail.SelectionID)
+		}
+		status := strings.TrimSpace(m.detail.Detail.Summary.Status)
+		if id != "" && status != "" {
+			return []string{fmt.Sprintf("Detail: %s · %s", id, status), fmt.Sprintf("Detail: %s", id), "Detail"}
+		}
+		if id != "" {
+			return []string{fmt.Sprintf("Detail: %s", id), "Detail"}
+		}
+		return []string{"Detail"}
+	}
+
+	prefix := "Board"
+	if m.active == mode.Search {
+		prefix = fmt.Sprintf("Search: %d results", m.searchResultCount())
+	}
+
+	selectedLong, selectedShort := "Selected: none", "Sel: none"
+	if sel := m.currentSelection(); sel != nil {
+		selectedLong = fmt.Sprintf("Selected: %s (%s)", sel.Issue.ID, sel.Issue.Status)
+		selectedShort = fmt.Sprintf("Sel: %s", sel.Issue.ID)
+	}
+
+	loadingSummary := loading.Summary(m.loadingStates())
+	loadingShort := loadingSummary
+	if loadingSummary == "Idle" {
+		loadingShort = "idle"
+	}
+
+	variants := []string{
+		fmt.Sprintf("%s · %s · %s", prefix, selectedLong, loadingSummary),
+		fmt.Sprintf("%s · %s", prefix, selectedLong),
+		fmt.Sprintf("%s · %s · %s", prefix, selectedShort, loadingShort),
+		prefix,
+	}
+
+	if m.active == mode.Search {
+		variants = append([]string{
+			fmt.Sprintf("Search · %s · %s", selectedLong, loadingSummary),
+			fmt.Sprintf("Search · %s", selectedShort),
+		}, variants...)
+	}
+
+	return variants
+}
+
+func (m Model) loadingStates() []loading.State {
+	loadingStates := make([]loading.State, 0, 3)
+	if m.boardIsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeBoard})
+	}
+	if m.searchIsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
+	}
+	if m.detail.Loading {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID})
+	}
+	return loadingStates
+}
+
+func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) string {
+	if width < 90 {
 		switch active {
 		case mode.Search:
-			return []string{"Search: type to query · / focus · h/l panes · j/k results · esc board · ? help · q quit"}
+			return fmt.Sprintf("Search: type / tab j/k enter %s %s %s", keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 		case mode.Detail:
-			return []string{"Detail: c/u/x/a mutate · e editor · n/p/l launchers · r refresh · esc back · ? help · q quit"}
+			return fmt.Sprintf("Detail: j/k pgup/pgdn %s %s %s %s", keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 		default:
-			return []string{"Board: h/l cols · j/k issues · enter detail · ctrl+space search · ? help · q quit"}
+			return fmt.Sprintf("Board: %s %s %s %s %s %s", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 		}
 	}
 
 	switch active {
 	case mode.Search:
-		return []string{modeLine, "Search: type to query · / focus query · h/l move panes · j/k results · enter detail · esc board"}
+		return fmt.Sprintf("Search: type query · / focus · tab switch mode · j/k results · enter detail · %s board · %s help · %s quit", keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 	case mode.Detail:
-		return []string{modeLine, "Detail: c/u/x/a mutate · e editor · n/p/l launchers · r refresh detail · esc back to browse"}
+		return fmt.Sprintf("Detail: j/k scroll · pgup/pgdn · %s edit · %s back · %s help · %s quit", keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 	default:
-		return []string{modeLine, "Board: h/l switch columns · j/k move issues · enter detail · ctrl+space search"}
+		return fmt.Sprintf("Board: %s/%s columns · %s/%s issues · %s detail · %s search · %s help · %s quit", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 	}
 }
 

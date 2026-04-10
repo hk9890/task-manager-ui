@@ -76,16 +76,30 @@ project-plan/        # product, architecture, and execution planning docs
 ## Runtime Configuration (v1)
 
 Configuration lives in `internal/config` and is loaded once at startup via
-`config.Default()`.
+`config.Load()`.
+
+Runtime config path resolution uses `os.UserConfigDir()` and looks for:
+
+- `bwb/config.yaml`
+- on Linux this is typically `~/.config/bwb/config.yaml`
+
+Load semantics:
+
+- Missing config file is allowed; BWB starts with defaults.
+- Explicit config file values override environment-driven defaults.
+- Unknown YAML keys are ignored and surfaced as startup warnings.
+- Invalid YAML, unreadable existing config files, invalid values, and duplicate
+  launcher actions fail startup.
 
 The v1 model is intentionally small and only covers app-shell concerns:
 
 - `Editor.Command`
-  - Uses `$EDITOR` when set.
+  - Defaults to `$EDITOR` when set.
   - Falls back to `vi` when `$EDITOR` is unset/empty.
+  - `editor.command` in `config.yaml` overrides both.
 - `Launcher.Definitions`
   - Defaults to four built-in launcher actions:
-    - `editor` → launches the resolved editor command (`$EDITOR`, fallback `vi`).
+    - `editor` → launches the resolved editor command (`editor.command`, else `$EDITOR`, else `vi`).
     - `nvim` → launches `nvim` with a read-only issue context buffer seeded from
       interpolation placeholders.
     - `opencode` → launches `opencode run` with issue metadata args/env.
@@ -97,9 +111,37 @@ The v1 model is intentionally small and only covers app-shell concerns:
     - `Args` (optional argv templates)
     - `Env` (optional `KEY=value` templates)
     - `WorkDir` (optional working-directory template; defaults to project root)
+  - YAML launcher overrides merge by `Action`:
+    - matching built-ins are replaced field-by-field from the provided override
+    - new action names are appended
+    - unspecified built-ins remain available
 - `UI.ShowModeSwitcherHelp`
   - Defaults to `true`.
   - Controls whether the shell renders the mode hotkey hint line.
+
+Example config:
+
+```yaml
+editor:
+  command: nvim
+
+launcher:
+  definitions:
+    - action: opencode
+      command: opencode-dev
+      args:
+        - run
+        - --issue
+        - "{{issue.id}}"
+    - action: tmux-note
+      command: tmux
+      args:
+        - new-window
+        - "issue {{issue.id}}"
+
+ui:
+  show_mode_switcher_help: false
+```
 
 ### Launcher interpolation/context surface
 
@@ -127,6 +169,10 @@ Notes:
 - If no issue is selected, the shell shows a warning toast and does not launch.
 - Successful rich editor updates trigger detail reload; launchers remain
   non-blocking and do not auto-refresh issue detail.
+- Launcher actions are explicitly **background fire-and-forget** in v1 (no
+  managed terminal handoff/return contract). After launching, the app stays
+  active and shows guidance toast text; use `e` for edit/save flows that round
+  trip back into app state with detail reload.
 
 The rich marker-based edit document flow in `internal/launcher/editor` is the
 actual interactive shell edit path. Launcher definitions remain a separate
@@ -148,6 +194,31 @@ Shared shell feedback primitives live under `internal/ui/`:
   surfaces.
 - `ui/toaster` renders transient error/warn/info/success feedback.
 - `ui/modal` renders help/confirmation overlays.
+- `ui/shared/issuerow` owns compact issue row rendering for list-like surfaces
+  (board/search): selected-row prefix, type/priority/status/ID token assembly,
+  and width-aware truncation.
+
+UI component responsibility boundary:
+
+- **Row component**: `ui/shared/issuerow` is the single compact issue-row
+  renderer for board/search-style lists.
+- **Optional list component**: there is currently **no shared issue-list
+  component**. Row-level sharing is sufficient for now because the remaining
+  board/search containers differ materially in layout and behavior.
+- **Panel/container component**: `ui/styles.FormSection` is the generic rounded
+  bordered section/container primitive used to frame board columns, search
+  panes, and detail shells.
+- **Detail component**: `ui/details` is the dedicated issue-detail renderer and
+  stays separate from compact row/list rendering.
+
+Issue-list responsibility boundary:
+
+- Keep **row rendering** shared via `ui/shared/issuerow`.
+- Keep **list/panel containers** mode-specific for now (`ui/board` columns vs
+  `ui/search` query/results/preview panes), because their layout, empty-state,
+  focus, and composition responsibilities still differ materially.
+- If future changes create meaningful duplication above the row level, extract a
+  minimal list component under `internal/ui/shared/` with focused tests.
 
 Design intent:
 

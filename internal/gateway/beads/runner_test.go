@@ -6,7 +6,9 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -194,6 +196,33 @@ func TestCommandRunnerRunNilReceiver(t *testing.T) {
 	assertGatewayErrorCode(t, err, domain.ErrorCodeUnknown)
 }
 
+func TestCommandRunnerRunSerializesConcurrentExecutorCalls(t *testing.T) {
+	t.Parallel()
+
+	execStub := &concurrencyGuardExecutor{}
+	runner := NewCommandRunner(RunnerConfig{Executor: execStub})
+
+	const workers = 8
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			_, err := runner.Run(context.Background(), CommandRequest{Operation: "list issues", Args: []string{"list", "--json"}})
+			if err != nil {
+				t.Errorf("Run returned error: %v", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if execStub.maxConcurrent > 1 {
+		t.Fatalf("expected serialized executor calls, max concurrent=%d", execStub.maxConcurrent)
+	}
+}
+
 type stubExecutor struct {
 	command string
 	args    []string
@@ -202,6 +231,29 @@ type stubExecutor struct {
 
 	result ExecResult
 	err    error
+}
+
+type concurrencyGuardExecutor struct {
+	mu            sync.Mutex
+	current       int
+	maxConcurrent int
+}
+
+func (e *concurrencyGuardExecutor) Run(_ context.Context, _ string, _ []string, _ string, _ []string) (ExecResult, error) {
+	e.mu.Lock()
+	e.current++
+	if e.current > e.maxConcurrent {
+		e.maxConcurrent = e.current
+	}
+	e.mu.Unlock()
+
+	time.Sleep(10 * time.Millisecond)
+
+	e.mu.Lock()
+	e.current--
+	e.mu.Unlock()
+
+	return ExecResult{Stdout: []byte("ok")}, nil
 }
 
 func (s *stubExecutor) Run(_ context.Context, command string, args []string, workDir string, env []string) (ExecResult, error) {

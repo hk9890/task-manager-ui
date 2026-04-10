@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
@@ -33,6 +34,15 @@ func (a controllerAdapter) View() string {
 type staticProvider struct {
 	defs []dashboard.Definition
 	err  error
+}
+
+func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
+	t.Helper()
+	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+	return keys
 }
 
 func (p staticProvider) Dashboards(_ context.Context) ([]dashboard.Definition, error) {
@@ -64,7 +74,7 @@ func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
 		},
 	}}}
 
-	tm := testui.NewTestModel(t, controllerAdapter{controller: NewModel(gateway, provider)})
+	tm := testui.NewTestModel(t, controllerAdapter{controller: NewModel(gateway, provider, resolvedBoardKeys(t))})
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	testui.WaitForOutputContainsAll(t, tm.Output(), "Default", "Not Ready", "Ready", "In Progress", "bw-1", "bw-3")
@@ -109,7 +119,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		},
 	}}}
 
-	m := NewModel(gateway, provider)
+	m := NewModel(gateway, provider, resolvedBoardKeys(t))
 	m.dashboardID = "default"
 	m.dashboardTitle = "Default"
 	m.sections = []sectionState{
@@ -167,6 +177,82 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 	testui.AssertMatchesGoldenNormalized(t, []byte(m.View()), "model_navigation.golden")
 }
 
+func TestBoardModeUsesConfiguredBindings(t *testing.T) {
+	t.Parallel()
+
+	keys, err := config.ResolveKeyBindings(config.MergeKeyBindings(config.DefaultKeyBindings(), &config.KeyBindingOverride{
+		Board: map[string][]string{
+			config.BoardActionMoveLeft:   {"a"},
+			config.BoardActionMoveRight:  {"d"},
+			config.BoardActionMoveUp:     {"w"},
+			config.BoardActionMoveDown:   {"s"},
+			config.BoardActionOpenDetail: {"space"},
+			config.BoardActionReload:     {"R"},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}
+
+	provider := staticProvider{defs: []dashboard.Definition{{
+		ID:    "default",
+		Title: "Default",
+		Sections: []dashboard.Section{
+			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
+			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 25}}},
+		},
+	}}}
+
+	m := NewModel(gateway, provider, keys)
+	m.dashboardID = "default"
+	m.dashboardTitle = "Default"
+	m.sections = []sectionState{
+		{title: "Ready", issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, loaded: true},
+		{title: "In Progress", issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, loaded: true},
+	}
+	m.focusedColumn = 0
+	m.selectedRow[0] = 0
+	m.selectedRow[1] = 0
+	m.loading = false
+	m.SetSize(100, 24)
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m = next.(*Model)
+	if cmd == nil {
+		t.Fatal("expected selection change after configured move-right key")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	m = next.(*Model)
+	if cmd == nil {
+		t.Fatal("expected selection change after configured move-down key")
+	}
+	msg := cmd()
+	selChanged, ok := msg.(mode.SelectionChangedMsg)
+	if !ok || selChanged.Selection == nil || selChanged.Selection.Issue.ID != "bw-8" {
+		t.Fatalf("expected configured move-down to select bw-8, got %#v", msg)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	m = next.(*Model)
+	if cmd == nil {
+		t.Fatal("expected action request from configured open key")
+	}
+	if action, ok := cmd().(mode.ActionRequestMsg); !ok || action.Action != mode.ActionOpenDetail {
+		t.Fatalf("expected open detail action request, got %#v", cmd())
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	m = next.(*Model)
+	if cmd == nil || !m.loading {
+		t.Fatal("expected configured reload key to trigger dashboard reload")
+	}
+}
+
 func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t *testing.T) {
 	t.Parallel()
 
@@ -179,7 +265,7 @@ func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t
 			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
 			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
 		},
-	}}})
+	}}}, resolvedBoardKeys(t))
 
 	m.loading = false
 	m.sections = []sectionState{{title: "Not Ready", loaded: false}, {title: "Ready", loaded: false}, {title: "In Progress", loaded: false}}
@@ -272,7 +358,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			tm := testui.NewTestModelWithSize(t, controllerAdapter{controller: NewModel(gateway, provider)}, tc.width, tc.height)
+			tm := testui.NewTestModelWithSize(t, controllerAdapter{controller: NewModel(gateway, provider, resolvedBoardKeys(t))}, tc.width, tc.height)
 			t.Cleanup(func() {
 				_ = tm.Quit()
 			})

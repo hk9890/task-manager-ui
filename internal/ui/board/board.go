@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
@@ -18,24 +20,14 @@ const (
 	minReadableWideCol  = 40
 	wideLayoutThreshold = 150
 	fallbackColumnWidth = 18
-	minTitleWidth       = 8
 )
-
-// Row is one renderable board issue row.
-type Row struct {
-	ID       string
-	Title    string
-	Type     string
-	Status   string
-	Priority int
-	Selected bool
-}
 
 // Column is one board section column.
 type Column struct {
-	Title string
-	Rows  []Row
-	Error string
+	Title       string
+	Rows        []domain.IssueSummary
+	SelectedRow int
+	Error       string
 }
 
 // State is the full board renderer input.
@@ -192,41 +184,16 @@ func renderColumnRows(col Column, maxWidth int) []string {
 	}
 
 	rows := make([]string, 0, len(col.Rows))
-	for _, row := range col.Rows {
-		rows = append(rows, renderRowLine(row, maxWidth))
+	for idx, issue := range col.Rows {
+		rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
+			Issue:    issue,
+			Selected: idx == col.SelectedRow,
+			Width:    maxWidth,
+			Styled:   true,
+		}))
 	}
 
 	return rows
-}
-
-func renderRowLine(row Row, maxWidth int) string {
-	prefix := "  "
-	if row.Selected {
-		prefix = "› "
-	}
-
-	title := strings.TrimSpace(row.Title)
-	if title == "" {
-		title = "(untitled)"
-	}
-
-	idWidth := minInt(12, renderhelpers.MaxInt(7, maxWidth/5))
-	id := renderhelpers.CompactIssueID(row.ID, idWidth)
-	meta := strings.Join([]string{renderhelpers.CompactIssueType(row.Type), renderhelpers.CompactPriority(row.Priority), renderhelpers.CompactIssueState(row.Status), id}, " ")
-	titlePrefix := prefix + meta + " "
-	titleWidth := maxWidth - lipgloss.Width(titlePrefix)
-	if titleWidth < minTitleWidth {
-		return styles.TruncateString(prefix+meta, maxWidth)
-	}
-
-	return titlePrefix + styles.TruncateString(title, titleWidth)
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func joinWithGap(parts []string, gap string) []string {

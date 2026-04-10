@@ -1,9 +1,11 @@
 package details
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
@@ -14,7 +16,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		t.Parallel()
 
 		m := Model{}
-		view := m.View(100, false)
+		view := m.View(100, 20, false)
 		if !strings.Contains(view, "No selected issue.") {
 			t.Fatalf("expected no-selection state, got:\n%s", view)
 		}
@@ -24,7 +26,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		t.Parallel()
 
 		m := Model{SelectionID: "bw-2", TargetID: "bw-2", Loading: true}
-		view := m.View(100, false)
+		view := m.View(100, 20, false)
 		if !strings.Contains(view, "Loading details for") || !strings.Contains(view, "bw-2") {
 			t.Fatalf("expected loading detail state, got:\n%s", view)
 		}
@@ -34,7 +36,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		t.Parallel()
 
 		m := Model{SelectionID: "bw-2", Error: "boom"}
-		view := m.View(100, false)
+		view := m.View(100, 20, false)
 		if !strings.Contains(view, "Failed to load details for bw-2") || !strings.Contains(view, "boom") {
 			t.Fatalf("expected detail error state, got:\n%s", view)
 		}
@@ -52,7 +54,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 		},
 	}
 
-	view := m.View(100, false)
+	view := m.View(100, 20, false)
 	if !strings.Contains(view, "Second issue") || !strings.Contains(view, "bw-2 · in_progress · task · P2") {
 		t.Fatalf("expected bw-2 detail rendering, got:\n%s", view)
 	}
@@ -64,11 +66,58 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 		Summary: domain.IssueSummary{ID: "bw-4", Title: "Fourth issue", Status: "open", Type: "bug", Priority: 1},
 	}
 
-	view = m.View(100, false)
+	view = m.View(100, 20, false)
 	if !strings.Contains(view, "Fourth issue") || !strings.Contains(view, "bw-4 · open · bug · P1") {
 		t.Fatalf("expected bw-4 detail rendering after selection change, got:\n%s", view)
 	}
 	if strings.Contains(view, "bw-2 · in_progress · task · P2") {
 		t.Fatalf("expected previous detail bw-2 to be replaced, got:\n%s", view)
+	}
+}
+
+func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
+	t.Parallel()
+
+	descriptionLines := make([]string, 0, 40)
+	for i := 1; i <= 40; i++ {
+		descriptionLines = append(descriptionLines, "Line "+strconv.Itoa(i))
+	}
+
+	m := Model{
+		SelectionID: "bw-2",
+		TargetID:    "bw-2",
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-2", Title: "Long issue", Status: "open", Type: "task", Priority: 1},
+			Description: strings.Join(descriptionLines, "\n"),
+		},
+	}
+
+	initial := m.View(80, 10, false)
+	if !strings.Contains(initial, "Long issue") {
+		t.Fatalf("expected top-of-detail content in initial viewport, got:\n%s", initial)
+	}
+
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 10); !consumed {
+		t.Fatalf("expected page down to be consumed")
+	}
+	after := m.View(80, 10, false)
+	if after == initial {
+		t.Fatalf("expected viewport output to change after page down")
+	}
+
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 10); !consumed {
+		t.Fatalf("expected end key to be consumed")
+	}
+	endView := m.View(80, 10, false)
+	if !strings.Contains(endView, "Related: (none)") {
+		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
+	}
+
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 10); !consumed {
+		t.Fatalf("expected home key to be consumed")
+	}
+	homeView := m.View(80, 10, false)
+	if !strings.Contains(homeView, "Long issue") {
+		t.Fatalf("expected home to return to top, got:\n%s", homeView)
 	}
 }

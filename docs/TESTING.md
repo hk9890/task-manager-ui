@@ -51,6 +51,20 @@ go test ./internal/testing/...
 go test ./internal/testing/ui -v
 ```
 
+Fast deterministic UI verification loop (common during active implementation):
+
+```bash
+go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v
+```
+
+## Runtime UI Verification Workflow (operator runbook)
+
+Use `docs/RUNTIME_UI_VERIFICATION.md` for the concrete, command-oriented workflow.
+
+- It covers the fast deterministic automated scenario loop and a built-binary manual run.
+- It includes a short checklist for layout, navigation, search behavior, and external-tool flows.
+- Keep this document as policy/strategy; keep step-by-step runtime commands in that runbook.
+
 ## Full-App Verification (required for user-facing changes)
 
 Use the real app with the embedded fixture when a change affects layout, navigation, startup behavior, or operator-facing workflows.
@@ -77,6 +91,23 @@ Notes:
 - Prefer the embedded fixture for repeatable verification.
 - If terminal capture is needed, use a method that records the visible rendered screen. Alt-screen TUIs may not be proven by raw stdout/transcript output alone.
 - Full-app verification complements automated tests; it does not replace them.
+
+### Process-level capture policy (gyg.4)
+
+Current decision: **no new default process-level capture harness is added**.
+
+Reasoning:
+
+- Existing in-process embedded-fixture + teatest + golden/state assertions already cover the primary runtime UI risk surface quickly and deterministically.
+- Existing built-binary full-app verification already covers the remaining entrypoint/product run check for manual review without adding fragile transcript-only automation.
+
+Process-level capture stays optional and narrow. Add process-level automation only when a concrete bug class cannot be verified in-process. Any such path must define all of the following up front:
+
+1. **Readiness signal** (what visible state means the app is ready for assertion/capture).
+2. **Hard timeout** (must fail explicitly rather than hang; startup-to-capture budget under 2s for the seeded fixture path unless documented otherwise).
+3. **Cleanup behavior** (guaranteed child-process termination on success, timeout, and failure).
+
+Do not rely on raw stdout transcript capture alone for alt-screen rendering proof.
 
 ## Bubble Tea UI Testing Strategy (default)
 

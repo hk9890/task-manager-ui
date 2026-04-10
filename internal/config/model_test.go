@@ -57,3 +57,19 @@ func TestDefault_UIPreferences(t *testing.T) {
 		t.Fatal("expected mode switcher help to be enabled by default")
 	}
 }
+
+func TestCloneStringSlice(t *testing.T) {
+	values := []string{"a", "b"}
+	cloned := cloneStringSlice(values)
+	if len(cloned) != 2 || cloned[0] != "a" || cloned[1] != "b" {
+		t.Fatalf("unexpected cloned values: %#v", cloned)
+	}
+	cloned[0] = "changed"
+	if values[0] != "a" {
+		t.Fatalf("expected original slice to remain unchanged, got %#v", values)
+	}
+
+	if cloneStringSlice(nil) != nil {
+		t.Fatal("expected nil clone for nil input")
+	}
+}

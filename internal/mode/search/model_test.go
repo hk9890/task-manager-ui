@@ -2,13 +2,17 @@ package search
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
+	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
@@ -51,27 +55,19 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	}
 }
 
-func TestSearchModeInitDoesNotRunGatewaySearchForEmptyQuery(t *testing.T) {
+func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	t.Parallel()
 
 	gateway := newSearchFakeGateway()
-	m := NewModel(gateway)
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1}}}, Total: 1}
+	m := initModel(gateway)
 
-	for _, msg := range runBatch(m.Init()) {
-		next, cmd := m.Update(msg)
-		m = next.(*Model)
-		for _, follow := range runBatch(cmd) {
-			next, _ = m.Update(follow)
-			m = next.(*Model)
-		}
+	if !hasGatewayCall(gateway.Calls, fakes.MethodSearchIssues) {
+		t.Fatalf("expected empty init query to load default search results, calls=%#v", gateway.Calls)
 	}
 
-	if hasGatewayCall(gateway.Calls, fakes.MethodSearchIssues) {
-		t.Fatalf("expected empty init query to avoid gateway search call, calls=%#v", gateway.Calls)
-	}
-
-	if !strings.Contains(m.View(), "Start typing to search issues.") {
-		t.Fatalf("expected empty state view after init, got:\n%s", m.View())
+	if !strings.Contains(m.View(), "Default one") {
+		t.Fatalf("expected default results view after init, got:\n%s", m.View())
 	}
 }
 
@@ -79,16 +75,12 @@ func TestSearchModeTextQuerySendsGatewaySearch(t *testing.T) {
 	t.Parallel()
 
 	gateway := newSearchFakeGateway()
-	m := initModel(t, gateway)
+	m := initModel(gateway)
 
 	gateway.ResetCalls()
-	pressAndResolve(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
-	pressAndResolve(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	pressAndResolve(m, testui.SearchTypeTextKeys("gw")...)
 
-	query := latestSearchQuery(t, gateway.Calls)
-	if query.Text != "gw" {
-		t.Fatalf("expected text query gw, got %q", query.Text)
-	}
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, "gw")
 }
 
 func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
@@ -99,9 +91,9 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
 		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
 	}}
-	m := initModel(t, gateway)
+	m := initModel(gateway)
 
-	pressAndResolve(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	if m.focus != uisearch.FocusQuery {
 		t.Fatalf("expected initial search focus, got %v", m.focus)
 	}
@@ -114,7 +106,7 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m = next.(*Model)
-	m = applyMessages(m, runBatch(cmd))
+	m = applyMessages(m, drainCmd(cmd))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected j to move selection to bw-2, got %#v", got)
 	}
@@ -129,6 +121,41 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	m = next.(*Model)
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected left to move focus back to results, got %v", m.focus)
+	}
+}
+
+func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1}},
+		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2}},
+	}}
+	m := initModel(gateway)
+
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
+		t.Fatalf("expected initial selection on default results, got %#v", got)
+	}
+
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Filtered only", Status: "open", Type: "task", Priority: 1}}}}
+	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-9" {
+		t.Fatalf("expected filtered selection bw-9, got %#v", got)
+	}
+
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1}},
+		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2}},
+	}}
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyBackspace})
+
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
+		t.Fatalf("expected selection reset to first default result, got %#v", got)
+	}
+	if !strings.Contains(m.View(), "Default first") || !strings.Contains(m.View(), "Default second") {
+		t.Fatalf("expected restored default results in view, got:\n%s", m.View())
 	}
 }
 
@@ -163,8 +190,8 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Run("open detail action from results", func(t *testing.T) {
 		gateway := newSearchFakeGateway()
 		gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-7", Title: "Result", Status: "open", Type: "task", Priority: 1}}}}
-		m := initModel(t, gateway)
-		pressAndResolve(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+		m := initModel(gateway)
+		pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 
 		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 		m = next.(*Model)
@@ -173,13 +200,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 			t.Fatalf("expected action request command on enter")
 		}
 		msg := cmd()
-		action, ok := msg.(mode.ActionRequestMsg)
-		if !ok {
-			t.Fatalf("expected ActionRequestMsg, got %T", msg)
-		}
-		if action.Action != mode.ActionOpenDetail || action.Mode != mode.Search {
-			t.Fatalf("unexpected action request: %#v", action)
-		}
+		testui.AssertActionRequest(t, msg, mode.Search, mode.ActionOpenDetail)
 	})
 }
 
@@ -188,9 +209,9 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 
 	gateway := newSearchFakeGateway()
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-7", Title: "Result", Status: "open", Type: "task", Priority: 1}}}}
-	m := initModel(t, gateway)
+	m := initModel(gateway)
 
-	pressAndResolve(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	if m.focus != uisearch.FocusQuery {
 		t.Fatalf("expected query focus after typing, got %v", m.focus)
 	}
@@ -212,89 +233,90 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 	}
 }
 
+func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	m := initModel(gateway)
+
+	gateway.ResetCalls()
+	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, "jkhlr")
+}
+
+func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
+	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
+		t.Skip("requires bd, jq, and git on PATH")
+	}
+	t.Setenv("BEADS_ACTOR", "fixture-user")
+
+	repoPath := embeddedfixture.TempRepoPath(t)
+	embeddedfixture.Seed(t, repoPath)
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		WorkDir: repoPath,
+		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
+	})
+	gateway := beads.NewGateway(runner)
+
+	tm := testui.NewTestModelWithSize(t, controllerAdapter{controller: NewModel(gateway)}, 120, 30)
+	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	testui.WaitForOutputContainsAll(t, tm.Output(), "Search", "bwf-1")
+
+	if err := tm.Quit(); err != nil {
+		t.Fatalf("failed to quit teatest model: %v", err)
+	}
+
+	final, ok := tm.FinalModel(t).(controllerAdapter)
+	if !ok {
+		t.Fatalf("expected final model adapter")
+	}
+
+	finalModel, ok := final.controller.(*Model)
+	if !ok {
+		t.Fatalf("expected wrapped search model, got %T", final.controller)
+	}
+
+	if finalModel.errText != "" {
+		t.Fatalf("expected empty-query fallback search to load without errors, got %q", finalModel.errText)
+	}
+	if finalModel.ResultCount() == 0 {
+		t.Fatalf("expected fallback search to load fixture issues, got 0")
+	}
+	if strings.Contains(finalModel.View(), "Search failed") {
+		t.Fatalf("expected no runtime search failure in view, got:\n%s", finalModel.View())
+	}
+}
+
+func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1}}}}
+	m := initModel(gateway)
+
+	gateway.ResetCalls()
+	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, testui.SearchFragileQueryRunes())
+
+	pressAndResolve(m, testui.SearchClearQueryKeys()...)
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
+}
+
 func newSearchFakeGateway() *fakes.FakeBeadsGateway {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	return gateway
 }
 
-func initModel(t *testing.T, gateway *fakes.FakeBeadsGateway) *Model {
-	t.Helper()
-
-	m := NewModel(gateway)
-	initCmd := m.Init()
-	for _, msg := range runBatch(initCmd) {
-		next, cmd := m.Update(msg)
-		m = next.(*Model)
-		for _, follow := range runBatch(cmd) {
-			next, _ = m.Update(follow)
-			m = next.(*Model)
-		}
-	}
-
-	return m
+func initModel(gateway *fakes.FakeBeadsGateway) *Model {
+	return testui.InitializeController(NewModel(gateway)).(*Model)
 }
 
-func runBatch(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-
-	queue := []tea.Msg{cmd()}
-	var out []tea.Msg
-	for len(queue) > 0 {
-		msg := queue[0]
-		queue = queue[1:]
-		if batch, ok := msg.(tea.BatchMsg); ok {
-			for _, b := range batch {
-				if b != nil {
-					queue = append(queue, b())
-				}
-			}
-			continue
-		}
-		out = append(out, msg)
-	}
-
-	return out
-}
-
-func pressAndResolve(t *testing.T, m *Model, key tea.KeyMsg) {
-	t.Helper()
-
-	next, cmd := m.Update(key)
-	mCopy := next.(*Model)
-	*m = *mCopy
-
-	for _, msg := range runBatch(cmd) {
-		next, nested := m.Update(msg)
-		mCopy = next.(*Model)
-		*m = *mCopy
-		for _, follow := range runBatch(nested) {
-			next, _ = m.Update(follow)
-			mCopy = next.(*Model)
-			*m = *mCopy
-		}
-	}
-}
-
-func latestSearchQuery(t *testing.T, calls []fakes.GatewayCall) domain.SearchIssuesQuery {
-	t.Helper()
-
-	for i := len(calls) - 1; i >= 0; i-- {
-		call := calls[i]
-		if call.Method != fakes.MethodSearchIssues {
-			continue
-		}
-		input, ok := call.Input.(fakes.SearchIssuesCall)
-		if !ok {
-			t.Fatalf("expected SearchIssuesCall payload, got %T", call.Input)
-		}
-		return input.Query
-	}
-
-	t.Fatalf("no search calls recorded: %#v", calls)
-	return domain.SearchIssuesQuery{}
+func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
+	resolved := testui.ApplyControllerKeySequence(m, keys...).(*Model)
+	*m = *resolved
 }
 
 func hasGatewayCall(calls []fakes.GatewayCall, method fakes.GatewayMethod) bool {
@@ -311,10 +333,39 @@ func applyMessages(m *Model, msgs []tea.Msg) *Model {
 	for _, msg := range msgs {
 		next, cmd := m.Update(msg)
 		m = next.(*Model)
-		for _, follow := range runBatch(cmd) {
+		for _, follow := range drainCmd(cmd) {
 			next, _ = m.Update(follow)
 			m = next.(*Model)
 		}
 	}
 	return m
+}
+
+func drainCmd(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+
+	queue := []tea.Msg{cmd()}
+	var out []tea.Msg
+	for len(queue) > 0 {
+		msg := queue[0]
+		queue = queue[1:]
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, nested := range batch {
+				if nested != nil {
+					queue = append(queue, nested())
+				}
+			}
+			continue
+		}
+		out = append(out, msg)
+	}
+
+	return out
+}
+
+func hasExecutable(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -54,6 +55,7 @@ type CommandRunner struct {
 	defaultWorkDir string
 	defaultEnv     []string
 	executor       CommandExecutor
+	runMu          sync.Mutex
 }
 
 // NewCommandRunner creates a command runner for bd CLI interactions.
@@ -87,7 +89,9 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
 
+	r.runMu.Lock()
 	result, err := r.executor.Run(ctx, r.command, req.Args, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
+	r.runMu.Unlock()
 	if err != nil {
 		return nil, normalizeExecutionError(ctx, req.Operation, result.Stderr, err)
 	}

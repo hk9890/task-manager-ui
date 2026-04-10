@@ -205,6 +205,10 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 		return domain.SearchResultPage{}, newGatewayError(domain.ErrorCodeValidationFailed, operationSearchIssues, "priority_min cannot be greater than priority_max", nil)
 	}
 
+	if strings.TrimSpace(query.Text) == "" && query.WorkState == domain.WorkStateAny {
+		return g.searchIssuesFromList(ctx, query)
+	}
+
 	switch query.WorkState {
 	case domain.WorkStateReady:
 		return g.searchIssuesFromReady(ctx, query)
@@ -218,6 +222,62 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 	}
 
 	args = append(args, "--json")
+
+	if len(query.Statuses) > 0 {
+		args = append(args, "--status", strings.Join(query.Statuses, ","))
+	}
+
+	if len(query.Types) > 0 {
+		args = append(args, "--type", strings.Join(query.Types, ","))
+	}
+
+	if query.PriorityMin != nil {
+		args = append(args, "--priority-min", strconv.Itoa(*query.PriorityMin))
+	}
+
+	if query.PriorityMax != nil {
+		args = append(args, "--priority-max", strconv.Itoa(*query.PriorityMax))
+	}
+
+	if query.Assignee != "" {
+		args = append(args, "--assignee", query.Assignee)
+	}
+
+	for _, label := range query.Labels {
+		if strings.TrimSpace(label) == "" {
+			continue
+		}
+
+		args = append(args, "--label", label)
+	}
+
+	if limit := withOffsetWindow(query.Limit, query.Offset); limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+
+	items, err := g.decodeIssueArray(ctx, operationSearchIssues, args)
+	if err != nil {
+		return domain.SearchResultPage{}, err
+	}
+
+	summaries, err := mapIssueSummaries(operationSearchIssues, items, query.Offset, query.Limit)
+	if err != nil {
+		return domain.SearchResultPage{}, err
+	}
+
+	results := make([]domain.SearchResult, 0, len(summaries))
+	for _, summary := range summaries {
+		results = append(results, domain.SearchResult{Issue: summary})
+	}
+
+	return domain.SearchResultPage{
+		Results: results,
+		Total:   len(items),
+	}, nil
+}
+
+func (g *Gateway) searchIssuesFromList(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	args := []string{"list", "--json"}
 
 	if len(query.Statuses) > 0 {
 		args = append(args, "--status", strings.Join(query.Statuses, ","))

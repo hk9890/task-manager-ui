@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
@@ -37,6 +38,7 @@ type sectionState struct {
 type Model struct {
 	gateway   beads.BeadsGateway
 	provider  dashboard.DashboardDefinitionProvider
+	keys      config.ResolvedKeyBindings
 	width     int
 	height    int
 	loading   bool
@@ -54,14 +56,25 @@ type Model struct {
 var _ mode.Controller = (*Model)(nil)
 
 // NewModel creates a board mode controller.
-func NewModel(gateway beads.BeadsGateway, provider dashboard.DashboardDefinitionProvider) *Model {
+func NewModel(gateway beads.BeadsGateway, provider dashboard.DashboardDefinitionProvider, resolved ...config.ResolvedKeyBindings) *Model {
 	if provider == nil {
 		provider = dashboard.NewBuiltInProvider()
+	}
+	keys := config.ResolvedKeyBindings{}
+	if len(resolved) > 0 {
+		keys = resolved[0]
+	} else {
+		var err error
+		keys, err = config.ResolveKeyBindings(config.DefaultKeyBindings())
+		if err != nil {
+			panic(fmt.Sprintf("invalid default board keybindings: %v", err))
+		}
 	}
 
 	return &Model{
 		gateway:       gateway,
 		provider:      provider,
+		keys:          keys,
 		loading:       true,
 		selectedRow:   map[int]int{},
 		focusedColumn: 0,
@@ -146,8 +159,8 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "left", "h":
+		switch {
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveLeft, msg):
 			previous := m.focusedColumn
 			if m.focusedColumn > 0 {
 				m.focusedColumn--
@@ -157,7 +170,7 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 				return m, m.selectionChangedCmd()
 			}
 			return m, nil
-		case "right", "l", "tab":
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveRight, msg):
 			previous := m.focusedColumn
 			if m.focusedColumn < len(m.sections)-1 {
 				m.focusedColumn++
@@ -167,28 +180,28 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 				return m, m.selectionChangedCmd()
 			}
 			return m, nil
-		case "up", "k":
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 			previous := m.selectedRow[m.focusedColumn]
 			m.moveRow(-1)
 			if m.selectedRow[m.focusedColumn] != previous {
 				return m, m.selectionChangedCmd()
 			}
 			return m, nil
-		case "down", "j":
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
 			previous := m.selectedRow[m.focusedColumn]
 			m.moveRow(1)
 			if m.selectedRow[m.focusedColumn] != previous {
 				return m, m.selectionChangedCmd()
 			}
 			return m, nil
-		case "enter", "o":
+		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
 			if m.currentSelection() == nil {
 				return m, nil
 			}
 			return m, func() tea.Msg {
 				return mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionOpenDetail}
 			}
-		case "r":
+		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			m.loading = true
 			m.loadError = ""
 			m.pendingLoads = 0
@@ -213,19 +226,11 @@ func (m *Model) View() string {
 
 	columns := make([]uiboard.Column, 0, len(m.sections))
 	for colIdx, section := range m.sections {
-		rows := make([]uiboard.Row, 0, len(section.issues))
-		selectedRow := m.selectedRow[colIdx]
-		for rowIdx, issue := range section.issues {
-			rows = append(rows, uiboard.Row{
-				ID:       issue.ID,
-				Title:    issue.Title,
-				Type:     issue.Type,
-				Status:   issue.Status,
-				Priority: issue.Priority,
-				Selected: colIdx == m.focusedColumn && rowIdx == selectedRow,
-			})
+		selectedRow := -1
+		if colIdx == m.focusedColumn {
+			selectedRow = m.selectedRow[colIdx]
 		}
-		columns = append(columns, uiboard.Column{Title: section.title, Rows: rows, Error: section.errText})
+		columns = append(columns, uiboard.Column{Title: section.title, Rows: section.issues, SelectedRow: selectedRow, Error: section.errText})
 	}
 
 	return uiboard.Render(uiboard.State{

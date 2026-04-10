@@ -65,6 +65,30 @@ func CompactIssueState(status string) string {
 	}
 }
 
+// CompactIssueTypeStyled returns a styled short issue-type marker.
+func CompactIssueTypeStyled(issueType string) string {
+	token := CompactIssueType(issueType)
+	return styles.IssueTypeStyle(issueType).Render(token)
+}
+
+// CompactPriorityStyled returns a styled compact priority token.
+func CompactPriorityStyled(priority int) string {
+	token := CompactPriority(priority)
+	return styles.IssuePriorityStyle(priority).Render(token)
+}
+
+// CompactIssueStateStyled returns a styled compact status token.
+func CompactIssueStateStyled(status string) string {
+	token := CompactIssueState(status)
+	return styles.IssueStatusStyle(status).Render(token)
+}
+
+// CompactIssueIDMuted returns a muted compact display ID constrained by maxWidth.
+func CompactIssueIDMuted(id string, maxWidth int) string {
+	token := CompactIssueID(id, maxWidth)
+	return styles.IssueIDMutedStyle.Render(token)
+}
+
 // CompactIssueID returns a compact display ID constrained by maxWidth.
 func CompactIssueID(id string, maxWidth int) string {
 	trimmed := strings.TrimSpace(id)

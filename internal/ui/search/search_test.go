@@ -1,14 +1,21 @@
 package search
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/muesli/termenv"
 )
+
+var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func assertGoldenNormalized(t *testing.T, output []byte, name string) {
 	t.Helper()
@@ -37,6 +44,7 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		Width:      120,
 		Height:     28,
 	})
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
 
 	for _, want := range []string{
 		"Search",
@@ -48,24 +56,90 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		"B P0 IP bw-2 Another result",
 		"Gateway search result",
 	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("expected %q in view:\n%s", want, view)
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected %q in view:\n%s", want, plain)
 		}
 	}
 }
 
-func TestRenderShowsEmptyQueryHelp(t *testing.T) {
+func TestRenderShowsEmptyQueryResultsAndPreview(t *testing.T) {
 	t.Parallel()
 
-	view := Render(State{Width: 100, Height: 24})
-	if !strings.Contains(view, "Start typing to search issues.") {
-		t.Fatalf("expected empty-query help, got:\n%s", view)
+	view := Render(State{
+		Focus: FocusResults,
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-2", Title: "Second default", Status: "in_progress", Type: "bug", Priority: 2},
+		},
+		SelectedID: "bw-1",
+		Width:      100,
+		Height:     24,
+	})
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "› T P1 OPN bw-1 Default all result") {
+		t.Fatalf("expected default issue list row, got:\n%s", plain)
 	}
-	if !strings.Contains(view, "│") {
-		t.Fatalf("expected caret-like empty query field, got:\n%s", view)
+	if !strings.Contains(plain, "Second default") {
+		t.Fatalf("expected second issue row, got:\n%s", plain)
 	}
-	if !strings.Contains(view, "Selected issue preview") {
-		t.Fatalf("expected preview empty state, got:\n%s", view)
+	if !strings.Contains(plain, "Default all result") {
+		t.Fatalf("expected preview content for selected result, got:\n%s", plain)
+	}
+}
+
+func TestRenderResultsRowsApplySharedIDWidthCap(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Focus: FocusResults,
+		Results: []domain.IssueSummary{
+			{ID: "beads-workbench-ultra-wide-width-id", Title: "Result", Status: "open", Type: "task", Priority: 1},
+		},
+		SelectedID: "beads-workbench-ultra-wide-width-id",
+		Width:      220,
+		Height:     24,
+	})
+
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "…de-width-id") {
+		t.Fatalf("expected capped compact issue id suffix in search results, got:\n%s", plain)
+	}
+}
+
+func TestRenderResultsContentUsesSharedIssueRowRenderer(t *testing.T) {
+	t.Parallel()
+
+	issue := domain.IssueSummary{ID: "beads-workbench-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
+	lines := renderResultsContent(State{Results: []domain.IssueSummary{issue}, SelectedID: issue.ID}, 60)
+	if len(lines) != 1 {
+		t.Fatalf("expected exactly one rendered row, got %d", len(lines))
+	}
+
+	want := issuerow.RenderCompact(issuerow.RenderConfig{Issue: issue, Selected: true, Width: 60, Styled: true})
+	if lines[0] != want {
+		t.Fatalf("expected results row to use shared renderer\nwant: %q\ngot:  %q", want, lines[0])
+	}
+}
+
+func TestRenderResultsUsesStyledSharedRowRenderer(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	view := Render(State{
+		Focus: FocusResults,
+		Results: []domain.IssueSummary{
+			{ID: "beads-workbench-u5s", Title: "Result", Status: "open", Type: "task", Priority: 0},
+		},
+		SelectedID: "beads-workbench-u5s",
+		Width:      120,
+		Height:     24,
+	})
+
+	if !bytes.Contains([]byte(view), []byte("\x1b[")) {
+		t.Fatalf("expected ANSI styling in search row output, got: %q", view)
 	}
 }
 
@@ -124,5 +198,21 @@ func TestRenderGoldens(t *testing.T) {
 		})
 
 		assertGoldenNormalized(t, []byte(view), "search_results_narrow_w80.golden")
+	})
+
+	t.Run("default_all_results_w120", func(t *testing.T) {
+		view := Render(State{
+			Focus: FocusResults,
+			Results: []domain.IssueSummary{
+				{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-2", Title: "Second default", Status: "in_progress", Type: "bug", Priority: 0},
+			},
+			SelectedID:     "bw-1",
+			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Default preview description"},
+			Width:          120,
+			Height:         28,
+		})
+
+		assertGoldenNormalized(t, []byte(view), "search_default_all_results_w120.golden")
 	})
 }

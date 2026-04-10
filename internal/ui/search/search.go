@@ -8,6 +8,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
@@ -142,15 +143,6 @@ func renderResultsContent(state State, width int) []string {
 		}
 	}
 
-	if strings.TrimSpace(state.Query) == "" {
-		return []string{
-			styles.TruncateString("Start typing to search issues.", width),
-			"",
-			styles.TruncateString("Type a word or phrase to search across issue content.", width),
-			styles.TruncateString("Then use j/k for results, l for preview, enter for detail.", width),
-		}
-	}
-
 	if state.Typing && len(state.Results) == 0 {
 		return []string{
 			styles.TruncateString("Searching…", width),
@@ -169,38 +161,18 @@ func renderResultsContent(state State, width int) []string {
 
 	lines := make([]string, 0, len(state.Results))
 	for _, issue := range state.Results {
-		prefix := "  "
-		if issue.ID == state.SelectedID {
-			prefix = "› "
-		}
-
-		meta := strings.Join([]string{
-			renderhelpers.CompactIssueType(issue.Type),
-			renderhelpers.CompactPriority(issue.Priority),
-			renderhelpers.CompactIssueState(issue.Status),
-			renderhelpers.CompactIssueID(issue.ID, renderhelpers.MaxInt(7, width/5)),
-		}, " ")
-		base := prefix + meta + " "
-		titleWidth := width - lipgloss.Width(base)
-		if titleWidth < 8 {
-			lines = append(lines, styles.TruncateString(prefix+meta, width))
-			continue
-		}
-		lines = append(lines, base+styles.TruncateString(issue.Title, titleWidth))
+		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
+			Issue:    issue,
+			Selected: issue.ID == state.SelectedID,
+			Width:    width,
+			Styled:   true,
+		}))
 	}
 
 	return lines
 }
 
 func renderPreviewContent(state State, width int) []string {
-	if strings.TrimSpace(state.Query) == "" {
-		return []string{
-			"Selected issue preview",
-			"",
-			styles.TruncateString("Results appear on the left and the current selection is previewed here.", width),
-		}
-	}
-
 	if len(state.Results) == 0 || strings.TrimSpace(state.SelectedID) == "" {
 		return []string{
 			styles.TruncateString("No selected result.", width),
