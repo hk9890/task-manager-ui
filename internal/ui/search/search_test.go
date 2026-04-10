@@ -4,18 +4,15 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/muesli/termenv"
 )
-
-var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func assertGoldenNormalized(t *testing.T, output []byte, name string) {
 	t.Helper()
@@ -27,7 +24,7 @@ func assertGoldenNormalized(t *testing.T, output []byte, name string) {
 		}
 	}
 
-	ui.AssertMatchesGoldenNormalized(t, output, name)
+	testui.AssertMatchesGoldenNormalized(t, output, name)
 }
 
 func TestRenderResultsFirstSearchLayout(t *testing.T) {
@@ -44,7 +41,7 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		Width:      120,
 		Height:     28,
 	})
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	for _, want := range []string{
 		"Search",
@@ -75,7 +72,7 @@ func TestRenderShowsEmptyQueryResultsAndPreview(t *testing.T) {
 		Width:      100,
 		Height:     24,
 	})
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "› T P1 OPN bw-1 Default all result") {
 		t.Fatalf("expected default issue list row, got:\n%s", plain)
 	}
@@ -100,7 +97,7 @@ func TestRenderResultsRowsApplySharedIDWidthCap(t *testing.T) {
 		Height:     24,
 	})
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "…de-width-id") {
 		t.Fatalf("expected capped compact issue id suffix in search results, got:\n%s", plain)
 	}

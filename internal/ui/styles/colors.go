@@ -157,6 +157,8 @@ func IssueStatusStyle(status string) lipgloss.Style {
 }
 
 func normalizeIssueToken(raw string) string {
+	// Keep a local copy of renderhelpers.NormalizeToken to avoid a package cycle:
+	// styles -> renderhelpers -> styles.
 	tok := strings.TrimSpace(strings.ToLower(raw))
 	tok = strings.ReplaceAll(tok, "-", "_")
 	tok = strings.ReplaceAll(tok, " ", "_")

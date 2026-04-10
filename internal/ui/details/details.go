@@ -143,19 +143,19 @@ func renderLabels(labels []string) string {
 }
 
 func renderMultiline(text, fallback string, width int) []string {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
+	trimmed := strings.Trim(text, "\n")
+	if strings.TrimSpace(trimmed) == "" {
 		return []string{fallback}
 	}
 	lines := strings.Split(trimmed, "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		clean := strings.TrimSpace(line)
-		if clean == "" {
+		if strings.TrimSpace(line) == "" {
 			out = append(out, "")
 			continue
 		}
-		out = append(out, styles.TruncateString(clean, width))
+		cleaned := strings.TrimRight(line, " \t")
+		out = append(out, styles.TruncateString(cleaned, width))
 	}
 	if len(out) == 0 {
 		return []string{fallback}

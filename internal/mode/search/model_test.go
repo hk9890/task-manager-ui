@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
@@ -18,30 +19,13 @@ import (
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
 )
 
-type controllerAdapter struct {
-	controller mode.Controller
-}
-
-func (a controllerAdapter) Init() tea.Cmd {
-	return a.controller.Init()
-}
-
-func (a controllerAdapter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	next, cmd := a.controller.Update(msg)
-	return controllerAdapter{controller: next}, cmd
-}
-
-func (a controllerAdapter) View() string {
-	return a.controller.View()
-}
-
 func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	t.Parallel()
 
 	gateway := newSearchFakeGateway()
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1}}}, Total: 1}
 
-	tm := testui.NewTestModelWithSize(t, controllerAdapter{controller: NewModel(gateway)}, 120, 30)
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
 
@@ -62,7 +46,7 @@ func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1}}}, Total: 1}
 	m := initModel(gateway)
 
-	if !hasGatewayCall(gateway.Calls, fakes.MethodSearchIssues) {
+	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
 		t.Fatalf("expected empty init query to load default search results, calls=%#v", gateway.Calls)
 	}
 
@@ -257,9 +241,9 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 		WorkDir: repoPath,
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})
-	gateway := beads.NewGateway(runner)
+	gateway := beads.NewCLIGateway(runner)
 
-	tm := testui.NewTestModelWithSize(t, controllerAdapter{controller: NewModel(gateway)}, 120, 30)
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	testui.WaitForOutputContainsAll(t, tm.Output(), "Search", "bwf-1")
@@ -268,14 +252,14 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 		t.Fatalf("failed to quit teatest model: %v", err)
 	}
 
-	final, ok := tm.FinalModel(t).(controllerAdapter)
+	final, ok := tm.FinalModel(t).(testui.ControllerAdapter)
 	if !ok {
 		t.Fatalf("expected final model adapter")
 	}
 
-	finalModel, ok := final.controller.(*Model)
+	finalModel, ok := final.Controller.(*Model)
 	if !ok {
-		t.Fatalf("expected wrapped search model, got %T", final.controller)
+		t.Fatalf("expected wrapped search model, got %T", final.Controller)
 	}
 
 	if finalModel.errText != "" {
@@ -304,6 +288,91 @@ func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
 }
 
+func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T) {
+	t.Parallel()
+
+	keys, err := config.ResolveKeyBindings(config.MergeKeyBindings(config.DefaultKeyBindings(), &config.KeyBindingOverride{
+		Search: map[string][]string{
+			config.SearchActionMoveDown:       {"n"},
+			config.SearchActionMoveUp:         {"p"},
+			config.SearchActionFocusLeft:      {"a"},
+			config.SearchActionFocusRight:     {"d"},
+			config.SearchActionFocusQuery:     {"ctrl+f"},
+			config.SearchActionReload:         {"ctrl+r"},
+			config.SearchActionOpenDetail:     {"space"},
+			config.SearchActionCycleFocusNext: {"ctrl+n"},
+			config.SearchActionCycleFocusPrev: {"ctrl+p"},
+		},
+		Shell: map[string][]string{
+			config.ShellActionQuit: {"ctrl+q"},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
+	}}
+	m := testui.InitializeController(NewModel(gateway, keys)).(*Model)
+
+	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected configured next-focus binding to reach results, got %v", m.focus)
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	m = next.(*Model)
+	m = applyMessages(m, drainCmd(cmd))
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
+		t.Fatalf("expected configured move-down binding to select bw-2, got %#v", got)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected configured focus-left binding to return to query, got %v", m.focus)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected configured focus-query binding to keep query focus, got %v", m.focus)
+	}
+
+	if m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyCtrlQ}) {
+		t.Fatal("expected configured shell quit key to pass through search capture")
+	}
+	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")}) {
+		t.Fatal("expected plain text rune to be captured while query focused")
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	m = next.(*Model)
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusPreview {
+		t.Fatalf("expected configured focus-right binding to reach preview, got %v", m.focus)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = next.(*Model)
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected configured focus-left binding to return to results, got %v", m.focus)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	if cmd == nil {
+		t.Fatal("expected configured open-detail binding to emit action request")
+	}
+	if action, ok := cmd().(mode.ActionRequestMsg); !ok || action.Action != mode.ActionOpenDetail {
+		t.Fatalf("expected open detail action request, got %#v", cmd())
+	}
+}
+
 func newSearchFakeGateway() *fakes.FakeBeadsGateway {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
@@ -317,16 +386,6 @@ func initModel(gateway *fakes.FakeBeadsGateway) *Model {
 func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
 	resolved := testui.ApplyControllerKeySequence(m, keys...).(*Model)
 	*m = *resolved
-}
-
-func hasGatewayCall(calls []fakes.GatewayCall, method fakes.GatewayMethod) bool {
-	for _, call := range calls {
-		if call.Method == method {
-			return true
-		}
-	}
-
-	return false
 }
 
 func applyMessages(m *Model, msgs []tea.Msg) *Model {

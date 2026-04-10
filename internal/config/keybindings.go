@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	ShellContext = "shell"
-	BoardContext = "board"
+	ShellContext  = "shell"
+	BoardContext  = "board"
+	SearchContext = "search"
+	DetailContext = "detail"
+	ModalContext  = "modal"
 )
 
 const (
@@ -39,21 +42,50 @@ const (
 	BoardActionMoveDown   = "move_down"
 	BoardActionOpenDetail = "open_detail"
 	BoardActionReload     = "reload"
+
+	SearchActionMoveUp         = "move_up"
+	SearchActionMoveDown       = "move_down"
+	SearchActionFocusLeft      = "focus_left"
+	SearchActionFocusRight     = "focus_right"
+	SearchActionFocusQuery     = "focus_query"
+	SearchActionReload         = "reload"
+	SearchActionOpenDetail     = "open_detail"
+	SearchActionCycleFocusNext = "cycle_focus_next"
+	SearchActionCycleFocusPrev = "cycle_focus_prev"
+
+	DetailActionScrollUp   = "scroll_up"
+	DetailActionScrollDown = "scroll_down"
+	DetailActionPageUp     = "page_up"
+	DetailActionPageDown   = "page_down"
+	DetailActionHome       = "home"
+	DetailActionEnd        = "end"
+
+	ModalActionNext   = "next"
+	ModalActionPrev   = "prev"
+	ModalActionLeft   = "left"
+	ModalActionRight  = "right"
+	ModalActionEnter  = "enter"
+	ModalActionEscape = "escape"
 )
 
 type KeyBindings struct {
-	Shell map[string][]string
-	Board map[string][]string
+	Shell  map[string][]string
+	Board  map[string][]string
+	Search map[string][]string
+	Detail map[string][]string
+	Modal  map[string][]string
 }
 
 type KeyBindingOverride struct {
-	Shell map[string][]string `yaml:"shell"`
-	Board map[string][]string `yaml:"board"`
+	Shell  map[string][]string `yaml:"shell"`
+	Board  map[string][]string `yaml:"board"`
+	Search map[string][]string `yaml:"search"`
+	Detail map[string][]string `yaml:"detail"`
+	Modal  map[string][]string `yaml:"modal"`
 }
 
 type ResolvedKeyBindings struct {
 	contexts map[string]ContextBindings
-	keysByID map[string]string
 }
 
 type ContextBindings struct {
@@ -70,14 +102,14 @@ type ActionBinding struct {
 func DefaultKeyBindings() KeyBindings {
 	return KeyBindings{
 		Shell: map[string][]string{
-			ShellActionQuit:           {"q", "ctrl+c"},
+			ShellActionQuit:           {"ctrl+q"},
 			ShellActionHelp:           {"?"},
-			ShellActionModeBoard:      {"1", "b"},
-			ShellActionModeSearch:     {"2", "s"},
+			ShellActionModeBoard:      {"f13"},
+			ShellActionModeSearch:     {"f14"},
 			ShellActionToggleSearch:   {"ctrl+@"},
 			ShellActionModeDetail:     {"3"},
-			ShellActionModeCycleNext:  {"tab"},
-			ShellActionModeCyclePrev:  {"shift+tab"},
+			ShellActionModeCycleNext:  {"f15"},
+			ShellActionModeCyclePrev:  {"f16"},
 			ShellActionEscape:         {"esc"},
 			ShellActionReloadDetail:   {"r"},
 			ShellActionEditIssue:      {"e"},
@@ -97,13 +129,43 @@ func DefaultKeyBindings() KeyBindings {
 			BoardActionOpenDetail: {"enter", "o"},
 			BoardActionReload:     {"r"},
 		},
+		Search: map[string][]string{
+			SearchActionMoveUp:         {"k", "up"},
+			SearchActionMoveDown:       {"j", "down"},
+			SearchActionFocusLeft:      {"h", "left"},
+			SearchActionFocusRight:     {"l", "right"},
+			SearchActionFocusQuery:     {"/"},
+			SearchActionReload:         {"r"},
+			SearchActionOpenDetail:     {"enter"},
+			SearchActionCycleFocusNext: {"tab", "ctrl+j"},
+			SearchActionCycleFocusPrev: {"shift+tab", "ctrl+k"},
+		},
+		Detail: map[string][]string{
+			DetailActionScrollUp:   {"k", "up"},
+			DetailActionScrollDown: {"j", "down"},
+			DetailActionPageUp:     {"pgup"},
+			DetailActionPageDown:   {"pgdown"},
+			DetailActionHome:       {"home"},
+			DetailActionEnd:        {"end"},
+		},
+		Modal: map[string][]string{
+			ModalActionNext:   {"tab", "down"},
+			ModalActionPrev:   {"shift+tab", "up"},
+			ModalActionLeft:   {"left"},
+			ModalActionRight:  {"right"},
+			ModalActionEnter:  {"enter"},
+			ModalActionEscape: {"esc"},
+		},
 	}
 }
 
 func (k KeyBindings) Clone() KeyBindings {
 	return KeyBindings{
-		Shell: cloneBindingMap(k.Shell),
-		Board: cloneBindingMap(k.Board),
+		Shell:  cloneBindingMap(k.Shell),
+		Board:  cloneBindingMap(k.Board),
+		Search: cloneBindingMap(k.Search),
+		Detail: cloneBindingMap(k.Detail),
+		Modal:  cloneBindingMap(k.Modal),
 	}
 }
 
@@ -112,31 +174,40 @@ func MergeKeyBindings(base KeyBindings, override *KeyBindingOverride) KeyBinding
 	if override == nil {
 		return merged
 	}
-	if override.Shell != nil {
-		for action, keys := range override.Shell {
-			merged.Shell[action] = cloneStringSlice(keys)
-		}
-	}
-	if override.Board != nil {
-		for action, keys := range override.Board {
-			merged.Board[action] = cloneStringSlice(keys)
-		}
-	}
+	merged.Shell = mergeContextBindings(merged.Shell, override.Shell)
+	merged.Board = mergeContextBindings(merged.Board, override.Board)
+	merged.Search = mergeContextBindings(merged.Search, override.Search)
+	merged.Detail = mergeContextBindings(merged.Detail, override.Detail)
+	merged.Modal = mergeContextBindings(merged.Modal, override.Modal)
 	return merged
+}
+
+func mergeContextBindings(base, override map[string][]string) map[string][]string {
+	if override == nil {
+		return base
+	}
+
+	for action, keys := range override {
+		base[action] = cloneStringSlice(keys)
+	}
+
+	return base
 }
 
 func ResolveKeyBindings(k KeyBindings) (ResolvedKeyBindings, error) {
 	contexts := map[string]map[string][]string{
-		ShellContext: k.Shell,
-		BoardContext: k.Board,
+		ShellContext:  k.Shell,
+		BoardContext:  k.Board,
+		SearchContext: k.Search,
+		DetailContext: k.Detail,
+		ModalContext:  k.Modal,
 	}
 
 	resolved := ResolvedKeyBindings{
 		contexts: make(map[string]ContextBindings, len(contexts)),
-		keysByID: make(map[string]string),
 	}
 
-	for _, context := range []string{ShellContext, BoardContext} {
+	for _, context := range []string{ShellContext, BoardContext, SearchContext, DetailContext, ModalContext} {
 		bindings, err := buildContextBindings(context, contexts[context], allowedActionsForContext(context))
 		if err != nil {
 			return ResolvedKeyBindings{}, err
@@ -144,9 +215,6 @@ func ResolveKeyBindings(k KeyBindings) (ResolvedKeyBindings, error) {
 		resolved.contexts[context] = bindings
 	}
 
-	resolved.keysByID[string(ShellContext)+":"+ShellActionModeBoard] = firstBinding(k.Shell[ShellActionModeBoard])
-	resolved.keysByID[string(ShellContext)+":"+ShellActionModeSearch] = firstBinding(k.Shell[ShellActionModeSearch])
-	resolved.keysByID[string(ShellContext)+":"+ShellActionModeDetail] = firstBinding(k.Shell[ShellActionModeDetail])
 	return resolved, nil
 }
 
@@ -199,24 +267,8 @@ func (r ResolvedKeyBindings) DisplayLabel(context, action string) string {
 	return strings.Join(parts, "/")
 }
 
-func (r ResolvedKeyBindings) Label(context, action string) string {
-	keys := r.Keys(context, action)
-	if len(keys) == 0 {
-		return ""
-	}
-	return strings.Join(keys, "/")
-}
-
-func (r ResolvedKeyBindings) ModeBoardKey() string {
-	return r.keysByID[ShellContext+":"+ShellActionModeBoard]
-}
-
-func (r ResolvedKeyBindings) ModeSearchKey() string {
-	return r.keysByID[ShellContext+":"+ShellActionModeSearch]
-}
-
-func (r ResolvedKeyBindings) ModeDetailKey() string {
-	return r.keysByID[ShellContext+":"+ShellActionModeDetail]
+func (r ResolvedKeyBindings) IsZero() bool {
+	return len(r.contexts) == 0
 }
 
 func cloneBindingMap(input map[string][]string) map[string][]string {
@@ -348,13 +400,42 @@ func allowedActionsForContext(context string) map[string]struct{} {
 		} {
 			allowed[action] = struct{}{}
 		}
+	case SearchContext:
+		for _, action := range []string{
+			SearchActionMoveUp,
+			SearchActionMoveDown,
+			SearchActionFocusLeft,
+			SearchActionFocusRight,
+			SearchActionFocusQuery,
+			SearchActionReload,
+			SearchActionOpenDetail,
+			SearchActionCycleFocusNext,
+			SearchActionCycleFocusPrev,
+		} {
+			allowed[action] = struct{}{}
+		}
+	case DetailContext:
+		for _, action := range []string{
+			DetailActionScrollUp,
+			DetailActionScrollDown,
+			DetailActionPageUp,
+			DetailActionPageDown,
+			DetailActionHome,
+			DetailActionEnd,
+		} {
+			allowed[action] = struct{}{}
+		}
+	case ModalContext:
+		for _, action := range []string{
+			ModalActionNext,
+			ModalActionPrev,
+			ModalActionLeft,
+			ModalActionRight,
+			ModalActionEnter,
+			ModalActionEscape,
+		} {
+			allowed[action] = struct{}{}
+		}
 	}
 	return allowed
-}
-
-func firstBinding(keys []string) string {
-	if len(keys) == 0 {
-		return ""
-	}
-	return keys[0]
 }

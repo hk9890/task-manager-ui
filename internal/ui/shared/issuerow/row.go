@@ -74,12 +74,5 @@ func RenderCompact(config RenderConfig) string {
 
 // CompactIDWidth returns the shared max width for compact issue IDs.
 func CompactIDWidth(width int) int {
-	return minInt(maxCompactIDWidth, renderhelpers.MaxInt(minCompactIDWidth, width/5))
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return min(maxCompactIDWidth, max(minCompactIDWidth, width/5))
 }

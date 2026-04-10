@@ -1,16 +1,14 @@
 package issuerow
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/muesli/termenv"
 )
-
-var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestRenderCompactSelectionAndMetadata(t *testing.T) {
 	line := RenderCompact(RenderConfig{
@@ -76,7 +74,7 @@ func TestRenderCompactStyledIncludesANSI(t *testing.T) {
 	if !strings.Contains(line, "\x1b[") {
 		t.Fatalf("expected ANSI styling when Styled is true, got: %q", line)
 	}
-	plain := ansiEscapePattern.ReplaceAllString(line, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(line, "")
 	if !strings.Contains(plain, "› B P0 BLK u5s") {
 		t.Fatalf("expected styled metadata to preserve token text, got: %q", plain)
 	}

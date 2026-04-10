@@ -21,7 +21,7 @@ func main() {
 	}
 
 	cfg := configResult.Config
-	gateway := beads.NewGateway(beads.NewCommandRunner(beads.RunnerConfig{}))
+	gateway := beads.NewCLIGateway(beads.NewCommandRunner(beads.RunnerConfig{}))
 	projectRoot, err := os.Getwd()
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "failed to resolve project root: %v\n", err)

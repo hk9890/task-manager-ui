@@ -124,11 +124,3 @@ func NormalizeToken(raw string) string {
 	tok = strings.ReplaceAll(tok, " ", "_")
 	return tok
 }
-
-// MaxInt returns the greater of two ints.
-func MaxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

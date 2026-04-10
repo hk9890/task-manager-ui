@@ -2,24 +2,21 @@ package board
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/muesli/termenv"
 )
-
-var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func assertGoldenNormalized(t *testing.T, output []byte, golden string) {
 	t.Helper()
 
 	normalize := func(bts []byte) []byte {
-		withoutANSI := ansiEscapePattern.ReplaceAll(bts, nil)
+		withoutANSI := testui.AnsiEscapePattern.ReplaceAll(bts, nil)
 		trimmedNewline := bytes.TrimSuffix(withoutANSI, []byte("\n"))
 		lines := strings.Split(string(trimmedNewline), "\n")
 		for i, line := range lines {
@@ -29,7 +26,7 @@ func assertGoldenNormalized(t *testing.T, output []byte, golden string) {
 	}
 
 	got := normalize(output)
-	want := normalize(ui.ReadGolden(t, golden))
+	want := normalize(testui.ReadGolden(t, golden))
 	if !bytes.Equal(got, want) {
 		t.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", golden, string(want), string(got))
 	}
@@ -63,7 +60,7 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 		t.Fatalf("expected no full-row background fill, got: %q", line)
 	}
 
-	plain := ansiEscapePattern.ReplaceAllString(line, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(line, "")
 	if !strings.Contains(plain, "T P0 OPN u5s") {
 		t.Fatalf("expected compact metadata tokens in row, got: %q", plain)
 	}

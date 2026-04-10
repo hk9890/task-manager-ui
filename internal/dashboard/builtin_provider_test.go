@@ -8,16 +8,10 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
-type staticActorResolver string
-
-func (s staticActorResolver) CurrentActor() string {
-	return string(s)
-}
-
 func TestBuiltInProviderDashboardsWithoutActor(t *testing.T) {
 	t.Parallel()
 
-	provider := NewBuiltInProviderWithActorResolver(staticActorResolver(""))
+	provider := NewBuiltInProvider()
 
 	dashboards, err := provider.Dashboards(context.Background())
 	if err != nil {
@@ -45,36 +39,10 @@ func TestBuiltInProviderDashboardsWithoutActor(t *testing.T) {
 	})
 }
 
-func TestBuiltInProviderDashboardsWithActorRemainsFourLaneDefault(t *testing.T) {
-	t.Parallel()
-
-	provider := NewBuiltInProviderWithActorResolver(staticActorResolver("alice"))
-
-	dashboards, err := provider.Dashboards(context.Background())
-	if err != nil {
-		t.Fatalf("Dashboards returned error: %v", err)
-	}
-
-	if len(dashboards) != 1 {
-		t.Fatalf("expected 1 dashboard, got %d", len(dashboards))
-	}
-
-	sections := dashboards[0].Sections
-	if len(sections) != 4 {
-		t.Fatalf("expected 4 sections when actor available, got %d", len(sections))
-	}
-	assertSectionIDs(t, sections, []string{
-		builtInSectionIDNotReady,
-		builtInSectionIDReady,
-		builtInSectionIDInProgress,
-		builtInSectionIDDone,
-	})
-}
-
 func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
 	t.Parallel()
 
-	provider := NewBuiltInProviderWithActorResolver(staticActorResolver("alice"))
+	provider := NewBuiltInProvider()
 
 	dashboards, err := provider.Dashboards(context.Background())
 	if err != nil {

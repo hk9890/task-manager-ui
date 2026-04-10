@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -54,11 +53,6 @@ func Render(state State) string {
 		height = defaultBoardHeight
 	}
 
-	availableWidth := width - (columnGap * (len(state.Columns) - 1))
-	if availableWidth < minRenderableWidth {
-		availableWidth = minRenderableWidth
-	}
-
 	start, end := visibleColumnRange(width, len(state.Columns), state.FocusedColumn)
 	visible := state.Columns[start:end]
 
@@ -68,7 +62,7 @@ func Render(state State) string {
 	}
 
 	columnWidths := distributeWidths(visibleAvailableWidth, len(visible))
-	columnHeight := renderhelpers.MaxInt(3, height-1)
+	columnHeight := max(3, height-1)
 	renderedCols := make([]string, 0, len(visible))
 	for idx, col := range visible {
 		innerWidth := columnWidths[idx] - 2

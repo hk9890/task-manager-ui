@@ -128,6 +128,20 @@ func (f *FakeBeadsGateway) ResetCalls() {
 	f.Calls = nil
 }
 
+// HasCall reports whether a method was called.
+func (f *FakeBeadsGateway) HasCall(method string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, c := range f.Calls {
+		if string(c.Method) == method {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (f *FakeBeadsGateway) ListIssues(_ context.Context, query domain.IssueListQuery) ([]domain.IssueSummary, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

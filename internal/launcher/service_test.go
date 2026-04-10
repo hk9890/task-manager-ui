@@ -1,4 +1,4 @@
-package launcher
+package launcher_test
 
 import (
 	"context"
@@ -6,35 +6,15 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/launcher"
+	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
-
-type recordingRunner struct {
-	err   error
-	calls []runCall
-}
-
-type runCall struct {
-	command string
-	args    []string
-	dir     string
-	env     []string
-}
-
-func (r *recordingRunner) Run(_ context.Context, command string, args []string, dir string, env []string) error {
-	r.calls = append(r.calls, runCall{
-		command: command,
-		args:    append([]string(nil), args...),
-		dir:     dir,
-		env:     append([]string(nil), env...),
-	})
-	return r.err
-}
 
 func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingRunner{}
-	service, err := NewService([]Definition{{
+	runner := &fakes.FakeProcessRunner{}
+	service, err := launcher.NewService([]launcher.Definition{{
 		Action:  "opencode",
 		Command: "tool-{{issue.id}}",
 		Args: []string{
@@ -67,36 +47,36 @@ func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
 		t.Fatalf("Launch returned error: %v", err)
 	}
 
-	if len(runner.calls) != 1 {
-		t.Fatalf("expected exactly one process run, got %d", len(runner.calls))
+	if len(runner.Calls) != 1 {
+		t.Fatalf("expected exactly one process run, got %d", len(runner.Calls))
 	}
 
-	call := runner.calls[0]
-	if call.command != "tool-bw-77" {
-		t.Fatalf("expected interpolated command, got %q", call.command)
+	call := runner.Calls[0]
+	if call.Command != "tool-bw-77" {
+		t.Fatalf("expected interpolated command, got %q", call.Command)
 	}
-	if call.dir != "/repo/root" {
-		t.Fatalf("expected interpolated workdir /repo/root, got %q", call.dir)
+	if call.Dir != "/repo/root" {
+		t.Fatalf("expected interpolated workdir /repo/root, got %q", call.Dir)
 	}
-	if len(call.args) != 8 {
-		t.Fatalf("expected interpolated args, got %#v", call.args)
+	if len(call.Args) != 8 {
+		t.Fatalf("expected interpolated args, got %#v", call.Args)
 	}
-	if call.args[1] != "Implement launcher framework" || call.args[3] != "infra,launcher" || call.args[5] != "hans" || call.args[7] != "/repo/root" {
-		t.Fatalf("unexpected interpolated args: %#v", call.args)
+	if call.Args[1] != "Implement launcher framework" || call.Args[3] != "infra,launcher" || call.Args[5] != "hans" || call.Args[7] != "/repo/root" {
+		t.Fatalf("unexpected interpolated args: %#v", call.Args)
 	}
-	if len(call.env) != 5 {
-		t.Fatalf("expected interpolated env entries, got %#v", call.env)
+	if len(call.Env) != 5 {
+		t.Fatalf("expected interpolated env entries, got %#v", call.Env)
 	}
-	if call.env[0] != "BWB_ISSUE_ID=bw-77" || call.env[4] != "BWB_PROJECT_ROOT=/repo/root" {
-		t.Fatalf("unexpected interpolated env: %#v", call.env)
+	if call.Env[0] != "BWB_ISSUE_ID=bw-77" || call.Env[4] != "BWB_PROJECT_ROOT=/repo/root" {
+		t.Fatalf("unexpected interpolated env: %#v", call.Env)
 	}
 }
 
 func TestServiceLaunchDefaultsWorkDirToProjectRoot(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingRunner{}
-	service, err := NewService([]Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", runner)
+	runner := &fakes.FakeProcessRunner{}
+	service, err := launcher.NewService([]launcher.Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", runner)
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
 	}
@@ -105,8 +85,8 @@ func TestServiceLaunchDefaultsWorkDirToProjectRoot(t *testing.T) {
 		t.Fatalf("Launch returned error: %v", err)
 	}
 
-	if len(runner.calls) != 1 || runner.calls[0].dir != "/repo/root" {
-		t.Fatalf("expected default workdir /repo/root, got %#v", runner.calls)
+	if len(runner.Calls) != 1 || runner.Calls[0].Dir != "/repo/root" {
+		t.Fatalf("expected default workdir /repo/root, got %#v", runner.Calls)
 	}
 }
 
@@ -114,8 +94,8 @@ func TestServiceLaunchPropagatesRunnerError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("spawn failed")
-	runner := &recordingRunner{err: wantErr}
-	service, err := NewService([]Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", runner)
+	runner := &fakes.FakeProcessRunner{Err: wantErr}
+	service, err := launcher.NewService([]launcher.Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", runner)
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
 	}
@@ -129,7 +109,7 @@ func TestServiceLaunchPropagatesRunnerError(t *testing.T) {
 func TestServiceLaunchReturnsErrorForUnknownAction(t *testing.T) {
 	t.Parallel()
 
-	service, err := NewService([]Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", &recordingRunner{})
+	service, err := launcher.NewService([]launcher.Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", &fakes.FakeProcessRunner{})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
 	}
@@ -143,8 +123,8 @@ func TestServiceLaunchReturnsErrorForUnknownAction(t *testing.T) {
 func TestServiceBuiltInDefinitionsForV1Actions(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingRunner{}
-	service, err := NewService([]Definition{
+	runner := &fakes.FakeProcessRunner{}
+	service, err := launcher.NewService([]launcher.Definition{
 		{Action: "nvim", Command: "nvim", Args: []string{"[{{issue.id}}]", "{{issue.title}}"}},
 		{Action: "opencode", Command: "opencode", Args: []string{"run", "--issue", "{{issue.id}}", "--title", "{{issue.title}}"}},
 		{Action: "shell-command", Command: "sh", Args: []string{"-lc", "echo {{issue.id}}"}},
@@ -165,34 +145,34 @@ func TestServiceBuiltInDefinitionsForV1Actions(t *testing.T) {
 		t.Fatalf("Launch shell-command returned error: %v", err)
 	}
 
-	if len(runner.calls) != 3 {
-		t.Fatalf("expected three launch calls, got %d", len(runner.calls))
+	if len(runner.Calls) != 3 {
+		t.Fatalf("expected three launch calls, got %d", len(runner.Calls))
 	}
 
-	if runner.calls[0].command != "nvim" || runner.calls[1].command != "opencode" || runner.calls[2].command != "sh" {
-		t.Fatalf("unexpected built-in launcher commands: %#v", runner.calls)
+	if runner.Calls[0].Command != "nvim" || runner.Calls[1].Command != "opencode" || runner.Calls[2].Command != "sh" {
+		t.Fatalf("unexpected built-in launcher commands: %#v", runner.Calls)
 	}
 }
 
 func TestNewServiceValidatesInputs(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewService([]Definition{{Action: "", Command: "nvim"}}, "/repo/root", &recordingRunner{})
+	_, err := launcher.NewService([]launcher.Definition{{Action: "", Command: "nvim"}}, "/repo/root", &fakes.FakeProcessRunner{})
 	if err == nil {
 		t.Fatal("expected error for missing action")
 	}
 
-	_, err = NewService([]Definition{{Action: "editor", Command: ""}}, "/repo/root", &recordingRunner{})
+	_, err = launcher.NewService([]launcher.Definition{{Action: "editor", Command: ""}}, "/repo/root", &fakes.FakeProcessRunner{})
 	if err == nil {
 		t.Fatal("expected error for missing command")
 	}
 
-	_, err = NewService([]Definition{{Action: "editor", Command: "nvim"}, {Action: "editor", Command: "vi"}}, "/repo/root", &recordingRunner{})
+	_, err = launcher.NewService([]launcher.Definition{{Action: "editor", Command: "nvim"}, {Action: "editor", Command: "vi"}}, "/repo/root", &fakes.FakeProcessRunner{})
 	if err == nil {
 		t.Fatal("expected error for duplicate actions")
 	}
 
-	_, err = NewService([]Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", nil)
+	_, err = launcher.NewService([]launcher.Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", nil)
 	if err == nil {
 		t.Fatal("expected error for nil runner")
 	}

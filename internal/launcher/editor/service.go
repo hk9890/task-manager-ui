@@ -54,10 +54,6 @@ func NewIssueEditor(gateway beads.BeadsGateway, opener Opener) (*IssueEditor, er
 
 // EditIssue runs the issue document round-trip and applies updates when changed.
 func (e *IssueEditor) EditIssue(ctx context.Context, issueID string) (Result, error) {
-	if e == nil {
-		return Result{}, fmt.Errorf("issue editor is not configured")
-	}
-
 	issue, err := e.gateway.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issueID})
 	if err != nil {
 		return Result{}, err

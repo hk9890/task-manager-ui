@@ -13,7 +13,7 @@ func TestGatewayCreateIssueMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("bd-123\n")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 	priority := 1
 
 	result, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -56,7 +56,7 @@ func TestGatewayCreateIssueIncludesExplicitZeroPriority(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("bd-999\n")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 	priority := 0
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -83,7 +83,7 @@ func TestGatewayCreateIssueRequiresNonEmptyIssueID(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("\n")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -101,7 +101,7 @@ func TestGatewayUpdateIssueMapsCommandArgs(t *testing.T) {
 	assignee := "jane"
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	err := gateway.UpdateIssue(context.Background(), "bd-42", domain.UpdateIssueInput{
 		Title:       &title,
@@ -136,7 +136,7 @@ func TestGatewayUpdateIssueClearsLabelsWhenRequested(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	err := gateway.UpdateIssue(context.Background(), "bd-42", domain.UpdateIssueInput{ClearLabels: true})
 	if err != nil {
@@ -153,7 +153,7 @@ func TestGatewayCloseIssueMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	err := gateway.CloseIssue(context.Background(), "bd-7", domain.CloseIssueInput{Reason: "completed"})
 	if err != nil {
@@ -170,7 +170,7 @@ func TestGatewayAddCommentMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	err := gateway.AddComment(context.Background(), "bd-55", domain.AddCommentInput{Body: "Looks good"})
 	if err != nil {
@@ -187,7 +187,7 @@ func TestGatewayWriteOperationsPropagateNormalizedRunnerErrors(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{err: errors.New("fork/exec failed")}
-	gateway := NewGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)

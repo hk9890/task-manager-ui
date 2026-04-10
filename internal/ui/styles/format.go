@@ -1,7 +1,6 @@
 package styles
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -31,13 +30,4 @@ func TruncateString(s string, maxWidth int) string {
 	}
 
 	return result + "..."
-}
-
-// FormatCommentIndicator renders `<n>💬` when count > 0.
-func FormatCommentIndicator(count int) string {
-	if count <= 0 {
-		return ""
-	}
-
-	return fmt.Sprintf("%d\U0001F4AC", count)
 }

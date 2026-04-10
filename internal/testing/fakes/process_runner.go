@@ -3,6 +3,8 @@ package fakes
 import (
 	"context"
 	"sync"
+
+	"github.com/hk9890/beads-workbench/internal/launcher"
 )
 
 // ProcessRunCall captures one external process run request.
@@ -20,6 +22,8 @@ type FakeProcessRunner struct {
 	Err   error
 	Calls []ProcessRunCall
 }
+
+var _ launcher.ProcessRunner = (*FakeProcessRunner)(nil)
 
 // Run records process launch intent and returns a configured result.
 func (f *FakeProcessRunner) Run(_ context.Context, command string, args []string, dir string, env []string) error {

@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"os"
 	"os/exec"
 )
 
@@ -17,7 +18,7 @@ func (execProcessRunner) Run(ctx context.Context, command string, args []string,
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = dir
 	if len(env) > 0 {
-		cmd.Env = append([]string(nil), env...)
+		cmd.Env = append(os.Environ(), env...)
 	}
 
 	return cmd.Start()

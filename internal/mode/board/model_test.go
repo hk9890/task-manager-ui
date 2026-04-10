@@ -14,23 +14,6 @@ import (
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 )
 
-type controllerAdapter struct {
-	controller mode.Controller
-}
-
-func (a controllerAdapter) Init() tea.Cmd {
-	return a.controller.Init()
-}
-
-func (a controllerAdapter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	next, cmd := a.controller.Update(msg)
-	return controllerAdapter{controller: next}, cmd
-}
-
-func (a controllerAdapter) View() string {
-	return a.controller.View()
-}
-
 type staticProvider struct {
 	defs []dashboard.Definition
 	err  error
@@ -74,7 +57,7 @@ func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
 		},
 	}}}
 
-	tm := testui.NewTestModel(t, controllerAdapter{controller: NewModel(gateway, provider, resolvedBoardKeys(t))})
+	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: NewModel(gateway, provider, resolvedBoardKeys(t))})
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	testui.WaitForOutputContainsAll(t, tm.Output(), "Default", "Not Ready", "Ready", "In Progress", "bw-1", "bw-3")
@@ -83,14 +66,14 @@ func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
 		t.Fatalf("failed to quit teatest model: %v", err)
 	}
 
-	final, ok := tm.FinalModel(t).(controllerAdapter)
+	final, ok := tm.FinalModel(t).(testui.ControllerAdapter)
 	if !ok {
 		t.Fatalf("expected final model adapter")
 	}
 
-	finalModel, ok := final.controller.(*Model)
+	finalModel, ok := final.Controller.(*Model)
 	if !ok {
-		t.Fatalf("expected wrapped board model, got %T", final.controller)
+		t.Fatalf("expected wrapped board model, got %T", final.Controller)
 	}
 
 	if sel := finalModel.CurrentSelection(); sel == nil || sel.Issue.ID != "bw-4" {
@@ -358,7 +341,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			tm := testui.NewTestModelWithSize(t, controllerAdapter{controller: NewModel(gateway, provider, resolvedBoardKeys(t))}, tc.width, tc.height)
+			tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway, provider, resolvedBoardKeys(t))}, tc.width, tc.height)
 			t.Cleanup(func() {
 				_ = tm.Quit()
 			})
@@ -370,13 +353,13 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 				t.Fatalf("failed to quit teatest model: %v", err)
 			}
 
-			final, ok := tm.FinalModel(t).(controllerAdapter)
+			final, ok := tm.FinalModel(t).(testui.ControllerAdapter)
 			if !ok {
 				t.Fatalf("expected final model adapter")
 			}
-			finalModel, ok := final.controller.(*Model)
+			finalModel, ok := final.Controller.(*Model)
 			if !ok {
-				t.Fatalf("expected wrapped board model, got %T", final.controller)
+				t.Fatalf("expected wrapped board model, got %T", final.Controller)
 			}
 
 			view := finalModel.View()

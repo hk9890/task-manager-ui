@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -19,6 +20,8 @@ var obviousRuntimeErrorSnippets = []string{
 	"exclusive lock",
 	"panic:",
 }
+
+var AnsiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // AssertContainsAll verifies that every snippet exists in the rendered output.
 func AssertContainsAll(tb testing.TB, output string, snippets ...string) {

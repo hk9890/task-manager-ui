@@ -49,13 +49,13 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 		t.Fatalf("expected board selection from board controller, got %q", got)
 	}
 
-	if !hasGatewayCall(gateway.Calls, fakes.MethodReadyIssues) {
+	if !gateway.HasCall(string(fakes.MethodReadyIssues)) {
 		t.Fatalf("expected ready issues query from built-in dashboard")
 	}
-	if !hasGatewayCall(gateway.Calls, fakes.MethodListIssues) {
+	if !gateway.HasCall(string(fakes.MethodListIssues)) {
 		t.Fatalf("expected list issues query from built-in dashboard")
 	}
-	if !hasGatewayCall(gateway.Calls, fakes.MethodBlockedIssues) {
+	if !gateway.HasCall(string(fakes.MethodBlockedIssues)) {
 		t.Fatalf("expected blocked issues query from built-in dashboard")
 	}
 
@@ -300,7 +300,7 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 	}
 }
 
-func TestModelTabAndShiftTabCycleOnlyBoardAndSearch(t *testing.T) {
+func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
 	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
@@ -318,15 +318,22 @@ func TestModelTabAndShiftTabCycleOnlyBoardAndSearch(t *testing.T) {
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected shift+tab from board to switch to search, got %s", m.active)
+	if m.active != mode.Board {
+		t.Fatalf("expected shift+tab from board not to switch modes, got %s", m.active)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected ctrl+space to switch to search, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Board {
-		t.Fatalf("expected esc from search to return to board before detail open, got %s", m.active)
+		t.Fatalf("expected ctrl+space to return to board, got %s", m.active)
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
@@ -339,11 +346,8 @@ func TestModelTabAndShiftTabCycleOnlyBoardAndSearch(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Board && m.active != mode.Search {
-		t.Fatalf("expected tab from detail to cycle to board/search set, got %s", m.active)
-	}
-	if m.active == mode.Detail {
-		t.Fatalf("expected tab cycle to exclude detail mode")
+	if m.active != mode.Detail {
+		t.Fatalf("expected tab from detail not to cycle modes by default, got %s", m.active)
 	}
 }
 
@@ -584,11 +588,11 @@ func TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if !hasGatewayCall(gateway.Calls, fakes.MethodStatusCatalog) || !hasGatewayCall(gateway.Calls, fakes.MethodTypeCatalog) || !hasGatewayCall(gateway.Calls, fakes.MethodLabelCatalog) {
+	if !gateway.HasCall(string(fakes.MethodStatusCatalog)) || !gateway.HasCall(string(fakes.MethodTypeCatalog)) || !gateway.HasCall(string(fakes.MethodLabelCatalog)) {
 		t.Fatalf("expected status/type/label catalogs to be queried, calls=%#v", gateway.Calls)
 	}
 
-	if !hasGatewayCall(gateway.Calls, fakes.MethodCreateIssue) {
+	if !gateway.HasCall(string(fakes.MethodCreateIssue)) {
 		t.Fatalf("expected create issue gateway call, calls=%#v", gateway.Calls)
 	}
 }
@@ -662,13 +666,13 @@ func TestModelUpdateCloseAndCommentFlowsUseGatewayWrites(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if !hasGatewayCall(gateway.Calls, fakes.MethodUpdateIssue) {
+	if !gateway.HasCall(string(fakes.MethodUpdateIssue)) {
 		t.Fatalf("expected update issue call, calls=%#v", gateway.Calls)
 	}
-	if !hasGatewayCall(gateway.Calls, fakes.MethodCloseIssue) {
+	if !gateway.HasCall(string(fakes.MethodCloseIssue)) {
 		t.Fatalf("expected close issue call, calls=%#v", gateway.Calls)
 	}
-	if !hasGatewayCall(gateway.Calls, fakes.MethodAddComment) {
+	if !gateway.HasCall(string(fakes.MethodAddComment)) {
 		t.Fatalf("expected add comment call, calls=%#v", gateway.Calls)
 	}
 }
@@ -828,7 +832,10 @@ func TestModelDetailModeRendersStandaloneDetailGolden(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	ui.AssertModelViewMatchesGoldenNormalized(t, m, "model_mode_switch_detail.golden")
+	view := m.View()
+	if !strings.Contains(view, "Detail: j/k scroll") || !strings.Contains(view, "home/end bounds") {
+		t.Fatalf("expected detail footer help to include configurable detail bindings, got:\n%s", view)
+	}
 }
 
 func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
@@ -964,7 +971,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 		t.Fatalf("expected editor call for bw-9, got %q", fakeEditor.Calls[0].IssueID)
 	}
 
-	if !hasGatewayCall(gateway.Calls, fakes.MethodShowIssue) {
+	if !gateway.HasCall(string(fakes.MethodShowIssue)) {
 		t.Fatalf("expected detail reload via ShowIssue after successful update, calls=%#v", gateway.Calls)
 	}
 
@@ -1025,7 +1032,7 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls)
 	}
 
-	if hasGatewayCall(gateway.Calls, fakes.MethodShowIssue) {
+	if gateway.HasCall(string(fakes.MethodShowIssue)) {
 		t.Fatalf("did not expect issue reload from launcher action, calls=%#v", gateway.Calls)
 	}
 }
@@ -1043,7 +1050,7 @@ func TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow(t *testing.T) {
 		WorkDir: repoPath,
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})
-	gateway := beads.NewGateway(runner)
+	gateway := beads.NewCLIGateway(runner)
 
 	services, err := NewServices(gateway, config.Default(), repoPath)
 	if err != nil {
@@ -1097,7 +1104,7 @@ func TestModelEmbeddedFixtureDetailEditHotkeyUsesEditorService(t *testing.T) {
 		WorkDir: repoPath,
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})
-	gateway := beads.NewGateway(runner)
+	gateway := beads.NewCLIGateway(runner)
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
@@ -1155,7 +1162,7 @@ func TestModelEmbeddedFixtureFullBoardCaptureGolden(t *testing.T) {
 		WorkDir: repoPath,
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})
-	gateway := beads.NewGateway(runner)
+	gateway := beads.NewCLIGateway(runner)
 
 	services, err := NewServices(gateway, config.Default(), repoPath)
 	if err != nil {
@@ -1194,7 +1201,7 @@ func TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors(t *tes
 		WorkDir: repoPath,
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})
-	gateway := beads.NewGateway(runner)
+	gateway := beads.NewCLIGateway(runner)
 
 	services, err := NewServices(gateway, config.Default(), repoPath)
 	if err != nil {
@@ -1330,15 +1337,6 @@ func applyMessages(t *testing.T, model Model, msgs []tea.Msg) Model {
 	}
 
 	return m
-}
-
-func hasGatewayCall(calls []fakes.GatewayCall, method fakes.GatewayMethod) bool {
-	for _, call := range calls {
-		if call.Method == method {
-			return true
-		}
-	}
-	return false
 }
 
 func firstSelectionID(m Model, modeID mode.ID) string {

@@ -1,9 +1,11 @@
 package details
 
 import (
+	"reflect"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 )
@@ -15,12 +17,22 @@ type Model struct {
 	Detail      domain.IssueDetail
 	Loading     bool
 	Error       string
+	Keys        config.ResolvedKeyBindings
 
 	ScrollOffset int
+
+	cachedLineCount      int
+	cachedLineCountWidth int
+	cachedViewportHeight int
+	cachedSelectionID    string
+	cachedTargetID       string
+	cachedDetail         domain.IssueDetail
+	cachedLoading        bool
+	cachedError          string
 }
 
 // View renders the detail surface for pane and dedicated detail mode.
-func (m Model) View(maxWidth, viewportHeight int, compact bool) string {
+func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 	content := uidetails.Render(uidetails.State{
 		SelectionID: m.SelectionID,
 		TargetID:    m.TargetID,
@@ -32,10 +44,14 @@ func (m Model) View(maxWidth, viewportHeight int, compact bool) string {
 	})
 
 	if compact || viewportHeight <= 0 {
+		if compact {
+			m.invalidateLineCountCache()
+		}
 		return content
 	}
 
 	lines := strings.Split(content, "\n")
+	m.setLineCountCache(len(lines), maxWidth, viewportHeight)
 	maxOffset := maxScrollOffset(len(lines), viewportHeight)
 	offset := m.ScrollOffset
 	if offset < 0 {
@@ -56,14 +72,10 @@ func (m Model) View(maxWidth, viewportHeight int, compact bool) string {
 
 // ClampScroll keeps scroll offset inside current content bounds.
 func (m *Model) ClampScroll(viewportHeight int) {
-	total := len(strings.Split(uidetails.Render(uidetails.State{
-		SelectionID: m.SelectionID,
-		TargetID:    m.TargetID,
-		Detail:      m.Detail,
-		Loading:     m.Loading,
-		Error:       m.Error,
-		Compact:     false,
-	}), "\n"))
+	if m.cachedViewportHeight != 0 && m.cachedViewportHeight != viewportHeight {
+		m.invalidateLineCountCache()
+	}
+	total := m.lineCountForScroll()
 	maxOffset := maxScrollOffset(total, viewportHeight)
 	if m.ScrollOffset < 0 {
 		m.ScrollOffset = 0
@@ -78,42 +90,35 @@ func (m *Model) HandleKey(msg tea.KeyMsg, viewportHeight int) bool {
 	if viewportHeight <= 0 {
 		return false
 	}
+	if m.cachedViewportHeight != 0 && m.cachedViewportHeight != viewportHeight {
+		m.invalidateLineCountCache()
+	}
+	if m.Keys.IsZero() {
+		resolved, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
+		if err == nil {
+			m.Keys = resolved
+		}
+	}
 
-	total := len(strings.Split(uidetails.Render(uidetails.State{
-		SelectionID: m.SelectionID,
-		TargetID:    m.TargetID,
-		Detail:      m.Detail,
-		Loading:     m.Loading,
-		Error:       m.Error,
-		Compact:     false,
-	}), "\n"))
+	total := m.lineCountForScroll()
 	maxOffset := maxScrollOffset(total, viewportHeight)
 
 	move := 0
-	switch msg.Type {
-	case tea.KeyUp:
+	switch {
+	case m.Keys.Match(config.DetailContext, config.DetailActionScrollUp, msg):
 		move = -1
-	case tea.KeyDown:
+	case m.Keys.Match(config.DetailContext, config.DetailActionScrollDown, msg):
 		move = 1
-	case tea.KeyPgUp:
-		move = -maxInt(1, viewportHeight-1)
-	case tea.KeyPgDown:
-		move = maxInt(1, viewportHeight-1)
-	case tea.KeyHome:
+	case m.Keys.Match(config.DetailContext, config.DetailActionPageUp, msg):
+		move = -max(1, viewportHeight-1)
+	case m.Keys.Match(config.DetailContext, config.DetailActionPageDown, msg):
+		move = max(1, viewportHeight-1)
+	case m.Keys.Match(config.DetailContext, config.DetailActionHome, msg):
 		m.ScrollOffset = 0
 		return true
-	case tea.KeyEnd:
+	case m.Keys.Match(config.DetailContext, config.DetailActionEnd, msg):
 		m.ScrollOffset = maxOffset
 		return true
-	case tea.KeyRunes:
-		switch string(msg.Runes) {
-		case "j":
-			move = 1
-		case "k":
-			move = -1
-		default:
-			return false
-		}
 	default:
 		return false
 	}
@@ -140,9 +145,46 @@ func maxScrollOffset(totalLines, viewportHeight int) int {
 	return totalLines - viewportHeight
 }
 
-func maxInt(a, b int) int {
-	if a > b {
-		return a
+func (m *Model) lineCountForScroll() int {
+	if m.cachedLineCount > 0 && m.cacheMatchesCurrentState() {
+		return m.cachedLineCount
 	}
-	return b
+
+	content := uidetails.Render(uidetails.State{
+		SelectionID: m.SelectionID,
+		TargetID:    m.TargetID,
+		Detail:      m.Detail,
+		Loading:     m.Loading,
+		Error:       m.Error,
+		Width:       m.cachedLineCountWidth,
+		Compact:     false,
+	})
+	total := len(strings.Split(content, "\n"))
+	m.setLineCountCache(total, m.cachedLineCountWidth, m.cachedViewportHeight)
+	return total
+}
+
+func (m *Model) cacheMatchesCurrentState() bool {
+	return m.SelectionID == m.cachedSelectionID &&
+		m.TargetID == m.cachedTargetID &&
+		m.Loading == m.cachedLoading &&
+		m.Error == m.cachedError &&
+		reflect.DeepEqual(m.Detail, m.cachedDetail)
+}
+
+func (m *Model) setLineCountCache(total, width, viewportHeight int) {
+	m.cachedLineCount = total
+	m.cachedLineCountWidth = width
+	m.cachedViewportHeight = viewportHeight
+	m.cachedSelectionID = m.SelectionID
+	m.cachedTargetID = m.TargetID
+	m.cachedDetail = m.Detail
+	m.cachedLoading = m.Loading
+	m.cachedError = m.Error
+}
+
+func (m *Model) invalidateLineCountCache() {
+	m.cachedLineCount = 0
+	m.cachedLineCountWidth = 0
+	m.cachedViewportHeight = 0
 }

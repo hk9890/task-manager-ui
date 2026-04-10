@@ -26,19 +26,25 @@ type GatewayError struct {
 }
 
 func (e GatewayError) Error() string {
+	var base string
+
 	if e.Message == "" {
 		if e.Operation == "" {
-			return string(e.Code)
+			base = string(e.Code)
+		} else {
+			base = fmt.Sprintf("%s: %s", e.Operation, e.Code)
 		}
-
-		return fmt.Sprintf("%s: %s", e.Operation, e.Code)
+	} else if e.Operation == "" {
+		base = e.Message
+	} else {
+		base = fmt.Sprintf("%s: %s", e.Operation, e.Message)
 	}
 
-	if e.Operation == "" {
-		return e.Message
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %s", base, e.Cause.Error())
 	}
 
-	return fmt.Sprintf("%s: %s", e.Operation, e.Message)
+	return base
 }
 
 func (e GatewayError) Unwrap() error {

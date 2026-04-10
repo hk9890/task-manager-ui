@@ -6,9 +6,8 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
-// DashboardDefinitionProvider loads dashboard definitions independently from
-// board rendering.
-type DashboardDefinitionProvider interface {
+// Provider loads dashboard definitions independently from board rendering.
+type Provider interface {
 	Dashboards(ctx context.Context) ([]Definition, error)
 }
 

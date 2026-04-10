@@ -21,11 +21,8 @@ type FormSectionConfig struct {
 	Width   int
 	Height  int
 
-	TopLeft     string
-	TopLeftHint string
-	TopRight    string
-	BottomLeft  string
-	BottomRight string
+	TopLeft  string
+	TopRight string
 
 	Focused            bool
 	FocusedBorderColor lipgloss.TerminalColor
@@ -42,15 +39,13 @@ func FormSection(cfg FormSectionConfig) string {
 
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(titleColor)
-	hintStyle := lipgloss.NewStyle().Foreground(TextMutedColor)
-
 	innerWidth := cfg.Width - 2
 	if innerWidth < 1 {
 		innerWidth = 1
 	}
 
-	top := buildFormTopBorder(cfg.TopLeft, cfg.TopLeftHint, cfg.TopRight, innerWidth, borderStyle, titleStyle, hintStyle)
-	bottom := buildFormBottomBorder(cfg.BottomLeft, cfg.BottomRight, innerWidth, borderStyle, titleStyle)
+	top := buildFormTopBorder(cfg.TopLeft, cfg.TopRight, innerWidth, borderStyle, titleStyle)
+	bottom := buildFormBottomBorder(innerWidth, borderStyle)
 
 	content := cfg.Content
 	if len(content) == 0 {
@@ -82,7 +77,7 @@ func FormSection(cfg FormSectionConfig) string {
 	return top + "\n" + strings.Join(lines, "\n") + "\n" + bottom
 }
 
-func buildFormTopBorder(title, hint, rightTitle string, innerWidth int, borderStyle, titleStyle, hintStyle lipgloss.Style) string {
+func buildFormTopBorder(title, rightTitle string, innerWidth int, borderStyle, titleStyle lipgloss.Style) string {
 	if title == "" && rightTitle == "" {
 		return borderStyle.Render(borderTopLeft + strings.Repeat(borderHorizontal, innerWidth) + borderTopRight)
 	}
@@ -92,11 +87,6 @@ func buildFormTopBorder(title, hint, rightTitle string, innerWidth int, borderSt
 	if title != "" {
 		leftPart = titleStyle.Render(title)
 		leftWidth = lipgloss.Width(title)
-		if hint != "" {
-			h := "(" + hint + ")"
-			leftPart += " " + hintStyle.Render(h)
-			leftWidth += 1 + lipgloss.Width(h)
-		}
 	}
 
 	rightPart := ""
@@ -137,41 +127,6 @@ func buildFormTopBorder(title, hint, rightTitle string, innerWidth int, borderSt
 	return b.String()
 }
 
-func buildFormBottomBorder(leftTitle, rightTitle string, innerWidth int, borderStyle, titleStyle lipgloss.Style) string {
-	if leftTitle == "" && rightTitle == "" {
-		return borderStyle.Render(borderBottomLeft + strings.Repeat(borderHorizontal, innerWidth) + borderBottomRight)
-	}
-
-	leftWidth := lipgloss.Width(leftTitle)
-	rightWidth := lipgloss.Width(rightTitle)
-
-	dashes := 1
-	switch {
-	case leftTitle != "" && rightTitle != "":
-		dashes = innerWidth - leftWidth - rightWidth - 6
-	case leftTitle != "":
-		dashes = innerWidth - leftWidth - 3
-	default:
-		dashes = innerWidth - rightWidth - 3
-	}
-	if dashes < 1 {
-		dashes = 1
-	}
-
-	var b strings.Builder
-	b.WriteString(borderStyle.Render(borderBottomLeft))
-	if leftTitle != "" {
-		b.WriteString(borderStyle.Render(borderHorizontal + " "))
-		b.WriteString(leftTitle)
-		b.WriteString(borderStyle.Render(" "))
-	}
-	b.WriteString(borderStyle.Render(strings.Repeat(borderHorizontal, dashes)))
-	if rightTitle != "" {
-		b.WriteString(borderStyle.Render(" "))
-		b.WriteString(titleStyle.Render(rightTitle))
-		b.WriteString(borderStyle.Render(" " + borderHorizontal))
-	}
-	b.WriteString(borderStyle.Render(borderBottomRight))
-
-	return b.String()
+func buildFormBottomBorder(innerWidth int, borderStyle lipgloss.Style) string {
+	return borderStyle.Render(borderBottomLeft + strings.Repeat(borderHorizontal, innerWidth) + borderBottomRight)
 }

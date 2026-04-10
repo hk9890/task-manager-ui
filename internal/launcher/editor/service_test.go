@@ -54,7 +54,7 @@ func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
 		t.Fatalf("expected updated=true")
 	}
 
-	if !hasGatewayMethod(gateway.Calls, fakes.MethodUpdateIssue) {
+	if !gateway.HasCall(string(fakes.MethodUpdateIssue)) {
 		t.Fatalf("expected UpdateIssue call, calls=%#v", gateway.Calls)
 	}
 }
@@ -82,7 +82,7 @@ func TestIssueEditorNoChangesSkipsGatewayUpdate(t *testing.T) {
 		t.Fatalf("expected updated=false")
 	}
 
-	if hasGatewayMethod(gateway.Calls, fakes.MethodUpdateIssue) {
+	if gateway.HasCall(string(fakes.MethodUpdateIssue)) {
 		t.Fatalf("did not expect UpdateIssue call, calls=%#v", gateway.Calls)
 	}
 }
@@ -105,13 +105,4 @@ func TestIssueEditorReturnsOpenerError(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected opener error, got %v", err)
 	}
-}
-
-func hasGatewayMethod(calls []fakes.GatewayCall, method fakes.GatewayMethod) bool {
-	for _, call := range calls {
-		if call.Method == method {
-			return true
-		}
-	}
-	return false
 }

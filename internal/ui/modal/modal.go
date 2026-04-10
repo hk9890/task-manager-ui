@@ -4,6 +4,7 @@ package modal
 import (
 	"strings"
 
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/ui/overlay"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 
@@ -140,6 +141,21 @@ func NewWithKeys(cfg Config, km KeyMap) Model {
 	return m
 }
 
+// BindingsFromConfig converts resolved modal keybindings into the modal KeyMap.
+func BindingsFromConfig(keys config.ResolvedKeyBindings) KeyMap {
+	if keys.IsZero() {
+		return DefaultKeyMap
+	}
+	return KeyMap{
+		Next:   newBindings(keys.Keys(config.ModalContext, config.ModalActionNext)...),
+		Prev:   newBindings(keys.Keys(config.ModalContext, config.ModalActionPrev)...),
+		Left:   newBindings(keys.Keys(config.ModalContext, config.ModalActionLeft)...),
+		Right:  newBindings(keys.Keys(config.ModalContext, config.ModalActionRight)...),
+		Enter:  newBindings(keys.Keys(config.ModalContext, config.ModalActionEnter)...),
+		Escape: newBindings(keys.Keys(config.ModalContext, config.ModalActionEscape)...),
+	}
+}
+
 // Init returns initial cursor blink command for input mode.
 func (m Model) Init() tea.Cmd {
 	if m.hasInputs {
@@ -202,7 +218,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case msg.String() == "n":
 			if m.focusedInput == -1 || !m.hasInputs {
-				return m, func() tea.Msg { return CancelMsg{} }
+				if !m.config.Required {
+					return m, func() tea.Msg { return CancelMsg{} }
+				}
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -285,8 +303,8 @@ func (m Model) prevField() Model {
 
 // View renders the modal content without a background overlay.
 func (m Model) View() string {
-	minWidth := maxInt(40, m.config.MinWidth)
-	contentWidth := maxInt(minWidth, lipgloss.Width(m.config.Title))
+	minWidth := max(40, m.config.MinWidth)
+	contentWidth := max(minWidth, lipgloss.Width(m.config.Title))
 	boxWidth := contentWidth + 2
 
 	titleStyle := lipgloss.NewStyle().
@@ -393,9 +411,14 @@ func (m Model) FocusedInput() int { return m.focusedInput }
 // FocusedField returns the focused button field.
 func (m Model) FocusedField() Field { return m.focusedField }
 
-func maxInt(a, b int) int {
-	if a > b {
-		return a
+func newBindings(keys ...string) []key.Binding {
+	bindings := make([]key.Binding, 0, len(keys))
+	for _, keyName := range keys {
+		if keyName == "space" {
+			bindings = append(bindings, key.NewBinding(key.WithKeys("space", " ")))
+			continue
+		}
+		bindings = append(bindings, key.NewBinding(key.WithKeys(keyName)))
 	}
-	return b
+	return bindings
 }

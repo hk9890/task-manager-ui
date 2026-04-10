@@ -2,8 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"os"
-	"strings"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -19,7 +17,6 @@ const (
 	builtInSectionTitleInProgress = "In Progress"
 	builtInSectionIDDone          = "done"
 	builtInSectionTitleDone       = "Done"
-	beadsActorEnvVar              = "BEADS_ACTOR"
 	defaultSectionLimit           = 25
 	inProgressStatus              = "in_progress"
 	doneStatus                    = "closed"
@@ -28,48 +25,13 @@ const (
 // BuiltInProvider is a dashboard definition provider backed by built-in queue
 // definitions mapped to supported gateway query contracts.
 type BuiltInProvider struct {
-	actorResolver ActorResolver
 }
 
-var _ DashboardDefinitionProvider = (*BuiltInProvider)(nil)
-
-// ActorResolver resolves the current beads actor/user identity.
-type ActorResolver interface {
-	CurrentActor() string
-}
-
-// EnvActorResolver resolves current user identity from environment.
-type EnvActorResolver struct {
-	envKey string
-}
+var _ Provider = (*BuiltInProvider)(nil)
 
 // NewBuiltInProvider creates a built-in dashboard provider.
 func NewBuiltInProvider() *BuiltInProvider {
-	return &BuiltInProvider{actorResolver: NewEnvActorResolver()}
-}
-
-// NewBuiltInProviderWithActorResolver creates a built-in provider using a
-// custom actor resolver. Empty resolver falls back to environment resolution.
-func NewBuiltInProviderWithActorResolver(actorResolver ActorResolver) *BuiltInProvider {
-	if actorResolver == nil {
-		actorResolver = NewEnvActorResolver()
-	}
-
-	return &BuiltInProvider{actorResolver: actorResolver}
-}
-
-// NewEnvActorResolver creates an environment-based actor resolver.
-func NewEnvActorResolver() EnvActorResolver {
-	return EnvActorResolver{envKey: beadsActorEnvVar}
-}
-
-// CurrentActor returns the current actor identity from BEADS_ACTOR.
-func (r EnvActorResolver) CurrentActor() string {
-	if r.envKey == "" {
-		return ""
-	}
-
-	return strings.TrimSpace(os.Getenv(r.envKey))
+	return &BuiltInProvider{}
 }
 
 // Dashboards returns built-in dashboard definitions.

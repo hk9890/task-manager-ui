@@ -3,6 +3,7 @@ package beads
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -35,34 +36,15 @@ func NewCLIGateway(runner *CommandRunner) *Gateway {
 	return &Gateway{runner: runner}
 }
 
-// NewGateway builds a CLI-backed beads gateway.
-func NewGateway(runner *CommandRunner) *Gateway {
-	return NewCLIGateway(runner)
-}
-
 // ListIssues returns issue summaries using `bd list --json`.
 func (g *Gateway) ListIssues(ctx context.Context, query domain.IssueListQuery) ([]domain.IssueSummary, error) {
 	args := []string{"list", "--json"}
-
-	if len(query.Statuses) > 0 {
-		args = append(args, "--status", strings.Join(query.Statuses, ","))
-	}
-
-	if len(query.Types) > 0 {
-		args = append(args, "--type", strings.Join(query.Types, ","))
-	}
-
-	if query.Assignee != "" {
-		args = append(args, "--assignee", query.Assignee)
-	}
-
-	for _, label := range query.Labels {
-		if strings.TrimSpace(label) == "" {
-			continue
-		}
-
-		args = append(args, "--label", label)
-	}
+	args = append(args, buildFilterArgs(issueFilterArgs{
+		Statuses: query.Statuses,
+		Types:    query.Types,
+		Assignee: query.Assignee,
+		Labels:   query.Labels,
+	})...)
 
 	if query.SortBy != "" {
 		sortField := mapListSortField(query.SortBy)
@@ -222,34 +204,14 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 	}
 
 	args = append(args, "--json")
-
-	if len(query.Statuses) > 0 {
-		args = append(args, "--status", strings.Join(query.Statuses, ","))
-	}
-
-	if len(query.Types) > 0 {
-		args = append(args, "--type", strings.Join(query.Types, ","))
-	}
-
-	if query.PriorityMin != nil {
-		args = append(args, "--priority-min", strconv.Itoa(*query.PriorityMin))
-	}
-
-	if query.PriorityMax != nil {
-		args = append(args, "--priority-max", strconv.Itoa(*query.PriorityMax))
-	}
-
-	if query.Assignee != "" {
-		args = append(args, "--assignee", query.Assignee)
-	}
-
-	for _, label := range query.Labels {
-		if strings.TrimSpace(label) == "" {
-			continue
-		}
-
-		args = append(args, "--label", label)
-	}
+	args = append(args, buildFilterArgs(issueFilterArgs{
+		Statuses:    query.Statuses,
+		Types:       query.Types,
+		PriorityMin: query.PriorityMin,
+		PriorityMax: query.PriorityMax,
+		Assignee:    query.Assignee,
+		Labels:      query.Labels,
+	})...)
 
 	if limit := withOffsetWindow(query.Limit, query.Offset); limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(limit))
@@ -265,10 +227,7 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 		return domain.SearchResultPage{}, err
 	}
 
-	results := make([]domain.SearchResult, 0, len(summaries))
-	for _, summary := range summaries {
-		results = append(results, domain.SearchResult{Issue: summary})
-	}
+	results := toSearchResults(summaries)
 
 	return domain.SearchResultPage{
 		Results: results,
@@ -278,34 +237,14 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 
 func (g *Gateway) searchIssuesFromList(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	args := []string{"list", "--json"}
-
-	if len(query.Statuses) > 0 {
-		args = append(args, "--status", strings.Join(query.Statuses, ","))
-	}
-
-	if len(query.Types) > 0 {
-		args = append(args, "--type", strings.Join(query.Types, ","))
-	}
-
-	if query.PriorityMin != nil {
-		args = append(args, "--priority-min", strconv.Itoa(*query.PriorityMin))
-	}
-
-	if query.PriorityMax != nil {
-		args = append(args, "--priority-max", strconv.Itoa(*query.PriorityMax))
-	}
-
-	if query.Assignee != "" {
-		args = append(args, "--assignee", query.Assignee)
-	}
-
-	for _, label := range query.Labels {
-		if strings.TrimSpace(label) == "" {
-			continue
-		}
-
-		args = append(args, "--label", label)
-	}
+	args = append(args, buildFilterArgs(issueFilterArgs{
+		Statuses:    query.Statuses,
+		Types:       query.Types,
+		PriorityMin: query.PriorityMin,
+		PriorityMax: query.PriorityMax,
+		Assignee:    query.Assignee,
+		Labels:      query.Labels,
+	})...)
 
 	if limit := withOffsetWindow(query.Limit, query.Offset); limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(limit))
@@ -321,10 +260,7 @@ func (g *Gateway) searchIssuesFromList(ctx context.Context, query domain.SearchI
 		return domain.SearchResultPage{}, err
 	}
 
-	results := make([]domain.SearchResult, 0, len(summaries))
-	for _, summary := range summaries {
-		results = append(results, domain.SearchResult{Issue: summary})
-	}
+	results := toSearchResults(summaries)
 
 	return domain.SearchResultPage{
 		Results: results,
@@ -363,10 +299,7 @@ func (g *Gateway) searchIssuePageFromRecords(items []map[string]any, query domai
 
 	filtered := filterIssueSummariesForSearch(summaries, query)
 	paged := paginate(filtered, query.Offset, query.Limit)
-	results := make([]domain.SearchResult, 0, len(paged))
-	for _, summary := range paged {
-		results = append(results, domain.SearchResult{Issue: summary})
-	}
+	results := toSearchResults(paged)
 
 	return domain.SearchResultPage{
 		Results: results,
@@ -397,11 +330,11 @@ func issueMatchesSearchQuery(item domain.IssueSummary, query domain.SearchIssues
 		}
 	}
 
-	if len(query.Statuses) > 0 && !containsString(query.Statuses, item.Status) {
+	if len(query.Statuses) > 0 && !slices.Contains(query.Statuses, item.Status) {
 		return false
 	}
 
-	if len(query.Types) > 0 && !containsString(query.Types, item.Type) {
+	if len(query.Types) > 0 && !slices.Contains(query.Types, item.Type) {
 		return false
 	}
 
@@ -414,7 +347,7 @@ func issueMatchesSearchQuery(item domain.IssueSummary, query domain.SearchIssues
 			continue
 		}
 
-		if !containsString(item.Labels, label) {
+		if !slices.Contains(item.Labels, label) {
 			return false
 		}
 	}
@@ -430,14 +363,56 @@ func issueMatchesSearchQuery(item domain.IssueSummary, query domain.SearchIssues
 	return true
 }
 
-func containsString(items []string, target string) bool {
-	for _, item := range items {
-		if item == target {
-			return true
-		}
+type issueFilterArgs struct {
+	Statuses    []string
+	Types       []string
+	PriorityMin *int
+	PriorityMax *int
+	Assignee    string
+	Labels      []string
+}
+
+func buildFilterArgs(filter issueFilterArgs) []string {
+	args := make([]string, 0)
+
+	if len(filter.Statuses) > 0 {
+		args = append(args, "--status", strings.Join(filter.Statuses, ","))
 	}
 
-	return false
+	if len(filter.Types) > 0 {
+		args = append(args, "--type", strings.Join(filter.Types, ","))
+	}
+
+	if filter.PriorityMin != nil {
+		args = append(args, "--priority-min", strconv.Itoa(*filter.PriorityMin))
+	}
+
+	if filter.PriorityMax != nil {
+		args = append(args, "--priority-max", strconv.Itoa(*filter.PriorityMax))
+	}
+
+	if filter.Assignee != "" {
+		args = append(args, "--assignee", filter.Assignee)
+	}
+
+	for _, label := range filter.Labels {
+		if strings.TrimSpace(label) == "" {
+			continue
+		}
+
+		args = append(args, "--label", label)
+	}
+
+	return args
+}
+
+func toSearchResults(issues []domain.IssueSummary) []domain.SearchResult {
+	results := make([]domain.SearchResult, 0, len(issues))
+	for _, issue := range issues {
+		results = append(results, domain.SearchResult{Issue: issue})
+	}
+
+	return results
 }
 
 // StatusCatalog returns available issue statuses using `bd statuses --json`.

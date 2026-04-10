@@ -141,7 +141,54 @@ launcher:
 
 ui:
   show_mode_switcher_help: false
+
+keybindings:
+  shell:
+    quit: [ctrl+q]
+    toggle_help: [F1]
+  board:
+    move_left: [left]
+    move_right: [right]
+  search:
+    cycle_focus_next: [ctrl+n]
+    cycle_focus_prev: [ctrl+p]
+    open_detail: [space]
+  detail:
+    scroll_down: [ctrl+d]
+    scroll_up: [ctrl+u]
+  modal:
+    enter: [space]
+    escape: [q]
 ```
+
+### Keybindings (v1)
+
+Keybindings are resolved once at startup from the `keybindings` section.
+
+- Supported contexts: `shell`, `board`, `search`, `detail`, `modal`
+- Overrides merge per action; you only need to specify actions you want to change
+- Unknown actions, invalid key names, missing required actions, and conflicting keys
+  in the same context fail startup
+- Search query typing still accepts normal text input; only configured search actions
+  intercept keys in search mode
+
+Supported actions by context:
+
+- `shell`
+  - `quit`, `toggle_help`, `mode_board`, `mode_search`, `toggle_search`,
+    `mode_detail`, `mode_cycle_next`, `mode_cycle_prev`, `escape`,
+    `reload_detail`, `edit_issue`, `create_issue`, `update_issue`,
+    `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
+    `launch_shell_command`
+- `board`
+  - `move_left`, `move_right`, `move_up`, `move_down`, `open_detail`, `reload`
+- `search`
+  - `move_up`, `move_down`, `focus_left`, `focus_right`, `focus_query`,
+    `reload`, `open_detail`, `cycle_focus_next`, `cycle_focus_prev`
+- `detail`
+  - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
+- `modal`
+  - `next`, `prev`, `left`, `right`, `enter`, `escape`
 
 ### Launcher interpolation/context surface
 

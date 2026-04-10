@@ -165,3 +165,139 @@ func TestBuildIssueUpdateInputNoChanges(t *testing.T) {
 		t.Fatalf("expected no changes, got %#v", input)
 	}
 }
+
+func TestBuildIssueUpdateInputClearLabels(t *testing.T) {
+	t.Parallel()
+
+	original := IssueDetail{Summary: IssueSummary{Labels: []string{"bug", "ui"}}}
+	edited := IssueEditDocument{Labels: nil}
+
+	input, changed := BuildIssueUpdateInput(original, edited)
+	if !changed {
+		t.Fatalf("expected changed=true when labels are cleared")
+	}
+	if !input.ClearLabels {
+		t.Fatalf("expected ClearLabels=true when edited labels empty")
+	}
+	if len(input.Labels) != 0 {
+		t.Fatalf("expected no label set payload when clearing, got %#v", input.Labels)
+	}
+}
+
+func TestParseIssueEditDocumentPriorityBoundariesAndOutOfRange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		priorityRaw string
+		want        int
+		wantErr     bool
+	}{
+		{name: "min boundary", priorityRaw: "0", want: 0},
+		{name: "max boundary", priorityRaw: "4", want: 4},
+		{name: "below range", priorityRaw: "-1", wantErr: true},
+		{name: "above range", priorityRaw: "5", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			issue := IssueDetail{Summary: IssueSummary{
+				Title:    "Priority test",
+				Status:   "open",
+				Type:     "task",
+				Priority: 2,
+			}}
+
+			rendered := RenderIssueEditDocument(issue)
+			edited := strings.Replace(rendered,
+				issueEditFieldPriorityBegin+"\n2\n"+issueEditFieldPriorityEnd,
+				issueEditFieldPriorityBegin+"\n"+tc.priorityRaw+"\n"+issueEditFieldPriorityEnd,
+				1,
+			)
+
+			parsed, err := ParseIssueEditDocument(edited)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected parse error for priority %q", tc.priorityRaw)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("ParseIssueEditDocument returned error: %v", err)
+			}
+			if parsed.Priority != tc.want {
+				t.Fatalf("parsed priority = %d, want %d", parsed.Priority, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseIssueEditDocumentPriorityPrefixP2(t *testing.T) {
+	t.Parallel()
+
+	issue := IssueDetail{Summary: IssueSummary{
+		Title:    "Priority prefix",
+		Status:   "open",
+		Type:     "task",
+		Priority: 1,
+	}}
+
+	rendered := RenderIssueEditDocument(issue)
+	edited := strings.Replace(rendered,
+		issueEditFieldPriorityBegin+"\n1\n"+issueEditFieldPriorityEnd,
+		issueEditFieldPriorityBegin+"\nP2\n"+issueEditFieldPriorityEnd,
+		1,
+	)
+
+	parsed, err := ParseIssueEditDocument(edited)
+	if err != nil {
+		t.Fatalf("ParseIssueEditDocument returned error: %v", err)
+	}
+	if parsed.Priority != 2 {
+		t.Fatalf("expected P2 to parse as priority 2, got %d", parsed.Priority)
+	}
+}
+
+func TestBuildIssueUpdateInputAssigneeClearing(t *testing.T) {
+	t.Parallel()
+
+	original := IssueDetail{Summary: IssueSummary{Assignee: "hans"}}
+	edited := IssueEditDocument{Assignee: ""}
+
+	input, changed := BuildIssueUpdateInput(original, edited)
+	if !changed {
+		t.Fatalf("expected changed=true when assignee is cleared")
+	}
+	if input.Assignee == nil {
+		t.Fatalf("expected assignee update pointer when clearing")
+	}
+	if *input.Assignee != "" {
+		t.Fatalf("expected cleared assignee to be empty string, got %q", *input.Assignee)
+	}
+}
+
+func TestParseIssueEditDocumentPreservesMultiParagraphDescription(t *testing.T) {
+	t.Parallel()
+
+	multi := "first paragraph\n\nstill first\n\nsecond paragraph"
+	issue := IssueDetail{Summary: IssueSummary{
+		Title:    "Description test",
+		Status:   "open",
+		Type:     "task",
+		Priority: 2,
+	}, Description: multi}
+
+	rendered := RenderIssueEditDocument(issue)
+	parsed, err := ParseIssueEditDocument(rendered)
+	if err != nil {
+		t.Fatalf("ParseIssueEditDocument returned error: %v", err)
+	}
+
+	if parsed.Description != multi {
+		t.Fatalf("expected description to preserve blank lines, got %q", parsed.Description)
+	}
+}

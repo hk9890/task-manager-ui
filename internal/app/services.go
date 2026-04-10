@@ -9,17 +9,11 @@ import (
 	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
 )
 
-// SharedUIState contains shell-wide UI state shared across modes.
-type SharedUIState struct {
-	ToastMessage string
-}
-
 // Services is the intentionally small root app container.
 //
 // Allowed dependencies:
 //   - Beads gateway (all issue reads/writes)
 //   - config model (runtime preferences)
-//   - shared UI state
 //
 // This shell intentionally excludes BQL, orchestration/control-plane, SQL,
 // caching, pub/sub, and watcher wiring.
@@ -30,7 +24,6 @@ type Services struct {
 	Launcher launcher.Service
 	Editor   launchereditor.Service
 	Config   config.Model
-	UI       SharedUIState
 }
 
 // NewServices constructs the minimal app services container.
@@ -65,7 +58,6 @@ func NewServices(gateway beads.BeadsGateway, cfg config.Model, projectRoot strin
 		Launcher: launcherService,
 		Editor:   editorService,
 		Config:   cfg,
-		UI:       SharedUIState{},
 	}, nil
 }
 
@@ -88,6 +80,5 @@ func NewServicesWithLauncher(gateway beads.BeadsGateway, cfg config.Model, launc
 		Launcher: launcherService,
 		Editor:   editorService,
 		Config:   cfg,
-		UI:       SharedUIState{},
 	}, nil
 }

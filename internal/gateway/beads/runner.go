@@ -89,6 +89,12 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
 
+	// Dolt uses file locking for the local .beads database, so concurrent bd CLI
+	// calls against the same repo can contend and fail.
+	// This serializes dashboard loads (4 sections currently run one-by-one, ~4x
+	// slower than ideal parallel execution).
+	// If bd gains a long-running server mode or safe read-only concurrency, relax
+	// this to a bounded semaphore.
 	r.runMu.Lock()
 	result, err := r.executor.Run(ctx, r.command, req.Args, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
 	r.runMu.Unlock()
@@ -133,7 +139,6 @@ func RunJSON[T any](ctx context.Context, r *CommandRunner, req CommandRequest) (
 // DecodeJSONInto decodes JSON output into target and normalizes decode errors.
 func DecodeJSONInto(operation string, stdout []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(stdout))
-	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(target); err != nil {
 		return newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)

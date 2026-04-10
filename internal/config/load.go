@@ -2,7 +2,6 @@ package config
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,7 +82,7 @@ type overrideUI struct {
 func readConfigFile(path string) ([]byte, []string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		if errorsIsNotExist(err) {
+		if os.IsNotExist(err) {
 			return nil, nil, nil
 		}
 		return nil, nil, fmt.Errorf("stat config %q: %w", path, err)
@@ -134,6 +133,15 @@ func sanitizeOverride(override overrideModel) overrideModel {
 	}
 	if override.KeyBindings.Board != nil {
 		override.KeyBindings.Board = filterBindingOverrideMap(override.KeyBindings.Board, allowedActionsForContext(BoardContext))
+	}
+	if override.KeyBindings.Search != nil {
+		override.KeyBindings.Search = filterBindingOverrideMap(override.KeyBindings.Search, allowedActionsForContext(SearchContext))
+	}
+	if override.KeyBindings.Detail != nil {
+		override.KeyBindings.Detail = filterBindingOverrideMap(override.KeyBindings.Detail, allowedActionsForContext(DetailContext))
+	}
+	if override.KeyBindings.Modal != nil {
+		override.KeyBindings.Modal = filterBindingOverrideMap(override.KeyBindings.Modal, allowedActionsForContext(ModalContext))
 	}
 	return override
 }
@@ -299,11 +307,17 @@ var allowedMappingKeys = map[string]map[string]struct{}{
 		"show_mode_switcher_help": {},
 	},
 	"keybindings": {
-		"shell": {},
-		"board": {},
+		"shell":  {},
+		"board":  {},
+		"search": {},
+		"detail": {},
+		"modal":  {},
 	},
-	"keybindings.shell": allowedActionsForContext(ShellContext),
-	"keybindings.board": allowedActionsForContext(BoardContext),
+	"keybindings.shell":  allowedActionsForContext(ShellContext),
+	"keybindings.board":  allowedActionsForContext(BoardContext),
+	"keybindings.search": allowedActionsForContext(SearchContext),
+	"keybindings.detail": allowedActionsForContext(DetailContext),
+	"keybindings.modal":  allowedActionsForContext(ModalContext),
 }
 
 var allowedSequenceMappingKeys = map[string]map[string]struct{}{
@@ -314,8 +328,6 @@ var allowedSequenceMappingKeys = map[string]map[string]struct{}{
 		"env":     {},
 		"workdir": {},
 	},
-	"keybindings.shell": allowedActionsForContext(ShellContext),
-	"keybindings.board": allowedActionsForContext(BoardContext),
 }
 
 func collectUnknownWarnings(node *yaml.Node, path []string) []string {
@@ -387,8 +399,4 @@ func joinPath(path []string) string {
 		joined += "." + part
 	}
 	return joined
-}
-
-func errorsIsNotExist(err error) bool {
-	return err != nil && (os.IsNotExist(err) || errors.Is(err, os.ErrNotExist))
 }

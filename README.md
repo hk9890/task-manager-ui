@@ -29,6 +29,7 @@ Highlights:
 - config file values override env-based defaults like `$EDITOR`
 - unknown YAML keys are ignored with warnings
 - invalid YAML or unreadable config files fail startup
+- shell, board, search, detail, and modal keybindings are configurable
 
 See [`docs/CODING.md`](./docs/CODING.md) for the current config schema and
 examples.

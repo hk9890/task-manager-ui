@@ -53,43 +53,43 @@ func (c InterpolationContext) Placeholders() map[string]string {
 	}
 }
 
-// DefinitionResolver resolves launcher definitions from action names.
-type DefinitionResolver struct {
+// definitionResolver resolves launcher definitions from action names.
+type definitionResolver struct {
 	definitions map[string]Definition
 }
 
-// NewDefinitionResolver indexes launcher definitions by action.
-func NewDefinitionResolver(definitions []Definition) (DefinitionResolver, error) {
+// newDefinitionResolver indexes launcher definitions by action.
+func newDefinitionResolver(definitions []Definition) (definitionResolver, error) {
 	indexed := make(map[string]Definition, len(definitions))
 	for _, definition := range definitions {
 		action := strings.TrimSpace(definition.Action)
 		if action == "" {
-			return DefinitionResolver{}, errors.New("launcher action is required")
+			return definitionResolver{}, errors.New("launcher action is required")
 		}
 		if strings.TrimSpace(definition.Command) == "" {
-			return DefinitionResolver{}, fmt.Errorf("launcher command is required for action %q", action)
+			return definitionResolver{}, fmt.Errorf("launcher command is required for action %q", action)
 		}
 		if _, exists := indexed[action]; exists {
-			return DefinitionResolver{}, fmt.Errorf("duplicate launcher action %q", action)
+			return definitionResolver{}, fmt.Errorf("duplicate launcher action %q", action)
 		}
 
 		indexed[action] = definition
 	}
 
-	return DefinitionResolver{definitions: indexed}, nil
+	return definitionResolver{definitions: indexed}, nil
 }
 
 // Resolve returns a definition for the requested action.
-func (r DefinitionResolver) Resolve(action string) (Definition, bool) {
+func (r definitionResolver) Resolve(action string) (Definition, bool) {
 	definition, ok := r.definitions[action]
 	return definition, ok
 }
 
-// TemplateInterpolator interpolates supported launcher placeholders.
-type TemplateInterpolator struct{}
+// templateInterpolator interpolates supported launcher placeholders.
+type templateInterpolator struct{}
 
 // Interpolate substitutes placeholders in input using the provided context.
-func (TemplateInterpolator) Interpolate(input string, ctx InterpolationContext) string {
+func (templateInterpolator) Interpolate(input string, ctx InterpolationContext) string {
 	placeholders := ctx.Placeholders()
 	keys := make([]string, 0, len(placeholders))
 	for key := range placeholders {
@@ -106,9 +106,9 @@ func (TemplateInterpolator) Interpolate(input string, ctx InterpolationContext) 
 }
 
 type launcherService struct {
-	resolver     DefinitionResolver
+	resolver     definitionResolver
 	runner       ProcessRunner
-	interpolator TemplateInterpolator
+	interpolator templateInterpolator
 	projectRoot  string
 }
 
@@ -119,7 +119,7 @@ func NewService(definitions []Definition, projectRoot string, runner ProcessRunn
 		return nil, errors.New("process runner is required")
 	}
 
-	resolver, err := NewDefinitionResolver(definitions)
+	resolver, err := newDefinitionResolver(definitions)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func NewService(definitions []Definition, projectRoot string, runner ProcessRunn
 	return launcherService{
 		resolver:     resolver,
 		runner:       runner,
-		interpolator: TemplateInterpolator{},
+		interpolator: templateInterpolator{},
 		projectRoot:  projectRoot,
 	}, nil
 }

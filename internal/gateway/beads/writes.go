@@ -15,20 +15,9 @@ const (
 	opAddComment  = "add comment"
 )
 
-func (g *Gateway) commandRunner() (*CommandRunner, error) {
-	if g == nil || g.runner == nil {
-		return nil, newGatewayError(domain.ErrorCodeUnknown, "gateway", "gateway is not configured", nil)
-	}
-
-	return g.runner, nil
-}
-
 // CreateIssue creates a new issue through `bd create`.
 func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	runner, err := g.commandRunner()
-	if err != nil {
-		return domain.CreateIssueResult{}, err
-	}
+	runner := g.runner
 
 	args := []string{"create", "--silent", "--title", input.Title}
 
@@ -70,10 +59,12 @@ func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput
 
 // UpdateIssue updates issue fields through `bd update`.
 func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.UpdateIssueInput) error {
-	runner, err := g.commandRunner()
-	if err != nil {
-		return err
+	if strings.TrimSpace(issueID) == "" {
+		return newGatewayError(domain.ErrorCodeValidationFailed, opUpdateIssue, "issue id is required", nil)
 	}
+
+	runner := g.runner
+	var err error
 
 	args := []string{"update", issueID}
 
@@ -117,10 +108,12 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 
 // CloseIssue closes an issue through `bd close`.
 func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.CloseIssueInput) error {
-	runner, err := g.commandRunner()
-	if err != nil {
-		return err
+	if strings.TrimSpace(issueID) == "" {
+		return newGatewayError(domain.ErrorCodeValidationFailed, opCloseIssue, "issue id is required", nil)
 	}
+
+	runner := g.runner
+	var err error
 
 	args := []string{"close", issueID}
 
@@ -138,10 +131,12 @@ func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.C
 
 // AddComment adds an issue comment through `bd comments add`.
 func (g *Gateway) AddComment(ctx context.Context, issueID string, input domain.AddCommentInput) error {
-	runner, err := g.commandRunner()
-	if err != nil {
-		return err
+	if strings.TrimSpace(issueID) == "" {
+		return newGatewayError(domain.ErrorCodeValidationFailed, opAddComment, "issue id is required", nil)
 	}
+
+	runner := g.runner
+	var err error
 
 	_, err = runner.Run(ctx, CommandRequest{
 		Operation: opAddComment,

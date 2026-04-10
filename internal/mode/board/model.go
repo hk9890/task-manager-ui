@@ -37,7 +37,7 @@ type sectionState struct {
 // Model is the standalone board mode controller backed by dashboard queries.
 type Model struct {
 	gateway   beads.BeadsGateway
-	provider  dashboard.DashboardDefinitionProvider
+	provider  dashboard.Provider
 	keys      config.ResolvedKeyBindings
 	width     int
 	height    int
@@ -56,7 +56,7 @@ type Model struct {
 var _ mode.Controller = (*Model)(nil)
 
 // NewModel creates a board mode controller.
-func NewModel(gateway beads.BeadsGateway, provider dashboard.DashboardDefinitionProvider, resolved ...config.ResolvedKeyBindings) *Model {
+func NewModel(gateway beads.BeadsGateway, provider dashboard.Provider, resolved ...config.ResolvedKeyBindings) *Model {
 	if provider == nil {
 		provider = dashboard.NewBuiltInProvider()
 	}
@@ -353,7 +353,7 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 	}
 }
 
-func loadDashboardsCmd(provider dashboard.DashboardDefinitionProvider) tea.Cmd {
+func loadDashboardsCmd(provider dashboard.Provider) tea.Cmd {
 	return func() tea.Msg {
 		dashboards, err := provider.Dashboards(context.Background())
 		return dashboardsLoadedMsg{dashboards: dashboards, err: err}

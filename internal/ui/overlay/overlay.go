@@ -14,12 +14,8 @@ type Position int
 const (
 	// Center places foreground in the center.
 	Center Position = iota
-	// Top places foreground at the top center.
-	Top
 	// Bottom places foreground at the bottom center.
 	Bottom
-	// BottomLeft places foreground at the bottom-left.
-	BottomLeft
 )
 
 // Config controls overlay placement.
@@ -74,14 +70,8 @@ func Place(cfg Config, fg, bg string) string {
 
 func calculatePosition(cfg Config, fgWidth, fgHeight int) (x, y int) {
 	switch cfg.Position {
-	case Top:
-		x = (cfg.Width - fgWidth) / 2
-		y = cfg.PadY
 	case Bottom:
 		x = (cfg.Width - fgWidth) / 2
-		y = cfg.Height - fgHeight - cfg.PadY
-	case BottomLeft:
-		x = cfg.PadX
 		y = cfg.Height - fgHeight - cfg.PadY
 	default:
 		x = (cfg.Width - fgWidth) / 2

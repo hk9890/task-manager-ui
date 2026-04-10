@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -121,13 +120,13 @@ func NewModel(services Services) Model {
 	}
 
 	helpText := shellKeyHelp(keys)
-	help := modal.New(modal.Config{
+	help := modal.NewWithKeys(modal.Config{
 		Title:       "Keyboard Help",
 		Message:     helpText,
 		HideButtons: true,
 		Required:    false,
 		MinWidth:    72,
-	})
+	}, modal.BindingsFromConfig(keys))
 
 	return Model{
 		services:       services,
@@ -136,7 +135,7 @@ func NewModel(services Services) Model {
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
 		board:          boardmode.NewModel(services.Gateway, dashboard.NewBuiltInProvider(), keys),
-		search:         searchmode.NewModel(services.Gateway),
+		search:         searchmode.NewModel(services.Gateway, keys),
 		toast:          toaster.New(),
 		help:           help,
 		width:          defaultViewportWidth,
@@ -270,7 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
 		m.actionState = dialog
-		m.actionModal = mutationModal(dialog)
+		m.actionModal = mutationModal(dialog, m.keys)
 		m.actionModal.SetSize(m.width, m.height)
 		m.showActionModal = true
 		return m, batchCmds(modeCmd, m.actionModal.Init())
@@ -325,18 +324,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = m.toast.Hide()
 		return m, modeCmd
 	case tea.KeyMsg:
+		searchCaptured := false
 		if m.active == mode.Search {
 			type searchShellKeyCapture interface {
 				CapturesShellKey(tea.KeyMsg) bool
 			}
 
 			if searchCtrl, ok := m.search.(searchShellKeyCapture); ok && searchCtrl.CapturesShellKey(msg) {
-				return m, modeCmd
+				searchCaptured = true
 			}
 		}
-
-		if m.active == mode.Detail && m.detail.HandleKey(msg, m.detailViewportHeight()) {
+		if searchCaptured {
 			return m, modeCmd
+		}
+
+		if m.active == mode.Detail {
+			m.detail.Keys = m.keys
+			if m.detail.HandleKey(msg, m.detailViewportHeight()) {
+				return m, modeCmd
+			}
 		}
 
 		switch {
@@ -427,7 +433,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
 			}
 			m.actionState = mutationDialogState{kind: mutationClose, issue: selection.Issue}
-			m.actionModal = mutationModal(m.actionState)
+			m.actionModal = mutationModal(m.actionState, m.keys)
 			m.actionModal.SetSize(m.width, m.height)
 			m.showActionModal = true
 			return m, batchCmds(modeCmd, m.actionModal.Init())
@@ -437,7 +443,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
 			}
 			m.actionState = mutationDialogState{kind: mutationComment, issue: selection.Issue}
-			m.actionModal = mutationModal(m.actionState)
+			m.actionModal = mutationModal(m.actionState, m.keys)
 			m.actionModal.SetSize(m.width, m.height)
 			m.showActionModal = true
 			return m, batchCmds(modeCmd, m.actionModal.Init())
@@ -513,7 +519,7 @@ func selectionEqual(a, b *mode.Selection) bool {
 		return a == b
 	}
 
-	return reflect.DeepEqual(a.Issue, b.Issue)
+	return a.Issue.ID == b.Issue.ID
 }
 
 // View renders the root shell.
@@ -604,7 +610,7 @@ func (m Model) renderHeader() string {
 	leftWidth := lipgloss.Width(left)
 	contextWidth := lipgloss.Width(context)
 	if leftWidth+1+contextWidth > m.width {
-		available := maxInt(0, m.width-leftWidth-1)
+		available := max(0, m.width-leftWidth-1)
 		if available <= 0 {
 			return left
 		}
@@ -612,24 +618,24 @@ func (m Model) renderHeader() string {
 		contextWidth = lipgloss.Width(context)
 	}
 
-	spacer := strings.Repeat(" ", maxInt(1, m.width-leftWidth-contextWidth))
+	spacer := strings.Repeat(" ", max(1, m.width-leftWidth-contextWidth))
 	return left + spacer + context
 }
 
 func (m Model) renderBody() string {
 	if m.active == mode.Detail {
 		return styles.FormSection(styles.FormSectionConfig{
-			Width:              maxInt(60, m.width-2),
+			Width:              max(60, m.width-2),
 			TopLeft:            "Issue Detail",
 			TopRight:           detailHeaderID(m.detail),
-			Content:            strings.Split(m.detail.View(maxInt(40, m.width-8), m.detailViewportHeight(), false), "\n"),
+			Content:            strings.Split(m.detail.View(max(40, m.width-8), m.detailViewportHeight(), false), "\n"),
 			Focused:            true,
 			FocusedBorderColor: styles.BorderHighlightFocusColor,
 		})
 	}
 
-	browseWidth := maxInt(40, m.width-2)
-	browseHeight := maxInt(14, m.height-7)
+	browseWidth := max(40, m.width-2)
+	browseHeight := max(14, m.height-7)
 	m.board.SetSize(browseWidth, browseHeight)
 	m.search.SetSize(browseWidth, browseHeight)
 
@@ -644,7 +650,7 @@ func (m Model) renderBody() string {
 }
 
 func (m Model) detailViewportHeight() int {
-	return maxInt(1, maxInt(14, m.height-7)-2)
+	return max(1, max(14, m.height-7)-2)
 }
 
 func (m Model) renderFooter() string {
@@ -845,13 +851,12 @@ func (m Model) selectedIssueContext() (domain.IssueDetail, bool) {
 func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 	return strings.Join([]string{
 		"Mode switching:",
-		fmt.Sprintf("  %s = Board, %s = Search", keys.DisplayLabel(config.ShellContext, config.ShellActionModeBoard), combineDisplayLabels(keys, config.ShellContext, config.ShellActionModeSearch, config.ShellActionToggleSearch)),
-		fmt.Sprintf("  %s / %s = cycle Board/Search", keys.DisplayLabel(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayLabel(config.ShellContext, config.ShellActionModeCyclePrev)),
+		fmt.Sprintf("  %s = toggle Board/Search", keys.DisplayLabel(config.ShellContext, config.ShellActionToggleSearch)),
 		fmt.Sprintf("  %s = open selected issue detail", keys.DisplayLabel(config.ShellContext, config.ShellActionModeDetail)),
 		"",
 		"Selection:",
 		fmt.Sprintf("  Board: %s switch columns, %s move within a column", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
-		"  Search: type to query; tab from query focuses results; h/l switch panes; j/k moves results",
+		fmt.Sprintf("  Search: type to query; %s focuses query; %s/%s switch panes; %s/%s moves results; %s/%s cycles focus", keys.DisplayLabel(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusRight), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveDown), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveUp), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusPrev)),
 		"",
 		"Actions:",
 		fmt.Sprintf("  %s = create issue (inline modal)", keys.DisplayLabel(config.ShellContext, config.ShellActionCreateIssue)),
@@ -863,7 +868,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		"  launcher actions do not provide in-app return/save handling",
 		fmt.Sprintf("  use %s for edit/save round-trip that reloads detail", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
 		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
-		"  detail scroll: j/k or ↑/↓, pgup/pgdn, home/end",
+		fmt.Sprintf("  detail scroll: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
 		fmt.Sprintf("  %s = reload detail mode from gateway", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
 		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
@@ -885,19 +890,6 @@ func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, secon
 		return left
 	}
 	return left + " or " + right
-}
-
-func headerHelpLines(active mode.ID, width int) []string {
-	_ = active
-	_ = width
-	return nil
-}
-
-func (m Model) modeSwitchKey() string {
-	if m.active == mode.Search {
-		return m.keys.Primary(config.ShellContext, config.ShellActionModeBoard)
-	}
-	return m.keys.Primary(config.ShellContext, config.ShellActionModeSearch)
 }
 
 func (m Model) headerContext() string {
@@ -987,9 +979,9 @@ func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) 
 	if width < 90 {
 		switch active {
 		case mode.Search:
-			return fmt.Sprintf("Search: type / tab j/k enter %s %s %s", keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+			return fmt.Sprintf("Search: type %s %s/%s %s %s %s", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusPrev), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown)+"/"+keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
 		case mode.Detail:
-			return fmt.Sprintf("Detail: j/k pgup/pgdn %s %s %s %s", keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+			return fmt.Sprintf("Detail: %s/%s %s/%s %s/%s %s", keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionHome), keys.DisplayPrimary(config.DetailContext, config.DetailActionEnd), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
 		default:
 			return fmt.Sprintf("Board: %s %s %s %s %s %s", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 		}
@@ -997,9 +989,9 @@ func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) 
 
 	switch active {
 	case mode.Search:
-		return fmt.Sprintf("Search: type query · / focus · tab switch mode · j/k results · enter detail · %s board · %s help · %s quit", keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+		return fmt.Sprintf("Search: type query · %s focus · %s/%s switch panes · %s/%s results · %s detail · %s board", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusRight), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
 	case mode.Detail:
-		return fmt.Sprintf("Detail: j/k scroll · pgup/pgdn · %s edit · %s back · %s help · %s quit", keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+		return fmt.Sprintf("Detail: %s/%s scroll · %s/%s page · %s/%s bounds · %s edit · %s back", keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionHome), keys.DisplayPrimary(config.DetailContext, config.DetailActionEnd), keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
 	default:
 		return fmt.Sprintf("Board: %s/%s columns · %s/%s issues · %s detail · %s search · %s help · %s quit", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 	}
@@ -1082,10 +1074,10 @@ func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses 
 	}
 }
 
-func mutationModal(state mutationDialogState) modal.Model {
+func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) modal.Model {
 	switch state.kind {
 	case mutationCreate:
-		return modal.New(modal.Config{
+		return modal.NewWithKeys(modal.Config{
 			Title:       "Create Issue",
 			Message:     fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
 			ConfirmText: "Create",
@@ -1099,9 +1091,9 @@ func mutationModal(state mutationDialogState) modal.Model {
 				{Key: "labels", Label: "Labels", Placeholder: "comma,separated"},
 				{Key: "description", Label: "Description", Placeholder: "Short description"},
 			},
-		})
+		}, modal.BindingsFromConfig(keys))
 	case mutationUpdate:
-		return modal.New(modal.Config{
+		return modal.NewWithKeys(modal.Config{
 			Title:       fmt.Sprintf("Update Issue %s", state.issue.ID),
 			Message:     fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
 			ConfirmText: "Update",
@@ -1115,9 +1107,9 @@ func mutationModal(state mutationDialogState) modal.Model {
 				{Key: "assignee", Label: "Assignee", Value: state.issue.Assignee, Placeholder: "username"},
 				{Key: "labels", Label: "Labels", Value: strings.Join(state.issue.Labels, ","), Placeholder: "comma,separated"},
 			},
-		})
+		}, modal.BindingsFromConfig(keys))
 	case mutationClose:
-		return modal.New(modal.Config{
+		return modal.NewWithKeys(modal.Config{
 			Title:          fmt.Sprintf("Close Issue %s", state.issue.ID),
 			Message:        "Provide an optional close reason.",
 			ConfirmText:    "Close",
@@ -1127,9 +1119,9 @@ func mutationModal(state mutationDialogState) modal.Model {
 			Inputs: []modal.InputConfig{
 				{Key: "reason", Label: "Reason", Placeholder: "completed"},
 			},
-		})
+		}, modal.BindingsFromConfig(keys))
 	case mutationComment:
-		return modal.New(modal.Config{
+		return modal.NewWithKeys(modal.Config{
 			Title:       fmt.Sprintf("Comment on %s", state.issue.ID),
 			Message:     "Add a comment for the selected issue.",
 			ConfirmText: "Add comment",
@@ -1138,9 +1130,9 @@ func mutationModal(state mutationDialogState) modal.Model {
 			Inputs: []modal.InputConfig{
 				{Key: "body", Label: "Comment", Placeholder: "Comment text"},
 			},
-		})
+		}, modal.BindingsFromConfig(keys))
 	default:
-		return modal.New(modal.Config{Title: "Action", Message: "Unsupported action", Required: false})
+		return modal.NewWithKeys(modal.Config{Title: "Action", Message: "Unsupported action", Required: false}, modal.BindingsFromConfig(keys))
 	}
 }
 
@@ -1303,11 +1295,4 @@ func detailHeaderID(detail detailsmode.Model) string {
 		id = strings.TrimSpace(detail.SelectionID)
 	}
 	return id
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

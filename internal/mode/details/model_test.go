@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
@@ -49,6 +50,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	m := Model{
 		SelectionID: "bw-2",
 		TargetID:    "bw-2",
+		Keys:        mustResolveDetailKeys(t, nil),
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "bw-2", Title: "Second issue", Status: "in_progress", Type: "task", Priority: 2},
 		},
@@ -73,6 +75,54 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	if strings.Contains(view, "bw-2 · in_progress · task · P2") {
 		t.Fatalf("expected previous detail bw-2 to be replaced, got:\n%s", view)
 	}
+}
+
+func TestModelDetailUsesConfiguredBindings(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-2",
+		TargetID:    "bw-2",
+		Keys: mustResolveDetailKeys(t, &config.KeyBindingOverride{
+			Detail: map[string][]string{
+				config.DetailActionScrollDown: {"n"},
+				config.DetailActionScrollUp:   {"p"},
+				config.DetailActionPageDown:   {"ctrl+f"},
+				config.DetailActionPageUp:     {"ctrl+b"},
+				config.DetailActionHome:       {"g"},
+				config.DetailActionEnd:        {"G"},
+			},
+		}),
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-2", Title: "Long issue", Status: "open", Type: "task", Priority: 1},
+			Description: strings.Repeat("line\n", 60),
+		},
+	}
+
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 10); !consumed || m.ScrollOffset == 0 {
+		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ScrollOffset)
+	}
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 10); !consumed {
+		t.Fatal("expected configured scroll-up key to be consumed")
+	}
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 10); !consumed {
+		t.Fatal("expected configured page-down key to be consumed")
+	}
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 10); !consumed {
+		t.Fatal("expected configured end key to be consumed")
+	}
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 10); !consumed || m.ScrollOffset != 0 {
+		t.Fatalf("expected configured home key to reset offset, got %d", m.ScrollOffset)
+	}
+}
+
+func mustResolveDetailKeys(t *testing.T, override *config.KeyBindingOverride) config.ResolvedKeyBindings {
+	t.Helper()
+	keys, err := config.ResolveKeyBindings(config.MergeKeyBindings(config.DefaultKeyBindings(), override))
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+	return keys
 }
 
 func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {

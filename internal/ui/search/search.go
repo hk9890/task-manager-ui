@@ -9,7 +9,6 @@ import (
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -64,7 +63,7 @@ func Render(state State) string {
 
 	leftWidth, rightWidth := splitWidths(width)
 	queryHeight := 3
-	resultsHeight := renderhelpers.MaxInt(6, height-queryHeight-1)
+	resultsHeight := max(6, height-queryHeight-1)
 	previewHeight := height
 
 	queryContent := renderQueryContent(state.Query, state.Focus == FocusQuery)

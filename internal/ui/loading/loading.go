@@ -3,6 +3,7 @@ package loading
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -54,7 +55,7 @@ func Summary(states []State) string {
 		if scope == "" {
 			continue
 		}
-		if contains(scopes, scope) {
+		if slices.Contains(scopes, scope) {
 			continue
 		}
 		scopes = append(scopes, scope)
@@ -65,13 +66,4 @@ func Summary(states []State) string {
 	}
 
 	return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("Loading: " + strings.Join(scopes, ", "))
-}
-
-func contains(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }

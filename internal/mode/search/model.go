@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
@@ -21,6 +22,7 @@ type searchLoadedMsg struct {
 // Model is the standalone search mode controller.
 type Model struct {
 	gateway beads.BeadsGateway
+	keys    config.ResolvedKeyBindings
 
 	width  int
 	height int
@@ -39,9 +41,20 @@ type Model struct {
 var _ mode.Controller = (*Model)(nil)
 
 // NewModel creates a search mode controller.
-func NewModel(gateway beads.BeadsGateway) *Model {
+func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings) *Model {
+	keys := config.ResolvedKeyBindings{}
+	if len(resolved) > 0 {
+		keys = resolved[0]
+	} else {
+		var err error
+		keys, err = config.ResolveKeyBindings(config.DefaultKeyBindings())
+		if err != nil {
+			panic(err)
+		}
+	}
 	return &Model{
 		gateway: gateway,
+		keys:    keys,
 		focus:   uisearch.FocusQuery,
 	}
 }
@@ -90,27 +103,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		return m, nil
-	case tea.KeyEnter:
-		if m.focus == uisearch.FocusResults && m.currentSelection() != nil {
-			return m, func() tea.Msg {
-				return mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionOpenDetail}
-			}
-		}
-		return m, nil
-	case tea.KeyUp:
-		if m.focus == uisearch.FocusResults && m.moveSelection(-1) {
-			return m, m.selectionChangedCmd()
-		}
-		return m, nil
-	case tea.KeyDown:
-		if m.focus == uisearch.FocusResults && m.moveSelection(1) {
-			return m, m.selectionChangedCmd()
-		}
-		return m, nil
-	case tea.KeyLeft:
-		return m.moveFocusLeft(), nil
-	case tea.KeyRight:
-		return m.moveFocusRight(), nil
 	case tea.KeyBackspace:
 		if m.focus != uisearch.FocusQuery {
 			return m, nil
@@ -132,36 +124,44 @@ func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
 		m.query = ""
 		m.typing = false
 		return m.triggerSearch()
-	case tea.KeyCtrlJ, tea.KeyTab:
-		return m.cycleFocus(1), nil
-	case tea.KeyShiftTab, tea.KeyCtrlK:
-		return m.cycleFocus(-1), nil
-	case tea.KeyRunes:
-		if m.focus == uisearch.FocusQuery {
-			m.query += string(msg.Runes)
-			m.typing = true
-			return m.triggerSearch()
-		}
+	}
 
-		switch string(msg.Runes) {
-		case "j":
-			if m.focus == uisearch.FocusResults && m.moveSelection(1) {
-				return m, m.selectionChangedCmd()
+	switch {
+	case msg.Type == tea.KeyRunes && m.focus == uisearch.FocusQuery:
+		m.query += string(msg.Runes)
+		m.typing = true
+		return m.triggerSearch()
+	case m.keys.Match(config.SearchContext, config.SearchActionOpenDetail, msg):
+		if m.focus == uisearch.FocusResults && m.currentSelection() != nil {
+			return m, func() tea.Msg {
+				return mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionOpenDetail}
 			}
-			return m, nil
-		case "k":
-			if m.focus == uisearch.FocusResults && m.moveSelection(-1) {
-				return m, m.selectionChangedCmd()
-			}
-			return m, nil
-		case "h":
-			return m.moveFocusLeft(), nil
-		case "l":
-			return m.moveFocusRight(), nil
-		case "/":
+		}
+		return m, nil
+	case m.keys.Match(config.SearchContext, config.SearchActionMoveUp, msg):
+		if m.focus == uisearch.FocusResults && m.moveSelection(-1) {
+			return m, m.selectionChangedCmd()
+		}
+		return m, nil
+	case m.keys.Match(config.SearchContext, config.SearchActionMoveDown, msg):
+		if m.focus == uisearch.FocusResults && m.moveSelection(1) {
+			return m, m.selectionChangedCmd()
+		}
+		return m, nil
+	case m.keys.Match(config.SearchContext, config.SearchActionFocusLeft, msg):
+		return m.moveFocusLeft(), nil
+	case m.keys.Match(config.SearchContext, config.SearchActionFocusRight, msg):
+		return m.moveFocusRight(), nil
+	case m.keys.Match(config.SearchContext, config.SearchActionCycleFocusNext, msg):
+		return m.cycleFocus(1), nil
+	case m.keys.Match(config.SearchContext, config.SearchActionCycleFocusPrev, msg):
+		return m.cycleFocus(-1), nil
+	case msg.Type == tea.KeyRunes:
+		switch {
+		case m.keys.Match(config.SearchContext, config.SearchActionFocusQuery, msg):
 			m.focus = uisearch.FocusQuery
 			return m, nil
-		case "r":
+		case m.keys.Match(config.SearchContext, config.SearchActionReload, msg):
 			return m.triggerSearch()
 		}
 
@@ -330,7 +330,7 @@ func loadSearchCmd(gateway beads.BeadsGateway, query domain.SearchIssuesQuery) t
 // CapturesShellKey reports whether active search input should consume a key
 // before shell-level keybindings are evaluated.
 func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
-	if msg.Type == tea.KeyTab {
+	if m.keys.Match(config.SearchContext, config.SearchActionCycleFocusNext, msg) || m.keys.Match(config.SearchContext, config.SearchActionCycleFocusPrev, msg) {
 		return true
 	}
 
@@ -338,12 +338,10 @@ func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
 		return false
 	}
 	if msg.Type == tea.KeyRunes {
-		switch string(msg.Runes) {
-		case "1", "2", "3":
-			return false
-		default:
-			return true
-		}
+		return true
+	}
+	if shellKeysPassThrough(m.keys, msg) {
+		return false
 	}
 	switch msg.Type {
 	case tea.KeyBackspace, tea.KeyCtrlU:
@@ -351,6 +349,25 @@ func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
 	default:
 		return false
 	}
+}
+
+func shellKeysPassThrough(keys config.ResolvedKeyBindings, msg tea.KeyMsg) bool {
+	for _, action := range []string{
+		config.ShellActionQuit,
+		config.ShellActionHelp,
+		config.ShellActionModeBoard,
+		config.ShellActionModeSearch,
+		config.ShellActionToggleSearch,
+		config.ShellActionModeDetail,
+		config.ShellActionModeCycleNext,
+		config.ShellActionModeCyclePrev,
+		config.ShellActionEscape,
+	} {
+		if keys.Match(config.ShellContext, action, msg) {
+			return true
+		}
+	}
+	return false
 }
 
 func selectedDetail(selection *mode.Selection) domain.IssueDetail {
