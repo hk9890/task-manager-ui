@@ -41,3 +41,9 @@ For architecture and implementation guidance, see:
 - [`project-plan/EXECUTION-PLAN.md`](./project-plan/EXECUTION-PLAN.md)
 - [`docs/RELEASING.md`](./docs/RELEASING.md)
 - [`CHANGELOG.md`](./CHANGELOG.md)
+
+## Release visibility policy
+
+This repository remains **private**. GitHub releases created here are
+**internal-only** and are not intended to be publicly accessible unless a future
+maintainer decision explicitly changes this policy.

@@ -6,7 +6,7 @@ This repository currently uses a **manual, operator-driven release flow**.
 
 - CI provenance is now available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which runs `go build ./cmd/bwb`, `go vet ./...`, and `go test ./...` on `push` and `pull_request`.
 - Release verification should include both local operator checks and the corresponding successful CI workflow run(s) for the release commit.
-- Release visibility policy (public vs private defaults and expectations) is **not decided yet** and is tracked in `beads-workbench-2rj`.
+- Release visibility policy: this repository remains **private** and releases created here are **internal-only** unless a future maintainer decision explicitly changes that policy.
 
 ## Prerequisites
 
@@ -85,6 +85,11 @@ Run from the repository root.
    git ls-remote --tags origin "refs/tags/vX.Y.Z"
    ```
 
-## Important decision checkpoint (pending)
+## Repository visibility policy
 
-Before publishing/finalizing visibility settings, check the status of `beads-workbench-2rj`. Do not invent or assume a public/private policy in this guide until that issue is resolved.
+This repository is intentionally private. Treat `gh release create` / `gh release edit`
+outputs in this repository as internal distribution artifacts only.
+
+If public release visibility is desired in the future, record a new maintainer policy
+decision first, then update this guide and create concrete implementation tracking for
+any required repository/settings changes.
