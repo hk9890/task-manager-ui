@@ -1,10 +1,13 @@
 # Releasing
 
-This repository currently uses a **manual, operator-driven release flow**.
+This repository uses a **tag-triggered GitHub Actions release flow** backed by
+GoReleaser.
 
 ## Scope and current state
 
-- CI provenance is now available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which runs `go build ./cmd/bwb`, `go vet ./...`, and `go test ./...` on `push` and `pull_request`.
+- CI provenance is available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which runs `go build ./cmd/bwb`, `go vet ./...`, and `go test ./...` on `push` and `pull_request`.
+- Release artifacts are published by `.github/workflows/release.yml` using `.goreleaser.yaml` whenever a `v*` tag is pushed.
+- Release archives are intentionally named for installer compatibility, for example `bwb_0.2.0_linux_x64.tar.gz` and `bwb_0.2.0_macos_arm64.tar.gz`, so tools like `mise` can auto-detect the correct asset.
 - Release verification should include both local operator checks and the corresponding successful CI workflow run(s) for the release commit.
 - Release visibility policy: this repository remains **private** and releases created here are **internal-only** unless a future maintainer decision explicitly changes that policy.
 
@@ -60,30 +63,34 @@ Run from the repository root.
    git tag -a vX.Y.Z -m "bwb vX.Y.Z"
    ```
 
-5. Push the tag to origin:
+5. Push the tag to origin to trigger the automated release workflow:
 
    ```bash
    git push origin vX.Y.Z
    ```
 
-6. Create or edit the GitHub release with `gh release`:
+6. Watch the `Release` workflow complete successfully. It will:
 
-   ```bash
-   gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <path-to-notes>
-   ```
-
-   If a release already exists and needs correction:
-
-   ```bash
-   gh release edit vX.Y.Z --title "vX.Y.Z" --notes-file <path-to-notes>
-   ```
+   - build `bwb` archives for supported platforms
+   - create or update the GitHub release for the tag
+   - upload release assets and checksums
 
 7. Post-release verification:
 
    ```bash
    gh release view vX.Y.Z
+   gh release view vX.Y.Z --json assets
    git ls-remote --tags origin "refs/tags/vX.Y.Z"
    ```
+
+## Backfilling or correcting release assets
+
+If a tag or release already exists but is missing assets, upload corrected
+artifacts to the existing release instead of creating a new tag:
+
+```bash
+gh release upload vX.Y.Z dist/* --clobber
+```
 
 ## Repository visibility policy
 
