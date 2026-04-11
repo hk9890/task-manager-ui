@@ -39,3 +39,5 @@ For architecture and implementation guidance, see:
 - [`project-plan/ARCHITECTURE.md`](./project-plan/ARCHITECTURE.md)
 - [`project-plan/IMPLEMENTATION.md`](./project-plan/IMPLEMENTATION.md)
 - [`project-plan/EXECUTION-PLAN.md`](./project-plan/EXECUTION-PLAN.md)
+- [`docs/RELEASING.md`](./docs/RELEASING.md)
+- [`CHANGELOG.md`](./CHANGELOG.md)
