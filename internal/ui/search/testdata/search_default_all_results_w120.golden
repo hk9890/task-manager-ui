@@ -1,23 +1,23 @@
 ╭─ Search ─────────────────────────────────── text ─╮  ╭─ Preview ─────────────────────────────────────────────────────╮
 │Type to search issues…                             │  │Default all result                                             │
-╰───────────────────────────────────────────────────╯  │bw-1 · open · task · P1                                        │
-╭─ Results ───────────────────────────────────── 2 ─╮  │Assignee: hans  Labels: ui                                     │
-│› T P1 OPN bw-1 Default all result                 │  │                                                               │
-│  B P0 IP bw-2 Second default                      │  │Description                                                    │
+╰───────────────────────────────────────────────────╯  │bw-1                                                           │
+╭─ Results ───────────────────────────────────── 2 ─╮  │                                                               │
+│› T P1 OPN bw-1 Default all result                 │  │Metadata                                                       │
+│  B P0 IP bw-2 Second default                      │  │Type      : task                                               │
+│                                                   │  │Priority  : P1                                                 │
+│                                                   │  │Status    : open                                               │
+│                                                   │  │Assignee  : hans                                               │
+│                                                   │  │Labels    : ui                                                 │
+│                                                   │  │Comments  : 0                                                  │
+│                                                   │  │Blocked by: 0                                                  │
+│                                                   │  │Blocks    : 0                                                  │
+│                                                   │  │Related   : 0                                                  │
+│                                                   │  │                                                               │
+│                                                   │  │Description                                                    │
 │                                                   │  │Default preview description                                    │
 │                                                   │  │                                                               │
 │                                                   │  │Comments: 0                                                    │
 │                                                   │  │Blocked by: 0  Blocks: 0  Related: 0                           │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
-│                                                   │  │                                                               │
 │                                                   │  │                                                               │
 │                                                   │  │                                                               │
 │                                                   │  │                                                               │

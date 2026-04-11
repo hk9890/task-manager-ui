@@ -557,13 +557,13 @@ func issueSummaryFromMap(operation string, record map[string]any) (domain.IssueS
 		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
-	assignee, err := optionalStringFromMap(record, "owner")
+	assignee, err := optionalStringFromMap(record, "assignee")
 	if err != nil {
 		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
 	if assignee == "" {
-		assignee, err = optionalStringFromMap(record, "assignee")
+		assignee, err = optionalStringFromMap(record, "owner")
 		if err != nil {
 			return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 		}

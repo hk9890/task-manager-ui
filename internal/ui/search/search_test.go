@@ -149,6 +149,32 @@ func TestRenderShowsErrorInResultsPane(t *testing.T) {
 	}
 }
 
+func TestRenderPreviewUsesCompactMarkdownDetailRendering(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Query: "markdown",
+		Focus: FocusPreview,
+		Results: []domain.IssueSummary{
+			{ID: "bw-50", Title: "Markdown preview", Status: "open", Type: "task", Priority: 1},
+		},
+		SelectedID: "bw-50",
+		SelectedDetail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-50", Title: "Markdown preview", Status: "open", Type: "task", Priority: 1},
+			Description: "# Header\n\n- item one\n- item two",
+		},
+		Width:  80,
+		Height: 20,
+	})
+
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+	for _, want := range []string{"Preview", "Header", "item one", "Metadata", "Comments  : 0"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected %q in compact markdown preview:\n%s", want, plain)
+		}
+	}
+}
+
 func TestRenderGoldens(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,16 @@
 Full detail sample
-bw-22 · in_progress · feature · P2
-Assignee: alice  Labels: backend, ui
+bw-22
+
+Metadata
+Type      : feature
+Priority  : P2
+Status    : in_progress
+Assignee  : alice
+Labels    : backend, ui
+Comments  : 1
+Blocked by: 1
+Blocks    : 1
+Related   : 1
 
 Description
 Ship issue detail rendering for standalone mode.

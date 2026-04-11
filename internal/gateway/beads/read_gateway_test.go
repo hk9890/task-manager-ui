@@ -138,6 +138,52 @@ func TestGatewayShowIssueMapsDetail(t *testing.T) {
 	}
 }
 
+func TestGatewayShowIssuePrefersAssigneeOverOwner(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-7", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-7","title":"assignee precedence","description":"detail","status":"open","issue_type":"task","priority":1,"assignee":"bob","owner":"hans.kohlreiter@dynatrace.com","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-7"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.Summary.Assignee != "bob" {
+		t.Fatalf("expected assignee to prefer assignee field, got %q", got.Summary.Assignee)
+	}
+}
+
+func TestGatewayShowIssueFallsBackToOwnerWhenAssigneeMissing(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-8", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-8","title":"assignee fallback","description":"detail","status":"open","issue_type":"task","priority":1,"owner":"legacy-owner","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-8"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.Summary.Assignee != "legacy-owner" {
+		t.Fatalf("expected assignee fallback to owner when assignee missing, got %q", got.Summary.Assignee)
+	}
+}
+
 func TestGatewaySearchIssuesBuildsCommandAndReturnsPage(t *testing.T) {
 	t.Parallel()
 

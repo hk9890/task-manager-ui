@@ -1,21 +1,21 @@
 ╭─ Search ───────────────── live ─╮  ╭─ Preview ───────────────────────────────╮
 │gateway                          │  │Implement create update close and comm...│
-╰─────────────────────────────────╯  │beads-workbench-yze.4.2 · open · task ...│
-╭─ Results ─────────────────── 2 ─╮  │Assignee: (unassigned)  Labels: (none)   │
-│› T P1 OPN yze.4.2 Implement c...│  │                                         │
-│  T P1 IP yze.4.3 Implement la...│  │Description                              │
+╰─────────────────────────────────╯  │beads-workbench-yze.4.2                  │
+╭─ Results ─────────────────── 2 ─╮  │                                         │
+│› T P1 OPN yze.4.2 Implement c...│  │Metadata                                 │
+│  T P1 IP yze.4.3 Implement la...│  │Type      : task                         │
+│                                 │  │Priority  : P1                           │
+│                                 │  │Status    : open                         │
+│                                 │  │Comments  : 0                            │
+│                                 │  │Blocked by: 0                            │
+│                                 │  │Blocks    : 0                            │
+│                                 │  │Related   : 0                            │
+│                                 │  │                                         │
+│                                 │  │Description                              │
 │                                 │  │(no description)                         │
 │                                 │  │                                         │
 │                                 │  │Comments: 0                              │
 │                                 │  │Blocked by: 0  Blocks: 0  Related: 0     │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
 │                                 │  │                                         │
 │                                 │  │                                         │
 │                                 │  │                                         │

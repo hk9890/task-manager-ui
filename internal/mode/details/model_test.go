@@ -57,7 +57,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	}
 
 	view := m.View(100, 20, false)
-	if !strings.Contains(view, "Second issue") || !strings.Contains(view, "bw-2 · in_progress · task · P2") {
+	if !strings.Contains(view, "Second issue") || !strings.Contains(view, "bw-2") || !strings.Contains(view, "Type      : task") {
 		t.Fatalf("expected bw-2 detail rendering, got:\n%s", view)
 	}
 
@@ -69,10 +69,10 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	}
 
 	view = m.View(100, 20, false)
-	if !strings.Contains(view, "Fourth issue") || !strings.Contains(view, "bw-4 · open · bug · P1") {
+	if !strings.Contains(view, "Fourth issue") || !strings.Contains(view, "bw-4") || !strings.Contains(view, "Type      : bug") {
 		t.Fatalf("expected bw-4 detail rendering after selection change, got:\n%s", view)
 	}
-	if strings.Contains(view, "bw-2 · in_progress · task · P2") {
+	if strings.Contains(view, "bw-2\n") {
 		t.Fatalf("expected previous detail bw-2 to be replaced, got:\n%s", view)
 	}
 }
@@ -99,19 +99,19 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		},
 	}
 
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 10); !consumed || m.ScrollOffset == 0 {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ScrollOffset == 0 {
 		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ScrollOffset)
 	}
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 10); !consumed {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
 		t.Fatal("expected configured scroll-up key to be consumed")
 	}
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 10); !consumed {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
 		t.Fatal("expected configured page-down key to be consumed")
 	}
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 10); !consumed {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
 		t.Fatal("expected configured end key to be consumed")
 	}
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 10); !consumed || m.ScrollOffset != 0 {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ScrollOffset != 0 {
 		t.Fatalf("expected configured home key to reset offset, got %d", m.ScrollOffset)
 	}
 }
@@ -147,7 +147,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected top-of-detail content in initial viewport, got:\n%s", initial)
 	}
 
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 10); !consumed {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
 		t.Fatalf("expected page down to be consumed")
 	}
 	after := m.View(80, 10, false)
@@ -155,7 +155,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected viewport output to change after page down")
 	}
 
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 10); !consumed {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
 		t.Fatalf("expected end key to be consumed")
 	}
 	endView := m.View(80, 10, false)
@@ -163,11 +163,38 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
 	}
 
-	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 10); !consumed {
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
 		t.Fatalf("expected home key to be consumed")
 	}
 	homeView := m.View(80, 10, false)
 	if !strings.Contains(homeView, "Long issue") {
 		t.Fatalf("expected home to return to top, got:\n%s", homeView)
+	}
+}
+
+func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-2",
+		TargetID:    "bw-2",
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-2", Title: "Width sensitive markdown", Status: "open", Type: "task", Priority: 1},
+			Description: strings.Repeat("wrap-me ", 80),
+		},
+	}
+
+	_ = m.View(120, 10, false)
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
+		t.Fatal("expected end key at wide width to be consumed")
+	}
+	wideOffset := m.ScrollOffset
+
+	if consumed := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
+		t.Fatal("expected end key at narrow width to be consumed")
+	}
+
+	if m.ScrollOffset <= wideOffset {
+		t.Fatalf("expected larger max offset after narrowing width, wide=%d narrow=%d", wideOffset, m.ScrollOffset)
 	}
 }

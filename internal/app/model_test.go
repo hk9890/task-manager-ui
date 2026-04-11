@@ -758,8 +758,8 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m = applyMessages(t, m, runBatch(cmd))
 
 	viewTop := m.View()
-	if !strings.Contains(viewTop, "Line 1") {
-		t.Fatalf("expected top lines in initial detail view, got:\n%s", viewTop)
+	if !strings.Contains(viewTop, "Metadata") || !strings.Contains(viewTop, "Type      : task") {
+		t.Fatalf("expected metadata section in initial detail view, got:\n%s", viewTop)
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
@@ -769,6 +769,9 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	viewPaged := m.View()
 	if viewPaged == viewTop {
 		t.Fatalf("expected detail view to change after page down")
+	}
+	if !strings.Contains(viewPaged, "Line 1") {
+		t.Fatalf("expected first description lines after paging, got:\n%s", viewPaged)
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnd})
@@ -1088,6 +1091,12 @@ func TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "Issue Detail") || !strings.Contains(view, "Blocked bug for fixture") {
 		t.Fatalf("expected dedicated detail rendering for fixture issue, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Assignee  : bob") {
+		t.Fatalf("expected detail metadata to show fixture assignee bob, got:\n%s", view)
+	}
+	if strings.Contains(view, "Assignee  : hans.kohlreiter@dynatrace.com") {
+		t.Fatalf("expected detail metadata to avoid owner in assignee slot, got:\n%s", view)
 	}
 }
 

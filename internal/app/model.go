@@ -217,7 +217,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.SetSize(m.width, m.height)
 		m.search.SetSize(m.width, m.height)
 		m.help.SetSize(m.width, m.height)
-		m.detail.ClampScroll(m.detailViewportHeight())
+		m.detail.ClampScroll(max(40, m.width-8), m.detailViewportHeight())
 		return m, modeCmd
 	case detailLoadedMsg:
 		if msg.issueID != m.detail.TargetID {
@@ -233,7 +233,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.detail.Error = ""
 		m.detail.Detail = msg.detail
-		m.detail.ClampScroll(m.detailViewportHeight())
+		m.detail.ClampScroll(max(40, m.width-8), m.detailViewportHeight())
 		return m, modeCmd
 	case editIssueResultMsg:
 		if msg.err != nil {
@@ -340,7 +340,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.active == mode.Detail {
 			m.detail.Keys = m.keys
-			if m.detail.HandleKey(msg, m.detailViewportHeight()) {
+			if m.detail.HandleKey(msg, max(40, m.width-8), m.detailViewportHeight()) {
 				return m, modeCmd
 			}
 		}

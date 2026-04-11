@@ -10,6 +10,8 @@ import (
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 )
 
+const defaultLineCountWidth = 80
+
 // Model is the shell-owned standalone detail presentation state.
 type Model struct {
 	SelectionID string
@@ -71,11 +73,11 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 }
 
 // ClampScroll keeps scroll offset inside current content bounds.
-func (m *Model) ClampScroll(viewportHeight int) {
+func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	if m.cachedViewportHeight != 0 && m.cachedViewportHeight != viewportHeight {
 		m.invalidateLineCountCache()
 	}
-	total := m.lineCountForScroll()
+	total := m.lineCountForScroll(maxWidth)
 	maxOffset := maxScrollOffset(total, viewportHeight)
 	if m.ScrollOffset < 0 {
 		m.ScrollOffset = 0
@@ -86,7 +88,7 @@ func (m *Model) ClampScroll(viewportHeight int) {
 }
 
 // HandleKey updates detail-mode scroll state and reports whether it consumed the key.
-func (m *Model) HandleKey(msg tea.KeyMsg, viewportHeight int) bool {
+func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) bool {
 	if viewportHeight <= 0 {
 		return false
 	}
@@ -100,7 +102,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, viewportHeight int) bool {
 		}
 	}
 
-	total := m.lineCountForScroll()
+	total := m.lineCountForScroll(maxWidth)
 	maxOffset := maxScrollOffset(total, viewportHeight)
 
 	move := 0
@@ -145,9 +147,13 @@ func maxScrollOffset(totalLines, viewportHeight int) int {
 	return totalLines - viewportHeight
 }
 
-func (m *Model) lineCountForScroll() int {
-	if m.cachedLineCount > 0 && m.cacheMatchesCurrentState() {
+func (m *Model) lineCountForScroll(width int) int {
+	if m.cachedLineCount > 0 && m.cacheMatchesCurrentState(width) {
 		return m.cachedLineCount
+	}
+
+	if width <= 0 {
+		width = defaultLineCountWidth
 	}
 
 	content := uidetails.Render(uidetails.State{
@@ -156,19 +162,24 @@ func (m *Model) lineCountForScroll() int {
 		Detail:      m.Detail,
 		Loading:     m.Loading,
 		Error:       m.Error,
-		Width:       m.cachedLineCountWidth,
+		Width:       width,
 		Compact:     false,
 	})
 	total := len(strings.Split(content, "\n"))
-	m.setLineCountCache(total, m.cachedLineCountWidth, m.cachedViewportHeight)
+	m.setLineCountCache(total, width, m.cachedViewportHeight)
 	return total
 }
 
-func (m *Model) cacheMatchesCurrentState() bool {
+func (m *Model) cacheMatchesCurrentState(width int) bool {
+	if width <= 0 {
+		width = defaultLineCountWidth
+	}
+
 	return m.SelectionID == m.cachedSelectionID &&
 		m.TargetID == m.cachedTargetID &&
 		m.Loading == m.cachedLoading &&
 		m.Error == m.cachedError &&
+		width == m.cachedLineCountWidth &&
 		reflect.DeepEqual(m.Detail, m.cachedDetail)
 }
 
