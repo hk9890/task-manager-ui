@@ -1,6 +1,8 @@
 package details
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -11,6 +13,19 @@ import (
 )
 
 var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func assertGolden(t *testing.T, output []byte, name string) {
+	t.Helper()
+
+	if os.Getenv("BWB_UPDATE_GOLDEN") == "1" {
+		path := filepath.Join("testdata", name)
+		if err := os.WriteFile(path, output, 0o600); err != nil {
+			t.Fatalf("write golden %s: %v", path, err)
+		}
+	}
+
+	ui.AssertMatchesGolden(t, output, name)
+}
 
 func TestRenderMinimalGolden(t *testing.T) {
 	t.Parallel()
@@ -29,22 +44,7 @@ func TestRenderMinimalGolden(t *testing.T) {
 		Width: 120,
 	})
 
-	for _, want := range []string{
-		"Minimal detail",
-		"bw-1",
-		"Metadata",
-		"Type      : task",
-		"Priority  : P1",
-		"Status    : open",
-		"Comments  : 0",
-		"Blocked by: 0",
-		"Blocks    : 0",
-		"Related   : 0",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("expected %q in view:\n%s", want, view)
-		}
-	}
+	assertGolden(t, []byte(view), "minimal.golden")
 }
 
 func TestRenderFullGolden(t *testing.T) {
@@ -54,16 +54,21 @@ func TestRenderFullGolden(t *testing.T) {
 		SelectionID: "bw-22",
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{
-				ID:       "bw-22",
-				Title:    "Full detail sample",
-				Status:   "in_progress",
-				Type:     "feature",
-				Priority: 2,
-				Assignee: "alice",
-				Labels:   []string{"backend", "ui"},
+				ID:        "bw-22",
+				Title:     "Full detail sample",
+				Status:    "in_progress",
+				Type:      "feature",
+				Priority:  2,
+				Assignee:  "alice",
+				Labels:    []string{"backend", "ui"},
+				CreatedAt: mustTime(t, "2026-04-01T12:00:00Z"),
+				UpdatedAt: mustTime(t, "2026-04-05T11:00:00Z"),
 			},
+			Creator:     "hans",
 			Description: "Ship issue detail rendering for standalone mode.\nKeep shell-owned selection state.",
 			Notes:       "Reference donor rendering patterns only.",
+			ClosedAt:    mustTime(t, "2026-04-09T08:00:00Z"),
+			CloseReason: "completed",
 			Comments: []domain.IssueComment{
 				{ID: "c-1", Author: "reviewer", Body: "Looks good to me", CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
 			},
@@ -74,24 +79,7 @@ func TestRenderFullGolden(t *testing.T) {
 		Width: 120,
 	})
 
-	for _, want := range []string{
-		"Full detail sample",
-		"bw-22",
-		"Metadata",
-		"Type      : feature",
-		"Priority  : P2",
-		"Status    : in_progress",
-		"Assignee  : alice",
-		"Labels    : backend, ui",
-		"Comments  : 1",
-		"Blocked by: 1",
-		"Blocks    : 1",
-		"Related   : 1",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("expected %q in view:\n%s", want, view)
-		}
-	}
+	assertGolden(t, []byte(view), "full.golden")
 }
 
 func TestRenderCommentsGolden(t *testing.T) {
@@ -117,22 +105,7 @@ func TestRenderCommentsGolden(t *testing.T) {
 		Width: 100,
 	})
 
-	for _, want := range []string{
-		"Comments heavy issue",
-		"bw-77",
-		"Metadata",
-		"Type      : bug",
-		"Priority  : P0",
-		"Status    : open",
-		"Comments  : 3",
-		"unknown · unknown time",
-		"alice · 2026-04-05 10:00",
-		"bob · 2026-04-05 12:00",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("expected %q in view:\n%s", want, view)
-		}
-	}
+	assertGolden(t, []byte(view), "comments.golden")
 }
 
 func TestRenderDependencyRichGolden(t *testing.T) {
@@ -165,24 +138,7 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 		Width: 100,
 	})
 
-	for _, want := range []string{
-		"Dependency rich issue",
-		"bw-88",
-		"Metadata",
-		"Type      : task",
-		"Priority  : P1",
-		"Status    : blocked",
-		"Blocked by: 2",
-		"Blocks    : 2",
-		"Related   : 2",
-		"Blocked by (2)",
-		"Blocks (2)",
-		"Related (2)",
-	} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("expected %q in view:\n%s", want, view)
-		}
-	}
+	assertGolden(t, []byte(view), "dependency_rich.golden")
 }
 
 func TestRenderCompactGolden(t *testing.T) {
@@ -210,7 +166,34 @@ func TestRenderCompactGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "compact.golden")
+	assertGolden(t, []byte(view), "compact.golden")
+}
+
+func TestRenderCompactClosedDurationGolden(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-23",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:        "bw-23",
+				Title:     "Closed compact duration sample",
+				Status:    "closed",
+				Type:      "bug",
+				Priority:  1,
+				Assignee:  "alice",
+				CreatedAt: mustTime(t, "2026-04-01T12:00:00Z"),
+			},
+			Creator:     "hans",
+			ClosedAt:    mustTime(t, "2026-04-03T14:30:00Z"),
+			CloseReason: "completed",
+			Description: "Closed issue includes duration in metadata rail.",
+		},
+		Width:   56,
+		Compact: true,
+	})
+
+	assertGolden(t, []byte(view), "compact_closed_duration.golden")
 }
 
 func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
@@ -269,6 +252,15 @@ func TestRenderFallsBackToSingleColumnBelowBreakpoint(t *testing.T) {
 
 	if !strings.Contains(view, "\nMetadata\n") {
 		t.Fatalf("expected single-column metadata section below breakpoint, got:\n%s", view)
+	}
+}
+
+func TestRenderTwoColumnUsesFixedMetadataRailWidth(t *testing.T) {
+	t.Parallel()
+
+	_, metadata := splitInspectorWidths(InspectorTwoColumnMinWidth)
+	if metadata != 34 {
+		t.Fatalf("expected fixed metadata rail width 34, got %d", metadata)
 	}
 }
 

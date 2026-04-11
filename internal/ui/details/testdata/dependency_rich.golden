@@ -1,6 +1,17 @@
 Dependency rich issue
-bw-88 · blocked · task · P1
-Assignee: (unassigned)  Labels: (none)
+bw-88
+
+Metadata
+Core
+Type    : task
+Priority: P1
+Status  : blocked
+----------------------------------------------------------------------------------------------------
+Counts
+Comments  : 0
+Blocked by: 2
+Blocks    : 2
+Related   : 2
 
 Description
 Dependency context check

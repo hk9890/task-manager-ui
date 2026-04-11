@@ -2,11 +2,19 @@ Full detail sample
 bw-22
 
 Metadata
-Type      : feature
-Priority  : P2
-Status    : in_progress
-Assignee  : alice
-Labels    : backend, ui
+Core
+Type    : feature
+Priority: P2
+Status  : in_progress
+--------------------------------------------------------
+Ownership
+Assignee: alice
+--------------------------------------------------------
+Labels
+• backend
+• ui
+--------------------------------------------------------
+Counts
 Comments  : 1
 Blocked by: 1
 Blocks    : 1

@@ -758,7 +758,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m = applyMessages(t, m, runBatch(cmd))
 
 	viewTop := m.View()
-	if !strings.Contains(viewTop, "Metadata") || !strings.Contains(viewTop, "Type      : task") {
+	if !strings.Contains(viewTop, "Metadata") || !strings.Contains(viewTop, "Core") || !strings.Contains(viewTop, "Type    : task") {
 		t.Fatalf("expected metadata section in initial detail view, got:\n%s", viewTop)
 	}
 
@@ -1092,10 +1092,10 @@ func TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow(t *testing.T) {
 	if !strings.Contains(view, "Issue Detail") || !strings.Contains(view, "Blocked bug for fixture") {
 		t.Fatalf("expected dedicated detail rendering for fixture issue, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Assignee  : bob") {
+	if !strings.Contains(view, "Assignee: bob") {
 		t.Fatalf("expected detail metadata to show fixture assignee bob, got:\n%s", view)
 	}
-	if strings.Contains(view, "Assignee  : hans.kohlreiter@dynatrace.com") {
+	if strings.Contains(view, "Assignee: hans.kohlreiter@dynatrace.com") {
 		t.Fatalf("expected detail metadata to avoid owner in assignee slot, got:\n%s", view)
 	}
 }

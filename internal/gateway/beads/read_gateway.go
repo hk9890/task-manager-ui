@@ -145,7 +145,22 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
 	}
 
+	creator, err := optionalStringFromMap(primary, "owner")
+	if err != nil {
+		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
+	}
+
 	notes, err := optionalStringFromMap(primary, "notes")
+	if err != nil {
+		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
+	}
+
+	closedAt, err := optionalTimestampFromMap(primary, "closed_at")
+	if err != nil {
+		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
+	}
+
+	closeReason, err := optionalStringFromMap(primary, "close_reason")
 	if err != nil {
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
 	}
@@ -172,8 +187,11 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 
 	return domain.IssueDetail{
 		Summary:     summary,
+		Creator:     creator,
 		Description: description,
 		Notes:       notes,
+		ClosedAt:    closedAt,
+		CloseReason: closeReason,
 		BlockedBy:   blockedBy,
 		Blocks:      blocks,
 		Related:     related,
@@ -758,6 +776,29 @@ func timestampFromMap(record map[string]any, key string) (time.Time, error) {
 	v, ok := record[key]
 	if !ok {
 		return time.Time{}, fmt.Errorf("missing field %q", key)
+	}
+
+	text, ok := v.(string)
+	if !ok {
+		return time.Time{}, fmt.Errorf("field %q is not a string", key)
+	}
+
+	if strings.TrimSpace(text) == "" {
+		return time.Time{}, nil
+	}
+
+	parsed, err := time.Parse(time.RFC3339, text)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("field %q has invalid timestamp: %w", key, err)
+	}
+
+	return parsed, nil
+}
+
+func optionalTimestampFromMap(record map[string]any, key string) (time.Time, error) {
+	v, ok := record[key]
+	if !ok || v == nil {
+		return time.Time{}, nil
 	}
 
 	text, ok := v.(string)

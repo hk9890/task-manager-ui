@@ -168,7 +168,7 @@ func TestRenderPreviewUsesCompactMarkdownDetailRendering(t *testing.T) {
 	})
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	for _, want := range []string{"Preview", "Header", "item one", "Metadata", "Comments  : 0"} {
+	for _, want := range []string{"Preview", "Header", "Metadata", "Core", "Counts"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected %q in compact markdown preview:\n%s", want, plain)
 		}

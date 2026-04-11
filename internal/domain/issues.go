@@ -32,8 +32,11 @@ type IssueComment struct {
 // IssueDetail is the full issue read model for details and editing flows.
 type IssueDetail struct {
 	Summary     IssueSummary
+	Creator     string
 	Description string
 	Notes       string
+	ClosedAt    time.Time
+	CloseReason string
 	BlockedBy   []IssueReference
 	Blocks      []IssueReference
 	Related     []IssueReference

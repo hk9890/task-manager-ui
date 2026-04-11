@@ -3,9 +3,12 @@
 ╰─────────────────────────────────╯  │beads-workbench-yze.4.2                  │
 ╭─ Results ─────────────────── 2 ─╮  │                                         │
 │› T P1 OPN yze.4.2 Implement c...│  │Metadata                                 │
-│  T P1 IP yze.4.3 Implement la...│  │Type      : task                         │
-│                                 │  │Priority  : P1                           │
-│                                 │  │Status    : open                         │
+│  T P1 IP yze.4.3 Implement la...│  │Core                                     │
+│                                 │  │Type    : task                           │
+│                                 │  │Priority: P1                             │
+│                                 │  │Status  : open                           │
+│                                 │  │-----------------------------------------│
+│                                 │  │Counts                                   │
 │                                 │  │Comments  : 0                            │
 │                                 │  │Blocked by: 0                            │
 │                                 │  │Blocks    : 0                            │
@@ -16,9 +19,6 @@
 │                                 │  │                                         │
 │                                 │  │Comments: 0                              │
 │                                 │  │Blocked by: 0  Blocks: 0  Related: 0     │
-│                                 │  │                                         │
-│                                 │  │                                         │
-│                                 │  │                                         │
 │                                 │  │                                         │
 ╰─────────────────────────────────╯  │                                         │
                                      ╰─────────────────────────────────────────╯

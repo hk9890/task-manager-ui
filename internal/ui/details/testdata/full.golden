@@ -1,22 +1,28 @@
-Full detail sample
-bw-22 · in_progress · feature · P2
-Assignee: alice  Labels: backend, ui
-
-Description
-Ship issue detail rendering for standalone mode.
-Keep shell-owned selection state.
-
-Notes
-Reference donor rendering patterns only.
-
-Comments (1)
-reviewer · 2026-04-05 11:00
-  Looks good to me
-
-Related Work
-Blocked by (1)
-bw-10 · Data model update
-Blocks (1)
-bw-30 · Integration checks
-Related (1)
-bw-44 · Renderer cleanup
+Full detail sample                                                                    Metadata
+bw-22                                                                                 Core
+                                                                                      Type    : feature
+Description                                                                           Priority: P2
+Ship issue detail rendering for standalone mode.                                      Status  : in_progress
+Keep shell-owned selection state.                                                     ----------------------------------
+                                                                                      Ownership
+Notes                                                                                 Assignee: alice
+Reference donor rendering patterns only.                                              Creator : hans
+                                                                                      ----------------------------------
+Comments (1)                                                                          Time
+reviewer · 2026-04-05 11:00                                                           Created : 2026-04-01 12:00
+  Looks good to me                                                                    Updated : 2026-04-05 11:00
+                                                                                      Duration: 7d 20h
+Related Work                                                                          ----------------------------------
+Blocked by (1)                                                                        Close
+bw-10 · Data model update                                                             Closed: 2026-04-09 08:00
+Blocks (1)                                                                            Reason: completed
+bw-30 · Integration checks                                                            ----------------------------------
+Related (1)                                                                           Labels
+bw-44 · Renderer cleanup                                                              • backend
+                                                                                      • ui
+                                                                                      ----------------------------------
+                                                                                      Counts
+                                                                                      Comments  : 1
+                                                                                      Blocked by: 1
+                                                                                      Blocks    : 1
+                                                                                      Related   : 1

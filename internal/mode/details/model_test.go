@@ -57,7 +57,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	}
 
 	view := m.View(100, 20, false)
-	if !strings.Contains(view, "Second issue") || !strings.Contains(view, "bw-2") || !strings.Contains(view, "Type      : task") {
+	if !strings.Contains(view, "Second issue") || !strings.Contains(view, "bw-2") || !strings.Contains(view, "Type    : task") {
 		t.Fatalf("expected bw-2 detail rendering, got:\n%s", view)
 	}
 
@@ -69,7 +69,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	}
 
 	view = m.View(100, 20, false)
-	if !strings.Contains(view, "Fourth issue") || !strings.Contains(view, "bw-4") || !strings.Contains(view, "Type      : bug") {
+	if !strings.Contains(view, "Fourth issue") || !strings.Contains(view, "bw-4") || !strings.Contains(view, "Type    : bug") {
 		t.Fatalf("expected bw-4 detail rendering after selection change, got:\n%s", view)
 	}
 	if strings.Contains(view, "bw-2\n") {

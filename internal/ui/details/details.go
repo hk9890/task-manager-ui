@@ -22,7 +22,7 @@ const (
 	InspectorTwoColumnMinWidth = 110
 
 	detailColumnGap       = 2
-	metadataRailMinWidth  = 28
+	metadataRailWidth     = 34
 	contentColumnMinWidth = 50
 )
 
@@ -162,12 +162,9 @@ func renderContentSections(detail domain.IssueDetail, width int) []string {
 
 func splitInspectorWidths(total int) (content, metadata int) {
 	available := total - detailColumnGap
-	metadata = max(metadataRailMinWidth, (available*32)/100)
+	metadata = metadataRailWidth
 	if available-metadata < contentColumnMinWidth {
 		metadata = available - contentColumnMinWidth
-	}
-	if metadata < metadataRailMinWidth {
-		metadata = metadataRailMinWidth
 	}
 	content = available - metadata
 	if content < 1 {

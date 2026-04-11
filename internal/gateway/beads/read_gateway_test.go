@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -136,6 +137,19 @@ func TestGatewayShowIssueMapsDetail(t *testing.T) {
 	if len(got.Comments) != 1 || got.Comments[0].Body != "Looks good" {
 		t.Fatalf("unexpected comments: %#v", got.Comments)
 	}
+
+	if got.Creator != "carol" {
+		t.Fatalf("unexpected creator: %q", got.Creator)
+	}
+
+	expectedClosedAt := time.Date(2026, time.April, 8, 16, 0, 0, 0, time.UTC)
+	if !got.ClosedAt.Equal(expectedClosedAt) {
+		t.Fatalf("unexpected closed_at: got %s want %s", got.ClosedAt.Format(time.RFC3339), expectedClosedAt.Format(time.RFC3339))
+	}
+
+	if got.CloseReason != "completed" {
+		t.Fatalf("unexpected close reason: %q", got.CloseReason)
+	}
 }
 
 func TestGatewayShowIssuePrefersAssigneeOverOwner(t *testing.T) {
@@ -181,6 +195,41 @@ func TestGatewayShowIssueFallsBackToOwnerWhenAssigneeMissing(t *testing.T) {
 
 	if got.Summary.Assignee != "legacy-owner" {
 		t.Fatalf("expected assignee fallback to owner when assignee missing, got %q", got.Summary.Assignee)
+	}
+
+	if got.Creator != "legacy-owner" {
+		t.Fatalf("expected creator to decode owner, got %q", got.Creator)
+	}
+}
+
+func TestGatewayShowIssueLeavesCreatorAndCloseMetadataEmptyWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-9", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-9","title":"metadata absent","description":"detail","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-9"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.Creator != "" {
+		t.Fatalf("expected empty creator, got %q", got.Creator)
+	}
+
+	if !got.ClosedAt.IsZero() {
+		t.Fatalf("expected zero closed_at, got %s", got.ClosedAt.Format(time.RFC3339))
+	}
+
+	if got.CloseReason != "" {
+		t.Fatalf("expected empty close reason, got %q", got.CloseReason)
 	}
 }
 
