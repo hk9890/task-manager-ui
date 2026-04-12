@@ -165,7 +165,7 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
 	}
 
-	blockedBy, err := referencesFromMapArray(primary, "dependencies", operationShowIssue)
+	blockedBy, relatedFromDependencies, err := dependencyReferencesFromMap(primary, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
@@ -179,6 +179,8 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
+
+	related = mergeUniqueReferences(related, relatedFromDependencies)
 
 	comments, err := commentsFromMapArray(primary, "comments", operationShowIssue)
 	if err != nil {
@@ -623,20 +625,105 @@ func referencesFromMapArray(parent map[string]any, key string, operation string)
 
 	out := make([]domain.IssueReference, 0, len(records))
 	for _, record := range records {
-		id, err := stringFromMap(record, "id")
+		ref, err := referenceFromMap(record, operation)
 		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+			return nil, err
 		}
 
-		title, err := stringFromMap(record, "title")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-		}
-
-		out = append(out, domain.IssueReference{ID: id, Title: title})
+		out = append(out, ref)
 	}
 
 	return out, nil
+}
+
+func dependencyReferencesFromMap(parent map[string]any, operation string) ([]domain.IssueReference, []domain.IssueReference, error) {
+	records, err := mapArrayFromMap(parent, "dependencies")
+	if err != nil {
+		return nil, nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	blockedBy := make([]domain.IssueReference, 0, len(records))
+	related := make([]domain.IssueReference, 0)
+	for _, record := range records {
+		ref, err := referenceFromMap(record, operation)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		dependencyType, err := optionalStringFromMap(record, "dependency_type")
+		if err != nil {
+			return nil, nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+		}
+
+		if dependencyType == "related" {
+			related = append(related, ref)
+			continue
+		}
+
+		blockedBy = append(blockedBy, ref)
+	}
+
+	return blockedBy, related, nil
+}
+
+func referenceFromMap(record map[string]any, operation string) (domain.IssueReference, error) {
+	id, err := stringFromMap(record, "id")
+	if err != nil {
+		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	title, err := stringFromMap(record, "title")
+	if err != nil {
+		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	issueType, err := optionalStringFromMap(record, "issue_type")
+	if err != nil {
+		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	priority, err := optionalIntFromMap(record, "priority")
+	if err != nil {
+		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	status, err := optionalStringFromMap(record, "status")
+	if err != nil {
+		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	return domain.IssueReference{ID: id, Title: title, Type: issueType, Priority: priority, Status: status}, nil
+}
+
+func mergeUniqueReferences(groups ...[]domain.IssueReference) []domain.IssueReference {
+	seen := make(map[string]struct{})
+	out := make([]domain.IssueReference, 0)
+	for _, group := range groups {
+		for _, ref := range group {
+			if _, ok := seen[ref.ID]; ok {
+				continue
+			}
+
+			seen[ref.ID] = struct{}{}
+			out = append(out, ref)
+		}
+	}
+
+	return out
+}
+
+func optionalIntFromMap(record map[string]any, key string) (int, error) {
+	v, ok := record[key]
+	if !ok || v == nil {
+		return 0, nil
+	}
+
+	number, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("field %q is not a number", key)
+	}
+
+	return int(number), nil
 }
 
 func commentsFromMapArray(parent map[string]any, key string, operation string) ([]domain.IssueComment, error) {

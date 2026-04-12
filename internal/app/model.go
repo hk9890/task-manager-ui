@@ -340,7 +340,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.active == mode.Detail {
 			m.detail.Keys = m.keys
-			if m.detail.HandleKey(msg, max(40, m.width-8), m.detailViewportHeight()) {
+			consumed, intent := m.detail.HandleKey(msg, max(40, m.width-8), m.detailViewportHeight())
+			if intent != nil {
+				issueID := strings.TrimSpace(intent.IssueID)
+				if issueID == "" {
+					return m, modeCmd
+				}
+				m.active = mode.Detail
+				m.detail.SelectionID = issueID
+				m.detail.TargetID = issueID
+				m.detail.Loading = true
+				m.detail.Error = ""
+				m.detail.ScrollOffset = 0
+				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
+			}
+			if consumed {
 				return m, modeCmd
 			}
 		}

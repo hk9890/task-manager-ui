@@ -10,11 +10,12 @@ import (
 )
 
 const (
-	minTitleWidth      = 8
-	minCompactIDWidth  = 7
-	maxCompactIDWidth  = 12
-	selectedPrefixText = "› "
-	idlePrefixText     = "  "
+	minTitleWidth       = 8
+	minNarrowTitleWidth = 4
+	minCompactIDWidth   = 7
+	maxCompactIDWidth   = 12
+	selectedPrefixText  = "› "
+	idlePrefixText      = "  "
 )
 
 // RenderConfig configures compact issue row rendering.
@@ -23,6 +24,14 @@ type RenderConfig struct {
 	// canonical summary fields (id/title/type/status/priority). This keeps board
 	// and search on one data shape and removes adapter-only row structs.
 	Issue    domain.IssueSummary
+	Selected bool
+	Width    int
+	Styled   bool
+}
+
+// ReferenceRenderConfig configures compact related-issue row rendering.
+type ReferenceRenderConfig struct {
+	Issue    domain.IssueReference
 	Selected bool
 	Width    int
 	Styled   bool
@@ -66,6 +75,50 @@ func RenderCompact(config RenderConfig) string {
 	titlePrefix := prefixPlain + metaPlain + " "
 	titleWidth := config.Width - lipgloss.Width(titlePrefix)
 	if titleWidth < minTitleWidth {
+		return styles.TruncateString(prefixPlain+metaPlain, config.Width)
+	}
+
+	return prefixStyled + metaStyled + " " + styles.TruncateString(title, titleWidth)
+}
+
+// RenderReferenceCompact renders a one-line compact row for related issues.
+func RenderReferenceCompact(config ReferenceRenderConfig) string {
+	prefixPlain := idlePrefixText
+	prefixStyled := idlePrefixText
+	if config.Selected {
+		prefixPlain = selectedPrefixText
+		if config.Styled {
+			prefixStyled = styles.SelectionIndicatorStyle.Render("›") + " "
+		} else {
+			prefixStyled = selectedPrefixText
+		}
+	}
+
+	title := strings.TrimSpace(config.Issue.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+
+	idWidth := CompactIDWidth(config.Width)
+	metaPlain := strings.Join([]string{
+		renderhelpers.CompactIssueType(config.Issue.Type),
+		renderhelpers.CompactPriority(config.Issue.Priority),
+		renderhelpers.CompactIssueStateNarrow(config.Issue.Status),
+		renderhelpers.CompactIssueID(config.Issue.ID, idWidth),
+	}, " ")
+	metaStyled := metaPlain
+	if config.Styled {
+		metaStyled = strings.Join([]string{
+			renderhelpers.CompactIssueTypeStyled(config.Issue.Type),
+			renderhelpers.CompactPriorityStyled(config.Issue.Priority),
+			renderhelpers.CompactIssueStateNarrowStyled(config.Issue.Status),
+			renderhelpers.CompactIssueIDMuted(config.Issue.ID, idWidth),
+		}, " ")
+	}
+
+	titlePrefix := prefixPlain + metaPlain + " "
+	titleWidth := config.Width - lipgloss.Width(titlePrefix)
+	if titleWidth < minNarrowTitleWidth {
 		return styles.TruncateString(prefixPlain+metaPlain, config.Width)
 	}
 

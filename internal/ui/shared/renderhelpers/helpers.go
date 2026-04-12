@@ -65,6 +65,28 @@ func CompactIssueState(status string) string {
 	}
 }
 
+// CompactIssueStateNarrow returns a single-character status token for dense rows.
+func CompactIssueStateNarrow(status string) string {
+	switch NormalizeToken(status) {
+	case "blocked":
+		return "B"
+	case "in_progress":
+		return "I"
+	case "open":
+		return "O"
+	case "closed":
+		return "C"
+	case "ready":
+		return "R"
+	default:
+		tok := NormalizeToken(status)
+		if tok == "" {
+			return "-"
+		}
+		return strings.ToUpper(string([]rune(tok)[0]))
+	}
+}
+
 // CompactIssueTypeStyled returns a styled short issue-type marker.
 func CompactIssueTypeStyled(issueType string) string {
 	token := CompactIssueType(issueType)
@@ -80,6 +102,12 @@ func CompactPriorityStyled(priority int) string {
 // CompactIssueStateStyled returns a styled compact status token.
 func CompactIssueStateStyled(status string) string {
 	token := CompactIssueState(status)
+	return styles.IssueStatusStyle(status).Render(token)
+}
+
+// CompactIssueStateNarrowStyled returns a styled one-character status token.
+func CompactIssueStateNarrowStyled(status string) string {
+	token := CompactIssueStateNarrow(status)
 	return styles.IssueStatusStyle(status).Render(token)
 }
 

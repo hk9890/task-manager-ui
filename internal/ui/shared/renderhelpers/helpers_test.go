@@ -114,6 +114,35 @@ func TestCompactIssueState(t *testing.T) {
 	}
 }
 
+func TestCompactIssueStateNarrow(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		status string
+		want   string
+	}{
+		{name: "blocked", status: "blocked", want: "B"},
+		{name: "in progress", status: "in-progress", want: "I"},
+		{name: "open", status: "open", want: "O"},
+		{name: "closed", status: "closed", want: "C"},
+		{name: "ready", status: "ready", want: "R"},
+		{name: "blank", status: "   ", want: "-"},
+		{name: "unknown first rune", status: "something", want: "S"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := CompactIssueStateNarrow(tc.status); got != tc.want {
+				t.Fatalf("CompactIssueStateNarrow(%q) = %q, want %q", tc.status, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCompactIssueID(t *testing.T) {
 	t.Parallel()
 
@@ -154,6 +183,10 @@ func TestStyledHelpersContainUnderlyingToken(t *testing.T) {
 
 	if got := CompactIssueStateStyled("ready"); !strings.Contains(got, "RDY") {
 		t.Fatalf("CompactIssueStateStyled should contain token RDY, got %q", got)
+	}
+
+	if got := CompactIssueStateNarrowStyled("in_progress"); !strings.Contains(got, "I") {
+		t.Fatalf("CompactIssueStateNarrowStyled should contain token I, got %q", got)
 	}
 
 	if got := CompactIssueIDMuted("beads-workbench-9uk", 8); !strings.Contains(got, "9uk") {

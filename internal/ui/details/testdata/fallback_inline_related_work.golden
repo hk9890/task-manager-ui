@@ -1,0 +1,19 @@
+Fallback inline related work                                                                             Metadata
+bw-fallback                                                                                              Core
+                                                                                                         Type    : task
+Description                                                                                              Priority: P2
+Below wide breakpoint should keep inline related work section.                                           Status  : open
+                                                                                                         ----------------------------------
+Notes                                                                                                    Counts
+(no notes)                                                                                               Comments  : 0
+                                                                                                         Blocked by: 1
+Comments (0)                                                                                             Blocks    : 1
+(no comments)                                                                                            Related   : 1
+                                                                                                         
+Related Work                                                                                             
+Blocked by (1)                                                                                           
+bw-11 · Dependency A                                                                                     
+Blocks (1)                                                                                               
+bw-12 · Dependency B                                                                                     
+Related (1)                                                                                              
+bw-13 · Dependency C                                                                                     

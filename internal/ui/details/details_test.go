@@ -196,6 +196,61 @@ func TestRenderCompactClosedDurationGolden(t *testing.T) {
 	assertGolden(t, []byte(view), "compact_closed_duration.golden")
 }
 
+func TestRenderWideThreeColumnGolden(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-wide",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-wide",
+				Title:    "Wide layout sample",
+				Status:   "in_progress",
+				Type:     "feature",
+				Priority: 1,
+			},
+			Description: "Three column layout should render related rail on wide terminals.",
+			Notes:       "Inline related work section should be suppressed when rail is active.",
+			BlockedBy: []domain.IssueReference{
+				{ID: "bw-1", Title: "Auth migration", Type: "task", Priority: 1, Status: "blocked"},
+			},
+			Blocks: []domain.IssueReference{
+				{ID: "bw-2", Title: "Docs update", Type: "docs", Priority: 2, Status: "open"},
+			},
+			Related: []domain.IssueReference{
+				{ID: "bw-3", Title: "Renderer cleanup", Type: "chore", Priority: 3, Status: "open"},
+			},
+		},
+		Width: InspectorThreeColumnMinWidth,
+	})
+
+	assertGolden(t, []byte(view), "wide_three_column.golden")
+}
+
+func TestRenderFallbackKeepsInlineRelatedWorkGolden(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-fallback",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-fallback",
+				Title:    "Fallback inline related work",
+				Status:   "open",
+				Type:     "task",
+				Priority: 2,
+			},
+			Description: "Below wide breakpoint should keep inline related work section.",
+			BlockedBy:   []domain.IssueReference{{ID: "bw-11", Title: "Dependency A"}},
+			Blocks:      []domain.IssueReference{{ID: "bw-12", Title: "Dependency B"}},
+			Related:     []domain.IssueReference{{ID: "bw-13", Title: "Dependency C"}},
+		},
+		Width: InspectorThreeColumnMinWidth - 1,
+	})
+
+	assertGolden(t, []byte(view), "fallback_inline_related_work.golden")
+}
+
 func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
 	t.Parallel()
 
@@ -261,6 +316,37 @@ func TestRenderTwoColumnUsesFixedMetadataRailWidth(t *testing.T) {
 	_, metadata := splitInspectorWidths(InspectorTwoColumnMinWidth)
 	if metadata != 34 {
 		t.Fatalf("expected fixed metadata rail width 34, got %d", metadata)
+	}
+}
+
+func TestRenderThreeColumnRailWidthsStayInApprovedRange(t *testing.T) {
+	t.Parallel()
+
+	left, _, metadata := splitThreeColumnWidths(InspectorThreeColumnMinWidth)
+	if left < 22 || left > 28 {
+		t.Fatalf("expected left rail in [22,28], got %d", left)
+	}
+	if metadata != 34 {
+		t.Fatalf("expected metadata rail width 34, got %d", metadata)
+	}
+}
+
+func TestRenderWideLayoutSuppressesInlineRelatedWork(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-rail",
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-rail", Title: "Rail", Status: "open", Type: "task", Priority: 1},
+			Description: "desc",
+			BlockedBy:   []domain.IssueReference{{ID: "bw-1", Title: "A"}},
+			Related:     []domain.IssueReference{{ID: "bw-2", Title: "B"}},
+		},
+		Width: InspectorThreeColumnMinWidth,
+	})
+
+	if strings.Contains(view, "\nRelated Work\n") {
+		t.Fatalf("expected inline related work section to be suppressed in wide layout, got:\n%s", view)
 	}
 }
 

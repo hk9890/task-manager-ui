@@ -97,3 +97,71 @@ func TestCompactIDWidthUsesSharedBoundedRule(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderReferenceCompactNarrowWidthsRemainReadable(t *testing.T) {
+	tests := []struct {
+		name  string
+		width int
+	}{
+		{name: "width 22", width: 22},
+		{name: "width 24", width: 24},
+		{name: "width 28", width: 28},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			line := RenderReferenceCompact(ReferenceRenderConfig{
+				Issue: domain.IssueReference{
+					ID:       "beads-workbench-syf.3",
+					Title:    "Add narrow related issue row renderer for left rail",
+					Type:     "task",
+					Priority: 3,
+					Status:   "in_progress",
+				},
+				Selected: true,
+				Width:    tc.width,
+			})
+
+			if strings.Contains(line, "\n") {
+				t.Fatalf("expected one-line row at width %d, got %q", tc.width, line)
+			}
+			if lipgloss.Width(line) > tc.width {
+				t.Fatalf("expected row width <= %d, got %d: %q", tc.width, lipgloss.Width(line), line)
+			}
+			if !strings.Contains(line, "T P3 I") {
+				t.Fatalf("expected type/priority/status compact tokens at width %d, got %q", tc.width, line)
+			}
+			if !strings.Contains(line, "syf.3") {
+				t.Fatalf("expected compact issue id token at width %d, got %q", tc.width, line)
+			}
+		})
+	}
+}
+
+func TestRenderReferenceCompactSelectionDistinct(t *testing.T) {
+	issue := domain.IssueReference{
+		ID:       "beads-workbench-9uk",
+		Title:    "Selection contrast check",
+		Type:     "bug",
+		Priority: 1,
+		Status:   "blocked",
+	}
+
+	selected := RenderReferenceCompact(ReferenceRenderConfig{Issue: issue, Selected: true, Styled: true, Width: 28})
+	idle := RenderReferenceCompact(ReferenceRenderConfig{Issue: issue, Selected: false, Styled: true, Width: 28})
+
+	if selected == idle {
+		t.Fatalf("expected selected and unselected rows to differ, got selected=%q idle=%q", selected, idle)
+	}
+
+	selectedPlain := testui.AnsiEscapePattern.ReplaceAllString(selected, "")
+	idlePlain := testui.AnsiEscapePattern.ReplaceAllString(idle, "")
+
+	if !strings.HasPrefix(selectedPlain, "› ") {
+		t.Fatalf("expected selected row indicator prefix, got %q", selectedPlain)
+	}
+	if !strings.HasPrefix(idlePlain, "  ") {
+		t.Fatalf("expected unselected row idle prefix, got %q", idlePlain)
+	}
+}

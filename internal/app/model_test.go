@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -784,6 +785,68 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	}
 }
 
+func TestModelDetailModeLeftRailEnterOpensRelatedIssueAndStaysInDetailMode(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary:   domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
+		Related:   []domain.IssueReference{{ID: "bw-5", Title: "Related target"}},
+		BlockedBy: []domain.IssueReference{{ID: "bw-2", Title: "Blocked upstream"}},
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 160
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	m.detail.ScrollOffset = 5
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-5", Title: "Related target", Status: "in_progress", Type: "bug", Priority: 2},
+	}
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected enter on related left rail to trigger detail load command")
+	}
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected app to remain in detail mode after related open, got %s", m.active)
+	}
+	if m.detail.TargetID != "bw-5" || m.detail.SelectionID != "bw-5" {
+		t.Fatalf("expected related issue bw-5 to become detail target/selection, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	}
+	if m.detail.ScrollOffset != 0 {
+		t.Fatalf("expected related issue open to reset content scroll offset, got %d", m.detail.ScrollOffset)
+	}
+
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.detail.Detail.Summary.ID != "bw-5" {
+		t.Fatalf("expected loaded related issue detail bw-5, got %q", m.detail.Detail.Summary.ID)
+	}
+}
+
 func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -1228,6 +1291,57 @@ func TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors(t *tes
 	ui.AssertNoObviousRuntimeErrorPanels(t, view)
 }
 
+func TestModelEmbeddedFixtureDetailShowsRelatedFromRealBDRelatedLink(t *testing.T) {
+	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
+		t.Skip("requires bd, jq, and git on PATH")
+	}
+	t.Setenv("BEADS_ACTOR", "fixture-user")
+
+	repoPath := embeddedfixture.TempRepoPath(t)
+	embeddedfixture.Seed(t, repoPath)
+
+	if err := runBDInRepo(repoPath, "link", "bwf-2", "bwf-3", "--type", "related"); err != nil {
+		t.Fatalf("failed to create real related link: %v", err)
+	}
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		WorkDir: repoPath,
+		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
+	})
+	gateway := beads.NewCLIGateway(runner)
+
+	services, err := NewServices(gateway, config.Default(), repoPath)
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if got := firstSelectionID(m, mode.Board); got != "bwf-2" {
+		t.Fatalf("expected startup board selection bwf-2 from Not Ready lane, got %q", got)
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected active mode detail after enter, got %s", m.active)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Related") {
+		t.Fatalf("expected related rail/section in detail view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "bwf-3") {
+		t.Fatalf("expected linked related issue bwf-3 in detail view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Closed fixture chore") {
+		t.Fatalf("expected related issue title in detail view, got:\n%s", view)
+	}
+}
+
 func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	t.Parallel()
 
@@ -1359,4 +1473,16 @@ func firstSelectionID(m Model, modeID mode.ID) string {
 func hasExecutable(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
+}
+
+func runBDInRepo(repoPath string, args ...string) error {
+	cmd := exec.Command("bd", args...)
+	cmd.Dir = repoPath
+	cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("bd %s failed: %w\n%s", strings.Join(args, " "), err, out)
+	}
+
+	return nil
 }

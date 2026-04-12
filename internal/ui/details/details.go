@@ -20,9 +20,14 @@ const (
 	// InspectorTwoColumnMinWidth is the detail width breakpoint where the
 	// inspector layout switches from one column to content+metadata rail.
 	InspectorTwoColumnMinWidth = 110
+	// InspectorThreeColumnMinWidth is the detail width breakpoint where the
+	// inspector layout switches to related+content+metadata rails.
+	InspectorThreeColumnMinWidth = 140
 
 	detailColumnGap       = 2
 	metadataRailWidth     = 34
+	leftRailMinWidth      = 22
+	leftRailMaxWidth      = 28
 	contentColumnMinWidth = 50
 )
 
@@ -37,7 +42,17 @@ type State struct {
 	Error       string
 	Width       int
 	Compact     bool
+	FocusPane   FocusPane
 }
+
+// FocusPane identifies which detail pane is visually focused.
+type FocusPane int
+
+const (
+	FocusPaneContent FocusPane = iota
+	FocusPaneRelated
+	FocusPaneMetadata
+)
 
 // Render renders standalone issue detail metadata and content.
 func Render(state State) string {
@@ -72,6 +87,10 @@ func Render(state State) string {
 		return renderCompact(detail, width)
 	}
 
+	if width >= InspectorThreeColumnMinWidth {
+		return renderThreeColumn(detail, width, state.FocusPane)
+	}
+
 	if width >= InspectorTwoColumnMinWidth {
 		return renderTwoColumn(detail, width)
 	}
@@ -93,7 +112,7 @@ func renderSingleColumn(detail domain.IssueDetail, width int) string {
 		out = append(out, metadata...)
 	}
 
-	out = append(out, renderContentSections(detail, width)...)
+	out = append(out, renderContentSections(detail, width, true)...)
 
 	return strings.Join(out, "\n")
 }
@@ -106,7 +125,7 @@ func renderTwoColumn(detail domain.IssueDetail, width int) string {
 		styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), contentWidth),
 		styles.TruncateString(detail.Summary.ID, contentWidth),
 	)
-	left = append(left, renderContentSections(detail, contentWidth)...)
+	left = append(left, renderContentSections(detail, contentWidth, true)...)
 
 	right := []string{"Metadata"}
 	metadata := renderMetadataRail(detail, metadataWidth)
@@ -137,7 +156,60 @@ func renderTwoColumn(detail domain.IssueDetail, width int) string {
 	return strings.Join(merged, "\n")
 }
 
-func renderContentSections(detail domain.IssueDetail, width int) []string {
+func renderThreeColumn(detail domain.IssueDetail, width int, focusPane FocusPane) string {
+	leftWidth, contentWidth, metadataWidth := splitThreeColumnWidths(width)
+
+	left := []string{renderPaneHeading("Related Work", focusPane == FocusPaneRelated, leftWidth)}
+	left = append(left, renderRelatedIssuesRail(detail, leftWidth)...)
+
+	content := []string{renderPaneHeading("Content", focusPane == FocusPaneContent, contentWidth)}
+	content = append(content,
+		styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), contentWidth),
+		styles.TruncateString(detail.Summary.ID, contentWidth),
+	)
+	content = append(content, renderContentSections(detail, contentWidth, false)...)
+
+	metadata := []string{renderPaneHeading("Metadata", focusPane == FocusPaneMetadata, metadataWidth)}
+	metadataRows := renderMetadataRail(detail, metadataWidth)
+	if len(metadataRows) == 0 {
+		metadata = append(metadata, "(none)")
+	} else {
+		metadata = append(metadata, metadataRows...)
+	}
+
+	maxLines := len(content)
+	if len(left) > maxLines {
+		maxLines = len(left)
+	}
+	if len(metadata) > maxLines {
+		maxLines = len(metadata)
+	}
+
+	merged := make([]string, 0, maxLines)
+	for i := 0; i < maxLines; i++ {
+		l := ""
+		if i < len(left) {
+			l = left[i]
+		}
+		c := ""
+		if i < len(content) {
+			c = content[i]
+		}
+		r := ""
+		if i < len(metadata) {
+			r = metadata[i]
+		}
+		merged = append(merged,
+			padToWidth(l, leftWidth)+strings.Repeat(" ", detailColumnGap)+
+				padToWidth(c, contentWidth)+strings.Repeat(" ", detailColumnGap)+
+				styles.TruncateString(r, metadataWidth),
+		)
+	}
+
+	return strings.Join(merged, "\n")
+}
+
+func renderContentSections(detail domain.IssueDetail, width int, includeRelatedWork bool) []string {
 	out := make([]string, 0, 56)
 	out = append(out, "")
 	out = append(out, "Description")
@@ -151,11 +223,13 @@ func renderContentSections(detail domain.IssueDetail, width int) []string {
 	out = append(out, fmt.Sprintf("Comments (%d)", len(detail.Comments)))
 	out = append(out, renderComments(detail.Comments, width)...)
 
-	out = append(out, "")
-	out = append(out, "Related Work")
-	out = append(out, renderReferences("Blocked by", detail.BlockedBy, width)...)
-	out = append(out, renderReferences("Blocks", detail.Blocks, width)...)
-	out = append(out, renderReferences("Related", detail.Related, width)...)
+	if includeRelatedWork {
+		out = append(out, "")
+		out = append(out, "Related Work")
+		out = append(out, renderReferences("Blocked by", detail.BlockedBy, width)...)
+		out = append(out, renderReferences("Blocks", detail.Blocks, width)...)
+		out = append(out, renderReferences("Related", detail.Related, width)...)
+	}
 
 	return out
 }
@@ -174,6 +248,51 @@ func splitInspectorWidths(total int) (content, metadata int) {
 		metadata = 1
 	}
 	return content, metadata
+}
+
+func splitThreeColumnWidths(total int) (left, content, metadata int) {
+	available := total - (detailColumnGap * 2)
+	metadata = metadataRailWidth
+	left = clamp(available/5, leftRailMinWidth, leftRailMaxWidth)
+	content = available - left - metadata
+
+	if content < contentColumnMinWidth {
+		left -= contentColumnMinWidth - content
+		if left < leftRailMinWidth {
+			left = leftRailMinWidth
+		}
+		content = available - left - metadata
+	}
+
+	if content < 1 {
+		content = 1
+	}
+	if metadata < 1 {
+		metadata = 1
+	}
+	if left < 1 {
+		left = 1
+	}
+
+	return left, content, metadata
+}
+
+func clamp(value, low, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
+}
+
+func renderPaneHeading(label string, focused bool, width int) string {
+	prefix := "  "
+	if focused {
+		prefix = "› "
+	}
+	return styles.TruncateString(prefix+label, width)
 }
 
 func padToWidth(value string, width int) string {
@@ -333,10 +452,7 @@ func renderReferences(label string, refs []domain.IssueReference, width int) []s
 		return []string{label + ": (none)"}
 	}
 
-	ordered := append([]domain.IssueReference(nil), refs...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return ordered[i].ID < ordered[j].ID
-	})
+	ordered := orderedReferences(refs)
 
 	out := []string{fmt.Sprintf("%s (%d)", label, len(ordered))}
 	for _, ref := range ordered {

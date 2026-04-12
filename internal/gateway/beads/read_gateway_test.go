@@ -126,12 +126,24 @@ func TestGatewayShowIssueMapsDetail(t *testing.T) {
 		t.Fatalf("unexpected blocked-by: %#v", got.BlockedBy)
 	}
 
+	if got.BlockedBy[0].Title != "Dependency issue" || got.BlockedBy[0].Type != "bug" || got.BlockedBy[0].Priority != 1 || got.BlockedBy[0].Status != "open" {
+		t.Fatalf("unexpected blocked-by reference metadata: %#v", got.BlockedBy[0])
+	}
+
 	if len(got.Blocks) != 1 || got.Blocks[0].ID != "bw-250" {
 		t.Fatalf("unexpected blocks: %#v", got.Blocks)
 	}
 
+	if got.Blocks[0].Title != "Dependent issue" || got.Blocks[0].Type != "task" || got.Blocks[0].Priority != 2 || got.Blocks[0].Status != "in_progress" {
+		t.Fatalf("unexpected blocks reference metadata: %#v", got.Blocks[0])
+	}
+
 	if len(got.Related) != 1 || got.Related[0].ID != "bw-350" {
 		t.Fatalf("unexpected related: %#v", got.Related)
+	}
+
+	if got.Related[0].Title != "Related issue" || got.Related[0].Type != "spike" || got.Related[0].Priority != 3 || got.Related[0].Status != "blocked" {
+		t.Fatalf("unexpected related reference metadata: %#v", got.Related[0])
 	}
 
 	if len(got.Comments) != 1 || got.Comments[0].Body != "Looks good" {
@@ -545,6 +557,95 @@ func TestGatewayShowIssueDecodeFailureWhenDependencyIsMissingTitle(t *testing.T)
 
 	_, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-9"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+}
+
+func TestGatewayShowIssueReferenceMetadataIsOptional(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-10", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-10","title":"optional refs","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"dep"}],"dependents":[{"id":"bw-2","title":"child"}],"related":[{"id":"bw-3","title":"rel"}]}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-10"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.BlockedBy[0].Type != "" || got.BlockedBy[0].Priority != 0 || got.BlockedBy[0].Status != "" {
+		t.Fatalf("expected zero-value optional metadata on dependency reference, got %#v", got.BlockedBy[0])
+	}
+
+	if got.Blocks[0].Type != "" || got.Blocks[0].Priority != 0 || got.Blocks[0].Status != "" {
+		t.Fatalf("expected zero-value optional metadata on dependent reference, got %#v", got.Blocks[0])
+	}
+
+	if got.Related[0].Type != "" || got.Related[0].Priority != 0 || got.Related[0].Status != "" {
+		t.Fatalf("expected zero-value optional metadata on related reference, got %#v", got.Related[0])
+	}
+}
+
+func TestGatewayShowIssueMapsRelatedFromDependenciesWhenDependencyTypeIsRelated(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-11", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-11","title":"related in dependencies","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"real blocker","dependency_type":"blocks"},{"id":"bw-3","title":"real related","dependency_type":"related"}],"dependents":[{"id":"bw-2","title":"child"}]}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-11"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if len(got.BlockedBy) != 1 || got.BlockedBy[0].ID != "bw-1" {
+		t.Fatalf("expected only non-related dependency refs in blocked-by, got %#v", got.BlockedBy)
+	}
+
+	if len(got.Related) != 1 || got.Related[0].ID != "bw-3" {
+		t.Fatalf("expected related refs from dependencies, got %#v", got.Related)
+	}
+}
+
+func TestGatewayShowIssueMergesTopLevelAndDependencyRelatedWithoutDuplicates(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-12", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-12","title":"mixed related","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-4","title":"from deps related","dependency_type":"related"},{"id":"bw-5","title":"non related dep"}],"related":[{"id":"bw-4","title":"from top-level related"},{"id":"bw-6","title":"top-level only"}]}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-12"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if len(got.BlockedBy) != 1 || got.BlockedBy[0].ID != "bw-5" {
+		t.Fatalf("expected non-related dependency to remain blocked-by, got %#v", got.BlockedBy)
+	}
+
+	if len(got.Related) != 2 {
+		t.Fatalf("expected merged related refs with de-duplication, got %#v", got.Related)
+	}
+
+	if got.Related[0].ID != "bw-4" || got.Related[1].ID != "bw-6" {
+		t.Fatalf("unexpected related merge order/content: %#v", got.Related)
+	}
 }
 
 type routeResponse struct {

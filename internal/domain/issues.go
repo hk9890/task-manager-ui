@@ -15,10 +15,13 @@ type IssueSummary struct {
 	UpdatedAt time.Time
 }
 
-// IssueReference identifies a related issue by id and title.
+// IssueReference identifies a related issue.
 type IssueReference struct {
-	ID    string
-	Title string
+	ID       string
+	Title    string
+	Type     string
+	Priority int
+	Status   string
 }
 
 // IssueComment is a normalized issue comment representation.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -179,4 +180,50 @@ func formatDuration(start, end time.Time) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func renderRelatedIssuesRail(detail domain.IssueDetail, width int) []string {
+	groups := []struct {
+		label string
+		refs  []domain.IssueReference
+	}{
+		{label: "Blocked by", refs: detail.BlockedBy},
+		{label: "Blocks", refs: detail.Blocks},
+		{label: "Related", refs: detail.Related},
+	}
+
+	out := make([]string, 0, 16)
+	for _, group := range groups {
+		ordered := orderedReferences(group.refs)
+		if len(ordered) == 0 {
+			continue
+		}
+
+		if len(out) > 0 {
+			out = append(out, "")
+		}
+		out = append(out, styles.TruncateString(fmt.Sprintf("%s (%d)", group.label, len(ordered)), width))
+		for _, ref := range ordered {
+			out = append(out, issuerow.RenderReferenceCompact(issuerow.ReferenceRenderConfig{
+				Issue:    ref,
+				Selected: false,
+				Width:    width,
+				Styled:   false,
+			}))
+		}
+	}
+
+	if len(out) == 0 {
+		return []string{"(none)"}
+	}
+
+	return out
+}
+
+func orderedReferences(refs []domain.IssueReference) []domain.IssueReference {
+	ordered := append([]domain.IssueReference(nil), refs...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].ID < ordered[j].ID
+	})
+	return ordered
 }

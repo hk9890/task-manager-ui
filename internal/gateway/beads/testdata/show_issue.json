@@ -14,13 +14,11 @@
     "created_at": "2026-04-05T09:00:00Z",
     "updated_at": "2026-04-05T10:00:00Z",
     "dependencies": [
-      {"id": "bw-150", "title": "Dependency issue"}
+      {"id": "bw-150", "title": "Dependency issue", "issue_type": "bug", "priority": 1, "status": "open", "dependency_type": "blocks"},
+      {"id": "bw-350", "title": "Related issue", "issue_type": "spike", "priority": 3, "status": "blocked", "dependency_type": "related"}
     ],
     "dependents": [
-      {"id": "bw-250", "title": "Dependent issue"}
-    ],
-    "related": [
-      {"id": "bw-350", "title": "Related issue"}
+      {"id": "bw-250", "title": "Dependent issue", "issue_type": "task", "priority": 2, "status": "in_progress"}
     ],
     "comments": [
       {
