@@ -4,5 +4,6 @@
 *.db
 .beads-credential-key
 .coder/
+.opencode/
 .idea/
 bwb

@@ -1,1 +1,0 @@
-/home/hans/dev/env/ai-repo/commands/simplify.md
