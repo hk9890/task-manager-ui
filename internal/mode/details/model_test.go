@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 )
 
 func TestModelViewRendersRepresentativeStates(t *testing.T) {
@@ -48,9 +49,10 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "bw-2",
-		TargetID:    "bw-2",
-		Keys:        mustResolveDetailKeys(t, nil),
+		SelectionID:  "bw-2",
+		TargetID:     "bw-2",
+		Keys:         mustResolveDetailKeys(t, nil),
+		BrowserItems: []domain.IssueReference{{ID: "bw-2", Title: "Second issue"}},
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "bw-2", Title: "Second issue", Status: "in_progress", Type: "task", Priority: 2},
 		},
@@ -64,6 +66,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	// Simulate shell selection change to a different issue and loaded detail update.
 	m.SelectionID = "bw-4"
 	m.TargetID = "bw-4"
+	m.BrowserItems = []domain.IssueReference{{ID: "bw-4", Title: "Fourth issue"}}
 	m.Detail = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-4", Title: "Fourth issue", Status: "open", Type: "bug", Priority: 1},
 	}
@@ -211,35 +214,43 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed in detail mode")
 	}
-	if got := m.focusPane(); got != 1 {
-		t.Fatalf("expected left from content to focus related, got %v", got)
+	if got := m.focusPane(); got != uidetails.FocusPaneContent {
+		t.Fatalf("expected left from content to stay content when browser absent, got %v", got)
+	}
+
+	m.BrowserItems = []domain.IssueReference{{ID: "bw-1"}, {ID: "bw-2"}}
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+		t.Fatal("expected left key to be consumed")
+	}
+	if got := m.focusPane(); got != uidetails.FocusPaneBrowser {
+		t.Fatalf("expected left from content to focus browser when present, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
-	if got := m.focusPane(); got != 1 {
-		t.Fatalf("expected left from related to stay on related, got %v", got)
+	if got := m.focusPane(); got != uidetails.FocusPaneBrowser {
+		t.Fatalf("expected left from browser to stay on browser, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != 0 {
-		t.Fatalf("expected right from related to focus content, got %v", got)
+	if got := m.focusPane(); got != uidetails.FocusPaneContent {
+		t.Fatalf("expected right from browser to focus content, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != 2 {
+	if got := m.focusPane(); got != uidetails.FocusPaneMetadata {
 		t.Fatalf("expected right from content to focus metadata, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != 2 {
+	if got := m.focusPane(); got != uidetails.FocusPaneMetadata {
 		t.Fatalf("expected right from metadata to stay on metadata, got %v", got)
 	}
 }
@@ -250,27 +261,29 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 	m := Model{
 		SelectionID: "bw-1",
 		TargetID:    "bw-1",
-		FocusPane:   1,
+		FocusPane:   uidetails.FocusPaneBrowser,
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-1", Title: "One"},
+			{ID: "bw-2", Title: "two"},
+			{ID: "bw-3", Title: "three"},
+		},
 		Detail: domain.IssueDetail{
-			Summary:   domain.IssueSummary{ID: "bw-1", Title: "One"},
-			BlockedBy: []domain.IssueReference{{ID: "bw-3", Title: "three"}},
-			Blocks:    []domain.IssueReference{{ID: "bw-2", Title: "two"}},
-			Related:   []domain.IssueReference{{ID: "bw-4", Title: "four"}},
+			Summary: domain.IssueSummary{ID: "bw-1", Title: "One"},
 		},
 	}
 
 	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10); !consumed || intent != nil {
 		t.Fatalf("expected down to move related selection without intent, consumed=%v intent=%v", consumed, intent)
 	}
-	if m.SelectedRelatedIndex != 1 {
-		t.Fatalf("expected related index to move to 1, got %d", m.SelectedRelatedIndex)
+	if m.BrowserSelectedIndex != 1 {
+		t.Fatalf("expected related index to move to 1, got %d", m.BrowserSelectedIndex)
 	}
 
 	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10); !consumed || intent != nil {
 		t.Fatalf("expected up to move related selection without intent, consumed=%v intent=%v", consumed, intent)
 	}
-	if m.SelectedRelatedIndex != 0 {
-		t.Fatalf("expected related index to move back to 0, got %d", m.SelectedRelatedIndex)
+	if m.BrowserSelectedIndex != 0 {
+		t.Fatalf("expected related index to move back to 0, got %d", m.BrowserSelectedIndex)
 	}
 }
 
@@ -280,12 +293,14 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenIntent(t *testing.T) {
 	m := Model{
 		SelectionID:          "bw-1",
 		TargetID:             "bw-1",
-		FocusPane:            1,
-		SelectedRelatedIndex: 1,
+		FocusPane:            uidetails.FocusPaneBrowser,
+		BrowserSelectedIndex: 1,
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-1", Title: "One"},
+			{ID: "bw-3", Title: "three"},
+		},
 		Detail: domain.IssueDetail{
-			Summary:   domain.IssueSummary{ID: "bw-1", Title: "One"},
-			BlockedBy: []domain.IssueReference{{ID: "bw-2", Title: "two"}},
-			Related:   []domain.IssueReference{{ID: "bw-3", Title: "three"}},
+			Summary: domain.IssueSummary{ID: "bw-1", Title: "One"},
 		},
 	}
 
@@ -307,7 +322,7 @@ func TestModelDetailMetadataPaneIsNonInteractiveForScrollBindings(t *testing.T) 
 	m := Model{
 		SelectionID: "bw-1",
 		TargetID:    "bw-1",
-		FocusPane:   2,
+		FocusPane:   uidetails.FocusPaneMetadata,
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "bw-1", Title: "One"},
 			Description: strings.Repeat("line\n", 50),
@@ -323,5 +338,105 @@ func TestModelDetailMetadataPaneIsNonInteractiveForScrollBindings(t *testing.T) 
 	}
 	if m.ScrollOffset != 0 {
 		t.Fatalf("expected metadata pane to keep scroll offset unchanged, got %d", m.ScrollOffset)
+	}
+}
+
+func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-1",
+		FocusPane:   uidetails.FocusPaneMetadata,
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-1", Status: "open"},
+		},
+	}
+
+	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
+	if !consumed {
+		t.Fatal("expected enter in metadata pane to be consumed")
+	}
+	if intent != nil {
+		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
+	}
+	if !m.ConsumeOpenStatusDialogIntent() {
+		t.Fatal("expected metadata enter to raise open-status-dialog intent")
+	}
+	if m.ConsumeOpenStatusDialogIntent() {
+		t.Fatal("expected status-dialog intent to be consumed once")
+	}
+}
+
+func TestModelApplyLoadedDetailBuildsBrowserFromParentGroupAndKeepsStableAcrossSiblings(t *testing.T) {
+	t.Parallel()
+
+	m := Model{}
+	first := domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-42", Title: "Child 42"},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{ID: "bw-1", Title: "Parent"},
+			Children: []domain.IssueReference{
+				{ID: "bw-42", Title: "Child 42"},
+				{ID: "bw-43", Title: "Child 43"},
+			},
+		},
+	}
+	m.ApplyLoadedDetail("bw-42", first)
+
+	if m.BrowserGroupParentID != "bw-1" {
+		t.Fatalf("expected parent id bw-1, got %q", m.BrowserGroupParentID)
+	}
+	if len(m.BrowserItems) != 3 {
+		t.Fatalf("expected browser parent+siblings, got %d", len(m.BrowserItems))
+	}
+	if m.BrowserItems[0].ID != "bw-1" {
+		t.Fatalf("expected parent row first, got %#v", m.BrowserItems)
+	}
+
+	originalFirstRow := &m.BrowserItems[0]
+	second := domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-43", Title: "Child 43"},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{ID: "bw-1", Title: "Parent renamed"},
+			Children: []domain.IssueReference{
+				{ID: "bw-42", Title: "Child 42 renamed"},
+				{ID: "bw-43", Title: "Child 43 renamed"},
+			},
+		},
+	}
+	m.ApplyLoadedDetail("bw-43", second)
+
+	if &m.BrowserItems[0] != originalFirstRow {
+		t.Fatalf("expected browser items slice to stay stable within same parent-group")
+	}
+	if m.BrowserSelectedIndex != 2 {
+		t.Fatalf("expected selection to move to bw-43 index, got %d", m.BrowserSelectedIndex)
+	}
+}
+
+func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		BrowserGroupParentID: "bw-parent",
+		BrowserItems:         []domain.IssueReference{{ID: "bw-parent"}, {ID: "bw-child"}},
+		BrowserSelectedIndex: 1,
+		FocusPane:            uidetails.FocusPaneBrowser,
+	}
+
+	m.ApplyLoadedDetail("bw-child", domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-child"}})
+
+	if m.BrowserGroupParentID != "" {
+		t.Fatalf("expected browser parent id to clear, got %q", m.BrowserGroupParentID)
+	}
+	if len(m.BrowserItems) != 0 {
+		t.Fatalf("expected browser items to clear, got %#v", m.BrowserItems)
+	}
+	if m.BrowserSelectedIndex != -1 {
+		t.Fatalf("expected browser selection reset to -1, got %d", m.BrowserSelectedIndex)
+	}
+	if m.FocusPane != uidetails.FocusPaneContent {
+		t.Fatalf("expected focus to move back to content when browser absent, got %v", m.FocusPane)
 	}
 }

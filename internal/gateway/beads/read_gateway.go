@@ -165,7 +165,7 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
 	}
 
-	blockedBy, relatedFromDependencies, err := dependencyReferencesFromMap(primary, operationShowIssue)
+	blockedBy, relatedFromDependencies, parentIssue, hasParent, err := dependencyReferencesFromMap(primary, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
@@ -187,17 +187,31 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, err
 	}
 
+	parentGroupContext := domain.ParentGroupBrowserContext{}
+	if hasParent {
+		siblings, err := g.parentChildSiblings(ctx, parentIssue.ID)
+		if err != nil {
+			return domain.IssueDetail{}, err
+		}
+
+		parentGroupContext = domain.ParentGroupBrowserContext{
+			Parent:   parentIssue,
+			Children: siblings,
+		}
+	}
+
 	return domain.IssueDetail{
-		Summary:     summary,
-		Creator:     creator,
-		Description: description,
-		Notes:       notes,
-		ClosedAt:    closedAt,
-		CloseReason: closeReason,
-		BlockedBy:   blockedBy,
-		Blocks:      blocks,
-		Related:     related,
-		Comments:    comments,
+		Summary:            summary,
+		Creator:            creator,
+		Description:        description,
+		Notes:              notes,
+		ClosedAt:           closedAt,
+		CloseReason:        closeReason,
+		ParentGroupBrowser: parentGroupContext,
+		BlockedBy:          blockedBy,
+		Blocks:             blocks,
+		Related:            related,
+		Comments:           comments,
 	}, nil
 }
 
@@ -636,23 +650,25 @@ func referencesFromMapArray(parent map[string]any, key string, operation string)
 	return out, nil
 }
 
-func dependencyReferencesFromMap(parent map[string]any, operation string) ([]domain.IssueReference, []domain.IssueReference, error) {
+func dependencyReferencesFromMap(parent map[string]any, operation string) ([]domain.IssueReference, []domain.IssueReference, domain.IssueReference, bool, error) {
 	records, err := mapArrayFromMap(parent, "dependencies")
 	if err != nil {
-		return nil, nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+		return nil, nil, domain.IssueReference{}, false, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
 	blockedBy := make([]domain.IssueReference, 0, len(records))
 	related := make([]domain.IssueReference, 0)
+	parentIssue := domain.IssueReference{}
+	hasParent := false
 	for _, record := range records {
 		ref, err := referenceFromMap(record, operation)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, domain.IssueReference{}, false, err
 		}
 
 		dependencyType, err := optionalStringFromMap(record, "dependency_type")
 		if err != nil {
-			return nil, nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+			return nil, nil, domain.IssueReference{}, false, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 		}
 
 		if dependencyType == "related" {
@@ -660,10 +676,60 @@ func dependencyReferencesFromMap(parent map[string]any, operation string) ([]dom
 			continue
 		}
 
+		if dependencyType == "parent-child" {
+			if !hasParent {
+				parentIssue = ref
+				hasParent = true
+			}
+
+			continue
+		}
+
 		blockedBy = append(blockedBy, ref)
 	}
 
-	return blockedBy, related, nil
+	return blockedBy, related, parentIssue, hasParent, nil
+}
+
+func (g *Gateway) parentChildSiblings(ctx context.Context, parentID string) ([]domain.IssueReference, error) {
+	if strings.TrimSpace(parentID) == "" {
+		return nil, nil
+	}
+
+	items, err := g.decodeIssueArray(ctx, operationShowIssue, []string{"show", parentID, "--json"})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	dependents, err := mapArrayFromMap(items[0], "dependents")
+	if err != nil {
+		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
+	}
+
+	out := make([]domain.IssueReference, 0, len(dependents))
+	for _, dependent := range dependents {
+		dependencyType, err := optionalStringFromMap(dependent, "dependency_type")
+		if err != nil {
+			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
+		}
+
+		if dependencyType != "parent-child" {
+			continue
+		}
+
+		ref, err := referenceFromMap(dependent, operationShowIssue)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, ref)
+	}
+
+	return out, nil
 }
 
 func referenceFromMap(record map[string]any, operation string) (domain.IssueReference, error) {

@@ -15,6 +15,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
 	"github.com/hk9890/beads-workbench/internal/mode"
+	detailsmode "github.com/hk9890/beads-workbench/internal/mode/details"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
@@ -785,7 +786,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	}
 }
 
-func TestModelDetailModeLeftRailEnterOpensRelatedIssueAndStaysInDetailMode(t *testing.T) {
+func TestModelDetailModeLeftBrowserEnterOpensIssueAndStaysInDetailMode(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
@@ -793,9 +794,14 @@ func TestModelDetailModeLeftRailEnterOpensRelatedIssueAndStaysInDetailMode(t *te
 	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
-		Summary:   domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
-		Related:   []domain.IssueReference{{ID: "bw-5", Title: "Related target"}},
-		BlockedBy: []domain.IssueReference{{ID: "bw-2", Title: "Blocked upstream"}},
+		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{ID: "bw-1", Title: "Root"},
+			Children: []domain.IssueReference{
+				{ID: "bw-5", Title: "Sibling target"},
+				{ID: "bw-6", Title: "Sibling peer"},
+			},
+		},
 	}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -823,27 +829,119 @@ func TestModelDetailModeLeftRailEnterOpensRelatedIssueAndStaysInDetailMode(t *te
 	m = applyMessages(t, m, runBatch(cmd))
 
 	gateway.ShowIssueResponse = domain.IssueDetail{
-		Summary: domain.IssueSummary{ID: "bw-5", Title: "Related target", Status: "in_progress", Type: "bug", Priority: 2},
+		Summary: domain.IssueSummary{ID: "bw-5", Title: "Sibling target", Status: "in_progress", Type: "bug", Priority: 2},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{ID: "bw-1", Title: "Root"},
+			Children: []domain.IssueReference{
+				{ID: "bw-5", Title: "Sibling target"},
+				{ID: "bw-6", Title: "Sibling peer"},
+			},
+		},
 	}
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatalf("expected enter on related left rail to trigger detail load command")
+		t.Fatalf("expected enter on left browser panel to trigger detail load command")
 	}
 
 	if m.active != mode.Detail {
 		t.Fatalf("expected app to remain in detail mode after related open, got %s", m.active)
 	}
 	if m.detail.TargetID != "bw-5" || m.detail.SelectionID != "bw-5" {
-		t.Fatalf("expected related issue bw-5 to become detail target/selection, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+		t.Fatalf("expected browser issue bw-5 to become detail target/selection, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
 	}
 	if m.detail.ScrollOffset != 0 {
-		t.Fatalf("expected related issue open to reset content scroll offset, got %d", m.detail.ScrollOffset)
+		t.Fatalf("expected browser issue open to reset content scroll offset, got %d", m.detail.ScrollOffset)
 	}
 
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.detail.Detail.Summary.ID != "bw-5" {
-		t.Fatalf("expected loaded related issue detail bw-5, got %q", m.detail.Detail.Summary.ID)
+		t.Fatalf("expected loaded browser issue detail bw-5, got %q", m.detail.Detail.Summary.ID)
+	}
+	if len(m.detail.BrowserItems) != 3 {
+		t.Fatalf("expected stable parent-group browser items (parent + siblings), got %d", len(m.detail.BrowserItems))
+	}
+}
+
+func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
+	}
+	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 140
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected status catalog load command after enter on metadata status")
+	}
+
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	_ = cmd
+
+	if !m.showActionModal {
+		t.Fatal("expected status action modal to open")
+	}
+
+	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{"status": "in_progress"}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected status update submit command")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if !gateway.HasCall(string(fakes.MethodStatusCatalog)) {
+		t.Fatalf("expected status catalog query, calls=%#v", gateway.Calls)
+	}
+	if !gateway.HasCall(string(fakes.MethodUpdateIssue)) {
+		t.Fatalf("expected status update issue call, calls=%#v", gateway.Calls)
+	}
+
+	foundStatusUpdate := false
+	for _, call := range gateway.Calls {
+		if call.Method != fakes.MethodUpdateIssue {
+			continue
+		}
+		updateCall, ok := call.Input.(fakes.UpdateIssueCall)
+		if !ok {
+			continue
+		}
+		if updateCall.Input.Status == nil || *updateCall.Input.Status != "in_progress" {
+			t.Fatalf("expected status-only update to in_progress, got %#v", updateCall.Input)
+		}
+		if updateCall.Input.Priority != nil {
+			t.Fatalf("expected priority editing out of scope; got priority update %#v", *updateCall.Input.Priority)
+		}
+		foundStatusUpdate = true
+	}
+	if !foundStatusUpdate {
+		t.Fatal("expected to capture update issue input for status edit")
 	}
 }
 
@@ -1152,8 +1250,11 @@ func TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "Issue Detail") || !strings.Contains(view, "Blocked bug for fixture") {
+	if !strings.Contains(view, "Blocked bug for fixture") {
 		t.Fatalf("expected dedicated detail rendering for fixture issue, got:\n%s", view)
+	}
+	if strings.Contains(view, "Issue Detail") {
+		t.Fatalf("expected detail mode to avoid extra shell wrapper heading, got:\n%s", view)
 	}
 	if !strings.Contains(view, "Assignee: bob") {
 		t.Fatalf("expected detail metadata to show fixture assignee bob, got:\n%s", view)
@@ -1393,8 +1494,11 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 		t.Fatalf("expected detail mode after enter, got %s", m.active)
 	}
 	detailView := m.View()
-	if !strings.Contains(detailView, "Issue Detail") || !strings.Contains(detailView, "In progress one") {
+	if !strings.Contains(detailView, "In progress one") {
 		t.Fatalf("expected dedicated detail layout with selected issue content, got:\n%s", detailView)
+	}
+	if strings.Contains(detailView, "Issue Detail") {
+		t.Fatalf("expected dedicated detail layout without extra shell wrapper heading, got:\n%s", detailView)
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -1417,6 +1521,89 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	}
 
 	ui.AssertMatchesGoldenNormalized(t, []byte(boardView), "model_roundtrip_board_back_w120.golden")
+}
+
+func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	boardSpy := &sizingSpyController{id: mode.Board, viewText: "board"}
+	searchSpy := &sizingSpyController{id: mode.Search, viewText: "search"}
+
+	m := NewModel(services)
+	m.board = boardSpy
+	m.search = searchSpy
+	m.width = 120
+	m.height = 34
+
+	expectedWidth, expectedHeight := m.workspaceSize()
+
+	m.active = mode.Board
+	_ = m.renderBody()
+	if boardSpy.lastWidth != expectedWidth || boardSpy.lastHeight != expectedHeight {
+		t.Fatalf("expected board SetSize(%d,%d), got (%d,%d)", expectedWidth, expectedHeight, boardSpy.lastWidth, boardSpy.lastHeight)
+	}
+	if searchSpy.lastWidth != expectedWidth || searchSpy.lastHeight != expectedHeight {
+		t.Fatalf("expected search SetSize(%d,%d), got (%d,%d)", expectedWidth, expectedHeight, searchSpy.lastWidth, searchSpy.lastHeight)
+	}
+
+	m.active = mode.Search
+	body := m.renderBody()
+	if !strings.Contains(body, "search") {
+		t.Fatalf("expected active search view rendering, got: %q", body)
+	}
+
+	longLines := make([]string, 0, 80)
+	for i := 1; i <= 80; i++ {
+		longLines = append(longLines, fmt.Sprintf("Line %d", i))
+	}
+	m.active = mode.Detail
+	m.detail = detailsmode.Model{
+		SelectionID: "bw-1",
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-1", Title: "Issue one", Status: "open", Type: "task", Priority: 1},
+			Description: strings.Join(longLines, "\n"),
+		},
+	}
+
+	detailBody := m.renderBody()
+	if strings.Contains(detailBody, "Issue Detail") {
+		t.Fatalf("expected detail body to avoid extra boxed wrapper heading, got:\n%s", detailBody)
+	}
+	if got := len(strings.Split(detailBody, "\n")); got != expectedHeight {
+		t.Fatalf("expected detail body height %d lines, got %d", expectedHeight, got)
+	}
+	if m.detailViewportWidth() != expectedWidth {
+		t.Fatalf("expected detail viewport width %d, got %d", expectedWidth, m.detailViewportWidth())
+	}
+	if m.detailViewportHeight() != expectedHeight {
+		t.Fatalf("expected detail viewport height %d, got %d", expectedHeight, m.detailViewportHeight())
+	}
+}
+
+type sizingSpyController struct {
+	id         mode.ID
+	viewText   string
+	lastWidth  int
+	lastHeight int
+}
+
+func (s *sizingSpyController) ID() mode.ID { return s.id }
+
+func (s *sizingSpyController) Init() tea.Cmd { return nil }
+
+func (s *sizingSpyController) Update(tea.Msg) (mode.Controller, tea.Cmd) { return s, nil }
+
+func (s *sizingSpyController) View() string { return s.viewText }
+
+func (s *sizingSpyController) SetSize(width, height int) {
+	s.lastWidth = width
+	s.lastHeight = height
 }
 
 func runBatch(cmd tea.Cmd) []tea.Msg {

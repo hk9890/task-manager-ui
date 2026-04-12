@@ -24,6 +24,13 @@ type IssueReference struct {
 	Status   string
 }
 
+// ParentGroupBrowserContext is the normalized parent-group relationship
+// projection used by the issue-details left browser panel.
+type ParentGroupBrowserContext struct {
+	Parent   IssueReference
+	Children []IssueReference
+}
+
 // IssueComment is a normalized issue comment representation.
 type IssueComment struct {
 	ID        string
@@ -34,16 +41,17 @@ type IssueComment struct {
 
 // IssueDetail is the full issue read model for details and editing flows.
 type IssueDetail struct {
-	Summary     IssueSummary
-	Creator     string
-	Description string
-	Notes       string
-	ClosedAt    time.Time
-	CloseReason string
-	BlockedBy   []IssueReference
-	Blocks      []IssueReference
-	Related     []IssueReference
-	Comments    []IssueComment
+	Summary            IssueSummary
+	Creator            string
+	Description        string
+	Notes              string
+	ClosedAt           time.Time
+	CloseReason        string
+	ParentGroupBrowser ParentGroupBrowserContext
+	BlockedBy          []IssueReference
+	Blocks             []IssueReference
+	Related            []IssueReference
+	Comments           []IssueComment
 }
 
 // BlockedIssueView is the blocked-work projection used by blocked dashboards.

@@ -51,6 +51,7 @@ const (
 	mutationUpdate  mutationKind = "update"
 	mutationClose   mutationKind = "close"
 	mutationComment mutationKind = "comment"
+	mutationStatus  mutationKind = "status"
 )
 
 type mutationCatalogsLoadedMsg struct {
@@ -59,6 +60,12 @@ type mutationCatalogsLoadedMsg struct {
 	statuses []domain.StatusOption
 	types    []domain.TypeOption
 	labels   []domain.LabelOption
+	err      error
+}
+
+type statusCatalogLoadedMsg struct {
+	issue    domain.IssueSummary
+	statuses []domain.StatusOption
 	err      error
 }
 
@@ -145,8 +152,7 @@ func NewModel(services Services) Model {
 
 // Init loads initial board and search controllers.
 func (m Model) Init() tea.Cmd {
-	m.board.SetSize(m.width, m.height)
-	m.search.SetSize(m.width, m.height)
+	m.applyWorkspaceSizeToBrowseModes()
 	return tea.Batch(m.board.Init(), m.search.Init())
 }
 
@@ -214,10 +220,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.board.SetSize(m.width, m.height)
-		m.search.SetSize(m.width, m.height)
+		m.applyWorkspaceSizeToBrowseModes()
 		m.help.SetSize(m.width, m.height)
-		m.detail.ClampScroll(max(40, m.width-8), m.detailViewportHeight())
+		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
 	case detailLoadedMsg:
 		if msg.issueID != m.detail.TargetID {
@@ -232,8 +237,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.detail.Error = ""
-		m.detail.Detail = msg.detail
-		m.detail.ClampScroll(max(40, m.width-8), m.detailViewportHeight())
+		m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
+		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
 	case editIssueResultMsg:
 		if msg.err != nil {
@@ -250,6 +255,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.detail.SelectionID = selection.Issue.ID
+		m.detail.SelectBrowserIssue(selection.Issue.ID)
 		m.detail.Loading = true
 		m.detail.Error = ""
 		m.detail.TargetID = selection.Issue.ID
@@ -268,6 +274,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
+		m.actionState = dialog
+		m.actionModal = mutationModal(dialog, m.keys)
+		m.actionModal.SetSize(m.width, m.height)
+		m.showActionModal = true
+		return m, batchCmds(modeCmd, m.actionModal.Init())
+	case statusCatalogLoadedMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load status catalog: %v", msg.err), toaster.StyleError))
+		}
+
+		dialog := buildMutationDialog(mutationStatus, msg.issue, msg.statuses, nil, nil)
 		m.actionState = dialog
 		m.actionModal = mutationModal(dialog, m.keys)
 		m.actionModal.SetSize(m.width, m.height)
@@ -294,6 +311,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case mutationComment:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+			)
+		case mutationStatus:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
 			)
 		default:
@@ -340,7 +362,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.active == mode.Detail {
 			m.detail.Keys = m.keys
-			consumed, intent := m.detail.HandleKey(msg, max(40, m.width-8), m.detailViewportHeight())
+			consumed, intent := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
+			if m.detail.ConsumeOpenStatusDialogIntent() {
+				issue := m.detail.Detail.Summary
+				if strings.TrimSpace(issue.ID) == "" {
+					if selection := m.currentSelection(); selection != nil {
+						issue = selection.Issue
+					}
+				}
+				if strings.TrimSpace(issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+				}
+				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, issue))
+			}
 			if intent != nil {
 				issueID := strings.TrimSpace(intent.IssueID)
 				if issueID == "" {
@@ -348,6 +382,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.active = mode.Detail
 				m.detail.SelectionID = issueID
+				m.detail.SelectBrowserIssue(issueID)
 				m.detail.TargetID = issueID
 				m.detail.Loading = true
 				m.detail.Error = ""
@@ -582,6 +617,7 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 		m.detail.ScrollOffset = 0
 	}
 	m.detail.SelectionID = selection.Issue.ID
+	m.detail.SelectBrowserIssue(selection.Issue.ID)
 
 	if m.detail.Loading && m.detail.TargetID == selection.Issue.ID {
 		return nil
@@ -637,21 +673,13 @@ func (m Model) renderHeader() string {
 }
 
 func (m Model) renderBody() string {
-	if m.active == mode.Detail {
-		return styles.FormSection(styles.FormSectionConfig{
-			Width:              max(60, m.width-2),
-			TopLeft:            "Issue Detail",
-			TopRight:           detailHeaderID(m.detail),
-			Content:            strings.Split(m.detail.View(max(40, m.width-8), m.detailViewportHeight(), false), "\n"),
-			Focused:            true,
-			FocusedBorderColor: styles.BorderHighlightFocusColor,
-		})
-	}
+	workspaceWidth, workspaceHeight := m.workspaceSize()
+	m.board.SetSize(workspaceWidth, workspaceHeight)
+	m.search.SetSize(workspaceWidth, workspaceHeight)
 
-	browseWidth := max(40, m.width-2)
-	browseHeight := max(14, m.height-7)
-	m.board.SetSize(browseWidth, browseHeight)
-	m.search.SetSize(browseWidth, browseHeight)
+	if m.active == mode.Detail {
+		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false)
+	}
 
 	var browse string
 	if m.active == mode.Board {
@@ -664,7 +692,27 @@ func (m Model) renderBody() string {
 }
 
 func (m Model) detailViewportHeight() int {
-	return max(1, max(14, m.height-7)-2)
+	_, workspaceHeight := m.workspaceSize()
+	return workspaceHeight
+}
+
+func (m Model) detailViewportWidth() int {
+	workspaceWidth, _ := m.workspaceSize()
+	return workspaceWidth
+}
+
+func (m Model) workspaceSize() (int, int) {
+	workspaceWidth := max(1, m.width-2)
+	headerHeight := lipgloss.Height(m.renderHeader())
+	footerHeight := lipgloss.Height(m.renderFooter())
+	workspaceHeight := max(1, m.height-headerHeight-footerHeight)
+	return workspaceWidth, workspaceHeight
+}
+
+func (m Model) applyWorkspaceSizeToBrowseModes() {
+	workspaceWidth, workspaceHeight := m.workspaceSize()
+	m.board.SetSize(workspaceWidth, workspaceHeight)
+	m.search.SetSize(workspaceWidth, workspaceHeight)
 }
 
 func (m Model) renderFooter() string {
@@ -1040,6 +1088,16 @@ func loadMutationCatalogsCmd(services Services, kind mutationKind, issue domain.
 	}
 }
 
+func loadStatusCatalogForIssueCmd(services Services, issue domain.IssueSummary) tea.Cmd {
+	return func() tea.Msg {
+		statuses, err := services.Gateway.StatusCatalog(context.Background())
+		if err != nil {
+			return statusCatalogLoadedMsg{issue: issue, err: fmt.Errorf("status catalog: %w", err)}
+		}
+		return statusCatalogLoadedMsg{issue: issue, statuses: statuses}
+	}
+}
+
 func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) mutationDialogState {
 	statusNames := make(map[string]struct{}, len(statuses))
 	typeNames := make(map[string]struct{}, len(types))
@@ -1143,6 +1201,17 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 			MinWidth:    72,
 			Inputs: []modal.InputConfig{
 				{Key: "body", Label: "Comment", Placeholder: "Comment text"},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationStatus:
+		return modal.NewWithKeys(modal.Config{
+			Title:       fmt.Sprintf("Update Status %s", state.issue.ID),
+			Message:     fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)")),
+			ConfirmText: "Update",
+			MinWidth:    72,
+			Required:    true,
+			Inputs: []modal.InputConfig{
+				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
 			},
 		}, modal.BindingsFromConfig(keys))
 	default:
@@ -1249,6 +1318,19 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: %w", err)}
 			}
 			return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID}
+		case mutationStatus:
+			status := strings.TrimSpace(values["status"])
+			if status == "" {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: status is required")}
+			}
+			if _, ok := state.statusNames[status]; len(state.statusNames) > 0 && !ok {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: unknown status %q", status)}
+			}
+
+			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Status: &status}); err != nil {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID}
 		default:
 			return mutationResultMsg{kind: state.kind, issueID: state.issue.ID, err: fmt.Errorf("unsupported mutation action")}
 		}
@@ -1301,12 +1383,4 @@ func emptyFallback(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func detailHeaderID(detail detailsmode.Model) string {
-	id := strings.TrimSpace(detail.Detail.Summary.ID)
-	if id == "" {
-		id = strings.TrimSpace(detail.SelectionID)
-	}
-	return id
 }

@@ -12,9 +12,19 @@ import (
 )
 
 type metadataField struct {
-	label string
-	value string
+	key      MetadataFieldKey
+	label    string
+	value    string
+	editable bool
 }
+
+// MetadataFieldKey identifies actionable fields in the metadata rail.
+type MetadataFieldKey string
+
+const (
+	MetadataFieldNone   MetadataFieldKey = ""
+	MetadataFieldStatus MetadataFieldKey = "status"
+)
 
 type metadataGroup struct {
 	title  string
@@ -24,7 +34,7 @@ type metadataGroup struct {
 
 const metadataDividerRune = "-"
 
-func renderMetadataRail(detail domain.IssueDetail, width int) []string {
+func renderMetadataRail(detail domain.IssueDetail, width int, selectedField MetadataFieldKey) []string {
 	groups := metadataGroups(detail)
 	if len(groups) == 0 || width < 1 {
 		return nil
@@ -49,6 +59,9 @@ func renderMetadataRail(detail domain.IssueDetail, width int) []string {
 
 		for _, field := range group.fields {
 			line := fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value)
+			if field.key != MetadataFieldNone && field.key == selectedField {
+				line = "› " + line
+			}
 			out = append(out, styles.TruncateString(line, width))
 		}
 
@@ -79,7 +92,7 @@ func metadataGroups(detail domain.IssueDetail) []metadataGroup {
 	core.fields = append(core.fields,
 		metadataField{label: "Type", value: emptyFallback(summary.Type, "(unknown)")},
 		metadataField{label: "Priority", value: formatPriority(summary.Priority)},
-		metadataField{label: "Status", value: emptyFallback(summary.Status, "(unknown)")},
+		metadataField{key: MetadataFieldStatus, label: "Status", value: emptyFallback(summary.Status, "(unknown)"), editable: true},
 	)
 	groups = append(groups, core)
 

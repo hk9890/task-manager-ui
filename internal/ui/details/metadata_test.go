@@ -45,6 +45,29 @@ func TestMetadataFieldsOrderAndCoverage(t *testing.T) {
 	}
 }
 
+func TestMetadataCoreFieldsKeepStatusAsFirstEditableField(t *testing.T) {
+	t.Parallel()
+
+	groups := metadataGroups(domain.IssueDetail{
+		Summary: domain.IssueSummary{Type: "task", Priority: 2, Status: "open"},
+	})
+	if len(groups) == 0 {
+		t.Fatal("expected metadata groups")
+	}
+
+	core := groups[0]
+	if core.title != "Core" {
+		t.Fatalf("expected first metadata group Core, got %q", core.title)
+	}
+	if len(core.fields) < 3 {
+		t.Fatalf("expected core fields, got %#v", core.fields)
+	}
+
+	if core.fields[2].key != MetadataFieldStatus {
+		t.Fatalf("expected status to be actionable metadata field, got key=%q", core.fields[2].key)
+	}
+}
+
 func TestMetadataFieldsOmitEmptyOptionalValues(t *testing.T) {
 	t.Parallel()
 
@@ -77,7 +100,7 @@ func TestRenderMetadataRailRespectsWidth(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"this-is-an-extremely-long-label-that-must-be-truncated"},
 		},
-	}, 20)
+	}, 20, MetadataFieldNone)
 
 	if len(lines) == 0 {
 		t.Fatal("expected metadata lines")
@@ -87,6 +110,23 @@ func TestRenderMetadataRailRespectsWidth(t *testing.T) {
 		if lipgloss.Width(line) > 20 {
 			t.Fatalf("line exceeds width: %q (%d)", line, lipgloss.Width(line))
 		}
+	}
+}
+
+func TestRenderMetadataRailHighlightsSelectedStatusField(t *testing.T) {
+	t.Parallel()
+
+	lines := renderMetadataRail(domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			Type:     "task",
+			Priority: 1,
+			Status:   "open",
+		},
+	}, 40, MetadataFieldStatus)
+
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "› Status") {
+		t.Fatalf("expected selected status indicator in metadata rail, got:\n%s", joined)
 	}
 }
 

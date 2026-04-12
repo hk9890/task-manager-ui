@@ -35,14 +35,17 @@ var readOnlyMarkdown = markdown.NewRenderer()
 
 // State is the issue detail renderer input.
 type State struct {
-	SelectionID string
-	TargetID    string
-	Detail      domain.IssueDetail
-	Loading     bool
-	Error       string
-	Width       int
-	Compact     bool
-	FocusPane   FocusPane
+	SelectionID            string
+	TargetID               string
+	Detail                 domain.IssueDetail
+	BrowserItems           []domain.IssueReference
+	BrowserSelectedIssueID string
+	Loading                bool
+	Error                  string
+	Width                  int
+	Compact                bool
+	FocusPane              FocusPane
+	MetadataSelectedField  MetadataFieldKey
 }
 
 // FocusPane identifies which detail pane is visually focused.
@@ -50,7 +53,7 @@ type FocusPane int
 
 const (
 	FocusPaneContent FocusPane = iota
-	FocusPaneRelated
+	FocusPaneBrowser
 	FocusPaneMetadata
 )
 
@@ -87,12 +90,16 @@ func Render(state State) string {
 		return renderCompact(detail, width)
 	}
 
-	if width >= InspectorThreeColumnMinWidth {
-		return renderThreeColumn(detail, width, state.FocusPane)
+	if width >= InspectorThreeColumnMinWidth && len(state.BrowserItems) > 0 {
+		return renderThreeColumn(detail, state.BrowserItems, state.BrowserSelectedIssueID, width, state.FocusPane, state.MetadataSelectedField)
 	}
 
 	if width >= InspectorTwoColumnMinWidth {
-		return renderTwoColumn(detail, width)
+		selectedField := MetadataFieldNone
+		if state.FocusPane == FocusPaneMetadata {
+			selectedField = state.MetadataSelectedField
+		}
+		return renderTwoColumn(detail, width, selectedField)
 	}
 
 	return renderSingleColumn(detail, width)
@@ -105,7 +112,7 @@ func renderSingleColumn(detail domain.IssueDetail, width int) string {
 		styles.TruncateString(detail.Summary.ID, width),
 	)
 
-	metadata := renderMetadataRail(detail, width)
+	metadata := renderMetadataRail(detail, width, MetadataFieldNone)
 	if len(metadata) > 0 {
 		out = append(out, "")
 		out = append(out, "Metadata")
@@ -117,7 +124,7 @@ func renderSingleColumn(detail domain.IssueDetail, width int) string {
 	return strings.Join(out, "\n")
 }
 
-func renderTwoColumn(detail domain.IssueDetail, width int) string {
+func renderTwoColumn(detail domain.IssueDetail, width int, selectedField MetadataFieldKey) string {
 	contentWidth, metadataWidth := splitInspectorWidths(width)
 
 	left := make([]string, 0, 64)
@@ -128,7 +135,7 @@ func renderTwoColumn(detail domain.IssueDetail, width int) string {
 	left = append(left, renderContentSections(detail, contentWidth, true)...)
 
 	right := []string{"Metadata"}
-	metadata := renderMetadataRail(detail, metadataWidth)
+	metadata := renderMetadataRail(detail, metadataWidth, selectedField)
 	if len(metadata) == 0 {
 		right = append(right, "(none)")
 	} else {
@@ -156,11 +163,11 @@ func renderTwoColumn(detail domain.IssueDetail, width int) string {
 	return strings.Join(merged, "\n")
 }
 
-func renderThreeColumn(detail domain.IssueDetail, width int, focusPane FocusPane) string {
+func renderThreeColumn(detail domain.IssueDetail, browserItems []domain.IssueReference, browserSelectedIssueID string, width int, focusPane FocusPane, metadataSelectedField MetadataFieldKey) string {
 	leftWidth, contentWidth, metadataWidth := splitThreeColumnWidths(width)
 
-	left := []string{renderPaneHeading("Related Work", focusPane == FocusPaneRelated, leftWidth)}
-	left = append(left, renderRelatedIssuesRail(detail, leftWidth)...)
+	left := []string{renderPaneHeading("Issue Browser", focusPane == FocusPaneBrowser, leftWidth)}
+	left = append(left, renderIssueBrowserRail(browserItems, browserSelectedIssueID, leftWidth)...)
 
 	content := []string{renderPaneHeading("Content", focusPane == FocusPaneContent, contentWidth)}
 	content = append(content,
@@ -170,7 +177,11 @@ func renderThreeColumn(detail domain.IssueDetail, width int, focusPane FocusPane
 	content = append(content, renderContentSections(detail, contentWidth, false)...)
 
 	metadata := []string{renderPaneHeading("Metadata", focusPane == FocusPaneMetadata, metadataWidth)}
-	metadataRows := renderMetadataRail(detail, metadataWidth)
+	selectedField := MetadataFieldNone
+	if focusPane == FocusPaneMetadata {
+		selectedField = metadataSelectedField
+	}
+	metadataRows := renderMetadataRail(detail, metadataWidth, selectedField)
 	if len(metadataRows) == 0 {
 		metadata = append(metadata, "(none)")
 	} else {
@@ -207,6 +218,31 @@ func renderThreeColumn(detail domain.IssueDetail, width int, focusPane FocusPane
 	}
 
 	return strings.Join(merged, "\n")
+}
+
+func renderIssueBrowserRail(items []domain.IssueReference, selectedIssueID string, width int) []string {
+	if len(items) == 0 {
+		return []string{"(none)"}
+	}
+
+	out := make([]string, 0, len(items))
+	for _, ref := range items {
+		out = append(out, renderBrowserItem(ref, ref.ID == selectedIssueID, width))
+	}
+	return out
+}
+
+func renderBrowserItem(ref domain.IssueReference, selected bool, width int) string {
+	id := strings.TrimSpace(ref.ID)
+	if id == "" {
+		id = "(unknown-id)"
+	}
+	title := emptyFallback(ref.Title, "(untitled)")
+	prefix := "  "
+	if selected {
+		prefix = "› "
+	}
+	return styles.TruncateString(prefix+id+" · "+title, width)
 }
 
 func renderContentSections(detail domain.IssueDetail, width int, includeRelatedWork bool) []string {
@@ -309,7 +345,7 @@ func renderCompact(detail domain.IssueDetail, width int) string {
 		styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width),
 		styles.TruncateString(detail.Summary.ID, width),
 	)
-	metadata := renderMetadataRail(detail, width)
+	metadata := renderMetadataRail(detail, width, MetadataFieldNone)
 	if len(metadata) > 0 {
 		out = append(out, "")
 		out = append(out, "Metadata")

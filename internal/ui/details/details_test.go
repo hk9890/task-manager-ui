@@ -221,7 +221,13 @@ func TestRenderWideThreeColumnGolden(t *testing.T) {
 				{ID: "bw-3", Title: "Renderer cleanup", Type: "chore", Priority: 3, Status: "open"},
 			},
 		},
-		Width: InspectorThreeColumnMinWidth,
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-parent", Title: "Parent epic"},
+			{ID: "bw-wide", Title: "Wide layout sample"},
+			{ID: "bw-sibling", Title: "Sibling issue"},
+		},
+		BrowserSelectedIssueID: "bw-wide",
+		Width:                  InspectorThreeColumnMinWidth,
 	})
 
 	assertGolden(t, []byte(view), "wide_three_column.golden")
@@ -331,7 +337,7 @@ func TestRenderThreeColumnRailWidthsStayInApprovedRange(t *testing.T) {
 	}
 }
 
-func TestRenderWideLayoutSuppressesInlineRelatedWork(t *testing.T) {
+func TestRenderWideLayoutWithoutBrowserFallsBackToPairedContentMetadata(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
@@ -345,8 +351,40 @@ func TestRenderWideLayoutSuppressesInlineRelatedWork(t *testing.T) {
 		Width: InspectorThreeColumnMinWidth,
 	})
 
-	if strings.Contains(view, "\nRelated Work\n") {
-		t.Fatalf("expected inline related work section to be suppressed in wide layout, got:\n%s", view)
+	if strings.Contains(view, "Issue Browser") {
+		t.Fatalf("expected no special left browser without parent-group context, got:\n%s", view)
+	}
+	if strings.Contains(view, "Issue Browser") {
+		t.Fatalf("expected no special left browser without parent-group context, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Metadata") {
+		t.Fatalf("expected paired content/metadata layout without browser panel, got:\n%s", view)
+	}
+}
+
+func TestRenderWideLayoutWithBrowserUsesLeftIssueBrowserPanel(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-child",
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-child", Title: "Child", Status: "open", Type: "task", Priority: 1},
+			Description: "desc",
+		},
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-parent", Title: "Parent"},
+			{ID: "bw-child", Title: "Child"},
+			{ID: "bw-sibling", Title: "Sibling"},
+		},
+		BrowserSelectedIssueID: "bw-child",
+		Width:                  InspectorThreeColumnMinWidth,
+	})
+
+	if !strings.Contains(view, "Issue Browser") {
+		t.Fatalf("expected left issue browser panel in wide layout, got:\n%s", view)
+	}
+	if !strings.Contains(view, "› bw-child · Child") {
+		t.Fatalf("expected selected browser row marker, got:\n%s", view)
 	}
 }
 

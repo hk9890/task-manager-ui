@@ -162,6 +162,85 @@ func TestGatewayShowIssueMapsDetail(t *testing.T) {
 	if got.CloseReason != "completed" {
 		t.Fatalf("unexpected close reason: %q", got.CloseReason)
 	}
+
+	if got.ParentGroupBrowser.Parent.ID != "" || len(got.ParentGroupBrowser.Children) != 0 {
+		t.Fatalf("expected empty parent-group browser context when parent is absent, got %#v", got.ParentGroupBrowser)
+	}
+}
+
+func TestGatewayShowIssueMapsParentGroupBrowserContextFromParentChildRelationships(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-42", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-42","title":"child issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"parent issue","issue_type":"epic","priority":1,"status":"open","dependency_type":"parent-child"},{"id":"bw-50","title":"blocker issue","issue_type":"bug","priority":1,"status":"open","dependency_type":"blocks"},{"id":"bw-90","title":"dependency-related issue","issue_type":"spike","priority":3,"status":"blocked","dependency_type":"related"}],"related":[{"id":"bw-91","title":"top-level related issue","issue_type":"task","priority":2,"status":"open"}]}
+			]`)},
+		},
+		argsKey([]string{"show", "bw-1", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"parent issue","description":"detail","status":"open","issue_type":"epic","priority":1,"created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-04T10:00:00Z","dependents":[{"id":"bw-42","title":"child issue","issue_type":"task","priority":2,"status":"open","dependency_type":"parent-child"},{"id":"bw-43","title":"sibling issue","issue_type":"task","priority":3,"status":"in_progress","dependency_type":"parent-child"},{"id":"bw-99","title":"non-child dependent","issue_type":"task","priority":3,"status":"open","dependency_type":"blocks"}]}
+			]`)},
+		},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-42"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.ParentGroupBrowser.Parent.ID != "bw-1" {
+		t.Fatalf("expected parent-group parent bw-1, got %#v", got.ParentGroupBrowser.Parent)
+	}
+
+	if len(got.ParentGroupBrowser.Children) != 2 {
+		t.Fatalf("expected two parent-child siblings, got %#v", got.ParentGroupBrowser.Children)
+	}
+
+	if got.ParentGroupBrowser.Children[0].ID != "bw-42" || got.ParentGroupBrowser.Children[1].ID != "bw-43" {
+		t.Fatalf("unexpected parent-child sibling mapping: %#v", got.ParentGroupBrowser.Children)
+	}
+
+	if len(got.BlockedBy) != 1 || got.BlockedBy[0].ID != "bw-50" {
+		t.Fatalf("expected only non-parent blockers in blocked-by, got %#v", got.BlockedBy)
+	}
+
+	if len(got.Related) != 2 || got.Related[0].ID != "bw-91" || got.Related[1].ID != "bw-90" {
+		t.Fatalf("expected generic related refs to remain separate from parent-group, got %#v", got.Related)
+	}
+
+	if len(exec.calls) != 2 {
+		t.Fatalf("expected child and parent show calls, got %d", len(exec.calls))
+	}
+}
+
+func TestGatewayShowIssueReturnsEmptyParentGroupBrowserContextWhenNoParent(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-77", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-77","title":"no parent issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-50","title":"blocker issue","dependency_type":"blocks"}]}
+			]`)},
+		},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-77"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.ParentGroupBrowser.Parent.ID != "" || len(got.ParentGroupBrowser.Children) != 0 {
+		t.Fatalf("expected empty parent-group browser context, got %#v", got.ParentGroupBrowser)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("expected no parent lookup when issue has no parent-child dependency, got %d calls", len(exec.calls))
+	}
 }
 
 func TestGatewayShowIssuePrefersAssigneeOverOwner(t *testing.T) {
