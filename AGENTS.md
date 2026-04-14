@@ -4,26 +4,29 @@ A terminal UI for browsing beads issues, creating and updating work, and launchi
 
 **Tech Stack**: Go, Bubble Tea, `bd` CLI (beads issue tracker)
 
+## Project Overview
+
+Read `docs/OVERVIEW.md` for the runtime flow, package map, architectural boundaries, and supporting doc index.
+
 ## Coding
 
 Read `docs/CODING.md` for build commands, package layout, and core architectural rules.
 
-## Landing the Plane (Session Completion)
+## Testing
 
-**When ending a work session**, complete ALL steps:
+Read `docs/TESTING.md` for test policy, verification depth, fixtures, and focused commands.
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Verify** - All changes committed AND pushed
+Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
 
-**CRITICAL**: Work is NOT complete until `git push` succeeds.
+## Releases
+
+Read `docs/RELEASING.md` for the tag-triggered GitHub release flow backed by `.github/workflows/release.yml` and `.goreleaser.yaml`.
+
+## Change Workflow
+
+Read `docs/CHANGE-WORKFLOW.md` for tracker usage, quality gates, session completion, and push requirements.
+
+Work is not done until `bd dolt push`, `git push`, and a final `git status` show the tracker and branch are fully landed.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
@@ -44,30 +47,4 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->

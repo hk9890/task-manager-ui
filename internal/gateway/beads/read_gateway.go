@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -95,18 +94,13 @@ func (g *Gateway) BlockedIssues(ctx context.Context, query domain.BlockedIssuesQ
 
 	views := make([]domain.BlockedIssueView, 0, len(items))
 	for _, item := range items {
-		summary, mapErr := issueSummaryFromMap(operationBlockedIssues, item)
+		summary, mapErr := item.toIssueSummary(operationBlockedIssues)
 		if mapErr != nil {
 			return nil, mapErr
 		}
 
-		blockedByIDs, listErr := stringListFromMap(item, "blocked_by")
-		if listErr != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationBlockedIssues, "failed to decode command JSON output", listErr)
-		}
-
-		blockedBy := make([]domain.IssueReference, 0, len(blockedByIDs))
-		for _, id := range blockedByIDs {
+		blockedBy := make([]domain.IssueReference, 0, len(item.BlockedBy))
+		for _, id := range item.BlockedBy {
 			blockedBy = append(blockedBy, domain.IssueReference{ID: id})
 		}
 
@@ -135,54 +129,39 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 	}
 
 	primary := items[0]
-	summary, err := issueSummaryFromMap(operationShowIssue, primary)
+	summary, err := primary.toIssueSummary(operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
 
-	description, err := stringFromMap(primary, "description")
+	description, err := requiredString(primary.Description, "description")
 	if err != nil {
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
 	}
 
-	creator, err := optionalStringFromMap(primary, "owner")
+	closedAt, err := optionalTimestamp(primary.ClosedAt, "closed_at")
 	if err != nil {
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
 	}
 
-	notes, err := optionalStringFromMap(primary, "notes")
-	if err != nil {
-		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
-	}
-
-	closedAt, err := optionalTimestampFromMap(primary, "closed_at")
-	if err != nil {
-		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
-	}
-
-	closeReason, err := optionalStringFromMap(primary, "close_reason")
-	if err != nil {
-		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
-	}
-
-	blockedBy, relatedFromDependencies, parentIssue, hasParent, err := dependencyReferencesFromMap(primary, operationShowIssue)
+	blockedBy, relatedFromDependencies, parentIssue, hasParent, err := dependencyReferencesFromPayload(primary.Dependencies, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
 
-	blocks, err := referencesFromMapArray(primary, "dependents", operationShowIssue)
+	blocks, err := referencesFromPayload(primary.Dependents, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
 
-	related, err := referencesFromMapArray(primary, "related", operationShowIssue)
+	related, err := referencesFromPayload(primary.Related, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
 
 	related = mergeUniqueReferences(related, relatedFromDependencies)
 
-	comments, err := commentsFromMapArray(primary, "comments", operationShowIssue)
+	comments, err := commentsFromPayload(primary.Comments, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
@@ -202,11 +181,11 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 
 	return domain.IssueDetail{
 		Summary:            summary,
-		Creator:            creator,
+		Creator:            optionalString(primary.Owner),
 		Description:        description,
-		Notes:              notes,
+		Notes:              optionalString(primary.Notes),
 		ClosedAt:           closedAt,
-		CloseReason:        closeReason,
+		CloseReason:        optionalString(primary.CloseReason),
 		ParentGroupBrowser: parentGroupContext,
 		BlockedBy:          blockedBy,
 		Blocks:             blocks,
@@ -332,7 +311,7 @@ func (g *Gateway) searchIssuesFromBlocked(ctx context.Context, query domain.Sear
 	return g.searchIssuePageFromRecords(items, query)
 }
 
-func (g *Gateway) searchIssuePageFromRecords(items []map[string]any, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+func (g *Gateway) searchIssuePageFromRecords(items []bdIssuePayload, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	summaries, err := mapIssueSummaries(operationSearchIssues, items, 0, 0)
 	if err != nil {
 		return domain.SearchResultPage{}, err
@@ -458,35 +437,20 @@ func toSearchResults(issues []domain.IssueSummary) []domain.SearchResult {
 
 // StatusCatalog returns available issue statuses using `bd statuses --json`.
 func (g *Gateway) StatusCatalog(ctx context.Context) ([]domain.StatusOption, error) {
-	payload, err := RunJSON[map[string]any](ctx, g.runner, CommandRequest{Operation: operationStatuses, Args: []string{"statuses", "--json"}})
+	payload, err := RunJSON[bdStatusCatalogPayload](ctx, g.runner, CommandRequest{Operation: operationStatuses, Args: []string{"statuses", "--json"}})
 	if err != nil {
 		return nil, err
 	}
 
-	builtIn, err := mapArrayFromMap(payload, "built_in_statuses")
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationStatuses, "failed to decode command JSON output", err)
-	}
-
-	custom, err := mapArrayFromMap(payload, "custom_statuses")
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationStatuses, "failed to decode command JSON output", err)
-	}
-
-	all := append(builtIn, custom...)
+	all := append(payload.BuiltInStatuses, payload.CustomStatuses...)
 	out := make([]domain.StatusOption, 0, len(all))
 	for _, status := range all {
-		name, err := stringFromMap(status, "name")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationStatuses, "failed to decode command JSON output", err)
+		mapped, mapErr := status.toStatusOption(operationStatuses)
+		if mapErr != nil {
+			return nil, mapErr
 		}
 
-		description, err := stringFromMap(status, "description")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationStatuses, "failed to decode command JSON output", err)
-		}
-
-		out = append(out, domain.StatusOption{Name: name, Description: description})
+		out = append(out, mapped)
 	}
 
 	return out, nil
@@ -494,35 +458,20 @@ func (g *Gateway) StatusCatalog(ctx context.Context) ([]domain.StatusOption, err
 
 // TypeCatalog returns available issue types using `bd types --json`.
 func (g *Gateway) TypeCatalog(ctx context.Context) ([]domain.TypeOption, error) {
-	payload, err := RunJSON[map[string]any](ctx, g.runner, CommandRequest{Operation: operationTypes, Args: []string{"types", "--json"}})
+	payload, err := RunJSON[bdTypeCatalogPayload](ctx, g.runner, CommandRequest{Operation: operationTypes, Args: []string{"types", "--json"}})
 	if err != nil {
 		return nil, err
 	}
 
-	core, err := mapArrayFromMap(payload, "core_types")
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationTypes, "failed to decode command JSON output", err)
-	}
-
-	custom, err := mapArrayFromMap(payload, "custom_types")
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationTypes, "failed to decode command JSON output", err)
-	}
-
-	all := append(core, custom...)
+	all := append(payload.CoreTypes, payload.CustomTypes...)
 	out := make([]domain.TypeOption, 0, len(all))
 	for _, typ := range all {
-		name, err := stringFromMap(typ, "name")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationTypes, "failed to decode command JSON output", err)
+		mapped, mapErr := typ.toTypeOption(operationTypes)
+		if mapErr != nil {
+			return nil, mapErr
 		}
 
-		description, err := stringFromMap(typ, "description")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationTypes, "failed to decode command JSON output", err)
-		}
-
-		out = append(out, domain.TypeOption{Name: name, Description: description})
+		out = append(out, mapped)
 	}
 
 	return out, nil
@@ -530,7 +479,7 @@ func (g *Gateway) TypeCatalog(ctx context.Context) ([]domain.TypeOption, error) 
 
 // LabelCatalog returns available labels using `bd label list-all --json`.
 func (g *Gateway) LabelCatalog(ctx context.Context) ([]domain.LabelOption, error) {
-	labels, err := RunJSON[[]string](ctx, g.runner, CommandRequest{Operation: operationLabels, Args: []string{"label", "list-all", "--json"}})
+	labels, err := RunJSON[bdLabelListAllPayload](ctx, g.runner, CommandRequest{Operation: operationLabels, Args: []string{"label", "list-all", "--json"}})
 	if err != nil {
 		return nil, err
 	}
@@ -547,14 +496,14 @@ func (g *Gateway) LabelCatalog(ctx context.Context) ([]domain.LabelOption, error
 	return out, nil
 }
 
-func (g *Gateway) decodeIssueArray(ctx context.Context, operation string, args []string) ([]map[string]any, error) {
-	return RunJSON[[]map[string]any](ctx, g.runner, CommandRequest{Operation: operation, Args: args})
+func (g *Gateway) decodeIssueArray(ctx context.Context, operation string, args []string) ([]bdIssuePayload, error) {
+	return RunJSON[[]bdIssuePayload](ctx, g.runner, CommandRequest{Operation: operation, Args: args})
 }
 
-func mapIssueSummaries(operation string, records []map[string]any, offset int, limit int) ([]domain.IssueSummary, error) {
+func mapIssueSummaries(operation string, records []bdIssuePayload, offset int, limit int) ([]domain.IssueSummary, error) {
 	out := make([]domain.IssueSummary, 0, len(records))
 	for _, record := range records {
-		summary, err := issueSummaryFromMap(operation, record)
+		summary, err := record.toIssueSummary(operation)
 		if err != nil {
 			return nil, err
 		}
@@ -565,81 +514,10 @@ func mapIssueSummaries(operation string, records []map[string]any, offset int, l
 	return paginate(out, offset, limit), nil
 }
 
-func issueSummaryFromMap(operation string, record map[string]any) (domain.IssueSummary, error) {
-	id, err := stringFromMap(record, "id")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	title, err := stringFromMap(record, "title")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	status, err := stringFromMap(record, "status")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	issueType, err := stringFromMap(record, "issue_type")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	priority, err := intFromMap(record, "priority")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	assignee, err := optionalStringFromMap(record, "assignee")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	if assignee == "" {
-		assignee, err = optionalStringFromMap(record, "owner")
-		if err != nil {
-			return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-		}
-	}
-
-	labels, err := stringListFromMap(record, "labels")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	createdAt, err := timestampFromMap(record, "created_at")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	updatedAt, err := timestampFromMap(record, "updated_at")
-	if err != nil {
-		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	return domain.IssueSummary{
-		ID:        id,
-		Title:     title,
-		Status:    status,
-		Type:      issueType,
-		Priority:  priority,
-		Assignee:  assignee,
-		Labels:    labels,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
-	}, nil
-}
-
-func referencesFromMapArray(parent map[string]any, key string, operation string) ([]domain.IssueReference, error) {
-	records, err := mapArrayFromMap(parent, key)
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
+func referencesFromPayload(records []bdIssueRefPayload, operation string) ([]domain.IssueReference, error) {
 	out := make([]domain.IssueReference, 0, len(records))
 	for _, record := range records {
-		ref, err := referenceFromMap(record, operation)
+		ref, err := record.toIssueReference(operation)
 		if err != nil {
 			return nil, err
 		}
@@ -650,27 +528,18 @@ func referencesFromMapArray(parent map[string]any, key string, operation string)
 	return out, nil
 }
 
-func dependencyReferencesFromMap(parent map[string]any, operation string) ([]domain.IssueReference, []domain.IssueReference, domain.IssueReference, bool, error) {
-	records, err := mapArrayFromMap(parent, "dependencies")
-	if err != nil {
-		return nil, nil, domain.IssueReference{}, false, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
+func dependencyReferencesFromPayload(records []bdIssueRefPayload, operation string) ([]domain.IssueReference, []domain.IssueReference, domain.IssueReference, bool, error) {
 	blockedBy := make([]domain.IssueReference, 0, len(records))
 	related := make([]domain.IssueReference, 0)
 	parentIssue := domain.IssueReference{}
 	hasParent := false
 	for _, record := range records {
-		ref, err := referenceFromMap(record, operation)
+		ref, err := record.toIssueReference(operation)
 		if err != nil {
 			return nil, nil, domain.IssueReference{}, false, err
 		}
 
-		dependencyType, err := optionalStringFromMap(record, "dependency_type")
-		if err != nil {
-			return nil, nil, domain.IssueReference{}, false, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-		}
-
+		dependencyType := optionalString(record.DependencyType)
 		if dependencyType == "related" {
 			related = append(related, ref)
 			continue
@@ -705,23 +574,14 @@ func (g *Gateway) parentChildSiblings(ctx context.Context, parentID string) ([]d
 		return nil, nil
 	}
 
-	dependents, err := mapArrayFromMap(items[0], "dependents")
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
-	}
-
+	dependents := items[0].Dependents
 	out := make([]domain.IssueReference, 0, len(dependents))
 	for _, dependent := range dependents {
-		dependencyType, err := optionalStringFromMap(dependent, "dependency_type")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
-		}
-
-		if dependencyType != "parent-child" {
+		if optionalString(dependent.DependencyType) != "parent-child" {
 			continue
 		}
 
-		ref, err := referenceFromMap(dependent, operationShowIssue)
+		ref, err := dependent.toIssueReference(operationShowIssue)
 		if err != nil {
 			return nil, err
 		}
@@ -730,35 +590,6 @@ func (g *Gateway) parentChildSiblings(ctx context.Context, parentID string) ([]d
 	}
 
 	return out, nil
-}
-
-func referenceFromMap(record map[string]any, operation string) (domain.IssueReference, error) {
-	id, err := stringFromMap(record, "id")
-	if err != nil {
-		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	title, err := stringFromMap(record, "title")
-	if err != nil {
-		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	issueType, err := optionalStringFromMap(record, "issue_type")
-	if err != nil {
-		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	priority, err := optionalIntFromMap(record, "priority")
-	if err != nil {
-		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	status, err := optionalStringFromMap(record, "status")
-	if err != nil {
-		return domain.IssueReference{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	return domain.IssueReference{ID: id, Title: title, Type: issueType, Priority: priority, Status: status}, nil
 }
 
 func mergeUniqueReferences(groups ...[]domain.IssueReference) []domain.IssueReference {
@@ -778,197 +609,18 @@ func mergeUniqueReferences(groups ...[]domain.IssueReference) []domain.IssueRefe
 	return out
 }
 
-func optionalIntFromMap(record map[string]any, key string) (int, error) {
-	v, ok := record[key]
-	if !ok || v == nil {
-		return 0, nil
-	}
-
-	number, ok := v.(float64)
-	if !ok {
-		return 0, fmt.Errorf("field %q is not a number", key)
-	}
-
-	return int(number), nil
-}
-
-func commentsFromMapArray(parent map[string]any, key string, operation string) ([]domain.IssueComment, error) {
-	records, err := mapArrayFromMap(parent, key)
-	if err != nil {
-		return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
+func commentsFromPayload(records []bdIssueCommentPayload, operation string) ([]domain.IssueComment, error) {
 	out := make([]domain.IssueComment, 0, len(records))
 	for _, record := range records {
-		id, err := stringFromMap(record, "id")
+		comment, err := record.toIssueComment(operation)
 		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+			return nil, err
 		}
 
-		author, err := optionalStringFromMap(record, "author")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-		}
-
-		body, err := optionalStringFromMap(record, "text")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-		}
-
-		createdAt, err := timestampFromMap(record, "created_at")
-		if err != nil {
-			return nil, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-		}
-
-		out = append(out, domain.IssueComment{
-			ID:        id,
-			Author:    author,
-			Body:      body,
-			CreatedAt: createdAt,
-		})
+		out = append(out, comment)
 	}
 
 	return out, nil
-}
-
-func stringFromMap(record map[string]any, key string) (string, error) {
-	v, ok := record[key]
-	if !ok {
-		return "", fmt.Errorf("missing field %q", key)
-	}
-
-	if v == nil {
-		return "", nil
-	}
-
-	value, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("field %q is not a string", key)
-	}
-
-	return value, nil
-}
-
-func optionalStringFromMap(record map[string]any, key string) (string, error) {
-	v, ok := record[key]
-	if !ok || v == nil {
-		return "", nil
-	}
-
-	value, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("field %q is not a string", key)
-	}
-
-	return value, nil
-}
-
-func intFromMap(record map[string]any, key string) (int, error) {
-	v, ok := record[key]
-	if !ok {
-		return 0, fmt.Errorf("missing field %q", key)
-	}
-
-	number, ok := v.(float64)
-	if !ok {
-		return 0, fmt.Errorf("field %q is not a number", key)
-	}
-
-	return int(number), nil
-}
-
-func stringListFromMap(record map[string]any, key string) ([]string, error) {
-	v, ok := record[key]
-	if !ok || v == nil {
-		return nil, nil
-	}
-
-	rawItems, ok := v.([]any)
-	if !ok {
-		return nil, fmt.Errorf("field %q is not an array", key)
-	}
-
-	out := make([]string, 0, len(rawItems))
-	for i, raw := range rawItems {
-		text, ok := raw.(string)
-		if !ok {
-			return nil, fmt.Errorf("field %q element %d is not a string", key, i)
-		}
-
-		out = append(out, text)
-	}
-
-	return out, nil
-}
-
-func mapArrayFromMap(record map[string]any, key string) ([]map[string]any, error) {
-	v, ok := record[key]
-	if !ok || v == nil {
-		return nil, nil
-	}
-
-	rawItems, ok := v.([]any)
-	if !ok {
-		return nil, fmt.Errorf("field %q is not an array", key)
-	}
-
-	out := make([]map[string]any, 0, len(rawItems))
-	for i, raw := range rawItems {
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("field %q element %d is not an object", key, i)
-		}
-
-		out = append(out, m)
-	}
-
-	return out, nil
-}
-
-func timestampFromMap(record map[string]any, key string) (time.Time, error) {
-	v, ok := record[key]
-	if !ok {
-		return time.Time{}, fmt.Errorf("missing field %q", key)
-	}
-
-	text, ok := v.(string)
-	if !ok {
-		return time.Time{}, fmt.Errorf("field %q is not a string", key)
-	}
-
-	if strings.TrimSpace(text) == "" {
-		return time.Time{}, nil
-	}
-
-	parsed, err := time.Parse(time.RFC3339, text)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("field %q has invalid timestamp: %w", key, err)
-	}
-
-	return parsed, nil
-}
-
-func optionalTimestampFromMap(record map[string]any, key string) (time.Time, error) {
-	v, ok := record[key]
-	if !ok || v == nil {
-		return time.Time{}, nil
-	}
-
-	text, ok := v.(string)
-	if !ok {
-		return time.Time{}, fmt.Errorf("field %q is not a string", key)
-	}
-
-	if strings.TrimSpace(text) == "" {
-		return time.Time{}, nil
-	}
-
-	parsed, err := time.Parse(time.RFC3339, text)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("field %q has invalid timestamp: %w", key, err)
-	}
-
-	return parsed, nil
 }
 
 func mapListSortField(field domain.SortField) string {

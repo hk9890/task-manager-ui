@@ -2,8 +2,6 @@ package mode
 
 import (
 	"github.com/hk9890/beads-workbench/internal/domain"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ID identifies a top-level workflow hosted by the root shell.
@@ -40,14 +38,3 @@ const (
 	ActionOpenDetail Action = "open_detail"
 	ActionLaunch     Action = "launch"
 )
-
-// Controller is the minimal contract feature modes should satisfy.
-//
-// Concrete mode implementations will be introduced in later tasks.
-type Controller interface {
-	ID() ID
-	Init() tea.Cmd
-	Update(tea.Msg) (Controller, tea.Cmd)
-	View() string
-	SetSize(width, height int)
-}

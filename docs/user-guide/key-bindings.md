@@ -10,7 +10,11 @@ overridden through runtime config.
 
 - `ctrl+q` — quit
 - `?` — toggle help
-- `ctrl+@` — toggle search mode
+- `ctrl+space` (`ctrl+@`) — toggle search mode
+- `f13` — switch to board mode
+- `f14` — switch to search mode
+- `f15` — cycle to the next mode
+- `f16` — cycle to the previous mode
 - `3` — switch to detail mode
 - `esc` — return from detail/search to browse, or dismiss toast state
 - `r` — reload detail mode from the gateway (detail mode only)
@@ -45,8 +49,8 @@ Typing while the query field is focused updates the search query directly.
 - `enter` — open selected result in detail mode
 - `tab`, `ctrl+j` — cycle focus to next search pane
 - `shift+tab`, `ctrl+k` — cycle focus to previous search pane
-- `backspace` — delete previous query character when query is focused
-- `ctrl+u` — clear query when query is focused
+- `backspace` — delete previous query character when query is focused (built-in behavior, not part of the configurable search keymap)
+- `ctrl+u` — clear query when query is focused (built-in behavior, not part of the configurable search keymap)
 
 ## Detail Mode
 
@@ -72,6 +76,8 @@ Typing while the query field is focused updates the search query directly.
 
 - Keybindings are context-specific. The same key may do different things in
   shell, board, search, detail, and modal contexts.
+- `ctrl+space` may be reported by some terminals as `ctrl+@`; both refer to the
+  same default toggle-search binding.
 - Search mode intentionally captures normal text entry while the query field is
   focused.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.

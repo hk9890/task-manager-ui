@@ -53,8 +53,6 @@ type Model struct {
 	selectedRow   map[int]int
 }
 
-var _ mode.Controller = (*Model)(nil)
-
 // NewModel creates a board mode controller.
 func NewModel(gateway beads.BeadsGateway, provider dashboard.Provider, resolved ...config.ResolvedKeyBindings) *Model {
 	if provider == nil {
@@ -81,11 +79,6 @@ func NewModel(gateway beads.BeadsGateway, provider dashboard.Provider, resolved 
 	}
 }
 
-// ID returns board mode identifier.
-func (m *Model) ID() mode.ID {
-	return mode.Board
-}
-
 // Init loads built-in dashboards then section data from gateway.
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
@@ -93,25 +86,25 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update processes board-specific messages and keybindings.
-func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		return m, nil
+		return nil
 	case dashboardsLoadedMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.loadError = msg.err.Error()
 			m.sections = nil
 			m.pendingLoads = 0
-			return m, nil
+			return nil
 		}
 
-		if len(msg.dashboards) == 0 {
-			m.loadError = "no dashboards available"
+		if err := dashboard.ValidateDefinitions(msg.dashboards); err != nil {
+			m.loadError = err.Error()
 			m.sections = nil
 			m.pendingLoads = 0
-			return m, nil
+			return nil
 		}
 
 		def := msg.dashboards[0]
@@ -126,17 +119,17 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 		}
 		m.pendingLoads = len(def.Sections)
 		if m.pendingLoads == 0 {
-			return m, nil
+			return nil
 		}
 
 		cmds := make([]tea.Cmd, 0, len(def.Sections))
 		for i, section := range def.Sections {
 			cmds = append(cmds, loadSectionCmd(m.gateway, i, section.Query))
 		}
-		return m, tea.Batch(cmds...)
+		return tea.Batch(cmds...)
 	case sectionLoadedMsg:
 		if msg.sectionIndex < 0 || msg.sectionIndex >= len(m.sections) {
-			return m, nil
+			return nil
 		}
 
 		section := m.sections[msg.sectionIndex]
@@ -155,9 +148,9 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 
 		if m.pendingLoads == 0 {
 			m.normalizeFocus()
-			return m, m.selectionChangedCmd()
+			return m.selectionChangedCmd()
 		}
-		return m, nil
+		return nil
 	case tea.KeyMsg:
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveLeft, msg):
@@ -167,9 +160,9 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 			}
 			m.normalizeSelectionForFocusedColumn()
 			if m.focusedColumn != previous {
-				return m, m.selectionChangedCmd()
+				return m.selectionChangedCmd()
 			}
-			return m, nil
+			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveRight, msg):
 			previous := m.focusedColumn
 			if m.focusedColumn < len(m.sections)-1 {
@@ -177,39 +170,39 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 			}
 			m.normalizeSelectionForFocusedColumn()
 			if m.focusedColumn != previous {
-				return m, m.selectionChangedCmd()
+				return m.selectionChangedCmd()
 			}
-			return m, nil
+			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 			previous := m.selectedRow[m.focusedColumn]
 			m.moveRow(-1)
 			if m.selectedRow[m.focusedColumn] != previous {
-				return m, m.selectionChangedCmd()
+				return m.selectionChangedCmd()
 			}
-			return m, nil
+			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
 			previous := m.selectedRow[m.focusedColumn]
 			m.moveRow(1)
 			if m.selectedRow[m.focusedColumn] != previous {
-				return m, m.selectionChangedCmd()
+				return m.selectionChangedCmd()
 			}
-			return m, nil
+			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
 			if m.currentSelection() == nil {
-				return m, nil
+				return nil
 			}
-			return m, func() tea.Msg {
+			return func() tea.Msg {
 				return mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionOpenDetail}
 			}
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			m.loading = true
 			m.loadError = ""
 			m.pendingLoads = 0
-			return m, loadDashboardsCmd(m.provider)
+			return loadDashboardsCmd(m.provider)
 		}
 	}
 
-	return m, nil
+	return nil
 }
 
 // View renders the standalone board dashboard.

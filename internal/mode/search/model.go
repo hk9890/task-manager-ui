@@ -38,8 +38,6 @@ type Model struct {
 	typing      bool
 }
 
-var _ mode.Controller = (*Model)(nil)
-
 // NewModel creates a search mode controller.
 func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings) *Model {
 	keys := config.ResolvedKeyBindings{}
@@ -59,11 +57,6 @@ func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings
 	}
 }
 
-// ID returns search mode identifier.
-func (m *Model) ID() mode.ID {
-	return mode.Search
-}
-
 // Init loads default all-issues search results for empty query.
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
@@ -73,11 +66,11 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update processes search-specific messages and keybindings.
-func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
-		return m, nil
+		return nil
 	case searchLoadedMsg:
 		m.loading = false
 		m.typing = false
@@ -85,30 +78,30 @@ func (m *Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 			m.errText = msg.err.Error()
 			m.results = nil
 			m.selectedRow = 0
-			return m, m.selectionChangedCmd()
+			return m.selectionChangedCmd()
 		}
 
 		m.errText = ""
 		m.results = msg.issues
 		m.normalizeSelection()
-		return m, m.selectionChangedCmd()
+		return m.selectionChangedCmd()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyEsc:
-		return m, nil
+		return nil
 	case tea.KeyBackspace:
 		if m.focus != uisearch.FocusQuery {
-			return m, nil
+			return nil
 		}
 		if m.query == "" {
-			return m, nil
+			return nil
 		}
 		runes := []rune(m.query)
 		m.query = string(runes[:len(runes)-1])
@@ -116,10 +109,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
 		return m.triggerSearch()
 	case tea.KeyCtrlU:
 		if m.focus != uisearch.FocusQuery {
-			return m, nil
+			return nil
 		}
 		if m.query == "" {
-			return m, nil
+			return nil
 		}
 		m.query = ""
 		m.typing = false
@@ -133,55 +126,58 @@ func (m *Model) handleKey(msg tea.KeyMsg) (mode.Controller, tea.Cmd) {
 		return m.triggerSearch()
 	case m.keys.Match(config.SearchContext, config.SearchActionOpenDetail, msg):
 		if m.focus == uisearch.FocusResults && m.currentSelection() != nil {
-			return m, func() tea.Msg {
+			return func() tea.Msg {
 				return mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionOpenDetail}
 			}
 		}
-		return m, nil
+		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveUp, msg):
 		if m.focus == uisearch.FocusResults && m.moveSelection(-1) {
-			return m, m.selectionChangedCmd()
+			return m.selectionChangedCmd()
 		}
-		return m, nil
+		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveDown, msg):
 		if m.focus == uisearch.FocusResults && m.moveSelection(1) {
-			return m, m.selectionChangedCmd()
+			return m.selectionChangedCmd()
 		}
-		return m, nil
+		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionFocusLeft, msg):
-		return m.moveFocusLeft(), nil
+		m.moveFocusLeft()
+		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionFocusRight, msg):
-		return m.moveFocusRight(), nil
+		m.moveFocusRight()
+		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionCycleFocusNext, msg):
-		return m.cycleFocus(1), nil
+		m.cycleFocus(1)
+		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionCycleFocusPrev, msg):
-		return m.cycleFocus(-1), nil
+		m.cycleFocus(-1)
+		return nil
 	case msg.Type == tea.KeyRunes:
 		switch {
 		case m.keys.Match(config.SearchContext, config.SearchActionFocusQuery, msg):
 			m.focus = uisearch.FocusQuery
-			return m, nil
+			return nil
 		case m.keys.Match(config.SearchContext, config.SearchActionReload, msg):
 			return m.triggerSearch()
 		}
 
-		return m, nil
+		return nil
 	default:
-		return m, nil
+		return nil
 	}
 }
 
-func (m *Model) moveFocusLeft() mode.Controller {
+func (m *Model) moveFocusLeft() {
 	switch m.focus {
 	case uisearch.FocusPreview:
 		m.focus = uisearch.FocusResults
 	case uisearch.FocusResults:
 		m.focus = uisearch.FocusQuery
 	}
-	return m
 }
 
-func (m *Model) moveFocusRight() mode.Controller {
+func (m *Model) moveFocusRight() {
 	switch m.focus {
 	case uisearch.FocusQuery:
 		if len(m.results) > 0 {
@@ -190,10 +186,9 @@ func (m *Model) moveFocusRight() mode.Controller {
 	case uisearch.FocusResults:
 		m.focus = uisearch.FocusPreview
 	}
-	return m
 }
 
-func (m *Model) cycleFocus(delta int) mode.Controller {
+func (m *Model) cycleFocus(delta int) {
 	order := []uisearch.FocusPane{uisearch.FocusQuery, uisearch.FocusResults, uisearch.FocusPreview}
 	idx := 0
 	for i, focus := range order {
@@ -211,13 +206,12 @@ func (m *Model) cycleFocus(delta int) mode.Controller {
 	}
 	if len(m.results) == 0 && order[idx] != uisearch.FocusQuery {
 		m.focus = uisearch.FocusQuery
-		return m
+		return
 	}
 	m.focus = order[idx]
-	return m
 }
 
-func (m *Model) triggerSearch() (mode.Controller, tea.Cmd) {
+func (m *Model) triggerSearch() tea.Cmd {
 	query := domain.SearchIssuesQuery{
 		Text:   strings.TrimSpace(m.query),
 		Limit:  defaultSearchLimit,
@@ -225,7 +219,7 @@ func (m *Model) triggerSearch() (mode.Controller, tea.Cmd) {
 	}
 	m.loading = true
 	m.errText = ""
-	return m, loadSearchCmd(m.gateway, query)
+	return loadSearchCmd(m.gateway, query)
 }
 
 // View renders the standalone search surface.

@@ -82,27 +82,23 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 		t.Fatalf("expected initial search focus, got %v", m.focus)
 	}
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected right to move focus to results, got %v", m.focus)
 	}
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	m = next.(*Model)
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m = applyMessages(m, drainCmd(cmd))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected j to move selection to bw-2, got %#v", got)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	if m.focus != uisearch.FocusPreview {
 		t.Fatalf("expected right to move focus to preview, got %v", m.focus)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected left to move focus back to results, got %v", m.focus)
 	}
@@ -148,8 +144,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 
 	t.Run("error state", func(t *testing.T) {
 		m := NewModel(newSearchFakeGateway())
-		next, _ := m.Update(searchLoadedMsg{err: errors.New("boom")})
-		m = next.(*Model)
+		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View()
 		if !strings.Contains(view, "Search failed") || !strings.Contains(view, "boom") {
@@ -160,8 +155,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Run("no results state", func(t *testing.T) {
 		m := NewModel(newSearchFakeGateway())
 		m.query = "xyz"
-		next, cmd := m.Update(searchLoadedMsg{issues: nil})
-		m = next.(*Model)
+		cmd := m.Update(searchLoadedMsg{issues: nil})
 		if cmd != nil {
 			_ = cmd()
 		}
@@ -177,9 +171,8 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 		m := initModel(gateway)
 		pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 
-		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-		m = next.(*Model)
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		if cmd == nil {
 			t.Fatalf("expected action request command on enter")
 		}
@@ -200,14 +193,12 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 		t.Fatalf("expected query focus after typing, got %v", m.focus)
 	}
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected tab to cycle query->results, got %v", m.focus)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focus != uisearch.FocusPreview {
 		t.Fatalf("expected tab to cycle results->preview, got %v", m.focus)
 	}
@@ -319,27 +310,23 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	m := testui.InitializeController(NewModel(gateway, keys)).(*Model)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected configured next-focus binding to reach results, got %v", m.focus)
 	}
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
-	m = next.(*Model)
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
 	m = applyMessages(m, drainCmd(cmd))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected configured move-down binding to select bw-2, got %#v", got)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	if m.focus != uisearch.FocusQuery {
 		t.Fatalf("expected configured focus-left binding to return to query, got %v", m.focus)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
 	if m.focus != uisearch.FocusQuery {
 		t.Fatalf("expected configured focus-query binding to keep query focus, got %v", m.focus)
 	}
@@ -351,20 +338,17 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 		t.Fatal("expected plain text rune to be captured while query focused")
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	m = next.(*Model)
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 	if m.focus != uisearch.FocusPreview {
 		t.Fatalf("expected configured focus-right binding to reach preview, got %v", m.focus)
 	}
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	m = next.(*Model)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected configured focus-left binding to return to results, got %v", m.focus)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
 	if cmd == nil {
 		t.Fatal("expected configured open-detail binding to emit action request")
 	}
@@ -390,11 +374,9 @@ func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
 
 func applyMessages(m *Model, msgs []tea.Msg) *Model {
 	for _, msg := range msgs {
-		next, cmd := m.Update(msg)
-		m = next.(*Model)
+		cmd := m.Update(msg)
 		for _, follow := range drainCmd(cmd) {
-			next, _ = m.Update(follow)
-			m = next.(*Model)
+			_ = m.Update(follow)
 		}
 	}
 	return m

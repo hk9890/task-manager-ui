@@ -115,8 +115,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 	m.loading = false
 	m.SetSize(100, 24)
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(*Model)
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving right")
 	}
@@ -129,8 +128,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		t.Fatalf("expected selection bw-7 after moving right, got %#v", selChanged.Selection)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = next.(*Model)
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving down")
 	}
@@ -143,8 +141,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		t.Fatalf("expected selection bw-8 after moving down, got %#v", selChanged.Selection)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(*Model)
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatalf("expected action request command on enter")
 	}
@@ -203,14 +200,12 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 	m.loading = false
 	m.SetSize(100, 24)
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	m = next.(*Model)
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 	if cmd == nil {
 		t.Fatal("expected selection change after configured move-right key")
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
-	m = next.(*Model)
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	if cmd == nil {
 		t.Fatal("expected selection change after configured move-down key")
 	}
@@ -220,8 +215,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("expected configured move-down to select bw-8, got %#v", msg)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
-	m = next.(*Model)
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
 	if cmd == nil {
 		t.Fatal("expected action request from configured open key")
 	}
@@ -229,8 +223,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("expected open detail action request, got %#v", cmd())
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
-	m = next.(*Model)
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
 	if cmd == nil || !m.loading {
 		t.Fatal("expected configured reload key to trigger dashboard reload")
 	}
@@ -258,8 +251,7 @@ func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t
 	m.selectedRow[1] = 0
 	m.selectedRow[2] = 0
 
-	next, _ := m.Update(sectionLoadedMsg{sectionIndex: 2, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}}})
-	m = next.(*Model)
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 2, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}}})
 
 	if m.focusedColumn != 0 {
 		t.Fatalf("expected startup focus to remain on first dashboard column while loads are pending, got %d", m.focusedColumn)
@@ -271,8 +263,7 @@ func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t
 		t.Fatalf("expected render to avoid mid-load focus jumps to later column, got:\n%s", m.View())
 	}
 
-	next, _ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}})
-	m = next.(*Model)
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}})
 	if m.focusedColumn != 0 {
 		t.Fatalf("expected startup focus to stay deterministic until all section loads complete, got %d", m.focusedColumn)
 	}
@@ -280,8 +271,7 @@ func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t
 		t.Fatalf("expected no row selection before all section loads complete, got:\n%s", m.View())
 	}
 
-	next, _ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-0", Title: "Blocked first", Priority: 0, Status: "blocked", Type: "bug"}}})
-	m = next.(*Model)
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-0", Title: "Blocked first", Priority: 0, Status: "blocked", Type: "bug"}}})
 
 	if m.focusedColumn != 0 {
 		t.Fatalf("expected final focus to settle on earliest non-empty dashboard column, got %d", m.focusedColumn)
@@ -292,6 +282,89 @@ func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t
 	}
 	if !strings.Contains(m.View(), "› B P0 BLK bw-0 Blocked first") {
 		t.Fatalf("expected runtime render to show startup focus on settled first column row, got:\n%s", m.View())
+	}
+}
+
+func TestBoardModeRejectsInvalidProviderOutputBeforeSectionLoads(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		defs    []dashboard.Definition
+		wantErr string
+	}{
+		{name: "zero dashboards", defs: nil, wantErr: "zero definitions"},
+		{name: "empty dashboard id", defs: []dashboard.Definition{{Title: "Default", Sections: []dashboard.Section{{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "id is required"},
+		{name: "empty dashboard title", defs: []dashboard.Definition{{ID: "default", Sections: []dashboard.Section{{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "title is required"},
+		{name: "zero sections", defs: []dashboard.Definition{{ID: "default", Title: "Default"}}, wantErr: "at least one section is required"},
+		{name: "empty section id", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "section[0]: id is required"},
+		{name: "empty section title", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{ID: "ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "section[0]: title is required"},
+		{name: "unsupported query type", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryType("custom")}}}}}, wantErr: "unsupported query type"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			gateway := fakes.NewFakeBeadsGateway()
+			m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
+			m.loading = true
+
+			cmd := m.Update(dashboardsLoadedMsg{dashboards: tc.defs})
+			if cmd != nil {
+				t.Fatalf("expected no follow-up command for invalid dashboard definitions")
+			}
+
+			if m.loadError == "" || !strings.Contains(m.loadError, tc.wantErr) {
+				t.Fatalf("expected load error containing %q, got %q", tc.wantErr, m.loadError)
+			}
+			if m.sections != nil {
+				t.Fatalf("expected sections to be cleared on validation failure")
+			}
+			if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodBlockedIssues)) {
+				t.Fatalf("expected no section query calls on invalid provider output")
+			}
+		})
+	}
+}
+
+func TestBoardModeAcceptsValidMultiDashboardProviderOutput(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}
+
+	defs := []dashboard.Definition{
+		{
+			ID:    "primary",
+			Title: "Primary",
+			Sections: []dashboard.Section{
+				{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
+			},
+		},
+		{
+			ID:    "secondary",
+			Title: "Secondary",
+			Sections: []dashboard.Section{
+				{ID: "blocked", Title: "Blocked", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 25}}},
+			},
+		},
+	}
+
+	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
+
+	cmd := m.Update(dashboardsLoadedMsg{dashboards: defs})
+	if cmd == nil {
+		t.Fatalf("expected section load commands for valid dashboards")
+	}
+
+	if m.loadError != "" {
+		t.Fatalf("expected no load error for valid dashboards, got %q", m.loadError)
+	}
+	if m.dashboardID != "primary" || m.dashboardTitle != "Primary" {
+		t.Fatalf("expected board to load first dashboard, got id=%q title=%q", m.dashboardID, m.dashboardTitle)
+	}
+	if len(m.sections) != 1 {
+		t.Fatalf("expected first dashboard sections to be loaded, got %d", len(m.sections))
 	}
 }
 

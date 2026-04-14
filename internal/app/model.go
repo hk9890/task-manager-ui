@@ -101,8 +101,8 @@ type Model struct {
 
 	selectedByMode map[mode.ID]*mode.Selection
 
-	board  mode.Controller
-	search mode.Controller
+	board  *boardmode.Model
+	search *searchmode.Model
 
 	detail detailsmode.Model
 
@@ -161,9 +161,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	modeCmd := tea.Cmd(nil)
 	if !m.shouldCaptureKeyForOverlay(msg) {
 		modeCmd = m.forwardModeMessages(msg)
-	}
-	if m.syncSelectionFromControllers() {
-		modeCmd = batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	}
 
 	if m.showActionModal {
@@ -348,11 +345,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		searchCaptured := false
 		if m.active == mode.Search {
-			type searchShellKeyCapture interface {
-				CapturesShellKey(tea.KeyMsg) bool
-			}
-
-			if searchCtrl, ok := m.search.(searchShellKeyCapture); ok && searchCtrl.CapturesShellKey(msg) {
+			if m.search.CapturesShellKey(msg) {
 				searchCaptured = true
 			}
 		}
@@ -529,48 +522,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, modeCmd
 }
 
-func (m *Model) syncSelectionFromControllers() bool {
-	boardChanged := m.syncSelectionFromController(mode.Board, m.board)
-	searchChanged := m.syncSelectionFromController(mode.Search, m.search)
-	return boardChanged || searchChanged
-}
-
-func (m *Model) syncSelectionFromController(modeID mode.ID, controller mode.Controller) bool {
-	if controller == nil {
-		return false
-	}
-
-	type selectionProvider interface {
-		CurrentSelection() *mode.Selection
-	}
-
-	provider, ok := controller.(selectionProvider)
-	if !ok {
-		return false
-	}
-
-	selection := provider.CurrentSelection()
-	current := m.selectedByMode[modeID]
-	if selectionEqual(current, selection) {
-		return false
-	}
-
-	m.selectedByMode[modeID] = selection
-	if modeID == m.active {
-		m.lastBrowse = modeID
-	}
-
-	return true
-}
-
-func selectionEqual(a, b *mode.Selection) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-
-	return a.Issue.ID == b.Issue.ID
-}
-
 // View renders the root shell.
 func (m Model) View() string {
 	header := m.renderHeader()
@@ -732,51 +683,21 @@ func (m Model) boardIsLoading() bool {
 	if m.board == nil {
 		return false
 	}
-
-	type loadingReporter interface {
-		IsLoading() bool
-	}
-
-	reporter, ok := m.board.(loadingReporter)
-	if !ok {
-		return false
-	}
-
-	return reporter.IsLoading()
+	return m.board.IsLoading()
 }
 
 func (m Model) searchIsLoading() bool {
 	if m.search == nil {
 		return false
 	}
-
-	type loadingReporter interface {
-		IsLoading() bool
-	}
-
-	reporter, ok := m.search.(loadingReporter)
-	if !ok {
-		return false
-	}
-
-	return reporter.IsLoading()
+	return m.search.IsLoading()
 }
 
 func (m Model) searchResultCount() int {
 	if m.search == nil {
 		return 0
 	}
-
-	type resultCounter interface {
-		ResultCount() int
-	}
-
-	counter, ok := m.search.(resultCounter)
-	if !ok {
-		return 0
-	}
-
-	return counter.ResultCount()
+	return m.search.ResultCount()
 }
 
 func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
@@ -789,20 +710,14 @@ func (m *Model) forwardBoardMessage(msg tea.Msg) tea.Cmd {
 	if m.board == nil || !m.shouldForwardToBoard(msg) {
 		return nil
 	}
-
-	next, cmd := m.board.Update(msg)
-	m.board = next
-	return cmd
+	return m.board.Update(msg)
 }
 
 func (m *Model) forwardSearchMessage(msg tea.Msg) tea.Cmd {
 	if m.search == nil || !m.shouldForwardToSearch(msg) {
 		return nil
 	}
-
-	next, cmd := m.search.Update(msg)
-	m.search = next
-	return cmd
+	return m.search.Update(msg)
 }
 
 func (m Model) shouldForwardToBoard(msg tea.Msg) bool {

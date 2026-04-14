@@ -14,6 +14,16 @@ A standalone terminal UI for browsing and updating beads issues.
 go build ./cmd/bwb
 ```
 
+## Docs
+
+- [`docs/OVERVIEW.md`](./docs/OVERVIEW.md) — runtime flow, package map, architecture boundaries
+- [`docs/CODING.md`](./docs/CODING.md) — build commands, config model, implementation constraints
+- [`docs/TESTING.md`](./docs/TESTING.md) — test policy, fixtures, and runtime verification expectations
+- [`docs/RUNTIME_UI_VERIFICATION.md`](./docs/RUNTIME_UI_VERIFICATION.md) — built-binary runtime UI verification runbook
+- [`docs/CHANGE-WORKFLOW.md`](./docs/CHANGE-WORKFLOW.md) — beads-first change landing and session completion workflow
+- [`docs/RELEASING.md`](./docs/RELEASING.md) — tag-triggered release workflow
+- [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — default keybindings reference
+
 ## Configuration
 
 BWB optionally loads runtime config from:
@@ -34,12 +44,11 @@ Highlights:
 See [`docs/CODING.md`](./docs/CODING.md) for the current config schema and
 examples.
 
-For architecture and implementation guidance, see:
+For deeper design and planning context, see:
 
 - [`project-plan/ARCHITECTURE.md`](./project-plan/ARCHITECTURE.md)
 - [`project-plan/IMPLEMENTATION.md`](./project-plan/IMPLEMENTATION.md)
 - [`project-plan/EXECUTION-PLAN.md`](./project-plan/EXECUTION-PLAN.md)
-- [`docs/RELEASING.md`](./docs/RELEASING.md)
 - [`CHANGELOG.md`](./CHANGELOG.md)
 
 ## Release visibility policy

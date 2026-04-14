@@ -29,31 +29,46 @@ This architecture deliberately avoids the current Perles design assumptions arou
 
 ## System Overview
 
-Beads Workbench should be composed of five main areas:
+Beads Workbench is composed of five main areas:
 
-1. **App shell**
+1. **App shell (`internal/app`)**
    - Bubble Tea root model
-   - mode switching
-   - shared notifications and layout
+   - active mode ownership and switching
+   - cross-mode selection/detail coordination
+   - shared notifications, overlays, and layout
 
-2. **Feature modes**
+2. **Feature modes (`internal/mode/*`)**
    - board/dashboard browsing
    - search/browse
    - issue details
-   - create/update/comment flows
+   - feature-local keyboard/state handling
+   - shell contract messages (`SelectionChangedMsg`, `ActionRequestMsg`)
 
-3. **Gateway layer**
+3. **Gateway layer (`internal/gateway/beads`)**
    - the single UI-facing interface for all beads reads and writes
    - implemented through official `bd` commands / official API surfaces only
+   - typed CLI payload decoding + explicit domain mapping
 
-4. **Launcher layer**
+4. **Launcher layer (`internal/launcher`)**
    - editor handoff
    - external tool launch actions
    - terminal/tab/tmux integration
 
-5. **Definition providers**
+5. **Definition providers (`internal/dashboard`)**
    - built-in dashboard definitions in v1
+   - provider-output validation before board rendering
    - future file-backed dashboard definition provider
+
+### UI ownership model
+
+The shell is the integration point; feature modes are intentionally narrower.
+
+- `internal/app` owns mode lifecycle, selected issue ownership by browse mode, and detail loading/reloading decisions.
+- Browse modes emit `SelectionChangedMsg` when selection changes.
+- The shell reacts to those events and decides whether to refresh detail state.
+- `internal/mode/*` packages do not own cross-mode orchestration and do not poll shared state.
+
+This keeps mode packages testable and prevents hidden coupling through a generic top-level controller abstraction.
 
 ## Core Rule: No Direct SQL
 
@@ -124,9 +139,19 @@ The adapter is responsible for:
 
 - command construction
 - environment propagation (`BEADS_DIR`, actor, etc.)
-- JSON parsing
-- domain mapping
+- typed payload decode per command/output shape
+- explicit payload-to-domain mapping helpers
 - error normalization for the UI
+
+### Typed mapping strategy
+
+Read flows decode into command-specific payload structs (for example, issue arrays, status/type catalogs, label lists) and then map those payloads into domain models with required-field checks.
+
+Design constraints:
+
+- avoid generic `map[string]any` decoding in primary gateway reads
+- keep decode failures operation-scoped and actionable (`decode failed` + operation context)
+- keep command argument construction and payload mapping covered by unit fixtures in `internal/gateway/beads/testdata`
 
 ## Future Federated Mode
 
@@ -214,6 +239,12 @@ type DashboardDefinitionProvider interface {
     Dashboards(ctx context.Context) ([]DashboardDefinition, error)
 }
 ```
+
+Provider output is validated before the board uses it:
+
+- each dashboard must include non-empty id/title/sections
+- each section must include non-empty id/title
+- each section query type must be one of the supported gateway-backed query types
 
 In v1:
 

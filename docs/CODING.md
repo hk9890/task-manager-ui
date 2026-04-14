@@ -34,13 +34,13 @@ Current bootstrapped layout:
 ```
 cmd/bwb/             # binary entrypoint
 internal/
-  app/               # Bubble Tea root model, mode switching, shared layout
+  app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
-  gateway/beads/     # BeadsGateway interface + CLI-backed implementation
+  gateway/beads/     # BeadsGateway interface + CLI adapter with typed bd payload decoding
   launcher/          # external editor and command launch actions
-  dashboard/         # dashboard definition providers and built-in definitions
-  mode/              # board/search/details controllers
+  dashboard/         # dashboard definitions/providers + provider-output validation guardrails
+  mode/              # board/search/detail feature models + shell message contracts
   ui/                # reusable rendering components (loading, modal, toaster, styles)
 project-plan/        # product, architecture, and execution planning docs
 ```
@@ -72,6 +72,14 @@ project-plan/        # product, architecture, and execution planning docs
    - Launch success/failure is surfaced in shell toast feedback.
 
 7. **Create vs edit ownership boundary is explicit.** The rich marker-based document flow currently owns **issue editing** (`e` in detail context). Issue creation remains on the existing create/update task boundary and is not coupled to this editor document contract.
+
+8. **App shell owns mode lifecycle and cross-mode coordination.** `internal/app` owns active-mode switching, selection ownership by mode, and detail loading/reloading decisions. `internal/mode/*` packages own feature-local state and emit shell contracts (`SelectionChangedMsg`, `ActionRequestMsg`) instead of reaching across package boundaries.
+
+9. **Selection/detail sync is event-driven, not polled.** Browse modes emit `SelectionChangedMsg` when selection changes; app reacts by updating shared selection state and (when needed) issuing detail loads. Do not reintroduce polling-based synchronization loops.
+
+10. **Gateway decoding is typed and operation-scoped.** `internal/gateway/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
+
+11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions`/`ValidateQuery` checks. Providers may vary, but section query types must stay within the supported gateway query contract.
 
 ## Runtime Configuration (v1)
 

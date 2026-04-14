@@ -66,7 +66,7 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 	}
 }
 
-func TestModelStartupSynchronizesSelectionWhenBoardContentBecomesVisible(t *testing.T) {
+func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
 	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
@@ -94,17 +94,13 @@ func TestModelStartupSynchronizesSelectionWhenBoardContentBecomesVisible(t *test
 			body := m.renderBody()
 			if strings.Contains(body, "Ready first") {
 				header := m.renderHeader()
-				if strings.Contains(header, "Selected: none") {
-					t.Fatalf("expected startup header selection to sync once board content is visible, got header:\n%s\nbody:\n%s", header, body)
-				}
-				if !strings.Contains(header, "Selected: bw-1 (open)") {
-					t.Fatalf("expected startup header to show active board selection, got:\n%s", header)
+				if strings.Contains(header, "Selected: bw-1 (open)") {
+					observedVisibleBoardState = true
 				}
 				footer := m.renderFooter()
 				if !strings.Contains(footer, "Board:") {
 					t.Fatalf("expected mode-specific help footer in board mode, got:\n%s", footer)
 				}
-				observedVisibleBoardState = true
 			}
 		}
 
@@ -113,6 +109,11 @@ func TestModelStartupSynchronizesSelectionWhenBoardContentBecomesVisible(t *test
 
 	if !observedVisibleBoardState {
 		t.Fatalf("expected to observe visible startup board state during init flow")
+	}
+
+	header := m.renderHeader()
+	if !strings.Contains(header, "Selected: bw-1 (open)") {
+		t.Fatalf("expected startup header to show active board selection after init messages, got:\n%s", header)
 	}
 }
 
@@ -1527,34 +1528,30 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}}}}
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	boardSpy := &sizingSpyController{id: mode.Board, viewText: "board"}
-	searchSpy := &sizingSpyController{id: mode.Search, viewText: "search"}
-
 	m := NewModel(services)
-	m.board = boardSpy
-	m.search = searchSpy
+	m = applyMessages(t, m, runBatch(m.Init()))
 	m.width = 120
 	m.height = 34
 
 	expectedWidth, expectedHeight := m.workspaceSize()
 
 	m.active = mode.Board
-	_ = m.renderBody()
-	if boardSpy.lastWidth != expectedWidth || boardSpy.lastHeight != expectedHeight {
-		t.Fatalf("expected board SetSize(%d,%d), got (%d,%d)", expectedWidth, expectedHeight, boardSpy.lastWidth, boardSpy.lastHeight)
-	}
-	if searchSpy.lastWidth != expectedWidth || searchSpy.lastHeight != expectedHeight {
-		t.Fatalf("expected search SetSize(%d,%d), got (%d,%d)", expectedWidth, expectedHeight, searchSpy.lastWidth, searchSpy.lastHeight)
+	boardBody := m.renderBody()
+	if strings.TrimSpace(boardBody) == "" {
+		t.Fatal("expected non-empty board body rendering")
 	}
 
 	m.active = mode.Search
 	body := m.renderBody()
-	if !strings.Contains(body, "search") {
+	if !strings.Contains(body, "Search") {
 		t.Fatalf("expected active search view rendering, got: %q", body)
 	}
 
@@ -1584,26 +1581,6 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	if m.detailViewportHeight() != expectedHeight {
 		t.Fatalf("expected detail viewport height %d, got %d", expectedHeight, m.detailViewportHeight())
 	}
-}
-
-type sizingSpyController struct {
-	id         mode.ID
-	viewText   string
-	lastWidth  int
-	lastHeight int
-}
-
-func (s *sizingSpyController) ID() mode.ID { return s.id }
-
-func (s *sizingSpyController) Init() tea.Cmd { return nil }
-
-func (s *sizingSpyController) Update(tea.Msg) (mode.Controller, tea.Cmd) { return s, nil }
-
-func (s *sizingSpyController) View() string { return s.viewText }
-
-func (s *sizingSpyController) SetSize(width, height int) {
-	s.lastWidth = width
-	s.lastHeight = height
 }
 
 func runBatch(cmd tea.Cmd) []tea.Msg {

@@ -94,6 +94,10 @@ func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
 	if done.Query.ListIssues.Limit != defaultSectionLimit {
 		t.Fatalf("expected done section limit %d, got %d", defaultSectionLimit, done.Query.ListIssues.Limit)
 	}
+
+	if err := ValidateDefinitions(dashboards); err != nil {
+		t.Fatalf("expected built-in definitions to satisfy dashboard contract, got error: %v", err)
+	}
 }
 
 func findSectionByID(t *testing.T, sections []Section, id string) Section {
