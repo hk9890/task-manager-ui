@@ -28,13 +28,7 @@ Run from the repository root.
    git status
    ```
 
-3. Run required quality gates from `docs/CODING.md`:
-
-   ```bash
-   go build ./cmd/bwb
-   go vet ./...
-   go test ./...
-   ```
+3. Run the required quality gates from `docs/CODING.md`.
 
 4. Confirm CI provenance for the candidate release commit:
 

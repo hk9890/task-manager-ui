@@ -9,23 +9,12 @@
 
 ## Build and Test
 
-```bash
-go build ./cmd/bwb    # build the binary
-go test ./...         # run all tests
-go vet ./...          # vet
-```
+Use standard Go tooling from the repository root for build, vet, and test work.
+See [Quality Gates](#quality-gates) for the authoritative pre-handoff command
+sequence.
 
 For testing strategy, vocabulary, and harness conventions (teatest, golden files,
 fake seams, embedded fixture usage), see `docs/TESTING.md`.
-
-Recommended local verification before handoff:
-
-```bash
-go test ./cmd/bwb -run TestArchitectureGuardrails
-go build ./cmd/bwb
-go vet ./...
-go test ./...
-```
 
 ## Package Layout
 
@@ -40,7 +29,7 @@ internal/
   gateway/beads/     # BeadsGateway interface + CLI adapter with typed bd payload decoding
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard definitions/providers + provider-output validation guardrails
-  mode/              # board/search/detail feature models + shell message contracts
+  mode/              # board/search/details feature models + shell message contracts
   ui/                # reusable rendering components (loading, modal, toaster, styles)
 project-plan/        # product, architecture, and execution planning docs
 ```
@@ -327,13 +316,17 @@ These checks are intentionally lightweight and local-friendly: they run as a nor
 
 ## Quality Gates
 
-The minimum quality gates for implementation and acceptance are:
+The authoritative local verification sequence before handoff is:
 
 ```bash
+go test ./cmd/bwb -run TestArchitectureGuardrails
 go build ./cmd/bwb
 go vet ./...
+go test ./...
 ```
 
-These are in addition to `go test ./...`, which includes the architecture guardrail test.
+This sequence includes the minimum implementation and acceptance gates (`go
+build ./cmd/bwb`, `go vet ./...`, and `go test ./...`) plus a fast targeted
+architecture-guardrail check up front.
 
 See `project-plan/ARCHITECTURE.md` for the full architecture definition, interface contracts, and `project-plan/IMPLEMENTATION.md` for phase sequencing and donor reuse strategy.

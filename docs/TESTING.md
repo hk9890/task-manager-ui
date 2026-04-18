@@ -37,12 +37,7 @@ go test ./...
 
 Recommended local quality checks:
 
-```bash
-go test ./cmd/bwb -run TestArchitectureGuardrails
-go build ./cmd/bwb
-go vet ./...
-go test ./...
-```
+Run the authoritative pre-handoff quality gate sequence from `docs/CODING.md`.
 
 Harness-focused checks:
 
@@ -53,9 +48,7 @@ go test ./internal/testing/ui -v
 
 Fast deterministic UI verification loop (common during active implementation):
 
-```bash
-go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v
-```
+See `docs/RUNTIME_UI_VERIFICATION.md` for the focused scenario command.
 
 ## Runtime UI Verification Workflow (operator runbook)
 
