@@ -44,11 +44,11 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 	out := make([]string, 0, 24)
 	for i, group := range groups {
 		if i > 0 {
-			out = append(out, strings.Repeat(metadataDividerRune, width))
+			out = append(out, renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-2)), width, false))
 		}
 
 		if group.title != "" {
-			out = append(out, styles.TruncateString(group.title, width))
+			out = append(out, renderMetadataPrefixedLine(group.title, width, false))
 		}
 
 		labelWidth := 0
@@ -61,13 +61,13 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 		for _, field := range group.fields {
 			line := fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value)
 			selected := field.key != MetadataFieldNone && field.key == selectedField
-			interactive := selectedField != MetadataFieldNone
-			out = append(out, renderMetadataFieldLine(line, width, field.editable, interactive, selected))
+			selected = selected && selectedField != MetadataFieldNone
+			out = append(out, renderMetadataFieldLine(line, width, selected))
 		}
 
 		if len(group.labels) > 0 {
 			for _, label := range group.labels {
-				out = append(out, styles.TruncateString("• "+label, width))
+				out = append(out, renderMetadataPrefixedLine("• "+label, width, false))
 			}
 		}
 	}
@@ -75,17 +75,29 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 	return out
 }
 
-func renderMetadataFieldLine(line string, width int, editable, interactive, selected bool) string {
-	if !editable || !interactive {
-		return styles.TruncateString(line, width)
+func renderMetadataFieldLine(line string, width int, selected bool) string {
+	return renderMetadataPrefixedLine(line, width, selected)
+}
+
+func renderMetadataPrefixedLine(content string, width int, selected bool) string {
+	if width < 1 {
+		return ""
 	}
 
-	prefix := "  "
-	if selected {
-		prefix = styles.SelectionIndicatorStyle.Render("›") + " "
+	prefixPlain, prefixStyled := styles.SelectionPrefix(selected, true)
+	gutterWidth := len([]rune(prefixPlain))
+	if width <= gutterWidth {
+		if !selected {
+			return strings.Repeat(" ", width)
+		}
+		if width == 1 {
+			return styles.SelectionIndicatorStyle.Render("›")
+		}
+		return prefixStyled
 	}
 
-	return styles.TruncateString(prefix+line, width)
+	contentWidth := width - gutterWidth
+	return prefixStyled + styles.TruncateString(content, contentWidth)
 }
 
 func metadataFields(detail domain.IssueDetail) []metadataField {
@@ -104,8 +116,8 @@ func metadataGroups(detail domain.IssueDetail) []metadataGroup {
 	core := metadataGroup{title: "Core"}
 	core.fields = append(core.fields,
 		metadataField{label: "Type", value: emptyFallback(summary.Type, "(unknown)")},
-		metadataField{key: MetadataFieldPriority, label: "Priority", value: formatPriority(summary.Priority), editable: true},
 		metadataField{key: MetadataFieldStatus, label: "Status", value: emptyFallback(summary.Status, "(unknown)"), editable: true},
+		metadataField{key: MetadataFieldPriority, label: "Priority", value: formatPriority(summary.Priority), editable: true},
 	)
 	groups = append(groups, core)
 

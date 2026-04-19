@@ -1,14 +1,14 @@
 ╭─ Dependencies ─── 0 ─╮  ╭─ Content ───────────── 3 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (0)        │  │Comments heavy issue                │  │Core                            │
-│(none)                │  │bw-77 · open · P0                   │  │Type    : bug                   │
-│                      │  │                                    │  │Priority: P0                    │
-│Blocks (0)            │  │Description                         │  │Status  : open                  │
-│(none)                │  │Short description                   │  │--------------------------------│
-│                      │  │                                    │  │Counts                          │
-│Related (0)           │  │Notes                               │  │Comments  : 3                   │
-│(none)                │  │(no notes)                          │  │Blocked by: 0                   │
-│                      │  │                                    │  │Blocks    : 0                   │
-│                      │  │                                    │  │Related   : 0                   │
+│Blocked by (0)        │  │Comments heavy issue                │  │  Core                          │
+│(none)                │  │bw-77 · open · P0                   │  │  Type    : bug                 │
+│                      │  │                                    │  │  Status  : open                │
+│Blocks (0)            │  │Description                         │  │  Priority: P0                  │
+│(none)                │  │Short description                   │  │  ------------------------------│
+│                      │  │                                    │  │  Counts                        │
+│Related (0)           │  │Notes                               │  │  Comments  : 3                 │
+│(none)                │  │(no notes)                          │  │  Blocked by: 0                 │
+│                      │  │                                    │  │  Blocks    : 0                 │
+│                      │  │                                    │  │  Related   : 0                 │
 │                      │  │                                    │  │                                │
 │                      │  │                                    │  │Quick actions                   │
 │                      │  │                                    │  │e Edit issue                    │

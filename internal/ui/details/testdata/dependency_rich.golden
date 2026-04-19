@@ -1,14 +1,14 @@
 ╭─ Dependencies ─── 6 ─╮  ╭─ Content ───────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (2)        │  │Dependency rich issue               │  │Core                            │
-│  ? P0 - bw-1 Auth ...│  │bw-88 · blocked · P1                │  │Type    : task                  │
-│  ? P0 - bw-5 Upstr...│  │                                    │  │Priority: P1                    │
-│                      │  │Description                         │  │Status  : blocked               │
-│Blocks (2)            │  │Dependency context check            │  │--------------------------------│
-│  ? P0 - bw-12 Rele...│  │                                    │  │Counts                          │
-│  ? P0 - bw-9 UI po...│  │Notes                               │  │Comments  : 0                   │
-│                      │  │(no notes)                          │  │Blocked by: 2                   │
-│Related (2)           │  │                                    │  │Blocks    : 2                   │
-│  ? P0 - bw-100 Pla...│  │                                    │  │Related   : 2                   │
+│Blocked by (2)        │  │Dependency rich issue               │  │  Core                          │
+│  ? P0 - bw-1 Auth ...│  │bw-88 · blocked · P1                │  │  Type    : task                │
+│  ? P0 - bw-5 Upstr...│  │                                    │  │  Status  : blocked             │
+│                      │  │Description                         │  │  Priority: P1                  │
+│Blocks (2)            │  │Dependency context check            │  │  ------------------------------│
+│  ? P0 - bw-12 Rele...│  │                                    │  │  Counts                        │
+│  ? P0 - bw-9 UI po...│  │Notes                               │  │  Comments  : 0                 │
+│                      │  │(no notes)                          │  │  Blocked by: 2                 │
+│Related (2)           │  │                                    │  │  Blocks    : 2                 │
+│  ? P0 - bw-100 Pla...│  │                                    │  │  Related   : 2                 │
 │  ? P0 - bw-42 Sear...│  │                                    │  │                                │
 │                      │  │                                    │  │Quick actions                   │
 │                      │  │                                    │  │e Edit issue                    │

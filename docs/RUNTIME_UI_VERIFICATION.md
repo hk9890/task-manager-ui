@@ -23,25 +23,81 @@ sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2
 (cd "$repoPath" && BD_NON_INTERACTIVE=1 /tmp/bwb)
 ```
 
-### Optional agent-visible capture path
+### Ad-hoc PTY recipes (copy/paste)
 
-When the operator/agent needs to inspect the real rendered alt-screen without a human staring at the terminal, capture the visible screen buffer through a PTY and terminal emulator:
+Use this when you need agent-visible proof of runtime behavior without manually watching a terminal.
 
 ```bash
 python3 -m pip install --user pyte
 go build -o /tmp/bwb ./cmd/bwb
-repoPath="$(mktemp -d)"
-sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
-python3 scripts/capture_bwb_screen.py --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 -- -- env BD_NON_INTERACTIVE=1 /tmp/bwb
 ```
 
-To capture dedicated detail mode after startup, send a delayed key sequence such as `3` then `ctrl+q`:
+#### PTY step toolkit (`scripts/capture_bwb_screen.py`)
+
+Prefer repeatable `--step` instructions over blind delay chains.
+
+- `send-key:<KEY>`
+- `wait-for-text:<TEXT>[:timeout-ms]`
+- `wait-for-no-text:<TEXT>[:timeout-ms]`
+- `checkpoint:<name>`
+
+Legacy `--steps delay:key,...` still works, but `--step` wait-based flows are the default for reliable mutation verification.
+
+#### A) Read-only navigation check (wait-based)
 
 ```bash
-python3 scripts/capture_bwb_screen.py --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 --steps '0.2:3,0.2:CTRL+Q' -- -- env BD_NON_INTERACTIVE=1 /tmp/bwb
+repoPath="$(mktemp -d)"
+sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
+python3 scripts/capture_bwb_screen.py \
+  --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 \
+  --step 'wait-for-text:Ready:3000' \
+  --step 'wait-for-text:Selected::3000' \
+  --step 'send-key:ENTER' \
+  --step 'wait-for-text:Detail::3000' \
+  --step 'checkpoint:detail-open' \
+  --step 'send-key:ESC' \
+  --step 'wait-for-text:Board:2000' \
+  --step 'send-key:CTRL+Q' \
+  -- -- env BD_NON_INTERACTIVE=1 /tmp/bwb
 ```
 
-This path is intended for verification and debugging only. It captures the final visible screen buffer, not just raw stdout.
+#### B) Mutation save check (wrapper + before/after)
+
+`scripts/verify_bwb_state_flow.py` wraps capture + before/after `bd show --json` assertions.
+
+```bash
+repoPath="$(mktemp -d)"
+sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
+python3 scripts/verify_bwb_state_flow.py \
+  --cwd "$repoPath" \
+  --issue bwf-1 \
+  --flow mutation-save \
+  --app-command env BD_NON_INTERACTIVE=1 /tmp/bwb
+```
+
+Expected: JSON output includes `"ok": true` and `"changed": true`.
+
+#### C) Mutation cancel / no-save check (wrapper)
+
+```bash
+repoPath="$(mktemp -d)"
+sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
+python3 scripts/verify_bwb_state_flow.py \
+  --cwd "$repoPath" \
+  --issue bwf-1 \
+  --flow mutation-cancel \
+  --app-command env BD_NON_INTERACTIVE=1 /tmp/bwb
+```
+
+Expected: JSON output includes `"ok": true` and `"changed": false`.
+
+#### D) Common failure/timeout messages
+
+- `step <index> (...) timed out after <N>ms`: a specific wait step did not settle; inspect `steps[*].observed_excerpt` and `failure`.
+- `capture timed out after <Ns>`: global timeout was exceeded; increase `--timeout` for longer flows.
+- `missing command after --`: `capture_bwb_screen.py` did not receive the app command.
+- `--app-command requires a command after --`: `verify_bwb_state_flow.py` got no executable command.
+- `ModuleNotFoundError: No module named 'pyte'`: install `pyte` first (`python3 -m pip install --user pyte`).
 
 ## 3) What to verify in the manual run
 

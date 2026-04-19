@@ -58,12 +58,12 @@ type launchActionResultMsg struct {
 type mutationKind string
 
 const (
-	mutationCreate        mutationKind = "create"
-	mutationUpdate        mutationKind = "update"
-	mutationClose         mutationKind = "close"
-	mutationComment       mutationKind = "comment"
-	mutationStatus        mutationKind = "status"
-	mutationPriorityCycle mutationKind = "priority_cycle"
+	mutationCreate   mutationKind = "create"
+	mutationUpdate   mutationKind = "update"
+	mutationClose    mutationKind = "close"
+	mutationComment  mutationKind = "comment"
+	mutationStatus   mutationKind = "status"
+	mutationPriority mutationKind = "priority"
 )
 
 type mutationCatalogsLoadedMsg struct {
@@ -85,6 +85,7 @@ type mutationResultMsg struct {
 	kind      mutationKind
 	issueID   string
 	createdID string
+	noChange  bool
 	err       error
 }
 
@@ -338,6 +339,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.showToast(msg.err.Error(), toaster.StyleError))
 		}
 
+		if msg.noChange {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo))
+		}
+
 		m.markBrowseSurfacesDirty()
 
 		switch msg.kind {
@@ -370,7 +375,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				loadDetailCmd(m.services, msg.issueID),
 				m.maybeAutoRefreshActiveSurfaceCmd(),
 			)
-		case mutationPriorityCycle:
+		case mutationPriority:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
@@ -429,7 +434,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, issue))
 			}
-			if m.detail.ConsumeCyclePriorityIntent() {
+			if m.detail.ConsumeOpenPriorityDialogIntent() {
 				issue := m.detail.Detail.Summary
 				if strings.TrimSpace(issue.ID) == "" {
 					if selection := m.currentSelection(); selection != nil {
@@ -439,7 +444,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if strings.TrimSpace(issue.ID) == "" {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
 				}
-				return m, batchCmds(modeCmd, cyclePriorityForIssueCmd(m.services, issue))
+				dialog := buildMutationDialog(mutationPriority, issue, nil, nil, nil)
+				m.actionState = dialog
+				m.actionModal = mutationModal(dialog, m.keys)
+				m.actionModal.SetSize(m.width, m.height)
+				m.showActionModal = true
+				return m, batchCmds(modeCmd, m.actionModal.Init())
 			}
 			if intent != nil {
 				issueID := strings.TrimSpace(intent.IssueID)
@@ -1182,19 +1192,6 @@ func loadStatusCatalogForIssueCmd(services Services, issue domain.IssueSummary) 
 	}
 }
 
-func cyclePriorityForIssueCmd(services Services, issue domain.IssueSummary) tea.Cmd {
-	return func() tea.Msg {
-		next := (issue.Priority + 1) % 5
-		if next < 0 {
-			next = 0
-		}
-		if err := services.Gateway.UpdateIssue(context.Background(), issue.ID, domain.UpdateIssueInput{Priority: &next}); err != nil {
-			return mutationResultMsg{kind: mutationPriorityCycle, issueID: issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
-		}
-		return mutationResultMsg{kind: mutationPriorityCycle, issueID: issue.ID}
-	}
-}
-
 func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) mutationDialogState {
 	statusNames := make(map[string]struct{}, len(statuses))
 	typeNames := make(map[string]struct{}, len(types))
@@ -1302,13 +1299,26 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 		}, modal.BindingsFromConfig(keys))
 	case mutationStatus:
 		return modal.NewWithKeys(modal.Config{
-			Title:       fmt.Sprintf("Update Status %s", state.issue.ID),
-			Message:     fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)")),
-			ConfirmText: "Update",
-			MinWidth:    72,
-			Required:    true,
+			Title:         fmt.Sprintf("Update Status %s", state.issue.ID),
+			Message:       fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)")),
+			ConfirmText:   "Update",
+			MinWidth:      72,
+			Required:      true,
+			SubmitOnEnter: true,
 			Inputs: []modal.InputConfig{
 				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationPriority:
+		return modal.NewWithKeys(modal.Config{
+			Title:         fmt.Sprintf("Update Priority %s", state.issue.ID),
+			Message:       "Set the issue priority (0-4).",
+			ConfirmText:   "Update",
+			MinWidth:      72,
+			Required:      true,
+			SubmitOnEnter: true,
+			Inputs: []modal.InputConfig{
+				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-4"},
 			},
 		}, modal.BindingsFromConfig(keys))
 	default:
@@ -1423,11 +1433,33 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 			if _, ok := state.statusNames[status]; len(state.statusNames) > 0 && !ok {
 				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: unknown status %q", status)}
 			}
+			if status == strings.TrimSpace(state.issue.Status) {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, noChange: true}
+			}
 
 			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Status: &status}); err != nil {
 				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: %w", err)}
 			}
 			return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID}
+		case mutationPriority:
+			priority, err := parseRequiredPriority(values["priority"])
+			if err != nil {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
+			}
+			if priority == nil {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: priority is required")}
+			}
+			if *priority < 0 || *priority > 4 {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: priority must be between 0 and 4")}
+			}
+			if *priority == state.issue.Priority {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, noChange: true}
+			}
+
+			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Priority: priority}); err != nil {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID}
 		default:
 			return mutationResultMsg{kind: state.kind, issueID: state.issue.ID, err: fmt.Errorf("unsupported mutation action")}
 		}

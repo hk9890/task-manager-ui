@@ -14,8 +14,6 @@ const (
 	minNarrowTitleWidth = 4
 	minCompactIDWidth   = 7
 	maxCompactIDWidth   = 12
-	selectedPrefixText  = "› "
-	idlePrefixText      = "  "
 )
 
 // RenderConfig configures compact issue row rendering.
@@ -39,16 +37,7 @@ type ReferenceRenderConfig struct {
 
 // RenderCompact renders one compact issue row with shared metadata semantics.
 func RenderCompact(config RenderConfig) string {
-	prefixPlain := idlePrefixText
-	prefixStyled := idlePrefixText
-	if config.Selected {
-		prefixPlain = selectedPrefixText
-		if config.Styled {
-			prefixStyled = styles.SelectionIndicatorStyle.Render("›") + " "
-		} else {
-			prefixStyled = selectedPrefixText
-		}
-	}
+	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
 
 	title := strings.TrimSpace(config.Issue.Title)
 	if title == "" {
@@ -83,16 +72,7 @@ func RenderCompact(config RenderConfig) string {
 
 // RenderReferenceCompact renders a one-line compact row for related issues.
 func RenderReferenceCompact(config ReferenceRenderConfig) string {
-	prefixPlain := idlePrefixText
-	prefixStyled := idlePrefixText
-	if config.Selected {
-		prefixPlain = selectedPrefixText
-		if config.Styled {
-			prefixStyled = styles.SelectionIndicatorStyle.Render("›") + " "
-		} else {
-			prefixStyled = selectedPrefixText
-		}
-	}
+	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
 
 	title := strings.TrimSpace(config.Issue.Title)
 	if title == "" {

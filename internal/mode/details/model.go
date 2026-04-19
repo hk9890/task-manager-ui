@@ -32,8 +32,8 @@ type Model struct {
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
 
-	pendingOpenStatusDialog bool
-	pendingCyclePriority    bool
+	pendingOpenStatusDialog   bool
+	pendingOpenPriorityDialog bool
 }
 
 // OpenRelatedIssueIntent requests shell-level navigation to another issue from
@@ -143,7 +143,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		case uidetails.MetadataFieldStatus:
 			m.pendingOpenStatusDialog = true
 		case uidetails.MetadataFieldPriority:
-			m.pendingCyclePriority = true
+			m.pendingOpenPriorityDialog = true
 		}
 		return true, nil
 	}
@@ -297,12 +297,12 @@ func (m *Model) ConsumeOpenStatusDialogIntent() bool {
 	return true
 }
 
-// ConsumeCyclePriorityIntent reports and clears pending priority-cycle intent.
-func (m *Model) ConsumeCyclePriorityIntent() bool {
-	if !m.pendingCyclePriority {
+// ConsumeOpenPriorityDialogIntent reports and clears pending priority-dialog intent.
+func (m *Model) ConsumeOpenPriorityDialogIntent() bool {
+	if !m.pendingOpenPriorityDialog {
 		return false
 	}
-	m.pendingCyclePriority = false
+	m.pendingOpenPriorityDialog = false
 	return true
 }
 

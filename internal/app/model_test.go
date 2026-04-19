@@ -1559,7 +1559,136 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 	}
 }
 
-func TestModelDetailMetadataEnterOnPriorityCyclesPriority(t *testing.T) {
+func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 140
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected status catalog load command after enter on metadata status")
+	}
+
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	_ = cmd
+
+	if !m.showActionModal {
+		t.Fatal("expected status action modal to open")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		m = applyMessages(t, m, runBatch(cmd))
+	}
+
+	if m.showActionModal {
+		t.Fatal("expected escape to close status action modal")
+	}
+
+	for _, call := range gateway.Calls {
+		if call.Method == fakes.MethodUpdateIssue {
+			t.Fatalf("expected no UpdateIssue call on escape cancel, calls=%#v", gateway.Calls)
+		}
+	}
+}
+
+func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 140
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected status catalog load command after enter on metadata status")
+	}
+
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	if !m.showActionModal {
+		t.Fatal("expected status action modal to open")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected enter on unchanged status to submit no-op mutation")
+	}
+
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected no-op mutation command after submit")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if m.showActionModal {
+		t.Fatal("expected status action modal to close after enter no-op")
+	}
+
+	for _, call := range gateway.Calls {
+		if call.Method == fakes.MethodUpdateIssue {
+			t.Fatalf("expected no UpdateIssue call on unchanged enter no-op, calls=%#v", gateway.Calls)
+		}
+	}
+
+	if !m.toast.Visible() {
+		t.Fatal("expected no-change toast to be visible after unchanged enter")
+	}
+}
+
+func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
@@ -1595,7 +1724,18 @@ func TestModelDetailMetadataEnterOnPriorityCyclesPriority(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("expected priority cycle command after enter on metadata priority")
+		t.Fatal("expected priority dialog init command after enter on metadata priority")
+	}
+	_ = cmd
+
+	if !m.showActionModal {
+		t.Fatal("expected priority action modal to open")
+	}
+
+	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{"priority": "0"}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected priority update submit command")
 	}
 
 	next, _ = m.Update(cmd())
@@ -1621,12 +1761,71 @@ func TestModelDetailMetadataEnterOnPriorityCyclesPriority(t *testing.T) {
 			t.Fatalf("expected priority update, got %#v", updateCall.Input)
 		}
 		if *updateCall.Input.Priority != 0 {
-			t.Fatalf("expected wrapped priority P4->P0, got P%d", *updateCall.Input.Priority)
+			t.Fatalf("expected submitted priority 0, got P%d", *updateCall.Input.Priority)
 		}
 		foundPriorityUpdate = true
 	}
 	if !foundPriorityUpdate {
-		t.Fatal("expected to capture update issue input for priority cycle edit")
+		t.Fatal("expected to capture update issue input for priority dialog edit")
+	}
+}
+
+func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 3}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 140
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected priority dialog init command")
+	}
+	_ = cmd
+
+	if !m.showActionModal {
+		t.Fatal("expected priority action modal to open")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		m = applyMessages(t, m, runBatch(cmd))
+	}
+
+	if m.showActionModal {
+		t.Fatal("expected escape to close priority action modal")
+	}
+
+	for _, call := range gateway.Calls {
+		if call.Method == fakes.MethodUpdateIssue {
+			t.Fatalf("expected no UpdateIssue call on priority escape cancel, calls=%#v", gateway.Calls)
+		}
 	}
 }
 

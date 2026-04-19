@@ -144,7 +144,8 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 	innerHeight := max(1, height-2)
 
-	deps := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, leftWidth-2)
+	depGroups := dependencyGroups(detail, state.BrowserItems)
+	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
 	leftBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              leftWidth,
@@ -279,7 +280,27 @@ func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueRefe
 	if len(browserItems) > 0 && strings.TrimSpace(detail.ParentGroupBrowser.Parent.ID) != "" {
 		groups = append(groups, relationshipGroup{Label: "Structure", Refs: browserItems})
 	}
-	return groups
+
+	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(browserItems))
+	out := make([]relationshipGroup, 0, len(groups))
+	for _, group := range groups {
+		ordered := orderedReferences(group.Refs)
+		filtered := make([]domain.IssueReference, 0, len(ordered))
+		for _, ref := range ordered {
+			refID := strings.TrimSpace(ref.ID)
+			if refID == "" {
+				continue
+			}
+			if _, exists := seen[refID]; exists {
+				continue
+			}
+			filtered = append(filtered, ref)
+			seen[refID] = struct{}{}
+		}
+		out = append(out, relationshipGroup{Label: group.Label, Refs: filtered})
+	}
+
+	return out
 }
 
 func renderRelationshipGroups(groups []relationshipGroup, selectedIssueID string, width int) []string {

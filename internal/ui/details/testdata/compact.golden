@@ -2,23 +2,23 @@ Full detail sample
 bw-22 · in_progress
 
 Metadata
-Core
-Type    : feature
-Priority: P2
-Status  : in_progress
---------------------------------------------------------
-Ownership
-Assignee: alice
---------------------------------------------------------
-Labels
-• backend
-• ui
---------------------------------------------------------
-Counts
-Comments  : 1
-Blocked by: 1
-Blocks    : 1
-Related   : 1
+  Core
+  Type    : feature
+  Status  : in_progress
+  Priority: P2
+  ------------------------------------------------------
+  Ownership
+  Assignee: alice
+  ------------------------------------------------------
+  Labels
+  • backend
+  • ui
+  ------------------------------------------------------
+  Counts
+  Comments  : 1
+  Blocked by: 1
+  Blocks    : 1
+  Related   : 1
 
 Description
 Ship issue detail rendering for standalone mode.

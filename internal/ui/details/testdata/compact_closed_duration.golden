@@ -2,28 +2,28 @@ Closed compact duration sample
 bw-23 · closed
 
 Metadata
-Core
-Type    : bug
-Priority: P1
-Status  : closed
---------------------------------------------------------
-Ownership
-Assignee: alice
-Creator : hans
---------------------------------------------------------
-Time
-Created : 2026-04-01 12:00
-Duration: 2d 2h 30m
---------------------------------------------------------
-Close
-Closed: 2026-04-03 14:30
-Reason: completed
---------------------------------------------------------
-Counts
-Comments  : 0
-Blocked by: 0
-Blocks    : 0
-Related   : 0
+  Core
+  Type    : bug
+  Status  : closed
+  Priority: P1
+  ------------------------------------------------------
+  Ownership
+  Assignee: alice
+  Creator : hans
+  ------------------------------------------------------
+  Time
+  Created : 2026-04-01 12:00
+  Duration: 2d 2h 30m
+  ------------------------------------------------------
+  Close
+  Closed: 2026-04-03 14:30
+  Reason: completed
+  ------------------------------------------------------
+  Counts
+  Comments  : 0
+  Blocked by: 0
+  Blocks    : 0
+  Related   : 0
 
 Description
 Closed issue includes duration in metadata rail.

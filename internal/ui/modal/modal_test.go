@@ -136,3 +136,50 @@ func TestNKeyDoesNotCancelWhenRequired(t *testing.T) {
 		}
 	}
 }
+
+func TestEscapeCancelsEvenWhenRequired(t *testing.T) {
+	m := New(Config{
+		Title:    "Required",
+		Required: true,
+		Inputs: []InputConfig{{
+			Key:   "status",
+			Label: "Status",
+			Value: "open",
+		}},
+	})
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd == nil {
+		t.Fatal("expected escape to emit cancel command")
+	}
+	if _, ok := cmd().(CancelMsg); !ok {
+		t.Fatalf("expected CancelMsg, got %T", cmd())
+	}
+}
+
+func TestSubmitOnEnterSubmitsFromFocusedInput(t *testing.T) {
+	m := New(Config{
+		Title:         "Status",
+		SubmitOnEnter: true,
+		Required:      true,
+		Inputs: []InputConfig{{
+			Key:   "status",
+			Label: "Status",
+			Value: "open",
+		}},
+	})
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected enter to submit from focused input")
+	}
+
+	msg := cmd()
+	submit, ok := msg.(SubmitMsg)
+	if !ok {
+		t.Fatalf("expected SubmitMsg, got %T", msg)
+	}
+	if submit.Values["status"] != "open" {
+		t.Fatalf("expected submitted status open, got %#v", submit.Values)
+	}
+}

@@ -1,14 +1,14 @@
 ╭─ Dependencies ──────── 0 ─╮  ╭─ Content ──────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (0)             │  │Minimal detail                                     │  │Core                            │
-│(none)                     │  │bw-1 · open · P1                                   │  │Type    : task                  │
-│                           │  │                                                   │  │Priority: P1                    │
-│Blocks (0)                 │  │Description                                        │  │Status  : open                  │
-│(none)                     │  │(no description)                                   │  │--------------------------------│
-│                           │  │                                                   │  │Counts                          │
-│Related (0)                │  │Notes                                              │  │Comments  : 0                   │
-│(none)                     │  │(no notes)                                         │  │Blocked by: 0                   │
-│                           │  │                                                   │  │Blocks    : 0                   │
-│                           │  │                                                   │  │Related   : 0                   │
+│Blocked by (0)             │  │Minimal detail                                     │  │  Core                          │
+│(none)                     │  │bw-1 · open · P1                                   │  │  Type    : task                │
+│                           │  │                                                   │  │  Status  : open                │
+│Blocks (0)                 │  │Description                                        │  │  Priority: P1                  │
+│(none)                     │  │(no description)                                   │  │  ------------------------------│
+│                           │  │                                                   │  │  Counts                        │
+│Related (0)                │  │Notes                                              │  │  Comments  : 0                 │
+│(none)                     │  │(no notes)                                         │  │  Blocked by: 0                 │
+│                           │  │                                                   │  │  Blocks    : 0                 │
+│                           │  │                                                   │  │  Related   : 0                 │
 │                           │  │                                                   │  │                                │
 │                           │  │                                                   │  │Quick actions                   │
 │                           │  │                                                   │  │e Edit issue                    │

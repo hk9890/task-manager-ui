@@ -1,24 +1,24 @@
 ╭─ Dependencies ──────── 3 ─╮  ╭─ Content ──────────────────────────── 1 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (1)             │  │Full detail sample                                 │  │Core                            │
-│  ? P0 - bw-10 Data mode...│  │bw-22 · in_progress · P2                           │  │Type    : feature               │
-│                           │  │                                                   │  │Priority: P2                    │
-│Blocks (1)                 │  │Description                                        │  │Status  : in_progress           │
-│  ? P0 - bw-30 Integrati...│  │Ship issue detail rendering for standalone mode.   │  │--------------------------------│
-│                           │  │Keep shell-owned selection state.                  │  │Ownership                       │
-│Related (1)                │  │                                                   │  │Assignee: alice                 │
-│  ? P0 - bw-44 Renderer ...│  │Notes                                              │  │Creator : hans                  │
-│                           │  │Reference donor rendering patterns only.           │  │--------------------------------│
-│                           │  │                                                   │  │Time                            │
-│                           │  │                                                   │  │Created : 2026-04-01 12:00      │
-│                           │  │                                                   │  │Updated : 2026-04-05 11:00      │
-│                           │  │                                                   │  │Duration: 7d 20h                │
-│                           │  │                                                   │  │--------------------------------│
-│                           │  │                                                   │  │Close                           │
-│                           │  │                                                   │  │Closed: 2026-04-09 08:00        │
-│                           │  │                                                   │  │Reason: completed               │
-│                           │  │                                                   │  │--------------------------------│
-│                           │  │                                                   │  │Labels                          │
-│                           │  │Comments (1)                                       │  │• backend                       │
-│                           │  │reviewer · 2026-04-05 11:00                        │  │• ui                            │
+│Blocked by (1)             │  │Full detail sample                                 │  │  Core                          │
+│  ? P0 - bw-10 Data mode...│  │bw-22 · in_progress · P2                           │  │  Type    : feature             │
+│                           │  │                                                   │  │  Status  : in_progress         │
+│Blocks (1)                 │  │Description                                        │  │  Priority: P2                  │
+│  ? P0 - bw-30 Integrati...│  │Ship issue detail rendering for standalone mode.   │  │  ------------------------------│
+│                           │  │Keep shell-owned selection state.                  │  │  Ownership                     │
+│Related (1)                │  │                                                   │  │  Assignee: alice               │
+│  ? P0 - bw-44 Renderer ...│  │Notes                                              │  │  Creator : hans                │
+│                           │  │Reference donor rendering patterns only.           │  │  ------------------------------│
+│                           │  │                                                   │  │  Time                          │
+│                           │  │                                                   │  │  Created : 2026-04-01 12:00    │
+│                           │  │                                                   │  │  Updated : 2026-04-05 11:00    │
+│                           │  │                                                   │  │  Duration: 7d 20h              │
+│                           │  │                                                   │  │  ------------------------------│
+│                           │  │                                                   │  │  Close                         │
+│                           │  │                                                   │  │  Closed: 2026-04-09 08:00      │
+│                           │  │                                                   │  │  Reason: completed             │
+│                           │  │                                                   │  │  ------------------------------│
+│                           │  │                                                   │  │  Labels                        │
+│                           │  │Comments (1)                                       │  │  • backend                     │
+│                           │  │reviewer · 2026-04-05 11:00                        │  │  • ui                          │
 │                           │  │  Looks good to me                                 │  │… (12 more)                     │
 ╰───────────────────────────╯  ╰───────────────────────────────────────────────────╯  ╰────────────────────────────────╯

@@ -461,6 +461,53 @@ func TestRenderDependenciesOmitsStructureWhenBrowserItemsComeFromDependencyFallb
 	}
 }
 
+func TestDependencyGroupsDeduplicateIssueIDsAcrossVisibleGroups(t *testing.T) {
+	t.Parallel()
+
+	groups := dependencyGroups(domain.IssueDetail{
+		BlockedBy: []domain.IssueReference{{ID: "bw-1", Title: "Blocker"}},
+		Blocks:    []domain.IssueReference{{ID: "bw-2", Title: "Blocked child"}},
+		Related: []domain.IssueReference{
+			{ID: "bw-1", Title: "Duplicate from blocked-by"},
+			{ID: "bw-3", Title: "Related unique"},
+		},
+	}, nil)
+
+	if got := len(groups); got != 3 {
+		t.Fatalf("expected 3 dependency groups, got %d", got)
+	}
+	if got := len(groups[0].Refs); got != 1 || groups[0].Refs[0].ID != "bw-1" {
+		t.Fatalf("expected blocked-by to keep bw-1 once, got %#v", groups[0].Refs)
+	}
+	if got := len(groups[1].Refs); got != 1 || groups[1].Refs[0].ID != "bw-2" {
+		t.Fatalf("expected blocks to keep bw-2 once, got %#v", groups[1].Refs)
+	}
+	if got := len(groups[2].Refs); got != 1 || groups[2].Refs[0].ID != "bw-3" {
+		t.Fatalf("expected related to drop duplicate bw-1 and keep bw-3, got %#v", groups[2].Refs)
+	}
+}
+
+func TestRenderDependenciesPaneLinesDoNotRenderDuplicateIssueRowsAcrossGroups(t *testing.T) {
+	t.Parallel()
+
+	lines := renderDependenciesPaneLines(domain.IssueDetail{
+		BlockedBy: []domain.IssueReference{{ID: "bw-1", Title: "Blocker"}},
+		Blocks:    []domain.IssueReference{{ID: "bw-2", Title: "Blocked child"}},
+		Related: []domain.IssueReference{
+			{ID: "bw-1", Title: "Duplicate from blocked-by"},
+			{ID: "bw-3", Title: "Related unique"},
+		},
+	}, nil, "bw-3", 80)
+
+	joined := strings.Join(lines, "\n")
+	if got := strings.Count(joined, "bw-1"); got != 1 {
+		t.Fatalf("expected duplicate dependency row bw-1 to render once, got %d occurrences in:\n%s", got, joined)
+	}
+	if !strings.Contains(joined, "Related (1)") {
+		t.Fatalf("expected related group count to reflect de-duplicated rows, got:\n%s", joined)
+	}
+}
+
 func TestRenderUsesMarkdownRendererForDescriptionAndNotes(t *testing.T) {
 	t.Parallel()
 

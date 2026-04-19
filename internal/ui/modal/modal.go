@@ -42,6 +42,7 @@ type Config struct {
 	MinWidth       int
 	HideButtons    bool
 	Required       bool
+	SubmitOnEnter  bool
 }
 
 // SubmitMsg is emitted when confirm is triggered.
@@ -187,6 +188,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.keys.Enter...):
 			if m.focusedInput >= 0 {
+				if m.config.SubmitOnEnter {
+					if m.hasInputs && m.config.Required {
+						for _, input := range m.inputs {
+							if input.Value() == "" {
+								return m, nil
+							}
+						}
+					}
+					return m, func() tea.Msg { return SubmitMsg{Values: m.values()} }
+				}
 				m = m.nextField()
 				return m, nil
 			}
@@ -202,9 +213,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, func() tea.Msg { return SubmitMsg{Values: m.values()} }
 		case key.Matches(msg, m.keys.Escape...):
-			if !m.config.Required {
-				return m, func() tea.Msg { return CancelMsg{} }
-			}
+			return m, func() tea.Msg { return CancelMsg{} }
 		case msg.String() == "y":
 			if m.focusedInput == -1 || !m.hasInputs {
 				if m.hasInputs && m.config.Required {

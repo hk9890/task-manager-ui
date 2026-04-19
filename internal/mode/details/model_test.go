@@ -337,7 +337,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 		t.Fatalf("expected no intent in metadata pane, got %+v", intent)
 	}
 	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
-		t.Fatalf("expected metadata down to select priority, got %q", m.MetadataSelectedField)
+		t.Fatalf("expected metadata down to select priority after status, got %q", m.MetadataSelectedField)
 	}
 
 	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
@@ -384,7 +384,7 @@ func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T
 	}
 }
 
-func TestModelDetailEnterOnMetadataPrioritySetsCyclePriorityIntent(t *testing.T) {
+func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -404,11 +404,11 @@ func TestModelDetailEnterOnMetadataPrioritySetsCyclePriorityIntent(t *testing.T)
 	if intent != nil {
 		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
 	}
-	if !m.ConsumeCyclePriorityIntent() {
-		t.Fatal("expected metadata enter on priority to raise cycle-priority intent")
+	if !m.ConsumeOpenPriorityDialogIntent() {
+		t.Fatal("expected metadata enter on priority to raise open-priority-dialog intent")
 	}
-	if m.ConsumeCyclePriorityIntent() {
-		t.Fatal("expected cycle-priority intent to be consumed once")
+	if m.ConsumeOpenPriorityDialogIntent() {
+		t.Fatal("expected open-priority-dialog intent to be consumed once")
 	}
 }
 
@@ -581,6 +581,47 @@ func TestModelApplyLoadedDetailWithoutParentGroupBuildsBrowserFromDependencies(t
 	}
 	if m.BrowserSelectedIndex != 1 {
 		t.Fatalf("expected selection to target loaded issue bw-3, got index %d", m.BrowserSelectedIndex)
+	}
+}
+
+func TestModelDependencyTraversalOrderMatchesDeduplicatedVisibleRenderOrder(t *testing.T) {
+	t.Parallel()
+
+	m := Model{}
+	m.ApplyLoadedDetail("bw-3", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-main", Title: "Primary"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-1", Title: "Blocker"},
+			{ID: "bw-3", Title: "Target"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-2", Title: "Blocked child"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-1", Title: "Duplicate from blocked-by"},
+			{ID: "bw-4", Title: "Related unique"},
+		},
+	})
+
+	if got := len(m.BrowserItems); got != 4 {
+		t.Fatalf("expected traversal list to deduplicate duplicate IDs, got %d items %#v", got, m.BrowserItems)
+	}
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID}; strings.Join(got, ",") != "bw-1,bw-3,bw-2,bw-4" {
+		t.Fatalf("expected deterministic grouped traversal order, got %v", got)
+	}
+
+	visited := []string{m.BrowserItems[m.BrowserSelectedIndex].ID}
+	stepsToEnd := len(m.BrowserItems) - 1 - m.BrowserSelectedIndex
+	for i := 0; i < stepsToEnd; i++ {
+		m.moveRelatedSelection(1)
+		selected, ok := m.selectedRelatedIssue()
+		if !ok {
+			t.Fatal("expected related selection while traversing")
+		}
+		visited = append(visited, selected.ID)
+	}
+	if strings.Join(visited, ",") != "bw-3,bw-2,bw-4" {
+		t.Fatalf("expected one-step traversal to visit remaining visible rows in order, got %v", visited)
 	}
 }
 
