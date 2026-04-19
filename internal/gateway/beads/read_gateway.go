@@ -149,7 +149,7 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, err
 	}
 
-	blocks, err := referencesFromPayload(primary.Dependents, operationShowIssue)
+	blocks, relatedFromDependents, err := dependentReferencesFromPayload(primary.Dependents, operationShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
@@ -159,7 +159,7 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, err
 	}
 
-	related = mergeUniqueReferences(related, relatedFromDependencies)
+	related = mergeUniqueReferences(related, relatedFromDependencies, relatedFromDependents)
 
 	comments, err := commentsFromPayload(primary.Comments, operationShowIssue)
 	if err != nil {
@@ -540,7 +540,7 @@ func dependencyReferencesFromPayload(records []bdIssueRefPayload, operation stri
 		}
 
 		dependencyType := optionalString(record.DependencyType)
-		if dependencyType == "related" {
+		if dependencyType == "related" || dependencyType == "relates-to" {
 			related = append(related, ref)
 			continue
 		}
@@ -558,6 +558,27 @@ func dependencyReferencesFromPayload(records []bdIssueRefPayload, operation stri
 	}
 
 	return blockedBy, related, parentIssue, hasParent, nil
+}
+
+func dependentReferencesFromPayload(records []bdIssueRefPayload, operation string) ([]domain.IssueReference, []domain.IssueReference, error) {
+	blocks := make([]domain.IssueReference, 0, len(records))
+	related := make([]domain.IssueReference, 0)
+	for _, record := range records {
+		ref, err := record.toIssueReference(operation)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		dependencyType := optionalString(record.DependencyType)
+		if dependencyType == "related" || dependencyType == "relates-to" {
+			related = append(related, ref)
+			continue
+		}
+
+		blocks = append(blocks, ref)
+	}
+
+	return blocks, related, nil
 }
 
 func (g *Gateway) parentChildSiblings(ctx context.Context, parentID string) ([]domain.IssueReference, error) {

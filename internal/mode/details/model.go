@@ -1,7 +1,6 @@
 package details
 
 import (
-	"reflect"
 	"sort"
 	"strings"
 
@@ -10,8 +9,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 )
-
-const defaultLineCountWidth = 80
 
 // Model is the shell-owned standalone detail presentation state.
 type Model struct {
@@ -28,21 +25,15 @@ type Model struct {
 	BrowserItems         []domain.IssueReference
 	BrowserSelectedIndex int
 
+	// ScrollOffset is retained as a compatibility alias to content offset.
 	ScrollOffset int
 
-	cachedLineCount      int
-	cachedLineCountWidth int
-	cachedViewportHeight int
-	cachedSelectionID    string
-	cachedTargetID       string
-	cachedDetail         domain.IssueDetail
-	cachedBrowserItems   []domain.IssueReference
-	cachedBrowserIssueID string
-	cachedLoading        bool
-	cachedError          string
-	cachedMetadataField  uidetails.MetadataFieldKey
+	ContentScrollOffset      int
+	DependenciesScrollOffset int
+	MetadataScrollOffset     int
 
 	pendingOpenStatusDialog bool
+	pendingCyclePriority    bool
 }
 
 // OpenRelatedIssueIntent requests shell-level navigation to another issue from
@@ -64,62 +55,56 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
-	content := uidetails.Render(uidetails.State{
+	if compact || viewportHeight <= 0 {
+		return uidetails.Render(uidetails.State{
+			SelectionID: m.SelectionID,
+			TargetID:    m.TargetID,
+			Detail:      m.Detail,
+			Loading:     m.Loading,
+			Error:       m.Error,
+			Width:       maxWidth,
+			Compact:     compact,
+		})
+	}
+
+	m.syncLegacyScrollAlias()
+	return uidetails.Render(uidetails.State{
 		SelectionID: m.SelectionID,
 		TargetID:    m.TargetID,
 		Detail:      m.Detail,
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),
-		BrowserSelectedIssueID: m.browserSelectedIssueID(),
-		Loading:                m.Loading,
-		Error:                  m.Error,
-		Width:                  maxWidth,
-		Compact:                compact,
-		FocusPane:              m.focusPane(),
-		MetadataSelectedField:  m.metadataSelectedField(),
+		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
+		Loading:                  m.Loading,
+		Error:                    m.Error,
+		Width:                    maxWidth,
+		Height:                   viewportHeight,
+		Compact:                  false,
+		FocusPane:                m.focusPane(),
+		MetadataSelectedField:    m.metadataSelectedField(),
+		ContentScrollOffset:      m.ContentScrollOffset,
+		DependenciesScrollOffset: m.DependenciesScrollOffset,
+		MetadataScrollOffset:     m.MetadataScrollOffset,
 	})
-
-	if compact || viewportHeight <= 0 {
-		if compact {
-			m.invalidateLineCountCache()
-		}
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	m.setLineCountCache(len(lines), maxWidth, viewportHeight)
-	maxOffset := maxScrollOffset(len(lines), viewportHeight)
-	offset := m.ScrollOffset
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > maxOffset {
-		offset = maxOffset
-	}
-
-	start := offset
-	end := start + viewportHeight
-	if end > len(lines) {
-		end = len(lines)
-	}
-
-	return strings.Join(lines[start:end], "\n")
 }
 
-// ClampScroll keeps scroll offset inside current content bounds.
+// ClampScroll keeps all pane scroll offsets inside current content bounds.
 func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
-	if m.cachedViewportHeight != 0 && m.cachedViewportHeight != viewportHeight {
-		m.invalidateLineCountCache()
+	if viewportHeight <= 0 {
+		return
 	}
-	total := m.lineCountForScroll(maxWidth)
-	maxOffset := maxScrollOffset(total, viewportHeight)
-	if m.ScrollOffset < 0 {
-		m.ScrollOffset = 0
-	}
-	if m.ScrollOffset > maxOffset {
-		m.ScrollOffset = maxOffset
-	}
+	m.syncLegacyScrollAlias()
+	bounds := uidetails.MaxScrollOffsets(uidetails.State{
+		Detail:       m.Detail,
+		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
+		Width:        maxWidth,
+		Height:       viewportHeight,
+	})
+	m.ContentScrollOffset = clampOffset(m.ContentScrollOffset, bounds.Content)
+	m.DependenciesScrollOffset = clampOffset(m.DependenciesScrollOffset, bounds.Dependencies)
+	m.MetadataScrollOffset = clampOffset(m.MetadataScrollOffset, bounds.Metadata)
+	m.ScrollOffset = m.ContentScrollOffset
 }
 
 // HandleKey updates detail-mode scroll state and reports whether it consumed the key.
@@ -127,14 +112,9 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	if viewportHeight <= 0 {
 		return false, nil
 	}
-	if m.cachedViewportHeight != 0 && m.cachedViewportHeight != viewportHeight {
-		m.invalidateLineCountCache()
-	}
+	m.syncLegacyScrollAlias()
 	m.normalizeRelatedSelection()
 	m.ensureMetadataSelection()
-	if !m.hasBrowserPanel() && m.focusPane() == uidetails.FocusPaneBrowser {
-		m.FocusPane = uidetails.FocusPaneContent
-	}
 	if m.Keys.IsZero() {
 		resolved, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
 		if err == nil {
@@ -151,7 +131,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		return true, nil
 	}
 
-	if msg.Type == tea.KeyEnter && m.focusPane() == uidetails.FocusPaneBrowser {
+	if msg.Type == tea.KeyEnter && m.focusPane() == uidetails.FocusPaneDependencies {
 		if ref, ok := m.selectedRelatedIssue(); ok {
 			return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
 		}
@@ -159,14 +139,21 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == uidetails.FocusPaneMetadata {
-		if m.metadataSelectedField() == uidetails.MetadataFieldStatus {
+		switch m.metadataSelectedField() {
+		case uidetails.MetadataFieldStatus:
 			m.pendingOpenStatusDialog = true
+		case uidetails.MetadataFieldPriority:
+			m.pendingCyclePriority = true
 		}
 		return true, nil
 	}
 
-	total := m.lineCountForScroll(maxWidth)
-	maxOffset := maxScrollOffset(total, viewportHeight)
+	bounds := uidetails.MaxScrollOffsets(uidetails.State{
+		Detail:       m.Detail,
+		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
+		Width:        maxWidth,
+		Height:       viewportHeight,
+	})
 
 	move := 0
 	action := ""
@@ -185,57 +172,45 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		move = max(1, viewportHeight-1)
 	case m.Keys.Match(config.DetailContext, config.DetailActionHome, msg):
 		action = config.DetailActionHome
-		if m.focusPane() != uidetails.FocusPaneContent {
-			return true, nil
-		}
-		m.ScrollOffset = 0
-		return true, nil
 	case m.Keys.Match(config.DetailContext, config.DetailActionEnd, msg):
 		action = config.DetailActionEnd
-		if m.focusPane() != uidetails.FocusPaneContent {
-			return true, nil
-		}
-		m.ScrollOffset = maxOffset
-		return true, nil
 	default:
 		return false, nil
 	}
 
-	if m.focusPane() == uidetails.FocusPaneBrowser {
-		switch action {
-		case config.DetailActionScrollUp:
+	switch m.focusPane() {
+	case uidetails.FocusPaneDependencies:
+		if action == config.DetailActionScrollUp {
 			m.moveRelatedSelection(-1)
 			return true, nil
-		case config.DetailActionScrollDown:
+		}
+		if action == config.DetailActionScrollDown {
 			m.moveRelatedSelection(1)
 			return true, nil
-		default:
+		}
+		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
+		return true, nil
+	case uidetails.FocusPaneMetadata:
+		if action == config.DetailActionScrollUp {
+			m.moveMetadataSelection(-1)
 			return true, nil
 		}
-	}
-
-	if m.focusPane() == uidetails.FocusPaneMetadata {
+		if action == config.DetailActionScrollDown {
+			m.moveMetadataSelection(1)
+			return true, nil
+		}
+		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, action, move)
+		return true, nil
+	default:
+		m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, action, move)
+		m.ScrollOffset = m.ContentScrollOffset
 		return true, nil
 	}
-
-	if move == 0 {
-		return false, nil
-	}
-
-	next := m.ScrollOffset + move
-	if next < 0 {
-		next = 0
-	}
-	if next > maxOffset {
-		next = maxOffset
-	}
-	m.ScrollOffset = next
-	return true, nil
 }
 
 func (m *Model) focusPane() uidetails.FocusPane {
 	switch m.FocusPane {
-	case uidetails.FocusPaneBrowser, uidetails.FocusPaneContent, uidetails.FocusPaneMetadata:
+	case uidetails.FocusPaneDependencies, uidetails.FocusPaneContent, uidetails.FocusPaneMetadata:
 		return m.FocusPane
 	default:
 		return uidetails.FocusPaneContent
@@ -247,15 +222,13 @@ func (m *Model) moveFocusLeft() {
 	case uidetails.FocusPaneMetadata:
 		m.FocusPane = uidetails.FocusPaneContent
 	case uidetails.FocusPaneContent:
-		if m.hasBrowserPanel() {
-			m.FocusPane = uidetails.FocusPaneBrowser
-		}
+		m.FocusPane = uidetails.FocusPaneDependencies
 	}
 }
 
 func (m *Model) moveFocusRight() {
 	switch m.focusPane() {
-	case uidetails.FocusPaneBrowser:
+	case uidetails.FocusPaneDependencies:
 		m.FocusPane = uidetails.FocusPaneContent
 	case uidetails.FocusPaneContent:
 		m.FocusPane = uidetails.FocusPaneMetadata
@@ -264,16 +237,55 @@ func (m *Model) moveFocusRight() {
 }
 
 func (m *Model) metadataSelectedField() uidetails.MetadataFieldKey {
-	if m.MetadataSelectedField == uidetails.MetadataFieldNone {
+	if !isEditableMetadataField(m.MetadataSelectedField) {
 		return uidetails.MetadataFieldStatus
 	}
 	return m.MetadataSelectedField
 }
 
 func (m *Model) ensureMetadataSelection() {
-	if m.MetadataSelectedField == uidetails.MetadataFieldNone {
+	if !isEditableMetadataField(m.MetadataSelectedField) {
 		m.MetadataSelectedField = uidetails.MetadataFieldStatus
 	}
+}
+
+func (m *Model) moveMetadataSelection(delta int) {
+	fields := editableMetadataFields()
+	if len(fields) == 0 {
+		m.MetadataSelectedField = uidetails.MetadataFieldNone
+		return
+	}
+
+	m.ensureMetadataSelection()
+	index := 0
+	for i, key := range fields {
+		if key == m.MetadataSelectedField {
+			index = i
+			break
+		}
+	}
+
+	next := index + delta
+	if next < 0 {
+		next = 0
+	}
+	if next >= len(fields) {
+		next = len(fields) - 1
+	}
+	m.MetadataSelectedField = fields[next]
+}
+
+func editableMetadataFields() []uidetails.MetadataFieldKey {
+	return []uidetails.MetadataFieldKey{uidetails.MetadataFieldStatus, uidetails.MetadataFieldPriority}
+}
+
+func isEditableMetadataField(key uidetails.MetadataFieldKey) bool {
+	for _, field := range editableMetadataFields() {
+		if key == field {
+			return true
+		}
+	}
+	return false
 }
 
 // ConsumeOpenStatusDialogIntent reports and clears pending status-dialog intent.
@@ -282,6 +294,15 @@ func (m *Model) ConsumeOpenStatusDialogIntent() bool {
 		return false
 	}
 	m.pendingOpenStatusDialog = false
+	return true
+}
+
+// ConsumeCyclePriorityIntent reports and clears pending priority-cycle intent.
+func (m *Model) ConsumeCyclePriorityIntent() bool {
+	if !m.pendingCyclePriority {
+		return false
+	}
+	m.pendingCyclePriority = false
 	return true
 }
 
@@ -332,10 +353,6 @@ func (m *Model) browserIssues() []domain.IssueReference {
 	return m.BrowserItems
 }
 
-func (m *Model) hasBrowserPanel() bool {
-	return len(m.BrowserItems) > 0
-}
-
 func (m *Model) browserSelectedIssueID() string {
 	if ref, ok := m.selectedRelatedIssue(); ok {
 		return ref.ID
@@ -346,7 +363,13 @@ func (m *Model) browserSelectedIssueID() string {
 func (m *Model) syncBrowserPanel(issueID string) {
 	parentID := strings.TrimSpace(m.Detail.ParentGroupBrowser.Parent.ID)
 	if parentID == "" {
-		m.clearBrowserPanel()
+		m.BrowserGroupParentID = ""
+		m.BrowserItems = browserItemsFromDependencies(m.Detail)
+		if len(m.BrowserItems) == 0 {
+			m.clearBrowserPanel()
+			return
+		}
+		m.selectBrowserIssue(issueID)
 		return
 	}
 
@@ -362,7 +385,7 @@ func (m *Model) clearBrowserPanel() {
 	m.BrowserGroupParentID = ""
 	m.BrowserItems = nil
 	m.BrowserSelectedIndex = -1
-	if m.FocusPane == uidetails.FocusPaneBrowser {
+	if m.FocusPane == uidetails.FocusPaneDependencies {
 		m.FocusPane = uidetails.FocusPaneContent
 	}
 }
@@ -410,73 +433,68 @@ func browserItemsFromParentGroup(group domain.ParentGroupBrowserContext) []domai
 	return out
 }
 
-func maxScrollOffset(totalLines, viewportHeight int) int {
-	if viewportHeight <= 0 || totalLines <= viewportHeight {
+func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueReference {
+	groups := [][]domain.IssueReference{
+		detail.BlockedBy,
+		detail.Blocks,
+		detail.Related,
+	}
+
+	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related))
+	out := make([]domain.IssueReference, 0, len(seen))
+	for _, refs := range groups {
+		ordered := append([]domain.IssueReference(nil), refs...)
+		sort.SliceStable(ordered, func(i, j int) bool {
+			return ordered[i].ID < ordered[j].ID
+		})
+
+		for _, ref := range ordered {
+			refID := strings.TrimSpace(ref.ID)
+			if refID == "" {
+				continue
+			}
+			if _, exists := seen[refID]; exists {
+				continue
+			}
+			out = append(out, ref)
+			seen[refID] = struct{}{}
+		}
+	}
+
+	return out
+}
+
+func applyScrollAction(current, maxOffset int, action string, move int) int {
+	switch action {
+	case config.DetailActionHome:
+		return 0
+	case config.DetailActionEnd:
+		return maxOffset
+	default:
+		next := current + move
+		if next < 0 {
+			next = 0
+		}
+		if next > maxOffset {
+			next = maxOffset
+		}
+		return next
+	}
+}
+
+func clampOffset(value, maxOffset int) int {
+	if value < 0 {
 		return 0
 	}
-	return totalLines - viewportHeight
-}
-
-func (m *Model) lineCountForScroll(width int) int {
-	if m.cachedLineCount > 0 && m.cacheMatchesCurrentState(width) {
-		return m.cachedLineCount
+	if value > maxOffset {
+		return maxOffset
 	}
+	return value
+}
 
-	if width <= 0 {
-		width = defaultLineCountWidth
+func (m *Model) syncLegacyScrollAlias() {
+	if m.ScrollOffset != 0 && m.ContentScrollOffset == 0 {
+		m.ContentScrollOffset = m.ScrollOffset
 	}
-
-	content := uidetails.Render(uidetails.State{
-		SelectionID: m.SelectionID,
-		TargetID:    m.TargetID,
-		Detail:      m.Detail,
-		BrowserItems: func() []domain.IssueReference {
-			return append([]domain.IssueReference(nil), m.BrowserItems...)
-		}(),
-		BrowserSelectedIssueID: m.browserSelectedIssueID(),
-		Loading:                m.Loading,
-		Error:                  m.Error,
-		Width:                  width,
-		Compact:                false,
-		MetadataSelectedField:  m.metadataSelectedField(),
-	})
-	total := len(strings.Split(content, "\n"))
-	m.setLineCountCache(total, width, m.cachedViewportHeight)
-	return total
-}
-
-func (m *Model) cacheMatchesCurrentState(width int) bool {
-	if width <= 0 {
-		width = defaultLineCountWidth
-	}
-
-	return m.SelectionID == m.cachedSelectionID &&
-		m.TargetID == m.cachedTargetID &&
-		m.Loading == m.cachedLoading &&
-		m.Error == m.cachedError &&
-		m.metadataSelectedField() == m.cachedMetadataField &&
-		reflect.DeepEqual(m.BrowserItems, m.cachedBrowserItems) &&
-		m.browserSelectedIssueID() == m.cachedBrowserIssueID &&
-		width == m.cachedLineCountWidth &&
-		reflect.DeepEqual(m.Detail, m.cachedDetail)
-}
-
-func (m *Model) setLineCountCache(total, width, viewportHeight int) {
-	m.cachedLineCount = total
-	m.cachedLineCountWidth = width
-	m.cachedViewportHeight = viewportHeight
-	m.cachedSelectionID = m.SelectionID
-	m.cachedTargetID = m.TargetID
-	m.cachedDetail = m.Detail
-	m.cachedBrowserItems = append([]domain.IssueReference(nil), m.BrowserItems...)
-	m.cachedBrowserIssueID = m.browserSelectedIssueID()
-	m.cachedLoading = m.Loading
-	m.cachedError = m.Error
-	m.cachedMetadataField = m.metadataSelectedField()
-}
-
-func (m *Model) invalidateLineCountCache() {
-	m.cachedLineCount = 0
-	m.cachedLineCountWidth = 0
-	m.cachedViewportHeight = 0
+	m.ScrollOffset = m.ContentScrollOffset
 }

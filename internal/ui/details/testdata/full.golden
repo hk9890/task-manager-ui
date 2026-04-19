@@ -1,28 +1,24 @@
-Full detail sample                                                                    Metadata
-bw-22                                                                                 Core
-                                                                                      Type    : feature
-Description                                                                           Priority: P2
-Ship issue detail rendering for standalone mode.                                      Status  : in_progress
-Keep shell-owned selection state.                                                     ----------------------------------
-                                                                                      Ownership
-Notes                                                                                 Assignee: alice
-Reference donor rendering patterns only.                                              Creator : hans
-                                                                                      ----------------------------------
-Comments (1)                                                                          Time
-reviewer · 2026-04-05 11:00                                                           Created : 2026-04-01 12:00
-  Looks good to me                                                                    Updated : 2026-04-05 11:00
-                                                                                      Duration: 7d 20h
-Related Work                                                                          ----------------------------------
-Blocked by (1)                                                                        Close
-bw-10 · Data model update                                                             Closed: 2026-04-09 08:00
-Blocks (1)                                                                            Reason: completed
-bw-30 · Integration checks                                                            ----------------------------------
-Related (1)                                                                           Labels
-bw-44 · Renderer cleanup                                                              • backend
-                                                                                      • ui
-                                                                                      ----------------------------------
-                                                                                      Counts
-                                                                                      Comments  : 1
-                                                                                      Blocked by: 1
-                                                                                      Blocks    : 1
-                                                                                      Related   : 1
+╭─ Dependencies ──────── 3 ─╮  ╭─ Content ──────────────────────────── 1 comments ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (1)             │  │Full detail sample                                 │  │Core                            │
+│  ? P0 - bw-10 Data mode...│  │bw-22 · in_progress · P2                           │  │Type    : feature               │
+│                           │  │                                                   │  │Priority: P2                    │
+│Blocks (1)                 │  │Description                                        │  │Status  : in_progress           │
+│  ? P0 - bw-30 Integrati...│  │Ship issue detail rendering for standalone mode.   │  │--------------------------------│
+│                           │  │Keep shell-owned selection state.                  │  │Ownership                       │
+│Related (1)                │  │                                                   │  │Assignee: alice                 │
+│  ? P0 - bw-44 Renderer ...│  │Notes                                              │  │Creator : hans                  │
+│                           │  │Reference donor rendering patterns only.           │  │--------------------------------│
+│                           │  │                                                   │  │Time                            │
+│                           │  │                                                   │  │Created : 2026-04-01 12:00      │
+│                           │  │                                                   │  │Updated : 2026-04-05 11:00      │
+│                           │  │                                                   │  │Duration: 7d 20h                │
+│                           │  │                                                   │  │--------------------------------│
+│                           │  │                                                   │  │Close                           │
+│                           │  │                                                   │  │Closed: 2026-04-09 08:00        │
+│                           │  │                                                   │  │Reason: completed               │
+│                           │  │                                                   │  │--------------------------------│
+│                           │  │                                                   │  │Labels                          │
+│                           │  │Comments (1)                                       │  │• backend                       │
+│                           │  │reviewer · 2026-04-05 11:00                        │  │• ui                            │
+│                           │  │  Looks good to me                                 │  │… (12 more)                     │
+╰───────────────────────────╯  ╰───────────────────────────────────────────────────╯  ╰────────────────────────────────╯

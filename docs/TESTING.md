@@ -83,6 +83,7 @@ Notes:
 
 - Prefer the embedded fixture for repeatable verification.
 - If terminal capture is needed, use a method that records the visible rendered screen. Alt-screen TUIs may not be proven by raw stdout/transcript output alone.
+- For a repo-local reproducible capture path, use `scripts/capture_bwb_screen.py` with `pyte`; see `docs/RUNTIME_UI_VERIFICATION.md`.
 - Full-app verification complements automated tests; it does not replace them.
 
 ### Process-level capture policy (gyg.4)

@@ -162,7 +162,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected end key to be consumed")
 	}
 	endView := m.View(80, 10, false)
-	if !strings.Contains(endView, "Related: (none)") {
+	if !strings.Contains(endView, "Line 40") {
 		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
 	}
 
@@ -214,8 +214,8 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed in detail mode")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneContent {
-		t.Fatalf("expected left from content to stay content when browser absent, got %v", got)
+	if got := m.focusPane(); got != uidetails.FocusPaneDependencies {
+		t.Fatalf("expected left from content to focus dependencies pane, got %v", got)
 	}
 
 	m.BrowserItems = []domain.IssueReference{{ID: "bw-1"}, {ID: "bw-2"}}
@@ -316,7 +316,7 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenIntent(t *testing.T) {
 	}
 }
 
-func TestModelDetailMetadataPaneIsNonInteractiveForScrollBindings(t *testing.T) {
+func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -336,8 +336,24 @@ func TestModelDetailMetadataPaneIsNonInteractiveForScrollBindings(t *testing.T) 
 	if intent != nil {
 		t.Fatalf("expected no intent in metadata pane, got %+v", intent)
 	}
-	if m.ScrollOffset != 0 {
-		t.Fatalf("expected metadata pane to keep scroll offset unchanged, got %d", m.ScrollOffset)
+	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
+		t.Fatalf("expected metadata down to select priority, got %q", m.MetadataSelectedField)
+	}
+
+	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	if !consumed || intent != nil {
+		t.Fatalf("expected metadata down to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
+	}
+	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
+		t.Fatalf("expected metadata selection clamped to priority, got %q", m.MetadataSelectedField)
+	}
+
+	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	if !consumed || intent != nil {
+		t.Fatalf("expected metadata up to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
+	}
+	if m.MetadataSelectedField != uidetails.MetadataFieldStatus {
+		t.Fatalf("expected metadata up to select status, got %q", m.MetadataSelectedField)
 	}
 }
 
@@ -365,6 +381,34 @@ func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T
 	}
 	if m.ConsumeOpenStatusDialogIntent() {
 		t.Fatal("expected status-dialog intent to be consumed once")
+	}
+}
+
+func TestModelDetailEnterOnMetadataPrioritySetsCyclePriorityIntent(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID:           "bw-1",
+		TargetID:              "bw-1",
+		FocusPane:             uidetails.FocusPaneMetadata,
+		MetadataSelectedField: uidetails.MetadataFieldPriority,
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-1", Priority: 1},
+		},
+	}
+
+	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
+	if !consumed {
+		t.Fatal("expected enter in metadata pane to be consumed")
+	}
+	if intent != nil {
+		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
+	}
+	if !m.ConsumeCyclePriorityIntent() {
+		t.Fatal("expected metadata enter on priority to raise cycle-priority intent")
+	}
+	if m.ConsumeCyclePriorityIntent() {
+		t.Fatal("expected cycle-priority intent to be consumed once")
 	}
 }
 
@@ -438,5 +482,60 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 	}
 	if m.FocusPane != uidetails.FocusPaneContent {
 		t.Fatalf("expected focus to move back to content when browser absent, got %v", m.FocusPane)
+	}
+}
+
+func TestModelApplyLoadedDetailWithoutParentGroupBuildsBrowserFromDependencies(t *testing.T) {
+	t.Parallel()
+
+	m := Model{}
+	m.ApplyLoadedDetail("bw-3", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-1", Title: "Primary"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-3", Title: "Upstream blocker"},
+			{ID: "bw-1", Title: "Auth migration"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-2", Title: "Docs update"},
+			{ID: "bw-3", Title: "Upstream blocker duplicate"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-4", Title: "Search sync"},
+		},
+	})
+
+	if m.BrowserGroupParentID != "" {
+		t.Fatalf("expected no parent-group id for dependency-only issue, got %q", m.BrowserGroupParentID)
+	}
+	if len(m.BrowserItems) != 4 {
+		t.Fatalf("expected flattened dependency browser items, got %#v", m.BrowserItems)
+	}
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID}; strings.Join(got, ",") != "bw-1,bw-3,bw-2,bw-4" {
+		t.Fatalf("expected deterministic grouped ordering with de-duplication, got %v", got)
+	}
+	if m.BrowserSelectedIndex != 1 {
+		t.Fatalf("expected selection to target loaded issue bw-3, got index %d", m.BrowserSelectedIndex)
+	}
+}
+
+func TestModelApplyLoadedDetailWithoutParentGroupDefaultsSelectionToFirstDependency(t *testing.T) {
+	t.Parallel()
+
+	m := Model{}
+	m.ApplyLoadedDetail("bw-999", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-1", Title: "Primary"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-2", Title: "Blocker"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-7", Title: "Neighbor"},
+		},
+	})
+
+	if len(m.BrowserItems) != 2 {
+		t.Fatalf("expected dependency refs in browser items, got %#v", m.BrowserItems)
+	}
+	if m.BrowserSelectedIndex != 0 {
+		t.Fatalf("expected default dependency selection index 0, got %d", m.BrowserSelectedIndex)
 	}
 }

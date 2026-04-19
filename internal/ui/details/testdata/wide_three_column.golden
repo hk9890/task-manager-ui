@@ -1,12 +1,24 @@
-  Issue Browser              › Content                                                                      Metadata
-  bw-parent · Parent epic    Wide layout sample                                                           Core
-› bw-wide · Wide layout ...  bw-wide                                                                      Type    : feature
-  bw-sibling · Sibling i...                                                                               Priority: P1
-                             Description                                                                  Status  : in_progress
-                             Three column layout should render related rail on wide terminals.            ----------------------------------
-                                                                                                          Counts
-                             Notes                                                                        Comments  : 0
-                             Inline related work section should be suppressed when rail is active.        Blocked by: 1
-                                                                                                          Blocks    : 1
-                             Comments (0)                                                                 Related   : 1
-                             (no comments)                                                                
+╭─ Dependencies ───────────── 3 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (1)                  │  │Wide layout sample                                                │  │Core                            │
+│  T P1 B bw-1 Auth migration    │  │bw-wide · in_progress · P1                                        │  │Type    : feature               │
+│                                │  │                                                                  │  │Priority: P1                    │
+│Blocks (1)                      │  │Description                                                       │  │Status  : in_progress           │
+│  D P2 O bw-2 Docs update       │  │Three column layout should render related rail on wide terminals. │  │--------------------------------│
+│                                │  │                                                                  │  │Counts                          │
+│Related (1)                     │  │Notes                                                             │  │Comments  : 0                   │
+│  C P3 O bw-3 Renderer cleanup  │  │Inline related work section should be suppressed when rail is acti│  │Blocked by: 1                   │
+│                                │  │ve.                                                               │  │Blocks    : 1                   │
+│Structure (3)                   │  │                                                                  │  │Related   : 1                   │
+│  ? P0 - …parent Parent epic    │  │                                                                  │  │                                │
+│  ? P0 - …ibling Sibling issue  │  │                                                                  │  │Quick actions                   │
+│› ? P0 - bw-wide Wide layout ...│  │                                                                  │  │e Edit issue                    │
+│                                │  │                                                                  │  │u Update issue                  │
+│                                │  │                                                                  │  │c Add comment                   │
+│                                │  │                                                                  │  │x Close issue                   │
+│                                │  │                                                                  │  │r Reload detail                 │
+│                                │  │                                                                  │  │                                │
+│                                │  │                                                                  │  │                                │
+│                                │  │                                                                  │  │                                │
+│                                │  │Comments (0)                                                      │  │                                │
+│                                │  │(no comments)                                                     │  │                                │
+╰────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯

@@ -864,6 +864,77 @@ func TestModelDetailModeLeftBrowserEnterOpensIssueAndStaysInDetailMode(t *testin
 	}
 }
 
+func TestModelDetailModeDependenciesWithoutParentGroupEnterOpensSelectedIssue(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-3", Title: "Blocker"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-5", Title: "Downstream"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-4", Title: "Related"},
+		},
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 160
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(m.detail.BrowserItems) != 3 {
+		t.Fatalf("expected dependencies to populate browser items without parent-group, got %d", len(m.detail.BrowserItems))
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-4", Title: "Related", Status: "in_progress", Type: "bug", Priority: 2},
+	}
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected enter on dependencies pane to trigger detail load command")
+	}
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected app to remain in detail mode after dependency open, got %s", m.active)
+	}
+	if m.detail.TargetID != "bw-4" || m.detail.SelectionID != "bw-4" {
+		t.Fatalf("expected selected dependency bw-4 to become detail target/selection, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	}
+
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.detail.Detail.Summary.ID != "bw-4" {
+		t.Fatalf("expected loaded dependency issue detail bw-4, got %q", m.detail.Detail.Summary.ID)
+	}
+}
+
 func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -943,6 +1014,77 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 	}
 	if !foundStatusUpdate {
 		t.Fatal("expected to capture update issue input for status edit")
+	}
+}
+
+func TestModelDetailMetadataEnterOnPriorityCyclesPriority(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 4},
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 140
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected priority cycle command after enter on metadata priority")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if !gateway.HasCall(string(fakes.MethodUpdateIssue)) {
+		t.Fatalf("expected priority cycle update issue call, calls=%#v", gateway.Calls)
+	}
+
+	foundPriorityUpdate := false
+	for _, call := range gateway.Calls {
+		if call.Method != fakes.MethodUpdateIssue {
+			continue
+		}
+		updateCall, ok := call.Input.(fakes.UpdateIssueCall)
+		if !ok {
+			continue
+		}
+		if updateCall.Input.Status != nil {
+			t.Fatalf("expected priority-only update, got status update %#v", *updateCall.Input.Status)
+		}
+		if updateCall.Input.Priority == nil {
+			t.Fatalf("expected priority update, got %#v", updateCall.Input)
+		}
+		if *updateCall.Input.Priority != 0 {
+			t.Fatalf("expected wrapped priority P4->P0, got P%d", *updateCall.Input.Priority)
+		}
+		foundPriorityUpdate = true
+	}
+	if !foundPriorityUpdate {
+		t.Fatal("expected to capture update issue input for priority cycle edit")
 	}
 }
 
@@ -1439,8 +1581,59 @@ func TestModelEmbeddedFixtureDetailShowsRelatedFromRealBDRelatedLink(t *testing.
 	if !strings.Contains(view, "bwf-3") {
 		t.Fatalf("expected linked related issue bwf-3 in detail view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Closed fixture chore") {
-		t.Fatalf("expected related issue title in detail view, got:\n%s", view)
+	if !strings.Contains(view, "bwf-3") {
+		t.Fatalf("expected related issue id in detail view, got:\n%s", view)
+	}
+}
+
+func TestModelEmbeddedFixtureDetailShowsRelatesToDependentOnlyUnderRelated(t *testing.T) {
+	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
+		t.Skip("requires bd, jq, and git on PATH")
+	}
+	t.Setenv("BEADS_ACTOR", "fixture-user")
+
+	repoPath := embeddedfixture.TempRepoPath(t)
+	embeddedfixture.Seed(t, repoPath)
+
+	if err := runBDInRepo(repoPath, "dep", "relate", "bwf-3", "bwf-2"); err != nil {
+		t.Fatalf("failed to create real relates-to dependency: %v", err)
+	}
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		WorkDir: repoPath,
+		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
+	})
+	gateway := beads.NewCLIGateway(runner)
+
+	services, err := NewServices(gateway, config.Default(), repoPath)
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if got := firstSelectionID(m, mode.Board); got != "bwf-2" {
+		t.Fatalf("expected startup board selection bwf-2 from Not Ready lane, got %q", got)
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected active mode detail after enter, got %s", m.active)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Blocks (0)") {
+		t.Fatalf("expected relates-to dependent not to appear under blocks, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Related (1)") {
+		t.Fatalf("expected exactly one related entry from relates-to dependent, got:\n%s", view)
+	}
+	if strings.Count(view, "bwf-3") != 1 {
+		t.Fatalf("expected relates-to-linked issue bwf-3 to render once (under Related only), got:\n%s", view)
 	}
 }
 

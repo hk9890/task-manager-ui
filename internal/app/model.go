@@ -47,11 +47,12 @@ type launchActionResultMsg struct {
 type mutationKind string
 
 const (
-	mutationCreate  mutationKind = "create"
-	mutationUpdate  mutationKind = "update"
-	mutationClose   mutationKind = "close"
-	mutationComment mutationKind = "comment"
-	mutationStatus  mutationKind = "status"
+	mutationCreate        mutationKind = "create"
+	mutationUpdate        mutationKind = "update"
+	mutationClose         mutationKind = "close"
+	mutationComment       mutationKind = "comment"
+	mutationStatus        mutationKind = "status"
+	mutationPriorityCycle mutationKind = "priority_cycle"
 )
 
 type mutationCatalogsLoadedMsg struct {
@@ -315,6 +316,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
 			)
+		case mutationPriorityCycle:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+			)
 		default:
 			return m, modeCmd
 		}
@@ -367,6 +373,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
 				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, issue))
+			}
+			if m.detail.ConsumeCyclePriorityIntent() {
+				issue := m.detail.Detail.Summary
+				if strings.TrimSpace(issue.ID) == "" {
+					if selection := m.currentSelection(); selection != nil {
+						issue = selection.Issue
+					}
+				}
+				if strings.TrimSpace(issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+				}
+				return m, batchCmds(modeCmd, cyclePriorityForIssueCmd(m.services, issue))
 			}
 			if intent != nil {
 				issueID := strings.TrimSpace(intent.IssueID)
@@ -653,7 +671,7 @@ func (m Model) detailViewportWidth() int {
 }
 
 func (m Model) workspaceSize() (int, int) {
-	workspaceWidth := max(1, m.width-2)
+	workspaceWidth := max(1, m.width)
 	headerHeight := lipgloss.Height(m.renderHeader())
 	footerHeight := lipgloss.Height(m.renderFooter())
 	workspaceHeight := max(1, m.height-headerHeight-footerHeight)
@@ -1010,6 +1028,19 @@ func loadStatusCatalogForIssueCmd(services Services, issue domain.IssueSummary) 
 			return statusCatalogLoadedMsg{issue: issue, err: fmt.Errorf("status catalog: %w", err)}
 		}
 		return statusCatalogLoadedMsg{issue: issue, statuses: statuses}
+	}
+}
+
+func cyclePriorityForIssueCmd(services Services, issue domain.IssueSummary) tea.Cmd {
+	return func() tea.Msg {
+		next := (issue.Priority + 1) % 5
+		if next < 0 {
+			next = 0
+		}
+		if err := services.Gateway.UpdateIssue(context.Background(), issue.ID, domain.UpdateIssueInput{Priority: &next}); err != nil {
+			return mutationResultMsg{kind: mutationPriorityCycle, issueID: issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
+		}
+		return mutationResultMsg{kind: mutationPriorityCycle, issueID: issue.ID}
 	}
 }
 

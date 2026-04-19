@@ -141,6 +141,27 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 	assertGolden(t, []byte(view), "dependency_rich.golden")
 }
 
+func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-88",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-88", Title: "Dependency rich issue", Status: "blocked", Type: "task", Priority: 1},
+			BlockedBy: []domain.IssueReference{{ID: "bw-1", Title: "Auth migration"}},
+			Blocks:    []domain.IssueReference{{ID: "bw-9", Title: "UI polish"}},
+			Related:   []domain.IssueReference{{ID: "bw-42", Title: "Search sync"}},
+		},
+		BrowserSelectedIssueID: "bw-9",
+		Width:                  100,
+	})
+
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "│›") || !strings.Contains(plain, "bw-9") {
+		t.Fatalf("expected selected dependency row marker for bw-9, got:\n%s", plain)
+	}
+}
+
 func TestRenderCompactGolden(t *testing.T) {
 	t.Parallel()
 
@@ -211,6 +232,9 @@ func TestRenderWideThreeColumnGolden(t *testing.T) {
 			},
 			Description: "Three column layout should render related rail on wide terminals.",
 			Notes:       "Inline related work section should be suppressed when rail is active.",
+			ParentGroupBrowser: domain.ParentGroupBrowserContext{
+				Parent: domain.IssueReference{ID: "bw-parent", Title: "Parent epic"},
+			},
 			BlockedBy: []domain.IssueReference{
 				{ID: "bw-1", Title: "Auth migration", Type: "task", Priority: 1, Status: "blocked"},
 			},
@@ -277,19 +301,12 @@ func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
 		Width: InspectorTwoColumnMinWidth,
 	})
 
-	lines := strings.Split(view, "\n")
-	if len(lines) == 0 {
-		t.Fatalf("expected rendered output at width %d", InspectorTwoColumnMinWidth)
-	}
-	if !strings.Contains(lines[0], "Metadata") {
-		t.Fatalf("expected first row to include metadata rail at width %d, got:\n%s", InspectorTwoColumnMinWidth, view)
-	}
-	if !strings.Contains(view, "Description") {
-		t.Fatalf("expected content pane section at width %d, got:\n%s", InspectorTwoColumnMinWidth, view)
+	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Metadata") {
+		t.Fatalf("expected three-pane layout headings at width %d, got:\n%s", InspectorTwoColumnMinWidth, view)
 	}
 }
 
-func TestRenderFallsBackToSingleColumnBelowBreakpoint(t *testing.T) {
+func TestRenderThreePaneLayoutBelowLegacyBreakpoints(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
@@ -307,12 +324,8 @@ func TestRenderFallsBackToSingleColumnBelowBreakpoint(t *testing.T) {
 		Width: InspectorTwoColumnMinWidth - 1,
 	})
 
-	if strings.Contains(view, "Description  Metadata") {
-		t.Fatalf("expected no two-column header row below breakpoint, got:\n%s", view)
-	}
-
-	if !strings.Contains(view, "\nMetadata\n") {
-		t.Fatalf("expected single-column metadata section below breakpoint, got:\n%s", view)
+	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Metadata") {
+		t.Fatalf("expected dense three-pane layout below legacy breakpoint, got:\n%s", view)
 	}
 }
 
@@ -329,11 +342,38 @@ func TestRenderThreeColumnRailWidthsStayInApprovedRange(t *testing.T) {
 	t.Parallel()
 
 	left, _, metadata := splitThreeColumnWidths(InspectorThreeColumnMinWidth)
-	if left < 22 || left > 28 {
-		t.Fatalf("expected left rail in [22,28], got %d", left)
+	if left < leftRailMinWidth || left > leftRailMaxWidth {
+		t.Fatalf("expected left rail in [%d,%d], got %d", leftRailMinWidth, leftRailMaxWidth, left)
 	}
 	if metadata != 34 {
 		t.Fatalf("expected metadata rail width 34, got %d", metadata)
+	}
+}
+
+func TestSplitThreePaneWidthsTargetsQuarterLeftRailAtCommonTerminalSizes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		total int
+	}{
+		{name: "120 columns", total: 120},
+		{name: "160 columns", total: 160},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			left, _, metadata := splitThreePaneWidths(tc.total)
+			available := tc.total - (detailColumnGap * 2)
+			expected := clamp(available/4, leftRailMinWidth, leftRailMaxWidth)
+			if left != expected {
+				t.Fatalf("expected left rail %d for total=%d, got %d", expected, tc.total, left)
+			}
+			if metadata != metadataRailWidth {
+				t.Fatalf("expected metadata rail width %d for total=%d, got %d", metadataRailWidth, tc.total, metadata)
+			}
+		})
 	}
 }
 
@@ -370,6 +410,9 @@ func TestRenderWideLayoutWithBrowserUsesLeftIssueBrowserPanel(t *testing.T) {
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "bw-child", Title: "Child", Status: "open", Type: "task", Priority: 1},
 			Description: "desc",
+			ParentGroupBrowser: domain.ParentGroupBrowserContext{
+				Parent: domain.IssueReference{ID: "bw-parent", Title: "Parent"},
+			},
 		},
 		BrowserItems: []domain.IssueReference{
 			{ID: "bw-parent", Title: "Parent"},
@@ -380,11 +423,41 @@ func TestRenderWideLayoutWithBrowserUsesLeftIssueBrowserPanel(t *testing.T) {
 		Width:                  InspectorThreeColumnMinWidth,
 	})
 
-	if !strings.Contains(view, "Issue Browser") {
-		t.Fatalf("expected left issue browser panel in wide layout, got:\n%s", view)
+	if !strings.Contains(view, "Dependencies") {
+		t.Fatalf("expected left dependencies panel in wide layout, got:\n%s", view)
 	}
-	if !strings.Contains(view, "› bw-child · Child") {
-		t.Fatalf("expected selected browser row marker, got:\n%s", view)
+	if !strings.Contains(view, "Structure (3)") {
+		t.Fatalf("expected structure group in dependencies panel, got:\n%s", view)
+	}
+}
+
+func TestRenderDependenciesOmitsStructureWhenBrowserItemsComeFromDependencyFallback(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-main",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-main", Title: "Main", Status: "open", Type: "task", Priority: 1},
+			BlockedBy: []domain.IssueReference{
+				{ID: "bw-1", Title: "A"},
+			},
+			Blocks: []domain.IssueReference{
+				{ID: "bw-2", Title: "B"},
+			},
+			Related: []domain.IssueReference{
+				{ID: "bw-3", Title: "C"},
+			},
+		},
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-1", Title: "A"},
+			{ID: "bw-2", Title: "B"},
+			{ID: "bw-3", Title: "C"},
+		},
+		Width: InspectorThreeColumnMinWidth,
+	})
+
+	if strings.Contains(view, "Structure (") {
+		t.Fatalf("expected dependency-fallback view to omit structure group, got:\n%s", view)
 	}
 }
 
@@ -415,7 +488,7 @@ func TestRenderUsesMarkdownRendererForDescriptionAndNotes(t *testing.T) {
 	}
 }
 
-func TestRenderKeepsCommentBodiesPlainText(t *testing.T) {
+func TestRenderUsesMarkdownRendererForCommentBodies(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
@@ -430,8 +503,9 @@ func TestRenderKeepsCommentBodiesPlainText(t *testing.T) {
 		Width: 100,
 	})
 
-	if !strings.Contains(view, "  - literal markdown-like bullet") {
-		t.Fatalf("expected comment body to remain plain text, got:\n%s", view)
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "literal markdown-like bullet") {
+		t.Fatalf("expected markdown-rendered comment text to be present, got:\n%s", plain)
 	}
 }
 

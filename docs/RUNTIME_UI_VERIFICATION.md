@@ -23,6 +23,26 @@ sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2
 (cd "$repoPath" && BD_NON_INTERACTIVE=1 /tmp/bwb)
 ```
 
+### Optional agent-visible capture path
+
+When the operator/agent needs to inspect the real rendered alt-screen without a human staring at the terminal, capture the visible screen buffer through a PTY and terminal emulator:
+
+```bash
+python3 -m pip install --user pyte
+go build -o /tmp/bwb ./cmd/bwb
+repoPath="$(mktemp -d)"
+sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
+python3 scripts/capture_bwb_screen.py --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 -- -- env BD_NON_INTERACTIVE=1 /tmp/bwb
+```
+
+To capture dedicated detail mode after startup, send a delayed key sequence such as `3` then `ctrl+q`:
+
+```bash
+python3 scripts/capture_bwb_screen.py --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 --steps '0.2:3,0.2:CTRL+Q' -- -- env BD_NON_INTERACTIVE=1 /tmp/bwb
+```
+
+This path is intended for verification and debugging only. It captures the final visible screen buffer, not just raw stdout.
+
 ## 3) What to verify in the manual run
 
 Use this short checklist (pass/fail, no user handoff needed):

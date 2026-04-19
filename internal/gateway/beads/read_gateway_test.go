@@ -669,30 +669,72 @@ func TestGatewayShowIssueReferenceMetadataIsOptional(t *testing.T) {
 	}
 }
 
-func TestGatewayShowIssueMapsRelatedFromDependenciesWhenDependencyTypeIsRelated(t *testing.T) {
+func TestGatewayShowIssueMapsRelatedFromDependenciesWhenDependencyTypeIsRelatedOrRelatesTo(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		dependencyType string
+	}{
+		{name: "related", dependencyType: "related"},
+		{name: "relates-to", dependencyType: "relates-to"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			routes := map[string]routeResponse{
+				argsKey([]string{"show", "bw-11", "--json"}): {
+					result: ExecResult{Stdout: []byte(fmt.Sprintf(`[
+						{"id":"bw-11","title":"related in dependencies","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"real blocker","dependency_type":"blocks"},{"id":"bw-3","title":"real related","dependency_type":"%s"}],"dependents":[{"id":"bw-2","title":"child"}]}
+					]`, tc.dependencyType))},
+				},
+			}
+
+			gateway, _ := newTestGateway(routes)
+
+			got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-11"})
+			if err != nil {
+				t.Fatalf("ShowIssue returned error: %v", err)
+			}
+
+			if len(got.BlockedBy) != 1 || got.BlockedBy[0].ID != "bw-1" {
+				t.Fatalf("expected only non-related dependency refs in blocked-by, got %#v", got.BlockedBy)
+			}
+
+			if len(got.Related) != 1 || got.Related[0].ID != "bw-3" {
+				t.Fatalf("expected related refs from dependencies, got %#v", got.Related)
+			}
+		})
+	}
+}
+
+func TestGatewayShowIssueMapsRelatedFromDependentsWhenDependencyTypeIsRelatesTo(t *testing.T) {
 	t.Parallel()
 
 	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-11", "--json"}): {
+		argsKey([]string{"show", "bw-13", "--json"}): {
 			result: ExecResult{Stdout: []byte(`[
-				{"id":"bw-11","title":"related in dependencies","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"real blocker","dependency_type":"blocks"},{"id":"bw-3","title":"real related","dependency_type":"related"}],"dependents":[{"id":"bw-2","title":"child"}]}
+				{"id":"bw-13","title":"related in dependents","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependents":[{"id":"bw-21","title":"true dependent","dependency_type":"blocks"},{"id":"bw-22","title":"related dependent","dependency_type":"relates-to"}]}
 			]`)},
 		},
 	}
 
 	gateway, _ := newTestGateway(routes)
 
-	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-11"})
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-13"})
 	if err != nil {
 		t.Fatalf("ShowIssue returned error: %v", err)
 	}
 
-	if len(got.BlockedBy) != 1 || got.BlockedBy[0].ID != "bw-1" {
-		t.Fatalf("expected only non-related dependency refs in blocked-by, got %#v", got.BlockedBy)
+	if len(got.Blocks) != 1 || got.Blocks[0].ID != "bw-21" {
+		t.Fatalf("expected only non-related dependents in blocks, got %#v", got.Blocks)
 	}
 
-	if len(got.Related) != 1 || got.Related[0].ID != "bw-3" {
-		t.Fatalf("expected related refs from dependencies, got %#v", got.Related)
+	if len(got.Related) != 1 || got.Related[0].ID != "bw-22" {
+		t.Fatalf("expected relates-to dependent in related, got %#v", got.Related)
 	}
 }
 

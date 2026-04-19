@@ -22,8 +22,9 @@ type metadataField struct {
 type MetadataFieldKey string
 
 const (
-	MetadataFieldNone   MetadataFieldKey = ""
-	MetadataFieldStatus MetadataFieldKey = "status"
+	MetadataFieldNone     MetadataFieldKey = ""
+	MetadataFieldPriority MetadataFieldKey = "priority"
+	MetadataFieldStatus   MetadataFieldKey = "status"
 )
 
 type metadataGroup struct {
@@ -91,7 +92,7 @@ func metadataGroups(detail domain.IssueDetail) []metadataGroup {
 	core := metadataGroup{title: "Core"}
 	core.fields = append(core.fields,
 		metadataField{label: "Type", value: emptyFallback(summary.Type, "(unknown)")},
-		metadataField{label: "Priority", value: formatPriority(summary.Priority)},
+		metadataField{key: MetadataFieldPriority, label: "Priority", value: formatPriority(summary.Priority), editable: true},
 		metadataField{key: MetadataFieldStatus, label: "Status", value: emptyFallback(summary.Status, "(unknown)"), editable: true},
 	)
 	groups = append(groups, core)

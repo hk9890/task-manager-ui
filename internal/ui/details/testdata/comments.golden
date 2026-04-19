@@ -1,35 +1,24 @@
-Comments heavy issue
-bw-77
-
-Metadata
-Core
-Type    : bug
-Priority: P0
-Status  : open
-----------------------------------------------------------------------------------------------------
-Counts
-Comments  : 3
-Blocked by: 0
-Blocks    : 0
-Related   : 0
-
-Description
-Short description
-
-Notes
-(no notes)
-
-Comments (3)
-unknown · unknown time
-  (empty comment)
-
-alice · 2026-04-05 10:00
-  First chronologically
-
-bob · 2026-04-05 12:00
-  Second chronologically
-
-Related Work
-Blocked by: (none)
-Blocks: (none)
-Related: (none)
+╭─ Dependencies ─── 0 ─╮  ╭─ Content ───────────── 3 comments ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (0)        │  │Comments heavy issue                │  │Core                            │
+│(none)                │  │bw-77 · open · P0                   │  │Type    : bug                   │
+│                      │  │                                    │  │Priority: P0                    │
+│Blocks (0)            │  │Description                         │  │Status  : open                  │
+│(none)                │  │Short description                   │  │--------------------------------│
+│                      │  │                                    │  │Counts                          │
+│Related (0)           │  │Notes                               │  │Comments  : 3                   │
+│(none)                │  │(no notes)                          │  │Blocked by: 0                   │
+│                      │  │                                    │  │Blocks    : 0                   │
+│                      │  │                                    │  │Related   : 0                   │
+│                      │  │                                    │  │                                │
+│                      │  │                                    │  │Quick actions                   │
+│                      │  │                                    │  │e Edit issue                    │
+│                      │  │Comments (3)                        │  │u Update issue                  │
+│                      │  │unknown · unknown time              │  │c Add comment                   │
+│                      │  │  (empty comment)                   │  │x Close issue                   │
+│                      │  │                                    │  │r Reload detail                 │
+│                      │  │alice · 2026-04-05 10:00            │  │                                │
+│                      │  │  First chronologically             │  │                                │
+│                      │  │                                    │  │                                │
+│                      │  │bob · 2026-04-05 12:00              │  │                                │
+│                      │  │  Second chronologically            │  │                                │
+╰──────────────────────╯  ╰────────────────────────────────────╯  ╰────────────────────────────────╯

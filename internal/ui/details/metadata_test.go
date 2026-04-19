@@ -63,6 +63,10 @@ func TestMetadataCoreFieldsKeepStatusAsFirstEditableField(t *testing.T) {
 		t.Fatalf("expected core fields, got %#v", core.fields)
 	}
 
+	if core.fields[1].key != MetadataFieldPriority {
+		t.Fatalf("expected priority to be actionable metadata field, got key=%q", core.fields[1].key)
+	}
+
 	if core.fields[2].key != MetadataFieldStatus {
 		t.Fatalf("expected status to be actionable metadata field, got key=%q", core.fields[2].key)
 	}
@@ -127,6 +131,23 @@ func TestRenderMetadataRailHighlightsSelectedStatusField(t *testing.T) {
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "› Status") {
 		t.Fatalf("expected selected status indicator in metadata rail, got:\n%s", joined)
+	}
+}
+
+func TestRenderMetadataRailHighlightsSelectedPriorityField(t *testing.T) {
+	t.Parallel()
+
+	lines := renderMetadataRail(domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			Type:     "task",
+			Priority: 1,
+			Status:   "open",
+		},
+	}, 40, MetadataFieldPriority)
+
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "› Priority") {
+		t.Fatalf("expected selected priority indicator in metadata rail, got:\n%s", joined)
 	}
 }
 

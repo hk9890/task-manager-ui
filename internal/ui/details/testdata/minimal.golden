@@ -1,16 +1,24 @@
-Minimal detail                                                                        Metadata
-bw-1                                                                                  Core
-                                                                                      Type    : task
-Description                                                                           Priority: P1
-(no description)                                                                      Status  : open
-                                                                                      ----------------------------------
-Notes                                                                                 Counts
-(no notes)                                                                            Comments  : 0
-                                                                                      Blocked by: 0
-Comments (0)                                                                          Blocks    : 0
-(no comments)                                                                         Related   : 0
-                                                                                      
-Related Work                                                                          
-Blocked by: (none)                                                                    
-Blocks: (none)                                                                        
-Related: (none)                                                                       
+╭─ Dependencies ──────── 0 ─╮  ╭─ Content ──────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (0)             │  │Minimal detail                                     │  │Core                            │
+│(none)                     │  │bw-1 · open · P1                                   │  │Type    : task                  │
+│                           │  │                                                   │  │Priority: P1                    │
+│Blocks (0)                 │  │Description                                        │  │Status  : open                  │
+│(none)                     │  │(no description)                                   │  │--------------------------------│
+│                           │  │                                                   │  │Counts                          │
+│Related (0)                │  │Notes                                              │  │Comments  : 0                   │
+│(none)                     │  │(no notes)                                         │  │Blocked by: 0                   │
+│                           │  │                                                   │  │Blocks    : 0                   │
+│                           │  │                                                   │  │Related   : 0                   │
+│                           │  │                                                   │  │                                │
+│                           │  │                                                   │  │Quick actions                   │
+│                           │  │                                                   │  │e Edit issue                    │
+│                           │  │                                                   │  │u Update issue                  │
+│                           │  │                                                   │  │c Add comment                   │
+│                           │  │                                                   │  │x Close issue                   │
+│                           │  │                                                   │  │r Reload detail                 │
+│                           │  │                                                   │  │                                │
+│                           │  │                                                   │  │                                │
+│                           │  │                                                   │  │                                │
+│                           │  │Comments (0)                                       │  │                                │
+│                           │  │(no comments)                                      │  │                                │
+╰───────────────────────────╯  ╰───────────────────────────────────────────────────╯  ╰────────────────────────────────╯

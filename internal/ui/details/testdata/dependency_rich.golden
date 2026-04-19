@@ -1,34 +1,24 @@
-Dependency rich issue
-bw-88
-
-Metadata
-Core
-Type    : task
-Priority: P1
-Status  : blocked
-----------------------------------------------------------------------------------------------------
-Counts
-Comments  : 0
-Blocked by: 2
-Blocks    : 2
-Related   : 2
-
-Description
-Dependency context check
-
-Notes
-(no notes)
-
-Comments (0)
-(no comments)
-
-Related Work
-Blocked by (2)
-bw-1 · Auth migration
-bw-5 · Upstream gate
-Blocks (2)
-bw-12 · Release docs
-bw-9 · UI polish
-Related (2)
-bw-100 · Planning umbrella
-bw-42 · Search sync
+╭─ Dependencies ─── 6 ─╮  ╭─ Content ───────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (2)        │  │Dependency rich issue               │  │Core                            │
+│  ? P0 - bw-1 Auth ...│  │bw-88 · blocked · P1                │  │Type    : task                  │
+│  ? P0 - bw-5 Upstr...│  │                                    │  │Priority: P1                    │
+│                      │  │Description                         │  │Status  : blocked               │
+│Blocks (2)            │  │Dependency context check            │  │--------------------------------│
+│  ? P0 - bw-12 Rele...│  │                                    │  │Counts                          │
+│  ? P0 - bw-9 UI po...│  │Notes                               │  │Comments  : 0                   │
+│                      │  │(no notes)                          │  │Blocked by: 2                   │
+│Related (2)           │  │                                    │  │Blocks    : 2                   │
+│  ? P0 - bw-100 Pla...│  │                                    │  │Related   : 2                   │
+│  ? P0 - bw-42 Sear...│  │                                    │  │                                │
+│                      │  │                                    │  │Quick actions                   │
+│                      │  │                                    │  │e Edit issue                    │
+│                      │  │                                    │  │u Update issue                  │
+│                      │  │                                    │  │c Add comment                   │
+│                      │  │                                    │  │x Close issue                   │
+│                      │  │                                    │  │r Reload detail                 │
+│                      │  │                                    │  │                                │
+│                      │  │                                    │  │                                │
+│                      │  │                                    │  │                                │
+│                      │  │Comments (0)                        │  │                                │
+│                      │  │(no comments)                       │  │                                │
+╰──────────────────────╯  ╰────────────────────────────────────╯  ╰────────────────────────────────╯
