@@ -17,7 +17,7 @@ overridden through runtime config.
 - `f16` — cycle to the previous mode
 - `3` — switch to detail mode
 - `esc` — return from detail/search to browse, or dismiss toast state
-- `r` — reload detail mode from the gateway (detail mode only)
+- `r` — manually reload detail mode from the gateway immediately (detail mode only)
 - `e` — edit selected issue in external editor
 - `c` — create issue
 - `u` — update selected issue metadata
@@ -34,7 +34,7 @@ overridden through runtime config.
 - `k`, `up` — move up within the current column
 - `j`, `down` — move down within the current column
 - `enter`, `o` — open selected issue in detail mode
-- `r` — reload board data
+- `r` — manually reload board data immediately
 
 ## Search Mode
 
@@ -45,7 +45,7 @@ Typing while the query field is focused updates the search query directly.
 - `h`, `left` — move focus left between panes
 - `l`, `right` — move focus right between panes
 - `/` — focus the query field
-- `r` — reload current search
+- `r` — manually reload the current search immediately
 - `enter` — open selected result in detail mode
 - `tab`, `ctrl+j` — cycle focus to next search pane
 - `shift+tab`, `ctrl+k` — cycle focus to previous search pane
@@ -81,3 +81,5 @@ Typing while the query field is focused updates the search query directly.
 - Search mode intentionally captures normal text entry while the query field is
   focused.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.
+- Data views also auto-refresh when the app regains focus and on a low-frequency
+  background schedule. Use `r` when you want an immediate manual refresh.

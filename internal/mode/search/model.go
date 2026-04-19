@@ -19,6 +19,11 @@ type searchLoadedMsg struct {
 	err    error
 }
 
+type selectionAnchor struct {
+	issueID string
+	row     int
+}
+
 // Model is the standalone search mode controller.
 type Model struct {
 	gateway beads.BeadsGateway
@@ -36,6 +41,8 @@ type Model struct {
 	results     []domain.IssueSummary
 	selectedRow int
 	typing      bool
+
+	pendingSelectionAnchor *selectionAnchor
 }
 
 // NewModel creates a search mode controller.
@@ -74,6 +81,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case searchLoadedMsg:
 		m.loading = false
 		m.typing = false
+		anchor := m.pendingSelectionAnchor
+		m.pendingSelectionAnchor = nil
 		if msg.err != nil {
 			m.errText = msg.err.Error()
 			m.results = nil
@@ -83,7 +92,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		m.errText = ""
 		m.results = msg.issues
-		m.normalizeSelection()
+		if anchor != nil {
+			m.restoreSelectionFromAnchor(anchor)
+		} else {
+			m.normalizeSelection()
+		}
 		return m.selectionChangedCmd()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -159,7 +172,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			m.focus = uisearch.FocusQuery
 			return nil
 		case m.keys.Match(config.SearchContext, config.SearchActionReload, msg):
-			return m.triggerSearch()
+			return m.triggerSearchPreservingSelection()
 		}
 
 		return nil
@@ -212,6 +225,15 @@ func (m *Model) cycleFocus(delta int) {
 }
 
 func (m *Model) triggerSearch() tea.Cmd {
+	return m.triggerSearchWithAnchor(nil)
+}
+
+func (m *Model) triggerSearchPreservingSelection() tea.Cmd {
+	anchor := m.captureSelectionAnchor()
+	return m.triggerSearchWithAnchor(anchor)
+}
+
+func (m *Model) triggerSearchWithAnchor(anchor *selectionAnchor) tea.Cmd {
 	query := domain.SearchIssuesQuery{
 		Text:   strings.TrimSpace(m.query),
 		Limit:  defaultSearchLimit,
@@ -219,6 +241,7 @@ func (m *Model) triggerSearch() tea.Cmd {
 	}
 	m.loading = true
 	m.errText = ""
+	m.pendingSelectionAnchor = anchor
 	return loadSearchCmd(m.gateway, query)
 }
 
@@ -247,6 +270,25 @@ func (m *Model) SetSize(width, height int) {
 // IsLoading reports whether a gateway search is active.
 func (m *Model) IsLoading() bool {
 	return m.loading
+}
+
+// Reload refreshes current search results without mutating query input state.
+func (m *Model) Reload() tea.Cmd {
+	if m.loading {
+		return nil
+	}
+	return m.triggerSearchPreservingSelection()
+}
+
+// AutoRefresh refreshes search when safe for active query editing.
+func (m *Model) AutoRefresh() tea.Cmd {
+	if m.loading {
+		return nil
+	}
+	if m.focus == uisearch.FocusQuery && m.typing {
+		return nil
+	}
+	return m.triggerSearchPreservingSelection()
 }
 
 // ResultCount returns the current result count.
@@ -288,6 +330,32 @@ func (m *Model) selectedIssueID() string {
 		return ""
 	}
 	return selection.Issue.ID
+}
+
+func (m *Model) captureSelectionAnchor() *selectionAnchor {
+	anchor := &selectionAnchor{row: m.selectedRow}
+	if sel := m.currentSelection(); sel != nil {
+		anchor.issueID = sel.Issue.ID
+	}
+	return anchor
+}
+
+func (m *Model) restoreSelectionFromAnchor(anchor *selectionAnchor) {
+	if anchor == nil {
+		m.normalizeSelection()
+		return
+	}
+	if anchor.issueID != "" {
+		for idx, issue := range m.results {
+			if issue.ID == anchor.issueID {
+				m.selectedRow = idx
+				m.normalizeSelection()
+				return
+			}
+		}
+	}
+	m.selectedRow = anchor.row
+	m.normalizeSelection()
 }
 
 func (m *Model) currentSelection() *mode.Selection {

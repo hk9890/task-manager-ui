@@ -219,6 +219,107 @@ func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "jkhlr")
 }
 
+func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
+	}}
+	m := initModel(gateway)
+
+	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
+		t.Fatalf("expected second result selected before reload, got %#v", got)
+	}
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected query focus before reload, got %v", m.focus)
+	}
+
+	gateway.ResetCalls()
+	cmd := m.Reload()
+	m = applyMessages(m, drainCmd(cmd))
+
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+	if m.query != "x" {
+		t.Fatalf("expected reload to preserve query, got %q", m.query)
+	}
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
+		t.Fatalf("expected reload to preserve selected result, got %#v", got)
+	}
+}
+
+func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	m := initModel(gateway)
+
+	gateway.ResetCalls()
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if cmd == nil {
+		t.Fatalf("expected typing to trigger search")
+	}
+	if !m.typing {
+		t.Fatalf("expected typing flag while waiting for query search response")
+	}
+
+	auto := m.AutoRefresh()
+	if auto != nil {
+		t.Fatalf("expected auto refresh suppression while actively typing")
+	}
+
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no gateway calls before queued typing command resolves, got %#v", gateway.Calls)
+	}
+
+	m = applyMessages(m, drainCmd(cmd))
+	if len(gateway.Calls) != 1 || gateway.Calls[0].Method != fakes.MethodSearchIssues {
+		t.Fatalf("expected exactly one typing-triggered search call, got %#v", gateway.Calls)
+	}
+	if m.typing {
+		t.Fatalf("expected typing false after search resolves")
+	}
+}
+
+func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
+	}}
+	m := initModel(gateway)
+
+	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
+		t.Fatalf("expected second result selected before auto refresh, got %#v", got)
+	}
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected focus query before auto refresh, got %v", m.focus)
+	}
+
+	gateway.ResetCalls()
+	cmd := m.AutoRefresh()
+	m = applyMessages(m, drainCmd(cmd))
+
+	testui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+	if m.query != "x" {
+		t.Fatalf("expected auto refresh to preserve query, got %q", m.query)
+	}
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
+		t.Fatalf("expected auto refresh to preserve selected result, got %#v", got)
+	}
+}
+
 func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
 		t.Skip("requires bd, jq, and git on PATH")

@@ -34,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	program := tea.NewProgram(app.NewModel(services), tea.WithAltScreen())
+	program := tea.NewProgram(app.NewModel(services), tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := program.Run(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "bwb failed: %v\n", err)
 		os.Exit(1)

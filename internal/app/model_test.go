@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/config"
@@ -21,6 +22,12 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/modal"
 )
+
+func TestMain(m *testing.M) {
+	scheduleRefreshTickCmd = func() tea.Cmd { return nil }
+	modelNow = time.Now
+	os.Exit(m.Run())
+}
 
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
@@ -300,6 +307,541 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 	}
 	if m.lastBrowse != mode.Board {
 		t.Fatalf("expected lastBrowse to return to board, got %s", m.lastBrowse)
+	}
+}
+
+func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+	withModelNow(t, time.Unix(0, 0))
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+	if m.focusKnown {
+		t.Fatal("expected no focus events observed at startup")
+	}
+
+	withModelNow(t, time.Unix(61, 0))
+	gateway.ResetCalls()
+	next, cmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+		t.Fatalf("expected board refresh from tick fallback without focus events, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	gateway.ResetCalls()
+	next, cmd := m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) {
+		t.Fatalf("expected initial focus event not to force refresh, calls=%#v", gateway.Calls)
+	}
+
+	next, cmd = m.Update(tea.BlurMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	m.markSurfaceRefreshed(mode.Board)
+	next, cmd = m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+		t.Fatalf("expected focus regain to refresh active board, calls=%#v", gateway.Calls)
+	}
+
+	gateway.ResetCalls()
+	next, cmd = m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) {
+		t.Fatalf("expected repeated focus while focused to avoid refresh spam, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Detail {
+		t.Fatalf("expected detail active before focus-regain refresh test, got %s", m.active)
+	}
+
+	m.markSurfaceRefreshed(mode.Detail)
+	gateway.ResetCalls()
+
+	next, cmd = m.Update(tea.BlurMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected focus regain to refresh active detail immediately, calls=%#v", gateway.Calls)
+	}
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected focus regain in detail to refresh only active detail surface, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected active mode search before tick, got %s", m.active)
+	}
+
+	m.markSurfaceDirty(mode.Search)
+	gateway.ResetCalls()
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected search surface refresh on tick when search is active, calls=%#v", gateway.Calls)
+	}
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected tick refresh to target only active search surface, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 0}}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+	if m.active != mode.Board {
+		t.Fatalf("expected board active after init, got %s", m.active)
+	}
+
+	m.detail.SelectionID = "bw-3"
+	m.detail.TargetID = "bw-3"
+	m.detail.Detail = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked"}, Description: "cached detail"}
+	m.detail.Error = ""
+	m.detail.Loading = false
+
+	gateway.ResetCalls()
+	next, cmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Board {
+		t.Fatalf("expected board auto-refresh not to force mode switch, got %s", m.active)
+	}
+	if m.detail.Detail.Summary.ID != "bw-3" || m.detail.Detail.Description != "cached detail" {
+		t.Fatalf("expected board auto-refresh not to clear shell detail cache, got %#v", m.detail.Detail)
+	}
+	if gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected board auto-refresh not to force detail reload when selection remains, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}}}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected search active before refresh, got %s", m.active)
+	}
+
+	m.detail.SelectionID = "bw-9"
+	m.detail.TargetID = "bw-9"
+	m.detail.Detail = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open"}, Description: "cached detail"}
+	m.detail.Error = ""
+	m.detail.Loading = false
+
+	gateway.ResetCalls()
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Search {
+		t.Fatalf("expected search auto-refresh not to force mode switch, got %s", m.active)
+	}
+	if m.detail.Detail.Summary.ID != "bw-9" || m.detail.Detail.Description != "cached detail" {
+		t.Fatalf("expected search auto-refresh not to clear shell detail cache, got %#v", m.detail.Detail)
+	}
+	if gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected search auto-refresh not to force detail reload when selection remains, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected active mode search before focus refresh, got %s", m.active)
+	}
+
+	gateway.ResetCalls()
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	ui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+	m.markSurfaceRefreshed(mode.Search)
+	gateway.ResetCalls()
+
+	next, cmd = m.Update(tea.BlurMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected focus regain in search to refresh immediately, calls=%#v", gateway.Calls)
+	}
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected search focus regain to refresh only active search surface, calls=%#v", gateway.Calls)
+	}
+	ui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+}
+
+func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected search active before typing suppression test, got %s", m.active)
+	}
+
+	gateway.ResetCalls()
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected typing to issue search command")
+	}
+	if !m.search.CapturesShellKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}) {
+		t.Fatalf("expected search query to be focused for typing suppression case")
+	}
+
+	next, tickCmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(tickCmd))
+
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no gateway calls before queued typing command resolves, got %#v", gateway.Calls)
+	}
+
+	m = applyMessages(t, m, runBatch(cmd))
+	if len(gateway.Calls) != 1 || gateway.Calls[0].Method != fakes.MethodSearchIssues {
+		t.Fatalf("expected only one typing-triggered search call while auto-refresh is suppressed, got %#v", gateway.Calls)
+	}
+	if m.search.IsLoading() {
+		t.Fatalf("expected typing-triggered search to settle")
+	}
+}
+
+func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	gateway.ResetCalls()
+	m.showHelp = true
+	next, cmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no auto-refresh while help modal is open, calls=%#v", gateway.Calls)
+	}
+
+	m.showHelp = false
+	m.showActionModal = true
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no auto-refresh while action modal is open, calls=%#v", gateway.Calls)
+	}
+
+	m.showActionModal = false
+	m.active = mode.Detail
+	m.detail.Loading = true
+	m.detail.TargetID = firstSelectionID(m, mode.Board)
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected duplicate detail reload suppression while loading, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	gateway.ResetCalls()
+	next, cmd := m.Update(mutationResultMsg{kind: mutationStatus, issueID: "bw-1"})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+		t.Fatalf("expected board to refresh immediately when active and dirty after write, calls=%#v", gateway.Calls)
+	}
+	if gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected hidden search surface not to refresh from board-active write, calls=%#v", gateway.Calls)
+	}
+	if !gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected write flow to keep immediate detail reload, calls=%#v", gateway.Calls)
+	}
+
+	if state := m.refreshStateBySurface[mode.Board]; state.dirty {
+		t.Fatalf("expected active board dirty flag to clear after refresh")
+	}
+	if state := m.refreshStateBySurface[mode.Search]; !state.dirty {
+		t.Fatalf("expected inactive search to remain dirty until next eligible refresh")
+	}
+
+	gateway.ResetCalls()
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Search {
+		t.Fatalf("expected active mode search after toggle, got %s", m.active)
+	}
+	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected dirty search to refresh on activation, calls=%#v", gateway.Calls)
+	}
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) {
+		t.Fatalf("expected only newly active search to refresh on activation, calls=%#v", gateway.Calls)
+	}
+	if state := m.refreshStateBySurface[mode.Search]; state.dirty {
+		t.Fatalf("expected search dirty flag to clear after activation refresh")
+	}
+}
+
+func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+	withModelNow(t, time.Unix(0, 0))
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+	m.markSurfaceRefreshed(mode.Board)
+
+	gateway.ResetCalls()
+	withModelNow(t, time.Unix(59, 0))
+	next, cmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) {
+		t.Fatalf("expected no board refresh before stale interval elapses, calls=%#v", gateway.Calls)
+	}
+
+	gateway.ResetCalls()
+	withModelNow(t, time.Unix(60, 0))
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+		t.Fatalf("expected board refresh at ~60s stale threshold, calls=%#v", gateway.Calls)
+	}
+}
+
+func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Detail {
+		t.Fatalf("expected detail active for polling-scope assertion, got %s", m.active)
+	}
+
+	m.markBrowseSurfacesDirty()
+	m.markSurfaceDirty(mode.Detail)
+	gateway.ResetCalls()
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gateway.HasCall(string(fakes.MethodShowIssue)) {
+		t.Fatalf("expected active detail to refresh when eligible, calls=%#v", gateway.Calls)
+	}
+	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected no background refresh of inactive board/search surfaces, calls=%#v", gateway.Calls)
 	}
 }
 
@@ -1842,4 +2384,22 @@ func runBDInRepo(repoPath string, args ...string) error {
 	}
 
 	return nil
+}
+
+func withRefreshTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
+	t.Helper()
+	original := scheduleRefreshTickCmd
+	scheduleRefreshTickCmd = scheduler
+	t.Cleanup(func() {
+		scheduleRefreshTickCmd = original
+	})
+}
+
+func withModelNow(t *testing.T, now time.Time) {
+	t.Helper()
+	original := modelNow
+	modelNow = func() time.Time { return now }
+	t.Cleanup(func() {
+		modelNow = original
+	})
 }

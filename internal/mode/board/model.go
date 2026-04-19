@@ -34,6 +34,19 @@ type sectionState struct {
 	loaded  bool
 }
 
+type refreshMode int
+
+const (
+	refreshModeManual refreshMode = iota
+	refreshModeAuto
+)
+
+type refreshAnchor struct {
+	focusedColumn   int
+	focusedRow      int
+	selectedIssueID string
+}
+
 // Model is the standalone board mode controller backed by dashboard queries.
 type Model struct {
 	gateway   beads.BeadsGateway
@@ -51,6 +64,9 @@ type Model struct {
 
 	focusedColumn int
 	selectedRow   map[int]int
+
+	refreshMode   refreshMode
+	refreshAnchor *refreshAnchor
 }
 
 // NewModel creates a board mode controller.
@@ -76,6 +92,7 @@ func NewModel(gateway beads.BeadsGateway, provider dashboard.Provider, resolved 
 		loading:       true,
 		selectedRow:   map[int]int{},
 		focusedColumn: 0,
+		refreshMode:   refreshModeManual,
 	}
 }
 
@@ -111,8 +128,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.dashboardID = def.ID
 		m.dashboardTitle = def.Title
 		m.loadError = ""
-		m.focusedColumn = 0
+		if m.refreshMode != refreshModeAuto {
+			m.focusedColumn = 0
+		}
 		m.sections = make([]sectionState, len(def.Sections))
+		m.selectedRow = make(map[int]int, len(def.Sections))
 		for i, section := range def.Sections {
 			m.sections[i] = sectionState{id: section.ID, title: section.Title}
 			m.selectedRow[i] = 0
@@ -147,7 +167,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		if m.pendingLoads == 0 {
-			m.normalizeFocus()
+			m.settleAfterRefreshLoad()
 			return m.selectionChangedCmd()
 		}
 		return nil
@@ -198,6 +218,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.loading = true
 			m.loadError = ""
 			m.pendingLoads = 0
+			m.refreshMode = refreshModeManual
+			m.refreshAnchor = nil
 			return loadDashboardsCmd(m.provider)
 		}
 	}
@@ -251,6 +273,19 @@ func (m *Model) IsLoading() bool {
 	return m.loading || m.pendingLoads > 0
 }
 
+// AutoRefresh reloads board data while preserving user context when possible.
+func (m *Model) AutoRefresh() tea.Cmd {
+	if m.IsLoading() {
+		return nil
+	}
+	m.loading = true
+	m.loadError = ""
+	m.pendingLoads = 0
+	m.refreshMode = refreshModeAuto
+	m.refreshAnchor = m.captureRefreshAnchor()
+	return loadDashboardsCmd(m.provider)
+}
+
 func (m *Model) currentSelection() *mode.Selection {
 	if len(m.sections) == 0 || m.focusedColumn < 0 || m.focusedColumn >= len(m.sections) {
 		return nil
@@ -283,6 +318,76 @@ func (m *Model) normalizeFocus() {
 		m.focusedColumn = len(m.sections) - 1
 	}
 	m.normalizeSelectionForFocusedColumn()
+}
+
+func (m *Model) settleAfterRefreshLoad() {
+	if m.refreshMode == refreshModeAuto {
+		m.restoreFromAnchor(m.refreshAnchor)
+	} else {
+		m.normalizeFocus()
+	}
+	m.refreshMode = refreshModeManual
+	m.refreshAnchor = nil
+}
+
+func (m *Model) captureRefreshAnchor() *refreshAnchor {
+	anchor := &refreshAnchor{focusedColumn: m.focusedColumn, focusedRow: m.selectedRow[m.focusedColumn]}
+	if selection := m.currentSelection(); selection != nil {
+		anchor.selectedIssueID = selection.Issue.ID
+	}
+	return anchor
+}
+
+func (m *Model) restoreFromAnchor(anchor *refreshAnchor) {
+	if len(m.sections) == 0 {
+		m.focusedColumn = 0
+		return
+	}
+
+	if anchor == nil {
+		m.normalizeFocus()
+		return
+	}
+
+	if anchor.selectedIssueID != "" {
+		if col, row, ok := m.findIssue(anchor.selectedIssueID); ok {
+			m.focusedColumn = col
+			m.selectedRow[col] = row
+			m.normalizeSelectionForFocusedColumn()
+			return
+		}
+	}
+
+	m.focusedColumn = clamp(anchor.focusedColumn, 0, len(m.sections)-1)
+	if len(m.sections[m.focusedColumn].issues) > 0 {
+		m.selectedRow[m.focusedColumn] = clamp(anchor.focusedRow, 0, len(m.sections[m.focusedColumn].issues)-1)
+		m.normalizeSelectionForFocusedColumn()
+		return
+	}
+
+	m.selectEarliestNonEmptyColumn()
+	m.normalizeSelectionForFocusedColumn()
+}
+
+func (m *Model) findIssue(issueID string) (int, int, bool) {
+	for colIdx, section := range m.sections {
+		for rowIdx, issue := range section.issues {
+			if issue.ID == issueID {
+				return colIdx, rowIdx, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func clamp(value, low, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
 }
 
 func (m *Model) selectEarliestNonEmptyColumn() {

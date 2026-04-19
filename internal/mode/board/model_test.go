@@ -229,6 +229,135 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 	}
 }
 
+func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
+	m.loading = false
+	m.dashboardID = "default"
+	m.dashboardTitle = "Default"
+	m.sections = []sectionState{
+		{title: "Ready", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}},
+		{title: "In Progress", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}},
+	}
+	m.focusedColumn = 1
+	m.selectedRow[0] = 0
+	m.selectedRow[1] = 1
+
+	cmd := m.AutoRefresh()
+	if cmd == nil {
+		t.Fatalf("expected auto-refresh command")
+	}
+
+	defs := []dashboard.Definition{{
+		ID:    "default",
+		Title: "Default",
+		Sections: []dashboard.Section{
+			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
+			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
+		},
+	}}
+
+	_ = m.Update(dashboardsLoadedMsg{dashboards: defs})
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-9", Title: "Ready refreshed"}}})
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-8", Title: "Progress refreshed one"}, {ID: "bw-3", Title: "Progress two still here"}, {ID: "bw-10", Title: "Progress refreshed three"}}})
+
+	if m.focusedColumn != 1 {
+		t.Fatalf("expected focused column 1 to be preserved, got %d", m.focusedColumn)
+	}
+	sel := m.CurrentSelection()
+	if sel == nil || sel.Issue.ID != "bw-3" {
+		t.Fatalf("expected preserved selected issue bw-3, got %#v", sel)
+	}
+}
+
+func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
+	m.loading = false
+	m.dashboardID = "default"
+	m.dashboardTitle = "Default"
+	m.sections = []sectionState{
+		{title: "Ready", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}},
+		{title: "In Progress", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}},
+	}
+	m.focusedColumn = 1
+	m.selectedRow[0] = 0
+	m.selectedRow[1] = 1
+
+	cmd := m.AutoRefresh()
+	if cmd == nil {
+		t.Fatalf("expected auto-refresh command")
+	}
+
+	defs := []dashboard.Definition{{
+		ID:    "default",
+		Title: "Default",
+		Sections: []dashboard.Section{
+			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
+			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
+		},
+	}}
+
+	_ = m.Update(dashboardsLoadedMsg{dashboards: defs})
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-11", Title: "Ready refreshed"}}})
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-12", Title: "Progress replacement"}}})
+
+	if m.focusedColumn != 1 {
+		t.Fatalf("expected fallback to stay on prior focused column when it has rows, got %d", m.focusedColumn)
+	}
+	sel := m.CurrentSelection()
+	if sel == nil || sel.Issue.ID != "bw-12" {
+		t.Fatalf("expected deterministic row-clamp fallback selection bw-12, got %#v", sel)
+	}
+}
+
+func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
+	m.loading = false
+	m.dashboardID = "default"
+	m.dashboardTitle = "Default"
+	m.sections = []sectionState{
+		{title: "Ready", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}},
+		{title: "In Progress", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}},
+	}
+	m.focusedColumn = 1
+	m.selectedRow[0] = 0
+	m.selectedRow[1] = 1
+
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	if cmd == nil {
+		t.Fatalf("expected manual reload command")
+	}
+
+	defs := []dashboard.Definition{{
+		ID:    "default",
+		Title: "Default",
+		Sections: []dashboard.Section{
+			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
+			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
+		},
+	}}
+
+	_ = m.Update(dashboardsLoadedMsg{dashboards: defs})
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-21", Title: "Ready refreshed"}}})
+	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-22", Title: "Progress refreshed"}}})
+
+	if m.focusedColumn != 0 {
+		t.Fatalf("expected manual reload to reset focus to first available column, got %d", m.focusedColumn)
+	}
+	sel := m.CurrentSelection()
+	if sel == nil || sel.Issue.ID != "bw-21" {
+		t.Fatalf("expected manual reload selection to reset with full reload semantics, got %#v", sel)
+	}
+}
+
 func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t *testing.T) {
 	t.Parallel()
 

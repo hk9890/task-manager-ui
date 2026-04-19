@@ -25,7 +25,18 @@ import (
 const (
 	defaultViewportWidth  = 120
 	defaultViewportHeight = 34
+	refreshTickInterval   = 60 * time.Second
 )
+
+type refreshTickMsg struct{}
+
+var scheduleRefreshTickCmd = func() tea.Cmd {
+	return tea.Tick(refreshTickInterval, func(_ time.Time) tea.Msg {
+		return refreshTickMsg{}
+	})
+}
+
+var modelNow = time.Now
 
 type detailLoadedMsg struct {
 	issueID string
@@ -88,6 +99,11 @@ type mutationDialogState struct {
 	labelList   string
 }
 
+type surfaceRefreshState struct {
+	dirty       bool
+	lastRefresh time.Time
+}
+
 // Model is the root Bubble Tea shell for Beads Workbench.
 //
 // v1 detail presentation model keeps browse and full detail separated:
@@ -116,6 +132,11 @@ type Model struct {
 	showActionModal bool
 	actionState     mutationDialogState
 
+	focusKnown      bool
+	terminalFocused bool
+
+	refreshStateBySurface map[mode.ID]surfaceRefreshState
+
 	width  int
 	height int
 }
@@ -126,6 +147,8 @@ func NewModel(services Services) Model {
 	if err != nil {
 		panic(fmt.Sprintf("invalid resolved keybindings in app model: %v", err))
 	}
+
+	now := modelNow()
 
 	helpText := shellKeyHelp(keys)
 	help := modal.NewWithKeys(modal.Config{
@@ -148,13 +171,18 @@ func NewModel(services Services) Model {
 		help:           help,
 		width:          defaultViewportWidth,
 		height:         defaultViewportHeight,
+		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
+			mode.Board:  {lastRefresh: now},
+			mode.Search: {lastRefresh: now},
+			mode.Detail: {},
+		},
 	}
 }
 
 // Init loads initial board and search controllers.
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
-	return tea.Batch(m.board.Init(), m.search.Init())
+	return tea.Batch(m.board.Init(), m.search.Init(), scheduleRefreshTickCmd())
 }
 
 // Update handles root-level shell messages.
@@ -215,6 +243,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case tea.FocusMsg:
+		wasBlurred := m.focusKnown && !m.terminalFocused
+		m.focusKnown = true
+		m.terminalFocused = true
+		if !wasBlurred {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
+	case tea.BlurMsg:
+		m.focusKnown = true
+		m.terminalFocused = false
+		return m, modeCmd
+	case refreshTickMsg:
+		return m, batchCmds(modeCmd, scheduleRefreshTickCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -228,6 +270,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.detail.Loading = false
+		m.markSurfaceRefreshed(mode.Detail)
 		if msg.err != nil {
 			m.detail.Detail = domain.IssueDetail{}
 			m.detail.Error = msg.err.Error()
@@ -246,6 +289,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.updated {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo))
 		}
+
+		m.markBrowseSurfacesDirty()
 
 		selection := m.currentSelection()
 		if selection == nil || selection.Issue.ID == "" {
@@ -293,33 +338,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.showToast(msg.err.Error(), toaster.StyleError))
 		}
 
+		m.markBrowseSurfacesDirty()
+
 		switch msg.kind {
 		case mutationCreate:
-			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Created issue %s", emptyFallback(msg.createdID, "(unknown)")), toaster.StyleSuccess))
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Created issue %s", emptyFallback(msg.createdID, "(unknown)")), toaster.StyleSuccess),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
 		case mutationUpdate:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
 			)
 		case mutationClose:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Closed issue %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
 			)
 		case mutationComment:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
 			)
 		case mutationStatus:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
 			)
 		case mutationPriorityCycle:
 			return m, batchCmds(modeCmd,
 				m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
 				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
 			)
 		default:
 			return m, modeCmd
@@ -415,11 +470,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
 			m.active = mode.Board
 			m.lastBrowse = mode.Board
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
 			m.active = mode.Search
 			m.lastBrowse = mode.Search
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
 			if m.active == mode.Detail {
 				m.active = mode.Board
@@ -429,11 +484,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.active == mode.Search {
 				m.active = mode.Board
 				m.lastBrowse = mode.Board
-				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 			}
 			m.active = mode.Search
 			m.lastBrowse = mode.Search
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
 			if m.active == mode.Board || m.active == mode.Search {
 				m.lastBrowse = m.active
@@ -446,11 +501,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
 			m.active = nextMode(m.active, m.lastBrowse)
 			m.lastBrowse = m.active
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
 			m.active = prevMode(m.active, m.lastBrowse)
 			m.lastBrowse = m.active
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
 			if m.active == mode.Detail {
 				m.active = m.lastBrowse
@@ -459,7 +514,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.active == mode.Search {
 				m.active = mode.Board
 				m.lastBrowse = mode.Board
-				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 			}
 			m.toast = m.toast.Hide()
 			return m, modeCmd
@@ -578,7 +633,9 @@ func (m Model) currentSelection() *mode.Selection {
 func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 	selection := m.currentSelection()
 	if selection == nil || selection.Issue.ID == "" {
-		m.detail = detailsmode.Model{}
+		if m.active == mode.Detail {
+			m.detail = detailsmode.Model{}
+		}
 		return nil
 	}
 
@@ -591,7 +648,7 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 	if m.detail.Loading && m.detail.TargetID == selection.Issue.ID {
 		return nil
 	}
-	if !m.detail.Loading && m.detail.Detail.Summary.ID == selection.Issue.ID && m.detail.Error == "" {
+	if !m.detail.Loading && m.detail.Detail.Summary.ID == selection.Issue.ID && m.detail.Error == "" && !m.shouldRefreshSurface(mode.Detail) {
 		return nil
 	}
 
@@ -716,6 +773,100 @@ func (m Model) searchResultCount() int {
 		return 0
 	}
 	return m.search.ResultCount()
+}
+
+func (m *Model) maybeAutoRefreshActiveSurfaceCmd() tea.Cmd {
+	return m.maybeAutoRefreshActiveSurfaceCmdWithPolicy(false)
+}
+
+func (m *Model) maybeAutoRefreshActiveSurfaceCmdOnFocusRegain() tea.Cmd {
+	return m.maybeAutoRefreshActiveSurfaceCmdWithPolicy(true)
+}
+
+func (m *Model) maybeAutoRefreshActiveSurfaceCmdWithPolicy(force bool) tea.Cmd {
+	if m.showHelp || m.showActionModal {
+		return nil
+	}
+	if m.focusKnown && !m.terminalFocused {
+		return nil
+	}
+	if !force && !m.shouldRefreshSurface(m.active) {
+		return nil
+	}
+	return m.refreshActiveSurfaceCmd()
+}
+
+func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
+	switch m.active {
+	case mode.Board:
+		if m.boardIsLoading() {
+			return nil
+		}
+		m.markSurfaceRefreshed(mode.Board)
+		return m.board.AutoRefresh()
+	case mode.Search:
+		if m.searchIsLoading() {
+			return nil
+		}
+		m.markSurfaceRefreshed(mode.Search)
+		return m.search.AutoRefresh()
+	case mode.Detail:
+		if m.detail.Loading {
+			return nil
+		}
+		selection := m.currentSelection()
+		if selection == nil || selection.Issue.ID == "" {
+			return nil
+		}
+		m.detail.SelectionID = selection.Issue.ID
+		m.detail.SelectBrowserIssue(selection.Issue.ID)
+		m.detail.Loading = true
+		m.detail.Error = ""
+		m.detail.TargetID = selection.Issue.ID
+		m.markSurfaceRefreshed(mode.Detail)
+		return loadDetailCmd(m.services, selection.Issue.ID)
+	default:
+		return nil
+	}
+}
+
+func (m *Model) markBrowseSurfacesDirty() {
+	m.markSurfaceDirty(mode.Board, mode.Search)
+}
+
+func (m *Model) markSurfaceDirty(surfaces ...mode.ID) {
+	if m.refreshStateBySurface == nil {
+		m.refreshStateBySurface = make(map[mode.ID]surfaceRefreshState)
+	}
+	for _, surface := range surfaces {
+		state := m.refreshStateBySurface[surface]
+		state.dirty = true
+		m.refreshStateBySurface[surface] = state
+	}
+}
+
+func (m *Model) markSurfaceRefreshed(surface mode.ID) {
+	if m.refreshStateBySurface == nil {
+		m.refreshStateBySurface = make(map[mode.ID]surfaceRefreshState)
+	}
+	state := m.refreshStateBySurface[surface]
+	state.dirty = false
+	state.lastRefresh = modelNow()
+	m.refreshStateBySurface[surface] = state
+}
+
+func (m *Model) shouldRefreshSurface(surface mode.ID) bool {
+	state, ok := m.refreshStateBySurface[surface]
+	if !ok {
+		return true
+	}
+	if state.dirty {
+		return true
+	}
+	if state.lastRefresh.IsZero() {
+		return true
+	}
+	return modelNow().Sub(state.lastRefresh) >= refreshTickInterval
 }
 
 func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
