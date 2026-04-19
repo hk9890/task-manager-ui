@@ -131,7 +131,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 
 	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2)
 	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight)
-	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, false)
+	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone)
 
 	return ScrollOffsets{
 		Dependencies: max(0, len(deps)-innerHeight),
@@ -172,7 +172,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	if state.FocusPane == FocusPaneMetadata {
 		selectedField = state.MetadataSelectedField
 	}
-	metadata := renderMetadataPaneLines(detail, metadataWidth-2, selectedField, state.FocusPane == FocusPaneMetadata)
+	metadata := renderMetadataPaneLines(detail, metadataWidth-2, selectedField)
 	metaView, _ := sliceWithOffset(metadata, state.MetadataScrollOffset, innerHeight, metadataWidth-2)
 	metaBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              metadataWidth,
@@ -349,12 +349,8 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	return out
 }
 
-func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, focused bool) []string {
+func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey) []string {
 	out := make([]string, 0, 48)
-	if focused {
-		out = append(out, "› Editable: Status, Priority")
-		out = append(out, "")
-	}
 	out = append(out, renderMetadataRail(detail, width, selectedField)...)
 	out = append(out, "")
 	out = append(out,

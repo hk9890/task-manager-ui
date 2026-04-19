@@ -1,6 +1,7 @@
 package details
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
+
+var metadataANSIPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestMetadataFieldsOrderAndCoverage(t *testing.T) {
 	t.Parallel()
@@ -128,7 +131,7 @@ func TestRenderMetadataRailHighlightsSelectedStatusField(t *testing.T) {
 		},
 	}, 40, MetadataFieldStatus)
 
-	joined := strings.Join(lines, "\n")
+	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
 	if !strings.Contains(joined, "› Status") {
 		t.Fatalf("expected selected status indicator in metadata rail, got:\n%s", joined)
 	}
@@ -145,9 +148,46 @@ func TestRenderMetadataRailHighlightsSelectedPriorityField(t *testing.T) {
 		},
 	}, 40, MetadataFieldPriority)
 
-	joined := strings.Join(lines, "\n")
+	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
 	if !strings.Contains(joined, "› Priority") {
 		t.Fatalf("expected selected priority indicator in metadata rail, got:\n%s", joined)
+	}
+}
+
+func TestRenderMetadataRailSelectedFieldKeepsLabelAlignmentStable(t *testing.T) {
+	t.Parallel()
+
+	lines := renderMetadataRail(domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			Type:     "task",
+			Priority: 1,
+			Status:   "open",
+		},
+	}, 40, MetadataFieldStatus)
+
+	plainLines := make([]string, 0, len(lines))
+	for _, line := range lines {
+		plainLines = append(plainLines, metadataANSIPattern.ReplaceAllString(line, ""))
+	}
+
+	var priorityLine, statusLine string
+	for _, line := range plainLines {
+		if strings.Contains(line, "Priority") {
+			priorityLine = line
+		}
+		if strings.Contains(line, "Status") {
+			statusLine = line
+		}
+	}
+
+	if priorityLine == "" || statusLine == "" {
+		t.Fatalf("expected priority and status lines, got:\n%s", strings.Join(plainLines, "\n"))
+	}
+
+	priorityLabelOffset := lipgloss.Width(priorityLine[:strings.Index(priorityLine, "Priority")])
+	statusLabelOffset := lipgloss.Width(statusLine[:strings.Index(statusLine, "Status")])
+	if priorityLabelOffset != statusLabelOffset {
+		t.Fatalf("expected stable metadata label alignment\npriority: %q\nstatus:   %q", priorityLine, statusLine)
 	}
 }
 

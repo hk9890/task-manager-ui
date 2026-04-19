@@ -362,20 +362,11 @@ func (m *Model) browserSelectedIssueID() string {
 
 func (m *Model) syncBrowserPanel(issueID string) {
 	parentID := strings.TrimSpace(m.Detail.ParentGroupBrowser.Parent.ID)
-	if parentID == "" {
-		m.BrowserGroupParentID = ""
-		m.BrowserItems = browserItemsFromDependencies(m.Detail)
-		if len(m.BrowserItems) == 0 {
-			m.clearBrowserPanel()
-			return
-		}
-		m.selectBrowserIssue(issueID)
+	m.BrowserGroupParentID = parentID
+	m.BrowserItems = browserItemsFromDependencies(m.Detail)
+	if len(m.BrowserItems) == 0 {
+		m.clearBrowserPanel()
 		return
-	}
-
-	if m.BrowserGroupParentID != parentID || len(m.BrowserItems) == 0 {
-		m.BrowserGroupParentID = parentID
-		m.BrowserItems = browserItemsFromParentGroup(m.Detail.ParentGroupBrowser)
 	}
 
 	m.selectBrowserIssue(issueID)
@@ -439,8 +430,11 @@ func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueRefer
 		detail.Blocks,
 		detail.Related,
 	}
+	if strings.TrimSpace(detail.ParentGroupBrowser.Parent.ID) != "" {
+		groups = append(groups, browserItemsFromParentGroup(detail.ParentGroupBrowser))
+	}
 
-	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related))
+	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.ParentGroupBrowser.Children)+1)
 	out := make([]domain.IssueReference, 0, len(seen))
 	for _, refs := range groups {
 		ordered := append([]domain.IssueReference(nil), refs...)

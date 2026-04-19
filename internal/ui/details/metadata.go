@@ -60,10 +60,9 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 
 		for _, field := range group.fields {
 			line := fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value)
-			if field.key != MetadataFieldNone && field.key == selectedField {
-				line = "› " + line
-			}
-			out = append(out, styles.TruncateString(line, width))
+			selected := field.key != MetadataFieldNone && field.key == selectedField
+			interactive := selectedField != MetadataFieldNone
+			out = append(out, renderMetadataFieldLine(line, width, field.editable, interactive, selected))
 		}
 
 		if len(group.labels) > 0 {
@@ -74,6 +73,19 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 	}
 
 	return out
+}
+
+func renderMetadataFieldLine(line string, width int, editable, interactive, selected bool) string {
+	if !editable || !interactive {
+		return styles.TruncateString(line, width)
+	}
+
+	prefix := "  "
+	if selected {
+		prefix = styles.SelectionIndicatorStyle.Render("›") + " "
+	}
+
+	return styles.TruncateString(prefix+line, width)
 }
 
 func metadataFields(detail domain.IssueDetail) []metadataField {

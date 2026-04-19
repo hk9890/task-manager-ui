@@ -412,12 +412,21 @@ func TestModelDetailEnterOnMetadataPrioritySetsCyclePriorityIntent(t *testing.T)
 	}
 }
 
-func TestModelApplyLoadedDetailBuildsBrowserFromParentGroupAndKeepsStableAcrossSiblings(t *testing.T) {
+func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndStructureGroups(t *testing.T) {
 	t.Parallel()
 
 	m := Model{}
 	first := domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-42", Title: "Child 42"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-90", Title: "Blocker"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-91", Title: "Blocked child"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-92", Title: "Related"},
+		},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{ID: "bw-1", Title: "Parent"},
 			Children: []domain.IssueReference{
@@ -431,16 +440,24 @@ func TestModelApplyLoadedDetailBuildsBrowserFromParentGroupAndKeepsStableAcrossS
 	if m.BrowserGroupParentID != "bw-1" {
 		t.Fatalf("expected parent id bw-1, got %q", m.BrowserGroupParentID)
 	}
-	if len(m.BrowserItems) != 3 {
-		t.Fatalf("expected browser parent+siblings, got %d", len(m.BrowserItems))
+	if len(m.BrowserItems) != 6 {
+		t.Fatalf("expected flattened dependencies + structure rows, got %#v", m.BrowserItems)
 	}
-	if m.BrowserItems[0].ID != "bw-1" {
-		t.Fatalf("expected parent row first, got %#v", m.BrowserItems)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID, m.BrowserItems[5].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1,bw-42,bw-43" {
+		t.Fatalf("expected grouped dependency/structure ordering, got %v", got)
 	}
 
-	originalFirstRow := &m.BrowserItems[0]
 	second := domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-43", Title: "Child 43"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-90", Title: "Blocker renamed"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-91", Title: "Blocked child renamed"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-92", Title: "Related renamed"},
+		},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{ID: "bw-1", Title: "Parent renamed"},
 			Children: []domain.IssueReference{
@@ -451,11 +468,60 @@ func TestModelApplyLoadedDetailBuildsBrowserFromParentGroupAndKeepsStableAcrossS
 	}
 	m.ApplyLoadedDetail("bw-43", second)
 
-	if &m.BrowserItems[0] != originalFirstRow {
-		t.Fatalf("expected browser items slice to stay stable within same parent-group")
+	if len(m.BrowserItems) != 6 {
+		t.Fatalf("expected flattened dependencies + structure rows after sibling load, got %#v", m.BrowserItems)
 	}
-	if m.BrowserSelectedIndex != 2 {
+	if m.BrowserSelectedIndex != 5 {
 		t.Fatalf("expected selection to move to bw-43 index, got %d", m.BrowserSelectedIndex)
+	}
+}
+
+func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *testing.T) {
+	t.Parallel()
+
+	m := Model{}
+	m.ApplyLoadedDetail("bw-b2", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-b2", Title: "Target in Blocks"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-a1", Title: "Blocked by one"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-b1", Title: "Blocks one"},
+			{ID: "bw-b2", Title: "Blocks two"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-c1", Title: "Related one"},
+		},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{ID: "bw-s0", Title: "Structure parent"},
+			Children: []domain.IssueReference{
+				{ID: "bw-s1", Title: "Structure child one"},
+				{ID: "bw-s2", Title: "Structure child two"},
+			},
+		},
+	})
+
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID, m.BrowserItems[5].ID, m.BrowserItems[6].ID}; strings.Join(got, ",") != "bw-a1,bw-b1,bw-b2,bw-c1,bw-s0,bw-s1,bw-s2" {
+		t.Fatalf("expected flat traversal order to match rendered groups, got %v", got)
+	}
+
+	if m.BrowserSelectedIndex != 2 {
+		t.Fatalf("expected initial selection on bw-b2, got %d", m.BrowserSelectedIndex)
+	}
+
+	m.moveRelatedSelection(1)
+	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-c1" {
+		t.Fatalf("expected down from blocks to enter related group, got %+v ok=%v", selected, ok)
+	}
+
+	m.moveRelatedSelection(1)
+	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-s0" {
+		t.Fatalf("expected down from related to enter structure group, got %+v ok=%v", selected, ok)
+	}
+
+	m.moveRelatedSelection(-1)
+	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-c1" {
+		t.Fatalf("expected up from structure to return to related group, got %+v ok=%v", selected, ok)
 	}
 }
 
