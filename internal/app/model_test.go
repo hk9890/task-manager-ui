@@ -228,7 +228,13 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 	if m.active != mode.Search {
 		t.Fatalf("expected active mode to stay search while typing, got %s", m.active)
 	}
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected typing in search query not to run search until enter, got %#v", gateway.Calls)
+	}
 
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
 	ui.AssertLatestSearchQueryText(t, gateway.Calls, "b")
 }
 
@@ -257,6 +263,9 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
 
 	if view := m.View(); !strings.Contains(view, "search boom") {
 		t.Fatalf("expected search error state in shell view, got:\n%s", view)
@@ -265,6 +274,9 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	// Clear error and run another non-empty query that returns no results.
 	gateway.SetError(fakes.MethodSearchIssues, nil)
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -586,6 +598,12 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected query edit not to search before enter, got %#v", gateway.Calls)
+	}
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
 	ui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
 	m.markSurfaceRefreshed(mode.Search)
 	gateway.ResetCalls()
@@ -634,8 +652,8 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	gateway.ResetCalls()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
-	if cmd == nil {
-		t.Fatalf("expected typing to issue search command")
+	if cmd != nil {
+		t.Fatalf("expected query typing not to issue search command until enter")
 	}
 	if !m.search.CapturesShellKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}) {
 		t.Fatalf("expected search query to be focused for typing suppression case")
@@ -649,9 +667,11 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 		t.Fatalf("expected no gateway calls before queued typing command resolves, got %#v", gateway.Calls)
 	}
 
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if len(gateway.Calls) != 1 || gateway.Calls[0].Method != fakes.MethodSearchIssues {
-		t.Fatalf("expected only one typing-triggered search call while auto-refresh is suppressed, got %#v", gateway.Calls)
+		t.Fatalf("expected only one enter-triggered search call while auto-refresh is suppressed, got %#v", gateway.Calls)
 	}
 	if m.search.IsLoading() {
 		t.Fatalf("expected typing-triggered search to settle")

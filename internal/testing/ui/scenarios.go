@@ -44,7 +44,7 @@ func DetailScrollKeys() []tea.KeyMsg {
 
 // SearchFocusResultsKeys returns key sequence that moves search focus to results.
 func SearchFocusResultsKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyRight}}
+	return []tea.KeyMsg{{Type: tea.KeyDown}}
 }
 
 // SearchClearQueryKeys returns the key sequence used to clear query quickly.
@@ -59,8 +59,9 @@ func SearchFragileQueryRunes() string {
 
 // SearchTypeTextKeys returns key sequence for typing text into search query.
 func SearchTypeTextKeys(text string) []tea.KeyMsg {
-	keys := make([]tea.KeyMsg, 0, len([]rune(text)))
-	for _, r := range []rune(text) {
+	runes := []rune(text)
+	keys := make([]tea.KeyMsg, 0, len(runes))
+	for _, r := range runes {
 		keys = append(keys, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	return keys

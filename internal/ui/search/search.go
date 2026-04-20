@@ -209,7 +209,7 @@ func renderQueryContent(query string, focused bool) string {
 		if focused {
 			return "│"
 		}
-		return "Type to search issues…"
+		return "Type query, press Enter to search…"
 	}
 	if focused {
 		return value + "│"
@@ -222,12 +222,12 @@ func queryStatusHint(state State) string {
 		return "error"
 	}
 	if state.Typing {
-		return "typing"
+		return "ready"
 	}
 	if strings.TrimSpace(state.Query) == "" {
 		return "text"
 	}
-	return "live"
+	return "ready"
 }
 
 func resultCountTitle(results []domain.IssueSummary) string {
@@ -245,19 +245,11 @@ func renderResultsContent(state State, width int) []string {
 		}
 	}
 
-	if state.Typing && len(state.Results) == 0 {
-		return []string{
-			styles.TruncateString("Searching…", width),
-			"",
-			styles.TruncateString("Keep typing to refine the query.", width),
-		}
-	}
-
 	if len(state.Results) == 0 {
 		return []string{
 			styles.TruncateString("No results found.", width),
 			"",
-			styles.TruncateString("Try a different text query.", width),
+			styles.TruncateString("Press Enter to search / Typing only edits query text.", width),
 		}
 	}
 
@@ -298,8 +290,6 @@ func splitWideWidths(total int) (rail, content, metadata int) {
 			rail = max(12, rail-need/2)
 			metadata = max(12, metadata-(need-need/2))
 		}
-
-		content = available - rail - metadata
 	}
 
 	if rail < 1 {

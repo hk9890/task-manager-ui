@@ -1,10 +1,10 @@
-╭─ Search ────────────────────── live ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+╭─ Search ───────────────────── ready ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │nomatch│                              │  │No selected result.                     │  │  Core                          │
 ╰──────────────────────────────────────╯  │(none) · (none) · (unknown)             │  │  Type    : (unknown)           │
 ╭─ Results ──────────────────────── 0 ─╮  │                                        │  │  Status  : (none)              │
 │No results found.                     │  │Description                             │  │  Priority: (unknown)           │
 │                                      │  │Select a result in the search rail to pr│  │  ------------------------------│
-│Try a different text query.           │  │eview issue content.                    │  │  Counts                        │
+│Press Enter to search / Typing only...│  │eview issue content.                    │  │  Counts                        │
 │                                      │  │                                        │  │  Comments  : 0                 │
 │                                      │  │Notes                                   │  │  Blocked by: 0                 │
 │                                      │  │(no notes)                              │  │  Blocks    : 0                 │

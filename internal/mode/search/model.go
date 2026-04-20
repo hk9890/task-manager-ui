@@ -54,7 +54,7 @@ type Model struct {
 
 // NewModel creates a search mode controller.
 func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings) *Model {
-	keys := config.ResolvedKeyBindings{}
+	var keys config.ResolvedKeyBindings
 	if len(resolved) > 0 {
 		keys = resolved[0]
 	} else {
@@ -141,7 +141,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		runes := []rune(m.query)
 		m.query = string(runes[:len(runes)-1])
 		m.typing = true
-		return m.triggerSearch()
+		return nil
 	case tea.KeyCtrlU:
 		if m.focus != uisearch.FocusQuery {
 			return nil
@@ -151,13 +151,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		m.query = ""
 		m.typing = false
-		return m.triggerSearch()
+		return nil
 	}
 
 	switch {
 	case msg.Type == tea.KeyRunes && m.focus == uisearch.FocusQuery:
 		m.query += string(msg.Runes)
 		m.typing = true
+		return nil
+	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusQuery:
 		return m.triggerSearch()
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusMetadata:
 		switch m.metadataSelectedField {
@@ -175,6 +177,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveUp, msg):
+		if m.focus == uisearch.FocusResults && m.selectedRow <= 0 {
+			m.focus = uisearch.FocusQuery
+			return nil
+		}
 		if m.focus == uisearch.FocusResults && m.moveSelection(-1) {
 			m.selectedDetailLoading = true
 			m.selectedDetail = domain.IssueDetail{}
@@ -186,6 +192,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveDown, msg):
+		if m.focus == uisearch.FocusQuery {
+			if len(m.results) > 0 {
+				m.focus = uisearch.FocusResults
+			}
+			return nil
+		}
 		if m.focus == uisearch.FocusResults && m.moveSelection(1) {
 			m.selectedDetailLoading = true
 			m.selectedDetail = domain.IssueDetail{}
@@ -231,10 +243,6 @@ func (m *Model) moveFocusLeft() {
 
 func (m *Model) moveFocusRight() {
 	switch m.focus {
-	case uisearch.FocusQuery:
-		if len(m.results) > 0 {
-			m.focus = uisearch.FocusResults
-		}
 	case uisearch.FocusResults:
 		m.focus = uisearch.FocusContent
 	case uisearch.FocusContent:

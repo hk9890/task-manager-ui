@@ -40,9 +40,11 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 
 	gateway.ResetCalls()
 	m = testui.ApplyKeySequence(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...).(Model)
+	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, testui.SearchFragileQueryRunes())
 
 	m = testui.ApplyKeySequence(m, testui.SearchClearQueryKeys()...).(Model)
+	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
 
 	m = testui.ApplyKeySequence(m, testui.SearchFocusResultsKeys()...).(Model)

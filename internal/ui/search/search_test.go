@@ -49,7 +49,7 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		"Content",
 		"Metadata",
 		"gateway",
-		"live",
+		"ready",
 		"› T P1 OPN bw-1 Gateway search result",
 		"B P0 IP bw-2 Another result",
 		"Gateway search result",

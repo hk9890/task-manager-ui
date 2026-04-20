@@ -44,8 +44,8 @@ func TestScenarioHelpersProvideDeterministicKeyFlows(t *testing.T) {
 	if got := DetailScrollKeys(); len(got) != 2 || got[0].Type != tea.KeyPgDown || got[1].Type != tea.KeyEnd {
 		t.Fatalf("expected detail scroll sequence [pgdown end], got %#v", got)
 	}
-	if got := len(SearchFocusResultsKeys()); got != 1 || SearchFocusResultsKeys()[0].Type != tea.KeyRight {
-		t.Fatalf("expected search focus-right key, got %#v", SearchFocusResultsKeys())
+	if got := len(SearchFocusResultsKeys()); got != 1 || SearchFocusResultsKeys()[0].Type != tea.KeyDown {
+		t.Fatalf("expected search focus-down key, got %#v", SearchFocusResultsKeys())
 	}
 	if got := len(SearchClearQueryKeys()); got != 1 || SearchClearQueryKeys()[0].Type != tea.KeyCtrlU {
 		t.Fatalf("expected search clear ctrl+u key, got %#v", SearchClearQueryKeys())

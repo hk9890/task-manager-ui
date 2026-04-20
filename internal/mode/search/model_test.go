@@ -28,6 +28,7 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		view := string(bts)
@@ -63,6 +64,10 @@ func TestSearchModeTextQuerySendsGatewaySearch(t *testing.T) {
 
 	gateway.ResetCalls()
 	pressAndResolve(m, testui.SearchTypeTextKeys("gw")...)
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no search call before explicit enter, got %#v", gateway.Calls)
+	}
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "gw")
 }
@@ -78,19 +83,25 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	m := initModel(gateway)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.focus != uisearch.FocusQuery {
 		t.Fatalf("expected initial search focus, got %v", m.focus)
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected right to move focus to results, got %v", m.focus)
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected right in query to be no-op, got %v", m.focus)
 	}
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected down to move focus to results, got %v", m.focus)
+	}
+
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = applyMessages(m, drainCmd(cmd))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
-		t.Fatalf("expected j to move selection to bw-2, got %#v", got)
+		t.Fatalf("expected down to move selection to bw-2, got %#v", got)
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -101,6 +112,43 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected left to move focus back to results, got %v", m.focus)
+	}
+}
+
+func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
+	}}
+	m := initModel(gateway)
+
+	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
+		t.Fatalf("expected first result selected after search, got %#v", got)
+	}
+
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected down from query to move focus to results, got %v", m.focus)
+	}
+
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if cmd != nil {
+		m = applyMessages(m, drainCmd(cmd))
+	}
+	if m.focus != uisearch.FocusQuery {
+		t.Fatalf("expected up on first result to return focus to query, got %v", m.focus)
+	}
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
+		t.Fatalf("expected first result selection to stay on bw-1, got %#v", got)
+	}
+	if len(gateway.Calls) != 2 {
+		t.Fatalf("expected only init + explicit enter search calls, got %#v", gateway.Calls)
 	}
 }
 
@@ -120,6 +168,7 @@ func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
 
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Filtered only", Status: "open", Type: "task", Priority: 1}}}}
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-9" {
 		t.Fatalf("expected filtered selection bw-9, got %#v", got)
 	}
@@ -129,6 +178,7 @@ func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
 		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2}},
 	}}
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyBackspace})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
@@ -170,8 +220,9 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 		gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-7", Title: "Result", Status: "open", Type: "task", Priority: 1}}}}
 		m := initModel(gateway)
 		pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
+		pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		if cmd == nil {
 			t.Fatalf("expected action request command on enter")
@@ -216,6 +267,10 @@ func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 
 	gateway.ResetCalls()
 	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no search before enter, got %#v", gateway.Calls)
+	}
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "jkhlr")
 }
 
@@ -230,8 +285,9 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 	m := initModel(gateway)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyDown})
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected second result selected before reload, got %#v", got)
 	}
@@ -261,11 +317,11 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 
 	gateway.ResetCalls()
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if cmd == nil {
-		t.Fatalf("expected typing to trigger search")
+	if cmd != nil {
+		t.Fatalf("expected typing not to trigger search until enter")
 	}
 	if !m.typing {
-		t.Fatalf("expected typing flag while waiting for query search response")
+		t.Fatalf("expected typing flag while editing query")
 	}
 
 	auto := m.AutoRefresh()
@@ -274,12 +330,13 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 	}
 
 	if len(gateway.Calls) != 0 {
-		t.Fatalf("expected no gateway calls before queued typing command resolves, got %#v", gateway.Calls)
+		t.Fatalf("expected no gateway calls while editing query, got %#v", gateway.Calls)
 	}
 
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = applyMessages(m, drainCmd(cmd))
 	if len(gateway.Calls) != 1 || gateway.Calls[0].Method != fakes.MethodSearchIssues {
-		t.Fatalf("expected exactly one typing-triggered search call, got %#v", gateway.Calls)
+		t.Fatalf("expected exactly one enter-triggered search call, got %#v", gateway.Calls)
 	}
 	if m.typing {
 		t.Fatalf("expected typing false after search resolves")
@@ -297,8 +354,9 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 	m := initModel(gateway)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyDown})
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected second result selected before auto refresh, got %#v", got)
 	}
@@ -374,9 +432,14 @@ func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.
 
 	gateway.ResetCalls()
 	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no search before enter, got %#v", gateway.Calls)
+	}
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, testui.SearchFragileQueryRunes())
 
 	pressAndResolve(m, testui.SearchClearQueryKeys()...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
 }
 
@@ -411,6 +474,7 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	m := testui.InitializeController(NewModel(gateway, keys)).(*Model)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
 	if m.focus != uisearch.FocusResults {
 		t.Fatalf("expected configured next-focus binding to reach results, got %v", m.focus)
