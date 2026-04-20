@@ -74,7 +74,7 @@ func NewModel(gateway beads.BeadsGateway, provider dashboard.Provider, resolved 
 	if provider == nil {
 		provider = dashboard.NewBuiltInProvider()
 	}
-	keys := config.ResolvedKeyBindings{}
+	var keys config.ResolvedKeyBindings
 	if len(resolved) > 0 {
 		keys = resolved[0]
 	} else {

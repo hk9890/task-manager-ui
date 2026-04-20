@@ -14,6 +14,24 @@ A standalone terminal UI for browsing and updating beads issues.
 go build ./cmd/bwb
 ```
 
+## Developer Convenience Targets
+
+This repository includes a small `Makefile` as a **thin wrapper** around
+documented local commands for discoverability.
+
+```bash
+make help
+make build
+make test
+make vet
+```
+
+Optional wrappers may also be available for lint/script validation and hook
+installation.
+
+`docs/CODING.md` remains the authoritative source for the pre-handoff quality
+gate sequence.
+
 ## Docs
 
 - [`docs/OVERVIEW.md`](./docs/OVERVIEW.md) — runtime flow, package map, architecture boundaries

@@ -35,6 +35,8 @@ Use Go tooling from the repository root:
 go test ./...
 ```
 
+You may run `make test` as a thin convenience wrapper for the same command.
+
 Recommended local quality checks:
 
 Run the authoritative pre-handoff quality gate sequence from `docs/CODING.md`.

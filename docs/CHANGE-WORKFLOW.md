@@ -7,6 +7,26 @@
 - Use `bd ready`, `bd list --status open`, and `bd show <id>` to pick up or inspect work.
 - Use `bd remember` for persistent repo knowledge; do not create markdown memory files.
 
+## Optional local pre-commit hook (staged Go formatting)
+
+This repo includes a lightweight pre-commit hook at `scripts/git-hooks/pre-commit`.
+It only formats staged `*.go` files with `gofmt -w` and re-stages those files.
+It intentionally does not run broader checks (tests, vet, or build).
+
+Install once per clone (no Makefile required):
+
+```bash
+git config core.hooksPath scripts/git-hooks
+```
+
+If desired, `make install-hooks` runs the same command as a thin wrapper.
+
+Verify your local hook path:
+
+```bash
+git config --get core.hooksPath
+```
+
 ## Local change loop
 
 1. Confirm the issue or follow-up work is tracked in `bd`.

@@ -267,8 +267,6 @@ func splitThreePaneWidths(total int) (left, content, metadata int) {
 			left = max(8, left-need/2)
 			metadata = max(8, metadata-(need-need/2))
 		}
-
-		content = available - left - metadata
 	}
 
 	if left < 1 {

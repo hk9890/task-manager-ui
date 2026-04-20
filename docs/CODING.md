@@ -316,17 +316,39 @@ These checks are intentionally lightweight and local-friendly: they run as a nor
 
 ## Quality Gates
 
+For convenience, the repository `Makefile` provides thin wrapper targets for
+common commands (`make build`, `make test`, `make vet`, and optional wrappers
+for lint/script validation/hooks). It is a discoverability layer only.
+
+`docs/CODING.md` remains the authoritative source of truth for the full
+pre-handoff quality-gate sequence.
+
 The authoritative local verification sequence before handoff is:
 
 ```bash
+bash -n internal/testing/e2e/embeddedfixture/setup.sh
+python3 -m py_compile scripts/*.py
+GOLANGCI_LINT_VERSION="$(cat .golangci-version)" go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION} run
 go test ./cmd/bwb -run TestArchitectureGuardrails
 go build ./cmd/bwb
 go vet ./...
 go test ./...
 ```
 
-This sequence includes the minimum implementation and acceptance gates (`go
-build ./cmd/bwb`, `go vet ./...`, and `go test ./...`) plus a fast targeted
-architecture-guardrail check up front.
+This sequence includes script syntax validation for repo helper scripts, a
+conservative pinned `golangci-lint` run (`staticcheck` + `errcheck`), the
+minimum implementation/acceptance gates (`go build ./cmd/bwb`, `go vet ./...`,
+and `go test ./...`), plus a fast targeted architecture-guardrail check up
+front.
+
+### `golangci-lint` install/invocation policy
+
+- Version pin lives in `.golangci-version`.
+- Local and CI invocation both use `go run ...@${GOLANGCI_LINT_VERSION}` so
+  contributors do not need a separate global install.
+- Lint scope is intentionally minimal for this repo: `staticcheck` and
+  `errcheck` only (configured in `.golangci.yml`).
+- The initial lint pass is intentionally scoped to non-test packages
+  (`run.tests: false`) to keep rollout conservative and signal high.
 
 See `project-plan/ARCHITECTURE.md` for the full architecture definition, interface contracts, and `project-plan/IMPLEMENTATION.md` for phase sequencing and donor reuse strategy.

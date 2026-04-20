@@ -6,7 +6,7 @@ on:
 
 jobs:
   quality-gates:
-    name: Build, vet, and test
+    name: Validate scripts, lint, build, vet, and test
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -16,6 +16,17 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Validate embedded fixture setup shell syntax
+        run: bash -n internal/testing/e2e/embeddedfixture/setup.sh
+
+      - name: Validate Python helper script syntax
+        run: python3 -m py_compile scripts/*.py
+
+      - name: Lint (golangci-lint pinned version)
+        run: |
+          GOLANGCI_LINT_VERSION="$(cat .golangci-version)"
+          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION} run
 
       - name: Build
         run: go build ./cmd/bwb
