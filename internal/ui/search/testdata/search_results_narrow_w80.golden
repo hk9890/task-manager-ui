@@ -1,24 +1,24 @@
-╭─ Search ───────────────── live ─╮  ╭─ Preview ───────────────────────────────╮
+╭─ Search ───────────────── live ─╮  ╭─ Content ────────────────── 0 comments ─╮
 │gateway                          │  │Implement create update close and comm...│
-╰─────────────────────────────────╯  │beads-workbench-yze.4.2 · open           │
+╰─────────────────────────────────╯  │beads-workbench-yze.4.2 · open · P1      │
 ╭─ Results ─────────────────── 2 ─╮  │                                         │
-│› T P1 OPN yze.4.2 Implement c...│  │Metadata                                 │
-│  T P1 IP yze.4.3 Implement la...│  │Core                                     │
-│                                 │  │Type    : task                           │
-│                                 │  │Priority: P1                             │
-│                                 │  │Status  : open                           │
-│                                 │  │-----------------------------------------│
-│                                 │  │Counts                                   │
-│                                 │  │Comments  : 0                            │
-│                                 │  │Blocked by: 0                            │
-│                                 │  │Blocks    : 0                            │
-│                                 │  │Related   : 0                            │
+│› T P1 OPN yze.4.2 Implement c...│  │Description                              │
+│  T P1 IP yze.4.3 Implement la...│  │⏳ Loading details for beads-workbench...│
+│                                 │  │.4.2…                                    │
 │                                 │  │                                         │
-│                                 │  │Description                              │
-│                                 │  │(no description)                         │
+│                                 │  │Notes                                    │
+│                                 │  │(no notes)                               │
 │                                 │  │                                         │
-│                                 │  │Comments: 0                              │
-│                                 │  │Blocked by: 0  Blocks: 0  Related: 0     │
-│                                 │  │                                         │
-╰─────────────────────────────────╯  │                                         │
-                                     ╰─────────────────────────────────────────╯
+│                                 │  │Comments (0)                             │
+│                                 │  │(no comments)                            │
+│                                 │  ╰─────────────────────────────────────────╯
+│                                 │  ╭─ Metadata ──────────────────────────────╮
+│                                 │  │  Core                                   │
+│                                 │  │  Type    : task                         │
+│                                 │  │  Status  : open                         │
+│                                 │  │  Priority: P1                           │
+│                                 │  │  ---------------------------------------│
+│                                 │  │  Counts                                 │
+│                                 │  │  Comments  : 0                          │
+│                                 │  │… (9 more)                               │
+╰─────────────────────────────────╯  ╰─────────────────────────────────────────╯

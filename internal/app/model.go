@@ -279,7 +279,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.detail.Error = ""
-		m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
+		if strings.TrimSpace(msg.issueID) == strings.TrimSpace(m.detail.SelectionID) {
+			m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
+		} else {
+			m.detail.ApplyPreviewDetail(msg.detail)
+		}
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
 	case editIssueResultMsg:
@@ -457,16 +461,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, modeCmd
 				}
 				m.active = mode.Detail
-				m.detail.SelectionID = issueID
 				m.detail.SelectBrowserIssue(issueID)
 				m.detail.TargetID = issueID
 				m.detail.Loading = true
 				m.detail.Error = ""
+				m.detail.PreviewDetail = domain.IssueDetail{}
+				m.detail.ContentScrollOffset = 0
+				m.detail.MetadataScrollOffset = 0
 				m.detail.ScrollOffset = 0
 				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
 			}
 			if consumed {
 				return m, modeCmd
+			}
+		}
+
+		if m.active == mode.Search {
+			if m.search.ConsumeOpenStatusDialogIntent() {
+				selection := m.selectedByMode[mode.Search]
+				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+				}
+				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, selection.Issue))
+			}
+			if m.search.ConsumeOpenPriorityDialogIntent() {
+				selection := m.selectedByMode[mode.Search]
+				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+				}
+				dialog := buildMutationDialog(mutationPriority, selection.Issue, nil, nil, nil)
+				m.actionState = dialog
+				m.actionModal = mutationModal(dialog, m.keys)
+				m.actionModal.SetSize(m.width, m.height)
+				m.showActionModal = true
+				return m, batchCmds(modeCmd, m.actionModal.Init())
 			}
 		}
 
@@ -712,6 +740,7 @@ func (m Model) renderBody() string {
 	workspaceWidth, workspaceHeight := m.workspaceSize()
 	m.board.SetSize(workspaceWidth, workspaceHeight)
 	m.search.SetSize(workspaceWidth, workspaceHeight)
+	m.syncSearchPreviewDetailState()
 
 	if m.active == mode.Detail {
 		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false)
@@ -725,6 +754,29 @@ func (m Model) renderBody() string {
 	}
 
 	return browse
+}
+
+func (m *Model) syncSearchPreviewDetailState() {
+	if m.search == nil {
+		return
+	}
+	selection := m.selectedByMode[mode.Search]
+	if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
+		return
+	}
+
+	selectedID := strings.TrimSpace(selection.Issue.ID)
+	if m.detail.Loading && strings.TrimSpace(m.detail.TargetID) == selectedID {
+		m.search.SetSelectedDetail(domain.IssueDetail{}, true)
+		return
+	}
+	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.Loading && strings.TrimSpace(m.detail.Error) == "" {
+		m.search.SetSelectedDetail(m.detail.Detail, false)
+		return
+	}
+
+	m.search.SetSelectedDetail(domain.IssueDetail{}, false)
 }
 
 func (m Model) detailViewportHeight() int {

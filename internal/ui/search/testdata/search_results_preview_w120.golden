@@ -1,28 +1,28 @@
-╭─ Search ─────────────────────────────────── live ─╮  ╭─ Preview ─────────────────────────────────────────────────────╮
-│gateway                                            │  │Gateway search result                                          │
-╰───────────────────────────────────────────────────╯  │bw-1 · open                                                    │
-╭─ Results ───────────────────────────────────── 2 ─╮  │                                                               │
-│› T P1 OPN bw-1 Gateway search result              │  │Metadata                                                       │
-│  B P0 IP bw-2 Another result                      │  │Core                                                           │
-│                                                   │  │Type    : task                                                 │
-│                                                   │  │Priority: P1                                                   │
-│                                                   │  │Status  : open                                                 │
-│                                                   │  │---------------------------------------------------------------│
-│                                                   │  │Ownership                                                      │
-│                                                   │  │Assignee: hans                                                 │
-│                                                   │  │---------------------------------------------------------------│
-│                                                   │  │Labels                                                         │
-│                                                   │  │• ui                                                           │
-│                                                   │  │---------------------------------------------------------------│
-│                                                   │  │Counts                                                         │
-│                                                   │  │Comments  : 0                                                  │
-│                                                   │  │Blocked by: 0                                                  │
-│                                                   │  │Blocks    : 0                                                  │
-│                                                   │  │Related   : 0                                                  │
-│                                                   │  │                                                               │
-│                                                   │  │Description                                                    │
-│                                                   │  │Search preview description                                     │
-│                                                   │  │                                                               │
-│                                                   │  │Comments: 0                                                    │
-╰───────────────────────────────────────────────────╯  │Blocked by: 0  Blocks: 0  Related: 0                           │
-                                                       ╰───────────────────────────────────────────────────────────────╯
+╭─ Search ────────────────────── live ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│gateway                               │  │Gateway search result                   │  │  Core                          │
+╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
+╭─ Results ──────────────────────── 2 ─╮  │                                        │  │  Status  : open                │
+│› T P1 OPN bw-1 Gateway search result │  │Description                             │  │  Priority: P1                  │
+│  B P0 IP bw-2 Another result         │  │Search preview description              │  │  ------------------------------│
+│                                      │  │                                        │  │  Ownership                     │
+│                                      │  │Notes                                   │  │  Assignee: hans                │
+│                                      │  │(no notes)                              │  │  ------------------------------│
+│                                      │  │                                        │  │  Labels                        │
+│                                      │  │                                        │  │  • ui                          │
+│                                      │  │                                        │  │  ------------------------------│
+│                                      │  │                                        │  │  Counts                        │
+│                                      │  │                                        │  │  Comments  : 0                 │
+│                                      │  │                                        │  │  Blocked by: 0                 │
+│                                      │  │                                        │  │  Blocks    : 0                 │
+│                                      │  │                                        │  │  Related   : 0                 │
+│                                      │  │                                        │  │                                │
+│                                      │  │                                        │  │Quick actions                   │
+│                                      │  │                                        │  │e Edit issue                    │
+│                                      │  │                                        │  │u Update issue                  │
+│                                      │  │                                        │  │c Add comment                   │
+│                                      │  │                                        │  │x Close issue                   │
+│                                      │  │                                        │  │r Reload detail                 │
+│                                      │  │                                        │  │                                │
+│                                      │  │Comments (0)                            │  │                                │
+│                                      │  │(no comments)                           │  │                                │
+╰──────────────────────────────────────╯  ╰────────────────────────────────────────╯  ╰────────────────────────────────╯

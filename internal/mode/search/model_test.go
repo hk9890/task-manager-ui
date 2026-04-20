@@ -31,7 +31,7 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		view := string(bts)
-		return strings.Contains(view, "g│") && strings.Contains(view, "Gateway search") && strings.Contains(view, "Preview")
+		return strings.Contains(view, "g│") && strings.Contains(view, "Gateway search") && strings.Contains(view, "Content")
 	})
 
 	if err := tm.Quit(); err != nil {
@@ -94,8 +94,8 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if m.focus != uisearch.FocusPreview {
-		t.Fatalf("expected right to move focus to preview, got %v", m.focus)
+	if m.focus != uisearch.FocusContent {
+		t.Fatalf("expected right to move focus to content, got %v", m.focus)
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
@@ -199,8 +199,8 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.focus != uisearch.FocusPreview {
-		t.Fatalf("expected tab to cycle results->preview, got %v", m.focus)
+	if m.focus != uisearch.FocusContent {
+		t.Fatalf("expected tab to cycle results->content, got %v", m.focus)
 	}
 
 	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
@@ -235,9 +235,9 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected second result selected before reload, got %#v", got)
 	}
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
 	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected query focus before reload, got %v", m.focus)
+		t.Fatalf("expected focus-query binding before reload, got %v", m.focus)
 	}
 
 	gateway.ResetCalls()
@@ -302,9 +302,9 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected second result selected before auto refresh, got %#v", got)
 	}
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
 	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected focus query before auto refresh, got %v", m.focus)
+		t.Fatalf("expected focus-query binding before auto refresh, got %v", m.focus)
 	}
 
 	gateway.ResetCalls()
@@ -423,8 +423,8 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected configured focus-left binding to return to query, got %v", m.focus)
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected configured focus-left binding to stay on results, got %v", m.focus)
 	}
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
@@ -441,8 +441,8 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	if m.focus != uisearch.FocusPreview {
-		t.Fatalf("expected configured focus-right binding to reach preview, got %v", m.focus)
+	if m.focus != uisearch.FocusContent {
+		t.Fatalf("expected configured focus-right binding to reach content, got %v", m.focus)
 	}
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	if m.focus != uisearch.FocusResults {

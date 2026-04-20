@@ -1329,7 +1329,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	}
 }
 
-func TestModelDetailModeLeftBrowserEnterOpensIssueAndStaysInDetailMode(t *testing.T) {
+func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
@@ -1369,8 +1369,9 @@ func TestModelDetailModeLeftBrowserEnterOpensIssueAndStaysInDetailMode(t *testin
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
+	if cmd == nil {
+		t.Fatalf("expected down on left browser panel to trigger preview load command")
+	}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-5", Title: "Sibling target", Status: "in_progress", Type: "bug", Priority: 2},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
@@ -1381,32 +1382,50 @@ func TestModelDetailModeLeftBrowserEnterOpensIssueAndStaysInDetailMode(t *testin
 			},
 		},
 	}
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatalf("expected enter on left browser panel to trigger detail load command")
-	}
 
 	if m.active != mode.Detail {
-		t.Fatalf("expected app to remain in detail mode after related open, got %s", m.active)
+		t.Fatalf("expected app to remain in detail mode after browse preview, got %s", m.active)
 	}
-	if m.detail.TargetID != "bw-5" || m.detail.SelectionID != "bw-5" {
-		t.Fatalf("expected browser issue bw-5 to become detail target/selection, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	if m.detail.TargetID != "bw-5" {
+		t.Fatalf("expected browser preview target bw-5, got %q", m.detail.TargetID)
 	}
-	if m.detail.ScrollOffset != 0 {
-		t.Fatalf("expected browser issue open to reset content scroll offset, got %d", m.detail.ScrollOffset)
+	if m.detail.SelectionID != "bw-1" {
+		t.Fatalf("expected anchored selection to remain bw-1 while previewing, got %q", m.detail.SelectionID)
+	}
+	if got := firstSelectionID(m, mode.Board); got != "bw-1" {
+		t.Fatalf("expected board selection to stay anchored on bw-1, got %q", got)
 	}
 
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.detail.Detail.Summary.ID != "bw-5" {
-		t.Fatalf("expected loaded browser issue detail bw-5, got %q", m.detail.Detail.Summary.ID)
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatalf("expected enter on left browser panel to be no-op, got command")
+	}
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected app to remain in detail mode after browse no-op enter, got %s", m.active)
+	}
+	if m.detail.TargetID != "bw-5" || m.detail.SelectionID != "bw-1" {
+		t.Fatalf("expected preview target bw-5 with anchored selection bw-1, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	}
+	if m.detail.ScrollOffset != 0 {
+		t.Fatalf("expected browser preview to reset content scroll offset, got %d", m.detail.ScrollOffset)
+	}
+
+	if m.detail.Detail.Summary.ID != "bw-1" {
+		t.Fatalf("expected anchored detail to remain bw-1, got %q", m.detail.Detail.Summary.ID)
+	}
+	if m.detail.PreviewDetail.Summary.ID != "bw-5" {
+		t.Fatalf("expected loaded browser preview detail bw-5, got %q", m.detail.PreviewDetail.Summary.ID)
 	}
 	if len(m.detail.BrowserItems) != 3 {
-		t.Fatalf("expected stable parent-group browser items (parent + siblings), got %d", len(m.detail.BrowserItems))
+		t.Fatalf("expected stable parent-group browser items (parent + siblings) during preview, got %d", len(m.detail.BrowserItems))
 	}
 }
 
-func TestModelDetailModeDependenciesWithoutParentGroupEnterOpensSelectedIssue(t *testing.T) {
+func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssue(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
@@ -1450,30 +1469,38 @@ func TestModelDetailModeDependenciesWithoutParentGroupEnterOpensSelectedIssue(t 
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected down on dependencies pane to trigger preview load command")
+	}
+	gateway.ShowIssueResponse = domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-5", Title: "Downstream", Status: "in_progress", Type: "task", Priority: 2},
+	}
 	m = applyMessages(t, m, runBatch(cmd))
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-4", Title: "Related", Status: "in_progress", Type: "bug", Priority: 2},
 	}
+	m = applyMessages(t, m, runBatch(cmd))
+
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected enter on dependencies pane to trigger detail load command")
+	if cmd != nil {
+		t.Fatal("expected enter on dependencies pane to be no-op")
 	}
 
 	if m.active != mode.Detail {
-		t.Fatalf("expected app to remain in detail mode after dependency open, got %s", m.active)
+		t.Fatalf("expected app to remain in detail mode after dependency preview, got %s", m.active)
 	}
-	if m.detail.TargetID != "bw-4" || m.detail.SelectionID != "bw-4" {
-		t.Fatalf("expected selected dependency bw-4 to become detail target/selection, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	if m.detail.TargetID != "bw-4" || m.detail.SelectionID != "bw-1" {
+		t.Fatalf("expected selected dependency bw-4 preview target with anchored selection bw-1, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
 	}
 
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.detail.Detail.Summary.ID != "bw-4" {
-		t.Fatalf("expected loaded dependency issue detail bw-4, got %q", m.detail.Detail.Summary.ID)
+	if m.detail.Detail.Summary.ID != "bw-1" {
+		t.Fatalf("expected anchored detail to remain bw-1, got %q", m.detail.Detail.Summary.ID)
+	}
+	if m.detail.PreviewDetail.Summary.ID != "bw-4" {
+		t.Fatalf("expected loaded dependency issue preview bw-4, got %q", m.detail.PreviewDetail.Summary.ID)
 	}
 }
 

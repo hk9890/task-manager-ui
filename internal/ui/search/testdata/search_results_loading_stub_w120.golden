@@ -1,9 +1,9 @@
-╭─ Search ────────────────────── text ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Type to search issues…                │  │Default all result                      │  │  Core                          │
+╭─ Search ────────────────────── live ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│gateway                               │  │Gateway search result                   │  │  Core                          │
 ╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
 ╭─ Results ──────────────────────── 2 ─╮  │                                        │  │  Status  : open                │
-│› T P1 OPN bw-1 Default all result    │  │Description                             │  │  Priority: P1                  │
-│  B P0 IP bw-2 Second default         │  │Default preview description             │  │  ------------------------------│
+│› T P1 OPN bw-1 Gateway search result │  │Description                             │  │  Priority: P1                  │
+│  B P0 IP bw-2 Another result         │  │⏳ Loading details for bw-1…            │  │  ------------------------------│
 │                                      │  │                                        │  │  Ownership                     │
 │                                      │  │Notes                                   │  │  Assignee: hans                │
 │                                      │  │(no notes)                              │  │  ------------------------------│

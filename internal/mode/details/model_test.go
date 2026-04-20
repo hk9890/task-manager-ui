@@ -272,22 +272,25 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 		},
 	}
 
-	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10); !consumed || intent != nil {
-		t.Fatalf("expected down to move related selection without intent, consumed=%v intent=%v", consumed, intent)
+	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10); !consumed || intent == nil {
+		t.Fatalf("expected down to move related selection and emit preview intent, consumed=%v intent=%v", consumed, intent)
 	}
 	if m.BrowserSelectedIndex != 1 {
 		t.Fatalf("expected related index to move to 1, got %d", m.BrowserSelectedIndex)
 	}
+	if intent, _ := m.selectedRelatedIssue(); intent.ID != "bw-2" {
+		t.Fatalf("expected selected related issue bw-2 after down, got %q", intent.ID)
+	}
 
-	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10); !consumed || intent != nil {
-		t.Fatalf("expected up to move related selection without intent, consumed=%v intent=%v", consumed, intent)
+	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10); !consumed || intent == nil {
+		t.Fatalf("expected up to move related selection and emit preview intent, consumed=%v intent=%v", consumed, intent)
 	}
 	if m.BrowserSelectedIndex != 0 {
 		t.Fatalf("expected related index to move back to 0, got %d", m.BrowserSelectedIndex)
 	}
 }
 
-func TestModelDetailEnterOnRelatedPaneEmitsOpenIntent(t *testing.T) {
+func TestModelDetailEnterOnRelatedPaneIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -308,11 +311,42 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenIntent(t *testing.T) {
 	if !consumed {
 		t.Fatal("expected enter on related pane to be consumed")
 	}
-	if intent == nil {
-		t.Fatal("expected enter on related pane to emit open intent")
+	if intent != nil {
+		t.Fatalf("expected enter on related pane to be a no-op without intent, got %+v", intent)
 	}
-	if intent.IssueID != "bw-3" {
-		t.Fatalf("expected intent to target bw-3, got %q", intent.IssueID)
+}
+
+func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-2",
+		Detail: domain.IssueDetail{
+			Summary:   domain.IssueSummary{ID: "bw-1", Title: "Anchor", Status: "open", Type: "task", Priority: 1},
+			BlockedBy: []domain.IssueReference{{ID: "bw-2", Title: "Preview candidate", Status: "blocked", Type: "bug", Priority: 2}},
+		},
+		BrowserItems: []domain.IssueReference{{ID: "bw-2", Title: "Preview candidate", Status: "blocked", Type: "bug", Priority: 2}},
+	}
+
+	render := m.RenderDetail()
+	if render.Summary.ID != "bw-2" {
+		t.Fatalf("expected loading preview summary for target bw-2, got %q", render.Summary.ID)
+	}
+	if !strings.Contains(render.Description, "Loading details for bw-2") {
+		t.Fatalf("expected loading preview stub description, got %q", render.Description)
+	}
+	if got := render.BlockedBy; len(got) != 1 || got[0].ID != "bw-2" {
+		t.Fatalf("expected dependency rail to stay anchored to base detail, got %#v", got)
+	}
+
+	m.ApplyPreviewDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "Preview loaded", Status: "in_progress", Type: "bug", Priority: 2}, Description: "loaded preview"})
+	render = m.RenderDetail()
+	if render.Summary.ID != "bw-2" || render.Summary.Title != "Preview loaded" {
+		t.Fatalf("expected loaded preview detail to render, got %#v", render.Summary)
+	}
+	if render.Description != "loaded preview" {
+		t.Fatalf("expected loaded preview description, got %q", render.Description)
 	}
 }
 

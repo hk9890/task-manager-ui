@@ -46,7 +46,8 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 	for _, want := range []string{
 		"Search",
 		"Results",
-		"Preview",
+		"Content",
+		"Metadata",
 		"gateway",
 		"live",
 		"› T P1 OPN bw-1 Gateway search result",
@@ -98,7 +99,7 @@ func TestRenderResultsRowsApplySharedIDWidthCap(t *testing.T) {
 	})
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "…de-width-id") {
+	if !strings.Contains(plain, "…-width-id") {
 		t.Fatalf("expected capped compact issue id suffix in search results, got:\n%s", plain)
 	}
 }
@@ -149,12 +150,12 @@ func TestRenderShowsErrorInResultsPane(t *testing.T) {
 	}
 }
 
-func TestRenderPreviewUsesCompactMarkdownDetailRendering(t *testing.T) {
+func TestRenderPreviewUsesSharedContentAndMetadataRendering(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
 		Query: "markdown",
-		Focus: FocusPreview,
+		Focus: FocusContent,
 		Results: []domain.IssueSummary{
 			{ID: "bw-50", Title: "Markdown preview", Status: "open", Type: "task", Priority: 1},
 		},
@@ -168,7 +169,7 @@ func TestRenderPreviewUsesCompactMarkdownDetailRendering(t *testing.T) {
 	})
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	for _, want := range []string{"Preview", "Header", "Metadata", "Core", "Counts"} {
+	for _, want := range []string{"Content", "Header", "Metadata", "Core"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected %q in compact markdown preview:\n%s", want, plain)
 		}
@@ -193,6 +194,23 @@ func TestRenderGoldens(t *testing.T) {
 		})
 
 		assertGoldenNormalized(t, []byte(view), "search_results_preview_w120.golden")
+	})
+
+	t.Run("results_loading_stub_w120", func(t *testing.T) {
+		view := Render(State{
+			Query: "gateway",
+			Focus: FocusResults,
+			Results: []domain.IssueSummary{
+				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
+			},
+			SelectedID:    "bw-1",
+			DetailLoading: true,
+			Width:         120,
+			Height:        28,
+		})
+
+		assertGoldenNormalized(t, []byte(view), "search_results_loading_stub_w120.golden")
 	})
 
 	t.Run("empty_results_w120", func(t *testing.T) {
@@ -221,6 +239,23 @@ func TestRenderGoldens(t *testing.T) {
 		})
 
 		assertGoldenNormalized(t, []byte(view), "search_results_narrow_w80.golden")
+	})
+
+	t.Run("results_boundary_w110", func(t *testing.T) {
+		view := Render(State{
+			Query: "gateway",
+			Focus: FocusResults,
+			Results: []domain.IssueSummary{
+				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
+			},
+			SelectedID:     "bw-1",
+			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
+			Width:          110,
+			Height:         28,
+		})
+
+		assertGoldenNormalized(t, []byte(view), "search_results_boundary_w110.golden")
 	})
 
 	t.Run("default_all_results_w120", func(t *testing.T) {

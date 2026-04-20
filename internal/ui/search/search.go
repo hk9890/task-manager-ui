@@ -13,11 +13,16 @@ import (
 )
 
 const (
-	defaultSearchWidth  = 100
-	defaultSearchHeight = 24
-	searchColumnGap     = 2
-	minLeftPaneWidth    = 34
-	minRightPaneWidth   = 26
+	defaultSearchWidth        = 100
+	defaultSearchHeight       = 24
+	searchColumnGap           = 2
+	searchWideMinWidth        = 110
+	searchRailMinWidthWide    = 38
+	searchRailMaxWidthWide    = 52
+	searchMetadataWidth       = 34
+	searchContentMinWidthWide = 20
+	searchRailMinWidthNarrow  = 34
+	searchRightMinWidthNarrow = 26
 )
 
 // FocusPane identifies which search sub-pane is active.
@@ -26,7 +31,11 @@ type FocusPane int
 const (
 	FocusQuery FocusPane = iota
 	FocusResults
-	FocusPreview
+	FocusContent
+	FocusMetadata
+
+	// Backward-compatible alias.
+	FocusPreview = FocusContent
 )
 
 // State is the UI renderer input for search mode.
@@ -41,6 +50,9 @@ type State struct {
 	Results        []domain.IssueSummary
 	SelectedID     string
 	SelectedDetail domain.IssueDetail
+	DetailLoading  bool
+
+	MetadataSelectedField uidetails.MetadataFieldKey
 
 	Width  int
 	Height int
@@ -61,10 +73,60 @@ func Render(state State) string {
 		height = defaultSearchHeight
 	}
 
-	leftWidth, rightWidth := splitWidths(width)
+	selectedDetail := selectedDetailForRender(state)
+
+	if width >= searchWideMinWidth {
+		return renderWideLayout(state, selectedDetail, width, height)
+	}
+
+	return renderNarrowLayout(state, selectedDetail, width, height)
+}
+
+func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, height int) string {
+	railWidth, contentWidth, metadataWidth := splitWideWidths(width)
 	queryHeight := 3
-	resultsHeight := max(6, height-queryHeight-1)
-	previewHeight := height
+	resultsHeight := max(6, height-queryHeight)
+
+	queryContent := renderQueryContent(state.Query, state.Focus == FocusQuery)
+	queryBox := styles.FormSection(styles.FormSectionConfig{
+		Width:              railWidth,
+		Height:             queryHeight,
+		TopLeft:            "Search",
+		TopRight:           queryStatusHint(state),
+		Content:            []string{styles.TruncateString(queryContent, railWidth-2)},
+		Focused:            state.Focus == FocusQuery,
+		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	})
+
+	resultsBox := styles.FormSection(styles.FormSectionConfig{
+		Width:              railWidth,
+		Height:             resultsHeight,
+		TopLeft:            "Results",
+		TopRight:           resultCountTitle(state.Results),
+		Content:            renderResultsContent(state, railWidth-2),
+		Focused:            state.Focus == FocusResults,
+		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	})
+
+	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
+	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0)
+	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField)
+
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		left,
+		strings.Repeat(" ", searchColumnGap),
+		contentBox,
+		strings.Repeat(" ", searchColumnGap),
+		metadataBox,
+	)
+}
+
+func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, height int) string {
+	leftWidth, rightWidth := splitNarrowWidths(width)
+	queryHeight := 3
+	resultsHeight := max(6, height-queryHeight)
+	contentHeight, metadataHeight := splitNarrowRightHeights(height)
 
 	queryContent := renderQueryContent(state.Query, state.Focus == FocusQuery)
 	queryBox := styles.FormSection(styles.FormSectionConfig{
@@ -87,17 +149,58 @@ func Render(state State) string {
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 
-	previewBox := styles.FormSection(styles.FormSectionConfig{
-		Width:              rightWidth,
-		Height:             previewHeight,
-		TopLeft:            "Preview",
-		Content:            renderPreviewContent(state, rightWidth-2),
-		Focused:            state.Focus == FocusPreview,
-		FocusedBorderColor: styles.BorderHighlightFocusColor,
-	})
-
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", searchColumnGap), previewBox)
+	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0)
+	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField)
+	right := lipgloss.JoinVertical(lipgloss.Left, contentBox, metadataBox)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", searchColumnGap), right)
+}
+
+func selectedDetailForRender(state State) domain.IssueDetail {
+	summary, ok := selectedSummary(state.Results, state.SelectedID)
+	if !ok {
+		return domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				Title:    "No selected result.",
+				ID:       "(none)",
+				Status:   "(none)",
+				Type:     "",
+				Priority: -1,
+			},
+			Description: "Select a result in the search rail to preview issue content.",
+		}
+	}
+
+	if state.DetailLoading || strings.TrimSpace(state.SelectedDetail.Summary.ID) != strings.TrimSpace(state.SelectedID) {
+		return detailLoadingStub(summary)
+	}
+
+	if strings.TrimSpace(state.SelectedDetail.Summary.ID) == "" {
+		return detailLoadingStub(summary)
+	}
+
+	return state.SelectedDetail
+}
+
+func detailLoadingStub(summary domain.IssueSummary) domain.IssueDetail {
+	return domain.IssueDetail{
+		Summary:     summary,
+		Description: loading.View(loading.State{Scope: loading.ScopeDetail, Target: strings.TrimSpace(summary.ID)}),
+	}
+}
+
+func selectedSummary(results []domain.IssueSummary, selectedID string) (domain.IssueSummary, bool) {
+	selectedID = strings.TrimSpace(selectedID)
+	if selectedID == "" {
+		return domain.IssueSummary{}, false
+	}
+	for _, issue := range results {
+		if strings.TrimSpace(issue.ID) == selectedID {
+			return issue, true
+		}
+	}
+	return domain.IssueSummary{}, false
 }
 
 func renderQueryContent(query string, focused bool) string {
@@ -171,49 +274,95 @@ func renderResultsContent(state State, width int) []string {
 	return lines
 }
 
-func renderPreviewContent(state State, width int) []string {
-	if len(state.Results) == 0 || strings.TrimSpace(state.SelectedID) == "" {
-		return []string{
-			styles.TruncateString("No selected result.", width),
-		}
+func splitWideWidths(total int) (rail, content, metadata int) {
+	available := total - (searchColumnGap * 2)
+	if available < 3 {
+		available = 3
 	}
 
-	selectionID := state.SelectedID
-	if strings.TrimSpace(state.SelectedDetail.Summary.ID) == "" {
-		for _, issue := range state.Results {
-			if issue.ID == state.SelectedID {
-				return strings.Split(uidetails.Render(uidetails.State{
-					SelectionID: selectionID,
-					Detail:      domain.IssueDetail{Summary: issue},
-					Width:       width,
-					Compact:     true,
-				}), "\n")
-			}
+	metadata = searchMetadataWidth
+	rail = clamp((available*35)/100, searchRailMinWidthWide, searchRailMaxWidthWide)
+	content = available - rail - metadata
+
+	if content < searchContentMinWidthWide {
+		need := searchContentMinWidthWide - content
+		reduceRail := min(need, max(0, rail-24))
+		rail -= reduceRail
+		need -= reduceRail
+
+		reduceMetadata := min(need, max(0, metadata-20))
+		metadata -= reduceMetadata
+		need -= reduceMetadata
+
+		if need > 0 {
+			rail = max(12, rail-need/2)
+			metadata = max(12, metadata-(need-need/2))
 		}
+
+		content = available - rail - metadata
 	}
 
-	return strings.Split(uidetails.Render(uidetails.State{
-		SelectionID: selectionID,
-		Detail:      state.SelectedDetail,
-		Width:       width,
-		Compact:     true,
-	}), "\n")
+	if rail < 1 {
+		rail = 1
+	}
+	if metadata < 1 {
+		metadata = 1
+	}
+	content = available - rail - metadata
+	if content < 1 {
+		content = 1
+	}
+
+	return rail, content, metadata
 }
 
-func splitWidths(total int) (left, right int) {
+func splitNarrowWidths(total int) (left, right int) {
 	available := total - searchColumnGap
-	if available < minLeftPaneWidth+minRightPaneWidth {
-		available = minLeftPaneWidth + minRightPaneWidth
+	if available < searchRailMinWidthNarrow+searchRightMinWidthNarrow {
+		available = searchRailMinWidthNarrow + searchRightMinWidthNarrow
 	}
 	left = (available * 45) / 100
 	right = available - left
-	if left < minLeftPaneWidth {
-		left = minLeftPaneWidth
+	if left < searchRailMinWidthNarrow {
+		left = searchRailMinWidthNarrow
 		right = available - left
 	}
-	if right < minRightPaneWidth {
-		right = minRightPaneWidth
+	if right < searchRightMinWidthNarrow {
+		right = searchRightMinWidthNarrow
 		left = available - right
 	}
 	return left, right
+}
+
+func splitNarrowRightHeights(total int) (content, metadata int) {
+	if total <= 2 {
+		return 1, 1
+	}
+	content = (total * 3) / 5
+	metadata = total - content
+	if content < 6 {
+		content = 6
+		metadata = total - content
+	}
+	if metadata < 6 {
+		metadata = 6
+		content = total - metadata
+	}
+	if content < 1 {
+		content = 1
+	}
+	if metadata < 1 {
+		metadata = 1
+	}
+	return content, metadata
+}
+
+func clamp(value, low, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
 }

@@ -142,10 +142,10 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 
 func renderThreePane(detail domain.IssueDetail, state State, width, height int) string {
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
-	innerHeight := max(1, height-2)
 
 	depGroups := dependencyGroups(detail, state.BrowserItems)
 	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2)
+	innerHeight := max(1, height-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
 	leftBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              leftWidth,
@@ -157,32 +157,13 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 
-	content := renderContentPaneLines(detail, contentWidth-2, innerHeight)
-	contentView, _ := sliceWithOffset(content, state.ContentScrollOffset, innerHeight, contentWidth-2)
-	contentBox := styles.FormSection(styles.FormSectionConfig{
-		Width:              contentWidth,
-		Height:             height,
-		TopLeft:            "Content",
-		TopRight:           fmt.Sprintf("%d comments", len(detail.Comments)),
-		Content:            contentView,
-		Focused:            state.FocusPane == FocusPaneContent,
-		FocusedBorderColor: styles.BorderHighlightFocusColor,
-	})
+	contentBox := RenderContentPane(detail, contentWidth, height, state.FocusPane == FocusPaneContent, state.ContentScrollOffset)
 
 	selectedField := MetadataFieldNone
 	if state.FocusPane == FocusPaneMetadata {
 		selectedField = state.MetadataSelectedField
 	}
-	metadata := renderMetadataPaneLines(detail, metadataWidth-2, selectedField)
-	metaView, _ := sliceWithOffset(metadata, state.MetadataScrollOffset, innerHeight, metadataWidth-2)
-	metaBox := styles.FormSection(styles.FormSectionConfig{
-		Width:              metadataWidth,
-		Height:             height,
-		TopLeft:            "Metadata",
-		Content:            metaView,
-		Focused:            state.FocusPane == FocusPaneMetadata,
-		FocusedBorderColor: styles.BorderHighlightFocusColor,
-	})
+	metaBox := RenderMetadataPane(detail, metadataWidth, height, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, selectedField)
 
 	leftLines := strings.Split(leftBox, "\n")
 	contentLines := strings.Split(contentBox, "\n")
@@ -210,6 +191,55 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	}
 
 	return strings.Join(out, "\n")
+}
+
+// RenderContentPane renders the shared detail Content pane section.
+func RenderContentPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int) string {
+	if width <= 0 {
+		width = defaultDetailWidth
+	}
+	if height <= 0 {
+		height = defaultDetailHeight
+	}
+
+	innerHeight := max(1, height-2)
+	content := renderContentPaneLines(detail, width-2, innerHeight)
+	contentView, _ := sliceWithOffset(content, scrollOffset, innerHeight, width-2)
+	return styles.FormSection(styles.FormSectionConfig{
+		Width:              width,
+		Height:             height,
+		TopLeft:            "Content",
+		TopRight:           fmt.Sprintf("%d comments", len(detail.Comments)),
+		Content:            contentView,
+		Focused:            focused,
+		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	})
+}
+
+// RenderMetadataPane renders the shared detail Metadata pane section.
+func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, selectedField MetadataFieldKey) string {
+	if width <= 0 {
+		width = defaultDetailWidth
+	}
+	if height <= 0 {
+		height = defaultDetailHeight
+	}
+
+	if !focused {
+		selectedField = MetadataFieldNone
+	}
+
+	innerHeight := max(1, height-2)
+	metadata := renderMetadataPaneLines(detail, width-2, selectedField)
+	metaView, _ := sliceWithOffset(metadata, scrollOffset, innerHeight, width-2)
+	return styles.FormSection(styles.FormSectionConfig{
+		Width:              width,
+		Height:             height,
+		TopLeft:            "Metadata",
+		Content:            metaView,
+		Focused:            focused,
+		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	})
 }
 
 func splitThreePaneWidths(total int) (left, content, metadata int) {
