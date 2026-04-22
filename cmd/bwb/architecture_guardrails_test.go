@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -9,6 +12,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hk9890/beads-workbench/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 func TestArchitectureGuardrails(t *testing.T) {
@@ -161,4 +167,295 @@ func assertNoForbiddenDirectImportsInFirstPartyDeps(t *testing.T, pkgs []listedP
 	slices.Sort(violations)
 	violations = slices.Compact(violations)
 	t.Fatalf("forbidden direct imports detected: %s", strings.Join(violations, ", "))
+}
+
+func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
+	t.Parallel()
+
+	resolved := config.Default()
+	tests := []struct {
+		name         string
+		args         []string
+		expectLoad   bool
+		expectStderr bool
+	}{
+		{name: "help", args: []string{"--help"}, expectLoad: false},
+		{name: "version", args: []string{"--version"}, expectLoad: false},
+		{name: "print config", args: []string{"--print-config"}, expectLoad: true},
+		{name: "check config", args: []string{"--check-config"}, expectLoad: true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout, stderr bytes.Buffer
+			loadCalls := 0
+			started := false
+
+			code := run(tc.args, &stdout, &stderr,
+				func(opts config.LoadOptions) (config.Result, error) {
+					loadCalls++
+					return config.Result{Config: resolved, Path: "/tmp/config.yaml"}, nil
+				},
+				func(cfg config.Model, opts startupOptions) error {
+					started = true
+					return nil
+				},
+			)
+
+			if code != 0 {
+				t.Fatalf("expected exit code 0, got %d (stdout=%q stderr=%q)", code, stdout.String(), stderr.String())
+			}
+			if started {
+				t.Fatal("expected Bubble Tea startup to be skipped")
+			}
+			if tc.expectLoad && loadCalls != 1 {
+				t.Fatalf("expected config load once, got %d", loadCalls)
+			}
+			if !tc.expectLoad && loadCalls != 0 {
+				t.Fatalf("expected config load to be skipped, got %d calls", loadCalls)
+			}
+			if !tc.expectStderr && stderr.Len() != 0 {
+				t.Fatalf("expected empty stderr, got %q", stderr.String())
+			}
+		})
+	}
+}
+
+func TestRun_PrintConfigWritesResolvedYAMLAndSource(t *testing.T) {
+	t.Parallel()
+
+	resolved := config.Default()
+	configPath := filepath.Join(t.TempDir(), "custom.yaml")
+
+	var stdout, stderr bytes.Buffer
+	var seenOpts config.LoadOptions
+
+	code := run([]string{"--print-config", "--config", configPath}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			seenOpts = opts
+			return config.Result{Config: resolved, Path: configPath, Warnings: []string{"unused"}}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			return errors.New("should not start")
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !seenOpts.RequireExplicit || seenOpts.Path != configPath {
+		t.Fatalf("expected explicit path load options, got %#v", seenOpts)
+	}
+
+	out := stdout.String()
+	if !strings.HasPrefix(out, "# source: "+configPath+"\n") {
+		t.Fatalf("expected source comment prefix, got %q", out)
+	}
+
+	yamlBody := strings.TrimPrefix(out, "# source: "+configPath+"\n")
+	var decoded config.Model
+	if err := yaml.Unmarshal([]byte(yamlBody), &decoded); err != nil {
+		t.Fatalf("expected valid YAML body, got error: %v", err)
+	}
+	if decoded.Editor.Command != resolved.Editor.Command {
+		t.Fatalf("expected resolved config in yaml body, got editor=%q", decoded.Editor.Command)
+	}
+}
+
+func TestRun_CheckConfigPrintsWarningsAndSuccess(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--check-config"}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Default(), Path: "/tmp/config.yaml", Warnings: []string{"unknown key"}}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			return errors.New("should not start")
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "config OK") {
+		t.Fatalf("expected success message, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "bwb config warning: unknown key") {
+		t.Fatalf("expected warning output, got %q", stderr.String())
+	}
+}
+
+func TestRun_VersionUsesFallback(t *testing.T) {
+	t.Parallel()
+
+	old := version
+	version = "dev"
+	t.Cleanup(func() { version = old })
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--version"}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			return config.Result{}, errors.New("should not load")
+		},
+		func(cfg config.Model, opts startupOptions) error { return nil },
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if got := stdout.String(); got != "bwb dev\n" {
+		t.Fatalf("expected version output %q, got %q", "bwb dev\\n", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRun_UsageErrorsExitCode2(t *testing.T) {
+	t.Parallel()
+
+	tests := [][]string{
+		{"--does-not-exist"},
+		{"--config"},
+	}
+
+	for _, args := range tests {
+		var stdout, stderr bytes.Buffer
+		code := run(args, &stdout, &stderr,
+			func(opts config.LoadOptions) (config.Result, error) {
+				return config.Result{}, errors.New("should not load")
+			},
+			func(cfg config.Model, opts startupOptions) error { return nil },
+		)
+
+		if code != 2 {
+			t.Fatalf("args %v: expected exit code 2, got %d", args, code)
+		}
+		if stderr.Len() == 0 {
+			t.Fatalf("args %v: expected usage error on stderr", args)
+		}
+	}
+}
+
+func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
+	t.Parallel()
+
+	startDir := t.TempDir()
+	projectDir := filepath.Join(startDir, "project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd returned error: %v", err)
+	}
+	if err := os.Chdir(startDir); err != nil {
+		t.Fatalf("Chdir returned error: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalWD)
+	})
+
+	var stdout, stderr bytes.Buffer
+	var seenLoad config.LoadOptions
+	var seenStart startupOptions
+	started := false
+
+	code := run([]string{"--cwd", "project", "--config", "cfg.yaml", "--debug", "--no-auto-refresh"}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			seenLoad = opts
+			return config.Result{Config: config.Default(), Path: opts.Path}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			started = true
+			seenStart = opts
+			return nil
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr=%q)", code, stderr.String())
+	}
+	if !started {
+		t.Fatal("expected interactive startup")
+	}
+	if seenLoad.Path != filepath.Join(startDir, "cfg.yaml") {
+		t.Fatalf("expected config path resolved against start cwd, got %q", seenLoad.Path)
+	}
+	if seenStart.projectRoot != projectDir {
+		t.Fatalf("expected project root from --cwd, got %q", seenStart.projectRoot)
+	}
+	if !seenStart.debug {
+		t.Fatal("expected debug option enabled")
+	}
+	if seenStart.autoRefresh {
+		t.Fatal("expected --no-auto-refresh to disable auto refresh")
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] resolved config path: "+filepath.Join(startDir, "cfg.yaml")) {
+		t.Fatalf("expected debug config path line, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd: "+projectDir) {
+		t.Fatalf("expected debug cwd line, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh: false") {
+		t.Fatalf("expected debug auto-refresh line, got %q", stderr.String())
+	}
+}
+
+func TestRun_CWDMustExistAndBeDirectory(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing", func(t *testing.T) {
+		t.Parallel()
+		var stdout, stderr bytes.Buffer
+		started := false
+		code := run([]string{"--cwd", filepath.Join(t.TempDir(), "missing")}, &stdout, &stderr,
+			func(opts config.LoadOptions) (config.Result, error) {
+				return config.Result{Config: config.Default(), Path: "unused"}, nil
+			},
+			func(cfg config.Model, opts startupOptions) error {
+				started = true
+				return nil
+			},
+		)
+		if code == 0 {
+			t.Fatalf("expected non-zero exit for missing cwd")
+		}
+		if started {
+			t.Fatal("expected startup skipped for invalid cwd")
+		}
+	})
+
+	t.Run("file", func(t *testing.T) {
+		t.Parallel()
+		filePath := filepath.Join(t.TempDir(), "not-a-dir")
+		if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile returned error: %v", err)
+		}
+		var stdout, stderr bytes.Buffer
+		started := false
+		code := run([]string{"--cwd", filePath}, &stdout, &stderr,
+			func(opts config.LoadOptions) (config.Result, error) {
+				return config.Result{Config: config.Default(), Path: "unused"}, nil
+			},
+			func(cfg config.Model, opts startupOptions) error {
+				started = true
+				return nil
+			},
+		)
+		if code == 0 {
+			t.Fatalf("expected non-zero exit for non-directory cwd")
+		}
+		if started {
+			t.Fatal("expected startup skipped for invalid cwd")
+		}
+	})
 }

@@ -105,6 +105,10 @@ type surfaceRefreshState struct {
 	lastRefresh time.Time
 }
 
+type RuntimeOptions struct {
+	DisableAutoRefresh bool
+}
+
 // Model is the root Bubble Tea shell for Beads Workbench.
 //
 // v1 detail presentation model keeps browse and full detail separated:
@@ -140,10 +144,17 @@ type Model struct {
 
 	width  int
 	height int
+
+	runtime RuntimeOptions
 }
 
 // NewModel builds the root shell model.
 func NewModel(services Services) Model {
+	return NewModelWithOptions(services, RuntimeOptions{})
+}
+
+// NewModelWithOptions builds the root shell model with runtime toggles.
+func NewModelWithOptions(services Services, runtime RuntimeOptions) Model {
 	keys, err := config.ResolveKeyBindings(services.Config.KeyBindings)
 	if err != nil {
 		panic(fmt.Sprintf("invalid resolved keybindings in app model: %v", err))
@@ -177,12 +188,16 @@ func NewModel(services Services) Model {
 			mode.Search: {lastRefresh: now},
 			mode.Detail: {},
 		},
+		runtime: runtime,
 	}
 }
 
 // Init loads initial board and search controllers.
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
+	if m.runtime.DisableAutoRefresh {
+		return tea.Batch(m.board.Init(), m.search.Init())
+	}
 	return tea.Batch(m.board.Init(), m.search.Init(), scheduleRefreshTickCmd())
 }
 
@@ -251,12 +266,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !wasBlurred {
 			return m, modeCmd
 		}
+		if m.runtime.DisableAutoRefresh {
+			return m, modeCmd
+		}
 		return m, batchCmds(modeCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
 	case tea.BlurMsg:
 		m.focusKnown = true
 		m.terminalFocused = false
 		return m, modeCmd
 	case refreshTickMsg:
+		if m.runtime.DisableAutoRefresh {
+			return m, modeCmd
+		}
 		return m, batchCmds(modeCmd, scheduleRefreshTickCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

@@ -23,4 +23,4 @@ trap 'rm -f "$staged_list_file"' EXIT INT TERM
 git -C "$repo_root" diff --cached --name-only -z --diff-filter=ACMR -- '*.go' > "$staged_list_file"
 
 xargs -0 -I{} gofmt -w "$repo_root/{}" < "$staged_list_file"
-xargs -0 -I{} git -C "$repo_root" add -- "{}" < "$staged_list_file"
+xargs -0 -I{} git -C "$repo_root" add -u -- "{}" < "$staged_list_file"

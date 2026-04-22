@@ -8,34 +8,34 @@ const (
 
 // Model contains runtime configuration consumed by the app shell.
 type Model struct {
-	Editor      Editor
-	Launcher    Launcher
-	KeyBindings KeyBindings
-	UI          UI
+	Editor      Editor      `yaml:"editor"`
+	Launcher    Launcher    `yaml:"launcher"`
+	KeyBindings KeyBindings `yaml:"keybindings"`
+	UI          UI          `yaml:"ui"`
 }
 
 // Editor contains editor-launch configuration.
 type Editor struct {
-	Command string
+	Command string `yaml:"command"`
 }
 
 // Launcher contains launcher action definitions used by the shell.
 type Launcher struct {
-	Definitions []LauncherDefinition
+	Definitions []LauncherDefinition `yaml:"definitions"`
 }
 
 // LauncherDefinition describes one launcher action and its command argv.
 type LauncherDefinition struct {
-	Action  string
-	Command string
-	Args    []string
-	Env     []string
-	WorkDir string
+	Action  string   `yaml:"action"`
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args,omitempty"`
+	Env     []string `yaml:"env,omitempty"`
+	WorkDir string   `yaml:"workdir,omitempty"`
 }
 
 // UI contains shell-level presentation preferences.
 type UI struct {
-	ShowModeSwitcherHelp bool
+	ShowModeSwitcherHelp bool `yaml:"show_mode_switcher_help"`
 }
 
 func resolvedDefaultEditorCommand() string {

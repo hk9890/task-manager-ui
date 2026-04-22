@@ -3,6 +3,7 @@ package beads
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -221,6 +222,52 @@ func TestCommandRunnerRunSerializesConcurrentExecutorCalls(t *testing.T) {
 	if execStub.maxConcurrent > 1 {
 		t.Fatalf("expected serialized executor calls, max concurrent=%d", execStub.maxConcurrent)
 	}
+}
+
+func TestCommandRunnerRunDebugLogsArgvAndExitCodeOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
+	var lines []string
+	runner := NewCommandRunner(RunnerConfig{
+		Executor: execStub,
+		DebugLog: func(line string) {
+			lines = append(lines, line)
+		},
+	})
+
+	_, err := runner.Run(context.Background(), CommandRequest{Operation: "ready", Args: []string{"ready", "--json"}})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected one debug line, got %d (%#v)", len(lines), lines)
+	}
+	wantArgv := fmt.Sprintf("%q", []string{"bd", "ready", "--json"})
+	assertContains(t, lines[0], "argv="+wantArgv)
+	assertContains(t, lines[0], "exit_code=0")
+}
+
+func TestCommandRunnerRunDebugLogsExitCodeOnCommandFailure(t *testing.T) {
+	t.Parallel()
+
+	execStub := &stubExecutor{result: ExecResult{ExitCode: 2, Stderr: []byte("bad args")}}
+	var lines []string
+	runner := NewCommandRunner(RunnerConfig{
+		Executor: execStub,
+		DebugLog: func(line string) {
+			lines = append(lines, line)
+		},
+	})
+
+	_, err := runner.Run(context.Background(), CommandRequest{Operation: "ready", Args: []string{"ready"}})
+	if err == nil {
+		t.Fatal("expected command failure")
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected one debug line, got %d (%#v)", len(lines), lines)
+	}
+	assertContains(t, lines[0], "exit_code=2")
 }
 
 type stubExecutor struct {

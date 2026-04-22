@@ -12,6 +12,11 @@ import (
 
 const configRelativePath = "bwb/config.yaml"
 
+type LoadOptions struct {
+	Path            string
+	RequireExplicit bool
+}
+
 // Result contains resolved runtime configuration and any non-fatal warnings.
 type Result struct {
 	Config   Model
@@ -23,15 +28,20 @@ type Result struct {
 // bwb/config.yaml file, merges file-backed values over defaults, and returns
 // any non-fatal parse warnings.
 func Load() (Result, error) {
-	configDir, err := os.UserConfigDir()
+	return LoadWithOptions(LoadOptions{})
+}
+
+// LoadWithOptions loads runtime config using optional caller-provided path
+// overrides and explicit-path requirements.
+func LoadWithOptions(opts LoadOptions) (Result, error) {
+	path, err := resolveConfigPath(opts.Path)
 	if err != nil {
-		return Result{}, fmt.Errorf("resolve config dir: %w", err)
+		return Result{}, err
 	}
 
-	path := filepath.Join(configDir, configRelativePath)
 	result := Result{Config: Default(), Path: path}
 
-	data, warnings, err := readConfigFile(path)
+	data, warnings, err := readConfigFile(path, opts.RequireExplicit)
 	if err != nil {
 		return Result{}, err
 	}
@@ -50,6 +60,19 @@ func Load() (Result, error) {
 		return Result{}, fmt.Errorf("load config %q: %w", path, err)
 	}
 	return result, nil
+}
+
+func resolveConfigPath(override string) (string, error) {
+	if strings.TrimSpace(override) != "" {
+		return override, nil
+	}
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve config dir: %w", err)
+	}
+
+	return filepath.Join(configDir, configRelativePath), nil
 }
 
 type overrideModel struct {
@@ -79,16 +102,22 @@ type overrideUI struct {
 	ShowModeSwitcherHelp *bool `yaml:"show_mode_switcher_help"`
 }
 
-func readConfigFile(path string) ([]byte, []string, error) {
+func readConfigFile(path string, requireExists bool) ([]byte, []string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if requireExists {
+				return nil, nil, fmt.Errorf("config path %q does not exist", path)
+			}
 			return nil, nil, nil
 		}
 		return nil, nil, fmt.Errorf("stat config %q: %w", path, err)
 	}
 	if info.IsDir() {
 		return nil, nil, fmt.Errorf("config path %q is a directory, expected a file", path)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil, fmt.Errorf("config path %q is not a regular file", path)
 	}
 
 	data, err := os.ReadFile(path)

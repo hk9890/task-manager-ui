@@ -1,42 +1,231 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/app"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"gopkg.in/yaml.v3"
 )
 
-func main() {
-	configResult, err := config.Load()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
+var version = "dev"
+
+var configLoad = func(opts config.LoadOptions) (config.Result, error) {
+	return config.LoadWithOptions(opts)
+}
+
+type startupOptions struct {
+	projectRoot       string
+	debug             bool
+	autoRefresh       bool
+	debugOutputWriter io.Writer
+}
+
+var startInteractive = func(cfg config.Model, opts startupOptions) error {
+	runnerCfg := beads.RunnerConfig{WorkDir: opts.projectRoot}
+	if opts.debug {
+		writer := opts.debugOutputWriter
+		if writer == nil {
+			writer = io.Discard
+		}
+		runnerCfg.DebugLog = func(line string) {
+			_, _ = fmt.Fprintf(writer, "[bwb-debug] %s\n", line)
+		}
 	}
-	for _, warning := range configResult.Warnings {
-		_, _ = fmt.Fprintf(os.Stderr, "bwb config warning: %s\n", warning)
+	gateway := beads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
+
+	services, err := app.NewServices(gateway, cfg, opts.projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to initialize services: %w", err)
 	}
 
-	cfg := configResult.Config
-	gateway := beads.NewCLIGateway(beads.NewCommandRunner(beads.RunnerConfig{}))
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to resolve project root: %v\n", err)
-		os.Exit(1)
-	}
-
-	services, err := app.NewServices(gateway, cfg, projectRoot)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to initialize services: %v\n", err)
-		os.Exit(1)
-	}
-
-	program := tea.NewProgram(app.NewModel(services), tea.WithAltScreen(), tea.WithReportFocus())
+	model := app.NewModelWithOptions(services, app.RuntimeOptions{DisableAutoRefresh: !opts.autoRefresh})
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := program.Run(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "bwb failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("bwb failed: %w", err)
 	}
+
+	return nil
+}
+
+type cliOptions struct {
+	help        bool
+	showVersion bool
+	configPath  string
+	cwdPath     string
+	printConfig bool
+	checkConfig bool
+	debug       bool
+	noAuto      bool
+}
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, configLoad, startInteractive))
+}
+
+func run(args []string, stdout, stderr io.Writer, load func(config.LoadOptions) (config.Result, error), start func(config.Model, startupOptions) error) int {
+	opts, code, ok := parseCLI(args, stderr)
+	if !ok {
+		return code
+	}
+
+	if opts.help {
+		printUsage(stdout)
+		return 0
+	}
+
+	if opts.showVersion {
+		_, _ = fmt.Fprintf(stdout, "bwb %s\n", version)
+		return 0
+	}
+
+	startCWD, err := os.Getwd()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to resolve process start cwd: %v\n", err)
+		return 1
+	}
+
+	resolvedConfigPath := resolveAgainstStartCWD(startCWD, opts.configPath)
+	loadOpts := config.LoadOptions{Path: resolvedConfigPath, RequireExplicit: opts.configPath != ""}
+	configResult, err := load(loadOpts)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to load config: %v\n", err)
+		return 1
+	}
+
+	if opts.printConfig {
+		encoded, err := yaml.Marshal(configResult.Config)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "failed to encode resolved config: %v\n", err)
+			return 1
+		}
+		_, _ = fmt.Fprintf(stdout, "# source: %s\n", configResult.Path)
+		_, _ = stdout.Write(encoded)
+		return 0
+	}
+
+	if opts.checkConfig {
+		for _, warning := range configResult.Warnings {
+			_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
+		}
+		_, _ = fmt.Fprintln(stdout, "config OK")
+		return 0
+	}
+
+	for _, warning := range configResult.Warnings {
+		_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
+	}
+
+	resolvedCWD, err := resolveAndValidateCWD(startCWD, opts.cwdPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "failed to resolve --cwd: %v\n", err)
+		return 1
+	}
+
+	autoRefresh := !opts.noAuto
+	if opts.debug {
+		_, _ = fmt.Fprintf(stderr, "[bwb-debug] resolved config path: %s\n", configResult.Path)
+		_, _ = fmt.Fprintf(stderr, "[bwb-debug] resolved cwd: %s\n", resolvedCWD)
+		_, _ = fmt.Fprintf(stderr, "[bwb-debug] auto-refresh: %t\n", autoRefresh)
+	}
+
+	if err := start(configResult.Config, startupOptions{
+		projectRoot:       resolvedCWD,
+		debug:             opts.debug,
+		autoRefresh:       autoRefresh,
+		debugOutputWriter: stderr,
+	}); err != nil {
+		_, _ = fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	return 0
+}
+
+func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
+	var opts cliOptions
+
+	fs := flag.NewFlagSet("bwb", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		printUsage(stderr)
+	}
+
+	fs.BoolVar(&opts.help, "h", false, "show help")
+	fs.BoolVar(&opts.help, "help", false, "show help")
+	fs.BoolVar(&opts.showVersion, "v", false, "show version")
+	fs.BoolVar(&opts.showVersion, "version", false, "show version")
+	fs.StringVar(&opts.configPath, "c", "", "path to config file")
+	fs.StringVar(&opts.configPath, "config", "", "path to config file")
+	fs.StringVar(&opts.cwdPath, "cwd", "", "target project directory")
+	fs.BoolVar(&opts.printConfig, "print-config", false, "print resolved config")
+	fs.BoolVar(&opts.checkConfig, "check-config", false, "validate resolved config")
+	fs.BoolVar(&opts.debug, "d", false, "enable debug diagnostics")
+	fs.BoolVar(&opts.debug, "debug", false, "enable debug diagnostics")
+	fs.BoolVar(&opts.noAuto, "no-auto-refresh", false, "disable periodic auto-refresh")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return cliOptions{help: true}, 0, true
+		}
+		return cliOptions{}, 2, false
+	}
+
+	if fs.NArg() > 0 {
+		_, _ = fmt.Fprintf(stderr, "unexpected arguments: %v\n", fs.Args())
+		fs.Usage()
+		return cliOptions{}, 2, false
+	}
+
+	return opts, 0, true
+}
+
+func resolveAgainstStartCWD(startCWD, path string) string {
+	if strings.TrimSpace(path) == "" || filepath.IsAbs(path) {
+		return path
+	}
+
+	return filepath.Join(startCWD, path)
+}
+
+func resolveAndValidateCWD(startCWD, cwdOverride string) (string, error) {
+	resolved := startCWD
+	if strings.TrimSpace(cwdOverride) != "" {
+		resolved = resolveAgainstStartCWD(startCWD, cwdOverride)
+	}
+
+	info, err := os.Stat(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("path %q does not exist", resolved)
+		}
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("path %q is not a directory", resolved)
+	}
+
+	return resolved, nil
+}
+
+func printUsage(w io.Writer) {
+	_, _ = fmt.Fprintln(w, "Usage: bwb [options]")
+	_, _ = fmt.Fprintln(w, "")
+	_, _ = fmt.Fprintln(w, "Options:")
+	_, _ = fmt.Fprintln(w, "  -h, --help            Show help")
+	_, _ = fmt.Fprintln(w, "  -v, --version         Show version")
+	_, _ = fmt.Fprintln(w, "  -c, --config <path>   Use explicit config file")
+	_, _ = fmt.Fprintln(w, "      --cwd <path>      Target project directory")
+	_, _ = fmt.Fprintln(w, "  -d, --debug           Enable debug diagnostics")
+	_, _ = fmt.Fprintln(w, "      --no-auto-refresh Disable automatic refresh triggers")
+	_, _ = fmt.Fprintln(w, "      --print-config    Print resolved config YAML")
+	_, _ = fmt.Fprintln(w, "      --check-config    Validate config and exit")
 }

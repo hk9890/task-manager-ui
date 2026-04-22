@@ -1,24 +1,24 @@
-╭─ Dependencies ─── 0 ─╮  ╭─ Content ───────────── 3 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (0)        │  │Comments heavy issue                │  │  Core                          │
-│(none)                │  │bw-77 · open · P0                   │  │  Type    : bug                 │
-│                      │  │                                    │  │  Status  : open                │
-│Blocks (0)            │  │Description                         │  │  Priority: P0                  │
-│(none)                │  │Short description                   │  │  ------------------------------│
-│                      │  │                                    │  │  Counts                        │
-│Related (0)           │  │Notes                               │  │  Comments  : 3                 │
-│(none)                │  │(no notes)                          │  │  Blocked by: 0                 │
-│                      │  │                                    │  │  Blocks    : 0                 │
-│                      │  │                                    │  │  Related   : 0                 │
-│                      │  │                                    │  │                                │
-│                      │  │                                    │  │Quick actions                   │
-│                      │  │                                    │  │e Edit issue                    │
-│                      │  │Comments (3)                        │  │u Update issue                  │
-│                      │  │unknown · unknown time              │  │c Add comment                   │
-│                      │  │  (empty comment)                   │  │x Close issue                   │
-│                      │  │                                    │  │r Reload detail                 │
-│                      │  │alice · 2026-04-05 10:00            │  │                                │
-│                      │  │  First chronologically             │  │                                │
-│                      │  │                                    │  │                                │
-│                      │  │bob · 2026-04-05 12:00              │  │                                │
-│                      │  │  Second chronologically            │  │                                │
-╰──────────────────────╯  ╰────────────────────────────────────╯  ╰────────────────────────────────╯
+╭─ Content ─────────────────────────────────────────────────────────────────────────── 3 comments ─╮
+│Comments heavy issue                                                                              │
+│bw-77 · open · P0                                                                                 │
+│                                                                                                  │
+│Description                                                                                       │
+│Short description                                                                                 │
+│                                                                                                  │
+│Notes                                                                                             │
+│(no notes)                                                                                        │
+│                                                                                                  │
+│Comments (3)                                                                                      │
+│unknown · unknown time                                                                            │
+│… (6 more)                                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Dependencies ─────────────────────────────────────────── 0 ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (0)                                                │  │  Core                          │
+│(none)                                                        │  │  Type    : bug                 │
+│                                                              │  │  Status  : open                │
+│Blocks (0)                                                    │  │  Priority: P0                  │
+│(none)                                                        │  │  ------------------------------│
+│                                                              │  │  Counts                        │
+│Related (0)                                                   │  │  Comments  : 3                 │
+│(none)                                                        │  │… (9 more)                      │
+╰──────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯

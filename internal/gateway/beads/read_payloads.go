@@ -61,7 +61,12 @@ type bdTypeCatalogPayload struct {
 	CustomTypes []bdCatalogEntryPayload `json:"custom_types"`
 }
 
-type bdLabelListAllPayload []string
+type bdLabelCatalogEntryPayload struct {
+	Label *string `json:"label"`
+	Count *int    `json:"count"`
+}
+
+type bdLabelListAllPayload []bdLabelCatalogEntryPayload
 
 func (p bdIssuePayload) toIssueSummary(operation string) (domain.IssueSummary, error) {
 	id, err := requiredString(p.ID, "id")
@@ -182,6 +187,15 @@ func (p bdCatalogEntryPayload) toTypeOption(operation string) (domain.TypeOption
 	}
 
 	return domain.TypeOption{Name: name, Description: description}, nil
+}
+
+func (p bdLabelCatalogEntryPayload) toLabelOption(operation string) (domain.LabelOption, error) {
+	label, err := requiredString(p.Label, "label")
+	if err != nil {
+		return domain.LabelOption{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	return domain.LabelOption{Name: strings.TrimSpace(label)}, nil
 }
 
 func requiredString(v *string, field string) (string, error) {

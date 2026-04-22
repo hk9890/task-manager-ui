@@ -16,6 +16,71 @@ sequence.
 For testing strategy, vocabulary, and harness conventions (teatest, golden files,
 fake seams, embedded fixture usage), see `docs/TESTING.md`.
 
+## CLI startup semantics (v1)
+
+`cmd/bwb/main.go` intentionally keeps a minimal pre-TUI CLI surface before
+starting Bubble Tea.
+
+Supported flags:
+
+- `-h`, `--help`
+- `-v`, `--version`
+- `-c`, `--config <path>`
+- `--cwd <path>`
+- `-d`, `--debug`
+- `--no-auto-refresh`
+- `--print-config`
+- `--check-config`
+
+Non-interactive flags (`--help`, `--version`, `--print-config`,
+`--check-config`) return without booting the Bubble Tea program.
+
+### Path resolution and examples
+
+- `--config` sets an explicit config file path. Relative paths resolve against
+  the process start cwd.
+- `--cwd` sets the target beads project directory used by gateway commands.
+  Relative paths also resolve against process start cwd.
+- `--print-config` loads config, prints the resolved source comment and YAML,
+  then exits.
+- `--check-config` loads config, emits warnings, prints `config OK`, then exits.
+
+Examples:
+
+```bash
+bwb --config ./configs/dev.yaml
+bwb --cwd ../another-project
+bwb --config ./configs/dev.yaml --print-config
+bwb --check-config
+```
+
+### Exit-code contract for non-interactive paths
+
+| Condition | Exit code |
+| --- | --- |
+| Successful `--help`, `--version`, `--print-config`, `--check-config` | `0` |
+| Runtime/config failures (cwd/config load, config marshal, etc.) | `1` |
+| CLI usage failures (unknown flag, unexpected positional args) | `2` |
+
+### Version/build metadata behavior
+
+- `main.version` defaults to `dev` for local builds.
+- Release/snapshot builds inject version metadata via GoReleaser ldflags:
+  `-X main.version={{ .Version }}` (see `.goreleaser.yaml`).
+
+### Debug diagnostics contract
+
+When `--debug` is set, diagnostics are emitted to stderr and prefixed with:
+
+```text
+[bwb-debug]
+```
+
+Event categories:
+
+- startup resolution (`resolved config path`, `resolved cwd`, `auto-refresh`)
+- `bd` execution traces from the command runner (`bd argv=... exit_code=...`)
+
 ## Package Layout
 
 Current bootstrapped layout:

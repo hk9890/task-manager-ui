@@ -262,6 +262,54 @@ func TestLoad_UnreadableConfigReturnsError(t *testing.T) {
 	}
 }
 
+func TestLoadWithOptions_ExplicitPathOverridesDefaultLookup(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+
+	explicitDir := t.TempDir()
+	explicitPath := filepath.Join(explicitDir, "custom.yaml")
+	if err := os.WriteFile(explicitPath, []byte("editor:\n  command: nano\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	result, err := LoadWithOptions(LoadOptions{Path: explicitPath, RequireExplicit: true})
+	if err != nil {
+		t.Fatalf("LoadWithOptions returned error: %v", err)
+	}
+
+	if result.Path != explicitPath {
+		t.Fatalf("expected explicit config path %q, got %q", explicitPath, result.Path)
+	}
+	if result.Config.Editor.Command != "nano" {
+		t.Fatalf("expected explicit config override, got %q", result.Config.Editor.Command)
+	}
+}
+
+func TestLoadWithOptions_ExplicitMissingPathReturnsError(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "missing.yaml")
+
+	_, err := LoadWithOptions(LoadOptions{Path: missingPath, RequireExplicit: true})
+	if err == nil {
+		t.Fatal("expected explicit missing config path error")
+	}
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("expected missing config path error, got %v", err)
+	}
+}
+
+func TestLoadWithOptions_ExplicitDirectoryReturnsError(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := LoadWithOptions(LoadOptions{Path: dir, RequireExplicit: true})
+	if err == nil {
+		t.Fatal("expected explicit directory config path error")
+	}
+	if !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("expected directory config path error, got %v", err)
+	}
+}
+
 func writeConfig(t *testing.T, configHome, body string) string {
 	t.Helper()
 

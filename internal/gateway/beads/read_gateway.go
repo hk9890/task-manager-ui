@@ -486,11 +486,16 @@ func (g *Gateway) LabelCatalog(ctx context.Context) ([]domain.LabelOption, error
 
 	out := make([]domain.LabelOption, 0, len(labels))
 	for _, label := range labels {
-		if strings.TrimSpace(label) == "" {
+		mapped, mapErr := label.toLabelOption(operationLabels)
+		if mapErr != nil {
+			return nil, mapErr
+		}
+
+		if mapped.Name == "" {
 			continue
 		}
 
-		out = append(out, domain.LabelOption{Name: label})
+		out = append(out, mapped)
 	}
 
 	return out, nil

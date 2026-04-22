@@ -112,6 +112,10 @@ func Render(state State) string {
 		return renderCompact(detail, width)
 	}
 
+	if usesResponsiveDetailLayout(width) {
+		return renderResponsiveLayout(detail, state, width, height)
+	}
+
 	return renderThreePane(detail, state, width, height)
 }
 
@@ -126,6 +130,23 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 		height = defaultDetailHeight
 	}
 
+	if usesResponsiveDetailLayout(width) {
+		contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
+		dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
+
+		contentInnerHeight := max(1, contentHeight-2)
+		bottomInnerHeight := max(1, bottomHeight-2)
+		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2)
+		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight)
+		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone)
+
+		return ScrollOffsets{
+			Dependencies: max(0, len(deps)-bottomInnerHeight),
+			Content:      max(0, len(content)-contentInnerHeight),
+			Metadata:     max(0, len(metadata)-bottomInnerHeight),
+		}
+	}
+
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 	innerHeight := max(1, height-2)
 
@@ -138,6 +159,101 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 		Content:      max(0, len(content)-innerHeight),
 		Metadata:     max(0, len(metadata)-innerHeight),
 	}
+}
+
+func usesResponsiveDetailLayout(width int) bool {
+	return width < InspectorTwoColumnMinWidth
+}
+
+func renderResponsiveLayout(detail domain.IssueDetail, state State, width, height int) string {
+	contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
+	dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
+
+	contentBox := RenderContentPane(detail, width, contentHeight, state.FocusPane == FocusPaneContent, state.ContentScrollOffset)
+	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
+	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField)
+
+	contentLines := strings.Split(contentBox, "\n")
+	dependencyLines := strings.Split(dependenciesBox, "\n")
+	metadataLines := strings.Split(metadataBox, "\n")
+
+	bottomLines := make([]string, 0, bottomHeight)
+	for i := 0; i < bottomHeight; i++ {
+		dependenciesLine := ""
+		if i < len(dependencyLines) {
+			dependenciesLine = dependencyLines[i]
+		}
+		metadataLine := ""
+		if i < len(metadataLines) {
+			metadataLine = metadataLines[i]
+		}
+		bottomLines = append(bottomLines,
+			padToWidth(dependenciesLine, dependenciesWidth)+strings.Repeat(" ", detailColumnGap)+padToWidth(metadataLine, metadataWidth),
+		)
+	}
+
+	return strings.Join(append(contentLines, bottomLines...), "\n")
+}
+
+func renderDependenciesPane(detail domain.IssueDetail, state State, width, height int) string {
+	innerHeight := max(1, height-2)
+	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2)
+	dependenciesView, _ := sliceWithOffset(dependencies, state.DependenciesScrollOffset, innerHeight, width-2)
+	return styles.FormSection(styles.FormSectionConfig{
+		Width:              width,
+		Height:             height,
+		TopLeft:            "Dependencies",
+		TopRight:           fmt.Sprintf("%d", countDependencyReferences(detail)),
+		Content:            dependenciesView,
+		Focused:            state.FocusPane == FocusPaneDependencies,
+		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	})
+}
+
+func splitResponsiveLayoutHeights(total int) (content, bottom int) {
+	if total <= 0 {
+		total = defaultDetailHeight
+	}
+	if total <= 6 {
+		content = max(3, total-3)
+		bottom = max(3, total-content)
+		if content+bottom > total {
+			content = max(1, total-bottom)
+		}
+		return content, total - content
+	}
+
+	content = max(8, (total*3)/5)
+	bottom = total - content
+	if bottom < 6 {
+		shift := 6 - bottom
+		content = max(3, content-shift)
+		bottom = total - content
+	}
+	if bottom < 3 {
+		bottom = 3
+		content = max(1, total-bottom)
+	}
+	return content, bottom
+}
+
+func splitResponsiveBottomWidths(total int) (dependencies, metadata int) {
+	available := total - detailColumnGap
+	if available < 2 {
+		available = 2
+	}
+
+	metadata = min(metadataRailWidth, max(20, available/2))
+	if metadata > available-20 {
+		metadata = max(1, available-20)
+	}
+	dependencies = available - metadata
+	if dependencies < 1 {
+		dependencies = 1
+		metadata = available - dependencies
+	}
+
+	return dependencies, metadata
 }
 
 func renderThreePane(detail domain.IssueDetail, state State, width, height int) string {

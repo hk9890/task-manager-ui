@@ -7,12 +7,37 @@
 - Entrypoint: `cmd/bwb/main.go`
 - Primary runtime surfaces: Bubble Tea UI + `bd` CLI-backed gateway
 
+## CLI startup contract
+
+`bwb` includes a small pre-TUI CLI layer for help/version/config inspection and
+startup overrides.
+
+Supported flags:
+
+- `-h`, `--help`
+- `-v`, `--version`
+- `-c`, `--config <path>`
+- `--cwd <path>`
+- `-d`, `--debug`
+- `--no-auto-refresh`
+- `--print-config`
+- `--check-config`
+
+Non-interactive paths (`--help`, `--version`, `--print-config`,
+`--check-config`) exit before Bubble Tea starts.
+
 ## Runtime flow
 
-1. `cmd/bwb/main.go` loads runtime config with `internal/config.Load()`.
-2. It creates the source-specific beads gateway with `internal/gateway/beads.NewCLIGateway(...)`.
-3. It builds shell services with `internal/app.NewServices(...)`.
-4. It starts the TUI with `tea.NewProgram(..., tea.WithAltScreen())`.
+1. `cmd/bwb/main.go` parses CLI flags and handles non-interactive exits first.
+2. It resolves startup cwd/config options and loads runtime config with
+   `internal/config.LoadWithOptions(...)`.
+3. It creates the source-specific beads gateway with
+   `internal/gateway/beads.NewCLIGateway(...)`.
+4. It builds shell services with `internal/app.NewServices(...)`.
+5. It starts the TUI with `tea.NewProgram(..., tea.WithAltScreen())`.
+
+When `--debug` is enabled, stderr diagnostics are prefixed with `[bwb-debug]`
+and include startup resolution events and `bd` command traces.
 
 ## Package map
 

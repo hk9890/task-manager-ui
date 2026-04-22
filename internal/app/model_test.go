@@ -825,6 +825,83 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	}
 }
 
+func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
+	refreshMarkerSeen := false
+	withRefreshTickScheduler(t, func() tea.Cmd {
+		return func() tea.Msg {
+			return refreshTickMsg{}
+		}
+	})
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
+	for _, msg := range runBatch(m.Init()) {
+		if _, ok := msg.(refreshTickMsg); ok {
+			refreshMarkerSeen = true
+			break
+		}
+	}
+
+	if refreshMarkerSeen {
+		t.Fatalf("expected no periodic tick scheduling when auto-refresh disabled")
+	}
+}
+
+func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	gateway.ResetCalls()
+	next, cmd := m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.BlurMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.FocusMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(refreshTickMsg{})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(gateway.Calls) != 0 {
+		t.Fatalf("expected no auto-refresh side effects from focus/tick when disabled, calls=%#v", gateway.Calls)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(gateway.Calls) == 0 {
+		t.Fatalf("expected manual reload to remain functional when auto-refresh disabled")
+	}
+	if !gateway.HasCall(string(fakes.MethodReadyIssues)) {
+		t.Fatalf("expected manual reload to include board data refresh, calls=%#v", gateway.Calls)
+	}
+}
+
 func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
@@ -2251,6 +2328,102 @@ func TestModelEmbeddedFixtureDetailEditHotkeyUsesEditorService(t *testing.T) {
 	if len(fakeLauncher.Calls) != 0 {
 		t.Fatalf("expected no launcher call from detail edit hotkey, got %#v", fakeLauncher.Calls)
 	}
+}
+
+func TestModelEmbeddedFixtureMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
+	if !hasExecutable("bd") || !hasExecutable("jq") || !hasExecutable("git") {
+		t.Skip("requires bd, jq, and git on PATH")
+	}
+	t.Setenv("BEADS_ACTOR", "fixture-user")
+
+	repoPath := embeddedfixture.TempRepoPath(t)
+	embeddedfixture.Seed(t, repoPath)
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		WorkDir: repoPath,
+		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
+	})
+	gateway := beads.NewCLIGateway(runner)
+
+	services, err := NewServices(gateway, config.Default(), repoPath)
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 120
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	assertModalOpenWithoutCatalogToast := func(model Model, wantTitle string) {
+		t.Helper()
+		if !model.showActionModal {
+			t.Fatalf("expected action modal %q to open", wantTitle)
+		}
+		if !strings.Contains(model.actionModal.View(), wantTitle) {
+			t.Fatalf("expected modal title %q, got:\n%s", wantTitle, model.actionModal.View())
+		}
+		if model.toast.Visible() {
+			t.Fatalf("expected no toast while opening %q modal, got:\n%s", wantTitle, model.View())
+		}
+		if strings.Contains(model.View(), "Failed to load mutation catalogs") {
+			t.Fatalf("expected no mutation catalog decode toast while opening %q modal, got:\n%s", wantTitle, model.View())
+		}
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected create flow command")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	assertModalOpenWithoutCatalogToast(m, "Create Issue")
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		next, _ = m.Update(cmd())
+		m = next.(Model)
+	}
+	if m.showActionModal {
+		t.Fatal("expected create modal to close on escape")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected update flow command")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	assertModalOpenWithoutCatalogToast(m, "Update Issue bwf-2")
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		next, _ = m.Update(cmd())
+		m = next.(Model)
+	}
+	if m.showActionModal {
+		t.Fatal("expected update modal to close on escape")
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Detail {
+		t.Fatalf("expected detail mode before comment flow, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected comment flow command")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	assertModalOpenWithoutCatalogToast(m, "Comment on bwf-2")
 }
 
 func TestModelEmbeddedFixtureFullBoardCaptureGolden(t *testing.T) {

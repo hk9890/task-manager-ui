@@ -147,7 +147,7 @@ func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 	view := Render(State{
 		SelectionID: "bw-88",
 		Detail: domain.IssueDetail{
-			Summary: domain.IssueSummary{ID: "bw-88", Title: "Dependency rich issue", Status: "blocked", Type: "task", Priority: 1},
+			Summary:   domain.IssueSummary{ID: "bw-88", Title: "Dependency rich issue", Status: "blocked", Type: "task", Priority: 1},
 			BlockedBy: []domain.IssueReference{{ID: "bw-1", Title: "Auth migration"}},
 			Blocks:    []domain.IssueReference{{ID: "bw-9", Title: "UI polish"}},
 			Related:   []domain.IssueReference{{ID: "bw-42", Title: "Search sync"}},
@@ -306,7 +306,7 @@ func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
 	}
 }
 
-func TestRenderThreePaneLayoutBelowLegacyBreakpoints(t *testing.T) {
+func TestRenderResponsiveLayoutBelowLegacyBreakpoints(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
@@ -325,7 +325,13 @@ func TestRenderThreePaneLayoutBelowLegacyBreakpoints(t *testing.T) {
 	})
 
 	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Metadata") {
-		t.Fatalf("expected dense three-pane layout below legacy breakpoint, got:\n%s", view)
+		t.Fatalf("expected responsive detail layout headings below breakpoint, got:\n%s", view)
+	}
+	if strings.Index(view, "╭─ Content") > strings.Index(view, "╭─ Dependencies") {
+		t.Fatalf("expected content pane to render above bottom rails below breakpoint, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Description") || !strings.Contains(view, "Description body") {
+		t.Fatalf("expected readable content section below breakpoint, got:\n%s", view)
 	}
 }
 
@@ -524,7 +530,8 @@ func TestRenderUsesMarkdownRendererForDescriptionAndNotes(t *testing.T) {
 			Description: "# Ship markdown\n\n- first\n- second",
 			Notes:       "## Follow up\n\n[link](https://example.com)",
 		},
-		Width: 90,
+		Width:  90,
+		Height: 40,
 	})
 
 	plain := ansiEscapePattern.ReplaceAllString(view, "")
@@ -547,7 +554,8 @@ func TestRenderUsesMarkdownRendererForCommentBodies(t *testing.T) {
 				{ID: "c-1", Author: "alice", Body: "- literal markdown-like bullet", CreatedAt: mustTime(t, "2026-04-05T10:00:00Z")},
 			},
 		},
-		Width: 100,
+		Width:  100,
+		Height: 40,
 	})
 
 	plain := ansiEscapePattern.ReplaceAllString(view, "")

@@ -4,6 +4,25 @@ A terminal UI for browsing beads issues, creating and updating work, and launchi
 
 **Tech Stack**: Go, Bubble Tea, `bd` CLI (beads issue tracker)
 
+## CLI Startup Contract
+
+`bwb` has a minimal pre-TUI CLI layer. Supported flags are:
+
+- `-h`, `--help`
+- `-v`, `--version`
+- `-c`, `--config <path>`
+- `--cwd <path>`
+- `-d`, `--debug`
+- `--no-auto-refresh`
+- `--print-config`
+- `--check-config`
+
+Non-interactive paths (`--help`, `--version`, `--print-config`,
+`--check-config`) return before Bubble Tea starts.
+
+Debug diagnostics are stderr lines prefixed with `[bwb-debug]` and include both
+startup resolution events and `bd` CLI execution traces.
+
 ## Project Overview
 
 Read `docs/OVERVIEW.md` for the runtime flow, package map, architectural boundaries, and supporting doc index.
