@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -40,14 +41,5 @@ func TruncateString(s string, maxWidth int) string {
 		return strings.Repeat(".", maxWidth)
 	}
 
-	result := ""
-	for _, r := range s {
-		next := result + string(r)
-		if lipgloss.Width(next) > maxWidth-3 {
-			break
-		}
-		result = next
-	}
-
-	return result + "..."
+	return ansi.Truncate(s, maxWidth, "...")
 }

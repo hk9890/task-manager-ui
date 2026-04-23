@@ -5,8 +5,8 @@
 │› T P1 OPN bw-1 Default all result    │  │Description                             │  │  Priority: P1                  │
 │  B P0 IP bw-2 Second default         │  │Default preview description             │  │  ------------------------------│
 │                                      │  │                                        │  │  Ownership                     │
-│                                      │  │Notes                                   │  │  Assignee: hans                │
-│                                      │  │(no notes)                              │  │  ------------------------------│
+│                                      │  │                                        │  │  Assignee: hans                │
+│                                      │  │                                        │  │  ------------------------------│
 │                                      │  │                                        │  │  Labels                        │
 │                                      │  │                                        │  │  • ui                          │
 │                                      │  │                                        │  │  ------------------------------│
@@ -23,6 +23,6 @@
 │                                      │  │                                        │  │x Close issue                   │
 │                                      │  │                                        │  │r Reload detail                 │
 │                                      │  │                                        │  │                                │
-│                                      │  │Comments (0)                            │  │                                │
-│                                      │  │(no comments)                           │  │                                │
+│                                      │  │                                        │  │                                │
+│                                      │  │                                        │  │                                │
 ╰──────────────────────────────────────╯  ╰────────────────────────────────────────╯  ╰────────────────────────────────╯

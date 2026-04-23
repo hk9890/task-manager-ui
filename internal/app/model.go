@@ -179,6 +179,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) Model {
 		selectedByMode: make(map[mode.ID]*mode.Selection),
 		board:          boardmode.NewModel(services.Gateway, dashboard.NewBuiltInProvider(), keys),
 		search:         searchmode.NewModel(services.Gateway, keys),
+		detail:         detailsmode.Model{Keys: keys},
 		toast:          toaster.New(),
 		help:           help,
 		width:          defaultViewportWidth,

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
 )
@@ -561,6 +562,127 @@ func TestRenderUsesMarkdownRendererForCommentBodies(t *testing.T) {
 	plain := ansiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "literal markdown-like bullet") {
 		t.Fatalf("expected markdown-rendered comment text to be present, got:\n%s", plain)
+	}
+}
+
+func TestRenderCommentsOrdersNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	lines := renderComments([]domain.IssueComment{
+		{ID: "c-old", Author: "old", Body: "older", CreatedAt: mustTime(t, "2026-04-05T10:00:00Z")},
+		{ID: "c-new", Author: "new", Body: "newer", CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
+	}, 80)
+
+	joined := strings.Join(lines, "\n")
+	newIndex := strings.Index(joined, "new · 2026-04-05 11:00")
+	oldIndex := strings.Index(joined, "old · 2026-04-05 10:00")
+	if newIndex == -1 || oldIndex == -1 {
+		t.Fatalf("expected both comment headers, got:\n%s", joined)
+	}
+	if newIndex >= oldIndex {
+		t.Fatalf("expected newest comment header first, got:\n%s", joined)
+	}
+}
+
+func TestRenderCommentsElidesVeryLongLogLikeBodiesWithMarker(t *testing.T) {
+	t.Parallel()
+
+	bodyLines := []string{"$ go test ./..."}
+	for i := 0; i < 80; i++ {
+		bodyLines = append(bodyLines, "FAIL\tgithub.com/hk9890/beads-workbench/internal/ui/details\t0.123s")
+	}
+	body := strings.Join(bodyLines, "\n")
+
+	lines := renderComments([]domain.IssueComment{
+		{ID: "c-1", Author: "alice", Body: body, CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
+	}, 96)
+
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "… (+") || !strings.Contains(joined, "lines elided)") {
+		t.Fatalf("expected elision marker in long comment, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "├─ output") || !strings.Contains(joined, "│ ") {
+		t.Fatalf("expected framed log-like comment presentation, got:\n%s", joined)
+	}
+}
+
+func TestRenderCommentsExpandsTabsForReadableOutput(t *testing.T) {
+	t.Parallel()
+
+	lines := renderComments([]domain.IssueComment{
+		{ID: "c-1", Author: "alice", Body: "FAIL\tpackage/name\t0.01s", CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
+	}, 96)
+
+	joined := strings.Join(lines, "\n")
+	if strings.Contains(joined, "\t") {
+		t.Fatalf("expected tabs to be expanded, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "FAIL    package/name    0.01s") {
+		t.Fatalf("expected expanded tab spacing in rendered output, got:\n%s", joined)
+	}
+}
+
+func TestRenderCommentHeavyMarkdownStaysPaneBounded(t *testing.T) {
+	t.Parallel()
+
+	veryLong := strings.Repeat("0123456789", 30)
+	body := strings.Join([]string{
+		"```text",
+		veryLong,
+		veryLong,
+		"```",
+	}, "\n")
+
+	state := State{
+		SelectionID: "bw-ansi-overflow",
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-ansi-overflow", Title: "ANSI bounded comments", Status: "open", Type: "bug", Priority: 1},
+			Description: "Description",
+			Comments: []domain.IssueComment{
+				{ID: "c-1", Author: "alice", Body: body, CreatedAt: mustTime(t, "2026-04-05T10:00:00Z")},
+			},
+		},
+		Width:  100,
+		Height: 22,
+	}
+
+	view := Render(state)
+	lines := strings.Split(view, "\n")
+	for i, line := range lines {
+		if got := lipgloss.Width(line); got > state.Width {
+			t.Fatalf("line %d exceeds detail width (%d > %d): %q", i+1, got, state.Width, ansiEscapePattern.ReplaceAllString(line, ""))
+		}
+	}
+
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "Comments (1)") {
+		t.Fatalf("expected comments section to render, got:\n%s", plain)
+	}
+}
+
+func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-qa",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-qa", Title: "Quick actions", Status: "open", Type: "task", Priority: 1},
+		},
+		QuickActions: QuickActionLabels{
+			EditIssue:    "ctrl+e",
+			UpdateIssue:  "ctrl+u",
+			AddComment:   "ctrl+a",
+			CloseIssue:   "ctrl+x",
+			ReloadDetail: "ctrl+r",
+		},
+		Width: 120,
+	})
+
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	for _, want := range []string{"ctrl+e Edit issue", "ctrl+u Update issue", "ctrl+a Add comment", "ctrl+x Close issue", "ctrl+r Reload detail"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected configured quick action label %q in view:\n%s", want, plain)
+		}
 	}
 }
 

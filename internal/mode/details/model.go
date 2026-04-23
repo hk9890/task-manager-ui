@@ -71,10 +71,17 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 			SelectionID: m.SelectionID,
 			TargetID:    m.TargetID,
 			Detail:      detail,
-			Loading:     blockingLoad,
-			Error:       m.Error,
-			Width:       maxWidth,
-			Compact:     compact,
+			QuickActions: uidetails.QuickActionLabels{
+				EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
+				UpdateIssue:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
+				AddComment:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
+				CloseIssue:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
+				ReloadDetail: m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
+			},
+			Loading: blockingLoad,
+			Error:   m.Error,
+			Width:   maxWidth,
+			Compact: compact,
 		})
 	}
 
@@ -83,6 +90,13 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 		SelectionID: m.SelectionID,
 		TargetID:    m.TargetID,
 		Detail:      detail,
+		QuickActions: uidetails.QuickActionLabels{
+			EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
+			UpdateIssue:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
+			AddComment:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
+			CloseIssue:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
+			ReloadDetail: m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
+		},
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),

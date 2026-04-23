@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.0]
+
+### Added
+
+- Current-state monitoring/logging plan documenting BWB's existing stderr/debug diagnostics model
+
+### Changed
+
+- Detail metadata quick actions now render the active configured key labels instead of hard-coded shortcuts
+- Search preview keeps the search-mode add-comment shortcut while reusing the shared detail metadata renderer
+- Detail panes now omit empty notes/comments sections when there is nothing meaningful to show
+
+### Fixed
+
+- Detail comments now render newest-first with better framing/elision for long log-like output
+- ANSI-aware string truncation now preserves well-formed styling in compact rows and pane content
+
 ## [v0.2.0]
 
 ### Added

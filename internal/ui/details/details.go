@@ -19,6 +19,9 @@ const (
 	defaultDetailHeight = 24
 	timeLayout          = "2006-01-02 15:04"
 
+	maxCommentBodyLines        = 18
+	maxLogLikeCommentBodyLines = 28
+
 	// Kept for compatibility with existing tests/callers.
 	InspectorTwoColumnMinWidth   = 110
 	InspectorThreeColumnMinWidth = 140
@@ -38,6 +41,7 @@ type State struct {
 	Detail                   domain.IssueDetail
 	BrowserItems             []domain.IssueReference
 	BrowserSelectedIssueID   string
+	QuickActions             QuickActionLabels
 	Loading                  bool
 	Error                    string
 	Width                    int
@@ -67,6 +71,15 @@ type ScrollOffsets struct {
 	Dependencies int
 	Content      int
 	Metadata     int
+}
+
+// QuickActionLabels controls the metadata-rail quick action hints.
+type QuickActionLabels struct {
+	EditIssue    string
+	UpdateIssue  string
+	AddComment   string
+	CloseIssue   string
+	ReloadDetail string
 }
 
 // relationshipGroup is shared relation rendering input used by multiple rails.
@@ -138,7 +151,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 		bottomInnerHeight := max(1, bottomHeight-2)
 		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2)
 		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight)
-		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone)
+		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions)
 
 		return ScrollOffsets{
 			Dependencies: max(0, len(deps)-bottomInnerHeight),
@@ -152,7 +165,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 
 	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2)
 	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight)
-	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone)
+	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions)
 
 	return ScrollOffsets{
 		Dependencies: max(0, len(deps)-innerHeight),
@@ -171,7 +184,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 	contentBox := RenderContentPane(detail, width, contentHeight, state.FocusPane == FocusPaneContent, state.ContentScrollOffset)
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
-	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField)
+	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField, state.QuickActions)
 
 	contentLines := strings.Split(contentBox, "\n")
 	dependencyLines := strings.Split(dependenciesBox, "\n")
@@ -279,7 +292,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	if state.FocusPane == FocusPaneMetadata {
 		selectedField = state.MetadataSelectedField
 	}
-	metaBox := RenderMetadataPane(detail, metadataWidth, height, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, selectedField)
+	metaBox := RenderMetadataPane(detail, metadataWidth, height, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, selectedField, state.QuickActions)
 
 	leftLines := strings.Split(leftBox, "\n")
 	contentLines := strings.Split(contentBox, "\n")
@@ -333,7 +346,7 @@ func RenderContentPane(detail domain.IssueDetail, width, height int, focused boo
 }
 
 // RenderMetadataPane renders the shared detail Metadata pane section.
-func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, selectedField MetadataFieldKey) string {
+func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, selectedField MetadataFieldKey, quickActions QuickActionLabels) string {
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
@@ -346,7 +359,7 @@ func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bo
 	}
 
 	innerHeight := max(1, height-2)
-	metadata := renderMetadataPaneLines(detail, width-2, selectedField)
+	metadata := renderMetadataPaneLines(detail, width-2, selectedField, quickActions)
 	metaView, _ := sliceWithOffset(metadata, scrollOffset, innerHeight, width-2)
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
@@ -489,14 +502,18 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	upper = append(upper, "Description")
 	upper = append(upper, renderMarkdownMultiline(detail.Description, "(no description)", width)...)
 
-	upper = append(upper, "")
-	upper = append(upper, "Notes")
-	upper = append(upper, renderMarkdownMultiline(detail.Notes, "(no notes)", width)...)
+	if strings.TrimSpace(detail.Notes) != "" {
+		upper = append(upper, "")
+		upper = append(upper, "Notes")
+		upper = append(upper, renderMarkdownMultiline(detail.Notes, "(no notes)", width)...)
+	}
 
 	commentsSection := make([]string, 0, 16)
-	commentsSection = append(commentsSection, "")
-	commentsSection = append(commentsSection, fmt.Sprintf("Comments (%d)", len(detail.Comments)))
-	commentsSection = append(commentsSection, renderComments(detail.Comments, width)...)
+	if len(detail.Comments) > 0 {
+		commentsSection = append(commentsSection, "")
+		commentsSection = append(commentsSection, fmt.Sprintf("Comments (%d)", len(detail.Comments)))
+		commentsSection = append(commentsSection, renderComments(detail.Comments, width)...)
+	}
 
 	spacer := 0
 	totalLines := len(upper) + len(commentsSection)
@@ -514,19 +531,39 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	return out
 }
 
-func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey) []string {
+func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels) []string {
+	quickActions = quickActions.withDefaults()
 	out := make([]string, 0, 48)
 	out = append(out, renderMetadataRail(detail, width, selectedField)...)
 	out = append(out, "")
 	out = append(out,
 		"Quick actions",
-		"e Edit issue",
-		"u Update issue",
-		"c Add comment",
-		"x Close issue",
-		"r Reload detail",
+		fmt.Sprintf("%s Edit issue", quickActions.EditIssue),
+		fmt.Sprintf("%s Update issue", quickActions.UpdateIssue),
+		fmt.Sprintf("%s Add comment", quickActions.AddComment),
+		fmt.Sprintf("%s Close issue", quickActions.CloseIssue),
+		fmt.Sprintf("%s Reload detail", quickActions.ReloadDetail),
 	)
 	return out
+}
+
+func (q QuickActionLabels) withDefaults() QuickActionLabels {
+	if strings.TrimSpace(q.EditIssue) == "" {
+		q.EditIssue = "e"
+	}
+	if strings.TrimSpace(q.UpdateIssue) == "" {
+		q.UpdateIssue = "u"
+	}
+	if strings.TrimSpace(q.AddComment) == "" {
+		q.AddComment = "a"
+	}
+	if strings.TrimSpace(q.CloseIssue) == "" {
+		q.CloseIssue = "x"
+	}
+	if strings.TrimSpace(q.ReloadDetail) == "" {
+		q.ReloadDetail = "r"
+	}
+	return q
 }
 
 func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) {
@@ -674,27 +711,134 @@ func renderComments(comments []domain.IssueComment, width int) []string {
 
 	ordered := append([]domain.IssueComment(nil), comments...)
 	sort.SliceStable(ordered, func(i, j int) bool {
-		return ordered[i].CreatedAt.Before(ordered[j].CreatedAt)
+		left := ordered[i].CreatedAt
+		right := ordered[j].CreatedAt
+		if left.Equal(right) {
+			return ordered[i].ID > ordered[j].ID
+		}
+		if left.IsZero() {
+			return false
+		}
+		if right.IsZero() {
+			return true
+		}
+		return left.After(right)
 	})
 
-	out := make([]string, 0, len(ordered)*3)
+	out := make([]string, 0, len(ordered)*6)
 	for i, comment := range ordered {
 		author := emptyFallback(comment.Author, "unknown")
 		timestamp := formatTime(comment.CreatedAt)
-		out = append(out, styles.TruncateString(fmt.Sprintf("%s · %s", author, timestamp), width))
-		for _, line := range renderMarkdownMultiline(comment.Body, "(empty comment)", width-2) {
-			if line == "" {
-				out = append(out, "")
-				continue
+		commentHeader := fmt.Sprintf("[%d/%d] %s · %s", i+1, len(ordered), author, timestamp)
+		out = append(out, styles.TruncateString(commentHeader, width))
+
+		body, logLike := renderCommentBody(comment.Body, width)
+		if logLike {
+			out = append(out, styles.TruncateString("  ├─ output", width))
+			for _, line := range body {
+				if line == "" {
+					out = append(out, styles.TruncateString("  │", width))
+					continue
+				}
+				out = append(out, styles.TruncateString("  │ "+line, width))
 			}
-			out = append(out, styles.TruncateString("  "+line, width))
+			out = append(out, styles.TruncateString("  └─", width))
+		} else {
+			for _, line := range body {
+				if line == "" {
+					out = append(out, "")
+					continue
+				}
+				out = append(out, styles.TruncateString("  "+line, width))
+			}
 		}
 		if i < len(ordered)-1 {
-			out = append(out, "")
+			out = append(out, styles.TruncateString(strings.Repeat("─", max(8, width)), width))
 		}
 	}
 
 	return out
+}
+
+func renderCommentBody(body string, width int) ([]string, bool) {
+	normalized := strings.ReplaceAll(body, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\t", "    ")
+
+	logLike := isLogLikeComment(normalized)
+	if logLike {
+		lines := renderMultiline(normalized, "(empty comment)", max(1, width-4))
+		return applyCommentElision(lines, maxLogLikeCommentBodyLines, max(1, width-4)), true
+	}
+
+	lines := renderMarkdownMultiline(normalized, "(empty comment)", max(1, width-2))
+	return applyCommentElision(lines, maxCommentBodyLines, max(1, width-2)), false
+}
+
+func applyCommentElision(lines []string, maxLines, width int) []string {
+	if maxLines <= 0 || len(lines) <= maxLines {
+		return lines
+	}
+	kept := append([]string(nil), lines[:maxLines-1]...)
+	elided := len(lines) - (maxLines - 1)
+	kept = append(kept, styles.TruncateString(fmt.Sprintf("… (+%d lines elided)", elided), width))
+	return kept
+}
+
+func isLogLikeComment(body string) bool {
+	if strings.TrimSpace(body) == "" {
+		return false
+	}
+	if strings.Contains(body, "```") {
+		return true
+	}
+
+	lines := strings.Split(body, "\n")
+	longLines := 0
+	tabLines := 0
+	indicatorLines := 0
+
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if raw != "" && strings.Contains(raw, "\t") {
+			tabLines++
+		}
+		if len([]rune(raw)) >= 100 {
+			longLines++
+		}
+		if line == "" {
+			continue
+		}
+		if hasLogIndicator(line) {
+			indicatorLines++
+		}
+	}
+
+	return tabLines >= 2 || longLines >= 3 || indicatorLines >= 3
+}
+
+func hasLogIndicator(line string) bool {
+	indicators := []string{
+		"$ ",
+		"> ",
+		"--- PASS:",
+		"--- FAIL:",
+		"PASS",
+		"FAIL",
+		"ok  ",
+		"panic:",
+		"Error:",
+		"[error]",
+		"[warn]",
+		"stdout",
+		"stderr",
+	}
+
+	for _, marker := range indicators {
+		if strings.Contains(line, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func renderReferenceRow(ref domain.IssueReference, width int, selected bool) string {

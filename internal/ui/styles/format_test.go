@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -14,6 +15,26 @@ func TestTruncateString(t *testing.T) {
 	}
 	if got := TruncateString("hello world", 5); got != "he..." {
 		t.Fatalf("unexpected truncated value: %q", got)
+	}
+}
+
+func TestTruncateStringPreservesWellFormedANSI(t *testing.T) {
+	t.Parallel()
+
+	styled := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render(strings.Repeat("x", 64))
+	truncated := TruncateString(styled, 18)
+
+	if got := lipgloss.Width(truncated); got != 18 {
+		t.Fatalf("expected display width 18, got %d", got)
+	}
+
+	stripped := ansi.Strip(truncated)
+	if strings.Contains(stripped, "\x1b") {
+		t.Fatalf("expected no dangling/incomplete ANSI escapes after truncation, got %q", truncated)
+	}
+
+	if !strings.HasSuffix(stripped, "...") {
+		t.Fatalf("expected ellipsis suffix after truncation, got %q", stripped)
 	}
 }
 

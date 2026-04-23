@@ -5,8 +5,8 @@
 │› T P1 OPN bw-1 Gateway search re...│  │Description                     │  │  Priority: P1                  │
 │  B P0 IP bw-2 Another result       │  │Search preview description      │  │  ------------------------------│
 │                                    │  │                                │  │  Ownership                     │
-│                                    │  │Notes                           │  │  Assignee: hans                │
-│                                    │  │(no notes)                      │  │  ------------------------------│
+│                                    │  │                                │  │  Assignee: hans                │
+│                                    │  │                                │  │  ------------------------------│
 │                                    │  │                                │  │  Labels                        │
 │                                    │  │                                │  │  • ui                          │
 │                                    │  │                                │  │  ------------------------------│
@@ -23,6 +23,6 @@
 │                                    │  │                                │  │x Close issue                   │
 │                                    │  │                                │  │r Reload detail                 │
 │                                    │  │                                │  │                                │
-│                                    │  │Comments (0)                    │  │                                │
-│                                    │  │(no comments)                   │  │                                │
+│                                    │  │                                │  │                                │
+│                                    │  │                                │  │                                │
 ╰────────────────────────────────────╯  ╰────────────────────────────────╯  ╰────────────────────────────────╯

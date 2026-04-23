@@ -1108,6 +1108,46 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 	}
 }
 
+func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}, Description: "detail"}
+
+	cfg := config.Default()
+	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
+		Shell: map[string][]string{
+			config.ShellActionCommentIssue: {"ctrl+a"},
+		},
+	})
+
+	services, err := NewServices(gateway, cfg, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m.width = 120
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	view := m.View()
+	if !strings.Contains(view, "ctrl+a Add comment") {
+		t.Fatalf("expected detail quick actions to reflect configured comment binding, got:\n%s", view)
+	}
+	if strings.Contains(view, "c Add comment") {
+		t.Fatalf("expected stale default add-comment label to be absent, got:\n%s", view)
+	}
+}
+
 func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Assignee: "hans", Labels: []string{"infra"}, Priority: 1}}
