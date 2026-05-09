@@ -48,7 +48,7 @@ Use this sequence before handoff for code changes:
 ```bash
 bash -n internal/testing/e2e/embeddedfixture/setup.sh
 python3 -m py_compile scripts/*.py
-GOLANGCI_LINT_VERSION="$(cat .golangci-version)" go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION} run
+GOLANGCI_LINT_VERSION="$(<.golangci-version)" go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"${GOLANGCI_LINT_VERSION}" run
 go test ./cmd/bwb -run TestArchitectureGuardrails
 go build ./cmd/bwb
 go vet ./...
