@@ -10,21 +10,8 @@
 ## CLI startup contract
 
 `bwb` includes a small pre-TUI CLI layer for help/version/config inspection and
-startup overrides.
-
-Supported flags:
-
-- `-h`, `--help`
-- `-v`, `--version`
-- `-c`, `--config <path>`
-- `--cwd <path>`
-- `-d`, `--debug`
-- `--no-auto-refresh`
-- `--print-config`
-- `--check-config`
-
-Non-interactive paths (`--help`, `--version`, `--print-config`,
-`--check-config`) exit before Bubble Tea starts.
+startup overrides. For the full flag list, exit-code contract, and path
+resolution behavior, see `docs/CODING.md`.
 
 ## Runtime flow
 
@@ -34,10 +21,13 @@ Non-interactive paths (`--help`, `--version`, `--print-config`,
 3. It creates the source-specific beads gateway with
    `internal/gateway/beads.NewCLIGateway(...)`.
 4. It builds shell services with `internal/app.NewServices(...)`.
-5. It starts the TUI with `tea.NewProgram(..., tea.WithAltScreen())`.
+5. It starts the TUI with
+   `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
 
 When `--debug` is enabled, stderr diagnostics are prefixed with `[bwb-debug]`
-and include startup resolution events and `bd` command traces.
+and include startup resolution events and `bd` command traces. See
+`docs/MONITORING.md` for the current diagnostics surface, the in-repo
+`internal/logging` package status, and capture paths.
 
 ## Package map
 
@@ -48,6 +38,7 @@ and include startup resolution events and `bd` command traces.
 | `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
 | `internal/domain` | Issue, query, mutation, catalog, and error models |
 | `internal/gateway/beads` | Official `bd` CLI adapter and typed payload decoding |
+| `internal/logging` | Central slog-based logging package; the package already provides session IDs, persistent JSON Lines support, and stderr mirroring, but runtime wiring is still in progress |
 | `internal/dashboard` | Built-in dashboard definitions and validation |
 | `internal/mode/*` | Board, search, and details feature-local state/controllers |
 | `internal/launcher` | External tool launch actions and process runner |
@@ -68,6 +59,7 @@ and include startup resolution events and `bd` command traces.
 
 - `docs/CODING.md` — build commands, package layout, guardrails, config and launcher contracts
 - `docs/TESTING.md` — test policy, fixtures, and required verification depth
+- `docs/MONITORING.md` — current stderr/debug diagnostics model and evidence capture points
 - `docs/RUNTIME_UI_VERIFICATION.md` — runtime UI runbook for built-binary checks
 - `docs/CHANGE-WORKFLOW.md` — beads-first change landing and session completion workflow
 - `docs/RELEASING.md` — tag-triggered release process via GitHub Actions + GoReleaser

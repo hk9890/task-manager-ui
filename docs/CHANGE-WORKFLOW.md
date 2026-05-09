@@ -33,12 +33,29 @@ git config --get core.hooksPath
 2. Make the change.
 3. Run the right verification depth for the change:
    - Docs-only changes: verify touched paths, commands, routes, and links directly.
-   - Code changes: run the quality gates from `docs/CODING.md`.
+   - Code changes: run the code-change verification sequence below.
+   - Diagnostics/logging changes: also update and cross-check `docs/MONITORING.md`.
    - Runtime UI changes: also run `docs/RUNTIME_UI_VERIFICATION.md`.
 4. Update tracker state before handoff:
    - close finished work with `bd close <id>`
    - create follow-up issues for remaining work
    - keep issue descriptions/statuses aligned with reality
+
+### Code-change verification sequence
+
+Use this sequence before handoff for code changes:
+
+```bash
+bash -n internal/testing/e2e/embeddedfixture/setup.sh
+python3 -m py_compile scripts/*.py
+GOLANGCI_LINT_VERSION="$(cat .golangci-version)" go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION} run
+go test ./cmd/bwb -run TestArchitectureGuardrails
+go build ./cmd/bwb
+go vet ./...
+go test ./...
+```
+
+`docs/CODING.md` explains the purpose and scope of these checks.
 
 ## Landing the plane
 
@@ -53,6 +70,9 @@ bd dolt push
 git push
 git status
 ```
+
+If `git pull --rebase` changes the commit or requires conflict resolution,
+rerun the relevant verification before pushing.
 
 Completion bar:
 

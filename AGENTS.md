@@ -4,25 +4,6 @@ A terminal UI for browsing beads issues, creating and updating work, and launchi
 
 **Tech Stack**: Go, Bubble Tea, `bd` CLI (beads issue tracker)
 
-## CLI Startup Contract
-
-`bwb` has a minimal pre-TUI CLI layer. Supported flags are:
-
-- `-h`, `--help`
-- `-v`, `--version`
-- `-c`, `--config <path>`
-- `--cwd <path>`
-- `-d`, `--debug`
-- `--no-auto-refresh`
-- `--print-config`
-- `--check-config`
-
-Non-interactive paths (`--help`, `--version`, `--print-config`,
-`--check-config`) return before Bubble Tea starts.
-
-Debug diagnostics are stderr lines prefixed with `[bwb-debug]` and include both
-startup resolution events and `bd` CLI execution traces.
-
 ## Project Overview
 
 Read `docs/OVERVIEW.md` for the runtime flow, package map, architectural boundaries, and supporting doc index.
@@ -37,6 +18,10 @@ Read `docs/TESTING.md` for test policy, verification depth, fixtures, and focuse
 
 Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
 
+## Monitoring
+
+Read `docs/MONITORING.md` for the current diagnostics surface, `--debug` behavior, and where machine-visible evidence comes from today.
+
 ## Releases
 
 Read `docs/RELEASING.md` for the tag-triggered GitHub release flow backed by `.github/workflows/release.yml` and `.goreleaser.yaml`.
@@ -44,8 +29,6 @@ Read `docs/RELEASING.md` for the tag-triggered GitHub release flow backed by `.g
 ## Change Workflow
 
 Read `docs/CHANGE-WORKFLOW.md` for tracker usage, quality gates, session completion, and push requirements.
-
-Work is not done until `bd dolt push`, `git push`, and a final `git status` show the tracker and branch are fully landed.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker

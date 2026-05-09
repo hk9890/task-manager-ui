@@ -10,8 +10,9 @@
 ## Build and Test
 
 Use standard Go tooling from the repository root for build, vet, and test work.
-See [Quality Gates](#quality-gates) for the authoritative pre-handoff command
-sequence.
+See `docs/CHANGE-WORKFLOW.md` for the authoritative pre-handoff landing
+workflow. See [Quality Gates](#quality-gates) for the code-change verification
+commands used by that workflow.
 
 For testing strategy, vocabulary, and harness conventions (teatest, golden files,
 fake seams, embedded fixture usage), see `docs/TESTING.md`.
@@ -48,9 +49,9 @@ Non-interactive flags (`--help`, `--version`, `--print-config`,
 Examples:
 
 ```bash
-bwb --config ./configs/dev.yaml
+bwb --config "$HOME/.config/bwb/config.yaml"
 bwb --cwd ../another-project
-bwb --config ./configs/dev.yaml --print-config
+bwb --config "$HOME/.config/bwb/config.yaml" --print-config
 bwb --check-config
 ```
 
@@ -81,6 +82,9 @@ Event categories:
 - startup resolution (`resolved config path`, `resolved cwd`, `auto-refresh`)
 - `bd` execution traces from the command runner (`bd argv=... exit_code=...`)
 
+For the current diagnostics/logging surface and capture guidance, see
+`docs/MONITORING.md`.
+
 ## Package Layout
 
 Current bootstrapped layout:
@@ -92,6 +96,7 @@ internal/
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
   gateway/beads/     # BeadsGateway interface + CLI adapter with typed bd payload decoding
+  logging/           # central slog logging package; persistent sink/session-id support exists here, but cmd/bwb wiring is still in progress
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard definitions/providers + provider-output validation guardrails
   mode/              # board/search/details feature models + shell message contracts
@@ -342,10 +347,13 @@ When adapting code from the donor repo (`/home/hans/dev/github/perles`), prefer 
 
 ### Allowed donor paths (UI primitive scope)
 
-- `internal/ui/shared/modal/`
-- `internal/ui/shared/toaster/`
-- `internal/ui/styles/`
-- `internal/ui/shared/overlay/` (only as a rendering helper used by UI primitives)
+- `/home/hans/dev/github/perles/internal/ui/shared/modal/`
+- `/home/hans/dev/github/perles/internal/ui/shared/toaster/`
+- `/home/hans/dev/github/perles/internal/ui/styles/`
+- `/home/hans/dev/github/perles/internal/ui/shared/overlay/` (only as a rendering helper used by UI primitives)
+
+Typical adapted local targets in this repo are `internal/ui/modal/`,
+`internal/ui/toaster/`, `internal/ui/styles/`, and `internal/ui/overlay/`.
 
 ### Forbidden donor paths (do not copy into standalone shell)
 
@@ -385,26 +393,18 @@ For convenience, the repository `Makefile` provides thin wrapper targets for
 common commands (`make build`, `make test`, `make vet`, and optional wrappers
 for lint/script validation/hooks). It is a discoverability layer only.
 
-`docs/CODING.md` remains the authoritative source of truth for the full
-pre-handoff quality-gate sequence.
+For the authoritative pre-handoff landing workflow, see
+`docs/CHANGE-WORKFLOW.md#code-change-verification-sequence`.
 
-The authoritative local verification sequence before handoff is:
+That verification sequence covers:
 
-```bash
-bash -n internal/testing/e2e/embeddedfixture/setup.sh
-python3 -m py_compile scripts/*.py
-GOLANGCI_LINT_VERSION="$(cat .golangci-version)" go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION} run
-go test ./cmd/bwb -run TestArchitectureGuardrails
-go build ./cmd/bwb
-go vet ./...
-go test ./...
-```
-
-This sequence includes script syntax validation for repo helper scripts, a
-conservative pinned `golangci-lint` run (`staticcheck` + `errcheck`), the
-minimum implementation/acceptance gates (`go build ./cmd/bwb`, `go vet ./...`,
-and `go test ./...`), plus a fast targeted architecture-guardrail check up
-front.
+- script syntax validation for `internal/testing/e2e/embeddedfixture/setup.sh`
+  and `scripts/*.py`
+- pinned `golangci-lint` execution using `.golangci-version`
+- fast architecture-guardrail verification via
+  `go test ./cmd/bwb -run TestArchitectureGuardrails`
+- core implementation gates: `go build ./cmd/bwb`, `go vet ./...`, and
+  `go test ./...`
 
 ### `golangci-lint` install/invocation policy
 

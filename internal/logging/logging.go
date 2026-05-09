@@ -1,0 +1,317 @@
+package logging
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+const (
+	stateDirName         = "bwb"
+	defaultLogFileName   = "bwb.log"
+	rotationMaxSizeMB    = 10
+	rotationMaxBackups   = 5
+	rotationMaxAgeDays   = 30
+	rotationCompress     = true
+	defaultFileMode      = 0o644
+	defaultDirectoryMode = 0o755
+)
+
+// Options configures logger construction.
+type Options struct {
+	Debug     bool
+	Stderr    io.Writer
+	StateDir  string
+	SessionID string
+}
+
+// Manager owns the application root logger and session metadata.
+type Manager struct {
+	root      *slog.Logger
+	sessionID string
+	logPath   string
+	closer    io.Closer
+}
+
+// New constructs the root logger with persistent JSON logs and stderr mirroring.
+func New(opts Options) *Manager {
+	stderr := opts.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
+	sessionID := strings.TrimSpace(opts.SessionID)
+	if sessionID == "" {
+		sessionID = generateSessionID()
+	}
+
+	stderrHandler := newStderrHandler(stderr, opts.Debug)
+	handlers := []slog.Handler{stderrHandler}
+
+	logPath, fileSink, err := buildPersistentSink(opts)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "bwb logging warning: persistent log unavailable; continuing with stderr-only logging: %v\n", err)
+	} else {
+		handlers = append(handlers, newJSONFileHandler(fileSink, opts.Debug))
+	}
+
+	root := slog.New(newTeeHandler(handlers...)).With("session_id", sessionID)
+	if opts.Debug {
+		_, _ = fmt.Fprintf(stderr, "[bwb-debug] session_id=%s\n", sessionID)
+	}
+
+	return &Manager{
+		root:      root,
+		sessionID: sessionID,
+		logPath:   logPath,
+		closer:    fileSink,
+	}
+}
+
+// Logger returns the root logger.
+func (m *Manager) Logger() *slog.Logger {
+	if m == nil {
+		return slog.Default()
+	}
+	return m.root
+}
+
+// Component returns a component-scoped logger.
+func (m *Manager) Component(name string) *slog.Logger {
+	logger := m.Logger()
+	if strings.TrimSpace(name) == "" {
+		return logger
+	}
+	return logger.With("component", name)
+}
+
+// SessionID returns the run-scoped session identifier.
+func (m *Manager) SessionID() string {
+	if m == nil {
+		return ""
+	}
+	return m.sessionID
+}
+
+// LogPath returns the persistent log path. Empty means stderr-only fallback.
+func (m *Manager) LogPath() string {
+	if m == nil {
+		return ""
+	}
+	return m.logPath
+}
+
+// Close closes any persistent sink resources.
+func (m *Manager) Close() error {
+	if m == nil || m.closer == nil {
+		return nil
+	}
+	return m.closer.Close()
+}
+
+func buildPersistentSink(opts Options) (string, *lumberjack.Logger, error) {
+	path, err := resolveLogPath(opts.StateDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, defaultFileMode)
+	if err != nil {
+		return "", nil, fmt.Errorf("open log file %q: %w", path, err)
+	}
+	_ = file.Close()
+
+	sink := &lumberjack.Logger{
+		Filename:   path,
+		MaxSize:    rotationMaxSizeMB,
+		MaxBackups: rotationMaxBackups,
+		MaxAge:     rotationMaxAgeDays,
+		Compress:   rotationCompress,
+	}
+
+	return path, sink, nil
+}
+
+func resolveLogPath(stateDirOverride string) (string, error) {
+	stateDir := strings.TrimSpace(stateDirOverride)
+	if stateDir == "" {
+		var err error
+		stateDir, err = defaultUserStateDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve user state dir: %w", err)
+		}
+	}
+
+	bwbStateDir := filepath.Join(stateDir, stateDirName)
+	if err := os.MkdirAll(bwbStateDir, defaultDirectoryMode); err != nil {
+		return "", fmt.Errorf("create state directory %q: %w", bwbStateDir, err)
+	}
+
+	return filepath.Join(bwbStateDir, defaultLogFileName), nil
+}
+
+func defaultUserStateDir() (string, error) {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); xdg != "" {
+		return xdg, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state"), nil
+}
+
+func newJSONFileHandler(writer io.Writer, debug bool) slog.Handler {
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
+	}
+
+	return slog.NewJSONHandler(writer, &slog.HandlerOptions{
+		Level: level,
+		ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
+			switch attr.Key {
+			case slog.TimeKey:
+				attr.Key = "timestamp"
+			case slog.MessageKey:
+				attr.Key = "message"
+			}
+			return attr
+		},
+	})
+}
+
+func generateSessionID() string {
+	raw := make([]byte, 4)
+	if _, err := rand.Read(raw); err != nil {
+		return "00000000"
+	}
+	return hex.EncodeToString(raw)
+}
+
+type teeHandler struct {
+	handlers []slog.Handler
+}
+
+func newTeeHandler(handlers ...slog.Handler) slog.Handler {
+	copyHandlers := append([]slog.Handler(nil), handlers...)
+	return &teeHandler{handlers: copyHandlers}
+}
+
+func (h *teeHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, handler := range h.handlers {
+		if handler.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *teeHandler) Handle(ctx context.Context, record slog.Record) error {
+	for _, handler := range h.handlers {
+		if !handler.Enabled(ctx, record.Level) {
+			continue
+		}
+		if err := handler.Handle(ctx, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *teeHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	result := make([]slog.Handler, 0, len(h.handlers))
+	for _, handler := range h.handlers {
+		result = append(result, handler.WithAttrs(attrs))
+	}
+	return &teeHandler{handlers: result}
+}
+
+func (h *teeHandler) WithGroup(name string) slog.Handler {
+	result := make([]slog.Handler, 0, len(h.handlers))
+	for _, handler := range h.handlers {
+		result = append(result, handler.WithGroup(name))
+	}
+	return &teeHandler{handlers: result}
+}
+
+type stderrHandler struct {
+	mu      sync.Mutex
+	writer  io.Writer
+	debugOn bool
+	attrs   []slog.Attr
+	group   string
+}
+
+func newStderrHandler(writer io.Writer, debug bool) slog.Handler {
+	return &stderrHandler{writer: writer, debugOn: debug}
+}
+
+func (h *stderrHandler) Enabled(_ context.Context, level slog.Level) bool {
+	if level >= slog.LevelWarn {
+		return true
+	}
+	return h.debugOn && level == slog.LevelDebug
+}
+
+func (h *stderrHandler) Handle(_ context.Context, record slog.Record) error {
+	parts := make([]string, 0, 8)
+	if record.Level == slog.LevelDebug {
+		parts = append(parts, "[bwb-debug]", record.Message)
+	} else {
+		parts = append(parts, strings.ToLower(record.Level.String())+":", record.Message)
+	}
+
+	for _, attr := range h.attrs {
+		parts = append(parts, formatAttr(h.group, attr))
+	}
+	record.Attrs(func(attr slog.Attr) bool {
+		parts = append(parts, formatAttr(h.group, attr))
+		return true
+	})
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, err := fmt.Fprintln(h.writer, strings.Join(parts, " "))
+	return err
+}
+
+func (h *stderrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	copyAttrs := append(append([]slog.Attr(nil), h.attrs...), attrs...)
+	return &stderrHandler{
+		writer:  h.writer,
+		debugOn: h.debugOn,
+		attrs:   copyAttrs,
+		group:   h.group,
+	}
+}
+
+func (h *stderrHandler) WithGroup(name string) slog.Handler {
+	nextGroup := name
+	if strings.TrimSpace(h.group) != "" {
+		nextGroup = h.group + "." + name
+	}
+	return &stderrHandler{
+		writer:  h.writer,
+		debugOn: h.debugOn,
+		attrs:   append([]slog.Attr(nil), h.attrs...),
+		group:   nextGroup,
+	}
+}
+
+func formatAttr(group string, attr slog.Attr) string {
+	key := attr.Key
+	if strings.TrimSpace(group) != "" {
+		key = group + "." + key
+	}
+	return fmt.Sprintf("%s=%v", key, attr.Value.Any())
+}
