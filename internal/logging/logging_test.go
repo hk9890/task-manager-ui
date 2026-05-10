@@ -116,6 +116,39 @@ func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
 	}
 }
 
+func TestManagerInfoLogsMirrorToStderrWithDebugPrefixWhenDebugEnabled(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:  stateDir,
+		Stderr:    &stderr,
+		Debug:     true,
+		SessionID: "facefeed",
+	})
+	t.Cleanup(func() {
+		_ = m.Close()
+	})
+
+	m.Component("startup").Info("resolved config path", "path", "/tmp/cfg.yaml")
+
+	gotStderr := stderr.String()
+	if !strings.Contains(gotStderr, "[bwb-debug] resolved config path") || !strings.Contains(gotStderr, "path=/tmp/cfg.yaml") {
+		t.Fatalf("expected info message with debug prefix, got %q", gotStderr)
+	}
+
+	line := firstLineFromFile(t, m.LogPath())
+	record := decodeJSONLine(t, line)
+	if got := record["level"]; got != "INFO" {
+		t.Fatalf("expected INFO level in persistent log, got %#v", got)
+	}
+	if got := record["message"]; got != "resolved config path" {
+		t.Fatalf("expected info message in persistent log, got %#v", got)
+	}
+}
+
 func TestForcedRotationProducesRotatedOutput(t *testing.T) {
 	t.Parallel()
 

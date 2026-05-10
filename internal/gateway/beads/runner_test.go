@@ -2,8 +2,10 @@ package beads
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -224,50 +226,72 @@ func TestCommandRunnerRunSerializesConcurrentExecutorCalls(t *testing.T) {
 	}
 }
 
-func TestCommandRunnerRunDebugLogsArgvAndExitCodeOnSuccess(t *testing.T) {
+func TestCommandRunnerRunLogsExecutionTraceOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	var lines []string
+	var sink strings.Builder
 	runner := NewCommandRunner(RunnerConfig{
 		Executor: execStub,
-		DebugLog: func(line string) {
-			lines = append(lines, line)
-		},
+		Logger: slog.New(slog.NewJSONHandler(&sink, nil)),
 	})
 
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "ready", Args: []string{"ready", "--json"}})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
-	if len(lines) != 1 {
-		t.Fatalf("expected one debug line, got %d (%#v)", len(lines), lines)
+	record := decodeLoggedRecord(t, sink.String())
+	if got := record["msg"]; got != "bd command finished" {
+		t.Fatalf("expected message %q, got %#v", "bd command finished", got)
 	}
-	wantArgv := fmt.Sprintf("%q", []string{"bd", "ready", "--json"})
-	assertContains(t, lines[0], "argv="+wantArgv)
-	assertContains(t, lines[0], "exit_code=0")
+	assertLoggedArray(t, record["argv"], []string{"bd", "ready", "--json"})
+	assertLoggedFloatEquals(t, record["exit_code"], 0)
+	assertLoggedFloatAtLeast(t, record["duration_ms"], 0)
+	if got := record["operation"]; got != "ready" {
+		t.Fatalf("expected operation ready, got %#v", got)
+	}
 }
 
-func TestCommandRunnerRunDebugLogsExitCodeOnCommandFailure(t *testing.T) {
+func TestCommandRunnerRunLogsExecutionTraceOnCommandFailure(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{ExitCode: 2, Stderr: []byte("bad args")}}
-	var lines []string
+	var sink strings.Builder
 	runner := NewCommandRunner(RunnerConfig{
 		Executor: execStub,
-		DebugLog: func(line string) {
-			lines = append(lines, line)
-		},
+		Logger: slog.New(slog.NewJSONHandler(&sink, nil)),
 	})
 
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "ready", Args: []string{"ready"}})
 	if err == nil {
 		t.Fatal("expected command failure")
 	}
-	if len(lines) != 1 {
-		t.Fatalf("expected one debug line, got %d (%#v)", len(lines), lines)
+	record := decodeLoggedRecord(t, sink.String())
+	assertLoggedFloatEquals(t, record["exit_code"], 2)
+	if got := record["stderr"]; got != "bad args" {
+		t.Fatalf("expected stderr field, got %#v", got)
 	}
-	assertContains(t, lines[0], "exit_code=2")
+}
+
+func TestCommandRunnerRunLogsExecutionTraceOnExecutionError(t *testing.T) {
+	t.Parallel()
+
+	execStub := &stubExecutor{err: exec.ErrNotFound}
+	var sink strings.Builder
+	runner := NewCommandRunner(RunnerConfig{
+		Executor: execStub,
+		Logger:   slog.New(slog.NewJSONHandler(&sink, nil)),
+	})
+
+	_, err := runner.Run(context.Background(), CommandRequest{Operation: "ready", Args: []string{"ready"}})
+	if err == nil {
+		t.Fatal("expected execution error")
+	}
+	record := decodeLoggedRecord(t, sink.String())
+	assertLoggedFloatEquals(t, record["exit_code"], -1)
+	if got := record["error"]; got == nil || !strings.Contains(fmt.Sprint(got), "executable file not found") {
+		t.Fatalf("expected execution error field, got %#v", got)
+	}
 }
 
 type stubExecutor struct {
@@ -334,5 +358,61 @@ func assertContains(t *testing.T, got string, wantSubstring string) {
 
 	if !strings.Contains(got, wantSubstring) {
 		t.Fatalf("expected %q to contain %q", got, wantSubstring)
+	}
+}
+
+func decodeLoggedRecord(t *testing.T, content string) map[string]any {
+	t.Helper()
+
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		t.Fatal("expected logged record content")
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &record); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v (content=%q)", err, trimmed)
+	}
+	return record
+}
+
+func assertLoggedArray(t *testing.T, got any, want []string) {
+	t.Helper()
+
+	raw, ok := got.([]any)
+	if !ok {
+		t.Fatalf("expected []any array, got %T (%#v)", got, got)
+	}
+	if len(raw) != len(want) {
+		t.Fatalf("expected array len %d, got %d (%#v)", len(want), len(raw), raw)
+	}
+	for i, item := range raw {
+		if fmt.Sprint(item) != want[i] {
+			t.Fatalf("expected argv[%d]=%q, got %#v", i, want[i], item)
+		}
+	}
+}
+
+func assertLoggedFloatEquals(t *testing.T, got any, want float64) {
+	t.Helper()
+
+	value, ok := got.(float64)
+	if !ok {
+		t.Fatalf("expected float64, got %T (%#v)", got, got)
+	}
+	if value != want {
+		t.Fatalf("expected %v, got %v", want, value)
+	}
+}
+
+func assertLoggedFloatAtLeast(t *testing.T, got any, min float64) {
+	t.Helper()
+
+	value, ok := got.(float64)
+	if !ok {
+		t.Fatalf("expected float64, got %T (%#v)", got, got)
+	}
+	if value < min {
+		t.Fatalf("expected value >= %v, got %v", min, value)
 	}
 }

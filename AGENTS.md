@@ -20,7 +20,7 @@ Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
 
 ## Monitoring
 
-Read `docs/MONITORING.md` for the current diagnostics surface, `--debug` behavior, and where machine-visible evidence comes from today.
+Read `docs/MONITORING.md` for the centralized diagnostics surface, `--debug` behavior, persistent log location, and machine-visible evidence guidance.
 
 ## Releases
 

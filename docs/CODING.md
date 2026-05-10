@@ -80,7 +80,19 @@ When `--debug` is set, diagnostics are emitted to stderr and prefixed with:
 Event categories:
 
 - startup resolution (`resolved config path`, `resolved cwd`, `auto-refresh`)
-- `bd` execution traces from the command runner (`bd argv=... exit_code=...`)
+- one per-run `session_id` line for correlation
+- `bd` execution traces from the command runner (operation, full argv,
+  `exit_code`, `duration_ms`)
+
+Interactive runs also initialize `internal/logging`, which writes structured
+JSON Lines diagnostics to the default state path:
+
+- `$XDG_STATE_HOME/bwb/bwb.log`
+- fallback: `~/.local/state/bwb/bwb.log`
+
+Warnings and errors are mirrored to both stderr and the persistent log. When the
+persistent sink cannot be opened, BWB emits one stderr warning and continues
+with stderr-only logging.
 
 For the current diagnostics/logging surface and capture guidance, see
 `docs/MONITORING.md`.
@@ -96,7 +108,7 @@ internal/
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
   gateway/beads/     # BeadsGateway interface + CLI adapter with typed bd payload decoding
-  logging/           # central slog logging package; persistent sink/session-id support exists here, but cmd/bwb wiring is still in progress
+  logging/           # central slog logging package used by runtime startup and gateway tracing
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard definitions/providers + provider-output validation guardrails
   mode/              # board/search/details feature models + shell message contracts

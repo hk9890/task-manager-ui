@@ -28,7 +28,7 @@ bwb --config "$HOME/.config/bwb/config.yaml" --print-config
 bwb --check-config
 ```
 
-For exit codes, config details, and debug diagnostics, see
+For exit codes, config details, and centralized debug/logging behavior, see
 `docs/CODING.md` and `docs/MONITORING.md`.
 
 ## Developer Convenience Targets
@@ -54,7 +54,7 @@ gates, and `docs/CODING.md` for build/test details.
 - [`docs/OVERVIEW.md`](./docs/OVERVIEW.md) — runtime flow, package map, architecture boundaries
 - [`docs/CODING.md`](./docs/CODING.md) — build commands, config model, implementation constraints
 - [`docs/TESTING.md`](./docs/TESTING.md) — test policy, fixtures, and runtime verification expectations
-- [`docs/MONITORING.md`](./docs/MONITORING.md) — current diagnostics/logging surface and evidence capture points
+- [`docs/MONITORING.md`](./docs/MONITORING.md) — centralized logging contract and evidence capture points
 - [`docs/RUNTIME_UI_VERIFICATION.md`](./docs/RUNTIME_UI_VERIFICATION.md) — built-binary runtime UI verification runbook
 - [`docs/CHANGE-WORKFLOW.md`](./docs/CHANGE-WORKFLOW.md) — beads-first change landing and session completion workflow
 - [`docs/RELEASING.md`](./docs/RELEASING.md) — tag-triggered release workflow

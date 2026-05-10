@@ -2,25 +2,23 @@
 
 ## Current diagnostics surface
 
-The current runtime diagnostics contract still comes from `cmd/bwb/main.go` and
-`internal/gateway/beads/runner.go`:
+Runtime diagnostics are now centralized through `internal/logging` and used by
+`cmd/bwb/main.go` plus `internal/gateway/beads/runner.go`.
 
-- `stdout` is used for successful non-interactive output from `--help`,
-  `--version`, `--print-config`, and `--check-config`
-- `stderr` is used for startup failures, config warnings, and other
-  operator-facing errors from `cmd/bwb/main.go`
-- `--debug` adds extra stderr diagnostics with the compatibility prefix
-  `[bwb-debug]`
+- `stdout` remains the success surface for non-interactive `--help`, `--version`,
+  `--print-config`, and `--check-config`
+- `stderr` remains the operator-facing surface for startup failures, config
+  warnings, and other warnings/errors
+- interactive startup and gateway execution traces are also written to a
+  persistent JSON Lines log
+- `--debug` enables DEBUG/INFO diagnostic mirroring to `stderr` with the
+  compatibility prefix `[bwb-debug]`
 
-In normal `bwb` runs today, that means the effective diagnostics sink is still
-stderr.
+## Centralized logging contract
 
-## In-repo centralized logging package
+`internal/logging` is the single logging entrypoint for runtime diagnostics.
 
-The repository also now includes `internal/logging`, a central slog-based
-logging package that is being wired into the app in follow-up logging tasks.
-
-Implemented package capabilities:
+Implemented behavior:
 
 - persistent JSON Lines log sink at `$XDG_STATE_HOME/bwb/bwb.log`
   - fallback path: `~/.local/state/bwb/bwb.log`
@@ -34,36 +32,50 @@ Implemented package capabilities:
 - stderr-only fallback with a single warning if the persistent sink is
   unavailable
 
-Current status:
+Structured records include at least:
 
-- `internal/logging` exists in the repo and has direct tests
-- `cmd/bwb/main.go` and `internal/gateway/beads/runner.go` do not yet initialize
-  or use it in the current working tree
-- until that wiring lands, operators should treat stderr as the active runtime
-  diagnostics surface
+- `timestamp`
+- `level`
+- `message`
+- `session_id`
+- component-specific fields such as `component`, `argv`, `operation`,
+  `exit_code`, and `duration_ms`
 
 ## `--debug` coverage
 
-Today `--debug` emits two categories of machine-visible diagnostics:
+`--debug` mirrors two categories of machine-visible diagnostics to `stderr`:
 
 - startup resolution lines from `cmd/bwb/main.go`
   - resolved config path
   - resolved cwd
   - auto-refresh enabled/disabled
 - `bd` CLI execution traces from `internal/gateway/beads/runner.go`
-  - `bd argv=...`
-  - `exit_code=...`
+  - operation name
+  - full argv
+  - exit code
+  - duration in milliseconds
+
+The startup debug stream also prints the run `session_id` once so operators can
+correlate stderr output with structured log records.
 
 ## Capture commands
 
-Use stderr capture when you need reproducible evidence:
+Use stderr capture when you need reproducible operator-facing evidence:
 
 ```bash
 bwb --cwd /path/to/beads-project --debug 2> /tmp/bwb-debug.log
 ```
 
-Because stderr is still the active runtime sink today, the effective capture
-destination depends on how `bwb` is launched:
+Use the persistent JSON Lines log when you need durable machine-readable
+diagnostics:
+
+```bash
+tail -f "$XDG_STATE_HOME/bwb/bwb.log"
+```
+
+If `XDG_STATE_HOME` is unset, use `~/.local/state/bwb/bwb.log`.
+
+Effective capture destinations therefore include:
 
 - interactive terminal scrollback
 - shell redirection
@@ -73,10 +85,10 @@ destination depends on how `bwb` is launched:
 
 ## Relevant code paths
 
-- `cmd/bwb/main.go` — CLI parsing, startup warnings/errors, `--debug` startup lines
-- `internal/gateway/beads/runner.go` — per-command `bd` debug traces
-- `internal/gateway/beads/runner_test.go` — debug trace coverage for argv/exit code logging
-- `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, fallback warning
+- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, and non-interactive bypass paths
+- `internal/gateway/beads/runner.go` — structured per-command `bd` execution traces
+- `internal/gateway/beads/runner_test.go` — execution trace coverage for argv/exit code/duration logging
+- `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
 
 ## Runtime UI evidence

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/config"
+	"github.com/hk9890/beads-workbench/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -187,23 +188,28 @@ func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
 
 	for _, tc := range tests {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 
-			var stdout, stderr bytes.Buffer
-			loadCalls := 0
-			started := false
+				var stdout, stderr bytes.Buffer
+				loadCalls := 0
+				loggerCalls := 0
+				started := false
 
-			code := run(tc.args, &stdout, &stderr,
-				func(opts config.LoadOptions) (config.Result, error) {
-					loadCalls++
-					return config.Result{Config: resolved, Path: "/tmp/config.yaml"}, nil
-				},
-				func(cfg config.Model, opts startupOptions) error {
-					started = true
-					return nil
-				},
-			)
+				code := runWithLogger(tc.args, &stdout, &stderr,
+					func(opts config.LoadOptions) (config.Result, error) {
+						loadCalls++
+						return config.Result{Config: resolved, Path: "/tmp/config.yaml"}, nil
+					},
+					func(cfg config.Model, opts startupOptions) error {
+						started = true
+						return nil
+					},
+					func(opts logging.Options) *logging.Manager {
+						loggerCalls++
+						return nil
+					},
+				)
 
 			if code != 0 {
 				t.Fatalf("expected exit code 0, got %d (stdout=%q stderr=%q)", code, stdout.String(), stderr.String())
@@ -214,12 +220,15 @@ func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
 			if tc.expectLoad && loadCalls != 1 {
 				t.Fatalf("expected config load once, got %d", loadCalls)
 			}
-			if !tc.expectLoad && loadCalls != 0 {
-				t.Fatalf("expected config load to be skipped, got %d calls", loadCalls)
-			}
-			if !tc.expectStderr && stderr.Len() != 0 {
-				t.Fatalf("expected empty stderr, got %q", stderr.String())
-			}
+				if !tc.expectLoad && loadCalls != 0 {
+					t.Fatalf("expected config load to be skipped, got %d calls", loadCalls)
+				}
+				if loggerCalls != 0 {
+					t.Fatalf("expected logger construction skipped for non-interactive path, got %d calls", loggerCalls)
+				}
+				if !tc.expectStderr && stderr.Len() != 0 {
+					t.Fatalf("expected empty stderr, got %q", stderr.String())
+				}
 		})
 	}
 }
@@ -367,9 +376,10 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	var seenLoad config.LoadOptions
 	var seenStart startupOptions
+	loggerCalls := 0
 	started := false
 
-	code := run([]string{"--cwd", "project", "--config", "cfg.yaml", "--debug", "--no-auto-refresh"}, &stdout, &stderr,
+	code := runWithLogger([]string{"--cwd", "project", "--config", "cfg.yaml", "--debug", "--no-auto-refresh"}, &stdout, &stderr,
 		func(opts config.LoadOptions) (config.Result, error) {
 			seenLoad = opts
 			return config.Result{Config: config.Default(), Path: opts.Path}, nil
@@ -378,6 +388,11 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 			started = true
 			seenStart = opts
 			return nil
+		},
+		func(opts logging.Options) *logging.Manager {
+			loggerCalls++
+			opts.StateDir = t.TempDir()
+			return logging.New(opts)
 		},
 	)
 
@@ -399,13 +414,22 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if seenStart.autoRefresh {
 		t.Fatal("expected --no-auto-refresh to disable auto refresh")
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] resolved config path: "+filepath.Join(startDir, "cfg.yaml")) {
+	if seenStart.logManager == nil {
+		t.Fatal("expected log manager to be passed into startup options")
+	}
+	if loggerCalls != 1 {
+		t.Fatalf("expected logger to be constructed once, got %d", loggerCalls)
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
+		t.Fatalf("expected debug session line, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] resolved config path") || !strings.Contains(stderr.String(), "path="+filepath.Join(startDir, "cfg.yaml")) {
 		t.Fatalf("expected debug config path line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd: "+projectDir) {
+	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") || !strings.Contains(stderr.String(), "cwd="+projectDir) {
 		t.Fatalf("expected debug cwd line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh: false") {
+	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=false") {
 		t.Fatalf("expected debug auto-refresh line, got %q", stderr.String())
 	}
 }

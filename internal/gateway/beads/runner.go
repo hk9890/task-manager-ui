@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -47,7 +49,7 @@ type RunnerConfig struct {
 	WorkDir  string
 	Env      []string
 	Executor CommandExecutor
-	DebugLog func(string)
+	Logger   *slog.Logger
 }
 
 // CommandRunner is a reusable execution layer for bd-backed gateway methods.
@@ -56,7 +58,7 @@ type CommandRunner struct {
 	defaultWorkDir string
 	defaultEnv     []string
 	executor       CommandExecutor
-	debugLog       func(string)
+	logger         *slog.Logger
 	runMu          sync.Mutex
 }
 
@@ -82,7 +84,7 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		defaultWorkDir: cfg.WorkDir,
 		defaultEnv:     append([]string(nil), defaultEnv...),
 		executor:       executor,
-		debugLog:       cfg.DebugLog,
+		logger:         cfg.Logger,
 	}
 }
 
@@ -99,8 +101,9 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 	// If bd gains a long-running server mode or safe read-only concurrency, relax
 	// this to a bounded semaphore.
 	r.runMu.Lock()
+	startedAt := time.Now()
 	result, err := r.executor.Run(ctx, r.command, req.Args, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
-	r.logExecution(req.Args, result.ExitCode, err)
+	r.logExecution(req, result, err, time.Since(startedAt))
 	r.runMu.Unlock()
 	if err != nil {
 		return nil, normalizeExecutionError(ctx, req.Operation, result.Stderr, err)
@@ -173,15 +176,29 @@ func (r *CommandRunner) resolveWorkDir(override string) string {
 	return r.defaultWorkDir
 }
 
-func (r *CommandRunner) logExecution(args []string, exitCode int, err error) {
-	if r.debugLog == nil {
+func (r *CommandRunner) logExecution(req CommandRequest, result ExecResult, err error, duration time.Duration) {
+	if r.logger == nil {
 		return
 	}
+
+	exitCode := result.ExitCode
 	if err != nil && exitCode == 0 {
 		exitCode = -1
 	}
-	argv := append([]string{r.command}, args...)
-	r.debugLog(fmt.Sprintf("bd argv=%q exit_code=%d", argv, exitCode))
+	argv := append([]string{r.command}, req.Args...)
+	attrs := []any{
+		"operation", req.Operation,
+		"argv", argv,
+		"exit_code", exitCode,
+		"duration_ms", duration.Milliseconds(),
+	}
+	if trimmedStderr := strings.TrimSpace(string(result.Stderr)); trimmedStderr != "" {
+		attrs = append(attrs, "stderr", trimmedStderr)
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+	}
+	r.logger.Info("bd command finished", attrs...)
 }
 
 func normalizeExecutionError(ctx context.Context, operation string, stderr []byte, err error) error {

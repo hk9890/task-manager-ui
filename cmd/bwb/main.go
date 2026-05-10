@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/app"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,19 +27,13 @@ type startupOptions struct {
 	projectRoot       string
 	debug             bool
 	autoRefresh       bool
-	debugOutputWriter io.Writer
+	logManager        *logging.Manager
 }
 
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	runnerCfg := beads.RunnerConfig{WorkDir: opts.projectRoot}
-	if opts.debug {
-		writer := opts.debugOutputWriter
-		if writer == nil {
-			writer = io.Discard
-		}
-		runnerCfg.DebugLog = func(line string) {
-			_, _ = fmt.Fprintf(writer, "[bwb-debug] %s\n", line)
-		}
+	if opts.logManager != nil {
+		runnerCfg.Logger = opts.logManager.Component("gateway")
 	}
 	gateway := beads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
 
@@ -72,6 +67,10 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer, load func(config.LoadOptions) (config.Result, error), start func(config.Model, startupOptions) error) int {
+	return runWithLogger(args, stdout, stderr, load, start, logging.New)
+}
+
+func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.LoadOptions) (config.Result, error), start func(config.Model, startupOptions) error, newLogger func(logging.Options) *logging.Manager) int {
 	opts, code, ok := parseCLI(args, stderr)
 	if !ok {
 		return code
@@ -87,17 +86,36 @@ func run(args []string, stdout, stderr io.Writer, load func(config.LoadOptions) 
 		return 0
 	}
 
+	var logManager *logging.Manager
+	if !opts.printConfig && !opts.checkConfig && newLogger != nil {
+		logManager = newLogger(logging.Options{Debug: opts.debug, Stderr: stderr})
+		if logManager != nil {
+			defer func() {
+				_ = logManager.Close()
+			}()
+		}
+	}
+
 	startCWD, err := os.Getwd()
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "failed to resolve process start cwd: %v\n", err)
+		if logManager != nil {
+			logManager.Component("startup").Error("failed to resolve process start cwd", "error", err.Error())
+		} else {
+			_, _ = fmt.Fprintf(stderr, "failed to resolve process start cwd: %v\n", err)
+		}
 		return 1
 	}
 
 	resolvedConfigPath := resolveAgainstStartCWD(startCWD, opts.configPath)
+
 	loadOpts := config.LoadOptions{Path: resolvedConfigPath, RequireExplicit: opts.configPath != ""}
 	configResult, err := load(loadOpts)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "failed to load config: %v\n", err)
+		if logManager != nil {
+			logManager.Component("startup").Error("failed to load config", "error", err.Error(), "path", resolvedConfigPath)
+		} else {
+			_, _ = fmt.Fprintf(stderr, "failed to load config: %v\n", err)
+		}
 		return 1
 	}
 
@@ -121,29 +139,42 @@ func run(args []string, stdout, stderr io.Writer, load func(config.LoadOptions) 
 	}
 
 	for _, warning := range configResult.Warnings {
-		_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
+		if logManager != nil {
+			logManager.Component("startup").Warn("config warning", "warning", warning)
+		} else {
+			_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
+		}
 	}
 
 	resolvedCWD, err := resolveAndValidateCWD(startCWD, opts.cwdPath)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "failed to resolve --cwd: %v\n", err)
+		if logManager != nil {
+			logManager.Component("startup").Error("failed to resolve --cwd", "error", err.Error())
+		} else {
+			_, _ = fmt.Fprintf(stderr, "failed to resolve --cwd: %v\n", err)
+		}
 		return 1
 	}
 
 	autoRefresh := !opts.noAuto
-	if opts.debug {
-		_, _ = fmt.Fprintf(stderr, "[bwb-debug] resolved config path: %s\n", configResult.Path)
-		_, _ = fmt.Fprintf(stderr, "[bwb-debug] resolved cwd: %s\n", resolvedCWD)
-		_, _ = fmt.Fprintf(stderr, "[bwb-debug] auto-refresh: %t\n", autoRefresh)
+	if logManager != nil {
+		startupLogger := logManager.Component("startup")
+		startupLogger.Info("resolved config path", "path", configResult.Path)
+		startupLogger.Info("resolved cwd", "cwd", resolvedCWD)
+		startupLogger.Info("auto-refresh", "enabled", autoRefresh)
 	}
 
 	if err := start(configResult.Config, startupOptions{
 		projectRoot:       resolvedCWD,
 		debug:             opts.debug,
 		autoRefresh:       autoRefresh,
-		debugOutputWriter: stderr,
+		logManager:        logManager,
 	}); err != nil {
-		_, _ = fmt.Fprintln(stderr, err.Error())
+		if logManager != nil {
+			logManager.Component("startup").Error("interactive startup failed", "error", err.Error())
+		} else {
+			_, _ = fmt.Fprintln(stderr, err.Error())
+		}
 		return 1
 	}
 

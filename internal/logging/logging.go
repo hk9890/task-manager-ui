@@ -260,12 +260,15 @@ func (h *stderrHandler) Enabled(_ context.Context, level slog.Level) bool {
 	if level >= slog.LevelWarn {
 		return true
 	}
-	return h.debugOn && level == slog.LevelDebug
+	if !h.debugOn {
+		return false
+	}
+	return level == slog.LevelDebug || level == slog.LevelInfo
 }
 
 func (h *stderrHandler) Handle(_ context.Context, record slog.Record) error {
 	parts := make([]string, 0, 8)
-	if record.Level == slog.LevelDebug {
+	if record.Level < slog.LevelWarn {
 		parts = append(parts, "[bwb-debug]", record.Message)
 	} else {
 		parts = append(parts, strings.ToLower(record.Level.String())+":", record.Message)

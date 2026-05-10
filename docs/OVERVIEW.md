@@ -18,16 +18,18 @@ resolution behavior, see `docs/CODING.md`.
 1. `cmd/bwb/main.go` parses CLI flags and handles non-interactive exits first.
 2. It resolves startup cwd/config options and loads runtime config with
    `internal/config.LoadWithOptions(...)`.
-3. It creates the source-specific beads gateway with
+3. It initializes centralized runtime logging, then creates the source-specific
+   beads gateway with
    `internal/gateway/beads.NewCLIGateway(...)`.
 4. It builds shell services with `internal/app.NewServices(...)`.
 5. It starts the TUI with
    `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
 
 When `--debug` is enabled, stderr diagnostics are prefixed with `[bwb-debug]`
-and include startup resolution events and `bd` command traces. See
-`docs/MONITORING.md` for the current diagnostics surface, the in-repo
-`internal/logging` package status, and capture paths.
+and include startup resolution events plus gateway execution traces, while the
+same run also writes structured JSON Lines records with `session_id` to the
+persistent log file. See `docs/MONITORING.md` for the logging contract and
+capture paths.
 
 ## Package map
 
@@ -38,7 +40,7 @@ and include startup resolution events and `bd` command traces. See
 | `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
 | `internal/domain` | Issue, query, mutation, catalog, and error models |
 | `internal/gateway/beads` | Official `bd` CLI adapter and typed payload decoding |
-| `internal/logging` | Central slog-based logging package; the package already provides session IDs, persistent JSON Lines support, and stderr mirroring, but runtime wiring is still in progress |
+| `internal/logging` | Central slog-based logging package used by startup and gateway code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
 | `internal/dashboard` | Built-in dashboard definitions and validation |
 | `internal/mode/*` | Board, search, and details feature-local state/controllers |
 | `internal/launcher` | External tool launch actions and process runner |
@@ -59,7 +61,7 @@ and include startup resolution events and `bd` command traces. See
 
 - `docs/CODING.md` — build commands, package layout, guardrails, config and launcher contracts
 - `docs/TESTING.md` — test policy, fixtures, and required verification depth
-- `docs/MONITORING.md` — current stderr/debug diagnostics model and evidence capture points
+- `docs/MONITORING.md` — centralized logging contract, capture points, and evidence guidance
 - `docs/RUNTIME_UI_VERIFICATION.md` — runtime UI runbook for built-binary checks
 - `docs/CHANGE-WORKFLOW.md` — beads-first change landing and session completion workflow
 - `docs/RELEASING.md` — tag-triggered release process via GitHub Actions + GoReleaser
