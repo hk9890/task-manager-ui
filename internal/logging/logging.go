@@ -28,10 +28,12 @@ const (
 
 // Options configures logger construction.
 type Options struct {
-	Debug     bool
-	Stderr    io.Writer
-	StateDir  string
-	SessionID string
+	Debug        bool
+	Stderr       io.Writer
+	StateDir     string
+	SessionID    string
+	ProjectRoot  string
+	BuildVersion string
 }
 
 // Manager owns the application root logger and session metadata.
@@ -64,7 +66,11 @@ func New(opts Options) *Manager {
 		handlers = append(handlers, newJSONFileHandler(fileSink, opts.Debug))
 	}
 
-	root := slog.New(newTeeHandler(handlers...)).With("session_id", sessionID)
+	root := slog.New(newTeeHandler(handlers...)).With(
+		"session_id", sessionID,
+		"project_root", strings.TrimSpace(opts.ProjectRoot),
+		"build_version", strings.TrimSpace(opts.BuildVersion),
+	)
 	if opts.Debug {
 		_, _ = fmt.Fprintf(stderr, "[bwb-debug] session_id=%s\n", sessionID)
 	}

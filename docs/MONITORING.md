@@ -9,8 +9,9 @@ Runtime diagnostics are now centralized through `internal/logging` and used by
   `--print-config`, and `--check-config`
 - `stderr` remains the operator-facing surface for startup failures, config
   warnings, and other warnings/errors
-- interactive startup and gateway execution traces are also written to a
-  persistent JSON Lines log
+- all startup paths, including non-interactive `--print-config` and
+  `--check-config`, also write diagnostics to the persistent JSON Lines log when
+  the sink is available
 - `--debug` enables DEBUG/INFO diagnostic mirroring to `stderr` with the
   compatibility prefix `[bwb-debug]`
 
@@ -22,7 +23,12 @@ Implemented behavior:
 
 - persistent JSON Lines log sink at `$XDG_STATE_HOME/bwb/bwb.log`
   - fallback path: `~/.local/state/bwb/bwb.log`
+  - this sink is user/machine scoped and can contain sessions from multiple
+    beads projects and multiple BWB builds
 - per-run `session_id` attached to structured records
+- root provenance fields on every record:
+  - `project_root`
+  - `build_version`
 - fixed lumberjack rotation defaults
   - max size: 10 MB
   - max backups: 5
@@ -38,14 +44,21 @@ Structured records include at least:
 - `level`
 - `message`
 - `session_id`
+- `project_root`
+- `build_version`
 - component-specific fields such as `component`, `argv`, `operation`,
   `exit_code`, and `duration_ms`
+
+To attribute a session safely in the shared sink, use `session_id` together with
+`project_root` and `build_version`. Startup and gateway records both inherit
+those root attributes automatically.
 
 ## `--debug` coverage
 
 `--debug` mirrors two categories of machine-visible diagnostics to `stderr`:
 
-- startup resolution lines from `cmd/bwb/main.go`
+- startup resolution lines from `cmd/bwb/main.go` for both interactive and
+  non-interactive startup paths that load config
   - resolved config path
   - resolved cwd
   - auto-refresh enabled/disabled
@@ -56,7 +69,9 @@ Structured records include at least:
   - duration in milliseconds
 
 The startup debug stream also prints the run `session_id` once so operators can
-correlate stderr output with structured log records.
+correlate stderr output with structured log records. This applies equally to
+interactive startup and startup-only commands such as `--check-config` and
+`--print-config`.
 
 ## Capture commands
 
@@ -64,6 +79,7 @@ Use stderr capture when you need reproducible operator-facing evidence:
 
 ```bash
 bwb --cwd /path/to/beads-project --debug 2> /tmp/bwb-debug.log
+bwb --cwd /path/to/beads-project --debug --check-config 2> /tmp/bwb-debug-check.log
 ```
 
 Use the persistent JSON Lines log when you need durable machine-readable
@@ -75,6 +91,10 @@ tail -f "$XDG_STATE_HOME/bwb/bwb.log"
 
 If `XDG_STATE_HOME` is unset, use `~/.local/state/bwb/bwb.log`.
 
+When inspecting a shared `bwb.log`, do not assume adjacent records came from the
+same repository or binary. Filter or inspect by `session_id`, `project_root`,
+and `build_version`.
+
 Effective capture destinations therefore include:
 
 - interactive terminal scrollback
@@ -85,7 +105,7 @@ Effective capture destinations therefore include:
 
 ## Relevant code paths
 
-- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, and non-interactive bypass paths
+- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, and non-interactive startup command handling
 - `internal/gateway/beads/runner.go` — structured per-command `bd` execution traces
 - `internal/gateway/beads/runner_test.go` — execution trace coverage for argv/exit code/duration logging
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning

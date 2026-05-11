@@ -178,38 +178,39 @@ func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
 		name         string
 		args         []string
 		expectLoad   bool
+		expectLogger bool
 		expectStderr bool
 	}{
 		{name: "help", args: []string{"--help"}, expectLoad: false},
 		{name: "version", args: []string{"--version"}, expectLoad: false},
-		{name: "print config", args: []string{"--print-config"}, expectLoad: true},
-		{name: "check config", args: []string{"--check-config"}, expectLoad: true},
+		{name: "print config", args: []string{"--print-config"}, expectLoad: true, expectLogger: true},
+		{name: "check config", args: []string{"--check-config"}, expectLoad: true, expectLogger: true},
 	}
 
 	for _, tc := range tests {
 		tc := tc
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-				var stdout, stderr bytes.Buffer
-				loadCalls := 0
-				loggerCalls := 0
-				started := false
+			var stdout, stderr bytes.Buffer
+			loadCalls := 0
+			loggerCalls := 0
+			started := false
 
-				code := runWithLogger(tc.args, &stdout, &stderr,
-					func(opts config.LoadOptions) (config.Result, error) {
-						loadCalls++
-						return config.Result{Config: resolved, Path: "/tmp/config.yaml"}, nil
-					},
-					func(cfg config.Model, opts startupOptions) error {
-						started = true
-						return nil
-					},
-					func(opts logging.Options) *logging.Manager {
-						loggerCalls++
-						return nil
-					},
-				)
+			code := runWithLogger(tc.args, &stdout, &stderr,
+				func(opts config.LoadOptions) (config.Result, error) {
+					loadCalls++
+					return config.Result{Config: resolved, Path: "/tmp/config.yaml"}, nil
+				},
+				func(cfg config.Model, opts startupOptions) error {
+					started = true
+					return nil
+				},
+				func(opts logging.Options) *logging.Manager {
+					loggerCalls++
+					return nil
+				},
+			)
 
 			if code != 0 {
 				t.Fatalf("expected exit code 0, got %d (stdout=%q stderr=%q)", code, stdout.String(), stderr.String())
@@ -220,15 +221,19 @@ func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
 			if tc.expectLoad && loadCalls != 1 {
 				t.Fatalf("expected config load once, got %d", loadCalls)
 			}
-				if !tc.expectLoad && loadCalls != 0 {
-					t.Fatalf("expected config load to be skipped, got %d calls", loadCalls)
-				}
-				if loggerCalls != 0 {
-					t.Fatalf("expected logger construction skipped for non-interactive path, got %d calls", loggerCalls)
-				}
-				if !tc.expectStderr && stderr.Len() != 0 {
-					t.Fatalf("expected empty stderr, got %q", stderr.String())
-				}
+			if !tc.expectLoad && loadCalls != 0 {
+				t.Fatalf("expected config load to be skipped, got %d calls", loadCalls)
+			}
+			expectedLoggerCalls := 0
+			if tc.expectLogger {
+				expectedLoggerCalls = 1
+			}
+			if loggerCalls != expectedLoggerCalls {
+				t.Fatalf("expected logger construction calls %d, got %d", expectedLoggerCalls, loggerCalls)
+			}
+			if !tc.expectStderr && stderr.Len() != 0 {
+				t.Fatalf("expected empty stderr, got %q", stderr.String())
+			}
 		})
 	}
 }
@@ -242,7 +247,7 @@ func TestRun_PrintConfigWritesResolvedYAMLAndSource(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	var seenOpts config.LoadOptions
 
-	code := run([]string{"--print-config", "--config", configPath}, &stdout, &stderr,
+	code := runWithLogger([]string{"--print-config", "--config", configPath}, &stdout, &stderr,
 		func(opts config.LoadOptions) (config.Result, error) {
 			seenOpts = opts
 			return config.Result{Config: resolved, Path: configPath, Warnings: []string{"unused"}}, nil
@@ -250,13 +255,17 @@ func TestRun_PrintConfigWritesResolvedYAMLAndSource(t *testing.T) {
 		func(cfg config.Model, opts startupOptions) error {
 			return errors.New("should not start")
 		},
+		func(opts logging.Options) *logging.Manager {
+			opts.StateDir = t.TempDir()
+			return logging.New(opts)
+		},
 	)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	if !strings.Contains(stderr.String(), "warn: config warning") || !strings.Contains(stderr.String(), "warning=unused") {
+		t.Fatalf("expected warning mirrored to stderr, got %q", stderr.String())
 	}
 	if !seenOpts.RequireExplicit || seenOpts.Path != configPath {
 		t.Fatalf("expected explicit path load options, got %#v", seenOpts)
@@ -281,12 +290,16 @@ func TestRun_CheckConfigPrintsWarningsAndSuccess(t *testing.T) {
 	t.Parallel()
 
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"--check-config"}, &stdout, &stderr,
+	code := runWithLogger([]string{"--check-config", "--debug"}, &stdout, &stderr,
 		func(opts config.LoadOptions) (config.Result, error) {
 			return config.Result{Config: config.Default(), Path: "/tmp/config.yaml", Warnings: []string{"unknown key"}}, nil
 		},
 		func(cfg config.Model, opts startupOptions) error {
 			return errors.New("should not start")
+		},
+		func(opts logging.Options) *logging.Manager {
+			opts.StateDir = t.TempDir()
+			return logging.New(opts)
 		},
 	)
 
@@ -296,8 +309,59 @@ func TestRun_CheckConfigPrintsWarningsAndSuccess(t *testing.T) {
 	if !strings.Contains(stdout.String(), "config OK") {
 		t.Fatalf("expected success message, got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "bwb config warning: unknown key") {
+	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
+		t.Fatalf("expected debug session line, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] resolved config path") || !strings.Contains(stderr.String(), "path=/tmp/config.yaml") {
+		t.Fatalf("expected config path debug output, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") {
+		t.Fatalf("expected cwd debug output, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "warn: config warning") || !strings.Contains(stderr.String(), "warning=unknown key") {
 		t.Fatalf("expected warning output, got %q", stderr.String())
+	}
+}
+
+func TestRun_NonInteractiveDebugCreatesPersistentStartupLogs(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	code := runWithLogger([]string{"--print-config", "--debug"}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Default(), Path: "/tmp/config.yaml"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			return errors.New("should not start")
+		},
+		func(opts logging.Options) *logging.Manager {
+			opts.StateDir = stateDir
+			return logging.New(opts)
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "# source: /tmp/config.yaml\n") {
+		t.Fatalf("expected print-config output, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") || !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=true") {
+		t.Fatalf("expected startup debug diagnostics, got %q", stderr.String())
+	}
+
+	logPath := filepath.Join(stateDir, "bwb", "bwb.log")
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	logText := string(content)
+	for _, want := range []string{"\"message\":\"resolved config path\"", "\"message\":\"resolved cwd\"", "\"message\":\"auto-refresh\""} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("expected persistent log to contain %q, got %q", want, logText)
+		}
 	}
 }
 
@@ -354,8 +418,6 @@ func TestRun_UsageErrorsExitCode2(t *testing.T) {
 }
 
 func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
-	t.Parallel()
-
 	startDir := t.TempDir()
 	projectDir := filepath.Join(startDir, "project")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
@@ -376,6 +438,7 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	var seenLoad config.LoadOptions
 	var seenStart startupOptions
+	var seenLoggerOpts logging.Options
 	loggerCalls := 0
 	started := false
 
@@ -391,6 +454,7 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 		},
 		func(opts logging.Options) *logging.Manager {
 			loggerCalls++
+			seenLoggerOpts = opts
 			opts.StateDir = t.TempDir()
 			return logging.New(opts)
 		},
@@ -420,6 +484,12 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if loggerCalls != 1 {
 		t.Fatalf("expected logger to be constructed once, got %d", loggerCalls)
 	}
+	if seenLoggerOpts.ProjectRoot != projectDir {
+		t.Fatalf("expected logger project root %q, got %q", projectDir, seenLoggerOpts.ProjectRoot)
+	}
+	if seenLoggerOpts.BuildVersion != version {
+		t.Fatalf("expected logger build version %q, got %q", version, seenLoggerOpts.BuildVersion)
+	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
 		t.Fatalf("expected debug session line, got %q", stderr.String())
 	}
@@ -428,6 +498,9 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") || !strings.Contains(stderr.String(), "cwd="+projectDir) {
 		t.Fatalf("expected debug cwd line, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+version) {
+		t.Fatalf("expected provenance in debug output, got %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=false") {
 		t.Fatalf("expected debug auto-refresh line, got %q", stderr.String())

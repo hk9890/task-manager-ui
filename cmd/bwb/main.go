@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,10 +25,10 @@ var configLoad = func(opts config.LoadOptions) (config.Result, error) {
 }
 
 type startupOptions struct {
-	projectRoot       string
-	debug             bool
-	autoRefresh       bool
-	logManager        *logging.Manager
+	projectRoot string
+	debug       bool
+	autoRefresh bool
+	logManager  *logging.Manager
 }
 
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
@@ -87,15 +88,6 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	var logManager *logging.Manager
-	if !opts.printConfig && !opts.checkConfig && newLogger != nil {
-		logManager = newLogger(logging.Options{Debug: opts.debug, Stderr: stderr})
-		if logManager != nil {
-			defer func() {
-				_ = logManager.Close()
-			}()
-		}
-	}
-
 	startCWD, err := os.Getwd()
 	if err != nil {
 		if logManager != nil {
@@ -104,46 +96,6 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 			_, _ = fmt.Fprintf(stderr, "failed to resolve process start cwd: %v\n", err)
 		}
 		return 1
-	}
-
-	resolvedConfigPath := resolveAgainstStartCWD(startCWD, opts.configPath)
-
-	loadOpts := config.LoadOptions{Path: resolvedConfigPath, RequireExplicit: opts.configPath != ""}
-	configResult, err := load(loadOpts)
-	if err != nil {
-		if logManager != nil {
-			logManager.Component("startup").Error("failed to load config", "error", err.Error(), "path", resolvedConfigPath)
-		} else {
-			_, _ = fmt.Fprintf(stderr, "failed to load config: %v\n", err)
-		}
-		return 1
-	}
-
-	if opts.printConfig {
-		encoded, err := yaml.Marshal(configResult.Config)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "failed to encode resolved config: %v\n", err)
-			return 1
-		}
-		_, _ = fmt.Fprintf(stdout, "# source: %s\n", configResult.Path)
-		_, _ = stdout.Write(encoded)
-		return 0
-	}
-
-	if opts.checkConfig {
-		for _, warning := range configResult.Warnings {
-			_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
-		}
-		_, _ = fmt.Fprintln(stdout, "config OK")
-		return 0
-	}
-
-	for _, warning := range configResult.Warnings {
-		if logManager != nil {
-			logManager.Component("startup").Warn("config warning", "warning", warning)
-		} else {
-			_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
-		}
 	}
 
 	resolvedCWD, err := resolveAndValidateCWD(startCWD, opts.cwdPath)
@@ -156,19 +108,74 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		return 1
 	}
 
+	if newLogger != nil {
+		logManager = newLogger(logging.Options{
+			Debug:        opts.debug,
+			Stderr:       stderr,
+			ProjectRoot:  resolvedCWD,
+			BuildVersion: version,
+		})
+		if logManager != nil {
+			defer func() {
+				_ = logManager.Close()
+			}()
+		}
+	}
+
+	resolvedConfigPath := resolveAgainstStartCWD(startCWD, opts.configPath)
+	startupLogger := logManagerComponent(logManager, "startup")
+
+	loadOpts := config.LoadOptions{Path: resolvedConfigPath, RequireExplicit: opts.configPath != ""}
+	configResult, err := load(loadOpts)
+	if err != nil {
+		if startupLogger != nil {
+			startupLogger.Error("failed to load config", "error", err.Error(), "path", resolvedConfigPath)
+		} else {
+			_, _ = fmt.Fprintf(stderr, "failed to load config: %v\n", err)
+		}
+		return 1
+	}
+
+	for _, warning := range configResult.Warnings {
+		if startupLogger != nil {
+			startupLogger.Warn("config warning", "warning", warning)
+		} else {
+			_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
+		}
+	}
+
 	autoRefresh := !opts.noAuto
-	if logManager != nil {
-		startupLogger := logManager.Component("startup")
+	if startupLogger != nil {
 		startupLogger.Info("resolved config path", "path", configResult.Path)
 		startupLogger.Info("resolved cwd", "cwd", resolvedCWD)
 		startupLogger.Info("auto-refresh", "enabled", autoRefresh)
 	}
 
+	if opts.printConfig {
+		encoded, err := yaml.Marshal(configResult.Config)
+		if err != nil {
+			if startupLogger != nil {
+				startupLogger.Error("failed to encode resolved config", "error", err.Error())
+			} else {
+				_, _ = fmt.Fprintf(stderr, "failed to encode resolved config: %v\n", err)
+			}
+			return 1
+		}
+		_, _ = fmt.Fprintf(stdout, "# source: %s\n", configResult.Path)
+		_, _ = stdout.Write(encoded)
+		return 0
+	}
+
+	if opts.checkConfig {
+		_, _ = fmt.Fprintln(stdout, "config OK")
+		return 0
+	}
+
 	if err := start(configResult.Config, startupOptions{
-		projectRoot:       resolvedCWD,
-		debug:             opts.debug,
-		autoRefresh:       autoRefresh,
-		logManager:        logManager,
+		projectRoot: resolvedCWD,
+		debug:       opts.debug,
+		autoRefresh: autoRefresh,
+		logManager:  logManager,
 	}); err != nil {
 		if logManager != nil {
 			logManager.Component("startup").Error("interactive startup failed", "error", err.Error())
@@ -179,6 +186,13 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	return 0
+}
+
+func logManagerComponent(manager *logging.Manager, component string) *slog.Logger {
+	if manager == nil {
+		return nil
+	}
+	return manager.Component(component)
 }
 
 func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {

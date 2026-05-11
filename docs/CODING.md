@@ -84,8 +84,9 @@ Event categories:
 - `bd` execution traces from the command runner (operation, full argv,
   `exit_code`, `duration_ms`)
 
-Interactive runs also initialize `internal/logging`, which writes structured
-JSON Lines diagnostics to the default state path:
+All config-loading startup paths initialize `internal/logging`, including
+interactive startup plus non-interactive `--print-config` and `--check-config`.
+That logger writes structured JSON Lines diagnostics to the default state path:
 
 - `$XDG_STATE_HOME/bwb/bwb.log`
 - fallback: `~/.local/state/bwb/bwb.log`

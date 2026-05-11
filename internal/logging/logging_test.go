@@ -43,9 +43,11 @@ func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
 	var stderr bytes.Buffer
 
 	m := New(Options{
-		StateDir:  stateDir,
-		Stderr:    &stderr,
-		SessionID: "deadbeef",
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		SessionID:    "deadbeef",
+		ProjectRoot:  "/tmp/project-a",
+		BuildVersion: "dev",
 	})
 	t.Cleanup(func() {
 		_ = m.Close()
@@ -56,7 +58,7 @@ func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
 	line := firstLineFromFile(t, m.LogPath())
 	record := decodeJSONLine(t, line)
 
-	for _, key := range []string{"timestamp", "level", "message", "session_id"} {
+	for _, key := range []string{"timestamp", "level", "message", "session_id", "project_root", "build_version"} {
 		if _, ok := record[key]; !ok {
 			t.Fatalf("expected JSON key %q in record: %#v", key, record)
 		}
@@ -71,12 +73,21 @@ func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
 	if got := record["session_id"]; got != "deadbeef" {
 		t.Fatalf("expected session_id deadbeef, got %#v", got)
 	}
+	if got := record["project_root"]; got != "/tmp/project-a" {
+		t.Fatalf("expected project_root /tmp/project-a, got %#v", got)
+	}
+	if got := record["build_version"]; got != "dev" {
+		t.Fatalf("expected build_version dev, got %#v", got)
+	}
 	if got := record["component"]; got != "gateway" {
 		t.Fatalf("expected component gateway, got %#v", got)
 	}
 
 	if got := stderr.String(); !strings.Contains(got, "warn: gateway warning") {
 		t.Fatalf("expected warning mirrored to stderr, got %q", got)
+	}
+	if got := stderr.String(); !strings.Contains(got, "project_root=/tmp/project-a") || !strings.Contains(got, "build_version=dev") {
+		t.Fatalf("expected provenance mirrored to stderr, got %q", got)
 	}
 }
 
@@ -87,10 +98,12 @@ func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
 	var stderr bytes.Buffer
 
 	m := New(Options{
-		StateDir:  stateDir,
-		Stderr:    &stderr,
-		Debug:     true,
-		SessionID: "cafebabe",
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		Debug:        true,
+		SessionID:    "cafebabe",
+		ProjectRoot:  "/tmp/project-b",
+		BuildVersion: "1.2.3",
 	})
 	t.Cleanup(func() {
 		_ = m.Close()
@@ -105,6 +118,9 @@ func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
 	if !strings.Contains(gotStderr, "[bwb-debug] bd argv trace") {
 		t.Fatalf("expected debug message with prefix, got %q", gotStderr)
 	}
+	if !strings.Contains(gotStderr, "project_root=/tmp/project-b") || !strings.Contains(gotStderr, "build_version=1.2.3") {
+		t.Fatalf("expected debug provenance fields, got %q", gotStderr)
+	}
 
 	line := firstLineFromFile(t, m.LogPath())
 	record := decodeJSONLine(t, line)
@@ -113,6 +129,12 @@ func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
 	}
 	if got := record["message"]; got != "bd argv trace" {
 		t.Fatalf("expected debug message in persistent log, got %#v", got)
+	}
+	if got := record["project_root"]; got != "/tmp/project-b" {
+		t.Fatalf("expected project_root /tmp/project-b, got %#v", got)
+	}
+	if got := record["build_version"]; got != "1.2.3" {
+		t.Fatalf("expected build_version 1.2.3, got %#v", got)
 	}
 }
 
@@ -123,10 +145,12 @@ func TestManagerInfoLogsMirrorToStderrWithDebugPrefixWhenDebugEnabled(t *testing
 	var stderr bytes.Buffer
 
 	m := New(Options{
-		StateDir:  stateDir,
-		Stderr:    &stderr,
-		Debug:     true,
-		SessionID: "facefeed",
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		Debug:        true,
+		SessionID:    "facefeed",
+		ProjectRoot:  "/tmp/project-c",
+		BuildVersion: "dev",
 	})
 	t.Cleanup(func() {
 		_ = m.Close()
@@ -146,6 +170,12 @@ func TestManagerInfoLogsMirrorToStderrWithDebugPrefixWhenDebugEnabled(t *testing
 	}
 	if got := record["message"]; got != "resolved config path" {
 		t.Fatalf("expected info message in persistent log, got %#v", got)
+	}
+	if got := record["project_root"]; got != "/tmp/project-c" {
+		t.Fatalf("expected project_root /tmp/project-c, got %#v", got)
+	}
+	if got := record["build_version"]; got != "dev" {
+		t.Fatalf("expected build_version dev, got %#v", got)
 	}
 }
 
