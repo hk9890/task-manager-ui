@@ -2886,6 +2886,143 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	}
 }
 
+func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.SetError(fakes.MethodHealthCheck, domain.GatewayError{
+		Code:      domain.ErrorCodeCommandUnavailable,
+		Operation: "health check",
+		Message:   "bd command is unavailable",
+	})
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := NewModel(services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErr == "" {
+		t.Fatal("expected fatalErr to be set after CommandUnavailable health check, got empty string")
+	}
+}
+
+func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := NewModel(services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErr != "" {
+		t.Fatalf("expected fatalErr to be empty after successful health check, got %q", m.fatalErr)
+	}
+}
+
+func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.SetError(fakes.MethodHealthCheck, domain.GatewayError{
+		Code:    domain.ErrorCodeCommandUnavailable,
+		Message: "bd command is unavailable",
+	})
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := NewModel(services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	view := m.View()
+	if !strings.Contains(view, "beads is not available") {
+		t.Fatalf("expected fatal error title in View(), got %q", view)
+	}
+	if !strings.Contains(view, "bd") {
+		t.Fatalf("expected 'bd' mention in View(), got %q", view)
+	}
+}
+
+func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.SetError(fakes.MethodHealthCheck, domain.GatewayError{
+		Code:    domain.ErrorCodeCommandUnavailable,
+		Message: "bd command is unavailable",
+	})
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := NewModel(services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErr == "" {
+		t.Fatal("precondition: expected fatalErr to be set")
+	}
+
+	// Window resize should update dimensions.
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	if m.width != 120 || m.height != 40 {
+		t.Fatalf("expected width=120 height=40 after resize, got %d %d", m.width, m.height)
+	}
+
+	// Quit key should return tea.Quit.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if cmd == nil {
+		t.Fatal("expected tea.Quit cmd from 'q' key when fatalErr is set, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+
+	// Arbitrary key should be swallowed (no cmd).
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if cmd != nil {
+		t.Fatalf("expected nil cmd for non-quit key when fatalErr is set, got non-nil")
+	}
+}
+
+func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.SetError(fakes.MethodHealthCheck, errors.New("some plain error"))
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := NewModel(services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	// A non-GatewayError does not set fatalErr — app loads normally.
+	if m.fatalErr != "" {
+		t.Fatalf("expected fatalErr to be empty for non-GatewayError, got %q", m.fatalErr)
+	}
+}
+
 func runBatch(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
