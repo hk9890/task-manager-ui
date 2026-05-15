@@ -44,7 +44,7 @@ func NewCLIGateway(runner *CommandRunner) *Gateway {
 // working directory. Returns ErrorCodeCommandUnavailable if bd is not in PATH,
 // ErrorCodeNoDatabaseFound if no database is present, nil on success.
 func (g *Gateway) HealthCheck(ctx context.Context) error {
-	_, err := g.runner.Run(ctx, CommandRequest{Operation: operationHealthCheck, Args: []string{"list", "--json"}})
+	_, err := g.runner.Run(ctx, CommandRequest{Operation: operationHealthCheck, Args: []string{"ping", "--json"}})
 	return err
 }
 

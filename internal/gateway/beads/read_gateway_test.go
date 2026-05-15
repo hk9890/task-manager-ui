@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -949,6 +950,61 @@ func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
 	if got[0].ID != "bw-B" || got[1].ID != "bw-A" {
 		t.Fatalf("expected B before A when sorted by closed_at desc, got %s, %s", got[0].ID, got[1].ID)
 	}
+}
+
+func TestGatewayHealthCheckIssuesPingJSON(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ping", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{"status":"ok","total_ms":42}`)},
+		},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	err := gateway.HealthCheck(context.Background())
+	if err != nil {
+		t.Fatalf("HealthCheck returned unexpected error: %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("expected one command invocation, got %d", len(exec.calls))
+	}
+
+	if len(exec.calls[0]) != 2 || exec.calls[0][0] != "ping" || exec.calls[0][1] != "--json" {
+		t.Fatalf("expected argv [ping --json], got %v", exec.calls[0])
+	}
+}
+
+func TestGatewayHealthCheckNoDatabaseReturnsNoDatabaseFound(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ping", "--json"}): {
+			result: ExecResult{ExitCode: 1, Stderr: []byte("Error: no beads database found")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	err := gateway.HealthCheck(context.Background())
+	assertGatewayErrorCode(t, err, domain.ErrorCodeNoDatabaseFound)
+}
+
+func TestGatewayHealthCheckBdNotFoundReturnsCommandUnavailable(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ping", "--json"}): {
+			err: exec.ErrNotFound,
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	err := gateway.HealthCheck(context.Background())
+	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandUnavailable)
 }
 
 type routeResponse struct {
