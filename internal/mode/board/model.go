@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/dashboard"
@@ -13,6 +14,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/mode"
 	uiboard "github.com/hk9890/beads-workbench/internal/ui/board"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
+	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
 type dashboardsLoadedMsg struct {
@@ -229,7 +231,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the standalone board dashboard.
 func (m *Model) View() string {
-	if m.loading {
+	if m.loading || m.pendingLoads > 0 {
+		total := len(m.sections)
+		loaded := total - m.pendingLoads
+		if total > 0 {
+			return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(
+				fmt.Sprintf("⏳ Loading board (%d / %d sections)…", loaded, total),
+			)
+		}
 		return loading.View(loading.State{Scope: loading.ScopeBoard})
 	}
 	if strings.TrimSpace(m.loadError) != "" {

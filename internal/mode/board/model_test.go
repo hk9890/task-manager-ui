@@ -571,6 +571,67 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	}
 }
 
+func TestBoardModeViewShowsProgressCounterDuringSectionLoads(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
+
+	// Phase 1: before dashboards are known — m.loading=true, sections empty.
+	// Should show the generic loading message (no section count yet).
+	view := m.View()
+	if !strings.Contains(view, "Loading") {
+		t.Fatalf("expected generic loading message before dashboards are known, got %q", view)
+	}
+	if strings.Contains(view, "/ 0 sections") {
+		t.Fatalf("expected no section counter before dashboard definition arrives, got %q", view)
+	}
+
+	// Phase 2: dashboards loaded — sections allocated, pendingLoads=3, m.loading set false.
+	m.loading = false
+	m.sections = []sectionState{
+		{title: "A", loaded: false},
+		{title: "B", loaded: false},
+		{title: "C", loaded: false},
+	}
+	m.pendingLoads = 3
+
+	view = m.View()
+	if !strings.Contains(view, "0 / 3 sections") {
+		t.Fatalf("expected progress counter '0 / 3 sections' at load start, got %q", view)
+	}
+	if !strings.Contains(view, "⏳") {
+		t.Fatalf("expected loading indicator in progress counter, got %q", view)
+	}
+
+	// Phase 3: one section arrives.
+	m.pendingLoads = 2
+	m.sections[0] = sectionState{title: "A", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1"}}}
+
+	view = m.View()
+	if !strings.Contains(view, "1 / 3 sections") {
+		t.Fatalf("expected progress counter '1 / 3 sections' after first section, got %q", view)
+	}
+
+	// Phase 4: second section arrives.
+	m.pendingLoads = 1
+	m.sections[1] = sectionState{title: "B", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2"}}}
+
+	view = m.View()
+	if !strings.Contains(view, "2 / 3 sections") {
+		t.Fatalf("expected progress counter '2 / 3 sections' after second section, got %q", view)
+	}
+
+	// Phase 5: all sections loaded — counter disappears and board renders.
+	m.pendingLoads = 0
+	m.sections[2] = sectionState{title: "C", loaded: true, issues: []domain.IssueSummary{{ID: "bw-3"}}}
+
+	view = m.View()
+	if strings.Contains(view, "/ 3 sections") {
+		t.Fatalf("expected no loading counter once all sections are loaded, got %q", view)
+	}
+}
+
 func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 	t.Helper()
 
