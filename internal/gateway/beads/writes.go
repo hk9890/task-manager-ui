@@ -44,6 +44,7 @@ func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput
 	stdout, err := runner.Run(ctx, CommandRequest{
 		Operation: opCreateIssue,
 		Args:      args,
+		IsWrite:   true,
 	})
 	if err != nil {
 		return domain.CreateIssueResult{}, err
@@ -101,6 +102,7 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 	_, err = runner.Run(ctx, CommandRequest{
 		Operation: opUpdateIssue,
 		Args:      args,
+		IsWrite:   true,
 	})
 
 	return err
@@ -124,6 +126,7 @@ func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.C
 	_, err = runner.Run(ctx, CommandRequest{
 		Operation: opCloseIssue,
 		Args:      args,
+		IsWrite:   true,
 	})
 
 	return err
@@ -141,6 +144,7 @@ func (g *Gateway) AddComment(ctx context.Context, issueID string, input domain.A
 	_, err = runner.Run(ctx, CommandRequest{
 		Operation: opAddComment,
 		Args:      []string{"comments", "add", issueID, input.Body},
+		IsWrite:   true,
 	})
 
 	return err

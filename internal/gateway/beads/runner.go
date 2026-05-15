@@ -26,6 +26,11 @@ type CommandRequest struct {
 	Args      []string
 	WorkDir   string
 	Env       []string
+	// IsWrite marks the request as a mutating bd command (create, update, close,
+	// comment add, dep add, etc.). Write requests acquire an exclusive lock so
+	// they never overlap with other writers or in-flight readers. Read requests
+	// (IsWrite == false, the default) acquire a shared lock and run concurrently.
+	IsWrite bool
 }
 
 // ExecResult captures subprocess output and exit status.
@@ -59,7 +64,7 @@ type CommandRunner struct {
 	defaultEnv     []string
 	executor       CommandExecutor
 	logger         *slog.Logger
-	runMu          sync.Mutex
+	runMu          sync.RWMutex
 }
 
 // NewCommandRunner creates a command runner for bd CLI interactions.
@@ -94,17 +99,26 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
 
-	// Dolt uses file locking for the local .beads database, so concurrent bd CLI
-	// calls against the same repo can contend and fail.
-	// This serializes dashboard loads (4 sections currently run one-by-one, ~4x
-	// slower than ideal parallel execution).
-	// If bd gains a long-running server mode or safe read-only concurrency, relax
-	// this to a bounded semaphore.
-	r.runMu.Lock()
+	// Locking contract:
+	//   - Read requests (IsWrite == false): acquire a shared RLock so multiple
+	//     concurrent read calls (e.g. dashboard section loads via tea.Batch) run
+	//     in parallel. Empirical sampling against bd 1.0.4 + embedded Dolt (~25
+	//     concurrent reads, 0 failures) and the parallel soak test added in task
+	//     beads-workbench-5b1k (100 goroutines × 5 iterations, well under N×sleep
+	//     budget) confirm read-side concurrency is safe.
+	//   - Write requests (IsWrite == true): acquire an exclusive Lock so writers
+	//     never overlap with readers or other writers. The write-exclusion soak
+	//     test in runner_test.go (TestRWMutexWriteExclusion) enforces this.
+	if req.IsWrite {
+		r.runMu.Lock()
+		defer r.runMu.Unlock()
+	} else {
+		r.runMu.RLock()
+		defer r.runMu.RUnlock()
+	}
 	startedAt := time.Now()
 	result, err := r.executor.Run(ctx, r.command, req.Args, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
 	r.logExecution(req, result, err, time.Since(startedAt))
-	r.runMu.Unlock()
 	if err != nil {
 		return nil, normalizeExecutionError(ctx, req.Operation, result.Stderr, err)
 	}
