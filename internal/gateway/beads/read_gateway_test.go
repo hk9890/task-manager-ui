@@ -356,7 +356,7 @@ func TestGatewaySearchIssuesBuildsCommandAndReturnsPage(t *testing.T) {
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Total != 2 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" || got.Results[0].Issue.Assignee != "bob" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 1 || got.Metadata.Completeness != domain.SearchResultCompletenessMaybeMore || got.Metadata.Source != domain.SearchResultSourceBDSearch || got.Metadata.Notice == "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" || got.Results[0].Issue.Assignee != "bob" {
 		t.Fatalf("unexpected search result page: %#v", got)
 	}
 }
@@ -380,7 +380,7 @@ func TestGatewaySearchIssuesEmptyTextUsesListCommandFallback(t *testing.T) {
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Total != 2 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 1 || got.Metadata.Completeness != domain.SearchResultCompletenessMaybeMore || got.Metadata.Source != domain.SearchResultSourceBDListFallback || got.Metadata.Notice == "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" {
 		t.Fatalf("unexpected fallback search result page: %#v", got)
 	}
 }
@@ -415,7 +415,7 @@ func TestGatewaySearchIssuesEmptyTextWithFiltersUsesListCommandFallback(t *testi
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Total != 2 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 1 || got.Metadata.Completeness != domain.SearchResultCompletenessMaybeMore || got.Metadata.Source != domain.SearchResultSourceBDListFallback || got.Metadata.Notice == "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-2" {
 		t.Fatalf("unexpected filtered fallback search result page: %#v", got)
 	}
 }
@@ -451,7 +451,7 @@ func TestGatewaySearchIssuesWorkStateReadyUsesReadyAndLocalFilters(t *testing.T)
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Total != 1 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessExact || got.Metadata.Source != domain.SearchResultSourceReadyFilter || got.Metadata.Notice != "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
 		t.Fatalf("unexpected ready-filtered search result page: %#v", got)
 	}
 }
@@ -487,8 +487,31 @@ func TestGatewaySearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters(t *testin
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Total != 1 || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessExact || got.Metadata.Source != domain.SearchResultSourceBlockedFilter || got.Metadata.Notice != "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
 		t.Fatalf("unexpected blocked-filtered search result page: %#v", got)
+	}
+}
+
+func TestGatewaySearchIssuesWithoutLimitMarksBackendResultsPartialNotExact(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"search", "gateway", "--json", "--status", "all"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{Text: "gateway"})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessPartial || got.Metadata.Source != domain.SearchResultSourceBDSearch || got.Metadata.Notice == "" {
+		t.Fatalf("unexpected unlimited search metadata: %#v", got.Metadata)
 	}
 }
 

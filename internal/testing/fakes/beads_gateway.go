@@ -200,7 +200,7 @@ func (f *FakeBeadsGateway) SearchIssues(_ context.Context, query domain.SearchIs
 	}
 
 	resultsCopy := append([]domain.SearchResult(nil), f.SearchIssuesResponse.Results...)
-	return domain.SearchResultPage{Results: resultsCopy, Total: f.SearchIssuesResponse.Total}, nil
+	return domain.SearchResultPage{Results: resultsCopy, Metadata: f.SearchIssuesResponse.Metadata}, nil
 }
 
 func (f *FakeBeadsGateway) CreateIssue(_ context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {

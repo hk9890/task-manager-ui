@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.4.0]
+
+### Added
+
+- Structured logging foundation using `slog` with per-component loggers and runtime diagnostics routed through a central log manager
+- Monitoring documentation (`docs/MONITORING.md`) recording the logging architecture and stderr/debug diagnostics model
+- Search result metadata: completeness classification (exact/capped/partial), source tracking, and backend notices surfaced in the results panel
+- Inline search reload — search results remain visible while a new query runs in the background
+
+### Changed
+
+- Search query pane now shows a status-aware multi-line summary (applied query, draft changes, reload state) instead of truncating raw query text
+- Search results panel renders contextual banners for reload-in-progress, stale results on refresh failure, and completeness hints
+- Empty search states use specific messages that distinguish "no search has run yet" from "no matches for this query"
+- Result count badge in the results header includes a completeness label (exact / capped / partial) when available
+- Startup `logManager` is now initialized after CWD validation, eliminating guarded nil checks in the early-exit paths
+
+### Fixed
+
+- Startup error logging now uses the resolved `startupLogger` consistently instead of conditionally falling back to stderr after the log manager was already available
+
 ## [v0.3.0]
 
 ### Added

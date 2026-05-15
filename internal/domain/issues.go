@@ -66,8 +66,36 @@ type SearchResult struct {
 	Snippet string
 }
 
+// SearchResultCompleteness describes whether a search page is complete.
+type SearchResultCompleteness string
+
+const (
+	SearchResultCompletenessExact     SearchResultCompleteness = "exact"
+	SearchResultCompletenessMaybeMore SearchResultCompleteness = "maybe_more"
+	SearchResultCompletenessPartial   SearchResultCompleteness = "partial"
+)
+
+// SearchResultSource identifies how the gateway produced a search page.
+type SearchResultSource string
+
+const (
+	SearchResultSourceBDSearch       SearchResultSource = "bd_search"
+	SearchResultSourceBDListFallback SearchResultSource = "bd_list_fallback"
+	SearchResultSourceReadyFilter    SearchResultSource = "bd_ready_filtered"
+	SearchResultSourceBlockedFilter  SearchResultSource = "bd_blocked_filtered"
+)
+
+// SearchResultMetadata carries operator-facing page metadata.
+type SearchResultMetadata struct {
+	ReturnedCount  int
+	RequestedLimit int
+	Completeness   SearchResultCompleteness
+	Source         SearchResultSource
+	Notice         string
+}
+
 // SearchResultPage represents a paged search response from the gateway.
 type SearchResultPage struct {
-	Results []SearchResult
-	Total   int
+	Results  []SearchResult
+	Metadata SearchResultMetadata
 }

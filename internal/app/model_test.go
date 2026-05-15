@@ -211,6 +211,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 	}
 
 	m := NewModel(services)
+	m.width = 200
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -280,7 +281,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if view := m.View(); !strings.Contains(view, "No results found.") {
+	if view := m.View(); !strings.Contains(view, "No matches for \"xy\".") {
 		t.Fatalf("expected search empty state in shell view, got:\n%s", view)
 	}
 
@@ -469,6 +470,7 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	}
 
 	m.markSurfaceDirty(mode.Search)
+	m.markSurfaceDirty(mode.Search)
 	gateway.ResetCalls()
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
@@ -623,6 +625,113 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 		t.Fatalf("expected search focus regain to refresh only active search surface, calls=%#v", gateway.Calls)
 	}
 	ui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+}
+
+func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{
+		Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}}},
+		Metadata: domain.SearchResultMetadata{ReturnedCount: 7, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore},
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	header := m.renderHeader()
+	if !strings.Contains(header, "Search: 7 results") {
+		t.Fatalf("expected search header to use returned-count metadata, got:\n%s", header)
+	}
+	if !strings.Contains(header, "Selected: bw-9 (open)") {
+		t.Fatalf("expected header to keep active search selection, got:\n%s", header)
+	}
+	if got := m.search.SessionState(); got.DraftQuery != "xy" || got.AppliedQuery != "x" {
+		t.Fatalf("expected app shell to preserve draft/applied query split, got %#v", got)
+	}
+}
+
+func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
+	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}}}}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}, Description: "cached detail"}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := NewModel(services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.detail.Detail.Summary.ID != "bw-9" {
+		t.Fatalf("expected search selection detail to load, got %#v", m.detail.Detail)
+	}
+	m.renderBody()
+	if got := m.search.SessionState(); len(got.Page.Results) != 1 {
+		t.Fatalf("expected search page state present before reload, got %#v", got)
+	}
+
+	gateway.ResetCalls()
+	cmd = m.search.AutoRefresh()
+	if cmd == nil {
+		t.Fatal("expected search auto-refresh command")
+	}
+	if session := m.search.SessionState(); !session.Loading || !session.Reloading {
+		t.Fatalf("expected search session to mark reload in flight, got %#v", session)
+	}
+	gateway.SetError(fakes.MethodSearchIssues, errors.New("refresh boom"))
+
+	m = applyMessages(t, m, runBatch(cmd))
+	m.renderBody()
+	if got := m.search.SessionState(); got.Error != "refresh boom" || len(got.Page.Results) != 1 {
+		t.Fatalf("expected last search page retained after refresh failure, got %#v", got)
+	}
+	if !strings.Contains(m.View(), "cached detail") {
+		t.Fatalf("expected cached preview detail retained after refresh failure, got:\n%s", m.View())
+	}
+	if !strings.Contains(m.View(), "refresh boom") || !strings.Contains(m.View(), "Search result") || !strings.Contains(m.View(), "Refresh failed; showing last loaded") || !strings.Contains(m.View(), "Showing results for \"x\".") {
+		t.Fatalf("expected shell view to preserve search context on refresh failure, got:\n%s", m.View())
+	}
 }
 
 func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {

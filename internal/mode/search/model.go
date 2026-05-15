@@ -16,13 +16,24 @@ import (
 const defaultSearchLimit = 40
 
 type searchLoadedMsg struct {
-	issues []domain.IssueSummary
-	err    error
+	appliedQuery string
+	page         domain.SearchResultPage
+	err          error
 }
 
 type selectionAnchor struct {
 	issueID string
 	row     int
+}
+
+// SessionState captures the current search session state for shell integration.
+type SessionState struct {
+	DraftQuery   string
+	AppliedQuery string
+	Page         domain.SearchResultPage
+	Loading      bool
+	Reloading    bool
+	Error        string
 }
 
 // Model is the standalone search mode controller.
@@ -33,13 +44,16 @@ type Model struct {
 	width  int
 	height int
 
-	loading bool
-	errText string
+	loading     bool
+	reloading   bool
+	hasLoadedPage bool
+	errText     string
 
-	query string
-	focus uisearch.FocusPane
+	draftQuery   string
+	appliedQuery string
+	focus        uisearch.FocusPane
 
-	results     []domain.IssueSummary
+	page        domain.SearchResultPage
 	selectedRow int
 	typing      bool
 
@@ -75,6 +89,7 @@ func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings
 // Init loads default all-issues search results for empty query.
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
+	m.reloading = false
 	m.errText = ""
 	m.typing = false
 	return loadSearchCmd(m.gateway, domain.SearchIssuesQuery{Limit: defaultSearchLimit, Offset: 0})
@@ -88,20 +103,25 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	case searchLoadedMsg:
 		m.loading = false
+		m.reloading = false
 		m.typing = false
 		anchor := m.pendingSelectionAnchor
 		m.pendingSelectionAnchor = nil
 		if msg.err != nil {
 			m.errText = msg.err.Error()
-			m.results = nil
-			m.selectedRow = 0
-			m.selectedDetail = domain.IssueDetail{}
-			m.selectedDetailLoading = false
-			return m.selectionChangedCmd()
+			if !m.hasResults() {
+				m.selectedRow = 0
+				m.selectedDetail = domain.IssueDetail{}
+				m.selectedDetailLoading = false
+				return m.selectionChangedCmd()
+			}
+			return nil
 		}
 
 		m.errText = ""
-		m.results = msg.issues
+		m.appliedQuery = msg.appliedQuery
+		m.page = msg.page
+		m.hasLoadedPage = true
 		m.selectedDetailLoading = false
 		if anchor != nil {
 			m.restoreSelectionFromAnchor(anchor)
@@ -135,28 +155,28 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		if m.focus != uisearch.FocusQuery {
 			return nil
 		}
-		if m.query == "" {
+		if m.draftQuery == "" {
 			return nil
 		}
-		runes := []rune(m.query)
-		m.query = string(runes[:len(runes)-1])
+		runes := []rune(m.draftQuery)
+		m.draftQuery = string(runes[:len(runes)-1])
 		m.typing = true
 		return nil
 	case tea.KeyCtrlU:
 		if m.focus != uisearch.FocusQuery {
 			return nil
 		}
-		if m.query == "" {
+		if m.draftQuery == "" {
 			return nil
 		}
-		m.query = ""
+		m.draftQuery = ""
 		m.typing = false
 		return nil
 	}
 
 	switch {
 	case msg.Type == tea.KeyRunes && m.focus == uisearch.FocusQuery:
-		m.query += string(msg.Runes)
+		m.draftQuery += string(msg.Runes)
 		m.typing = true
 		return nil
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusQuery:
@@ -193,7 +213,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveDown, msg):
 		if m.focus == uisearch.FocusQuery {
-			if len(m.results) > 0 {
+			if m.hasResults() {
 				m.focus = uisearch.FocusResults
 			}
 			return nil
@@ -267,7 +287,7 @@ func (m *Model) cycleFocus(delta int) {
 	if idx >= len(order) {
 		idx = 0
 	}
-	if len(m.results) == 0 && order[idx] != uisearch.FocusQuery {
+	if !m.hasResults() && order[idx] != uisearch.FocusQuery {
 		m.focus = uisearch.FocusQuery
 		return
 	}
@@ -278,24 +298,23 @@ func (m *Model) cycleFocus(delta int) {
 }
 
 func (m *Model) triggerSearch() tea.Cmd {
-	return m.triggerSearchWithAnchor(nil)
+	return m.triggerSearchWithAnchor(strings.TrimSpace(m.draftQuery), nil)
 }
 
 func (m *Model) triggerSearchPreservingSelection() tea.Cmd {
 	anchor := m.captureSelectionAnchor()
-	return m.triggerSearchWithAnchor(anchor)
+	return m.triggerSearchWithAnchor(strings.TrimSpace(m.appliedQuery), anchor)
 }
 
-func (m *Model) triggerSearchWithAnchor(anchor *selectionAnchor) tea.Cmd {
+func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAnchor) tea.Cmd {
 	query := domain.SearchIssuesQuery{
-		Text:   strings.TrimSpace(m.query),
+		Text:   queryText,
 		Limit:  defaultSearchLimit,
 		Offset: 0,
 	}
 	m.loading = true
+	m.reloading = m.hasLoadedPage
 	m.errText = ""
-	m.selectedDetailLoading = true
-	m.selectedDetail = domain.IssueDetail{}
 	m.pendingSelectionAnchor = anchor
 	return loadSearchCmd(m.gateway, query)
 }
@@ -304,11 +323,14 @@ func (m *Model) triggerSearchWithAnchor(anchor *selectionAnchor) tea.Cmd {
 func (m *Model) View() string {
 	return uisearch.Render(uisearch.State{
 		Loading:               m.loading,
+		Reloading:             m.reloading,
 		Error:                 m.errText,
-		Query:                 m.query,
+		Query:                 m.draftQuery,
+		AppliedQuery:          m.appliedQuery,
 		Focus:                 m.focus,
 		Typing:                m.typing,
-		Results:               m.results,
+		Results:               m.results(),
+		Metadata:              m.page.Metadata,
 		SelectedID:            m.selectedIssueID(),
 		SelectedDetail:        m.selectedDetail,
 		DetailLoading:         m.selectedDetailLoading,
@@ -350,7 +372,22 @@ func (m *Model) AutoRefresh() tea.Cmd {
 
 // ResultCount returns the current result count.
 func (m *Model) ResultCount() int {
-	return len(m.results)
+	if m.page.Metadata.ReturnedCount > 0 {
+		return m.page.Metadata.ReturnedCount
+	}
+	return len(m.page.Results)
+}
+
+// SessionState returns the current search session snapshot.
+func (m *Model) SessionState() SessionState {
+	return SessionState{
+		DraftQuery:   m.draftQuery,
+		AppliedQuery: m.appliedQuery,
+		Page:         cloneSearchResultPage(m.page),
+		Loading:      m.loading,
+		Reloading:    m.reloading,
+		Error:        m.errText,
+	}
 }
 
 // CurrentSelection returns the current search issue selection.
@@ -359,7 +396,7 @@ func (m *Model) CurrentSelection() *mode.Selection {
 }
 
 func (m *Model) moveSelection(delta int) bool {
-	if len(m.results) == 0 {
+	if !m.hasResults() {
 		return false
 	}
 	previous := m.selectedRow
@@ -369,7 +406,7 @@ func (m *Model) moveSelection(delta int) bool {
 }
 
 func (m *Model) normalizeSelection() {
-	if len(m.results) == 0 {
+	if !m.hasResults() {
 		m.selectedRow = 0
 		m.selectedDetail = domain.IssueDetail{}
 		m.selectedDetailLoading = false
@@ -378,8 +415,8 @@ func (m *Model) normalizeSelection() {
 	if m.selectedRow < 0 {
 		m.selectedRow = 0
 	}
-	if m.selectedRow >= len(m.results) {
-		m.selectedRow = len(m.results) - 1
+	if m.selectedRow >= len(m.page.Results) {
+		m.selectedRow = len(m.page.Results) - 1
 	}
 }
 
@@ -428,8 +465,8 @@ func (m *Model) restoreSelectionFromAnchor(anchor *selectionAnchor) {
 		return
 	}
 	if anchor.issueID != "" {
-		for idx, issue := range m.results {
-			if issue.ID == anchor.issueID {
+		for idx, result := range m.page.Results {
+			if result.Issue.ID == anchor.issueID {
 				m.selectedRow = idx
 				m.normalizeSelection()
 				return
@@ -441,10 +478,10 @@ func (m *Model) restoreSelectionFromAnchor(anchor *selectionAnchor) {
 }
 
 func (m *Model) currentSelection() *mode.Selection {
-	if len(m.results) == 0 || m.selectedRow < 0 || m.selectedRow >= len(m.results) {
+	if !m.hasResults() || m.selectedRow < 0 || m.selectedRow >= len(m.page.Results) {
 		return nil
 	}
-	selection := mode.Selection{Issue: m.results[m.selectedRow]}
+	selection := mode.Selection{Issue: m.page.Results[m.selectedRow].Issue}
 	return &selection
 }
 
@@ -460,17 +497,13 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 
 func loadSearchCmd(gateway beads.BeadsGateway, query domain.SearchIssuesQuery) tea.Cmd {
 	return func() tea.Msg {
+		appliedQuery := strings.TrimSpace(query.Text)
 		page, err := gateway.SearchIssues(context.Background(), query)
 		if err != nil {
-			return searchLoadedMsg{err: err}
+			return searchLoadedMsg{appliedQuery: appliedQuery, err: err}
 		}
 
-		issues := make([]domain.IssueSummary, 0, len(page.Results))
-		for _, result := range page.Results {
-			issues = append(issues, result.Issue)
-		}
-
-		return searchLoadedMsg{issues: issues}
+		return searchLoadedMsg{appliedQuery: appliedQuery, page: page}
 	}
 }
 
@@ -521,6 +554,23 @@ func shellKeysPassThrough(keys config.ResolvedKeyBindings, msg tea.KeyMsg) bool 
 func (m *Model) SetSelectedDetail(detail domain.IssueDetail, loading bool) {
 	m.selectedDetail = detail
 	m.selectedDetailLoading = loading
+}
+
+func (m *Model) results() []domain.IssueSummary {
+	issues := make([]domain.IssueSummary, 0, len(m.page.Results))
+	for _, result := range m.page.Results {
+		issues = append(issues, result.Issue)
+	}
+	return issues
+}
+
+func (m *Model) hasResults() bool {
+	return len(m.page.Results) > 0
+}
+
+func cloneSearchResultPage(page domain.SearchResultPage) domain.SearchResultPage {
+	results := append([]domain.SearchResult(nil), page.Results...)
+	return domain.SearchResultPage{Results: results, Metadata: page.Metadata}
 }
 
 // ConsumeOpenStatusDialogIntent reports and clears pending status-dialog intent.

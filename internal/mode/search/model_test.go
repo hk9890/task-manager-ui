@@ -23,7 +23,7 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	t.Parallel()
 
 	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1}}}, Total: 1}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1}}}, Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact}}
 
 	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -44,7 +44,7 @@ func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	t.Parallel()
 
 	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1}}}, Total: 1}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1}}}, Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact}}
 	m := initModel(gateway)
 
 	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
@@ -197,20 +197,20 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View()
-		if !strings.Contains(view, "Search failed") || !strings.Contains(view, "boom") {
+		if !strings.Contains(view, "Search failed.") || !strings.Contains(view, "boom") || !strings.Contains(view, "Last search for the current search failed.") {
 			t.Fatalf("expected error state in view, got:\n%s", view)
 		}
 	})
 
 	t.Run("no results state", func(t *testing.T) {
 		m := NewModel(newSearchFakeGateway())
-		m.query = "xyz"
-		cmd := m.Update(searchLoadedMsg{issues: nil})
+		m.draftQuery = "xyz"
+		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
 		if cmd != nil {
 			_ = cmd()
 		}
 
-		if !strings.Contains(m.View(), "No results found.") {
+		if !strings.Contains(m.View(), "No matches for \"xyz\".") {
 			t.Fatalf("expected no-results state in view, got:\n%s", m.View())
 		}
 	})
@@ -301,8 +301,8 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 	m = applyMessages(m, drainCmd(cmd))
 
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
-	if m.query != "x" {
-		t.Fatalf("expected reload to preserve query, got %q", m.query)
+	if m.draftQuery != "x" {
+		t.Fatalf("expected reload to preserve query, got %q", m.draftQuery)
 	}
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected reload to preserve selected result, got %#v", got)
@@ -370,11 +370,82 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 	m = applyMessages(m, drainCmd(cmd))
 
 	testui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
-	if m.query != "x" {
-		t.Fatalf("expected auto refresh to preserve query, got %q", m.query)
+	if m.draftQuery != "x" {
+		t.Fatalf("expected auto refresh to preserve query, got %q", m.draftQuery)
+	}
+	if got := m.SessionState().AppliedQuery; got != "x" {
+		t.Fatalf("expected applied query to remain x after auto refresh, got %q", got)
 	}
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected auto refresh to preserve selected result, got %#v", got)
+	}
+}
+
+func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{
+		Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}}},
+		Metadata: domain.SearchResultMetadata{ReturnedCount: 1, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore, Notice: "first page"},
+	}
+	m := initModel(gateway)
+
+	pressAndResolve(m, testui.SearchTypeTextKeys("abc")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	session := m.SessionState()
+	if session.DraftQuery != "abc" || session.AppliedQuery != "abc" {
+		t.Fatalf("expected synced draft/applied query after search, got %#v", session)
+	}
+	if len(session.Page.Results) != 1 || session.Page.Metadata.Notice != "first page" {
+		t.Fatalf("expected page metadata/results captured in session, got %#v", session.Page)
+	}
+
+	cmd := m.Reload()
+	if cmd == nil {
+		t.Fatal("expected reload command")
+	}
+	session = m.SessionState()
+	if !session.Loading || !session.Reloading {
+		t.Fatalf("expected reload state while request in flight, got %#v", session)
+	}
+	if len(session.Page.Results) != 1 {
+		t.Fatalf("expected prior results retained during reload, got %#v", session.Page.Results)
+	}
+
+	m = applyMessages(m, []tea.Msg{searchLoadedMsg{appliedQuery: "abc", err: errors.New("reload failed")}})
+	session = m.SessionState()
+	if session.Error != "reload failed" {
+		t.Fatalf("expected reload error captured, got %#v", session)
+	}
+	if len(session.Page.Results) != 1 {
+		t.Fatalf("expected last loaded results retained on reload error, got %#v", session.Page.Results)
+	}
+	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
+		t.Fatalf("expected selection retained on reload error, got %#v", got)
+	}
+	if !strings.Contains(m.View(), "Refresh failed; showing last loaded") || !strings.Contains(m.View(), "First") || !strings.Contains(m.View(), "Showing results for \"abc\".") {
+		t.Fatalf("expected view to preserve rows and show refresh error, got:\n%s", m.View())
+	}
+}
+
+func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	m := initModel(gateway)
+
+	pressAndResolve(m, testui.SearchTypeTextKeys("foo")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+
+	session := m.SessionState()
+	if session.DraftQuery != "foox" {
+		t.Fatalf("expected draft query to include unsent edit, got %#v", session)
+	}
+	if session.AppliedQuery != "foo" {
+		t.Fatalf("expected applied query to remain last submitted value, got %#v", session)
 	}
 }
 

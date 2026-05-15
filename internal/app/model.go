@@ -782,6 +782,11 @@ func (m *Model) syncSearchPreviewDetailState() {
 	if m.search == nil {
 		return
 	}
+	session := m.search.SessionState()
+	if len(session.Page.Results) == 0 {
+		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
+		return
+	}
 	selection := m.selectedByMode[mode.Search]
 	if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
 		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
@@ -849,14 +854,18 @@ func (m Model) searchIsLoading() bool {
 	if m.search == nil {
 		return false
 	}
-	return m.search.IsLoading()
+	return m.search.SessionState().Loading
 }
 
 func (m Model) searchResultCount() int {
 	if m.search == nil {
 		return 0
 	}
-	return m.search.ResultCount()
+	session := m.search.SessionState()
+	if session.Page.Metadata.ReturnedCount > 0 {
+		return session.Page.Metadata.ReturnedCount
+	}
+	return len(session.Page.Results)
 }
 
 func (m *Model) maybeAutoRefreshActiveSurfaceCmd() tea.Cmd {
@@ -1182,10 +1191,10 @@ func (m Model) headerContextVariants() []string {
 	}
 
 	if m.active == mode.Search {
-		variants = append([]string{
+		variants = append(variants, []string{
 			fmt.Sprintf("Search · %s · %s", selectedLong, loadingSummary),
 			fmt.Sprintf("Search · %s", selectedShort),
-		}, variants...)
+		}...)
 	}
 
 	return variants

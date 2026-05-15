@@ -71,3 +71,33 @@ func TestFakeBeadsGatewayResetCalls(t *testing.T) {
 		t.Fatalf("expected no calls after reset, got %d", len(fake.Calls))
 	}
 }
+
+func TestFakeBeadsGatewaySearchIssuesReturnsMetadataCopy(t *testing.T) {
+	t.Parallel()
+
+	fake := NewFakeBeadsGateway()
+	fake.SearchIssuesResponse = domain.SearchResultPage{
+		Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "one"}}},
+		Metadata: domain.SearchResultMetadata{
+			ReturnedCount:  1,
+			RequestedLimit: 10,
+			Completeness:   domain.SearchResultCompletenessMaybeMore,
+			Source:         domain.SearchResultSourceBDSearch,
+			Notice:         "test notice",
+		},
+	}
+
+	got, err := fake.SearchIssues(context.Background(), domain.SearchIssuesQuery{})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if got.Metadata != fake.SearchIssuesResponse.Metadata {
+		t.Fatalf("expected metadata copy, got %#v want %#v", got.Metadata, fake.SearchIssuesResponse.Metadata)
+	}
+
+	got.Results[0].Issue.ID = "mutated"
+	if fake.SearchIssuesResponse.Results[0].Issue.ID != "bw-1" {
+		t.Fatalf("expected results copy isolation, fake mutated to %#v", fake.SearchIssuesResponse.Results)
+	}
+}

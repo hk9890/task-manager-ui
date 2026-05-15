@@ -16,6 +16,7 @@ const (
 	defaultSearchWidth        = 100
 	defaultSearchHeight       = 24
 	searchColumnGap           = 2
+	searchQueryHeight         = 5
 	searchWideMinWidth        = 110
 	searchRailMinWidthWide    = 38
 	searchRailMaxWidthWide    = 52
@@ -40,14 +41,17 @@ const (
 
 // State is the UI renderer input for search mode.
 type State struct {
-	Loading bool
-	Error   string
+	Loading   bool
+	Reloading bool
+	Error     string
 
-	Query  string
-	Focus  FocusPane
-	Typing bool
+	Query        string
+	AppliedQuery string
+	Focus        FocusPane
+	Typing       bool
 
 	Results        []domain.IssueSummary
+	Metadata       domain.SearchResultMetadata
 	SelectedID     string
 	SelectedDetail domain.IssueDetail
 	DetailLoading  bool
@@ -60,7 +64,7 @@ type State struct {
 
 // Render renders the standalone search view.
 func Render(state State) string {
-	if state.Loading {
+	if state.Loading && len(state.Results) == 0 {
 		return loading.View(loading.State{Scope: loading.ScopeSearch})
 	}
 
@@ -84,16 +88,16 @@ func Render(state State) string {
 
 func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, height int) string {
 	railWidth, contentWidth, metadataWidth := splitWideWidths(width)
-	queryHeight := 3
+	queryHeight := searchQueryHeight
 	resultsHeight := max(6, height-queryHeight)
 
-	queryContent := renderQueryContent(state.Query, state.Focus == FocusQuery)
+	queryContent := renderQueryContent(state, railWidth-2)
 	queryBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              railWidth,
 		Height:             queryHeight,
 		TopLeft:            "Search",
-		TopRight:           queryStatusHint(state),
-		Content:            []string{styles.TruncateString(queryContent, railWidth-2)},
+		TopRight:           queryStatusBadge(state),
+		Content:            queryContent,
 		Focused:            state.Focus == FocusQuery,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -102,7 +106,7 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 		Width:              railWidth,
 		Height:             resultsHeight,
 		TopLeft:            "Results",
-		TopRight:           resultCountTitle(state.Results),
+		TopRight:           resultCountTitle(state),
 		Content:            renderResultsContent(state, railWidth-2),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -124,17 +128,17 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 
 func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, height int) string {
 	leftWidth, rightWidth := splitNarrowWidths(width)
-	queryHeight := 3
+	queryHeight := searchQueryHeight
 	resultsHeight := max(6, height-queryHeight)
 	contentHeight, metadataHeight := splitNarrowRightHeights(height)
 
-	queryContent := renderQueryContent(state.Query, state.Focus == FocusQuery)
+	queryContent := renderQueryContent(state, leftWidth-2)
 	queryBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              leftWidth,
 		Height:             queryHeight,
 		TopLeft:            "Search",
-		TopRight:           queryStatusHint(state),
-		Content:            []string{styles.TruncateString(queryContent, leftWidth-2)},
+		TopRight:           queryStatusBadge(state),
+		Content:            queryContent,
 		Focused:            state.Focus == FocusQuery,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -143,7 +147,7 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 		Width:              leftWidth,
 		Height:             resultsHeight,
 		TopLeft:            "Results",
-		TopRight:           resultCountTitle(state.Results),
+		TopRight:           resultCountTitle(state),
 		Content:            renderResultsContent(state, leftWidth-2),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -203,13 +207,21 @@ func selectedSummary(results []domain.IssueSummary, selectedID string) (domain.I
 	return domain.IssueSummary{}, false
 }
 
-func renderQueryContent(query string, focused bool) string {
+func renderQueryContent(state State, width int) []string {
+	return []string{
+		styles.TruncateString(renderQueryInputLine(state.Query, state.Focus == FocusQuery), width),
+		styles.TruncateString(queryStatusCopy(state), width),
+		styles.TruncateString(queryNextActionHint(state), width),
+	}
+}
+
+func renderQueryInputLine(query string, focused bool) string {
 	value := strings.TrimSpace(query)
 	if value == "" {
 		if focused {
 			return "│"
 		}
-		return "Type query, press Enter to search…"
+		return "Type query, then press Enter."
 	}
 	if focused {
 		return value + "│"
@@ -217,42 +229,139 @@ func renderQueryContent(query string, focused bool) string {
 	return value
 }
 
-func queryStatusHint(state State) string {
-	if strings.TrimSpace(state.Error) != "" {
-		return "error"
+func queryStatusBadge(state State) string {
+	if isInlineReload(state) {
+		return "reload"
 	}
-	if state.Typing {
-		return "ready"
+	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
+		return "failed"
 	}
-	if strings.TrimSpace(state.Query) == "" {
-		return "text"
+	if hasDraftChanges(state) {
+		return "draft"
 	}
-	return "ready"
+	if hasSearchContext(state) {
+		return "shown"
+	}
+	return "idle"
 }
 
-func resultCountTitle(results []domain.IssueSummary) string {
-	if len(results) == 0 {
-		return "0"
+func queryStatusCopy(state State) string {
+	switch {
+	case isInlineReload(state):
+		return fmt.Sprintf("Refreshing results for %s.", searchScopeLabel(state))
+	case strings.TrimSpace(state.Error) != "" && len(state.Results) == 0:
+		return fmt.Sprintf("Last search for %s failed.", searchScopeLabel(state))
+	case hasDraftChanges(state) && strings.TrimSpace(state.AppliedQuery) != "":
+		return fmt.Sprintf("Results still show %q.", strings.TrimSpace(state.AppliedQuery))
+	case hasDraftChanges(state):
+		return "Draft query is not running yet."
+	case len(state.Results) > 0 && strings.TrimSpace(state.AppliedQuery) == "":
+		return "Showing default all-issues results."
+	case len(state.Results) > 0:
+		return fmt.Sprintf("Showing results for %q.", strings.TrimSpace(state.AppliedQuery))
+	case strings.TrimSpace(state.AppliedQuery) != "":
+		return fmt.Sprintf("No matches for %q yet.", strings.TrimSpace(state.AppliedQuery))
+	default:
+		return "No search has run yet."
 	}
-	return fmt.Sprintf("%d", len(results))
+}
+
+func queryNextActionHint(state State) string {
+	switch {
+	case isInlineReload(state):
+		return "Wait for refresh or keep browsing the stale results."
+	case strings.TrimSpace(state.Error) != "" && len(state.Results) == 0:
+		return "Edit the query, then press Enter to retry."
+	case hasDraftChanges(state):
+		return "Press Enter to run the current draft query."
+	case len(state.Results) > 0 && strings.TrimSpace(state.AppliedQuery) == "":
+		return "Type to refine these default results, then press Enter."
+	case len(state.Results) > 0:
+		return "Use arrows to browse results; Enter on a result opens detail."
+	case strings.TrimSpace(state.AppliedQuery) != "":
+		return "Try broader terms or clear the query, then press Enter."
+	default:
+		return "Type query text, then press Enter to search."
+	}
+}
+
+func resultCountTitle(state State) string {
+	count := displayedResultCount(state)
+	badge := strings.TrimSpace(resultCompletenessBadge(state))
+	if badge == "" {
+		return fmt.Sprintf("%d", count)
+	}
+	return fmt.Sprintf("%d %s", count, badge)
 }
 
 func renderResultsContent(state State, width int) []string {
-	if strings.TrimSpace(state.Error) != "" {
-		return []string{
-			styles.TruncateString("Search failed", width),
+	banner := renderResultsBanner(state, width)
+	body := renderResultsBody(state, width)
+	if len(banner) == 0 {
+		return body
+	}
+	if len(body) == 0 {
+		return banner
+	}
+	return append(append(banner, ""), body...)
+}
+
+func renderResultsBanner(state State, width int) []string {
+	lines := make([]string, 0, 4)
+	if isInlineReload(state) {
+		lines = append(lines, styles.TruncateString("Refreshing… showing previous results until reload finishes.", width))
+	}
+	if strings.TrimSpace(state.Error) != "" && len(state.Results) > 0 {
+		lines = append(lines,
+			styles.TruncateString("Refresh failed; showing last loaded results.", width),
 			styles.TruncateString(state.Error, width),
+		)
+	}
+	if len(state.Results) > 0 {
+		if copy := resultCompletenessCopy(state); copy != "" {
+			lines = append(lines, styles.TruncateString(copy, width))
+		}
+		if notice := resultNoticeCopy(state); notice != "" {
+			lines = append(lines, styles.TruncateString(notice, width))
+		}
+	}
+	return lines
+}
+
+func renderResultsBody(state State, width int) []string {
+	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
+		return []string{
+			styles.TruncateString("Search failed.", width),
+			styles.TruncateString(state.Error, width),
+			"",
+			styles.TruncateString("Edit the query, then press Enter to retry.", width),
 		}
 	}
 
 	if len(state.Results) == 0 {
+		return renderEmptyResultsBody(state, width)
+	}
+
+	return renderResultRows(state, width)
+}
+
+func renderEmptyResultsBody(state State, width int) []string {
+	if strings.TrimSpace(state.AppliedQuery) == "" {
 		return []string{
-			styles.TruncateString("No results found.", width),
+			styles.TruncateString("No search has run yet.", width),
 			"",
-			styles.TruncateString("Press Enter to search / Typing only edits query text.", width),
+			styles.TruncateString("Type query text, then press Enter to search.", width),
 		}
 	}
 
+	return []string{
+		styles.TruncateString(fmt.Sprintf("No matches for %q.", strings.TrimSpace(state.AppliedQuery)), width),
+		"",
+		styles.TruncateString("Try broader terms or clear the query, then press Enter.", width),
+	}
+}
+
+func renderResultRows(state State, width int) []string {
 	lines := make([]string, 0, len(state.Results))
 	for _, issue := range state.Results {
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
@@ -264,6 +373,79 @@ func renderResultsContent(state State, width int) []string {
 	}
 
 	return lines
+}
+
+func displayedResultCount(state State) int {
+	if state.Metadata.ReturnedCount > 0 {
+		return state.Metadata.ReturnedCount
+	}
+	return len(state.Results)
+}
+
+func resultCompletenessBadge(state State) string {
+	switch state.Metadata.Completeness {
+	case domain.SearchResultCompletenessExact:
+		return "exact"
+	case domain.SearchResultCompletenessMaybeMore:
+		return "capped"
+	case domain.SearchResultCompletenessPartial:
+		return "partial"
+	default:
+		return ""
+	}
+}
+
+func resultCompletenessCopy(state State) string {
+	count := displayedResultCount(state)
+	switch state.Metadata.Completeness {
+	case domain.SearchResultCompletenessExact:
+		return fmt.Sprintf("Exact results: %d match(es) currently shown.", count)
+	case domain.SearchResultCompletenessMaybeMore:
+		if state.Metadata.RequestedLimit > 0 {
+			return fmt.Sprintf("Results may be capped at the backend limit (%d requested).", state.Metadata.RequestedLimit)
+		}
+		return "Results may be capped before all matches were returned."
+	case domain.SearchResultCompletenessPartial:
+		return "Partial results: the backend did not return a complete page."
+	default:
+		return ""
+	}
+}
+
+func resultNoticeCopy(state State) string {
+	notice := strings.TrimSpace(state.Metadata.Notice)
+	if notice == "" {
+		return ""
+	}
+	if notice == resultCompletenessCopy(state) {
+		return ""
+	}
+	return notice
+}
+
+func isInlineReload(state State) bool {
+	return state.Reloading || (state.Loading && len(state.Results) > 0)
+}
+
+func hasDraftChanges(state State) bool {
+	return strings.TrimSpace(state.Query) != strings.TrimSpace(state.AppliedQuery)
+}
+
+func hasSearchContext(state State) bool {
+	return strings.TrimSpace(state.AppliedQuery) != "" || len(state.Results) > 0
+}
+
+func searchScopeLabel(state State) string {
+	if strings.TrimSpace(state.AppliedQuery) != "" {
+		return fmt.Sprintf("%q", strings.TrimSpace(state.AppliedQuery))
+	}
+	if len(state.Results) > 0 {
+		return "the default all-issues view"
+	}
+	if strings.TrimSpace(state.Query) != "" {
+		return fmt.Sprintf("%q", strings.TrimSpace(state.Query))
+	}
+	return "the current search"
 }
 
 func splitWideWidths(total int) (rail, content, metadata int) {

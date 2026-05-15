@@ -87,27 +87,19 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		return 0
 	}
 
-	var logManager *logging.Manager
 	startCWD, err := os.Getwd()
 	if err != nil {
-		if logManager != nil {
-			logManager.Component("startup").Error("failed to resolve process start cwd", "error", err.Error())
-		} else {
-			_, _ = fmt.Fprintf(stderr, "failed to resolve process start cwd: %v\n", err)
-		}
+		_, _ = fmt.Fprintf(stderr, "failed to resolve process start cwd: %v\n", err)
 		return 1
 	}
 
 	resolvedCWD, err := resolveAndValidateCWD(startCWD, opts.cwdPath)
 	if err != nil {
-		if logManager != nil {
-			logManager.Component("startup").Error("failed to resolve --cwd", "error", err.Error())
-		} else {
-			_, _ = fmt.Fprintf(stderr, "failed to resolve --cwd: %v\n", err)
-		}
+		_, _ = fmt.Fprintf(stderr, "failed to resolve --cwd: %v\n", err)
 		return 1
 	}
 
+	var logManager *logging.Manager
 	if newLogger != nil {
 		logManager = newLogger(logging.Options{
 			Debug:        opts.debug,
@@ -177,8 +169,8 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		autoRefresh: autoRefresh,
 		logManager:  logManager,
 	}); err != nil {
-		if logManager != nil {
-			logManager.Component("startup").Error("interactive startup failed", "error", err.Error())
+		if startupLogger != nil {
+			startupLogger.Error("interactive startup failed", "error", err.Error())
 		} else {
 			_, _ = fmt.Fprintln(stderr, err.Error())
 		}

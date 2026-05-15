@@ -1,13 +1,13 @@
-╭─ Search ─────────────────── ready ─╮  ╭─ Content ───────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+╭─ Search ─────────────────── shown ─╮  ╭─ Content ───────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │gateway                             │  │Gateway search result           │  │  Core                          │
-╰────────────────────────────────────╯  │bw-1 · open · P1                │  │  Type    : task                │
-╭─ Results ────────────────────── 2 ─╮  │                                │  │  Status  : open                │
-│› T P1 OPN bw-1 Gateway search re...│  │Description                     │  │  Priority: P1                  │
-│  B P0 IP bw-2 Another result       │  │Search preview description      │  │  ------------------------------│
-│                                    │  │                                │  │  Ownership                     │
+│Showing results for "gateway".      │  │bw-1 · open · P1                │  │  Type    : task                │
+│Use arrows to browse results; Ent...│  │                                │  │  Status  : open                │
+╰────────────────────────────────────╯  │Description                     │  │  Priority: P1                  │
+╭─ Results ──────────────── 2 exact ─╮  │Search preview description      │  │  ------------------------------│
+│Exact results: 2 match(es) curren...│  │                                │  │  Ownership                     │
 │                                    │  │                                │  │  Assignee: hans                │
-│                                    │  │                                │  │  ------------------------------│
-│                                    │  │                                │  │  Labels                        │
+│› T P1 OPN bw-1 Gateway search re...│  │                                │  │  ------------------------------│
+│  B P0 IP bw-2 Another result       │  │                                │  │  Labels                        │
 │                                    │  │                                │  │  • ui                          │
 │                                    │  │                                │  │  ------------------------------│
 │                                    │  │                                │  │  Counts                        │

@@ -19,6 +19,7 @@ const (
 	operationStatuses      = "status catalog"
 	operationTypes         = "type catalog"
 	operationLabels        = "label catalog"
+	searchNoticeMaybeMore  = "Results may be incomplete because the backend limit may have capped additional matches."
 )
 
 // Gateway is a beads gateway implementation backed by official bd commands.
@@ -248,7 +249,11 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 
 	return domain.SearchResultPage{
 		Results: results,
-		Total:   len(items),
+		Metadata: searchMetadataFromLimitedBackendResults(
+			len(results),
+			query.Limit,
+			domain.SearchResultSourceBDSearch,
+		),
 	}, nil
 }
 
@@ -284,7 +289,11 @@ func (g *Gateway) searchIssuesFromList(ctx context.Context, query domain.SearchI
 
 	return domain.SearchResultPage{
 		Results: results,
-		Total:   len(items),
+		Metadata: searchMetadataFromLimitedBackendResults(
+			len(results),
+			query.Limit,
+			domain.SearchResultSourceBDListFallback,
+		),
 	}, nil
 }
 
@@ -296,7 +305,7 @@ func (g *Gateway) searchIssuesFromReady(ctx context.Context, query domain.Search
 		return domain.SearchResultPage{}, err
 	}
 
-	return g.searchIssuePageFromRecords(items, query)
+	return g.searchIssuePageFromRecords(items, query, domain.SearchResultSourceReadyFilter)
 }
 
 func (g *Gateway) searchIssuesFromBlocked(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
@@ -308,10 +317,10 @@ func (g *Gateway) searchIssuesFromBlocked(ctx context.Context, query domain.Sear
 		return domain.SearchResultPage{}, err
 	}
 
-	return g.searchIssuePageFromRecords(items, query)
+	return g.searchIssuePageFromRecords(items, query, domain.SearchResultSourceBlockedFilter)
 }
 
-func (g *Gateway) searchIssuePageFromRecords(items []bdIssuePayload, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+func (g *Gateway) searchIssuePageFromRecords(items []bdIssuePayload, query domain.SearchIssuesQuery, source domain.SearchResultSource) (domain.SearchResultPage, error) {
 	summaries, err := mapIssueSummaries(operationSearchIssues, items, 0, 0)
 	if err != nil {
 		return domain.SearchResultPage{}, err
@@ -322,9 +331,34 @@ func (g *Gateway) searchIssuePageFromRecords(items []bdIssuePayload, query domai
 	results := toSearchResults(paged)
 
 	return domain.SearchResultPage{
-		Results: results,
-		Total:   len(filtered),
+		Results:  results,
+		Metadata: searchMetadataFromExactFilter(len(results), query.Limit, source),
 	}, nil
+}
+
+func searchMetadataFromLimitedBackendResults(returnedCount int, requestedLimit int, source domain.SearchResultSource) domain.SearchResultMetadata {
+	metadata := domain.SearchResultMetadata{
+		ReturnedCount:  returnedCount,
+		RequestedLimit: requestedLimit,
+		Completeness:   domain.SearchResultCompletenessMaybeMore,
+		Source:         source,
+		Notice:         searchNoticeMaybeMore,
+	}
+
+	if requestedLimit <= 0 || returnedCount < requestedLimit {
+		metadata.Completeness = domain.SearchResultCompletenessPartial
+	}
+
+	return metadata
+}
+
+func searchMetadataFromExactFilter(returnedCount int, requestedLimit int, source domain.SearchResultSource) domain.SearchResultMetadata {
+	return domain.SearchResultMetadata{
+		ReturnedCount:  returnedCount,
+		RequestedLimit: requestedLimit,
+		Completeness:   domain.SearchResultCompletenessExact,
+		Source:         source,
+	}
 }
 
 func filterIssueSummariesForSearch(items []domain.IssueSummary, query domain.SearchIssuesQuery) []domain.IssueSummary {

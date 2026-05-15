@@ -32,11 +32,13 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 
 	view := Render(State{
 		Query: "gateway",
+		AppliedQuery: "gateway",
 		Focus: FocusResults,
 		Results: []domain.IssueSummary{
 			{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1},
 			{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 		},
+		Metadata: domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 		SelectedID: "bw-1",
 		Width:      120,
 		Height:     28,
@@ -49,7 +51,8 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		"Content",
 		"Metadata",
 		"gateway",
-		"ready",
+		"shown",
+		"Exact results:",
 		"› T P1 OPN bw-1 Gateway search result",
 		"B P0 IP bw-2 Another result",
 		"Gateway search result",
@@ -69,6 +72,7 @@ func TestRenderShowsEmptyQueryResultsAndPreview(t *testing.T) {
 			{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1},
 			{ID: "bw-2", Title: "Second default", Status: "in_progress", Type: "bug", Priority: 2},
 		},
+		Metadata: domain.SearchResultMetadata{ReturnedCount: 2, Completeness: domain.SearchResultCompletenessExact},
 		SelectedID: "bw-1",
 		Width:      100,
 		Height:     24,
@@ -145,7 +149,7 @@ func TestRenderShowsErrorInResultsPane(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{Query: "bad", Error: "boom", Width: 100, Height: 24})
-	if !strings.Contains(view, "Search failed") || !strings.Contains(view, "boom") {
+	if !strings.Contains(view, "Search failed.") || !strings.Contains(view, "boom") || !strings.Contains(view, "failed") {
 		t.Fatalf("expected search error, got:\n%s", view)
 	}
 }
@@ -182,11 +186,13 @@ func TestRenderGoldens(t *testing.T) {
 	t.Run("results_with_preview_w120", func(t *testing.T) {
 		view := Render(State{
 			Query: "gateway",
+			AppliedQuery: "gateway",
 			Focus: FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
+			Metadata:       domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 			SelectedID:     "bw-1",
 			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
 			Width:          120,
@@ -199,11 +205,14 @@ func TestRenderGoldens(t *testing.T) {
 	t.Run("results_loading_stub_w120", func(t *testing.T) {
 		view := Render(State{
 			Query: "gateway",
+			AppliedQuery: "gateway",
 			Focus: FocusResults,
+			Reloading: true,
 			Results: []domain.IssueSummary{
 				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
+			Metadata:      domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore, Notice: "Results may be incomplete because the backend limit may have capped additional matches."},
 			SelectedID:    "bw-1",
 			DetailLoading: true,
 			Width:         120,
@@ -213,26 +222,41 @@ func TestRenderGoldens(t *testing.T) {
 		assertGoldenNormalized(t, []byte(view), "search_results_loading_stub_w120.golden")
 	})
 
-	t.Run("empty_results_w120", func(t *testing.T) {
+	t.Run("no_search_yet_w120", func(t *testing.T) {
 		view := Render(State{
-			Query:   "nomatch",
 			Focus:   FocusQuery,
 			Results: nil,
 			Width:   120,
 			Height:  28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_empty_results_w120.golden")
+		assertGoldenNormalized(t, []byte(view), "search_no_search_yet_w120.golden")
+	})
+
+	t.Run("no_matches_w120", func(t *testing.T) {
+		view := Render(State{
+			Query:        "nomatch",
+			AppliedQuery: "nomatch",
+			Focus:        FocusQuery,
+			Results:      nil,
+			Metadata:     domain.SearchResultMetadata{ReturnedCount: 0, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
+			Width:        120,
+			Height:       28,
+		})
+
+		assertGoldenNormalized(t, []byte(view), "search_no_matches_w120.golden")
 	})
 
 	t.Run("results_narrow_w80", func(t *testing.T) {
 		view := Render(State{
 			Query: "gateway",
+			AppliedQuery: "gateway",
 			Focus: FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Status: "open", Type: "task", Priority: 1},
 				{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Status: "in_progress", Type: "task", Priority: 1},
 			},
+			Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 			SelectedID: "beads-workbench-yze.4.2",
 			Width:      80,
 			Height:     24,
@@ -244,11 +268,13 @@ func TestRenderGoldens(t *testing.T) {
 	t.Run("results_boundary_w110", func(t *testing.T) {
 		view := Render(State{
 			Query: "gateway",
+			AppliedQuery: "gateway",
 			Focus: FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
+			Metadata:       domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 			SelectedID:     "bw-1",
 			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
 			Width:          110,
@@ -265,6 +291,7 @@ func TestRenderGoldens(t *testing.T) {
 				{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Second default", Status: "in_progress", Type: "bug", Priority: 0},
 			},
+			Metadata:       domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 			SelectedID:     "bw-1",
 			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Default preview description"},
 			Width:          120,
