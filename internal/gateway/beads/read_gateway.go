@@ -15,6 +15,7 @@ const (
 	operationListIssues    = "list issues"
 	operationReadyIssues   = "ready issues"
 	operationBlockedIssues = "blocked issues"
+	operationReadyExplain  = "ready explain"
 	operationShowIssue     = "show issue"
 	operationSearchIssues  = "search issues"
 	operationCountIssues   = "count issues"
@@ -158,6 +159,58 @@ func (g *Gateway) BlockedIssues(ctx context.Context, query domain.BlockedIssuesQ
 	}
 
 	return paginate(views, query.Offset, query.Limit), nil
+}
+
+// ReadyExplain returns ready and dependency-blocked issues with aggregate counts
+// using `bd ready --explain --json`. Unlike separate ReadyIssues and BlockedIssues
+// calls, this is a single bd invocation that surfaces both queues together with
+// summary totals and cycle detection metadata.
+func (g *Gateway) ReadyExplain(ctx context.Context, opts domain.ReadyExplainOptions) (domain.ReadyExplainResult, error) {
+	args := []string{"ready", "--explain", "--json"}
+	if opts.Limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(opts.Limit))
+	}
+
+	payload, err := RunJSON[bdReadyExplainPayload](ctx, g.runner, CommandRequest{Operation: operationReadyExplain, Args: args})
+	if err != nil {
+		return domain.ReadyExplainResult{}, err
+	}
+
+	ready, err := mapIssueSummaries(operationReadyExplain, payload.Ready, 0, 0)
+	if err != nil {
+		return domain.ReadyExplainResult{}, err
+	}
+
+	blocked := make([]domain.BlockedIssueView, 0, len(payload.Blocked))
+	for _, item := range payload.Blocked {
+		summary, mapErr := item.toIssueSummary(operationReadyExplain)
+		if mapErr != nil {
+			return domain.ReadyExplainResult{}, mapErr
+		}
+
+		blockedBy := make([]domain.IssueReference, 0, len(item.BlockedBy))
+		for _, ref := range item.BlockedBy {
+			blockedBy = append(blockedBy, domain.IssueReference{
+				ID:       optionalString(ref.ID),
+				Title:    optionalString(ref.Title),
+				Priority: optionalInt(ref.Priority),
+				Status:   optionalString(ref.Status),
+			})
+		}
+
+		blocked = append(blocked, domain.BlockedIssueView{
+			Issue:     summary,
+			BlockedBy: blockedBy,
+		})
+	}
+
+	return domain.ReadyExplainResult{
+		Ready:        ready,
+		Blocked:      blocked,
+		TotalReady:   payload.Summary.TotalReady,
+		TotalBlocked: payload.Summary.TotalBlocked,
+		CycleCount:   payload.Summary.CycleCount,
+	}, nil
 }
 
 // ShowIssue returns issue details using `bd show --json`.

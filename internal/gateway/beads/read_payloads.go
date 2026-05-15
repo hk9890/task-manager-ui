@@ -68,6 +68,99 @@ type bdLabelCatalogEntryPayload struct {
 
 type bdLabelListAllPayload []bdLabelCatalogEntryPayload
 
+// bdBlockedByRefPayload is the object form of a blocked_by entry in bd ready --explain --json.
+// Note: bd blocked --json represents blocked_by as []string (bare IDs);
+// bd ready --explain --json represents blocked_by as []object with id/title/priority/status.
+type bdBlockedByRefPayload struct {
+	ID       *string `json:"id"`
+	Title    *string `json:"title"`
+	Priority *int    `json:"priority"`
+	Status   *string `json:"status"`
+}
+
+// bdExplainBlockedItemPayload is the per-item shape in the "blocked" array of
+// bd ready --explain --json. It mirrors bdIssuePayload for the summary fields
+// but carries blocked_by as objects rather than bare string IDs.
+type bdExplainBlockedItemPayload struct {
+	ID        *string                 `json:"id"`
+	Title     *string                 `json:"title"`
+	Status    *string                 `json:"status"`
+	IssueType *string                 `json:"issue_type"`
+	Priority  *int                    `json:"priority"`
+	Assignee  *string                 `json:"assignee"`
+	Owner     *string                 `json:"owner"`
+	Labels    []string                `json:"labels"`
+	CreatedAt *string                 `json:"created_at"`
+	UpdatedAt *string                 `json:"updated_at"`
+	BlockedBy []bdBlockedByRefPayload `json:"blocked_by"`
+}
+
+type bdReadyExplainPayload struct {
+	Ready   []bdIssuePayload              `json:"ready"`
+	Blocked []bdExplainBlockedItemPayload `json:"blocked"`
+	Summary bdReadyExplainSummary         `json:"summary"`
+}
+
+type bdReadyExplainSummary struct {
+	TotalReady   int `json:"total_ready"`
+	TotalBlocked int `json:"total_blocked"`
+	CycleCount   int `json:"cycle_count"`
+}
+
+func (p bdExplainBlockedItemPayload) toIssueSummary(operation string) (domain.IssueSummary, error) {
+	id, err := requiredString(p.ID, "id")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	title, err := requiredString(p.Title, "title")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	status, err := requiredString(p.Status, "status")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	issueType, err := requiredString(p.IssueType, "issue_type")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	priority, err := requiredInt(p.Priority, "priority")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	assignee := optionalString(p.Assignee)
+	if assignee == "" {
+		assignee = optionalString(p.Owner)
+	}
+
+	createdAt, err := requiredTimestamp(p.CreatedAt, "created_at")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	updatedAt, err := requiredTimestamp(p.UpdatedAt, "updated_at")
+	if err != nil {
+		return domain.IssueSummary{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+	}
+
+	return domain.IssueSummary{
+		ID:        id,
+		Title:     title,
+		Status:    status,
+		Type:      issueType,
+		Priority:  priority,
+		Assignee:  assignee,
+		Labels:    p.Labels,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+	}, nil
+}
+
 type bdCountGroupPayload struct {
 	Group string `json:"group"`
 	Count int    `json:"count"`

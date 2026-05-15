@@ -19,7 +19,8 @@ const (
 	MethodShowIssue     GatewayMethod = "ShowIssue"
 	MethodSearchIssues  GatewayMethod = "SearchIssues"
 
-	MethodQuery GatewayMethod = "Query"
+	MethodQuery        GatewayMethod = "Query"
+	MethodReadyExplain GatewayMethod = "ReadyExplain"
 
 	MethodCountIssues GatewayMethod = "CountIssues"
 
@@ -64,6 +65,10 @@ type QueryCall struct {
 	Opts domain.QueryOptions
 }
 
+type ReadyExplainCall struct {
+	Opts domain.ReadyExplainOptions
+}
+
 type CountIssuesCall struct {
 	Query domain.IssueCountQuery
 }
@@ -102,6 +107,7 @@ type FakeBeadsGateway struct {
 	ShowIssueResponse     domain.IssueDetail
 	SearchIssuesResponse  domain.SearchResultPage
 	QueryResponse         []domain.IssueSummary
+	ReadyExplainResponse  domain.ReadyExplainResult
 	CountIssuesResponse   domain.IssueCountResult
 
 	CreateIssueResponse domain.CreateIssueResult
@@ -237,6 +243,26 @@ func (f *FakeBeadsGateway) Query(_ context.Context, expr string, opts domain.Que
 	}
 
 	return append([]domain.IssueSummary(nil), f.QueryResponse...), nil
+}
+
+func (f *FakeBeadsGateway) ReadyExplain(_ context.Context, opts domain.ReadyExplainOptions) (domain.ReadyExplainResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.Calls = append(f.Calls, GatewayCall{Method: MethodReadyExplain, Input: ReadyExplainCall{Opts: opts}})
+	if err := f.MethodErrors[MethodReadyExplain]; err != nil {
+		return domain.ReadyExplainResult{}, err
+	}
+
+	readyCopy := append([]domain.IssueSummary(nil), f.ReadyExplainResponse.Ready...)
+	blockedCopy := append([]domain.BlockedIssueView(nil), f.ReadyExplainResponse.Blocked...)
+	return domain.ReadyExplainResult{
+		Ready:        readyCopy,
+		Blocked:      blockedCopy,
+		TotalReady:   f.ReadyExplainResponse.TotalReady,
+		TotalBlocked: f.ReadyExplainResponse.TotalBlocked,
+		CycleCount:   f.ReadyExplainResponse.CycleCount,
+	}, nil
 }
 
 func (f *FakeBeadsGateway) CountIssues(_ context.Context, query domain.IssueCountQuery) (domain.IssueCountResult, error) {

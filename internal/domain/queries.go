@@ -106,6 +106,22 @@ type QueryOptions struct {
 	SortOrder SortDirection
 }
 
+// ReadyExplainOptions controls the ReadyExplain gateway call.
+type ReadyExplainOptions struct {
+	// Limit is the maximum number of issues to return per section. A value of 0 means uncapped.
+	Limit int
+}
+
+// ReadyExplainResult is the result of a ReadyExplain call. It combines ready
+// and dependency-blocked issues with aggregate counts from a single bd invocation.
+type ReadyExplainResult struct {
+	Ready        []IssueSummary
+	Blocked      []BlockedIssueView
+	TotalReady   int
+	TotalBlocked int
+	CycleCount   int
+}
+
 // SearchIssuesQuery requests text and structured search.
 type SearchIssuesQuery struct {
 	Text string

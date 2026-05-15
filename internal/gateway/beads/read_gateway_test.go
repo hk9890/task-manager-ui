@@ -1161,3 +1161,224 @@ func TestGatewayQueryReturnsDecodeErrorOnMissingID(t *testing.T) {
 	_, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 }
+
+func TestGatewayReadyExplainHappyPathDecodesSummaryAndQueues(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{
+				"ready": [
+					{"id":"bw-1","title":"ready one","status":"open","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
+					{"id":"bw-2","title":"ready two","status":"open","issue_type":"bug","priority":1,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
+				],
+				"blocked": [
+					{"id":"bw-3","title":"blocked one","status":"blocked","issue_type":"task","priority":2,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","blocked_by":[{"id":"bw-10","title":"blocker","priority":1,"status":"open"}]}
+				],
+				"summary": {"total_ready": 2, "total_blocked": 1, "cycle_count": 0}
+			}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error: %v", err)
+	}
+
+	if len(got.Ready) != 2 {
+		t.Fatalf("expected 2 ready issues, got %d", len(got.Ready))
+	}
+
+	if got.Ready[0].ID != "bw-1" || got.Ready[0].Assignee != "alice" {
+		t.Fatalf("unexpected first ready issue: %#v", got.Ready[0])
+	}
+
+	if got.Ready[1].ID != "bw-2" || got.Ready[1].Assignee != "bob" {
+		t.Fatalf("unexpected second ready issue: %#v", got.Ready[1])
+	}
+
+	if len(got.Blocked) != 1 {
+		t.Fatalf("expected 1 blocked issue, got %d", len(got.Blocked))
+	}
+
+	if got.Blocked[0].Issue.ID != "bw-3" || got.Blocked[0].Issue.Assignee != "carol" {
+		t.Fatalf("unexpected blocked issue: %#v", got.Blocked[0].Issue)
+	}
+
+	if len(got.Blocked[0].BlockedBy) != 1 {
+		t.Fatalf("expected 1 blocked_by ref, got %d", len(got.Blocked[0].BlockedBy))
+	}
+
+	ref := got.Blocked[0].BlockedBy[0]
+	if ref.ID != "bw-10" || ref.Title != "blocker" || ref.Priority != 1 || ref.Status != "open" {
+		t.Fatalf("unexpected blocked_by reference: %#v", ref)
+	}
+
+	if got.TotalReady != 2 || got.TotalBlocked != 1 || got.CycleCount != 0 {
+		t.Fatalf("unexpected summary: TotalReady=%d TotalBlocked=%d CycleCount=%d", got.TotalReady, got.TotalBlocked, got.CycleCount)
+	}
+}
+
+func TestGatewayReadyExplainWithLimitAppendsLimitFlag(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json", "--limit", "5"}): {
+			result: ExecResult{Stdout: []byte(`{
+				"ready": [],
+				"blocked": [],
+				"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0}
+			}`)},
+		},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{Limit: 5})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error: %v", err)
+	}
+
+	if len(got.Ready) != 0 || len(got.Blocked) != 0 {
+		t.Fatalf("expected empty queues, got ready=%d blocked=%d", len(got.Ready), len(got.Blocked))
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("expected one command call, got %d", len(exec.calls))
+	}
+
+	found := false
+	for i, arg := range exec.calls[0] {
+		if arg == "--limit" && i+1 < len(exec.calls[0]) && exec.calls[0][i+1] == "5" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("expected --limit 5 in argv, got: %v", exec.calls[0])
+	}
+}
+
+func TestGatewayReadyExplainNoLimitProducesNoLimitFlag(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)},
+		},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error: %v", err)
+	}
+
+	for _, arg := range exec.calls[0] {
+		if arg == "--limit" {
+			t.Fatalf("unexpected --limit flag in argv when Limit=0: %v", exec.calls[0])
+		}
+	}
+}
+
+func TestGatewayReadyExplainEmptyArraysDecodeToNonNilSlices(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error: %v", err)
+	}
+
+	if got.Ready == nil {
+		t.Fatal("Ready slice must be non-nil for empty array")
+	}
+
+	if got.Blocked == nil {
+		t.Fatal("Blocked slice must be non-nil for empty array")
+	}
+}
+
+func TestGatewayReadyExplainReturnsCommandFailedOnNonZeroExit(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json"}): {
+			result: ExecResult{ExitCode: 1, Stderr: []byte("no database")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
+}
+
+func TestGatewayReadyExplainReturnsDecodeErrorOnMissingID(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{
+				"ready": [{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}],
+				"blocked": [],
+				"summary": {"total_ready":1,"total_blocked":0,"cycle_count":0}
+			}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+}
+
+func TestGatewayReadyExplainBlockedItemMultipleBlockedByRefs(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--explain", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{
+				"ready": [],
+				"blocked": [
+					{"id":"bw-5","title":"multi-blocked","status":"blocked","issue_type":"bug","priority":2,"owner":"dave","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z",
+					 "blocked_by":[
+						{"id":"bw-A","title":"blocker A","priority":0,"status":"open"},
+						{"id":"bw-B","title":"blocker B","priority":1,"status":"in_progress"}
+					 ]}
+				],
+				"summary": {"total_ready":0,"total_blocked":1,"cycle_count":0}
+			}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error: %v", err)
+	}
+
+	if len(got.Blocked) != 1 {
+		t.Fatalf("expected 1 blocked issue, got %d", len(got.Blocked))
+	}
+
+	if len(got.Blocked[0].BlockedBy) != 2 {
+		t.Fatalf("expected 2 blocked_by refs, got %d", len(got.Blocked[0].BlockedBy))
+	}
+
+	if got.Blocked[0].BlockedBy[0].ID != "bw-A" || got.Blocked[0].BlockedBy[1].ID != "bw-B" {
+		t.Fatalf("unexpected blocked_by ref IDs: %#v", got.Blocked[0].BlockedBy)
+	}
+}
