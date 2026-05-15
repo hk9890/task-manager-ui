@@ -646,3 +646,48 @@ func hasExecutable(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
+
+func TestSearchItemCapacity(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		height int
+		want   int
+	}{
+		{height: 0, want: 20},  // before first WindowSizeMsg: safe default
+		{height: 1, want: 1},   // min clamp
+		{height: 24, want: 17}, // 24 - 7 = 17
+		{height: 30, want: 23}, // 30 - 7 = 23
+	}
+
+	for _, tc := range cases {
+		m := &Model{height: tc.height}
+		got := m.searchItemCapacity()
+		if got != tc.want {
+			t.Errorf("searchItemCapacity() with height=%d: got %d, want %d", tc.height, got, tc.want)
+		}
+	}
+}
+
+func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+	}}
+	m := initModel(gateway)
+
+	// Record call count after init.
+	callsBefore := len(gateway.Calls)
+
+	// Send a resize; must not issue a new search.
+	cmd := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	if cmd != nil {
+		t.Fatalf("expected WindowSizeMsg handler to return nil cmd, got %T", cmd)
+	}
+
+	if len(gateway.Calls) != callsBefore {
+		t.Fatalf("expected no new gateway calls on resize, got %d new call(s)", len(gateway.Calls)-callsBefore)
+	}
+}

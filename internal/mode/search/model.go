@@ -13,8 +13,6 @@ import (
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
 )
 
-const defaultSearchLimit = 40
-
 type searchLoadedMsg struct {
 	appliedQuery string
 	page         domain.SearchResultPage
@@ -92,7 +90,7 @@ func (m *Model) Init() tea.Cmd {
 	m.reloading = false
 	m.errText = ""
 	m.typing = false
-	return loadSearchCmd(m.gateway, domain.SearchIssuesQuery{Limit: defaultSearchLimit, Offset: 0})
+	return loadSearchCmd(m.gateway, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
 }
 
 // Update processes search-specific messages and keybindings.
@@ -309,7 +307,7 @@ func (m *Model) triggerSearchPreservingSelection() tea.Cmd {
 func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAnchor) tea.Cmd {
 	query := domain.SearchIssuesQuery{
 		Text:   queryText,
-		Limit:  defaultSearchLimit,
+		Limit:  m.searchItemCapacity(),
 		Offset: 0,
 	}
 	m.loading = true
@@ -344,6 +342,27 @@ func (m *Model) View() string {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+}
+
+// searchItemCapacity returns the number of result rows that fit in the results
+// pane at the current terminal height.
+//
+// Chrome breakdown: the query FormSection occupies searchQueryHeight (5) rows
+// (1 top border + 3 content lines + 1 bottom border), and the results
+// FormSection adds 2 border rows (1 top + 1 bottom). Total chrome = 7.
+// Formula: max(1, height-7).
+//
+// When height is 0 (before the first tea.WindowSizeMsg), a safe default of 20
+// is returned so that Init() fires queries with a reasonable limit.
+func (m *Model) searchItemCapacity() int {
+	if m.height == 0 {
+		return 20 // safe default before first WindowSizeMsg
+	}
+	rows := m.height - 7
+	if rows < 1 {
+		rows = 1
+	}
+	return rows
 }
 
 // IsLoading reports whether a gateway search is active.
