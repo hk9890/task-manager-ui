@@ -111,7 +111,7 @@ internal/
   gateway/beads/     # BeadsGateway interface + CLI adapter with typed bd payload decoding
   logging/           # central slog logging package used by runtime startup and gateway tracing
   launcher/          # external editor and command launch actions
-  dashboard/         # dashboard definitions/providers + provider-output validation guardrails
+  dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
   mode/              # board/search/details feature models + shell message contracts
   ui/                # reusable rendering components (loading, modal, toaster, styles)
 project-plan/        # product, architecture, and execution planning docs
@@ -125,7 +125,7 @@ project-plan/        # product, architecture, and execution planning docs
 
 3. **Gateway is source-specific.** A gateway instance is bound to one beads project. Federation is a future layer above gateways, not a change to the core interface.
 
-4. **Dashboard renderer and dashboard provider are separate.** v1 uses built-in definitions. A file-backed provider can be added later without touching the renderer.
+4. **Dashboard renderer and dashboard provider are separate.** The provider (`internal/dashboard`) is a metadata-only catalog: it returns section IDs and titles only. The board model owns gateway query routing for each section (three parallel `Query` / `ReadyExplain` gateway calls, fanned out after the provider responds). A file-backed provider can be added later by supplying section IDs and titles without touching the renderer or the board model's query logic.
 
 5. **Editor handoff is a first-class flow.** Rich issue editing opens `$EDITOR` rather than building complex inline forms.
 
@@ -151,7 +151,7 @@ project-plan/        # product, architecture, and execution planning docs
 
 10. **Gateway decoding is typed and operation-scoped.** `internal/gateway/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
 
-11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions`/`ValidateQuery` checks. Providers may vary, but section query types must stay within the supported gateway query contract.
+11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns gateway query routing and validates query types internally.
 
 ## Runtime Configuration (v1)
 

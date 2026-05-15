@@ -21,13 +21,23 @@ type Definition struct {
 }
 
 // Section describes one queue shown on a dashboard.
+// Providers supply IDs and titles only; the board model owns gateway query
+// routing for each section.
 type Section struct {
 	ID    string
 	Title string
+
+	// Query is a backward-compatibility shim retained until beads-workbench-lgln
+	// migrates the board model to own its own gateway calls. New providers should
+	// leave this field at its zero value. It will be removed once the board model
+	// no longer reads it.
 	Query Query
 }
 
 // QueryType identifies which supported gateway query contract backs a section.
+// This type is a backward-compatibility shim retained until
+// beads-workbench-lgln migrates the board model. New code should not reference
+// QueryType from dashboard definitions.
 type QueryType string
 
 const (
@@ -36,14 +46,10 @@ const (
 	QueryTypeBlockedIssues QueryType = "blocked_issues"
 )
 
-// Query describes the supported gateway query that backs a board section.
-//
-// The query contract is intentionally narrow: Type must be one of the
-// supported query kinds used by the board renderer.
-//
-// Payload fields are value types, so this contract cannot reliably distinguish
-// "unset" from "zero value" payload shapes. Validation therefore enforces the
-// supported Type and treats non-selected payload fields as ignored.
+// Query describes the gateway query that backed a board section in the
+// pre-lgln architecture. It is a backward-compatibility shim retained until
+// beads-workbench-lgln migrates the board model to own gateway query routing
+// directly. New providers should not set this field.
 type Query struct {
 	Type          QueryType
 	ListIssues    domain.IssueListQuery
@@ -52,6 +58,8 @@ type Query struct {
 }
 
 // ValidateDefinitions validates provider output before the board consumes it.
+// Validation checks IDs, titles, and non-empty sections. Query payload
+// validation is no longer enforced here; the board model owns query routing.
 func ValidateDefinitions(defs []Definition) error {
 	if len(defs) == 0 {
 		return fmt.Errorf("dashboard provider returned zero definitions")
@@ -75,29 +83,8 @@ func ValidateDefinitions(defs []Definition) error {
 			if strings.TrimSpace(section.Title) == "" {
 				return fmt.Errorf("dashboard[%d] section[%d]: title is required", dashboardIndex, sectionIndex)
 			}
-			if err := ValidateQuery(section.Query); err != nil {
-				return fmt.Errorf("dashboard[%d] section[%d]: %w", dashboardIndex, sectionIndex, err)
-			}
 		}
 	}
 
 	return nil
-}
-
-// ValidateQuery ensures the section query uses a supported query type.
-func ValidateQuery(query Query) error {
-	if !isSupportedQueryType(query.Type) {
-		return fmt.Errorf("unsupported query type %q", query.Type)
-	}
-
-	return nil
-}
-
-func isSupportedQueryType(queryType QueryType) bool {
-	switch queryType {
-	case QueryTypeListIssues, QueryTypeReadyIssues, QueryTypeBlockedIssues:
-		return true
-	default:
-		return false
-	}
 }

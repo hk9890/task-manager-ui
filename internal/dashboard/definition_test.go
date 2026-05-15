@@ -3,8 +3,6 @@ package dashboard
 import (
 	"strings"
 	"testing"
-
-	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
 func TestValidateDefinitions(t *testing.T) {
@@ -15,15 +13,15 @@ func TestValidateDefinitions(t *testing.T) {
 			ID:    "default",
 			Title: "Default",
 			Sections: []Section{
-				{ID: "ready", Title: "Ready", Query: Query{Type: QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
-				{ID: "blocked", Title: "Blocked", Query: Query{Type: QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 25}}},
+				{ID: "ready", Title: "Ready"},
+				{ID: "blocked", Title: "Blocked"},
 			},
 		},
 		{
 			ID:    "secondary",
 			Title: "Secondary",
 			Sections: []Section{
-				{ID: "in_progress", Title: "In Progress", Query: Query{Type: QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 25}}},
+				{ID: "in_progress", Title: "In Progress"},
 			},
 		},
 	}
@@ -36,12 +34,11 @@ func TestValidateDefinitions(t *testing.T) {
 	}{
 		{name: "valid multi dashboard", defs: valid},
 		{name: "zero definitions", defs: nil, wantErr: true, errMatch: "zero definitions"},
-		{name: "empty dashboard id", defs: []Definition{{Title: "Default", Sections: []Section{{ID: "ready", Title: "Ready", Query: Query{Type: QueryTypeReadyIssues}}}}}, wantErr: true, errMatch: "id is required"},
-		{name: "empty dashboard title", defs: []Definition{{ID: "default", Sections: []Section{{ID: "ready", Title: "Ready", Query: Query{Type: QueryTypeReadyIssues}}}}}, wantErr: true, errMatch: "title is required"},
+		{name: "empty dashboard id", defs: []Definition{{Title: "Default", Sections: []Section{{ID: "ready", Title: "Ready"}}}}, wantErr: true, errMatch: "id is required"},
+		{name: "empty dashboard title", defs: []Definition{{ID: "default", Sections: []Section{{ID: "ready", Title: "Ready"}}}}, wantErr: true, errMatch: "title is required"},
 		{name: "zero sections", defs: []Definition{{ID: "default", Title: "Default"}}, wantErr: true, errMatch: "at least one section is required"},
-		{name: "empty section id", defs: []Definition{{ID: "default", Title: "Default", Sections: []Section{{Title: "Ready", Query: Query{Type: QueryTypeReadyIssues}}}}}, wantErr: true, errMatch: "section[0]: id is required"},
-		{name: "empty section title", defs: []Definition{{ID: "default", Title: "Default", Sections: []Section{{ID: "ready", Query: Query{Type: QueryTypeReadyIssues}}}}}, wantErr: true, errMatch: "section[0]: title is required"},
-		{name: "unsupported query type", defs: []Definition{{ID: "default", Title: "Default", Sections: []Section{{ID: "ready", Title: "Ready", Query: Query{Type: QueryType("custom")}}}}}, wantErr: true, errMatch: "unsupported query type"},
+		{name: "empty section id", defs: []Definition{{ID: "default", Title: "Default", Sections: []Section{{Title: "Ready"}}}}, wantErr: true, errMatch: "section[0]: id is required"},
+		{name: "empty section title", defs: []Definition{{ID: "default", Title: "Default", Sections: []Section{{ID: "ready"}}}}, wantErr: true, errMatch: "section[0]: title is required"},
 	}
 
 	for _, tc := range tests {

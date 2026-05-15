@@ -473,7 +473,6 @@ func TestBoardModeRejectsInvalidProviderOutputBeforeSectionLoads(t *testing.T) {
 		{name: "zero sections", defs: []dashboard.Definition{{ID: "default", Title: "Default"}}, wantErr: "at least one section is required"},
 		{name: "empty section id", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "section[0]: id is required"},
 		{name: "empty section title", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{ID: "ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "section[0]: title is required"},
-		{name: "unsupported query type", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryType("custom")}}}}}, wantErr: "unsupported query type"},
 	}
 
 	for _, tc := range tests {

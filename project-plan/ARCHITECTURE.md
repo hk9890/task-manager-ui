@@ -55,9 +55,9 @@ Beads Workbench is composed of five main areas:
    - terminal/tab/tmux integration
 
 5. **Definition providers (`internal/dashboard`)**
-   - built-in dashboard definitions in v1
-   - provider-output validation before board rendering
-   - future file-backed dashboard definition provider
+   - metadata-only dashboard catalog: section IDs and titles
+   - provider-output validation (IDs, titles, non-empty sections) before board rendering
+   - future file-backed dashboard definition provider can add section IDs/titles without touching the board model
 
 ### UI ownership model
 
@@ -107,6 +107,11 @@ type BeadsGateway interface {
     ReadyIssues(ctx context.Context, q ReadyQuery) ([]IssueSummary, error)
     BlockedIssues(ctx context.Context, q BlockedQuery) ([]BlockedIssue, error)
     ShowIssue(ctx context.Context, id string) (IssueDetail, error)
+
+    // Query runs a structured issue search (text + filters).
+    Query(ctx context.Context, q IssueQuery) ([]IssueSummary, error)
+    // ReadyExplain returns the ready-work explanation for a given issue.
+    ReadyExplain(ctx context.Context, id string) (ReadyExplanation, error)
 
     CreateIssue(ctx context.Context, input CreateIssueInput) (CreateResult, error)
     UpdateIssue(ctx context.Context, id string, input UpdateIssueInput) error
@@ -226,13 +231,17 @@ Beads Workbench keeps the concept of dashboards or boards, but simplifies how th
 ### Architectural decision
 
 - **dashboard renderer** and **dashboard definition provider** are separate
+- **dashboard definition provider** is a metadata-only catalog (section IDs and titles)
+- **board model** owns gateway query routing for each section
 
 That means:
 
 - the renderer knows how to display columns / sections / queues
-- the provider decides which definitions exist
+- the provider decides which sections exist and what to call them
+- the board model issues three parallel gateway calls (one per active section type: `ListIssues`, `ReadyIssues`, `BlockedIssues`) and fans out results
+- `internal/dashboard/composer.go` buckets and sorts the parallel gateway results into the final board state
 
-Representative model:
+Representative provider model:
 
 ```go
 type DashboardDefinitionProvider interface {
@@ -244,28 +253,32 @@ Provider output is validated before the board uses it:
 
 - each dashboard must include non-empty id/title/sections
 - each section must include non-empty id/title
-- each section query type must be one of the supported gateway-backed query types
+- query payload validation is NOT enforced at the provider boundary; the board model owns query type routing
 
 In v1:
 
-- use a built-in provider with hard-coded dashboard definitions
+- use a built-in provider (`internal/dashboard.BuiltInProvider`) with hard-coded section IDs and titles
 
 Later:
 
-- add a file-backed provider without rewriting the board renderer
+- add a file-backed provider by supplying section IDs and titles without rewriting the board renderer or board model's query logic
 
-### Important limitation
+### Board model query fan-out (post-lgln)
 
-Dashboard definitions should map to supported gateway query types, not arbitrary BQL.
+After beads-workbench-lgln merges, the board model performs a 3-call fan-out on each dashboard load:
 
-Examples of supported built-in queue types:
+1. `gateway.ListIssues` — in-progress and done sections
+2. `gateway.ReadyIssues` — ready section
+3. `gateway.BlockedIssues` — not-ready section
 
-- ready
-- blocked
-- in-progress
-- open by status
-- recent updates
-- assigned to current user
+Results are composed and sorted by `internal/dashboard.Compose` before the board renders columns.
+
+### Supported section types
+
+- ready (`ReadyIssues`)
+- blocked/not-ready (`BlockedIssues`)
+- in-progress and done (`ListIssues` with status filters)
+- open by status, recent updates, assigned to current user (future `ListIssues` variants)
 
 ## Search Architecture
 

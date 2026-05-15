@@ -21,8 +21,11 @@ const (
 	doneStatus                    = "closed"
 )
 
-// BuiltInProvider is a dashboard definition provider backed by built-in queue
-// definitions mapped to supported gateway query contracts.
+// BuiltInProvider is a metadata-only dashboard definition catalog.
+// It supplies section IDs and titles; in v1 it also populates Section.Query
+// for backward compatibility with the board model until beads-workbench-lgln
+// migrates the board model to own gateway query routing directly. Future
+// providers should omit the Query field and rely on section ID and title only.
 type BuiltInProvider struct {
 }
 
@@ -33,13 +36,40 @@ func NewBuiltInProvider() *BuiltInProvider {
 	return &BuiltInProvider{}
 }
 
-// Dashboards returns built-in dashboard definitions.
+// Dashboards returns the built-in dashboard definition with four sections:
+// not_ready, ready, in_progress, and done. Section IDs and titles are the
+// stable contract. The Query field is populated only as a backward-compat shim
+// for the current board model; it will be removed by beads-workbench-lgln.
 func (p *BuiltInProvider) Dashboards(_ context.Context) ([]Definition, error) {
 	sections := []Section{
-		notReadySection(),
-		readySection(),
-		inProgressSection(),
-		doneSection(),
+		{
+			ID:    builtInSectionIDNotReady,
+			Title: builtInSectionTitleNotReady,
+			Query: Query{Type: QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 0}},
+		},
+		{
+			ID:    builtInSectionIDReady,
+			Title: builtInSectionTitleReady,
+			Query: Query{Type: QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 0}},
+		},
+		{
+			ID:    builtInSectionIDInProgress,
+			Title: builtInSectionTitleInProgress,
+			Query: Query{Type: QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{inProgressStatus}, Limit: 0}},
+		},
+		{
+			ID:    builtInSectionIDDone,
+			Title: builtInSectionTitleDone,
+			Query: Query{
+				Type: QueryTypeListIssues,
+				ListIssues: domain.IssueListQuery{
+					Statuses:  []string{doneStatus},
+					SortBy:    domain.SortFieldClosedAt,
+					SortOrder: domain.SortDirectionDescending,
+					Limit:     0,
+				},
+			},
+		},
 	}
 
 	return []Definition{{
@@ -47,56 +77,4 @@ func (p *BuiltInProvider) Dashboards(_ context.Context) ([]Definition, error) {
 		Title:    builtInDashboardTitleDefault,
 		Sections: sections,
 	}}, nil
-}
-
-func notReadySection() Section {
-	return Section{
-		ID:    builtInSectionIDNotReady,
-		Title: builtInSectionTitleNotReady,
-		Query: Query{
-			Type:          QueryTypeBlockedIssues,
-			BlockedIssues: domain.BlockedIssuesQuery{Limit: 0},
-		},
-	}
-}
-
-func readySection() Section {
-	return Section{
-		ID:    builtInSectionIDReady,
-		Title: builtInSectionTitleReady,
-		Query: Query{
-			Type:        QueryTypeReadyIssues,
-			ReadyIssues: domain.ReadyIssuesQuery{Limit: 0},
-		},
-	}
-}
-
-func inProgressSection() Section {
-	return Section{
-		ID:    builtInSectionIDInProgress,
-		Title: builtInSectionTitleInProgress,
-		Query: Query{
-			Type: QueryTypeListIssues,
-			ListIssues: domain.IssueListQuery{
-				Statuses: []string{inProgressStatus},
-				Limit:    0,
-			},
-		},
-	}
-}
-
-func doneSection() Section {
-	return Section{
-		ID:    builtInSectionIDDone,
-		Title: builtInSectionTitleDone,
-		Query: Query{
-			Type: QueryTypeListIssues,
-			ListIssues: domain.IssueListQuery{
-				Statuses:  []string{doneStatus},
-				SortBy:    domain.SortFieldClosedAt,
-				SortOrder: domain.SortDirectionDescending,
-				Limit:     0,
-			},
-		},
-	}
 }

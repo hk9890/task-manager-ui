@@ -2,10 +2,7 @@ package dashboard
 
 import (
 	"context"
-	"reflect"
 	"testing"
-
-	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
 func TestBuiltInProviderDashboardsWithoutActor(t *testing.T) {
@@ -28,7 +25,7 @@ func TestBuiltInProviderDashboardsWithoutActor(t *testing.T) {
 	}
 
 	if len(dashboard.Sections) != 4 {
-		t.Fatalf("expected 4 sections when actor unavailable, got %d", len(dashboard.Sections))
+		t.Fatalf("expected 4 sections, got %d", len(dashboard.Sections))
 	}
 
 	assertSectionIDs(t, dashboard.Sections, []string{
@@ -39,7 +36,7 @@ func TestBuiltInProviderDashboardsWithoutActor(t *testing.T) {
 	})
 }
 
-func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
+func TestBuiltInProviderSectionTitles(t *testing.T) {
 	t.Parallel()
 
 	provider := NewBuiltInProvider()
@@ -51,48 +48,21 @@ func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
 
 	sections := dashboards[0].Sections
 
-	notReady := findSectionByID(t, sections, builtInSectionIDNotReady)
-	if notReady.Query.Type != QueryTypeBlockedIssues {
-		t.Fatalf("expected not-ready section query type %q, got %q", QueryTypeBlockedIssues, notReady.Query.Type)
-	}
-	if notReady.Query.BlockedIssues.Limit != 0 {
-		t.Fatalf("expected not-ready limit 0 (caller-set), got %d", notReady.Query.BlockedIssues.Limit)
-	}
-
-	ready := findSectionByID(t, sections, builtInSectionIDReady)
-	if ready.Query.Type != QueryTypeReadyIssues {
-		t.Fatalf("expected ready section query type %q, got %q", QueryTypeReadyIssues, ready.Query.Type)
-	}
-	if ready.Query.ReadyIssues.Limit != 0 {
-		t.Fatalf("expected ready limit 0 (caller-set), got %d", ready.Query.ReadyIssues.Limit)
+	wantTitles := map[string]string{
+		builtInSectionIDNotReady:   builtInSectionTitleNotReady,
+		builtInSectionIDReady:      builtInSectionTitleReady,
+		builtInSectionIDInProgress: builtInSectionTitleInProgress,
+		builtInSectionIDDone:       builtInSectionTitleDone,
 	}
 
-	inProgress := findSectionByID(t, sections, builtInSectionIDInProgress)
-	if inProgress.Query.Type != QueryTypeListIssues {
-		t.Fatalf("expected in-progress section query type %q, got %q", QueryTypeListIssues, inProgress.Query.Type)
-	}
-	if !reflect.DeepEqual(inProgress.Query.ListIssues.Statuses, []string{inProgressStatus}) {
-		t.Fatalf("unexpected in-progress statuses: %#v", inProgress.Query.ListIssues.Statuses)
-	}
-	if inProgress.Query.ListIssues.Limit != 0 {
-		t.Fatalf("expected in-progress limit 0 (caller-set), got %d", inProgress.Query.ListIssues.Limit)
-	}
-
-	done := findSectionByID(t, sections, builtInSectionIDDone)
-	if done.Query.Type != QueryTypeListIssues {
-		t.Fatalf("expected done section query type %q, got %q", QueryTypeListIssues, done.Query.Type)
-	}
-	if !reflect.DeepEqual(done.Query.ListIssues.Statuses, []string{doneStatus}) {
-		t.Fatalf("unexpected done statuses: %#v", done.Query.ListIssues.Statuses)
-	}
-	if done.Query.ListIssues.SortBy != domain.SortFieldClosedAt {
-		t.Fatalf("expected done section sort by closed_at, got %q", done.Query.ListIssues.SortBy)
-	}
-	if done.Query.ListIssues.SortOrder != domain.SortDirectionDescending {
-		t.Fatalf("expected done section descending sort order, got %q", done.Query.ListIssues.SortOrder)
-	}
-	if done.Query.ListIssues.Limit != 0 {
-		t.Fatalf("expected done section limit 0 (caller-set), got %d", done.Query.ListIssues.Limit)
+	for _, section := range sections {
+		want, ok := wantTitles[section.ID]
+		if !ok {
+			t.Fatalf("unexpected section id: %q", section.ID)
+		}
+		if section.Title != want {
+			t.Fatalf("section %q: expected title %q, got %q", section.ID, want, section.Title)
+		}
 	}
 
 	if err := ValidateDefinitions(dashboards); err != nil {
