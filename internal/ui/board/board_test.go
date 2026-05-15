@@ -111,28 +111,36 @@ func TestRenderBoardColumnsGolden(t *testing.T) {
 							{ID: "beads-workbench-1ri", Title: "Dashboard UX runtime harness and width matrix assertions", Type: "feature", Status: "in_progress", Priority: 1},
 							{ID: "beads-workbench-y3x", Title: "Runtime bug: board rows hide readiness/type signals", Type: "bug", Status: "blocked", Priority: 0},
 						},
-						SelectedRow: 0,
+						SelectedRow:  0,
+						TotalCount:   7,
+						CountLoaded:  true,
 					},
 					{
 						Title: "Blocked",
 						Rows: []domain.IssueSummary{
 							{ID: "beads-workbench-9oo", Title: "Acceptance review board UX regressions and fixes", Type: "task", Status: "blocked", Priority: 0},
 						},
-						SelectedRow: -1,
+						SelectedRow:  -1,
+						TotalCount:   3,
+						CountLoaded:  true,
 					},
 					{
 						Title: "Recent Work",
 						Rows: []domain.IssueSummary{
 							{ID: "beads-workbench-j34", Title: "Remove large sidebar from board view", Type: "task", Status: "closed", Priority: 1},
 						},
-						SelectedRow: -1,
+						SelectedRow:  -1,
+						TotalCount:   42,
+						CountLoaded:  true,
 					},
 					{
 						Title: "Assigned",
 						Rows: []domain.IssueSummary{
 							{ID: "beads-workbench-7qz", Title: "Preserve four-column grouping in dashboard renderer", Type: "epic", Status: "in_progress", Priority: 1},
 						},
-						SelectedRow: -1,
+						SelectedRow:  -1,
+						TotalCount:   5,
+						CountLoaded:  true,
 					},
 				},
 			}
@@ -152,11 +160,11 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 		Width:          120,
 		Height:         24,
 		Columns: []Column{
-			{Title: "Ready", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Type: "task", Status: "open", Priority: 1}}, SelectedRow: -1},
-			{Title: "In Progress", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Type: "feature", Status: "in_progress", Priority: 1}}, SelectedRow: -1},
-			{Title: "Blocked", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.5", Title: "Add editor and launcher integration tests", Type: "bug", Status: "blocked", Priority: 1}}, SelectedRow: 0},
-			{Title: "Recent Work", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4", Title: "Deliver editor and launcher flows", Type: "task", Status: "closed", Priority: 1}}, SelectedRow: -1},
-			{Title: "Assigned", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.1", Title: "Acceptance Review: Beads Workbench v1 standalone product", Type: "epic", Status: "open", Priority: 1}}, SelectedRow: -1},
+			{Title: "Ready", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Type: "task", Status: "open", Priority: 1}}, SelectedRow: -1, TotalCount: 4, CountLoaded: true},
+			{Title: "In Progress", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Type: "feature", Status: "in_progress", Priority: 1}}, SelectedRow: -1, TotalCount: 1, CountLoaded: true},
+			{Title: "Blocked", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.5", Title: "Add editor and launcher integration tests", Type: "bug", Status: "blocked", Priority: 1}}, SelectedRow: 0, TotalCount: 2, CountLoaded: true},
+			{Title: "Recent Work", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4", Title: "Deliver editor and launcher flows", Type: "task", Status: "closed", Priority: 1}}, SelectedRow: -1, TotalCount: 15, CountLoaded: true},
+			{Title: "Assigned", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.1", Title: "Acceptance Review: Beads Workbench v1 standalone product", Type: "epic", Status: "open", Priority: 1}}, SelectedRow: -1, TotalCount: 3, CountLoaded: true},
 		},
 	}
 

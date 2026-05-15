@@ -55,16 +55,16 @@ func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
 	if notReady.Query.Type != QueryTypeBlockedIssues {
 		t.Fatalf("expected not-ready section query type %q, got %q", QueryTypeBlockedIssues, notReady.Query.Type)
 	}
-	if notReady.Query.BlockedIssues.Limit != defaultSectionLimit {
-		t.Fatalf("expected not-ready limit %d, got %d", defaultSectionLimit, notReady.Query.BlockedIssues.Limit)
+	if notReady.Query.BlockedIssues.Limit != 0 {
+		t.Fatalf("expected not-ready limit 0 (caller-set), got %d", notReady.Query.BlockedIssues.Limit)
 	}
 
 	ready := findSectionByID(t, sections, builtInSectionIDReady)
 	if ready.Query.Type != QueryTypeReadyIssues {
 		t.Fatalf("expected ready section query type %q, got %q", QueryTypeReadyIssues, ready.Query.Type)
 	}
-	if ready.Query.ReadyIssues.Limit != defaultSectionLimit {
-		t.Fatalf("expected ready limit %d, got %d", defaultSectionLimit, ready.Query.ReadyIssues.Limit)
+	if ready.Query.ReadyIssues.Limit != 0 {
+		t.Fatalf("expected ready limit 0 (caller-set), got %d", ready.Query.ReadyIssues.Limit)
 	}
 
 	inProgress := findSectionByID(t, sections, builtInSectionIDInProgress)
@@ -74,8 +74,8 @@ func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
 	if !reflect.DeepEqual(inProgress.Query.ListIssues.Statuses, []string{inProgressStatus}) {
 		t.Fatalf("unexpected in-progress statuses: %#v", inProgress.Query.ListIssues.Statuses)
 	}
-	if inProgress.Query.ListIssues.Limit != defaultSectionLimit {
-		t.Fatalf("expected in-progress limit %d, got %d", defaultSectionLimit, inProgress.Query.ListIssues.Limit)
+	if inProgress.Query.ListIssues.Limit != 0 {
+		t.Fatalf("expected in-progress limit 0 (caller-set), got %d", inProgress.Query.ListIssues.Limit)
 	}
 
 	done := findSectionByID(t, sections, builtInSectionIDDone)
@@ -85,14 +85,14 @@ func TestBuiltInProviderSectionQueryMapping(t *testing.T) {
 	if !reflect.DeepEqual(done.Query.ListIssues.Statuses, []string{doneStatus}) {
 		t.Fatalf("unexpected done statuses: %#v", done.Query.ListIssues.Statuses)
 	}
-	if done.Query.ListIssues.SortBy != domain.SortFieldUpdatedAt {
-		t.Fatalf("expected done section sort by updated_at, got %q", done.Query.ListIssues.SortBy)
+	if done.Query.ListIssues.SortBy != domain.SortFieldClosedAt {
+		t.Fatalf("expected done section sort by closed_at, got %q", done.Query.ListIssues.SortBy)
 	}
 	if done.Query.ListIssues.SortOrder != domain.SortDirectionDescending {
 		t.Fatalf("expected done section descending sort order, got %q", done.Query.ListIssues.SortOrder)
 	}
-	if done.Query.ListIssues.Limit != defaultSectionLimit {
-		t.Fatalf("expected done section limit %d, got %d", defaultSectionLimit, done.Query.ListIssues.Limit)
+	if done.Query.ListIssues.Limit != 0 {
+		t.Fatalf("expected done section limit 0 (caller-set), got %d", done.Query.ListIssues.Limit)
 	}
 
 	if err := ValidateDefinitions(dashboards); err != nil {

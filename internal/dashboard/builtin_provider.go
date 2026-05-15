@@ -17,7 +17,6 @@ const (
 	builtInSectionTitleInProgress = "In Progress"
 	builtInSectionIDDone          = "done"
 	builtInSectionTitleDone       = "Done"
-	defaultSectionLimit           = 25
 	inProgressStatus              = "in_progress"
 	doneStatus                    = "closed"
 )
@@ -56,7 +55,7 @@ func notReadySection() Section {
 		Title: builtInSectionTitleNotReady,
 		Query: Query{
 			Type:          QueryTypeBlockedIssues,
-			BlockedIssues: domain.BlockedIssuesQuery{Limit: defaultSectionLimit},
+			BlockedIssues: domain.BlockedIssuesQuery{Limit: 0},
 		},
 	}
 }
@@ -67,7 +66,7 @@ func readySection() Section {
 		Title: builtInSectionTitleReady,
 		Query: Query{
 			Type:        QueryTypeReadyIssues,
-			ReadyIssues: domain.ReadyIssuesQuery{Limit: defaultSectionLimit},
+			ReadyIssues: domain.ReadyIssuesQuery{Limit: 0},
 		},
 	}
 }
@@ -80,7 +79,7 @@ func inProgressSection() Section {
 			Type: QueryTypeListIssues,
 			ListIssues: domain.IssueListQuery{
 				Statuses: []string{inProgressStatus},
-				Limit:    defaultSectionLimit,
+				Limit:    0,
 			},
 		},
 	}
@@ -94,9 +93,9 @@ func doneSection() Section {
 			Type: QueryTypeListIssues,
 			ListIssues: domain.IssueListQuery{
 				Statuses:  []string{doneStatus},
-				SortBy:    domain.SortFieldUpdatedAt,
+				SortBy:    domain.SortFieldClosedAt,
 				SortOrder: domain.SortDirectionDescending,
-				Limit:     defaultSectionLimit,
+				Limit:     0,
 			},
 		},
 	}

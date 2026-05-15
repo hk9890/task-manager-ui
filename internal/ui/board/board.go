@@ -23,10 +23,12 @@ const (
 
 // Column is one board section column.
 type Column struct {
-	Title       string
-	Rows        []domain.IssueSummary
-	SelectedRow int
-	Error       string
+	Title        string
+	Rows         []domain.IssueSummary
+	SelectedRow  int
+	Error        string
+	TotalCount   int
+	CountLoaded  bool
 }
 
 // State is the full board renderer input.
@@ -71,11 +73,15 @@ func Render(state State) string {
 		}
 
 		rows := renderColumnRows(col, innerWidth)
+		topRight := ""
+		if col.CountLoaded {
+			topRight = fmt.Sprintf("%d", col.TotalCount)
+		}
 		renderedCols = append(renderedCols, styles.FormSection(styles.FormSectionConfig{
 			Width:              columnWidths[idx],
 			Height:             columnHeight,
 			TopLeft:            col.Title,
-			TopRight:           fmt.Sprintf("%d", len(col.Rows)),
+			TopRight:           topRight,
 			Content:            rows,
 			Focused:            (start + idx) == state.FocusedColumn,
 			FocusedBorderColor: styles.BorderHighlightFocusColor,

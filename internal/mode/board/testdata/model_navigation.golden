@@ -1,5 +1,5 @@
 Default
-╭─ Ready ─────────────────────────────────── 1 ─╮  ╭─ In Progress ───────────────────────────── 2 ─╮
+╭─ Ready ───────────────────────────────────────╮  ╭─ In Progress ─────────────────────────────────╮
 │  T P1 OPN bw-1 Ready first                    │  │  T P2 IP bw-7 Progress one                    │
 │                                               │  │› B P1 IP bw-8 Progress two                    │
 │                                               │  │                                               │

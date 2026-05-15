@@ -17,6 +17,7 @@ const (
 	operationBlockedIssues = "blocked issues"
 	operationShowIssue     = "show issue"
 	operationSearchIssues  = "search issues"
+	operationCountIssues   = "count issues"
 	operationStatuses      = "status catalog"
 	operationTypes         = "type catalog"
 	operationLabels        = "label catalog"
@@ -263,6 +264,37 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 			query.Limit,
 			domain.SearchResultSourceBDSearch,
 		),
+	}, nil
+}
+
+// CountIssues returns issue counts by status using `bd count --by-status --json`.
+// Zero-count groups are omitted by bd count; Groups in the result contains only
+// entries with a non-zero count.
+func (g *Gateway) CountIssues(ctx context.Context, query domain.IssueCountQuery) (domain.IssueCountResult, error) {
+	args := []string{"count", "--by-status", "--json"}
+	args = append(args, buildFilterArgs(issueFilterArgs{
+		Statuses: query.Statuses,
+		Types:    query.Types,
+		Assignee: query.Assignee,
+		Labels:   query.Labels,
+	})...)
+
+	payload, err := RunJSON[bdCountByStatusPayload](ctx, g.runner, CommandRequest{Operation: operationCountIssues, Args: args})
+	if err != nil {
+		return domain.IssueCountResult{}, err
+	}
+
+	groups := make([]domain.IssueStatusCount, 0, len(payload.Groups))
+	for _, g := range payload.Groups {
+		groups = append(groups, domain.IssueStatusCount{
+			Status: g.Group,
+			Count:  g.Count,
+		})
+	}
+
+	return domain.IssueCountResult{
+		Groups: groups,
+		Total:  payload.Total,
 	}, nil
 }
 
@@ -702,6 +734,8 @@ func mapListSortField(field domain.SortField) string {
 		return "priority"
 	case domain.SortFieldID:
 		return "id"
+	case domain.SortFieldClosedAt:
+		return "closed"
 	default:
 		return ""
 	}

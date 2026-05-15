@@ -1,5 +1,5 @@
 Default
-╭─ Ready ───────────────────────────── 3 ─╮  ╭─ Blocked ─────────────────────────── 1 ─╮  ╭─ Recent Work ──────────────────────── 1 ─╮  ╭─ Assigned ─────────────────────────── 1 ─╮
+╭─ Ready ───────────────────────────── 7 ─╮  ╭─ Blocked ─────────────────────────── 3 ─╮  ╭─ Recent Work ─────────────────────── 42 ─╮  ╭─ Assigned ─────────────────────────── 5 ─╮
 │› T P0 OPN u5s Redesign board rows and...│  │  T P0 BLK 9oo Acceptance review board...│  │  T P1 CLS j34 Remove large sidebar fro...│  │  E P1 IP 7qz Preserve four-column grou...│
 │  F P1 IP 1ri Dashboard UX runtime har...│  │                                         │  │                                          │  │                                          │
 │  B P0 BLK y3x Runtime bug: board rows...│  │                                         │  │                                          │  │                                          │

@@ -792,6 +792,165 @@ func TestGatewayShowIssueMergesTopLevelAndDependencyRelatedWithoutDuplicates(t *
 	}
 }
 
+func TestGatewayCountIssuesDecodesMultiGroup(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"count", "--by-status", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"},{"count":353,"group":"closed"}],"schema_version":1,"total":358}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	if got.Total != 358 {
+		t.Fatalf("expected Total=358, got %d", got.Total)
+	}
+
+	if len(got.Groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d: %#v", len(got.Groups), got.Groups)
+	}
+
+	openGroup := got.Groups[0]
+	if openGroup.Status != "open" || openGroup.Count != 5 {
+		t.Fatalf("expected open group {open 5}, got %#v", openGroup)
+	}
+
+	closedGroup := got.Groups[1]
+	if closedGroup.Status != "closed" || closedGroup.Count != 353 {
+		t.Fatalf("expected closed group {closed 353}, got %#v", closedGroup)
+	}
+}
+
+func TestGatewayCountIssuesDecodesSingleGroup(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"count", "--by-status", "--json", "--status", "open"}): {
+			result: ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"}],"schema_version":1,"total":5}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{Statuses: []string{"open"}})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	if got.Total != 5 {
+		t.Fatalf("expected Total=5, got %d", got.Total)
+	}
+
+	if len(got.Groups) != 1 {
+		t.Fatalf("expected 1 group (closed omitted because zero), got %d: %#v", len(got.Groups), got.Groups)
+	}
+
+	if got.Groups[0].Status != "open" || got.Groups[0].Count != 5 {
+		t.Fatalf("expected open group {open 5}, got %#v", got.Groups[0])
+	}
+}
+
+func TestGatewayCountIssuesDecodesEmptyGroups(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"count", "--by-status", "--json"}): {
+			result: ExecResult{Stdout: []byte(`{"groups":[],"schema_version":1,"total":0}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	if got.Total != 0 {
+		t.Fatalf("expected Total=0, got %d", got.Total)
+	}
+
+	if len(got.Groups) != 0 {
+		t.Fatalf("expected empty Groups, got %#v", got.Groups)
+	}
+}
+
+func TestGatewayCountIssuesPassesFilters(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"count", "--by-status", "--json", "--status", "closed", "--type", "bug", "--assignee", "alice", "--label", "backend"}): {
+			result: ExecResult{Stdout: []byte(`{"groups":[{"count":10,"group":"closed"}],"schema_version":1,"total":10}`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{
+		Statuses: []string{"closed"},
+		Types:    []string{"bug"},
+		Assignee: "alice",
+		Labels:   []string{"backend"},
+	})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	if got.Total != 10 {
+		t.Fatalf("expected Total=10, got %d", got.Total)
+	}
+}
+
+func TestMapListSortFieldClosedAtMapsToClosedFlag(t *testing.T) {
+	t.Parallel()
+
+	got := mapListSortField(domain.SortFieldClosedAt)
+	if got != "closed" {
+		t.Fatalf("expected SortFieldClosedAt to map to %q, got %q", "closed", got)
+	}
+}
+
+func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--reverse", "--limit", "5"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-B","title":"B closed recent","status":"closed","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","closed_at":"2026-04-01T00:00:00Z"},
+				{"id":"bw-A","title":"A closed earlier updated later","status":"closed","issue_type":"task","priority":1,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z","closed_at":"2026-01-01T00:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ListIssues(context.Background(), domain.IssueListQuery{
+		Statuses:  []string{"closed"},
+		SortBy:    domain.SortFieldClosedAt,
+		SortOrder: domain.SortDirectionDescending,
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("ListIssues returned error: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("expected 2 issues, got %d", len(got))
+	}
+
+	// B (closed 2026-04-01) should appear before A (closed 2026-01-01, updated 2026-05-01)
+	// because the backend sorts by closed_at, not updated_at.
+	if got[0].ID != "bw-B" || got[1].ID != "bw-A" {
+		t.Fatalf("expected B before A when sorted by closed_at desc, got %s, %s", got[0].ID, got[1].ID)
+	}
+}
+
 type routeResponse struct {
 	result ExecResult
 	err    error

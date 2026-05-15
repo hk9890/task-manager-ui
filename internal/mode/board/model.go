@@ -28,6 +28,21 @@ type sectionLoadedMsg struct {
 	err          error
 }
 
+type countIssuesLoadedMsg struct {
+	result domain.IssueCountResult
+	err    error
+}
+
+type countReadyLoadedMsg struct {
+	count int
+	err   error
+}
+
+type countBlockedLoadedMsg struct {
+	count int
+	err   error
+}
+
 type sectionState struct {
 	id      string
 	title   string
@@ -59,16 +74,25 @@ type Model struct {
 	loading   bool
 	loadError string
 
-	dashboardID    string
-	dashboardTitle string
-	sections       []sectionState
-	pendingLoads   int
+	dashboardID     string
+	dashboardTitle  string
+	sections        []sectionState
+	sectionQueries  []dashboard.Query
+	pendingLoads    int
 
 	focusedColumn int
 	selectedRow   map[int]int
 
 	refreshMode   refreshMode
 	refreshAnchor *refreshAnchor
+
+	// True counts fetched after sections render (off the startup critical path).
+	sectionCounts      domain.IssueCountResult
+	readyCount         int
+	blockedCount       int
+	countsLoaded       bool
+	readyCountLoaded   bool
+	blockedCountLoaded bool
 }
 
 // NewModel creates a board mode controller.
@@ -134,9 +158,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.focusedColumn = 0
 		}
 		m.sections = make([]sectionState, len(def.Sections))
+		m.sectionQueries = make([]dashboard.Query, len(def.Sections))
 		m.selectedRow = make(map[int]int, len(def.Sections))
 		for i, section := range def.Sections {
 			m.sections[i] = sectionState{id: section.ID, title: section.Title}
+			m.sectionQueries[i] = section.Query
 			m.selectedRow[i] = 0
 		}
 		m.pendingLoads = len(def.Sections)
@@ -144,9 +170,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 
+		capacity := m.sectionItemCapacity()
 		cmds := make([]tea.Cmd, 0, len(def.Sections))
 		for i, section := range def.Sections {
-			cmds = append(cmds, loadSectionCmd(m.gateway, i, section.Query))
+			q := applyQueryLimit(section.Query, capacity)
+			cmds = append(cmds, loadSectionCmd(m.gateway, i, q))
 		}
 		return tea.Batch(cmds...)
 	case sectionLoadedMsg:
@@ -170,8 +198,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 		if m.pendingLoads == 0 {
 			m.settleAfterRefreshLoad()
-			return m.selectionChangedCmd()
+			return tea.Batch(m.selectionChangedCmd(), m.dispatchCountCmds())
 		}
+		return nil
+	case countIssuesLoadedMsg:
+		if msg.err == nil {
+			m.sectionCounts = msg.result
+		}
+		m.countsLoaded = true
+		return nil
+	case countReadyLoadedMsg:
+		if msg.err == nil {
+			m.readyCount = msg.count
+		}
+		m.readyCountLoaded = true
+		return nil
+	case countBlockedLoadedMsg:
+		if msg.err == nil {
+			m.blockedCount = msg.count
+		}
+		m.blockedCountLoaded = true
 		return nil
 	case tea.KeyMsg:
 		switch {
@@ -222,6 +268,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.pendingLoads = 0
 			m.refreshMode = refreshModeManual
 			m.refreshAnchor = nil
+			m.invalidateCounts()
 			return loadDashboardsCmd(m.provider)
 		}
 	}
@@ -254,7 +301,15 @@ func (m *Model) View() string {
 		if colIdx == m.focusedColumn {
 			selectedRow = m.selectedRow[colIdx]
 		}
-		columns = append(columns, uiboard.Column{Title: section.title, Rows: section.issues, SelectedRow: selectedRow, Error: section.errText})
+		totalCount, countLoaded := m.sectionTotalCount(colIdx)
+		columns = append(columns, uiboard.Column{
+			Title:       section.title,
+			Rows:        section.issues,
+			SelectedRow: selectedRow,
+			Error:       section.errText,
+			TotalCount:  totalCount,
+			CountLoaded: countLoaded,
+		})
 	}
 
 	return uiboard.Render(uiboard.State{
@@ -270,6 +325,22 @@ func (m *Model) View() string {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+}
+
+// sectionItemCapacity returns the number of issue rows that fit in a section
+// at the current terminal height. The formula matches the actual FormSection
+// inner height: max(3, height-1) - 2 = max(1, height-3).
+// When height is 0 (before the first tea.WindowSizeMsg), a safe default of 20
+// is returned so that Init() fires queries with a reasonable limit.
+func (m *Model) sectionItemCapacity() int {
+	if m.height == 0 {
+		return 20 // safe default before first WindowSizeMsg
+	}
+	rows := m.height - 3
+	if rows < 1 {
+		rows = 1
+	}
+	return rows
 }
 
 // CurrentSelection returns the current board issue selection.
@@ -292,6 +363,7 @@ func (m *Model) AutoRefresh() tea.Cmd {
 	m.pendingLoads = 0
 	m.refreshMode = refreshModeAuto
 	m.refreshAnchor = m.captureRefreshAnchor()
+	m.invalidateCounts()
 	return loadDashboardsCmd(m.provider)
 }
 
@@ -474,6 +546,21 @@ func loadSectionCmd(gateway beads.BeadsGateway, sectionIndex int, query dashboar
 	}
 }
 
+// applyQueryLimit stamps limit onto a query copy before dispatch. Provider
+// definitions carry Limit==0 (meaning "caller will set"). The board model
+// applies sectionItemCapacity() here so the gateway receives a concrete limit.
+func applyQueryLimit(q dashboard.Query, limit int) dashboard.Query {
+	switch q.Type {
+	case dashboard.QueryTypeListIssues:
+		q.ListIssues.Limit = limit
+	case dashboard.QueryTypeReadyIssues:
+		q.ReadyIssues.Limit = limit
+	case dashboard.QueryTypeBlockedIssues:
+		q.BlockedIssues.Limit = limit
+	}
+	return q
+}
+
 func runSectionQuery(ctx context.Context, gateway beads.BeadsGateway, query dashboard.Query) ([]domain.IssueSummary, error) {
 	switch query.Type {
 	case dashboard.QueryTypeReadyIssues:
@@ -493,5 +580,101 @@ func runSectionQuery(ctx context.Context, gateway beads.BeadsGateway, query dash
 		return issues, nil
 	default:
 		return nil, fmt.Errorf("unsupported dashboard query type: %s", query.Type)
+	}
+}
+
+// invalidateCounts resets stored counts so the next load cycle re-fetches them.
+func (m *Model) invalidateCounts() {
+	m.sectionCounts = domain.IssueCountResult{}
+	m.readyCount = 0
+	m.blockedCount = 0
+	m.countsLoaded = false
+	m.readyCountLoaded = false
+	m.blockedCountLoaded = false
+}
+
+// dispatchCountCmds fires the count queries that run after sections have loaded.
+// CountIssues covers in_progress and closed status groups.
+// Separate uncapped ReadyIssues/BlockedIssues calls cover those section types.
+func (m *Model) dispatchCountCmds() tea.Cmd {
+	hasReady := false
+	hasBlocked := false
+	for _, q := range m.sectionQueries {
+		switch q.Type {
+		case dashboard.QueryTypeReadyIssues:
+			hasReady = true
+		case dashboard.QueryTypeBlockedIssues:
+			hasBlocked = true
+		}
+	}
+
+	cmds := []tea.Cmd{countIssuesCmd(m.gateway)}
+	if hasReady {
+		cmds = append(cmds, countReadyCmd(m.gateway))
+	} else {
+		// No ready section; mark ready count as loaded (0) so View stays consistent.
+		m.readyCountLoaded = true
+	}
+	if hasBlocked {
+		cmds = append(cmds, countBlockedCmd(m.gateway))
+	} else {
+		m.blockedCountLoaded = true
+	}
+	return tea.Batch(cmds...)
+}
+
+// sectionTotalCount returns the true total count and whether it has loaded for
+// the section at the given index. It uses sectionCounts for ListIssues sections
+// and readyCount/blockedCount for ReadyIssues/BlockedIssues sections.
+func (m *Model) sectionTotalCount(colIdx int) (count int, loaded bool) {
+	if colIdx < 0 || colIdx >= len(m.sectionQueries) {
+		return 0, false
+	}
+	q := m.sectionQueries[colIdx]
+	switch q.Type {
+	case dashboard.QueryTypeReadyIssues:
+		return m.readyCount, m.readyCountLoaded
+	case dashboard.QueryTypeBlockedIssues:
+		return m.blockedCount, m.blockedCountLoaded
+	case dashboard.QueryTypeListIssues:
+		if !m.countsLoaded {
+			return 0, false
+		}
+		// Find the count for the primary status in this query.
+		if len(q.ListIssues.Statuses) == 0 {
+			return m.sectionCounts.Total, true
+		}
+		status := q.ListIssues.Statuses[0]
+		for _, group := range m.sectionCounts.Groups {
+			if group.Status == status {
+				return group.Count, true
+			}
+		}
+		// Status group absent means zero issues in that state.
+		return 0, true
+	}
+	return 0, false
+}
+
+func countIssuesCmd(gateway beads.BeadsGateway) tea.Cmd {
+	return func() tea.Msg {
+		result, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
+		return countIssuesLoadedMsg{result: result, err: err}
+	}
+}
+
+func countReadyCmd(gateway beads.BeadsGateway) tea.Cmd {
+	return func() tea.Msg {
+		// Limit: 0 means uncapped — we count all ready issues.
+		issues, err := gateway.ReadyIssues(context.Background(), domain.ReadyIssuesQuery{Limit: 0})
+		return countReadyLoadedMsg{count: len(issues), err: err}
+	}
+}
+
+func countBlockedCmd(gateway beads.BeadsGateway) tea.Cmd {
+	return func() tea.Msg {
+		// Limit: 0 means uncapped — we count all blocked issues.
+		blocked, err := gateway.BlockedIssues(context.Background(), domain.BlockedIssuesQuery{Limit: 0})
+		return countBlockedLoadedMsg{count: len(blocked), err: err}
 	}
 }

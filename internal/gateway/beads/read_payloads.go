@@ -68,6 +68,17 @@ type bdLabelCatalogEntryPayload struct {
 
 type bdLabelListAllPayload []bdLabelCatalogEntryPayload
 
+type bdCountGroupPayload struct {
+	Group string `json:"group"`
+	Count int    `json:"count"`
+}
+
+type bdCountByStatusPayload struct {
+	Groups        []bdCountGroupPayload `json:"groups"`
+	SchemaVersion int                   `json:"schema_version"`
+	Total         int                   `json:"total"`
+}
+
 func (p bdIssuePayload) toIssueSummary(operation string) (domain.IssueSummary, error) {
 	id, err := requiredString(p.ID, "id")
 	if err != nil {

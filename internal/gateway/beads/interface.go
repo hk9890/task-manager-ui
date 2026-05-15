@@ -18,6 +18,7 @@ type BeadsGateway interface {
 	BlockedIssues(ctx context.Context, query domain.BlockedIssuesQuery) ([]domain.BlockedIssueView, error)
 	ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (domain.IssueDetail, error)
 	SearchIssues(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error)
+	CountIssues(ctx context.Context, query domain.IssueCountQuery) (domain.IssueCountResult, error)
 
 	CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error)
 	UpdateIssue(ctx context.Context, issueID string, input domain.UpdateIssueInput) error

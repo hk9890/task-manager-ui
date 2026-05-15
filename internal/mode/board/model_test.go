@@ -50,10 +50,10 @@ func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
 		ID:    "default",
 		Title: "Default",
 		Sections: []dashboard.Section{
-			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 25}}},
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 25}}},
-			{ID: "done", Title: "Done", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"closed"}, SortBy: domain.SortFieldUpdatedAt, SortOrder: domain.SortDirectionDescending, Limit: 25}}},
+			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 0}}},
+			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 0}}},
+			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 0}}},
+			{ID: "done", Title: "Done", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"closed"}, SortBy: domain.SortFieldUpdatedAt, SortOrder: domain.SortDirectionDescending, Limit: 0}}},
 		},
 	}}}
 
@@ -78,6 +78,51 @@ func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
 
 	if sel := finalModel.CurrentSelection(); sel == nil || sel.Issue.ID != "bw-4" {
 		t.Fatalf("expected initial selection bw-4 from Not Ready lane, got %#v", sel)
+	}
+
+	// Verify the board model applied a non-zero limit on section display queries derived from
+	// terminal height (not the provider's Limit==0 placeholder). Height=30 → sectionItemCapacity()=27.
+	// Count queries intentionally use Limit==0 (uncapped); we check that at least one
+	// section-display call per method used a non-zero limit.
+	sawReadyNonZero := false
+	sawListNonZero := false
+	sawBlockedNonZero := false
+	for _, call := range gateway.Calls {
+		switch call.Method {
+		case fakes.MethodReadyIssues:
+			c, ok := call.Input.(fakes.ReadyIssuesCall)
+			if !ok {
+				t.Fatalf("unexpected ReadyIssues call input type: %T", call.Input)
+			}
+			if c.Query.Limit != 0 {
+				sawReadyNonZero = true
+			}
+		case fakes.MethodListIssues:
+			c, ok := call.Input.(fakes.ListIssuesCall)
+			if !ok {
+				t.Fatalf("unexpected ListIssues call input type: %T", call.Input)
+			}
+			if c.Query.Limit != 0 {
+				sawListNonZero = true
+			}
+		case fakes.MethodBlockedIssues:
+			c, ok := call.Input.(fakes.BlockedIssuesCall)
+			if !ok {
+				t.Fatalf("unexpected BlockedIssues call input type: %T", call.Input)
+			}
+			if c.Query.Limit != 0 {
+				sawBlockedNonZero = true
+			}
+		}
+	}
+	if !sawReadyNonZero {
+		t.Fatalf("expected at least one ReadyIssues section-display call with non-zero Limit")
+	}
+	if !sawListNonZero {
+		t.Fatalf("expected at least one ListIssues section-display call with non-zero Limit")
+	}
+	if !sawBlockedNonZero {
+		t.Fatalf("expected at least one BlockedIssues section-display call with non-zero Limit")
 	}
 
 	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View()), "model_loaded.golden")
@@ -520,10 +565,10 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 		ID:    "default",
 		Title: "Default",
 		Sections: []dashboard.Section{
-			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 25}}},
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 25}}},
-			{ID: "done", Title: "Done", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"closed"}, SortBy: domain.SortFieldUpdatedAt, SortOrder: domain.SortDirectionDescending, Limit: 25}}},
+			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 0}}},
+			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 0}}},
+			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 0}}},
+			{ID: "done", Title: "Done", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"closed"}, SortBy: domain.SortFieldUpdatedAt, SortOrder: domain.SortDirectionDescending, Limit: 0}}},
 		},
 	}}}
 
@@ -543,7 +588,11 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway, provider, resolvedBoardKeys(t))}, tc.width, tc.height)
+			subGateway := fakes.NewFakeBeadsGateway()
+			subGateway.ReadyIssuesResponse = gateway.ReadyIssuesResponse
+			subGateway.ListIssuesResponse = gateway.ListIssuesResponse
+			subGateway.BlockedIssuesResponse = gateway.BlockedIssuesResponse
+			tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(subGateway, provider, resolvedBoardKeys(t))}, tc.width, tc.height)
 			t.Cleanup(func() {
 				_ = tm.Quit()
 			})
@@ -562,6 +611,51 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 			finalModel, ok := final.Controller.(*Model)
 			if !ok {
 				t.Fatalf("expected wrapped board model, got %T", final.Controller)
+			}
+
+			// Assert the board applied a non-zero limit on section-display queries derived from
+			// terminal height, not the provider's Limit==0 placeholder. Count queries intentionally
+			// use Limit==0 (uncapped); verify at least one section-display call per method used a
+			// non-zero limit.
+			sawReadyNonZero := false
+			sawListNonZero := false
+			sawBlockedNonZero := false
+			for _, call := range subGateway.Calls {
+				switch call.Method {
+				case fakes.MethodReadyIssues:
+					c, ok := call.Input.(fakes.ReadyIssuesCall)
+					if !ok {
+						t.Fatalf("unexpected ReadyIssues call input type: %T", call.Input)
+					}
+					if c.Query.Limit != 0 {
+						sawReadyNonZero = true
+					}
+				case fakes.MethodListIssues:
+					c, ok := call.Input.(fakes.ListIssuesCall)
+					if !ok {
+						t.Fatalf("unexpected ListIssues call input type: %T", call.Input)
+					}
+					if c.Query.Limit != 0 {
+						sawListNonZero = true
+					}
+				case fakes.MethodBlockedIssues:
+					c, ok := call.Input.(fakes.BlockedIssuesCall)
+					if !ok {
+						t.Fatalf("unexpected BlockedIssues call input type: %T", call.Input)
+					}
+					if c.Query.Limit != 0 {
+						sawBlockedNonZero = true
+					}
+				}
+			}
+			if !sawReadyNonZero {
+				t.Fatalf("expected at least one ReadyIssues section-display call with non-zero Limit for height=%d", tc.height)
+			}
+			if !sawListNonZero {
+				t.Fatalf("expected at least one ListIssues section-display call with non-zero Limit for height=%d", tc.height)
+			}
+			if !sawBlockedNonZero {
+				t.Fatalf("expected at least one BlockedIssues section-display call with non-zero Limit for height=%d", tc.height)
 			}
 
 			view := finalModel.View()
@@ -629,6 +723,31 @@ func TestBoardModeViewShowsProgressCounterDuringSectionLoads(t *testing.T) {
 	view = m.View()
 	if strings.Contains(view, "/ 3 sections") {
 		t.Fatalf("expected no loading counter once all sections are loaded, got %q", view)
+	}
+}
+
+func TestSectionItemCapacity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		height int
+		want   int
+	}{
+		{height: 0, want: 20},  // safe default before first WindowSizeMsg
+		{height: 1, want: 1},   // clamp: 1-3 = -2, clamped to 1
+		{height: 3, want: 1},   // clamp: 3-3 = 0, clamped to 1
+		{height: 4, want: 1},   // 4-3 = 1
+		{height: 24, want: 21}, // 24-3 = 21
+		{height: 30, want: 27}, // 30-3 = 27
+		{height: 34, want: 31}, // 34-3 = 31
+	}
+
+	for _, tc := range tests {
+		m := &Model{height: tc.height}
+		got := m.sectionItemCapacity()
+		if got != tc.want {
+			t.Errorf("sectionItemCapacity() with height=%d: got %d, want %d", tc.height, got, tc.want)
+		}
 	}
 }
 

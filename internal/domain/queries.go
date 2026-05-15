@@ -16,6 +16,9 @@ const (
 	SortFieldCreatedAt SortField = "created_at"
 	SortFieldPriority  SortField = "priority"
 	SortFieldID        SortField = "id"
+	// SortFieldClosedAt sorts by issue close date. Use only with status=closed filters;
+	// behavior for non-closed issues is undefined.
+	SortFieldClosedAt SortField = "closed_at"
 )
 
 // WorkStateFilter narrows search results to readiness/blocking queues.
@@ -33,6 +36,9 @@ type IssueListQuery struct {
 	Types     []string
 	Assignee  string
 	Labels    []string
+	// Limit is the maximum number of issues to return. A value of 0 means the
+	// caller (e.g. the board model) will set an appropriate display limit before
+	// dispatching. Custom dashboard providers must not assume Limit > 0.
 	Limit     int
 	Offset    int
 	SortBy    SortField
@@ -41,12 +47,18 @@ type IssueListQuery struct {
 
 // ReadyIssuesQuery requests ready-work queues.
 type ReadyIssuesQuery struct {
+	// Limit is the maximum number of issues to return. A value of 0 means the
+	// caller (e.g. the board model) will set an appropriate display limit before
+	// dispatching. Custom dashboard providers must not assume Limit > 0.
 	Limit  int
 	Offset int
 }
 
 // BlockedIssuesQuery requests blocked-work queues.
 type BlockedIssuesQuery struct {
+	// Limit is the maximum number of issues to return. A value of 0 means the
+	// caller (e.g. the board model) will set an appropriate display limit before
+	// dispatching. Custom dashboard providers must not assume Limit > 0.
 	Limit  int
 	Offset int
 }
@@ -54,6 +66,30 @@ type BlockedIssuesQuery struct {
 // ShowIssueQuery identifies a single issue to load.
 type ShowIssueQuery struct {
 	IssueID string
+}
+
+// IssueCountQuery requests issue counts. Statuses/Types/Assignee/Labels narrow the
+// counted population. Empty fields = count all. Pass Statuses:[]string{"closed"} to
+// count only closed issues.
+type IssueCountQuery struct {
+	Statuses []string
+	Types    []string
+	Assignee string
+	Labels   []string
+}
+
+// IssueStatusCount holds the count for a single issue status group.
+type IssueStatusCount struct {
+	Status string
+	Count  int
+}
+
+// IssueCountResult is the result of a CountIssues call.
+// Groups contains only non-zero status entries (zero-count groups are omitted by bd count).
+// Total is the sum of all group counts.
+type IssueCountResult struct {
+	Groups []IssueStatusCount
+	Total  int
 }
 
 // SearchIssuesQuery requests text and structured search.
