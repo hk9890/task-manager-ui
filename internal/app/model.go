@@ -123,10 +123,11 @@ type Model struct {
 	services Services
 	keys     config.ResolvedKeyBindings
 
-	// fatalErr is set when a startup health check detects that bd is unavailable.
-	// When non-empty, View() renders the fatal error screen and Update() only
-	// handles quit keys and window size changes.
-	fatalErr string
+	// fatalErrTitle and fatalErrBody are set when a startup health check detects
+	// that the app cannot run. When fatalErrTitle is non-empty, View() renders
+	// the fatal error screen and Update() only handles quit keys and window resize.
+	fatalErrTitle string
+	fatalErrBody  string
 
 	active     mode.ID
 	lastBrowse mode.ID
@@ -222,10 +223,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if check, ok := msg.(startupHealthCheckMsg); ok {
 		if check.err != nil {
 			var gwErr domain.GatewayError
-			if errors.As(check.err, &gwErr) && gwErr.Code == domain.ErrorCodeCommandUnavailable {
-				m.fatalErr = "bd command not found in PATH"
-				slog.Default().Error("beads health check failed", "error", check.err)
-				return m, nil
+			if errors.As(check.err, &gwErr) {
+				switch gwErr.Code {
+				case domain.ErrorCodeCommandUnavailable:
+					m.fatalErrTitle = "beads is not available"
+					m.fatalErrBody = "The bd CLI tool was not found in your PATH.\n\nInstall beads to use this app.\nSee https://github.com/hk9890/beads-workbench for setup instructions."
+					slog.Default().Error("beads health check failed", "error", check.err)
+					return m, nil
+				case domain.ErrorCodeNoDatabaseFound:
+					m.fatalErrTitle = "no beads project here"
+					m.fatalErrBody = "No beads database was found in this directory.\n\nRun 'bd init' to create a new database, or use --cwd to point to a directory that contains one."
+					slog.Default().Error("beads health check failed", "error", check.err)
+					return m, nil
+				}
 			}
 		}
 		// Health check passed — normal operation continues.
@@ -233,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// When a fatal error is set, only handle window resize and quit.
-	if m.fatalErr != "" {
+	if m.fatalErrTitle != "" {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
 			m.width = msg.Width
@@ -699,8 +709,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the root shell.
 func (m Model) View() string {
-	if m.fatalErr != "" {
-		return fatalerror.View(m.width, m.height)
+	if m.fatalErrTitle != "" {
+		return fatalerror.View(m.fatalErrTitle, m.fatalErrBody, m.width, m.height)
 	}
 
 	header := m.renderHeader()

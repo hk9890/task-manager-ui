@@ -7,6 +7,7 @@ type ErrorCode string
 
 const (
 	ErrorCodeCommandUnavailable ErrorCode = "command_unavailable"
+	ErrorCodeNoDatabaseFound    ErrorCode = "no_database_found"
 	ErrorCodeCommandFailed      ErrorCode = "command_failed"
 	ErrorCodeDecodeFailed       ErrorCode = "decode_failed"
 	ErrorCodeValidationFailed   ErrorCode = "validation_failed"

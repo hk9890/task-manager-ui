@@ -37,10 +37,11 @@ func NewCLIGateway(runner *CommandRunner) *Gateway {
 	return &Gateway{runner: runner}
 }
 
-// HealthCheck verifies that the bd CLI is reachable by running `bd version`.
-// Returns an error with ErrorCodeCommandUnavailable if bd is not in PATH.
+// HealthCheck verifies that bd is reachable and a beads database exists in the
+// working directory. Returns ErrorCodeCommandUnavailable if bd is not in PATH,
+// ErrorCodeNoDatabaseFound if no database is present, nil on success.
 func (g *Gateway) HealthCheck(ctx context.Context) error {
-	_, err := g.runner.Run(ctx, CommandRequest{Operation: operationHealthCheck, Args: []string{"version"}})
+	_, err := g.runner.Run(ctx, CommandRequest{Operation: operationHealthCheck, Args: []string{"list", "--json"}})
 	return err
 }
 

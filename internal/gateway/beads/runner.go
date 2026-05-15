@@ -110,8 +110,11 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 	}
 
 	if result.ExitCode != 0 {
-		message := fmt.Sprintf("command exited with code %d", result.ExitCode)
 		stderr := strings.TrimSpace(string(result.Stderr))
+		if strings.Contains(stderr, "no beads database found") {
+			return nil, newGatewayError(domain.ErrorCodeNoDatabaseFound, req.Operation, stderr, nil)
+		}
+		message := fmt.Sprintf("command exited with code %d", result.ExitCode)
 		if stderr != "" {
 			message = fmt.Sprintf("%s: %s", message, stderr)
 		}

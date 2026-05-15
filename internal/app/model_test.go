@@ -2905,7 +2905,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
-	if m.fatalErr == "" {
+	if m.fatalErrTitle == "" {
 		t.Fatal("expected fatalErr to be set after CommandUnavailable health check, got empty string")
 	}
 }
@@ -2924,8 +2924,8 @@ func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
-	if m.fatalErr != "" {
-		t.Fatalf("expected fatalErr to be empty after successful health check, got %q", m.fatalErr)
+	if m.fatalErrTitle != "" {
+		t.Fatalf("expected fatalErr to be empty after successful health check, got %q", m.fatalErrTitle)
 	}
 }
 
@@ -2974,7 +2974,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
-	if m.fatalErr == "" {
+	if m.fatalErrTitle == "" {
 		t.Fatal("precondition: expected fatalErr to be set")
 	}
 
@@ -3002,6 +3002,37 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	}
 }
 
+func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.SetError(fakes.MethodHealthCheck, domain.GatewayError{
+		Code:      domain.ErrorCodeNoDatabaseFound,
+		Operation: "health check",
+		Message:   "no beads database found",
+	})
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := NewModel(services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErrTitle == "" {
+		t.Fatal("expected fatalErrTitle to be set after NoDatabaseFound health check")
+	}
+	view := m.View()
+	if !strings.Contains(view, "no beads project here") {
+		t.Fatalf("expected no-database title in View(), got %q", view)
+	}
+	if !strings.Contains(view, "bd init") {
+		t.Fatalf("expected 'bd init' hint in View(), got %q", view)
+	}
+}
+
 func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
 	t.Parallel()
 
@@ -3018,8 +3049,8 @@ func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
 	m = applyMessages(t, m, msgs)
 
 	// A non-GatewayError does not set fatalErr — app loads normally.
-	if m.fatalErr != "" {
-		t.Fatalf("expected fatalErr to be empty for non-GatewayError, got %q", m.fatalErr)
+	if m.fatalErrTitle != "" {
+		t.Fatalf("expected fatalErr to be empty for non-GatewayError, got %q", m.fatalErrTitle)
 	}
 }
 

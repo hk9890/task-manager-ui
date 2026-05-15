@@ -6,11 +6,8 @@ import (
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
-const installURL = "https://github.com/hk9890/beads-workbench"
-
-// View renders a centered full-screen error screen. Call this when a fatal
-// startup error prevents normal app operation.
-func View(width, height int) string {
+// View renders a centered full-screen error screen with the given title and body.
+func View(title, body string, width, height int) string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(styles.ToastBorderErrorColor)
@@ -21,13 +18,13 @@ func View(width, height int) string {
 	hintStyle := lipgloss.NewStyle().
 		Foreground(styles.TextMutedColor)
 
-	title := titleStyle.Render("beads is not available")
-
-	body := bodyStyle.Render("The bd CLI tool was not found in your PATH.\n\nInstall beads to use this app.\nSee " + installURL + " for setup instructions.")
-
-	hint := hintStyle.Render("Press q or ctrl+c to quit.")
-
-	content := lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", hint)
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		titleStyle.Render(title),
+		"",
+		bodyStyle.Render(body),
+		"",
+		hintStyle.Render("Press q or ctrl+c to quit."),
+	)
 
 	if width <= 0 {
 		width = 80
