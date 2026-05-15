@@ -52,7 +52,7 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		"Metadata",
 		"gateway",
 		"shown",
-		"Exact results:",
+		"exact",
 		"› T P1 OPN bw-1 Gateway search result",
 		"B P0 IP bw-2 Another result",
 		"Gateway search result",

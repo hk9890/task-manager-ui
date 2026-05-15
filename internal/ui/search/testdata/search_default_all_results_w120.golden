@@ -1,13 +1,13 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Type query, then press Enter.         │  │Default all result                      │  │  Core                          │
-│Showing default all-issues results.   │  │bw-1 · open · P1                        │  │  Type    : task                │
-│Type to refine these default result...│  │                                        │  │  Status  : open                │
-╰──────────────────────────────────────╯  │Description                             │  │  Priority: P1                  │
-╭─ Results ────────────────── 2 exact ─╮  │Default preview description             │  │  ------------------------------│
-│Exact results: 2 match(es) currentl...│  │                                        │  │  Ownership                     │
+╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
+╭─ Results ────────────────── 2 exact ─╮  │                                        │  │  Status  : open                │
+│› T P1 OPN bw-1 Default all result    │  │Description                             │  │  Priority: P1                  │
+│  B P0 IP bw-2 Second default         │  │Default preview description             │  │  ------------------------------│
+│                                      │  │                                        │  │  Ownership                     │
 │                                      │  │                                        │  │  Assignee: hans                │
-│› T P1 OPN bw-1 Default all result    │  │                                        │  │  ------------------------------│
-│  B P0 IP bw-2 Second default         │  │                                        │  │  Labels                        │
+│                                      │  │                                        │  │  ------------------------------│
+│                                      │  │                                        │  │  Labels                        │
 │                                      │  │                                        │  │  • ui                          │
 │                                      │  │                                        │  │  ------------------------------│
 │                                      │  │                                        │  │  Counts                        │

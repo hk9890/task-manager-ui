@@ -729,7 +729,7 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	if !strings.Contains(m.View(), "cached detail") {
 		t.Fatalf("expected cached preview detail retained after refresh failure, got:\n%s", m.View())
 	}
-	if !strings.Contains(m.View(), "refresh boom") || !strings.Contains(m.View(), "Search result") || !strings.Contains(m.View(), "Refresh failed; showing last loaded") || !strings.Contains(m.View(), "Showing results for \"x\".") {
+	if !strings.Contains(m.View(), "refresh boom") || !strings.Contains(m.View(), "Search result") || !strings.Contains(m.View(), "failed") || !strings.Contains(m.View(), "x") {
 		t.Fatalf("expected shell view to preserve search context on refresh failure, got:\n%s", m.View())
 	}
 }

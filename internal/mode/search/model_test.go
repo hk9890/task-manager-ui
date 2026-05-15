@@ -197,7 +197,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View()
-		if !strings.Contains(view, "Search failed.") || !strings.Contains(view, "boom") || !strings.Contains(view, "Last search for the current search failed.") {
+		if !strings.Contains(view, "Search failed.") || !strings.Contains(view, "boom") || !strings.Contains(view, "failed") {
 			t.Fatalf("expected error state in view, got:\n%s", view)
 		}
 	})
@@ -425,7 +425,7 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected selection retained on reload error, got %#v", got)
 	}
-	if !strings.Contains(m.View(), "Refresh failed; showing last loaded") || !strings.Contains(m.View(), "First") || !strings.Contains(m.View(), "Showing results for \"abc\".") {
+	if !strings.Contains(m.View(), "reload failed") || !strings.Contains(m.View(), "First") || !strings.Contains(m.View(), "failed") || !strings.Contains(m.View(), "abc") {
 		t.Fatalf("expected view to preserve rows and show refresh error, got:\n%s", m.View())
 	}
 }

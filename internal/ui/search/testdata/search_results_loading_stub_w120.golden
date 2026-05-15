@@ -1,15 +1,15 @@
 ╭─ Search ──────────────────── reload ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │gateway                               │  │Gateway search result                   │  │  Core                          │
-│Refreshing results for "gateway".     │  │bw-1 · open · P1                        │  │  Type    : task                │
-│Wait for refresh or keep browsing t...│  │                                        │  │  Status  : open                │
-╰──────────────────────────────────────╯  │Description                             │  │  Priority: P1                  │
-╭─ Results ───────────────── 2 capped ─╮  │⏳ Loading details for bw-1…            │  │  ------------------------------│
-│Refreshing… showing previous result...│  │                                        │  │  Ownership                     │
-│Results may be capped at the backen...│  │                                        │  │  Assignee: hans                │
-│Results may be incomplete because t...│  │                                        │  │  ------------------------------│
+╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
+╭─ Results ───────────────── 2 capped ─╮  │                                        │  │  Status  : open                │
+│› T P1 OPN bw-1 Gateway search result │  │Description                             │  │  Priority: P1                  │
+│  B P0 IP bw-2 Another result         │  │⏳ Loading details for bw-1…            │  │  ------------------------------│
+│                                      │  │                                        │  │  Ownership                     │
+│                                      │  │                                        │  │  Assignee: hans                │
+│                                      │  │                                        │  │  ------------------------------│
 │                                      │  │                                        │  │  Labels                        │
-│› T P1 OPN bw-1 Gateway search result │  │                                        │  │  • ui                          │
-│  B P0 IP bw-2 Another result         │  │                                        │  │  ------------------------------│
+│                                      │  │                                        │  │  • ui                          │
+│                                      │  │                                        │  │  ------------------------------│
 │                                      │  │                                        │  │  Counts                        │
 │                                      │  │                                        │  │  Comments  : 0                 │
 │                                      │  │                                        │  │  Blocked by: 0                 │

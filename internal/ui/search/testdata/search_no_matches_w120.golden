@@ -1,12 +1,12 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │nomatch│                              │  │No selected result.                     │  │  Core                          │
-│No matches for "nomatch" yet.         │  │(none) · (none) · (unknown)             │  │  Type    : (unknown)           │
-│Try broader terms or clear the quer...│  │                                        │  │  Status  : (none)              │
-╰──────────────────────────────────────╯  │Description                             │  │  Priority: (unknown)           │
-╭─ Results ────────────────── 0 exact ─╮  │Select a result in the search rail to pr│  │  ------------------------------│
-│No matches for "nomatch".             │  │eview issue content.                    │  │  Counts                        │
+╰──────────────────────────────────────╯  │(none) · (none) · (unknown)             │  │  Type    : (unknown)           │
+╭─ Results ────────────────── 0 exact ─╮  │                                        │  │  Status  : (none)              │
+│No matches for "nomatch".             │  │Description                             │  │  Priority: (unknown)           │
+│                                      │  │Select a result in the search rail to pr│  │  ------------------------------│
+│Try broader terms or clear the quer...│  │eview issue content.                    │  │  Counts                        │
 │                                      │  │                                        │  │  Comments  : 0                 │
-│Try broader terms or clear the quer...│  │                                        │  │  Blocked by: 0                 │
+│                                      │  │                                        │  │  Blocked by: 0                 │
 │                                      │  │                                        │  │  Blocks    : 0                 │
 │                                      │  │                                        │  │  Related   : 0                 │
 │                                      │  │                                        │  │                                │
