@@ -103,7 +103,7 @@ func TestRenderResultsRowsApplySharedIDWidthCap(t *testing.T) {
 	})
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "…-width-id") {
+	if !strings.Contains(plain, "…") || !strings.Contains(plain, "width-id") {
 		t.Fatalf("expected capped compact issue id suffix in search results, got:\n%s", plain)
 	}
 }

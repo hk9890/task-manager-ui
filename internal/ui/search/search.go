@@ -18,8 +18,9 @@ const (
 	searchColumnGap           = 2
 	searchQueryHeight         = 3
 	searchWideMinWidth        = 110
-	searchRailMinWidthWide    = 38
-	searchRailMaxWidthWide    = 52
+	searchRailMinWidthWide    = 40
+	searchRailMaxWidthWide    = 120
+	searchRailPercentWide     = 30
 	searchMetadataWidth       = 34
 	searchContentMinWidthWide = 20
 	searchRailMinWidthNarrow  = 34
@@ -273,12 +274,11 @@ func renderResultsBanner(state State, width int) []string {
 
 func renderResultsBody(state State, width int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
-		return []string{
-			styles.TruncateString("Search failed.", width),
-			styles.TruncateString(state.Error, width),
-			"",
-			styles.TruncateString("Edit the query, then press Enter to retry.", width),
-		}
+		lines := []string{"Search failed."}
+		lines = append(lines, styles.WrapLines(state.Error, width)...)
+		lines = append(lines, "")
+		lines = append(lines, styles.WrapLines("Edit the query, then press Enter to retry.", width)...)
+		return lines
 	}
 
 	if len(state.Results) == 0 {
@@ -290,18 +290,15 @@ func renderResultsBody(state State, width int) []string {
 
 func renderEmptyResultsBody(state State, width int) []string {
 	if strings.TrimSpace(state.AppliedQuery) == "" {
-		return []string{
-			styles.TruncateString("No search has run yet.", width),
-			"",
-			styles.TruncateString("Type query text, then press Enter to search.", width),
-		}
+		lines := []string{"No search has run yet.", ""}
+		lines = append(lines, styles.WrapLines("Type query text, then press Enter to search.", width)...)
+		return lines
 	}
 
-	return []string{
-		styles.TruncateString(fmt.Sprintf("No matches for %q.", strings.TrimSpace(state.AppliedQuery)), width),
-		"",
-		styles.TruncateString("Try broader terms or clear the query, then press Enter.", width),
-	}
+	lines := styles.WrapLines(fmt.Sprintf("No matches for %q.", strings.TrimSpace(state.AppliedQuery)), width)
+	lines = append(lines, "")
+	lines = append(lines, styles.WrapLines("Try broader terms or clear the query, then press Enter.", width)...)
+	return lines
 }
 
 func renderResultRows(state State, width int) []string {
@@ -357,7 +354,7 @@ func splitWideWidths(total int) (rail, content, metadata int) {
 	}
 
 	metadata = searchMetadataWidth
-	rail = clamp((available*35)/100, searchRailMinWidthWide, searchRailMaxWidthWide)
+	rail = clamp((available*searchRailPercentWide)/100, searchRailMinWidthWide, searchRailMaxWidthWide)
 	content = available - rail - metadata
 
 	if content < searchContentMinWidthWide {

@@ -1,28 +1,28 @@
-╭─ Search ─────────────────── shown ─╮  ╭─ Content ───────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│gateway                             │  │Gateway search result           │  │  Core                          │
-╰────────────────────────────────────╯  │bw-1 · open · P1                │  │  Type    : task                │
-╭─ Results ──────────────── 2 exact ─╮  │                                │  │  Status  : open                │
-│› T P1 OPN bw-1 Gateway search re...│  │Description                     │  │  Priority: P1                  │
-│  B P0 IP bw-2 Another result       │  │Search preview description      │  │  ------------------------------│
-│                                    │  │                                │  │  Ownership                     │
-│                                    │  │                                │  │  Assignee: hans                │
-│                                    │  │                                │  │  ------------------------------│
-│                                    │  │                                │  │  Labels                        │
-│                                    │  │                                │  │  • ui                          │
-│                                    │  │                                │  │  ------------------------------│
-│                                    │  │                                │  │  Counts                        │
-│                                    │  │                                │  │  Comments  : 0                 │
-│                                    │  │                                │  │  Blocked by: 0                 │
-│                                    │  │                                │  │  Blocks    : 0                 │
-│                                    │  │                                │  │  Related   : 0                 │
-│                                    │  │                                │  │                                │
-│                                    │  │                                │  │Quick actions                   │
-│                                    │  │                                │  │e Edit issue                    │
-│                                    │  │                                │  │u Update issue                  │
-│                                    │  │                                │  │c Add comment                   │
-│                                    │  │                                │  │x Close issue                   │
-│                                    │  │                                │  │r Reload detail                 │
-│                                    │  │                                │  │                                │
-│                                    │  │                                │  │                                │
-│                                    │  │                                │  │                                │
-╰────────────────────────────────────╯  ╰────────────────────────────────╯  ╰────────────────────────────────╯
+╭─ Search ───────────────────── shown ─╮  ╭─ Content ─────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│gateway                               │  │Gateway search result         │  │  Core                          │
+╰──────────────────────────────────────╯  │bw-1 · open · P1              │  │  Type    : task                │
+╭─ Results ────────────────── 2 exact ─╮  │                              │  │  Status  : open                │
+│› T P1 OPN bw-1 Gateway search result │  │Description                   │  │  Priority: P1                  │
+│  B P0 IP bw-2 Another result         │  │Search preview description    │  │  ------------------------------│
+│                                      │  │                              │  │  Ownership                     │
+│                                      │  │                              │  │  Assignee: hans                │
+│                                      │  │                              │  │  ------------------------------│
+│                                      │  │                              │  │  Labels                        │
+│                                      │  │                              │  │  • ui                          │
+│                                      │  │                              │  │  ------------------------------│
+│                                      │  │                              │  │  Counts                        │
+│                                      │  │                              │  │  Comments  : 0                 │
+│                                      │  │                              │  │  Blocked by: 0                 │
+│                                      │  │                              │  │  Blocks    : 0                 │
+│                                      │  │                              │  │  Related   : 0                 │
+│                                      │  │                              │  │                                │
+│                                      │  │                              │  │Quick actions                   │
+│                                      │  │                              │  │e Edit issue                    │
+│                                      │  │                              │  │u Update issue                  │
+│                                      │  │                              │  │c Add comment                   │
+│                                      │  │                              │  │x Close issue                   │
+│                                      │  │                              │  │r Reload detail                 │
+│                                      │  │                              │  │                                │
+│                                      │  │                              │  │                                │
+│                                      │  │                              │  │                                │
+╰──────────────────────────────────────╯  ╰──────────────────────────────╯  ╰────────────────────────────────╯

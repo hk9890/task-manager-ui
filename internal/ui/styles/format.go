@@ -43,3 +43,15 @@ func TruncateString(s string, maxWidth int) string {
 
 	return ansi.Truncate(s, maxWidth, "...")
 }
+
+// WrapLines word-wraps s to maxWidth and returns the resulting lines.
+// Falls back to hard-wrap for tokens longer than maxWidth.
+func WrapLines(s string, maxWidth int) []string {
+	if maxWidth < 1 {
+		return []string{""}
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return []string{s}
+	}
+	return strings.Split(ansi.Wrap(s, maxWidth, " -"), "\n")
+}
