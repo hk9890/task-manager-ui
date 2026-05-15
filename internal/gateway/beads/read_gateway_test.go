@@ -997,3 +997,167 @@ func readFixture(t *testing.T, name string) []byte {
 
 	return data
 }
+
+func TestGatewayQueryHappyPathReturnsIssueSummaries(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"query", "status=in_progress", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"in progress one","status":"in_progress","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
+				{"id":"bw-2","title":"in progress two","status":"in_progress","issue_type":"bug","priority":1,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.Query(context.Background(), "status=in_progress", domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("expected 2 issues, got %d", len(got))
+	}
+
+	if got[0].ID != "bw-1" || got[0].Status != "in_progress" || got[0].Assignee != "alice" {
+		t.Fatalf("unexpected first issue: %#v", got[0])
+	}
+}
+
+func TestGatewayQueryArgvAssemblyWithAllOptions(t *testing.T) {
+	t.Parallel()
+
+	// Limit=1, Offset=1 → withOffsetWindow(1,1)=2 → --limit 2; caller gets page [1:2]
+	routes := map[string]routeResponse{
+		argsKey([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--reverse", "--limit", "2"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-A","title":"closed A","status":"closed","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"},
+				{"id":"bw-B","title":"closed B","status":"closed","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.Query(context.Background(), "status=closed", domain.QueryOptions{
+		Limit:         1,
+		Offset:        1,
+		IncludeClosed: true,
+		SortBy:        domain.SortFieldClosedAt,
+		SortOrder:     domain.SortDirectionDescending,
+	})
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+
+	// Offset=1 so we get the second item only
+	if len(got) != 1 || got[0].ID != "bw-B" {
+		t.Fatalf("expected one issue (bw-B after offset), got %#v", got)
+	}
+}
+
+func TestGatewayQueryArgvAssemblyLimitWithoutOffset(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"query", "status=open", "--json", "--sort", "updated", "--limit", "5"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"open one","status":"open","issue_type":"task","priority":1,"owner":"a","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{
+		Limit:  5,
+		SortBy: domain.SortFieldUpdatedAt,
+	})
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+
+	if len(got) != 1 || got[0].ID != "bw-1" {
+		t.Fatalf("unexpected result: %#v", got)
+	}
+}
+
+func TestGatewayQueryArgvNoLimitProducesNoLimitFlag(t *testing.T) {
+	t.Parallel()
+
+	// When Limit=0 and Offset=0, no --limit flag should be appended.
+	routes := map[string]routeResponse{
+		argsKey([]string{"query", "priority=1", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[]`)},
+		},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	_, err := gateway.Query(context.Background(), "priority=1", domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("expected one call, got %d", len(exec.calls))
+	}
+
+	for _, arg := range exec.calls[0] {
+		if arg == "--limit" {
+			t.Fatalf("unexpected --limit flag in argv: %v", exec.calls[0])
+		}
+	}
+}
+
+func TestGatewayQueryRejectsEmptyExpression(t *testing.T) {
+	t.Parallel()
+
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: &routingExecutor{routes: map[string]routeResponse{}}}))
+
+	_, err := gateway.Query(context.Background(), "", domain.QueryOptions{})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
+}
+
+func TestGatewayQueryRejectsWhitespaceOnlyExpression(t *testing.T) {
+	t.Parallel()
+
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: &routingExecutor{routes: map[string]routeResponse{}}}))
+
+	_, err := gateway.Query(context.Background(), "   ", domain.QueryOptions{})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
+}
+
+func TestGatewayQueryReturnsCommandFailedOnNonZeroExit(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"query", "status=open", "--json"}): {
+			result: ExecResult{ExitCode: 2, Stderr: []byte("bad expression")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	_, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
+}
+
+func TestGatewayQueryReturnsDecodeErrorOnMissingID(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"query", "status=open", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	_, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+}

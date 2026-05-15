@@ -18,6 +18,7 @@ const (
 	operationShowIssue     = "show issue"
 	operationSearchIssues  = "search issues"
 	operationCountIssues   = "count issues"
+	operationQuery         = "query issues"
 	operationStatuses      = "status catalog"
 	operationTypes         = "type catalog"
 	operationLabels        = "label catalog"
@@ -78,6 +79,41 @@ func (g *Gateway) ListIssues(ctx context.Context, query domain.IssueListQuery) (
 	}
 
 	return mapIssueSummaries(operationListIssues, items, query.Offset, query.Limit)
+}
+
+// Query returns issue summaries using `bd query "<expr>" --json` with the bd query DSL.
+// The expr must be a non-empty, non-whitespace string.
+func (g *Gateway) Query(ctx context.Context, expr string, opts domain.QueryOptions) ([]domain.IssueSummary, error) {
+	if strings.TrimSpace(expr) == "" {
+		return nil, newGatewayError(domain.ErrorCodeValidationFailed, operationQuery, "query expression is required", nil)
+	}
+
+	args := []string{"query", expr, "--json"}
+
+	if opts.IncludeClosed {
+		args = append(args, "-a")
+	}
+
+	if opts.SortBy != "" {
+		if sortField := mapListSortField(opts.SortBy); sortField != "" {
+			args = append(args, "--sort", sortField)
+		}
+	}
+
+	if opts.SortOrder == domain.SortDirectionDescending {
+		args = append(args, "--reverse")
+	}
+
+	if limit := withOffsetWindow(opts.Limit, opts.Offset); limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+
+	items, err := g.decodeIssueArray(ctx, operationQuery, args)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapIssueSummaries(operationQuery, items, opts.Offset, opts.Limit)
 }
 
 // ReadyIssues returns ready issue summaries using `bd ready --json`.

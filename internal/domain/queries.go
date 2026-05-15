@@ -92,6 +92,20 @@ type IssueCountResult struct {
 	Total  int
 }
 
+// QueryOptions controls filtering and pagination for the generic Query gateway method.
+type QueryOptions struct {
+	// Limit is the maximum number of issues to return. A value of 0 means uncapped.
+	Limit int
+	// Offset is used with Limit for paginated callers (bd receives Limit+Offset, caller receives page).
+	Offset int
+	// IncludeClosed includes closed issues in results (maps to bd's -a flag).
+	IncludeClosed bool
+	// SortBy identifies the sort field. An empty/zero value means no sort override.
+	SortBy SortField
+	// SortOrder controls ascending vs descending. Descending maps to bd's -r flag.
+	SortOrder SortDirection
+}
+
 // SearchIssuesQuery requests text and structured search.
 type SearchIssuesQuery struct {
 	Text string

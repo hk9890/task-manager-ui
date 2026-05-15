@@ -19,6 +19,8 @@ const (
 	MethodShowIssue     GatewayMethod = "ShowIssue"
 	MethodSearchIssues  GatewayMethod = "SearchIssues"
 
+	MethodQuery GatewayMethod = "Query"
+
 	MethodCountIssues GatewayMethod = "CountIssues"
 
 	MethodCreateIssue GatewayMethod = "CreateIssue"
@@ -55,6 +57,11 @@ type ShowIssueCall struct {
 
 type SearchIssuesCall struct {
 	Query domain.SearchIssuesQuery
+}
+
+type QueryCall struct {
+	Expr string
+	Opts domain.QueryOptions
 }
 
 type CountIssuesCall struct {
@@ -94,6 +101,7 @@ type FakeBeadsGateway struct {
 	BlockedIssuesResponse []domain.BlockedIssueView
 	ShowIssueResponse     domain.IssueDetail
 	SearchIssuesResponse  domain.SearchResultPage
+	QueryResponse         []domain.IssueSummary
 	CountIssuesResponse   domain.IssueCountResult
 
 	CreateIssueResponse domain.CreateIssueResult
@@ -217,6 +225,18 @@ func (f *FakeBeadsGateway) SearchIssues(_ context.Context, query domain.SearchIs
 
 	resultsCopy := append([]domain.SearchResult(nil), f.SearchIssuesResponse.Results...)
 	return domain.SearchResultPage{Results: resultsCopy, Metadata: f.SearchIssuesResponse.Metadata}, nil
+}
+
+func (f *FakeBeadsGateway) Query(_ context.Context, expr string, opts domain.QueryOptions) ([]domain.IssueSummary, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.Calls = append(f.Calls, GatewayCall{Method: MethodQuery, Input: QueryCall{Expr: expr, Opts: opts}})
+	if err := f.MethodErrors[MethodQuery]; err != nil {
+		return nil, err
+	}
+
+	return append([]domain.IssueSummary(nil), f.QueryResponse...), nil
 }
 
 func (f *FakeBeadsGateway) CountIssues(_ context.Context, query domain.IssueCountQuery) (domain.IssueCountResult, error) {
