@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ import (
 	boardmode "github.com/hk9890/beads-workbench/internal/mode/board"
 	detailsmode "github.com/hk9890/beads-workbench/internal/mode/details"
 	searchmode "github.com/hk9890/beads-workbench/internal/mode/search"
+	"github.com/hk9890/beads-workbench/internal/ui/fatalerror"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/modal"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
@@ -29,6 +32,8 @@ const (
 )
 
 type refreshTickMsg struct{}
+
+type startupHealthCheckMsg struct{ err error }
 
 var scheduleRefreshTickCmd = func() tea.Cmd {
 	return tea.Tick(refreshTickInterval, func(_ time.Time) tea.Msg {
@@ -118,6 +123,11 @@ type Model struct {
 	services Services
 	keys     config.ResolvedKeyBindings
 
+	// fatalErr is set when a startup health check detects that bd is unavailable.
+	// When non-empty, View() renders the fatal error screen and Update() only
+	// handles quit keys and window size changes.
+	fatalErr string
+
 	active     mode.ID
 	lastBrowse mode.ID
 
@@ -196,14 +206,46 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) Model {
 // Init loads initial board and search controllers.
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
-	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(m.board.Init(), m.search.Init())
+	healthCheckCmd := func() tea.Msg {
+		err := m.services.Gateway.HealthCheck(context.Background())
+		return startupHealthCheckMsg{err: err}
 	}
-	return tea.Batch(m.board.Init(), m.search.Init(), scheduleRefreshTickCmd())
+	if m.runtime.DisableAutoRefresh {
+		return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init())
+	}
+	return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init(), scheduleRefreshTickCmd())
 }
 
 // Update handles root-level shell messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle startup health check result before any other processing.
+	if check, ok := msg.(startupHealthCheckMsg); ok {
+		if check.err != nil {
+			var gwErr domain.GatewayError
+			if errors.As(check.err, &gwErr) && gwErr.Code == domain.ErrorCodeCommandUnavailable {
+				m.fatalErr = "bd command not found in PATH"
+				slog.Default().Error("beads health check failed", "error", check.err)
+				return m, nil
+			}
+		}
+		// Health check passed — normal operation continues.
+		return m, nil
+	}
+
+	// When a fatal error is set, only handle window resize and quit.
+	if m.fatalErr != "" {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+		case tea.KeyMsg:
+			if msg.String() == "q" || msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	}
+
 	modeCmd := tea.Cmd(nil)
 	if !m.shouldCaptureKeyForOverlay(msg) {
 		modeCmd = m.forwardModeMessages(msg)
@@ -657,6 +699,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the root shell.
 func (m Model) View() string {
+	if m.fatalErr != "" {
+		return fatalerror.View(m.width, m.height)
+	}
+
 	header := m.renderHeader()
 	body := m.renderBody()
 	footer := m.renderFooter()

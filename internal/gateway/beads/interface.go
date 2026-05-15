@@ -9,6 +9,10 @@ import (
 // BeadsGateway is the source-specific beads gateway used by the Beads Workbench UI.
 // A gateway instance is bound to one beads source/project.
 type BeadsGateway interface {
+	// HealthCheck verifies that the bd CLI is reachable. Returns an error with
+	// ErrorCodeCommandUnavailable if bd is not installed or not in PATH.
+	HealthCheck(ctx context.Context) error
+
 	ListIssues(ctx context.Context, query domain.IssueListQuery) ([]domain.IssueSummary, error)
 	ReadyIssues(ctx context.Context, query domain.ReadyIssuesQuery) ([]domain.IssueSummary, error)
 	BlockedIssues(ctx context.Context, query domain.BlockedIssuesQuery) ([]domain.BlockedIssueView, error)

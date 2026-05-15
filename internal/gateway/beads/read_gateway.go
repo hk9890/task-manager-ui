@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	operationHealthCheck   = "health check"
 	operationListIssues    = "list issues"
 	operationReadyIssues   = "ready issues"
 	operationBlockedIssues = "blocked issues"
@@ -34,6 +35,13 @@ func NewCLIGateway(runner *CommandRunner) *Gateway {
 	}
 
 	return &Gateway{runner: runner}
+}
+
+// HealthCheck verifies that the bd CLI is reachable by running `bd version`.
+// Returns an error with ErrorCodeCommandUnavailable if bd is not in PATH.
+func (g *Gateway) HealthCheck(ctx context.Context) error {
+	_, err := g.runner.Run(ctx, CommandRequest{Operation: operationHealthCheck, Args: []string{"version"}})
+	return err
 }
 
 // ListIssues returns issue summaries using `bd list --json`.

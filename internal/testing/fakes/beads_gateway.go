@@ -12,6 +12,7 @@ import (
 type GatewayMethod string
 
 const (
+	MethodHealthCheck   GatewayMethod = "HealthCheck"
 	MethodListIssues    GatewayMethod = "ListIssues"
 	MethodReadyIssues   GatewayMethod = "ReadyIssues"
 	MethodBlockedIssues GatewayMethod = "BlockedIssues"
@@ -140,6 +141,14 @@ func (f *FakeBeadsGateway) HasCall(method string) bool {
 	}
 
 	return false
+}
+
+func (f *FakeBeadsGateway) HealthCheck(_ context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.Calls = append(f.Calls, GatewayCall{Method: MethodHealthCheck})
+	return f.MethodErrors[MethodHealthCheck]
 }
 
 func (f *FakeBeadsGateway) ListIssues(_ context.Context, query domain.IssueListQuery) ([]domain.IssueSummary, error) {
