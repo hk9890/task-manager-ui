@@ -48,12 +48,16 @@ func TestRenderReadOnlyUsesPlainFallbackForEffectivelyPlainText(t *testing.T) {
 func TestRenderReadOnlyFallsBackToPlainWhenRendererErrors(t *testing.T) {
 	t.Parallel()
 
+	renderMarkdownANSIMu.Lock()
 	original := renderMarkdownANSI
 	renderMarkdownANSI = func(_ string, _ int) (string, error) {
 		return "", errors.New("boom")
 	}
+	renderMarkdownANSIMu.Unlock()
 	t.Cleanup(func() {
+		renderMarkdownANSIMu.Lock()
 		renderMarkdownANSI = original
+		renderMarkdownANSIMu.Unlock()
 	})
 
 	r := NewRenderer()

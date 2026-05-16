@@ -26,11 +26,15 @@ run = "go test ./cmd/bwb -run TestArchitectureGuardrails"
 
 [tasks.test]
 description = "Unit tests (fast, no external deps)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- ./..."
+run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- -race ./..."
+[tasks.test.env]
+CGO_ENABLED = "1"
 
 [tasks."test:integration"]
 description = "Integration tests (real bd binary, embedded fixture)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- -tags=integration ./..."
+run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- -race -tags=integration ./..."
+[tasks."test:integration".env]
+CGO_ENABLED = "1"
 
 [tasks."test:all"]
 description = "Run unit + integration tests"
@@ -38,11 +42,15 @@ depends = ["test", "test:integration"]
 
 [tasks."test:verbose"]
 description = "Unit tests with full per-test output (for debugging a hang or noisy failure)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- ./..."
+run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- -race ./..."
+[tasks."test:verbose".env]
+CGO_ENABLED = "1"
 
 [tasks."test:integration:verbose"]
 description = "Integration tests with full per-test output (=== RUN / --- PASS for every test)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- -tags=integration ./..."
+run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- -race -tags=integration ./..."
+[tasks."test:integration:verbose".env]
+CGO_ENABLED = "1"
 
 [tasks.scripts]
 description = "Validate script syntax (shell + python)"

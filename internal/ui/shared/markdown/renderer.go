@@ -3,6 +3,7 @@ package markdown
 import (
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/glamour"
 )
@@ -13,6 +14,12 @@ const (
 )
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// renderMarkdownANSIMu guards renderMarkdownANSI. Production code never
+// reassigns the variable after init; the mutex exists so that tests running in
+// parallel can safely swap and restore the seam without triggering the race
+// detector.
+var renderMarkdownANSIMu sync.Mutex
 
 // renderMarkdownANSI is a test seam for deterministic fallback testing.
 var renderMarkdownANSI = func(content string, width int) (string, error) {
@@ -25,6 +32,13 @@ var renderMarkdownANSI = func(content string, width int) (string, error) {
 	}
 
 	return renderer.Render(content)
+}
+
+// getRenderMarkdownANSI returns the current renderMarkdownANSI function under lock.
+func getRenderMarkdownANSI() func(string, int) (string, error) {
+	renderMarkdownANSIMu.Lock()
+	defer renderMarkdownANSIMu.Unlock()
+	return renderMarkdownANSI
 }
 
 // Renderer renders markdown for read-only terminal viewing surfaces.
@@ -55,7 +69,7 @@ func (r Renderer) RenderReadOnly(input string, width int) string {
 		return renderPlain(content, width)
 	}
 
-	rendered, err := renderMarkdownANSI(content, width)
+	rendered, err := getRenderMarkdownANSI()(content, width)
 	if err != nil {
 		return renderPlain(content, width)
 	}

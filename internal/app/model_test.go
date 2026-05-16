@@ -2972,10 +2972,27 @@ func firstSelectionID(m Model, modeID mode.ID) string {
 
 func withRefreshTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
 	t.Helper()
+	schedulerMu.Lock()
 	original := scheduleRefreshTickCmd
 	scheduleRefreshTickCmd = scheduler
+	schedulerMu.Unlock()
 	t.Cleanup(func() {
+		schedulerMu.Lock()
 		scheduleRefreshTickCmd = original
+		schedulerMu.Unlock()
+	})
+}
+
+func withToastDismissScheduler(t *testing.T, scheduler func(time.Duration) tea.Cmd) {
+	t.Helper()
+	schedulerMu.Lock()
+	original := scheduleToastDismissCmd
+	scheduleToastDismissCmd = scheduler
+	schedulerMu.Unlock()
+	t.Cleanup(func() {
+		schedulerMu.Lock()
+		scheduleToastDismissCmd = original
+		schedulerMu.Unlock()
 	})
 }
 

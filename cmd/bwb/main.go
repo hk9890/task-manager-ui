@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/app"
@@ -18,7 +19,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// versionMu guards the version variable. Production code sets it once at
+// startup via -ldflags and never mutates it again; the mutex exists solely so
+// that tests running in parallel can safely mutate/restore the variable without
+// triggering the race detector.
+var versionMu sync.Mutex
+
 var version = "dev"
+
+// getVersion returns the current version string under lock.
+func getVersion() string {
+	versionMu.Lock()
+	defer versionMu.Unlock()
+	return version
+}
 
 var configLoad = func(opts config.LoadOptions) (config.Result, error) {
 	return config.LoadWithOptions(opts)
@@ -89,7 +103,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	if opts.showVersion {
-		_, _ = fmt.Fprintf(stdout, "bwb %s\n", version)
+		_, _ = fmt.Fprintf(stdout, "bwb %s\n", getVersion())
 		return 0
 	}
 
@@ -111,7 +125,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 			Debug:        opts.debug,
 			Stderr:       stderr,
 			ProjectRoot:  resolvedCWD,
-			BuildVersion: version,
+			BuildVersion: getVersion(),
 		})
 		if logManager != nil {
 			defer func() {

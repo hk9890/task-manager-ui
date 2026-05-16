@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,6 +35,12 @@ type refreshTickMsg struct{}
 
 type startupHealthCheckMsg struct{ err error }
 
+// schedulerMu guards the test seam variables scheduleRefreshTickCmd and
+// scheduleToastDismissCmd. Tests that run in parallel mutate these globals;
+// the mutex ensures reads in Init/Update/showToast and writes in test helpers
+// do not race. Production code never writes these after init.
+var schedulerMu sync.Mutex
+
 var scheduleRefreshTickCmd = func() tea.Cmd {
 	return tea.Tick(refreshTickInterval, func(_ time.Time) tea.Msg {
 		return refreshTickMsg{}
@@ -42,6 +49,20 @@ var scheduleRefreshTickCmd = func() tea.Cmd {
 
 var scheduleToastDismissCmd = func(d time.Duration) tea.Cmd {
 	return toaster.ScheduleDismiss(d)
+}
+
+// getRefreshTickScheduler returns the current scheduleRefreshTickCmd under lock.
+func getRefreshTickScheduler() func() tea.Cmd {
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+	return scheduleRefreshTickCmd
+}
+
+// getToastDismissScheduler returns the current scheduleToastDismissCmd under lock.
+func getToastDismissScheduler() func(time.Duration) tea.Cmd {
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+	return scheduleToastDismissCmd
 }
 
 var modelNow = time.Now
@@ -220,7 +241,7 @@ func (m Model) Init() tea.Cmd {
 	if m.runtime.DisableAutoRefresh {
 		return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init())
 	}
-	return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init(), scheduleRefreshTickCmd())
+	return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init(), getRefreshTickScheduler()())
 }
 
 // Update handles root-level shell messages.
@@ -337,7 +358,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.runtime.DisableAutoRefresh {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, scheduleRefreshTickCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		return m, batchCmds(modeCmd, getRefreshTickScheduler()(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -900,7 +921,7 @@ func (m Model) renderFooter() string {
 
 func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	m.toast = m.toast.Show(message, style)
-	return scheduleToastDismissCmd(3 * time.Second)
+	return getToastDismissScheduler()(3 * time.Second)
 }
 
 func (m Model) boardIsLoading() bool {

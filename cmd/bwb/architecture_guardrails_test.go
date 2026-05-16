@@ -368,9 +368,15 @@ func TestRun_NonInteractiveDebugCreatesPersistentStartupLogs(t *testing.T) {
 func TestRun_VersionUsesFallback(t *testing.T) {
 	t.Parallel()
 
+	versionMu.Lock()
 	old := version
 	version = "dev"
-	t.Cleanup(func() { version = old })
+	versionMu.Unlock()
+	t.Cleanup(func() {
+		versionMu.Lock()
+		version = old
+		versionMu.Unlock()
+	})
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--version"}, &stdout, &stderr,
@@ -487,8 +493,8 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if seenLoggerOpts.ProjectRoot != projectDir {
 		t.Fatalf("expected logger project root %q, got %q", projectDir, seenLoggerOpts.ProjectRoot)
 	}
-	if seenLoggerOpts.BuildVersion != version {
-		t.Fatalf("expected logger build version %q, got %q", version, seenLoggerOpts.BuildVersion)
+	if seenLoggerOpts.BuildVersion != getVersion() {
+		t.Fatalf("expected logger build version %q, got %q", getVersion(), seenLoggerOpts.BuildVersion)
 	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
 		t.Fatalf("expected debug session line, got %q", stderr.String())
@@ -499,7 +505,7 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") || !strings.Contains(stderr.String(), "cwd="+projectDir) {
 		t.Fatalf("expected debug cwd line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+version) {
+	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+getVersion()) {
 		t.Fatalf("expected provenance in debug output, got %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=false") {

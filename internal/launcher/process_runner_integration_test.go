@@ -23,8 +23,8 @@ func TestExecProcessRunnerReapsChildren(t *testing.T) {
 	// Install the test hook so the reaper signals completion without sleeping.
 	// Use a buffered channel of size n so each goroutine never blocks.
 	hook := make(chan struct{}, n)
-	reaperHook = hook
-	t.Cleanup(func() { reaperHook = nil })
+	setReaperHook(hook)
+	t.Cleanup(func() { setReaperHook(nil) })
 
 	runner := NewExecProcessRunner()
 	ctx := context.Background()
