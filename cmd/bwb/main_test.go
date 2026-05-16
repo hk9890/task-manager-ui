@@ -51,6 +51,11 @@ func TestResolveAndValidateCWDRejectsFile(t *testing.T) {
 }
 
 func TestResolveAndValidateCWDRejectsInaccessibleDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// TODO(beads-workbench-2rfx): Windows ACLs do not honour Unix permission
+		// bits set via os.Chmod(0o000), so locked dirs remain accessible.
+		t.Skip("Unix permission bits have no effect on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses permission checks")
 	}
