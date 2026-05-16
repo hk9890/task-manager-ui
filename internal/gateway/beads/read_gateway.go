@@ -238,6 +238,8 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 	}
 
 	if len(items) == 0 {
+		// Defensive: today bd exits 1 for unknown IDs (mapped to ErrorCodeCommandFailed
+		// upstream); this branch handles a hypothetical future where bd exits 0 with [].
 		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeNotFound, operationShowIssue, fmt.Sprintf("issue not found: %s", query.IssueID), nil)
 	}
 
