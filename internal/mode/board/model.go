@@ -68,12 +68,12 @@ type refreshAnchor struct {
 
 // Model is the standalone board mode controller backed by direct gateway calls.
 type Model struct {
-	gateway beads.BeadsGateway
-	logger  *slog.Logger
-	keys    config.ResolvedKeyBindings
-	width   int
-	height  int
-	loading bool
+	gateway   beads.BeadsGateway
+	logger    *slog.Logger
+	keys      config.ResolvedKeyBindings
+	width     int
+	height    int
+	loading   bool
 	loadError string
 
 	// columns holds the four fixed board columns after composition.
@@ -240,10 +240,10 @@ func (m *Model) View() string {
 			selectedRow = m.selectedRow[colIdx]
 		}
 		uiColumns = append(uiColumns, uiboard.Column{
-			Title:       col.title,
-			Rows:        col.issues,
-			SelectedRow: selectedRow,
-			Total:       col.total,
+			Title:        col.title,
+			Rows:         col.issues,
+			SelectedRow:  selectedRow,
+			Total:        col.total,
 			TotalIsExact: col.exact,
 		})
 	}
@@ -590,4 +590,3 @@ func loadClosedCmd(gateway beads.BeadsGateway, limit int) tea.Cmd {
 		return closedLoadedMsg{issues: issues, err: err}
 	}
 }
-

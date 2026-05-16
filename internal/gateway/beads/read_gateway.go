@@ -12,19 +12,19 @@ import (
 )
 
 const (
-	operationHealthCheck    = "health check"
-	operationListIssues     = "list issues"
-	operationReadyIssues    = "ready issues"
-	operationBlockedIssues  = "blocked issues"
-	operationReadyExplain   = "ready explain"
-	operationShowIssue      = "show issue"
-	operationSearchIssues   = "search issues"
-	operationCountIssues    = "count issues"
-	operationQuery          = "query issues"
-	operationStatuses       = "status catalog"
-	operationTypes          = "type catalog"
-	operationLabels         = "label catalog"
-	searchNoticeMaybeMore   = "Results may be incomplete because the backend limit may have capped additional matches."
+	operationHealthCheck     = "health check"
+	operationListIssues      = "list issues"
+	operationReadyIssues     = "ready issues"
+	operationBlockedIssues   = "blocked issues"
+	operationReadyExplain    = "ready explain"
+	operationShowIssue       = "show issue"
+	operationSearchIssues    = "search issues"
+	operationCountIssues     = "count issues"
+	operationQuery           = "query issues"
+	operationStatuses        = "status catalog"
+	operationTypes           = "type catalog"
+	operationLabels          = "label catalog"
+	searchNoticeMaybeMore    = "Results may be incomplete because the backend limit may have capped additional matches."
 	searchNoticeNoTextFilter = "No text filter applied; returning entire ready/blocked queue."
 )
 

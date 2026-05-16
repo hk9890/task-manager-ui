@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
+	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 )
 
 // issueWithLongContent returns an IssueDetail with enough content lines for

@@ -42,10 +42,10 @@ type Model struct {
 	width  int
 	height int
 
-	loading     bool
-	reloading   bool
+	loading       bool
+	reloading     bool
 	hasLoadedPage bool
-	errText     string
+	errText       string
 
 	draftQuery   string
 	appliedQuery string

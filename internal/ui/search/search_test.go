@@ -31,14 +31,14 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
-		Query: "gateway",
+		Query:        "gateway",
 		AppliedQuery: "gateway",
-		Focus: FocusResults,
+		Focus:        FocusResults,
 		Results: []domain.IssueSummary{
 			{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1},
 			{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 		},
-		Metadata: domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
+		Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 		SelectedID: "bw-1",
 		Width:      120,
 		Height:     28,
@@ -72,7 +72,7 @@ func TestRenderShowsEmptyQueryResultsAndPreview(t *testing.T) {
 			{ID: "bw-1", Title: "Default all result", Status: "open", Type: "task", Priority: 1},
 			{ID: "bw-2", Title: "Second default", Status: "in_progress", Type: "bug", Priority: 2},
 		},
-		Metadata: domain.SearchResultMetadata{ReturnedCount: 2, Completeness: domain.SearchResultCompletenessExact},
+		Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, Completeness: domain.SearchResultCompletenessExact},
 		SelectedID: "bw-1",
 		Width:      100,
 		Height:     24,
@@ -185,9 +185,9 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_with_preview_w120", func(t *testing.T) {
 		view := Render(State{
-			Query: "gateway",
+			Query:        "gateway",
 			AppliedQuery: "gateway",
-			Focus: FocusResults,
+			Focus:        FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
@@ -204,10 +204,10 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_loading_stub_w120", func(t *testing.T) {
 		view := Render(State{
-			Query: "gateway",
+			Query:        "gateway",
 			AppliedQuery: "gateway",
-			Focus: FocusResults,
-			Reloading: true,
+			Focus:        FocusResults,
+			Reloading:    true,
 			Results: []domain.IssueSummary{
 				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
@@ -249,9 +249,9 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_narrow_w80", func(t *testing.T) {
 		view := Render(State{
-			Query: "gateway",
+			Query:        "gateway",
 			AppliedQuery: "gateway",
-			Focus: FocusResults,
+			Focus:        FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Status: "open", Type: "task", Priority: 1},
 				{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Status: "in_progress", Type: "task", Priority: 1},
@@ -267,9 +267,9 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_boundary_w110", func(t *testing.T) {
 		view := Render(State{
-			Query: "gateway",
+			Query:        "gateway",
 			AppliedQuery: "gateway",
-			Focus: FocusResults,
+			Focus:        FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},

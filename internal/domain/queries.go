@@ -32,10 +32,10 @@ const (
 
 // IssueListQuery is the generic list query used by browse views.
 type IssueListQuery struct {
-	Statuses  []string
-	Types     []string
-	Assignee  string
-	Labels    []string
+	Statuses []string
+	Types    []string
+	Assignee string
+	Labels   []string
 	// Limit is the maximum number of issues to return. A value of 0 means the
 	// caller (e.g. the board model) will set an appropriate display limit before
 	// dispatching. Custom dashboard providers must not assume Limit > 0.

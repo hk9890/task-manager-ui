@@ -23,10 +23,10 @@ const (
 
 // Column is one board section column.
 type Column struct {
-	Title        string
-	Rows         []domain.IssueSummary
-	SelectedRow  int
-	Error        string
+	Title       string
+	Rows        []domain.IssueSummary
+	SelectedRow int
+	Error       string
 	// Total is the number of issues in this column as reported by the gateway.
 	// TotalIsExact is false when the backend may have more issues than were returned
 	// (e.g. the Done column was capped), in which case the renderer shows "N+".
