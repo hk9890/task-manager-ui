@@ -6,20 +6,25 @@ This document defines the repository testing vocabulary, commands, and harness c
 
 ## Test Vocabulary
 
-- **Unit tests**
+The repository uses a two-tier model: **unit** and **integration**.
+
+- **Unit tests** (default — no build tag required)
   - Fast, deterministic tests that isolate a package or function with test doubles.
   - No dependency on a live beads project or shell state.
+  - Live in `*_test.go` files alongside the package under test.
   - Examples: `internal/gateway/beads/*_test.go`, `internal/ui/*/*_test.go`, `internal/testing/fakes/*_test.go`.
+  - Run with: `mise run test`
 
-- **Integration tests**
+- **Integration tests** (`//go:build integration` — real `bd` + embedded fixture)
   - Tests that execute the real `bd` CLI against a controlled beads fixture repo/workspace.
   - Verify command availability, real output shape, and behavior across package seams.
   - Use the embedded-mode fixture harness in `internal/testing/e2e/embeddedfixture`.
+  - Live in `*_integration_test.go` files with `//go:build integration` at the top.
+  - Run with: `mise run test:integration`
 
-- **End-to-end / smoke tests**
-  - Broad checks of `bwb` startup and critical user workflows using real process wiring.
-  - Lower depth than full scenario testing; intended to catch obvious regressions quickly.
-  - Use the same deterministic embedded fixture seed data as integration tests.
+**Build-tag rule for new tests:** If your test forks a real subprocess, replays the embedded fixture, or otherwise costs >1s, put it in a `*_integration_test.go` file with `//go:build integration` at the top.
+
+For current pass counts and wall-time baselines, see `docs/test-baseline-2026-05-16.md`.
 
 - **Full-app verification**
   - A real run of the built `bwb` binary against a deterministic fixture repo in a terminal session.
@@ -29,23 +34,27 @@ This document defines the repository testing vocabulary, commands, and harness c
 
 ## Commands
 
-Use Go tooling from the repository root:
+Use `mise run` tasks from the repository root:
 
 ```bash
-go test ./...
+mise run test                # unit tests only (fast, no real bd)
+mise run test:integration    # integration tests only (real bd, embedded fixture)
+mise run test:all            # unit + integration
+mise run test:verbose        # unit tests with -v flag
 ```
 
-You may run `make test` as a thin convenience wrapper for the same command.
+Run `mise tasks` to see the full list of available tasks.
 
 Recommended local quality checks:
 
-Run the authoritative pre-handoff quality gate sequence from `docs/CODING.md`.
+Run `mise run quality` for the authoritative pre-handoff gate sequence (see `docs/CODING.md` for details).
+Use `mise run quality:fast` for in-flight checks during active implementation.
 
-Harness-focused checks:
+Harness-focused checks (package-scoped, no mise wrapper needed):
 
 ```bash
-go test ./internal/testing/...
-go test ./internal/testing/ui -v
+mise run test -- ./internal/testing/...
+mise run test -- ./internal/testing/ui -v
 ```
 
 Fast deterministic UI verification loop (common during active implementation):

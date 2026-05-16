@@ -428,9 +428,27 @@ These checks are intentionally lightweight and local-friendly: they run as a nor
 
 ## Quality Gates
 
-For convenience, the repository `Makefile` provides thin wrapper targets for
-common commands (`make build`, `make test`, `make vet`, and optional wrappers
-for lint/script validation/hooks). It is a discoverability layer only.
+The repository uses `.mise.toml` tasks as the execution layer. Run `mise tasks` to see all available tasks.
+
+Key tasks:
+
+| Task | What it runs |
+|---|---|
+| `mise run build` | `go build ./cmd/bwb` |
+| `mise run vet` | `go vet ./...` |
+| `mise run test` | unit tests only (no `//go:build integration` tests) |
+| `mise run test:integration` | integration tests (real `bd` + embedded fixture) |
+| `mise run test:all` | unit + integration |
+| `mise run test:verbose` | unit tests with `-v` |
+| `mise run lint` | pinned `golangci-lint` via `.golangci-version` |
+| `mise run guardrails` | `go test ./cmd/bwb -run TestArchitectureGuardrails` |
+| `mise run quality` | full pre-handoff gate (scripts, lint, guardrails, build, vet, test) |
+| `mise run quality:fast` | lighter in-flight check (build, vet, test) |
+| `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
+
+**Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) fork real `bd` subprocesses and use the embedded fixture harness; they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess, replays the embedded fixture, or costs >1s, it belongs in an integration test file.
+
+**`golangci-lint` version pin:** The version is in `.golangci-version` (leading-v convention, e.g. `v2.1.6`). The `mise run lint` task reads this file automatically. Similarly, `gotestsum` is pinned in `.gotestsum-version`.
 
 For the authoritative pre-handoff landing workflow, see
 `docs/CHANGE-WORKFLOW.md#code-change-verification-sequence`.
@@ -443,7 +461,7 @@ That verification sequence covers:
 - fast architecture-guardrail verification via
   `go test ./cmd/bwb -run TestArchitectureGuardrails`
 - core implementation gates: `go build ./cmd/bwb`, `go vet ./...`, and
-  `go test ./...`
+  unit tests
 
 ### `golangci-lint` install/invocation policy
 

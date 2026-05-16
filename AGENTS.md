@@ -12,6 +12,8 @@ Read `docs/OVERVIEW.md` for the runtime flow, package map, architectural boundar
 
 Read `docs/CODING.md` for build commands, package layout, and core architectural rules.
 
+Run `mise tasks` to see all available build/test/quality tasks (`mise run <task>` to execute).
+
 ## Testing
 
 Read `docs/TESTING.md` for test policy, verification depth, fixtures, and focused commands.

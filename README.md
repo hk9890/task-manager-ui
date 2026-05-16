@@ -31,20 +31,17 @@ bwb --check-config
 For exit codes, config details, and centralized debug/logging behavior, see
 `docs/CODING.md` and `docs/MONITORING.md`.
 
-## Developer Convenience Targets
+## Developer Tasks
 
-This repository includes a small `Makefile` as a **thin wrapper** around
-documented local commands for discoverability.
+This repository uses [mise](https://mise.jdx.dev/) as the execution layer.
+Run `mise tasks` to list all available tasks.
 
 ```bash
-make help
-make build
-make test
-make vet
+mise run build
+mise run test:all
+mise run vet
+mise run quality
 ```
-
-Optional wrappers may also be available for lint/script validation and hook
-installation.
 
 See `docs/CHANGE-WORKFLOW.md` for the landing workflow and pre-handoff quality
 gates, and `docs/CODING.md` for build/test details.

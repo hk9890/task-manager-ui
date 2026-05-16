@@ -19,7 +19,7 @@ Install once per clone (no Makefile required):
 git config core.hooksPath scripts/git-hooks
 ```
 
-If desired, `make install-hooks` runs the same command as a thin wrapper.
+Alternatively, `mise run hooks:install` runs the same command.
 
 Verify your local hook path:
 
@@ -46,16 +46,12 @@ git config --get core.hooksPath
 Use this sequence before handoff for code changes:
 
 ```bash
-bash -n internal/testing/e2e/embeddedfixture/setup.sh
-python3 -m py_compile scripts/*.py
-GOLANGCI_LINT_VERSION="$(<.golangci-version)" go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"${GOLANGCI_LINT_VERSION}" run
-go test ./cmd/bwb -run TestArchitectureGuardrails
-go build ./cmd/bwb
-go vet ./...
-go test ./...
+mise run quality
 ```
 
-`docs/CODING.md` explains the purpose and scope of these checks.
+This runs the full gate sequence: script syntax checks, golangci-lint, architecture guardrails, build, vet, and unit tests. For individual tasks, see `docs/CODING.md`.
+
+Use `mise run quality:fast` for a lighter in-flight check (skips lint and integration tests). Run `mise tasks` for the full task list.
 
 ## Landing the plane
 

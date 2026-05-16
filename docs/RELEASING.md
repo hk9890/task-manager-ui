@@ -5,7 +5,7 @@ GoReleaser.
 
 ## Scope and current state
 
-- CI provenance is available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which runs `go build ./cmd/bwb`, `go vet ./...`, and `go test ./...` on `push` and `pull_request`.
+- CI provenance is available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which runs `go build ./cmd/bwb`, `go vet ./...`, and the unit test suite (equivalent to `mise run test`) on `push` and `pull_request`.
 - Release artifacts are published by `.github/workflows/release.yml` using `.goreleaser.yaml` whenever a `v*` tag is pushed.
 - Release/snapshot builds inject `bwb --version` metadata via GoReleaser ldflags (`-X main.version={{ .Version }}`), while local developer builds keep the fallback `dev` value.
 - Release archives are intentionally named for installer compatibility, for example `bwb_0.2.0_linux_x64.tar.gz` and `bwb_0.2.0_macos_arm64.tar.gz`, so tools like `mise` can auto-detect the correct asset.

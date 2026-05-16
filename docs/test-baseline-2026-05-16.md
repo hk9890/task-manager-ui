@@ -3,6 +3,8 @@
 Pre-migration baseline captured before epic `beads-workbench-i1th` (test stratification + mise execution layer).
 Blocks `i1th.1` (acceptance review) and `i1th.2` (build-tag gating).
 
+**Note:** Commands below were recorded before the mise task layer existed and use raw `go` invocations rather than mise tasks. For current developer commands, use `mise run test` (unit) or `mise run test:all` (unit + integration).
+
 ## Hardware / Go fingerprint
 
 | Field | Value |
@@ -24,9 +26,9 @@ Blocks `i1th.1` (acceptance review) and `i1th.2` (build-tag gating).
 | Run 3 | 93.4 s |
 | **Median** | **93.4 s** |
 
-Command used:
+Command used (pre-mise baseline; current equivalent: `mise run test:all`):
 ```bash
-go clean -testcache && timeout 240 go test ./... -timeout=180s >/dev/null 2>&1
+go clean -testcache && timeout 240 go test -timeout=180s ./... >/dev/null 2>&1
 ```
 
 ## Top-20 slowest individual tests
@@ -60,9 +62,9 @@ Measured by `jq .Elapsed` from `go test -json` output (one cold-cache run). Test
 
 ## Methodology
 
-All runs performed with both timeout layers as required:
+All runs performed with both timeout layers as required (pre-mise baseline; current equivalent: `mise run test:all`):
 ```bash
-timeout 240 go test ./... -timeout=180s
+timeout 240 go test -timeout=180s ./...
 ```
 
 Slowest-test breakdown command:

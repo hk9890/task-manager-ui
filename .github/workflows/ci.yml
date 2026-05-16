@@ -12,27 +12,26 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Go from go.mod policy
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+      - name: Install mise (handles Go toolchain via .mise.toml)
+        uses: jdx/mise-action@v2
 
-      - name: Validate embedded fixture setup shell syntax
-        run: bash -n internal/testing/e2e/embeddedfixture/setup.sh
+      - name: Scripts syntax
+        run: mise run scripts
 
-      - name: Validate Python helper script syntax
-        run: python3 -m py_compile scripts/*.py
-
-      - name: Lint (golangci-lint pinned version)
-        run: |
-          GOLANGCI_LINT_VERSION="$(cat .golangci-version)"
-          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION} run
+      - name: Lint
+        run: mise run lint
 
       - name: Build
-        run: go build ./cmd/bwb
+        run: mise run build
 
       - name: Vet
-        run: go vet ./...
+        run: mise run vet
 
-      - name: Test
-        run: go test ./...
+      - name: Architecture guardrails
+        run: mise run guardrails
+
+      - name: Unit tests
+        run: mise run test
+
+      - name: Integration tests
+        run: mise run test:integration
