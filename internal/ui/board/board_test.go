@@ -18,7 +18,10 @@ func assertGoldenNormalized(t *testing.T, output []byte, golden string) {
 
 	normalize := func(bts []byte) []byte {
 		withoutANSI := testui.AnsiEscapePattern.ReplaceAll(bts, nil)
-		trimmedNewline := bytes.TrimSuffix(withoutANSI, []byte("\n"))
+		// Strip \r\n and lone \r to handle Windows CRLF in golden files.
+		normalized := bytes.ReplaceAll(withoutANSI, []byte("\r\n"), []byte("\n"))
+		normalized = bytes.ReplaceAll(normalized, []byte("\r"), []byte("\n"))
+		trimmedNewline := bytes.TrimSuffix(normalized, []byte("\n"))
 		lines := strings.Split(string(trimmedNewline), "\n")
 		for i, line := range lines {
 			lines[i] = strings.TrimRight(line, " ")

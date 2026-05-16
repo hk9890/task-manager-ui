@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestResolveLogPathCreatesBWBStateDirectory(t *testing.T) {
@@ -189,8 +190,15 @@ func TestForcedRotationProducesRotatedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildPersistentSink returned error: %v", err)
 	}
+	// Close the sink and wait for lumberjack's background compression goroutine
+	// to finish before t.TempDir cleanup removes the directory. lumberjack.Close
+	// only closes the active log file; it does not drain the mill goroutine that
+	// compresses rotated backups. Without this wait, the goroutine may still hold
+	// files open in the temp dir when Go's test harness calls TempDir RemoveAll,
+	// causing an intermittent "directory not empty" error (~1 in 50 runs).
 	t.Cleanup(func() {
 		_ = sink.Close()
+		waitForLumberjackMill(t, filepath.Dir(logPath), 5*time.Second)
 	})
 
 	if _, err := sink.Write([]byte("before-rotate\n")); err != nil {
@@ -227,6 +235,44 @@ func TestForcedRotationProducesRotatedOutput(t *testing.T) {
 		}
 		t.Fatalf("expected rotated output file to be produced, entries=%v", names)
 	}
+}
+
+// waitForLumberjackMill polls logDir until no uncompressed backup log files
+// remain (i.e. lumberjack's background mill goroutine has finished compressing
+// all rotated backups), or until timeout elapses. It is a best-effort guard
+// against the race between lumberjack's compression goroutine and t.TempDir
+// cleanup — lumberjack.Logger.Close does not drain the mill goroutine.
+func waitForLumberjackMill(t *testing.T, logDir string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		entries, err := os.ReadDir(logDir)
+		if err != nil {
+			// Directory already gone — nothing to wait for.
+			return
+		}
+		pendingCompression := false
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == defaultLogFileName {
+				continue
+			}
+			// A backup file that has ".log" but not ".gz" suffix is still being
+			// compressed (or waiting to be compressed) by the mill goroutine.
+			if strings.HasSuffix(name, ".log") {
+				pendingCompression = true
+				break
+			}
+		}
+		if !pendingCompression {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Timeout elapsed — log a warning but do not fail; the test assertions
+	// already passed. A leftover file may still cause TempDir cleanup noise
+	// but that is non-fatal for the test result.
+	t.Logf("waitForLumberjackMill: timeout waiting for compression in %s", logDir)
 }
 
 func TestFallbackWhenStateDirUnavailableWarnsOnceAndUsesStderrOnly(t *testing.T) {

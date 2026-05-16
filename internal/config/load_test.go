@@ -203,7 +203,15 @@ func TestLoad_DirectoryAtConfigPathReturnsError(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
+	// On Windows, os.UserConfigDir() uses APPDATA rather than XDG_CONFIG_HOME
+	// or HOME, so the resolved config path may live under the real system AppData
+	// tree. Ensure the parent directory (e.g. AppData\Roaming\bwb) exists before
+	// we attempt to create the "directory-at-config-file" scenario — on Windows
+	// runners the bwb sub-directory may not yet exist.
 	path := filepath.Join(testUserConfigDir(t), configRelativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll parent returned error: %v", err)
+	}
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatalf("MkdirAll returned error: %v", err)
 	}

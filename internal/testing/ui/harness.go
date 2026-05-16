@@ -51,20 +51,25 @@ func ReadGolden(tb testing.TB, name string) []byte {
 }
 
 // AssertMatchesGolden compares output against a package-local golden file.
+// It strips \r from the golden file before comparison to handle Windows
+// CRLF line endings that may be present in existing checkouts.
 func AssertMatchesGolden(tb testing.TB, output []byte, name string) {
 	tb.Helper()
 
 	want := ReadGolden(tb, name)
-	normalizedWant := bytes.TrimSuffix(want, []byte("\n"))
+	normalizedWant := bytes.TrimSuffix(bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")), []byte("\n"))
 	normalizedOut := bytes.TrimSuffix(output, []byte("\n"))
 	if !bytes.Equal(normalizedOut, normalizedWant) {
 		tb.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", name, want, output)
 	}
 }
 
-// NormalizeOutput trims trailing newline and right-trims each rendered line.
+// NormalizeOutput trims trailing newline, strips \r (Windows CRLF),
+// and right-trims trailing spaces from each rendered line.
 func NormalizeOutput(output []byte) []byte {
-	trimmedNewline := bytes.TrimSuffix(output, []byte("\n"))
+	normalized := bytes.ReplaceAll(output, []byte("\r\n"), []byte("\n"))
+	normalized = bytes.ReplaceAll(normalized, []byte("\r"), []byte("\n"))
+	trimmedNewline := bytes.TrimSuffix(normalized, []byte("\n"))
 	lines := strings.Split(string(trimmedNewline), "\n")
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " ")

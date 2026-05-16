@@ -176,6 +176,11 @@ type Model struct {
 	focusKnown      bool
 	terminalFocused bool
 
+	// searchInitDone tracks whether the first lazy search init has been fired.
+	// Search mode is not pre-loaded at startup; the first mode switch to Search
+	// triggers Init() and sets this flag so subsequent entries do not reload.
+	searchInitDone bool
+
 	refreshStateBySurface map[mode.ID]surfaceRefreshState
 
 	width  int
@@ -232,7 +237,8 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 	}, nil
 }
 
-// Init loads initial board and search controllers.
+// Init loads initial board. Search is deferred until the user first switches to
+// search mode; see lazySearchInitCmd.
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
 	healthCheckCmd := func() tea.Msg {
@@ -240,9 +246,32 @@ func (m Model) Init() tea.Cmd {
 		return startupHealthCheckMsg{err: err}
 	}
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init())
+		return tea.Batch(healthCheckCmd, m.board.Init())
 	}
-	return tea.Batch(healthCheckCmd, m.board.Init(), m.search.Init(), getRefreshTickScheduler()())
+	return tea.Batch(healthCheckCmd, m.board.Init(), getRefreshTickScheduler()())
+}
+
+// lazySearchInitCmd fires m.search.Init() exactly once — the first time the
+// active mode is Search. It is safe to call on every mode transition; it is a
+// no-op when m.active is not Search, and a no-op after the first search init.
+// Subsequent re-entries into search mode use the normal auto-refresh path via
+// maybeAutoRefreshActiveSurfaceCmd.
+//
+// When it fires the initial load it also marks the search surface as refreshed
+// so the dirty flag is cleared; this prevents a double-load that would occur if
+// maybeAutoRefreshActiveSurfaceCmd ran immediately after (which it cannot,
+// because Init sets search.loading=true and the auto-refresh path gates on that
+// flag).
+func (m *Model) lazySearchInitCmd() tea.Cmd {
+	if m.active != mode.Search {
+		return nil
+	}
+	if m.searchInitDone {
+		return nil
+	}
+	m.searchInitDone = true
+	m.markSurfaceRefreshed(mode.Search)
+	return m.search.Init()
 }
 
 // Update handles root-level shell messages.
@@ -615,7 +644,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
 			m.active = mode.Search
 			m.lastBrowse = mode.Search
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
 			if m.active == mode.Detail {
 				m.active = mode.Board
@@ -629,7 +658,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.active = mode.Search
 			m.lastBrowse = mode.Search
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
 			if m.active == mode.Board || m.active == mode.Search {
 				m.lastBrowse = m.active
@@ -642,11 +671,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
 			m.active = nextMode(m.active, m.lastBrowse)
 			m.lastBrowse = m.active
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
 			m.active = prevMode(m.active, m.lastBrowse)
 			m.lastBrowse = m.active
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
 			if m.active == mode.Detail {
 				m.active = m.lastBrowse

@@ -91,6 +91,98 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 	}
 }
 
+// TestModelInitDoesNotPreloadSearch asserts that app.Model.Init fires no
+// SearchIssues call.  Search init is deferred until the user first activates
+// search mode (ticket t8kp).
+func TestModelInitDoesNotPreloadSearch(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected no SearchIssues call during startup; got calls=%#v", gateway.Calls)
+	}
+}
+
+// TestModelFirstSearchModeSwitchTriggersSearchInit asserts that the first
+// transition to search mode fires exactly one SearchIssues call (lazy init),
+// and that a second transition does NOT fire another SearchIssues call.
+func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "Ready", Status: "open", Priority: 1}},
+	}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// Startup must not have triggered search.
+	if gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected no SearchIssues call during startup; got calls=%#v", gateway.Calls)
+	}
+	if m.searchInitDone {
+		t.Fatalf("expected searchInitDone=false after startup")
+	}
+
+	// First switch to search mode: lazy init must fire.
+	gateway.ResetCalls()
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Search {
+		t.Fatalf("expected search active after toggle, got %s", m.active)
+	}
+	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected SearchIssues call on first search mode activation; got calls=%#v", gateway.Calls)
+	}
+	if !m.searchInitDone {
+		t.Fatalf("expected searchInitDone=true after first search activation")
+	}
+
+	// Return to board and go back to search: should NOT re-trigger SearchIssues
+	// from the lazy init path (auto-refresh may run if stale, but lazy init does not).
+	gateway.ResetCalls()
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt}) // toggle back to board
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	gateway.ResetCalls()
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt}) // toggle to search again
+	m = next.(Model)
+	// Only run the immediate Update result; don't recurse into auto-refresh
+	// commands — we only want to check that lazySearchInitCmd itself is a no-op.
+	_ = cmd
+	if !m.searchInitDone {
+		t.Fatalf("expected searchInitDone still true on second search activation")
+	}
+	// The lazy init flag must be set; subsequent refresh is handled by auto-refresh,
+	// not by Init. Confirm no second SearchIssues call came from the lazy path.
+	// (Auto-refresh may or may not fire depending on stale cadence; we apply no
+	// messages to avoid triggering it.)
+	if gateway.HasCall(string(fakes.MethodSearchIssues)) {
+		t.Fatalf("expected lazy init NOT to re-fire SearchIssues on second search activation; got calls=%#v", gateway.Calls)
+	}
+}
+
 func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}

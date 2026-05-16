@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -135,7 +136,13 @@ func TestRunDebugWithHelpExitsZeroNoDebugLines(t *testing.T) {
 // triggered by os.Open when the directory has execute permission but no read
 // permission (mode 0o111).  This is distinct from the 0o000 case: os.Stat
 // succeeds (directory exists and is a dir), but the Open probe returns EACCES.
+// On Windows, Unix permission bits have no effect so this scenario cannot be
+// reproduced with os.Chmod.
 func TestResolveAndValidateCWDRejectsExecuteOnlyDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// TODO: find a Windows-native way to test inaccessible-directory rejection.
+		t.Skip("Unix execute-only permission bits have no effect on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses permission checks")
 	}
@@ -161,7 +168,13 @@ func TestResolveAndValidateCWDRejectsExecuteOnlyDir(t *testing.T) {
 // code 1 with a clear message when --cwd points to an execute-only directory
 // (mode 0o111).  This exercises the EACCES path through the os.Open probe in
 // resolveAndValidateCWD where os.Stat succeeds but Open fails.
+// On Windows, Unix permission bits (os.Chmod) have no effect, so execute-only
+// directories are fully accessible and this scenario cannot be reproduced.
 func TestRunCWDExecuteOnlyExitsWithCode1(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// TODO: find a Windows-native way to test inaccessible-directory rejection.
+		t.Skip("Unix execute-only permission bits have no effect on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses permission checks")
 	}
