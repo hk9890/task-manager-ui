@@ -442,7 +442,7 @@ Key tasks:
 | `mise run test:verbose` | unit tests with `-v` |
 | `mise run lint` | pinned `golangci-lint` via `.golangci-version` |
 | `mise run guardrails` | `go test ./cmd/bwb -run TestArchitectureGuardrails` |
-| `mise run quality` | full pre-handoff gate (scripts, lint, guardrails, build, vet, test) |
+| `mise run quality` | full pre-handoff gate (scripts:check, lint, guardrails, build, vet, test) |
 | `mise run quality:fast` | lighter in-flight check (build, vet, test) |
 | `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
 

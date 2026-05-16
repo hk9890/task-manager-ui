@@ -80,7 +80,7 @@ Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
 mise run test                # unit tests only (~0.6s, no bd required)
 mise run test:integration    # unit + integration (real bd + embedded fixture)
 mise run test:verbose        # unit tests with -v
-mise run quality             # full pre-handoff gate (scripts, lint, guardrails, build, vet, test)
+mise run quality             # full pre-handoff gate (scripts:check, lint, guardrails, build, vet, test)
 mise run quality:fast        # lighter in-flight check (build, vet, test)
 ```
 

@@ -26,7 +26,7 @@ jobs:
 
       - name: Scripts syntax
         if: matrix.os != 'windows-latest'
-        run: mise run scripts
+        run: mise run scripts:check
 
       - name: Format check
         if: matrix.os != 'windows-latest'

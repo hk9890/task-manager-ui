@@ -78,7 +78,7 @@ run = "gotestsum --format standard-verbose -- -race -tags=integration ./..."
 [tasks."test:integration:verbose".env]
 CGO_ENABLED = "1"
 
-[tasks.scripts]
+[tasks."scripts:check"]
 description = "Validate script syntax (shell + python)"
 dir = "{{config_root}}"
 run = '''
@@ -115,3 +115,14 @@ fi
 description = "Install repo git hooks (one-time setup)"
 dir = "{{config_root}}"
 run = "git config core.hooksPath scripts/git-hooks"
+
+[tasks.bwb]
+description = "Build bwb and run interactively against the embedded fixture (fresh temp dir each run)"
+dir = "{{config_root}}"
+run = """
+go build -o /tmp/bwb ./cmd/bwb
+repoPath="$(mktemp -d)"
+sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
+echo "fixture: $repoPath"
+cd "$repoPath" && BD_NON_INTERACTIVE=1 /tmp/bwb
+"""
