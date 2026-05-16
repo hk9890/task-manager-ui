@@ -4,13 +4,13 @@ Use this runbook when a change touches user-visible runtime behavior (layout, na
 
 ## 1) Fast deterministic automated loop
 
-Run the focused scenario set first:
+Run the focused scenario set first. Use `-tags=integration` because one of these scenarios (`TestModelEmbeddedFixture*`) is an integration test that forks the real `bd` binary; without the tag the bare invocation silently skips it.
 
 ```bash
-go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v
+go test -tags=integration ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v
 ```
 
-This is the default quick proof for runtime behavior during implementation.
+This is the default quick proof for runtime behavior during implementation. See `docs/TESTING.md` for the unit-vs-integration tier vocabulary.
 
 ## 2) Fast manual built-binary review
 
