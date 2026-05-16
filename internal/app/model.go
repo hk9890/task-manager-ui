@@ -159,15 +159,18 @@ type Model struct {
 }
 
 // NewModel builds the root shell model.
-func NewModel(services Services) Model {
+func NewModel(services Services) (Model, error) {
 	return NewModelWithOptions(services, RuntimeOptions{})
 }
 
 // NewModelWithOptions builds the root shell model with runtime toggles.
-func NewModelWithOptions(services Services, runtime RuntimeOptions) Model {
+// It returns an error if the keybindings in services.Config cannot be resolved,
+// which can happen when callers construct Config directly (tests, programmatic
+// embed) without going through config.Load.
+func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, error) {
 	keys, err := config.ResolveKeyBindings(services.Config.KeyBindings)
 	if err != nil {
-		panic(fmt.Sprintf("invalid resolved keybindings in app model: %v", err))
+		return Model{}, fmt.Errorf("invalid keybindings in app model: %w", err)
 	}
 
 	now := modelNow()
@@ -200,7 +203,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) Model {
 			mode.Detail: {},
 		},
 		runtime: runtime,
-	}
+	}, nil
 }
 
 // Init loads initial board and search controllers.
@@ -541,6 +544,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detail.PreviewDetail = domain.IssueDetail{}
 				m.detail.ContentScrollOffset = 0
 				m.detail.MetadataScrollOffset = 0
+				m.detail.DependenciesScrollOffset = 0
 				m.detail.ScrollOffset = 0
 				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
 			}
@@ -754,9 +758,6 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 		return nil
 	}
 
-	if m.detail.SelectionID != selection.Issue.ID {
-		m.detail.ScrollOffset = 0
-	}
 	m.detail.SelectionID = selection.Issue.ID
 	m.detail.SelectBrowserIssue(selection.Issue.ID)
 
@@ -1083,16 +1084,13 @@ func nextMode(current mode.ID, lastBrowse mode.ID) mode.ID {
 	}
 }
 
-func prevMode(current mode.ID, lastBrowse mode.ID) mode.ID {
+func prevMode(current mode.ID, _ mode.ID) mode.ID {
 	switch current {
 	case mode.Board:
-		return mode.Search
+		return mode.Detail
 	case mode.Search:
 		return mode.Board
 	case mode.Detail:
-		if lastBrowse == mode.Search {
-			return mode.Board
-		}
 		return mode.Search
 	default:
 		return mode.Search

@@ -143,6 +143,28 @@ project-plan/        # product, architecture, and execution planning docs
    - Launchers start a subprocess and return immediately (no process supervision/retry).
    - Launch success/failure is surfaced in shell toast feedback.
 
+   **Shell-launcher security rule:** Launcher templates that use `sh -c` or
+   `sh -lc` MUST NOT interpolate issue fields into the shell body argument.
+   Issue fields (title, assignee, labels, etc.) are operator-untrusted input;
+   embedding them in the body allows shell injection. Instead, pass issue field
+   placeholders as additional positional arguments after the body, and reference
+   them via `$0`, `$1`, `$2` … inside the script. Example:
+
+   ```yaml
+   # SAFE — issue fields are positional args, never re-parsed as code
+   command: sh
+   args:
+     - "-lc"
+     - "printf 'id=%s title=%s\n' \"$0\" \"$1\""
+     - "{{issue.id}}"
+     - "{{issue.title}}"
+
+   # UNSAFE — do not do this
+   args:
+     - "-lc"
+     - "printf 'id=%s title=%s\n' \"{{issue.id}}\" \"{{issue.title}}\""
+   ```
+
 7. **Create vs edit ownership boundary is explicit.** The rich marker-based document flow currently owns **issue editing** (`e` in detail context). Issue creation remains on the existing create/update task boundary and is not coupled to this editor document contract.
 
 8. **App shell owns mode lifecycle and cross-mode coordination.** `internal/app` owns active-mode switching, selection ownership by mode, and detail loading/reloading decisions. `internal/mode/*` packages own feature-local state and emit shell contracts (`SelectionChangedMsg`, `ActionRequestMsg`) instead of reaching across package boundaries.
@@ -195,6 +217,10 @@ The v1 model is intentionally small and only covers app-shell concerns:
     - matching built-ins are replaced field-by-field from the provided override
     - new action names are appended
     - unspecified built-ins remain available
+    - `Args` and `Env` follow nil-sentinel semantics: omitting the key in YAML
+      leaves the field nil in the override struct, so the built-in value is
+      preserved; writing `args: []` produces a non-nil empty slice that
+      **replaces** the built-in args (use this to explicitly clear defaults)
 - `UI.ShowModeSwitcherHelp`
   - Defaults to `true`.
   - Controls whether the shell renders the mode hotkey hint line.

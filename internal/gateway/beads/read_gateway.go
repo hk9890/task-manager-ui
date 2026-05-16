@@ -6,29 +6,39 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
 const (
-	operationHealthCheck   = "health check"
-	operationListIssues    = "list issues"
-	operationReadyIssues   = "ready issues"
-	operationBlockedIssues = "blocked issues"
-	operationReadyExplain  = "ready explain"
-	operationShowIssue     = "show issue"
-	operationSearchIssues  = "search issues"
-	operationCountIssues   = "count issues"
-	operationQuery         = "query issues"
-	operationStatuses      = "status catalog"
-	operationTypes         = "type catalog"
-	operationLabels        = "label catalog"
-	searchNoticeMaybeMore  = "Results may be incomplete because the backend limit may have capped additional matches."
+	operationHealthCheck    = "health check"
+	operationListIssues     = "list issues"
+	operationReadyIssues    = "ready issues"
+	operationBlockedIssues  = "blocked issues"
+	operationReadyExplain   = "ready explain"
+	operationShowIssue      = "show issue"
+	operationSearchIssues   = "search issues"
+	operationCountIssues    = "count issues"
+	operationQuery          = "query issues"
+	operationStatuses       = "status catalog"
+	operationTypes          = "type catalog"
+	operationLabels         = "label catalog"
+	searchNoticeMaybeMore   = "Results may be incomplete because the backend limit may have capped additional matches."
+	searchNoticeNoTextFilter = "No text filter applied; returning entire ready/blocked queue."
 )
 
 // Gateway is a beads gateway implementation backed by official bd commands.
 type Gateway struct {
 	runner *CommandRunner
+
+	// parentSiblingCacheMu guards parentSiblingCache.
+	parentSiblingCacheMu sync.RWMutex
+	// parentSiblingCache stores the children list for a given parent issue ID,
+	// keyed by parent ID. Populated lazily by parentChildSiblings; reused across
+	// ShowIssue calls within the same gateway instance so each unique parent is
+	// fetched at most once.
+	parentSiblingCache map[string][]domain.IssueReference
 }
 
 // NewCLIGateway builds a CLI-backed beads gateway.
@@ -37,7 +47,10 @@ func NewCLIGateway(runner *CommandRunner) *Gateway {
 		runner = NewCommandRunner(RunnerConfig{})
 	}
 
-	return &Gateway{runner: runner}
+	return &Gateway{
+		runner:             runner,
+		parentSiblingCache: make(map[string][]domain.IssueReference),
+	}
 }
 
 // HealthCheck verifies that bd is reachable and a beads database exists in the
@@ -304,11 +317,27 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 		return g.searchIssuesFromList(ctx, query)
 	}
 
+	noTextFilter := strings.TrimSpace(query.Text) == ""
+
 	switch query.WorkState {
 	case domain.WorkStateReady:
-		return g.searchIssuesFromReady(ctx, query)
+		page, err := g.searchIssuesFromReady(ctx, query)
+		if err != nil {
+			return domain.SearchResultPage{}, err
+		}
+		if noTextFilter {
+			page.Metadata.Notice = searchNoticeNoTextFilter
+		}
+		return page, nil
 	case domain.WorkStateBlocked:
-		return g.searchIssuesFromBlocked(ctx, query)
+		page, err := g.searchIssuesFromBlocked(ctx, query)
+		if err != nil {
+			return domain.SearchResultPage{}, err
+		}
+		if noTextFilter {
+			page.Metadata.Notice = searchNoticeNoTextFilter
+		}
+		return page, nil
 	}
 
 	args := []string{"search"}
@@ -461,8 +490,12 @@ func (g *Gateway) searchIssuePageFromRecords(items []bdIssuePayload, query domai
 	results := toSearchResults(paged)
 
 	return domain.SearchResultPage{
-		Results:  results,
-		Metadata: searchMetadataFromExactFilter(len(results), query.Limit, source),
+		Results: results,
+		// Use limited-backend metadata rather than exact: bd ready/blocked have
+		// their own backend caps so the upstream set may be incomplete even after
+		// in-memory filtering. Notice is intentionally empty here; the caller
+		// (SearchIssues) attaches the no-text-filter notice when appropriate.
+		Metadata: searchMetadataFromCappedBackendRecords(len(results), query.Limit, source),
 	}, nil
 }
 
@@ -480,6 +513,24 @@ func searchMetadataFromLimitedBackendResults(returnedCount int, requestedLimit i
 	}
 
 	return metadata
+}
+
+// searchMetadataFromCappedBackendRecords builds metadata for in-memory filtered
+// results fetched from a capped backend (bd ready / bd blocked). Unlike
+// searchMetadataFromLimitedBackendResults it does not attach the MaybeMore
+// notice text — callers attach their own notice when appropriate.
+func searchMetadataFromCappedBackendRecords(returnedCount int, requestedLimit int, source domain.SearchResultSource) domain.SearchResultMetadata {
+	completeness := domain.SearchResultCompletenessMaybeMore
+	if requestedLimit <= 0 || returnedCount < requestedLimit {
+		completeness = domain.SearchResultCompletenessPartial
+	}
+
+	return domain.SearchResultMetadata{
+		ReturnedCount:  returnedCount,
+		RequestedLimit: requestedLimit,
+		Completeness:   completeness,
+		Source:         source,
+	}
 }
 
 func searchMetadataFromExactFilter(returnedCount int, requestedLimit int, source domain.SearchResultSource) domain.SearchResultMetadata {
@@ -755,6 +806,15 @@ func (g *Gateway) parentChildSiblings(ctx context.Context, parentID string) ([]d
 		return nil, nil
 	}
 
+	// Check cache first to avoid a second bd show per ShowIssue call when the
+	// same parent has already been fetched by a prior detail load.
+	g.parentSiblingCacheMu.RLock()
+	cached, hit := g.parentSiblingCache[parentID]
+	g.parentSiblingCacheMu.RUnlock()
+	if hit {
+		return cached, nil
+	}
+
 	items, err := g.decodeIssueArray(ctx, operationShowIssue, []string{"show", parentID, "--json"})
 	if err != nil {
 		return nil, err
@@ -778,6 +838,12 @@ func (g *Gateway) parentChildSiblings(ctx context.Context, parentID string) ([]d
 
 		out = append(out, ref)
 	}
+
+	// Store in cache so future ShowIssue calls for siblings of the same parent
+	// do not re-fetch.
+	g.parentSiblingCacheMu.Lock()
+	g.parentSiblingCache[parentID] = out
+	g.parentSiblingCacheMu.Unlock()
 
 	return out, nil
 }

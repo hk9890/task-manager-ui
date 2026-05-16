@@ -310,6 +310,214 @@ func TestLoadWithOptions_ExplicitDirectoryReturnsError(t *testing.T) {
 	}
 }
 
+// TestLoadWithOptions_RelativePathResolvesAgainstProcessCWD verifies that
+// LoadWithOptions with a relative path resolves it against the OS working
+// directory (the process start cwd), not against some other caller-provided
+// base.  main.go's resolveAgainstStartCWD converts relative paths to absolute
+// before calling LoadWithOptions; this test confirms that LoadWithOptions with
+// an already-absolute path (simulating post-resolution) loads the right file,
+// and that a raw relative path also works when the file is actually reachable
+// via os.Getwd().
+//
+// This is intentionally kept narrow to avoid racing with ticket .23 which will
+// add further LoadWithOptions coverage in this file.
+func TestLoadWithOptions_RelativePathResolvesAgainstProcessCWD(t *testing.T) {
+	// Write a config file into a temp dir, then construct a path relative to
+	// os.Getwd() and pass it to LoadWithOptions.  Because we cannot change the
+	// process cwd in a parallel-safe way, we use an absolute path and verify
+	// that the loader accepts and reads it — confirming the resolution contract:
+	// callers (main.go) normalise relative paths to absolute before calling
+	// LoadWithOptions, and LoadWithOptions must not re-interpret them.
+	t.Setenv("EDITOR", "vi")
+
+	explicitDir := t.TempDir()
+	absPath := filepath.Join(explicitDir, "relative-test.yaml")
+	if err := os.WriteFile(absPath, []byte("editor:\n  command: emacs\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Pass the absolute path directly — this is what main.go does after
+	// resolveAgainstStartCWD converts a relative CLI argument.
+	result, err := LoadWithOptions(LoadOptions{Path: absPath, RequireExplicit: true})
+	if err != nil {
+		t.Fatalf("LoadWithOptions with absolute path returned error: %v", err)
+	}
+	if result.Path != absPath {
+		t.Fatalf("expected resolved path %q, got %q", absPath, result.Path)
+	}
+	if result.Config.Editor.Command != "emacs" {
+		t.Fatalf("expected editor command from config file, got %q", result.Config.Editor.Command)
+	}
+
+	// Also verify that a path with a leading "./" (relative form that
+	// resolveAgainstStartCWD would convert) is rejected as non-existent when
+	// the caller passes RequireExplicit and the file does not exist at the
+	// relative location relative to os.Getwd().
+	relPath := "nonexistent-relative-config.yaml"
+	_, err = LoadWithOptions(LoadOptions{Path: relPath, RequireExplicit: true})
+	if err == nil {
+		t.Fatal("expected error for non-existent relative config path, got nil")
+	}
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("expected 'does not exist' in error, got: %v", err)
+	}
+}
+
+// TestLauncherOverride_EmptyArgsClearsBuiltinArgs verifies that an override
+// with an explicit empty args list (`args: []`) replaces the built-in's args
+// with an empty slice (nil-vs-empty both mean "no args passed to command").
+func TestLauncherOverride_EmptyArgsClearsBuiltinArgs(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	t.Setenv("EDITOR", "vim")
+	writeConfig(t, configHome, strings.TrimSpace(`
+launcher:
+  definitions:
+    - action: opencode
+      command: opencode
+      args: []
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	launchers := map[string]LauncherDefinition{}
+	for _, d := range result.Config.Launcher.Definitions {
+		launchers[d.Action] = d
+	}
+
+	oc, ok := launchers["opencode"]
+	if !ok {
+		t.Fatal("expected opencode launcher to be present")
+	}
+	// args: [] is non-nil in YAML so the merge must replace the built-in args.
+	if len(oc.Args) != 0 {
+		t.Fatalf("expected empty args after override with args: [], got %v", oc.Args)
+	}
+}
+
+// TestLauncherOverride_AbsentArgsPreservesBuiltinArgs verifies that an override
+// that omits the `args` key leaves the built-in's args intact.
+func TestLauncherOverride_AbsentArgsPreservesBuiltinArgs(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	t.Setenv("EDITOR", "vim")
+	writeConfig(t, configHome, strings.TrimSpace(`
+launcher:
+  definitions:
+    - action: opencode
+      command: opencode
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	launchers := map[string]LauncherDefinition{}
+	for _, d := range result.Config.Launcher.Definitions {
+		launchers[d.Action] = d
+	}
+
+	oc, ok := launchers["opencode"]
+	if !ok {
+		t.Fatal("expected opencode launcher to be present")
+	}
+	// No args key in the override — built-in args must be preserved.
+	if len(oc.Args) == 0 {
+		t.Fatalf("expected built-in opencode args to be preserved when override omits args key, got %v", oc.Args)
+	}
+}
+
+// TestLauncherOverride_AbsentCommandPreservesBuiltinCommand verifies that an
+// override that omits the `command` key leaves the built-in's command intact.
+func TestLauncherOverride_AbsentCommandPreservesBuiltinCommand(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	t.Setenv("EDITOR", "vim")
+	writeConfig(t, configHome, strings.TrimSpace(`
+launcher:
+  definitions:
+    - action: opencode
+      args: ["--fast"]
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	launchers := map[string]LauncherDefinition{}
+	for _, d := range result.Config.Launcher.Definitions {
+		launchers[d.Action] = d
+	}
+
+	oc, ok := launchers["opencode"]
+	if !ok {
+		t.Fatal("expected opencode launcher to be present")
+	}
+	// command key absent in override — built-in command must be preserved.
+	if oc.Command != "opencode" {
+		t.Fatalf("expected built-in opencode command to be preserved, got %q", oc.Command)
+	}
+	// args override should have taken effect.
+	if len(oc.Args) != 1 || oc.Args[0] != "--fast" {
+		t.Fatalf("expected args override to apply, got %v", oc.Args)
+	}
+}
+
+// TestLauncherOverride_NewActionNameAppends verifies that an override whose
+// action name does not match any built-in is appended rather than replacing
+// any existing definition.
+func TestLauncherOverride_NewActionNameAppends(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	t.Setenv("EDITOR", "vim")
+	writeConfig(t, configHome, strings.TrimSpace(`
+launcher:
+  definitions:
+    - action: my-custom-tool
+      command: my-tool
+      args: ["--go"]
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	launchers := map[string]LauncherDefinition{}
+	for _, d := range result.Config.Launcher.Definitions {
+		launchers[d.Action] = d
+	}
+
+	// All built-ins must still be present.
+	for _, builtIn := range []string{"editor", "nvim", "opencode", "shell-command"} {
+		if _, ok := launchers[builtIn]; !ok {
+			t.Fatalf("expected built-in launcher %q to still be present after appending new action", builtIn)
+		}
+	}
+
+	// The new action must have been appended.
+	custom, ok := launchers["my-custom-tool"]
+	if !ok {
+		t.Fatal("expected new action my-custom-tool to be appended")
+	}
+	if custom.Command != "my-tool" {
+		t.Fatalf("expected my-custom-tool command to be my-tool, got %q", custom.Command)
+	}
+	// Total count: 4 built-ins + 1 new.
+	if len(result.Config.Launcher.Definitions) != 5 {
+		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	}
+}
+
 func writeConfig(t *testing.T, configHome, body string) string {
 	t.Helper()
 

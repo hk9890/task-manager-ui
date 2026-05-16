@@ -29,6 +29,26 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// mustNewModel wraps NewModel and fails the test if an error is returned.
+func mustNewModel(t *testing.T, services Services) Model {
+	t.Helper()
+	m, err := NewModel(services)
+	if err != nil {
+		t.Fatalf("NewModel returned unexpected error: %v", err)
+	}
+	return m
+}
+
+// mustNewModelWithOptions wraps NewModelWithOptions and fails the test if an error is returned.
+func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOptions) Model {
+	t.Helper()
+	m, err := NewModelWithOptions(services, runtime)
+	if err != nil {
+		t.Fatalf("NewModelWithOptions returned unexpected error: %v", err)
+	}
+	return m
+}
+
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
@@ -43,7 +63,7 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	if m.board == nil {
 		t.Fatalf("expected board controller to be configured")
 	}
@@ -84,7 +104,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	queue := runBatch(m.Init())
 
 	observedVisibleBoardState := false
@@ -136,7 +156,7 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -208,7 +228,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 200
 	m = applyMessages(t, m, runBatch(m.Init()))
 
@@ -248,7 +268,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Enter search mode.
@@ -298,7 +318,7 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -319,6 +339,55 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 	}
 }
 
+func TestModelSearchEscFromResultsFocusReturnsToBoard(t *testing.T) {
+	// Regression: Esc must trigger shell escape (return to board) even when
+	// search focus is on Results / Content / Metadata, not just on Query.
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-3", Title: "Search result", Status: "open", Priority: 1}},
+	}}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// Enter search mode.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected search active after ctrl+space, got %s", m.active)
+	}
+
+	// Press down arrow to move search focus from Query to Results.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	// Confirm search focus is now on Results (CapturesShellKey must return false for Esc).
+	if m.search.CapturesShellKey(tea.KeyMsg{Type: tea.KeyEsc}) {
+		t.Fatal("expected CapturesShellKey to return false for Esc when focus is Results — shell escape must be reachable")
+	}
+
+	// Press Esc — shell escape handler should fire and return to board.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Board {
+		t.Fatalf("expected Esc from Results focus to return to board, got %s", m.active)
+	}
+	if m.lastBrowse != mode.Board {
+		t.Fatalf("expected lastBrowse to be board after Esc from search Results, got %s", m.lastBrowse)
+	}
+}
+
 func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withModelNow(t, time.Unix(0, 0))
@@ -333,7 +402,7 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 	if m.focusKnown {
 		t.Fatal("expected no focus events observed at startup")
@@ -363,7 +432,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	gateway.ResetCalls()
@@ -409,7 +478,7 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
@@ -451,7 +520,7 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -492,7 +561,7 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 	if m.active != mode.Board {
 		t.Fatalf("expected board active after init, got %s", m.active)
@@ -533,7 +602,7 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -578,7 +647,7 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -635,7 +704,7 @@ func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -679,7 +748,7 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -737,7 +806,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
@@ -790,7 +859,7 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	gateway.ResetCalls()
@@ -837,7 +906,7 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	gateway.ResetCalls()
@@ -895,7 +964,7 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m.markSurfaceRefreshed(mode.Board)
 
@@ -938,7 +1007,7 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
+	m := mustNewModelWithOptions(t, services, RuntimeOptions{DisableAutoRefresh: true})
 	for _, msg := range runBatch(m.Init()) {
 		if _, ok := msg.(refreshTickMsg); ok {
 			refreshMarkerSeen = true
@@ -964,7 +1033,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
+	m := mustNewModelWithOptions(t, services, RuntimeOptions{DisableAutoRefresh: true})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	gateway.ResetCalls()
@@ -1011,7 +1080,7 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
@@ -1047,7 +1116,7 @@ func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -1100,7 +1169,7 @@ func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	if footer := m.renderFooter(); strings.TrimSpace(footer) != "" {
@@ -1134,7 +1203,7 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	if footer := m.renderFooter(); !strings.Contains(footer, "ctrl+s search") || !strings.Contains(footer, "ctrl+q quit") {
@@ -1221,7 +1290,7 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 120
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1254,7 +1323,7 @@ func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	}
 	services.Editor = fakeEditor
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
@@ -1287,7 +1356,7 @@ func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 	}
 	services.Editor = fakeEditor
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
@@ -1327,7 +1396,7 @@ func TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
@@ -1386,7 +1455,7 @@ func TestModelUpdateCloseAndCommentFlowsUseGatewayWrites(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
@@ -1463,7 +1532,7 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
@@ -1520,7 +1589,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 90
 	m.height = 16
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1579,7 +1648,7 @@ func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *t
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 160
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1677,7 +1746,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssu
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 160
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1748,7 +1817,7 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 140
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1828,7 +1897,7 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 140
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1887,7 +1956,7 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 140
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -1958,7 +2027,7 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 140
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2038,7 +2107,7 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 140
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2097,7 +2166,7 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, _ := m.Update(launchActionResultMsg{action: "nvim", err: nil})
@@ -2127,7 +2196,7 @@ func TestModelDetailModeRendersStandaloneDetailGolden(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
@@ -2169,7 +2238,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 160
 	m.height = 42
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2205,7 +2274,7 @@ func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T)
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 120
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2245,7 +2314,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	fakeEditor := &fakes.FakeEditor{Result: launchereditor.Result{Updated: true}}
 	services.Editor = fakeEditor
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	if m.detail.Detail.Summary.ID != "bw-9" {
@@ -2309,7 +2378,7 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	fakeEditor := &fakes.FakeEditor{}
 	services.Editor = fakeEditor
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
@@ -2363,7 +2432,7 @@ func TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Startup lands on Not Ready lane when blocked work exists.
@@ -2429,7 +2498,7 @@ func TestModelEmbeddedFixtureDetailEditHotkeyUsesEditorService(t *testing.T) {
 	fakeEditor := &fakes.FakeEditor{}
 	services.Editor = fakeEditor
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	if got := firstSelectionID(m, mode.Board); got != "bwf-2" {
@@ -2484,7 +2553,7 @@ func TestModelEmbeddedFixtureMutationModalsOpenWithoutCatalogDecodeToast(t *test
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 120
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2580,7 +2649,7 @@ func TestModelEmbeddedFixtureFullBoardCaptureGolden(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 120
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2619,7 +2688,7 @@ func TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors(t *tes
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 120
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2654,7 +2723,7 @@ func TestModelEmbeddedFixtureDetailShowsRelatedFromRealBDRelatedLink(t *testing.
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	if got := firstSelectionID(m, mode.Board); got != "bwf-2" {
@@ -2705,7 +2774,7 @@ func TestModelEmbeddedFixtureDetailShowsRelatesToDependentOnlyUnderRelated(t *te
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	if got := firstSelectionID(m, mode.Board); got != "bwf-2" {
@@ -2752,7 +2821,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m.width = 120
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
@@ -2826,7 +2895,7 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m.width = 120
 	m.height = 34
@@ -2888,7 +2957,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
 		t.Fatalf("NewServices: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -2907,7 +2976,7 @@ func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 		t.Fatalf("NewServices: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -2930,7 +2999,7 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 		t.Fatalf("NewServices: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -2957,7 +3026,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 		t.Fatalf("NewServices: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -3004,7 +3073,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 		t.Fatalf("NewServices: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -3031,7 +3100,7 @@ func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
 		t.Fatalf("NewServices: %v", err)
 	}
 
-	m := NewModel(services)
+	m := mustNewModel(t, services)
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
@@ -3124,5 +3193,94 @@ func withModelNow(t *testing.T, now time.Time) {
 	modelNow = func() time.Time { return now }
 	t.Cleanup(func() {
 		modelNow = original
+	})
+}
+
+// TestNewModelWithOptionsReturnsErrorOnInvalidKeyBindings asserts that
+// NewModelWithOptions returns a typed error (not a panic) when Config contains
+// an invalid keybinding — defensive hardening for direct-construction callers
+// (tests, future programmatic embed) that skip config.Load.
+func TestNewModelWithOptionsReturnsErrorOnInvalidKeyBindings(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	cfg := config.Default()
+	// Inject an invalid keybinding: empty key slice for a required action.
+	cfg.KeyBindings.Shell[config.ShellActionQuit] = []string{}
+
+	services := Services{
+		Gateway: gateway,
+		Config:  cfg,
+	}
+
+	_, err := NewModelWithOptions(services, RuntimeOptions{})
+	if err == nil {
+		t.Fatal("expected NewModelWithOptions to return an error for invalid keybindings, got nil")
+	}
+}
+
+// TestModeCycleDirections asserts that nextMode and prevMode traverse the mode
+// cycle in opposite directions for every starting mode.
+//
+// Forward cycle  (nextMode): Board → Search → Board (2-mode browse toggle),
+//
+//	Detail → the browse mode not in lastBrowse
+//
+// Backward cycle (prevMode): Board → Detail → Search → Board
+// (prevMode ignores lastBrowse; the cycle is fixed).
+//
+// Together the two functions must differ at the modes where direction matters:
+// Board (next→Search vs prev→Detail) and Detail (next→browse vs prev→Search).
+func TestModeCycleDirections(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nextMode_forward", func(t *testing.T) {
+		t.Parallel()
+
+		if got := nextMode(mode.Board, mode.Board); got != mode.Search {
+			t.Errorf("nextMode(Board, Board) = %s; want Search", got)
+		}
+		if got := nextMode(mode.Search, mode.Board); got != mode.Board {
+			t.Errorf("nextMode(Search, Board) = %s; want Board", got)
+		}
+		// Detail goes to the browse mode not in lastBrowse.
+		if got := nextMode(mode.Detail, mode.Search); got != mode.Board {
+			t.Errorf("nextMode(Detail, Search) = %s; want Board", got)
+		}
+		if got := nextMode(mode.Detail, mode.Board); got != mode.Search {
+			t.Errorf("nextMode(Detail, Board) = %s; want Search", got)
+		}
+	})
+
+	t.Run("prevMode_backward", func(t *testing.T) {
+		t.Parallel()
+
+		// Backward cycle: Board → Detail → Search → Board
+		if got := prevMode(mode.Board, mode.Board); got != mode.Detail {
+			t.Errorf("prevMode(Board, _) = %s; want Detail", got)
+		}
+		if got := prevMode(mode.Detail, mode.Board); got != mode.Search {
+			t.Errorf("prevMode(Detail, _) = %s; want Search", got)
+		}
+		if got := prevMode(mode.Search, mode.Board); got != mode.Board {
+			t.Errorf("prevMode(Search, _) = %s; want Board", got)
+		}
+	})
+
+	t.Run("next_and_prev_differ_at_board_and_detail", func(t *testing.T) {
+		t.Parallel()
+
+		// Board: next→Search, prev→Detail — must differ.
+		if nextMode(mode.Board, mode.Board) == prevMode(mode.Board, mode.Board) {
+			t.Errorf("nextMode(Board) and prevMode(Board) both returned %s; they must differ",
+				nextMode(mode.Board, mode.Board))
+		}
+		// Detail: next→browse (Search when lb=Board), prev→Search — both happen
+		// to return Search when lb=Board, which is expected; the distinguishing
+		// arm is lb=Search where next→Board but prev→Search.
+		if nextMode(mode.Detail, mode.Search) == prevMode(mode.Detail, mode.Search) {
+			t.Errorf("nextMode(Detail,Search) and prevMode(Detail,Search) both returned %s; they must differ",
+				nextMode(mode.Detail, mode.Search))
+		}
 	})
 }

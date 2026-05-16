@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -63,7 +64,8 @@ func New(opts Options) *Manager {
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "bwb logging warning: persistent log unavailable; continuing with stderr-only logging: %v\n", err)
 	} else {
-		handlers = append(handlers, newJSONFileHandler(fileSink, opts.Debug))
+		safe := newFailsafeSink(fileSink, stderr)
+		handlers = append(handlers, newJSONFileHandler(safe, opts.Debug))
 	}
 
 	root := slog.New(newTeeHandler(handlers...)).With(
@@ -147,6 +149,42 @@ func buildPersistentSink(opts Options) (string, *lumberjack.Logger, error) {
 	return path, sink, nil
 }
 
+// failsafeSink wraps an io.Writer (typically a lumberjack.Logger). On the
+// first write error it emits one warning line to the fallback writer and then
+// routes all subsequent writes there, ensuring silent failures are surfaced
+// exactly once per session.
+type failsafeSink struct {
+	mu       sync.Mutex
+	primary  io.Writer
+	fallback io.Writer
+	failed   bool
+	warned   bool
+}
+
+func newFailsafeSink(primary io.Writer, fallback io.Writer) *failsafeSink {
+	return &failsafeSink{primary: primary, fallback: fallback}
+}
+
+func (s *failsafeSink) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.failed {
+		return s.fallback.Write(p)
+	}
+
+	n, err := s.primary.Write(p)
+	if err != nil {
+		s.failed = true
+		if !s.warned {
+			s.warned = true
+			_, _ = fmt.Fprintf(s.fallback, "bwb logging warning: persistent sink write failed; switching to stderr-only logging: %v\n", err)
+		}
+		return s.fallback.Write(p)
+	}
+	return n, nil
+}
+
 func resolveLogPath(stateDirOverride string) (string, error) {
 	stateDir := strings.TrimSpace(stateDirOverride)
 	if stateDir == "" {
@@ -196,10 +234,17 @@ func newJSONFileHandler(writer io.Writer, debug bool) slog.Handler {
 	})
 }
 
+// randReader is the source of entropy for session ID generation. Replaced in
+// tests to simulate rand.Read failures.
+var randReader = func(b []byte) (int, error) { return rand.Read(b) }
+
+// generateSessionID returns an 8-character hex session identifier. On rand.Read
+// failure it appends the current nanosecond timestamp in hex to ensure uniqueness
+// across concurrent processes or degraded-entropy restarts.
 func generateSessionID() string {
 	raw := make([]byte, 4)
-	if _, err := rand.Read(raw); err != nil {
-		return "00000000"
+	if _, err := randReader(raw); err != nil {
+		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(raw)
 }
@@ -251,7 +296,7 @@ func (h *teeHandler) WithGroup(name string) slog.Handler {
 }
 
 type stderrHandler struct {
-	mu      sync.Mutex
+	mu      *sync.Mutex // shared across all derived handlers; allocated once in newStderrHandler
 	writer  io.Writer
 	debugOn bool
 	attrs   []slog.Attr
@@ -259,7 +304,7 @@ type stderrHandler struct {
 }
 
 func newStderrHandler(writer io.Writer, debug bool) slog.Handler {
-	return &stderrHandler{writer: writer, debugOn: debug}
+	return &stderrHandler{mu: &sync.Mutex{}, writer: writer, debugOn: debug}
 }
 
 func (h *stderrHandler) Enabled(_ context.Context, level slog.Level) bool {
@@ -297,6 +342,7 @@ func (h *stderrHandler) Handle(_ context.Context, record slog.Record) error {
 func (h *stderrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	copyAttrs := append(append([]slog.Attr(nil), h.attrs...), attrs...)
 	return &stderrHandler{
+		mu:      h.mu, // share the same mutex; do not allocate a fresh one
 		writer:  h.writer,
 		debugOn: h.debugOn,
 		attrs:   copyAttrs,
@@ -310,6 +356,7 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 		nextGroup = h.group + "." + name
 	}
 	return &stderrHandler{
+		mu:      h.mu, // share the same mutex; do not allocate a fresh one
 		writer:  h.writer,
 		debugOn: h.debugOn,
 		attrs:   append([]slog.Attr(nil), h.attrs...),

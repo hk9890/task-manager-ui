@@ -46,7 +46,10 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		services.Logger = opts.logManager.Component("dashboard")
 	}
 
-	model := app.NewModelWithOptions(services, app.RuntimeOptions{DisableAutoRefresh: !opts.autoRefresh})
+	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{DisableAutoRefresh: !opts.autoRefresh})
+	if err != nil {
+		return fmt.Errorf("failed to initialize app model: %w", err)
+	}
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("bwb failed: %w", err)
@@ -252,6 +255,15 @@ func resolveAndValidateCWD(startCWD, cwdOverride string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("path %q is not a directory", resolved)
 	}
+
+	// Probe for read access. os.Open on a directory succeeds only when the
+	// caller has at minimum read+execute permission, catching EACCES before the
+	// gateway encounters it with a confusing error.
+	f, err := os.Open(resolved)
+	if err != nil {
+		return "", fmt.Errorf("path %q is not accessible: %w", resolved, err)
+	}
+	_ = f.Close()
 
 	return resolved, nil
 }

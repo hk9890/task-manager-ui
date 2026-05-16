@@ -3,8 +3,10 @@ package logging
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -250,6 +252,49 @@ func TestFallbackWhenStateDirUnavailableWarnsOnceAndUsesStderrOnly(t *testing.T)
 	}
 	if !strings.Contains(got, "warn: fallback warning") {
 		t.Fatalf("expected warnings to continue on stderr, got %q", got)
+	}
+}
+
+func TestGenerateSessionIDReturnsHexOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	id := generateSessionID()
+	if len(id) == 0 {
+		t.Fatal("expected non-empty session ID")
+	}
+	// Must be valid hex.
+	if _, err := strconv.ParseUint(id, 16, 64); err != nil {
+		// More than 64 bits: just verify every character is a hex digit.
+		for _, c := range id {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				t.Fatalf("session ID %q contains non-hex character %q", id, c)
+			}
+		}
+	}
+}
+
+func TestGenerateSessionIDFallsBackToTimestampOnRandError(t *testing.T) {
+	// Not parallel: modifies package-level randReader.
+	orig := randReader
+	randReader = func(b []byte) (int, error) { return 0, errors.New("entropy exhausted") }
+	t.Cleanup(func() { randReader = orig })
+
+	id1 := generateSessionID()
+	id2 := generateSessionID()
+
+	if id1 == "00000000" {
+		t.Fatalf("expected non-literal fallback, got %q", id1)
+	}
+	// Both IDs must be non-empty hex strings.
+	for _, id := range []string{id1, id2} {
+		if len(id) == 0 {
+			t.Fatalf("expected non-empty fallback session ID")
+		}
+		for _, c := range id {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				t.Fatalf("fallback session ID %q contains non-hex character %q", id, c)
+			}
+		}
 	}
 }
 

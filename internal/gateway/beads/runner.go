@@ -17,6 +17,47 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
+// envAllowlist is the fixed set of env var names passed to bd subprocesses.
+// All BD_* and other ambient vars are stripped; only these vars (and any
+// BWB_-prefixed var) survive. The gateway is bound to one project; env
+// isolation prevents stray BD_DB_PATH or XDG_CONFIG_HOME values from
+// redirecting bd to a different database.
+var envAllowlist = []string{
+	"PATH",
+	"HOME",
+	"USER",
+	"LANG",
+	"LC_ALL",
+	"LC_CTYPE",
+	"LC_MESSAGES",
+	"TERM",
+}
+
+// filterEnvToAllowlist returns a filtered copy of environ containing only
+// entries whose key is in envAllowlist or whose key has the prefix "BWB_".
+func filterEnvToAllowlist(environ []string) []string {
+	allowed := make(map[string]struct{}, len(envAllowlist))
+	for _, k := range envAllowlist {
+		allowed[k] = struct{}{}
+	}
+
+	out := make([]string, 0, len(envAllowlist))
+	for _, entry := range environ {
+		k, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if _, listed := allowed[k]; listed {
+			out = append(out, entry)
+			continue
+		}
+		if strings.HasPrefix(k, "BWB_") {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
 const defaultBDCommand = "bd"
 
 // CommandRequest describes one CLI invocation.
@@ -74,10 +115,11 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		command = defaultBDCommand
 	}
 
-	defaultEnv := cfg.Env
-	if defaultEnv == nil {
-		defaultEnv = os.Environ()
+	rawEnv := cfg.Env
+	if rawEnv == nil {
+		rawEnv = os.Environ()
 	}
+	defaultEnv := filterEnvToAllowlist(rawEnv)
 
 	executor := cfg.Executor
 	if executor == nil {
@@ -125,6 +167,14 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 
 	if result.ExitCode != 0 {
 		stderr := strings.TrimSpace(string(result.Stderr))
+		// TODO(beads-workbench-db0z.6): bd 1.0.4 does not expose a dedicated exit
+		// code or stable JSON signal for the "no database" condition — all CLI
+		// failures return exit code 1. The substring match below is therefore a
+		// best-effort detection pinned to the current wording. If bd adds a
+		// dedicated exit code or structured error field in a future release, prefer
+		// that over this substring check. The pinning test
+		// TestMissingBDDatabaseDetectionSubstringPin in runner_test.go will fail
+		// loudly if the wording changes, giving a clear signal to revisit.
 		if strings.Contains(stderr, "no beads database found") {
 			return nil, newGatewayError(domain.ErrorCodeNoDatabaseFound, req.Operation, stderr, nil)
 		}
@@ -161,6 +211,12 @@ func RunJSON[T any](ctx context.Context, r *CommandRunner, req CommandRequest) (
 }
 
 // DecodeJSONInto decodes JSON output into target and normalizes decode errors.
+//
+// NDJSON (newline-delimited JSON, i.e. multiple top-level JSON objects) is
+// intentionally unsupported. The second Decode call below detects any trailing
+// JSON content — including an NDJSON second record — and returns
+// ErrorCodeDecodeFailed. All bd commands that this gateway calls are expected
+// to emit exactly one JSON object on stdout.
 func DecodeJSONInto(operation string, stdout []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(stdout))
 
@@ -181,15 +237,20 @@ func DecodeJSONInto(operation string, stdout []byte, target any) error {
 
 func (r *CommandRunner) resolveEnv(extra []string) []string {
 	env := append([]string(nil), r.defaultEnv...)
-	env = append(env, extra...)
+	env = append(env, filterEnvToAllowlist(extra)...)
+	// Force BD_NON_INTERACTIVE=1 last so it always wins over caller-supplied
+	// values that survived the allowlist. bwb is a programmatic caller and must
+	// never let a child bd process prompt for tty input (every gateway call
+	// would hang). See the embedded-fixture integration tests in internal/app.
+	env = append(env, "BD_NON_INTERACTIVE=1")
 	return env
 }
 
-func (r *CommandRunner) resolveWorkDir(override string) string {
-	if strings.TrimSpace(override) != "" {
-		return override
-	}
-
+// resolveWorkDir always returns the gateway's bound defaultWorkDir.
+// CommandRequest.WorkDir is intentionally ignored: a gateway instance is bound
+// to exactly one beads project and must not be redirected by per-request
+// values (see CODING.md rule #3 — gateway is source-specific).
+func (r *CommandRunner) resolveWorkDir(_ string) string {
 	return r.defaultWorkDir
 }
 

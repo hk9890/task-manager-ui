@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -467,7 +468,9 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
-	testui.WaitForOutputContainsAll(t, tm.Output(), "Search", "bwf-1")
+	// Real bd subprocess can take ~8s in isolation and much longer under
+	// parallel `go test ./...` load — default 1s budget would flake. Bump to 15s.
+	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), 15*time.Second, "Search", "bwf-1")
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("failed to quit teatest model: %v", err)

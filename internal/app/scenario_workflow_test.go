@@ -30,7 +30,7 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 
-	m := testui.InitializeModel(NewModel(services)).(Model)
+	m := testui.InitializeModel(mustNewModel(t, services)).(Model)
 	m.width, m.height = 120, 24
 
 	m = testui.ApplyKeySequence(m, testui.BoardToSearchKeys()...).(Model)
@@ -81,7 +81,7 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 	}
 	services.Editor = fakeEditor
 
-	m := testui.InitializeModel(NewModel(services)).(Model)
+	m := testui.InitializeModel(mustNewModel(t, services)).(Model)
 	m = testui.ApplyKeySequence(m, testui.OpenDetailKeys()...).(Model)
 	if m.active != mode.Detail {
 		t.Fatalf("expected open detail scenario before tool actions, got %s", m.active)

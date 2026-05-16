@@ -121,6 +121,11 @@ func Render(state State) string {
 		height = defaultDetailHeight
 	}
 
+	const minDetailWidth = 30
+	if width < minDetailWidth {
+		return "Terminal too narrow"
+	}
+
 	if state.Compact {
 		return renderCompact(detail, width)
 	}
@@ -871,9 +876,3 @@ func emptyFallback(value, fallback string) string {
 	return value
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

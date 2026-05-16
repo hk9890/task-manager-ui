@@ -91,7 +91,11 @@ func defaultLauncherDefinitions(editor string) []LauncherDefinition {
 			Command: "sh",
 			Args: []string{
 				"-lc",
-				"printf 'issue=%s\\ntitle=%s\\nassignee=%s\\nlabels=%s\\n' \"{{issue.id}}\" \"{{issue.title}}\" \"{{issue.assignee}}\" \"{{issue.labels}}\"",
+				"printf 'issue=%s\\ntitle=%s\\nassignee=%s\\nlabels=%s\\n' \"$0\" \"$1\" \"$2\" \"$3\"",
+				"{{issue.id}}",
+				"{{issue.title}}",
+				"{{issue.assignee}}",
+				"{{issue.labels}}",
 			},
 			WorkDir: "{{project.root}}",
 		},

@@ -16,7 +16,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
-func TestCommandRunnerRunUsesDefaultAndRequestOverrides(t *testing.T) {
+func TestCommandRunnerRunUsesDefaultWorkDirAndIgnoresRequestWorkDir(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{
@@ -26,15 +26,17 @@ func TestCommandRunnerRunUsesDefaultAndRequestOverrides(t *testing.T) {
 	runner := NewCommandRunner(RunnerConfig{
 		Command:  "bd-custom",
 		WorkDir:  "/default/workdir",
-		Env:      []string{"A=1", "B=2"},
+		Env:      []string{"PATH=/usr/bin"},
 		Executor: execStub,
 	})
 
+	// Pass a request WorkDir — the runner must ignore it and use the gateway's
+	// bound defaultWorkDir (CODING.md rule #3: gateway is source-specific).
 	out, err := runner.Run(context.Background(), CommandRequest{
 		Operation: "list issues",
 		Args:      []string{"ready", "--json"},
 		WorkDir:   "/request/workdir",
-		Env:       []string{"C=3"},
+		Env:       []string{"HOME=/home/user"},
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -52,12 +54,18 @@ func TestCommandRunnerRunUsesDefaultAndRequestOverrides(t *testing.T) {
 		t.Fatalf("unexpected args: %#v", execStub.args)
 	}
 
-	if execStub.workDir != "/request/workdir" {
-		t.Fatalf("unexpected work dir: %q", execStub.workDir)
+	// WorkDir override in request must be ignored; executor receives the bound defaultWorkDir.
+	if execStub.workDir != "/default/workdir" {
+		t.Fatalf("unexpected work dir: got %q, want /default/workdir (request WorkDir must be ignored)", execStub.workDir)
 	}
 
-	if !reflect.DeepEqual(execStub.env, []string{"A=1", "B=2", "C=3"}) {
-		t.Fatalf("unexpected env: %#v", execStub.env)
+	// Both PATH (from RunnerConfig.Env) and HOME (from per-request Env) pass the
+	// allowlist filter. Non-allowlisted entries would be stripped.
+	// BD_NON_INTERACTIVE=1 is always appended last by resolveEnv to prevent
+	// bd from prompting for tty input.
+	expected := []string{"PATH=/usr/bin", "HOME=/home/user", "BD_NON_INTERACTIVE=1"}
+	if !reflect.DeepEqual(execStub.env, expected) {
+		t.Fatalf("unexpected env: %#v (want %#v)", execStub.env, expected)
 	}
 }
 
@@ -187,6 +195,29 @@ func TestDecodeJSONIntoRejectsTrailingPayload(t *testing.T) {
 	}
 
 	err := DecodeJSONInto("decode op", []byte(`{"value":"x"} {"extra":true}`), &target)
+	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+	assertContains(t, err.Error(), "failed to decode command JSON output")
+}
+
+// TestDecodeJSONIntoRejectsNDJSON pins the NDJSON-unsupported contract.
+// DecodeJSONInto expects exactly one top-level JSON object; a second record on a
+// new line (NDJSON format) must be rejected with ErrorCodeDecodeFailed. See the
+// doc comment on DecodeJSONInto for the rationale.
+func TestDecodeJSONIntoRejectsNDJSON(t *testing.T) {
+	t.Parallel()
+
+	// Two concatenated JSON objects separated by a newline (NDJSON format).
+	ndjson := []byte("{\"id\":\"bd-1\",\"title\":\"first\"}\n{\"id\":\"bd-2\",\"title\":\"second\"}\n")
+
+	var target struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+
+	err := DecodeJSONInto("decode op", ndjson, &target)
+	if err == nil {
+		t.Fatal("expected NDJSON to be rejected, got nil error")
+	}
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 	assertContains(t, err.Error(), "failed to decode command JSON output")
 }
@@ -419,6 +450,53 @@ func TestCommandRunnerRunLogsExecutionTraceOnExecutionError(t *testing.T) {
 	if got := record["error"]; got == nil || !strings.Contains(fmt.Sprint(got), "executable file not found") {
 		t.Fatalf("expected execution error field, got %#v", got)
 	}
+}
+
+// TestMissingBDDatabaseDetectionSubstringPin is a pinning integration test that
+// invokes the real bd CLI in an empty temporary directory (no .beads/) and
+// verifies two properties:
+//
+//  1. The runner maps the result to ErrorCodeNoDatabaseFound — proving the
+//     substring detection in runner.go still fires on the current bd wording.
+//  2. The stderr from bd contains the exact substring "no beads database found"
+//     that the detection logic depends on — this assertion fails loudly if bd
+//     renames the message in a future release, signalling that the detection
+//     mechanism in runner.go must be updated.
+//
+// TODO(beads-workbench-db0z.6): If bd adds a dedicated exit code or stable
+// structured-error field for missing-db in a future release, switch the
+// detection in runner.go to that signal and simplify or remove this test.
+func TestMissingBDDatabaseDetectionSubstringPin(t *testing.T) {
+	// This test spawns the real bd binary; skip in environments where bd is not
+	// available on PATH.
+	if _, err := exec.LookPath("bd"); err != nil {
+		t.Skip("bd not found on PATH; skipping integration pinning test")
+	}
+
+	emptyDir := t.TempDir()
+
+	runner := NewCommandRunner(RunnerConfig{
+		WorkDir: emptyDir,
+		// Use the real osCommandExecutor (nil Executor falls back to default).
+	})
+
+	_, err := runner.Run(context.Background(), CommandRequest{
+		Operation: "ready issues",
+		Args:      []string{"ready", "--json"},
+	})
+
+	if err == nil {
+		t.Fatal("expected an error from bd in a directory with no .beads/, got nil")
+	}
+
+	// Assert the runner mapped the result to ErrorCodeNoDatabaseFound.
+	assertGatewayErrorCode(t, err, domain.ErrorCodeNoDatabaseFound)
+
+	// Pin the exact substring that the detection logic in runner.go depends on.
+	// If bd renames this message in a future release this assertion will fail,
+	// signalling that runner.go's substring detection must be revisited.
+	const pinnedSubstring = "no beads database found"
+	assertContains(t, err.Error(), pinnedSubstring)
 }
 
 type stubExecutor struct {

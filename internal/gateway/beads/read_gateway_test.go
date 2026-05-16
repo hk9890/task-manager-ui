@@ -452,7 +452,7 @@ func TestGatewaySearchIssuesWorkStateReadyUsesReadyAndLocalFilters(t *testing.T)
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessExact || got.Metadata.Source != domain.SearchResultSourceReadyFilter || got.Metadata.Notice != "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessPartial || got.Metadata.Source != domain.SearchResultSourceReadyFilter || got.Metadata.Notice != "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
 		t.Fatalf("unexpected ready-filtered search result page: %#v", got)
 	}
 }
@@ -488,7 +488,7 @@ func TestGatewaySearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters(t *testin
 		t.Fatalf("SearchIssues returned error: %v", err)
 	}
 
-	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessExact || got.Metadata.Source != domain.SearchResultSourceBlockedFilter || got.Metadata.Notice != "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
+	if got.Metadata.ReturnedCount != 1 || got.Metadata.RequestedLimit != 0 || got.Metadata.Completeness != domain.SearchResultCompletenessPartial || got.Metadata.Source != domain.SearchResultSourceBlockedFilter || got.Metadata.Notice != "" || len(got.Results) != 1 || got.Results[0].Issue.ID != "bw-1" {
 		t.Fatalf("unexpected blocked-filtered search result page: %#v", got)
 	}
 }
@@ -1436,5 +1436,318 @@ func TestGatewayReadyExplainBlockedItemMultipleBlockedByRefs(t *testing.T) {
 
 	if got.Blocked[0].BlockedBy[0].ID != "bw-A" || got.Blocked[0].BlockedBy[1].ID != "bw-B" {
 		t.Fatalf("unexpected blocked_by ref IDs: %#v", got.Blocked[0].BlockedBy)
+	}
+}
+
+// Null optional field tolerance tests (beads-workbench-db0z.15)
+
+func TestGatewayCatalogAcceptsNullStatusDescription(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"statuses", "--json"}): {
+			result: ExecResult{Stdout: readFixture(t, "statuses_null_description.json")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	statuses, err := gateway.StatusCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("StatusCatalog returned error on null description: %v", err)
+	}
+
+	if len(statuses) != 3 {
+		t.Fatalf("expected 3 statuses, got %d: %#v", len(statuses), statuses)
+	}
+
+	// The custom status "qa" has null description — expect it decoded as empty string.
+	qa := statuses[2]
+	if qa.Name != "qa" {
+		t.Fatalf("expected third status to be 'qa', got %q", qa.Name)
+	}
+
+	if qa.Description != "" {
+		t.Fatalf("expected empty description for null-description status, got %q", qa.Description)
+	}
+}
+
+func TestGatewayCatalogAcceptsNullTypeDescription(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"types", "--json"}): {
+			result: ExecResult{Stdout: readFixture(t, "types_null_description.json")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	types, err := gateway.TypeCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("TypeCatalog returned error on null description: %v", err)
+	}
+
+	if len(types) != 3 {
+		t.Fatalf("expected 3 types, got %d: %#v", len(types), types)
+	}
+
+	// The custom type "spike" has null description — expect it decoded as empty string.
+	spike := types[2]
+	if spike.Name != "spike" {
+		t.Fatalf("expected third type to be 'spike', got %q", spike.Name)
+	}
+
+	if spike.Description != "" {
+		t.Fatalf("expected empty description for null-description type, got %q", spike.Description)
+	}
+}
+
+func TestGatewayCatalogAcceptsNullLabelsList(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"label", "list-all", "--json"}): {
+			result: ExecResult{Stdout: readFixture(t, "labels_null_list.json")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	labels, err := gateway.LabelCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("LabelCatalog returned error on null list: %v", err)
+	}
+
+	if len(labels) != 0 {
+		t.Fatalf("expected empty labels for null list, got %d: %#v", len(labels), labels)
+	}
+}
+
+func TestGatewayShowIssueAcceptsNullCommentText(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-301", "--json"}): {
+			result: ExecResult{Stdout: readFixture(t, "show_issue_null_comment_text.json")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-301"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error on null comment text: %v", err)
+	}
+
+	if len(got.Comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(got.Comments))
+	}
+
+	// Null comment text must decode as empty string, not cause an error.
+	if got.Comments[0].Body != "" {
+		t.Fatalf("expected empty body for null comment text, got %q", got.Comments[0].Body)
+	}
+}
+
+func TestGatewayShowIssueAcceptsNullLabelsAndUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-401", "--json"}): {
+			result: ExecResult{Stdout: readFixture(t, "show_issue_production_noise.json")},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-401"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error on production-noise fixture: %v", err)
+	}
+
+	if got.Summary.ID != "bw-401" {
+		t.Fatalf("unexpected issue ID: %q", got.Summary.ID)
+	}
+
+	// Null labels list must decode to nil/empty slice — not cause a decode error.
+	if len(got.Summary.Labels) != 0 {
+		t.Fatalf("expected empty labels for null labels list, got %#v", got.Summary.Labels)
+	}
+
+	// Multi-paragraph description must decode intact.
+	if !strings.HasPrefix(got.Description, "First paragraph") {
+		t.Fatalf("expected multi-paragraph description to start with 'First paragraph', got %q", got.Description)
+	}
+
+	if !strings.Contains(got.Description, "Second paragraph") {
+		t.Fatalf("expected multi-paragraph description to contain 'Second paragraph', got %q", got.Description)
+	}
+}
+
+// TestGatewayShowIssueChildIssueIssuesAtMostOneBdShowSynchronouslyOnCachedParent
+// asserts that repeated detail loads for a child issue with the same parent do
+// not re-issue a bd show for the parent after the first fetch — the parent
+// sibling lookup is served from cache on the second call.
+func TestGatewayShowIssueChildIssueIssuesAtMostOneBdShowSynchronouslyOnCachedParent(t *testing.T) {
+	t.Parallel()
+
+	childJSON := []byte(`[
+		{"id":"bw-42","title":"child issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"parent issue","issue_type":"epic","priority":1,"status":"open","dependency_type":"parent-child"}]}
+	]`)
+	parentJSON := []byte(`[
+		{"id":"bw-1","title":"parent issue","description":"detail","status":"open","issue_type":"epic","priority":1,"created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-04T10:00:00Z","dependents":[{"id":"bw-42","title":"child issue","issue_type":"task","priority":2,"status":"open","dependency_type":"parent-child"},{"id":"bw-43","title":"sibling issue","issue_type":"task","priority":3,"status":"in_progress","dependency_type":"parent-child"}]}
+	]`)
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-42", "--json"}): {result: ExecResult{Stdout: childJSON}},
+		argsKey([]string{"show", "bw-1", "--json"}):  {result: ExecResult{Stdout: parentJSON}},
+	}
+
+	gateway, exec := newTestGateway(routes)
+
+	// First detail load: fetches child and parent (2 bd show calls).
+	if _, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-42"}); err != nil {
+		t.Fatalf("first ShowIssue returned error: %v", err)
+	}
+	if len(exec.calls) != 2 {
+		t.Fatalf("expected 2 bd show calls on first load (child + parent), got %d", len(exec.calls))
+	}
+
+	callsAfterFirst := len(exec.calls)
+
+	// Second detail load for the same child: parent siblings must come from
+	// cache — at most one bd show (for the child itself) is issued synchronously.
+	if _, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-42"}); err != nil {
+		t.Fatalf("second ShowIssue returned error: %v", err)
+	}
+
+	newCalls := len(exec.calls) - callsAfterFirst
+	if newCalls > 1 {
+		t.Fatalf("expected at most 1 bd show on second detail load for child issue (parent cached), got %d new calls", newCalls)
+	}
+}
+
+// TestGatewaySearchIssuePageFromRecordsCappedReadyBackendIsNotExact verifies G5:
+// searchIssuePageFromRecords no longer falsely claims Exact completeness.
+// When bd ready returns results at the limit boundary, completeness must be MaybeMore,
+// not Exact, because the backend may have capped additional matches.
+func TestGatewaySearchIssuePageFromRecordsCappedReadyBackendIsNotExact(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a capped backend: bd ready returns exactly 2 items and limit=2
+	// so completeness should be MaybeMore (can't know if backend had more).
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"cap test one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
+				{"id":"bw-2","title":"cap test two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		Text:      "cap test",
+		WorkState: domain.WorkStateReady,
+		Limit:     2,
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if len(got.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(got.Results))
+	}
+
+	if got.Metadata.Completeness == domain.SearchResultCompletenessExact {
+		t.Fatalf("completeness must not be Exact when backend results may be capped; got %q", got.Metadata.Completeness)
+	}
+
+	if got.Metadata.Completeness != domain.SearchResultCompletenessMaybeMore {
+		t.Fatalf("expected MaybeMore completeness for capped backend result at limit boundary, got %q", got.Metadata.Completeness)
+	}
+
+	if got.Metadata.Source != domain.SearchResultSourceReadyFilter {
+		t.Fatalf("expected source ReadyFilter, got %q", got.Metadata.Source)
+	}
+
+	// Text IS set — no-text-filter notice must not be present.
+	if got.Metadata.Notice != "" {
+		t.Fatalf("expected no notice when text filter is applied, got %q", got.Metadata.Notice)
+	}
+}
+
+// TestGatewaySearchIssuesEmptyTextWithWorkStateReadyAttachesNotice verifies G7:
+// when text is empty and WorkState is Ready, the result includes a typed notice
+// indicating no text filter was applied.
+func TestGatewaySearchIssuesEmptyTextWithWorkStateReadyAttachesNotice(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"ready", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"some ready issue","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		WorkState: domain.WorkStateReady,
+		// Text intentionally empty
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if got.Metadata.Notice == "" {
+		t.Fatal("expected a non-empty notice for empty-text + WorkStateReady path")
+	}
+
+	if got.Metadata.Notice != searchNoticeNoTextFilter {
+		t.Fatalf("expected searchNoticeNoTextFilter notice, got %q", got.Metadata.Notice)
+	}
+
+	if got.Metadata.Source != domain.SearchResultSourceReadyFilter {
+		t.Fatalf("expected source ReadyFilter, got %q", got.Metadata.Source)
+	}
+}
+
+// TestGatewaySearchIssuesEmptyTextWithWorkStateBlockedAttachesNotice verifies G7
+// for the blocked queue path.
+func TestGatewaySearchIssuesEmptyTextWithWorkStateBlockedAttachesNotice(t *testing.T) {
+	t.Parallel()
+
+	routes := map[string]routeResponse{
+		argsKey([]string{"blocked", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-1","title":"some blocked issue","status":"blocked","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		WorkState: domain.WorkStateBlocked,
+		// Text intentionally empty
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	if got.Metadata.Notice == "" {
+		t.Fatal("expected a non-empty notice for empty-text + WorkStateBlocked path")
+	}
+
+	if got.Metadata.Notice != searchNoticeNoTextFilter {
+		t.Fatalf("expected searchNoticeNoTextFilter notice, got %q", got.Metadata.Notice)
+	}
+
+	if got.Metadata.Source != domain.SearchResultSourceBlockedFilter {
+		t.Fatalf("expected source BlockedFilter, got %q", got.Metadata.Source)
 	}
 }

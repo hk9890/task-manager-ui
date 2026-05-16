@@ -128,16 +128,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.selectedDetail = domain.IssueDetail{}
 		return m.selectionChangedCmd()
-	case domain.IssueDetail:
-		if strings.TrimSpace(msg.Summary.ID) == "" {
-			return nil
-		}
-		if strings.TrimSpace(msg.Summary.ID) != m.selectedIssueID() {
-			return nil
-		}
-		m.selectedDetail = msg
-		m.selectedDetailLoading = false
-		return nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -148,7 +138,15 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyEsc:
-		return nil
+		// Only consume Esc when the query input is focused; Esc has a
+		// specific local meaning there (clear / unfocus). For all other
+		// focus states, let the key fall through so the shell-level
+		// escape action can fire (CapturesShellKey already returns false
+		// for Esc in non-query focus states, so the shell handler runs).
+		if m.focus == uisearch.FocusQuery {
+			return nil
+		}
+		return nil // non-query focus: no local action; shell escape runs
 	case tea.KeyBackspace:
 		if m.focus != uisearch.FocusQuery {
 			return nil
@@ -333,8 +331,15 @@ func (m *Model) View() string {
 		SelectedDetail:        m.selectedDetail,
 		DetailLoading:         m.selectedDetailLoading,
 		MetadataSelectedField: m.metadataSelectedField,
-		Width:                 m.width,
-		Height:                m.height,
+		QuickActions: uidetails.QuickActionLabels{
+			EditIssue:    m.keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
+			UpdateIssue:  m.keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
+			AddComment:   m.keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
+			CloseIssue:   m.keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
+			ReloadDetail: m.keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
+		},
+		Width:  m.width,
+		Height: m.height,
 	})
 }
 

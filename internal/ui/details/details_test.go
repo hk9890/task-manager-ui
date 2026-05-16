@@ -686,6 +686,51 @@ func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
 	}
 }
 
+func TestRenderReturnsFallbackBelowMinWidth(t *testing.T) {
+	t.Parallel()
+
+	state := State{
+		SelectionID: "bw-narrow",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:     "bw-narrow",
+				Title:  "Narrow terminal",
+				Status: "open",
+				Type:   "task",
+			},
+		},
+		Width: 20,
+	}
+
+	got := Render(state)
+	if got != "Terminal too narrow" {
+		t.Fatalf("expected fallback message at width=20, got:\n%s", got)
+	}
+}
+
+func TestRenderDoesNotPanicAtExactMinWidth(t *testing.T) {
+	t.Parallel()
+
+	state := State{
+		SelectionID: "bw-minwidth",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:     "bw-minwidth",
+				Title:  "Exact min width",
+				Status: "open",
+				Type:   "task",
+			},
+		},
+		Width: 30,
+	}
+
+	// Must not panic; must not return the fallback message.
+	got := Render(state)
+	if got == "Terminal too narrow" {
+		t.Fatalf("expected normal render at width=30, got fallback message")
+	}
+}
+
 func mustTime(t *testing.T, value string) time.Time {
 	t.Helper()
 

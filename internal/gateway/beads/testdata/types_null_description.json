@@ -1,0 +1,9 @@
+{
+  "core_types": [
+    {"name": "task", "description": "Task"},
+    {"name": "bug", "description": "Bug"}
+  ],
+  "custom_types": [
+    {"name": "spike", "description": null}
+  ]
+}

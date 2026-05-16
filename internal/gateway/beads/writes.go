@@ -8,6 +8,11 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
+// createIssuePayload is the JSON response shape for `bd create --json`.
+type createIssuePayload struct {
+	ID string `json:"id"`
+}
+
 const (
 	opCreateIssue = "create issue"
 	opUpdateIssue = "update issue"
@@ -19,7 +24,12 @@ const (
 func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	runner := g.runner
 
-	args := []string{"create", "--silent", "--title", input.Title}
+	// Use --json so the response is a structured payload rather than a bare
+	// issue ID on stdout. This is safer than --silent + TrimSpace: structured
+	// decode rejects unexpected trailing content (diagnostic chatter, NDJSON)
+	// and the id field is unambiguously identified regardless of output format
+	// changes in future bd releases.
+	args := []string{"create", "--json", "--title", input.Title}
 
 	if input.Description != "" {
 		args = append(args, "--description", input.Description)
@@ -41,7 +51,7 @@ func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput
 		args = append(args, "--labels", strings.Join(input.Labels, ","))
 	}
 
-	stdout, err := runner.Run(ctx, CommandRequest{
+	payload, err := RunJSON[createIssuePayload](ctx, runner, CommandRequest{
 		Operation: opCreateIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -50,12 +60,11 @@ func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput
 		return domain.CreateIssueResult{}, err
 	}
 
-	issueID := strings.TrimSpace(string(stdout))
-	if issueID == "" {
+	if strings.TrimSpace(payload.ID) == "" {
 		return domain.CreateIssueResult{}, newGatewayError(domain.ErrorCodeDecodeFailed, opCreateIssue, "failed to decode create issue output", nil)
 	}
 
-	return domain.CreateIssueResult{IssueID: issueID}, nil
+	return domain.CreateIssueResult{IssueID: payload.ID}, nil
 }
 
 // UpdateIssue updates issue fields through `bd update`.

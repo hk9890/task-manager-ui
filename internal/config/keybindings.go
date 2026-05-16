@@ -174,15 +174,18 @@ func MergeKeyBindings(base KeyBindings, override *KeyBindingOverride) KeyBinding
 	if override == nil {
 		return merged
 	}
-	merged.Shell = mergeContextBindings(merged.Shell, override.Shell)
-	merged.Board = mergeContextBindings(merged.Board, override.Board)
-	merged.Search = mergeContextBindings(merged.Search, override.Search)
-	merged.Detail = mergeContextBindings(merged.Detail, override.Detail)
-	merged.Modal = mergeContextBindings(merged.Modal, override.Modal)
+	merged.Shell = mergeContextBindingsInPlace(merged.Shell, override.Shell)
+	merged.Board = mergeContextBindingsInPlace(merged.Board, override.Board)
+	merged.Search = mergeContextBindingsInPlace(merged.Search, override.Search)
+	merged.Detail = mergeContextBindingsInPlace(merged.Detail, override.Detail)
+	merged.Modal = mergeContextBindingsInPlace(merged.Modal, override.Modal)
 	return merged
 }
 
-func mergeContextBindings(base, override map[string][]string) map[string][]string {
+// mergeContextBindingsInPlace merges override entries into base in place and returns base.
+// Callers must ensure base is a freshly cloned map (not a shared default), as this
+// function mutates its first argument.
+func mergeContextBindingsInPlace(base, override map[string][]string) map[string][]string {
 	if override == nil {
 		return base
 	}

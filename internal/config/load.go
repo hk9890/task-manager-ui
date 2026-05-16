@@ -19,9 +19,10 @@ type LoadOptions struct {
 
 // Result contains resolved runtime configuration and any non-fatal warnings.
 type Result struct {
-	Config   Model
-	Path     string
-	Warnings []string
+	Config              Model
+	ResolvedKeyBindings ResolvedKeyBindings
+	Path                string
+	Warnings            []string
 }
 
 // Load resolves the config path via os.UserConfigDir, reads an optional
@@ -47,6 +48,12 @@ func LoadWithOptions(opts LoadOptions) (Result, error) {
 	}
 	result.Warnings = append(result.Warnings, warnings...)
 	if data == nil {
+		// No config file — resolve defaults (always valid, but populate field for consistency).
+		resolved, err := ResolveKeyBindings(result.Config.KeyBindings)
+		if err != nil {
+			return Result{}, fmt.Errorf("resolve default keybindings: %w", err)
+		}
+		result.ResolvedKeyBindings = resolved
 		return result, nil
 	}
 
@@ -56,9 +63,11 @@ func LoadWithOptions(opts LoadOptions) (Result, error) {
 	}
 	result.Warnings = append(result.Warnings, warnings...)
 	result.Config = merge(result.Config, override)
-	if err := validateResolved(result.Config); err != nil {
+	resolved, err := validateResolved(result.Config)
+	if err != nil {
 		return Result{}, fmt.Errorf("load config %q: %w", path, err)
 	}
+	result.ResolvedKeyBindings = resolved
 	return result, nil
 }
 
@@ -206,31 +215,32 @@ func validateOverride(override overrideModel) error {
 	return nil
 }
 
-func validateResolved(cfg Model) error {
+func validateResolved(cfg Model) (ResolvedKeyBindings, error) {
 	if strings.TrimSpace(cfg.Editor.Command) == "" {
-		return fmt.Errorf("editor.command must not be empty")
+		return ResolvedKeyBindings{}, fmt.Errorf("editor.command must not be empty")
 	}
 
 	seen := make(map[string]struct{}, len(cfg.Launcher.Definitions))
 	for i, definition := range cfg.Launcher.Definitions {
 		action := strings.TrimSpace(definition.Action)
 		if action == "" {
-			return fmt.Errorf("launcher.definitions[%d].action is required", i)
+			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].action is required", i)
 		}
 		if strings.TrimSpace(definition.Command) == "" {
-			return fmt.Errorf("launcher.definitions[%d].command is required for action %q", i, action)
+			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].command is required for action %q", i, action)
 		}
 		if _, exists := seen[action]; exists {
-			return fmt.Errorf("launcher.definitions contains duplicate action %q", action)
+			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions contains duplicate action %q", action)
 		}
 		seen[action] = struct{}{}
 	}
 
-	if _, err := ResolveKeyBindings(cfg.KeyBindings); err != nil {
-		return err
+	resolved, err := ResolveKeyBindings(cfg.KeyBindings)
+	if err != nil {
+		return ResolvedKeyBindings{}, err
 	}
 
-	return nil
+	return resolved, nil
 }
 
 func merge(base Model, override overrideModel) Model {

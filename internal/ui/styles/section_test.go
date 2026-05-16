@@ -21,6 +21,32 @@ func TestFormSectionRendersBordersAndContent(t *testing.T) {
 	}
 }
 
+func TestFormSectionReturnsTooNarrowLiteralBelowWidth6(t *testing.T) {
+	for _, w := range []int{0, 1, 3, 5} {
+		got := FormSection(FormSectionConfig{
+			Content: []string{"Body"},
+			Width:   w,
+			TopLeft: "Title",
+		})
+		if got != "too narrow" {
+			t.Fatalf("width=%d: expected literal \"too narrow\", got %q", w, got)
+		}
+	}
+}
+
+func TestFormSectionRendersNormallyAtWidth6(t *testing.T) {
+	got := FormSection(FormSectionConfig{
+		Content: []string{"x"},
+		Width:   6,
+	})
+	if got == "too narrow" {
+		t.Fatalf("width=6: expected normal render, got \"too narrow\"")
+	}
+	if !strings.Contains(got, "╭") {
+		t.Fatalf("width=6: expected border characters, got %q", got)
+	}
+}
+
 func TestFormSectionPadsToRequestedHeight(t *testing.T) {
 	got := FormSection(FormSectionConfig{
 		Content: []string{"Body"},

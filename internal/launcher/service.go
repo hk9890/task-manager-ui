@@ -4,11 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
+
+// envEntryRe validates that an interpolated Env entry has the form
+// NAME=value where NAME follows POSIX env-variable naming conventions.
+var envEntryRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=.*$`)
+
+// stripC0 removes all C0 control characters (U+0000–U+001F) from s.
+// This prevents ANSI-escape injection, newline injection into env entries, and
+// NUL-byte issues in argv before values reach the child process.
+func stripC0(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= 0x20 {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 // Service launches external tools using an issue context.
 type Service interface {
@@ -89,6 +108,8 @@ func (r definitionResolver) Resolve(action string) (Definition, bool) {
 type templateInterpolator struct{}
 
 // Interpolate substitutes placeholders in input using the provided context.
+// C0 control characters (\x00–\x1f) are stripped from each substituted value
+// before insertion to prevent ANSI/newline injection in argv and env entries.
 func (templateInterpolator) Interpolate(input string, ctx InterpolationContext) string {
 	placeholders := ctx.Placeholders()
 	keys := make([]string, 0, len(placeholders))
@@ -99,7 +120,7 @@ func (templateInterpolator) Interpolate(input string, ctx InterpolationContext) 
 
 	value := input
 	for _, key := range keys {
-		value = strings.ReplaceAll(value, key, placeholders[key])
+		value = strings.ReplaceAll(value, key, stripC0(placeholders[key]))
 	}
 
 	return value
@@ -155,7 +176,11 @@ func (s launcherService) Launch(ctx context.Context, action string, issue domain
 
 	env := make([]string, 0, len(definition.Env))
 	for _, entry := range definition.Env {
-		env = append(env, s.interpolator.Interpolate(entry, interpolationContext))
+		interpolated := s.interpolator.Interpolate(entry, interpolationContext)
+		if !envEntryRe.MatchString(interpolated) {
+			return fmt.Errorf("launcher action %q: invalid env entry %q: must match NAME=value", action, interpolated)
+		}
+		env = append(env, interpolated)
 	}
 
 	dir := strings.TrimSpace(definition.WorkDir)

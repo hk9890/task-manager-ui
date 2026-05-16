@@ -58,6 +58,7 @@ type State struct {
 	DetailLoading  bool
 
 	MetadataSelectedField uidetails.MetadataFieldKey
+	QuickActions          uidetails.QuickActionLabels
 
 	Width  int
 	Height int
@@ -115,7 +116,7 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
 	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0)
-	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, uidetails.QuickActionLabels{AddComment: "c"})
+	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
@@ -156,7 +157,7 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
 	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0)
-	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, uidetails.QuickActionLabels{AddComment: "c"})
+	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
 	right := lipgloss.JoinVertical(lipgloss.Left, contentBox, metadataBox)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", searchColumnGap), right)

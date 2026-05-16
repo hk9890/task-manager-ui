@@ -68,6 +68,31 @@ func TestResolveKeyBindingsRejectsConflictsAndUnknownActions(t *testing.T) {
 	}
 }
 
+func TestMergeKeyBindingsDoesNotMutateBase(t *testing.T) {
+	t.Parallel()
+
+	// Capture the original default before any merge.
+	original := DefaultKeyBindings()
+	originalQuitKeys := append([]string(nil), original.Shell[ShellActionQuit]...)
+
+	// Apply an override that changes shell quit.
+	_ = MergeKeyBindings(DefaultKeyBindings(), &KeyBindingOverride{
+		Shell: map[string][]string{ShellActionQuit: {"ctrl+c"}},
+	})
+
+	// The original base must be unchanged.
+	after := DefaultKeyBindings()
+	afterQuitKeys := after.Shell[ShellActionQuit]
+	if len(afterQuitKeys) != len(originalQuitKeys) {
+		t.Fatalf("DefaultKeyBindings shell quit mutated: before=%v after=%v", originalQuitKeys, afterQuitKeys)
+	}
+	for i := range originalQuitKeys {
+		if originalQuitKeys[i] != afterQuitKeys[i] {
+			t.Fatalf("DefaultKeyBindings shell quit mutated at index %d: before=%v after=%v", i, originalQuitKeys, afterQuitKeys)
+		}
+	}
+}
+
 func TestResolveKeyBindingsRejectsInvalidKeys(t *testing.T) {
 	t.Parallel()
 

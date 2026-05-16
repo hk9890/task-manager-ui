@@ -45,7 +45,16 @@ type OpenRelatedIssueIntent struct {
 }
 
 // ApplyLoadedDetail stores loaded detail and updates browser-panel state.
+// If issueID differs from the previously loaded issue (or no issue was loaded),
+// all three scroll offsets are zeroed before ClampScroll runs.
 func (m *Model) ApplyLoadedDetail(issueID string, detail domain.IssueDetail) {
+	previousID := strings.TrimSpace(m.Detail.Summary.ID)
+	if previousID == "" || previousID != strings.TrimSpace(issueID) {
+		m.ContentScrollOffset = 0
+		m.MetadataScrollOffset = 0
+		m.DependenciesScrollOffset = 0
+		m.ScrollOffset = 0
+	}
 	m.Detail = detail
 	m.PreviewDetail = domain.IssueDetail{}
 	m.syncBrowserPanel(issueID)

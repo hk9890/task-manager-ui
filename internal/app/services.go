@@ -3,6 +3,9 @@ package app
 import (
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
@@ -57,12 +60,53 @@ func NewServices(gateway beads.BeadsGateway, cfg config.Model, projectRoot strin
 		return Services{}, err
 	}
 
+	go cleanStaleTempFiles(slog.Default())
+
 	return Services{
 		Gateway:  gateway,
 		Launcher: launcherService,
 		Editor:   editorService,
 		Config:   cfg,
 	}, nil
+}
+
+// cleanStaleTempFiles removes bwb-issue-*.md files in os.TempDir() that are
+// older than 24 hours. These are leftover temp documents from editor sessions
+// that were interrupted by SIGKILL or a panic (the normal defer os.Remove path
+// only runs on clean exit).
+func cleanStaleTempFiles(logger *slog.Logger) {
+	cleanStaleTempFilesInDir(logger, os.TempDir())
+}
+
+// cleanStaleTempFilesInDir is the testable core of cleanStaleTempFiles.
+// It scans dir for bwb-issue-*.md files older than 24h and removes them.
+func cleanStaleTempFilesInDir(logger *slog.Logger, dir string) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	matches, err := filepath.Glob(filepath.Join(dir, "bwb-issue-*.md"))
+	if err != nil {
+		logger.Warn("temp cleanup: glob failed", "dir", dir, "error", err.Error())
+		return
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for _, path := range matches {
+		info, err := os.Stat(path)
+		if err != nil {
+			// File may have been removed concurrently; skip silently.
+			continue
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			logger.Warn("temp cleanup: remove failed", "path", path, "error", err.Error())
+		} else {
+			logger.Info("temp cleanup: removed stale temp file", "path", path, "age_hours", time.Since(info.ModTime()).Hours())
+		}
+	}
 }
 
 // NewServicesWithLauncher constructs services with an injected launcher seam.

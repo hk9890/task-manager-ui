@@ -29,7 +29,12 @@ type FormSectionConfig struct {
 }
 
 // FormSection renders a rounded section box with optional titles.
+// When cfg.Width < 6, returns the literal string "too narrow" with no styling.
 func FormSection(cfg FormSectionConfig) string {
+	if cfg.Width < 6 {
+		return "too narrow"
+	}
+
 	var borderColor lipgloss.TerminalColor = BorderDefaultColor
 	var titleColor lipgloss.TerminalColor = BorderDefaultColor
 	if cfg.Focused && cfg.FocusedBorderColor != nil {

@@ -137,6 +137,10 @@ Keep section headings and marker comments unchanged.
 
 // ParseIssueEditDocument parses the editable document content.
 func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
+	if strings.Count(content, issueEditMarkerEditableEnd) > 1 {
+		return IssueEditDocument{}, fmt.Errorf("multiple %s markers found — description body must not contain BWB: marker tokens", issueEditMarkerEditableEnd)
+	}
+
 	editable, err := issueEditExtractField(content, issueEditMarkerEditableBegin, issueEditMarkerEditableEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
@@ -152,17 +156,27 @@ func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 		return IssueEditDocument{}, err
 	}
 
-	status, err := issueEditExtractField(editable, issueEditFieldStatusBegin, issueEditFieldStatusEnd)
+	if err := issueEditCheckDescriptionForMarkers(description); err != nil {
+		return IssueEditDocument{}, err
+	}
+
+	descEndIdx := strings.Index(editable, issueEditFieldDescriptionEnd)
+	if descEndIdx < 0 {
+		return IssueEditDocument{}, fmt.Errorf("missing %s marker", issueEditFieldDescriptionEnd)
+	}
+	afterDesc := editable[descEndIdx+len(issueEditFieldDescriptionEnd):]
+
+	status, err := issueEditExtractField(afterDesc, issueEditFieldStatusBegin, issueEditFieldStatusEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	issueType, err := issueEditExtractField(editable, issueEditFieldTypeBegin, issueEditFieldTypeEnd)
+	issueType, err := issueEditExtractField(afterDesc, issueEditFieldTypeBegin, issueEditFieldTypeEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	priorityRaw, err := issueEditExtractField(editable, issueEditFieldPriorityBegin, issueEditFieldPriorityEnd)
+	priorityRaw, err := issueEditExtractField(afterDesc, issueEditFieldPriorityBegin, issueEditFieldPriorityEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
@@ -172,12 +186,12 @@ func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 		return IssueEditDocument{}, err
 	}
 
-	assignee, err := issueEditExtractField(editable, issueEditFieldAssigneeBegin, issueEditFieldAssigneeEnd)
+	assignee, err := issueEditExtractField(afterDesc, issueEditFieldAssigneeBegin, issueEditFieldAssigneeEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	labelsRaw, err := issueEditExtractField(editable, issueEditFieldLabelsBegin, issueEditFieldLabelsEnd)
+	labelsRaw, err := issueEditExtractField(afterDesc, issueEditFieldLabelsBegin, issueEditFieldLabelsEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
@@ -268,6 +282,13 @@ func issueEditExtractField(content, beginMarker, endMarker string) (string, erro
 	}
 
 	return strings.Trim(rest[:end], "\n"), nil
+}
+
+func issueEditCheckDescriptionForMarkers(description string) error {
+	if strings.Contains(description, "BWB:") {
+		return fmt.Errorf("description body must not contain BWB: marker tokens (would corrupt edit round-trip)")
+	}
+	return nil
 }
 
 func parseIssueEditPriority(raw string) (int, error) {

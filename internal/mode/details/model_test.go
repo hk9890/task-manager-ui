@@ -680,3 +680,95 @@ func TestModelApplyLoadedDetailWithoutParentGroupDefaultsSelectionToFirstDepende
 		t.Fatalf("expected default dependency selection index 0, got %d", m.BrowserSelectedIndex)
 	}
 }
+
+func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
+	t.Parallel()
+
+	issueA := domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "bw-1", Title: "Issue A"},
+		Description: strings.Repeat("line\n", 60),
+	}
+	issueB := domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "bw-2", Title: "Issue B"},
+		Description: strings.Repeat("line\n", 60),
+	}
+
+	t.Run("reset all offsets when switching to different issue", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{}
+		m.ApplyLoadedDetail("bw-1", issueA)
+
+		// Simulate user scrolling all three panes.
+		m.ContentScrollOffset = 10
+		m.MetadataScrollOffset = 5
+		m.DependenciesScrollOffset = 3
+		m.ScrollOffset = 10
+
+		// Switch to a different issue.
+		m.ApplyLoadedDetail("bw-2", issueB)
+
+		if m.ContentScrollOffset != 0 {
+			t.Errorf("expected ContentScrollOffset=0 after issue switch, got %d", m.ContentScrollOffset)
+		}
+		if m.MetadataScrollOffset != 0 {
+			t.Errorf("expected MetadataScrollOffset=0 after issue switch, got %d", m.MetadataScrollOffset)
+		}
+		if m.DependenciesScrollOffset != 0 {
+			t.Errorf("expected DependenciesScrollOffset=0 after issue switch, got %d", m.DependenciesScrollOffset)
+		}
+		if m.ScrollOffset != 0 {
+			t.Errorf("expected ScrollOffset=0 after issue switch, got %d", m.ScrollOffset)
+		}
+	})
+
+	t.Run("preserve scroll offsets when refreshing the same issue", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{}
+		m.ApplyLoadedDetail("bw-1", issueA)
+
+		// Simulate user scrolling.
+		m.ContentScrollOffset = 7
+		m.MetadataScrollOffset = 2
+		m.DependenciesScrollOffset = 4
+		m.ScrollOffset = 7
+
+		// Re-load the same issue (e.g. refresh).
+		m.ApplyLoadedDetail("bw-1", issueA)
+
+		if m.ContentScrollOffset != 7 {
+			t.Errorf("expected ContentScrollOffset=7 preserved on same-issue refresh, got %d", m.ContentScrollOffset)
+		}
+		if m.MetadataScrollOffset != 2 {
+			t.Errorf("expected MetadataScrollOffset=2 preserved on same-issue refresh, got %d", m.MetadataScrollOffset)
+		}
+		if m.DependenciesScrollOffset != 4 {
+			t.Errorf("expected DependenciesScrollOffset=4 preserved on same-issue refresh, got %d", m.DependenciesScrollOffset)
+		}
+	})
+
+	t.Run("reset offsets when first issue is loaded (empty previous)", func(t *testing.T) {
+		t.Parallel()
+
+		// Simulate stale scroll offsets before any issue is loaded (shouldn't
+		// happen in practice but ensures the empty-previous guard works).
+		m := Model{
+			ContentScrollOffset:      8,
+			MetadataScrollOffset:     3,
+			DependenciesScrollOffset: 1,
+		}
+
+		m.ApplyLoadedDetail("bw-1", issueA)
+
+		if m.ContentScrollOffset != 0 {
+			t.Errorf("expected ContentScrollOffset=0 on first issue load, got %d", m.ContentScrollOffset)
+		}
+		if m.MetadataScrollOffset != 0 {
+			t.Errorf("expected MetadataScrollOffset=0 on first issue load, got %d", m.MetadataScrollOffset)
+		}
+		if m.DependenciesScrollOffset != 0 {
+			t.Errorf("expected DependenciesScrollOffset=0 on first issue load, got %d", m.DependenciesScrollOffset)
+		}
+	})
+}

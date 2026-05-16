@@ -12,7 +12,7 @@ import (
 func TestGatewayCreateIssueMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("bd-123\n")}}
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-123"}`)}}
 	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 	priority := 1
 
@@ -38,7 +38,7 @@ func TestGatewayCreateIssueMapsCommandArgs(t *testing.T) {
 
 	wantArgs := []string{
 		"create",
-		"--silent",
+		"--json",
 		"--title", "Gateway write operation",
 		"--description", "Use official command",
 		"--type", "task",
@@ -55,7 +55,7 @@ func TestGatewayCreateIssueMapsCommandArgs(t *testing.T) {
 func TestGatewayCreateIssueIncludesExplicitZeroPriority(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("bd-999\n")}}
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-999"}`)}}
 	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 	priority := 0
 
@@ -69,7 +69,7 @@ func TestGatewayCreateIssueIncludesExplicitZeroPriority(t *testing.T) {
 
 	wantArgs := []string{
 		"create",
-		"--silent",
+		"--json",
 		"--title", "P0 issue",
 		"--priority", "0",
 	}
@@ -82,12 +82,26 @@ func TestGatewayCreateIssueIncludesExplicitZeroPriority(t *testing.T) {
 func TestGatewayCreateIssueRequiresNonEmptyIssueID(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("\n")}}
+	// bd returns a valid JSON payload but with an empty id field; the gateway
+	// must reject this as a decode failure rather than returning an empty IssueID.
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":""}`)}}
 	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 	assertContains(t, err.Error(), "failed to decode create issue output")
+}
+
+// TestGatewayCreateIssueRejectsInvalidJSON verifies that a non-JSON stdout
+// (e.g. unexpected diagnostic output) is rejected with ErrorCodeDecodeFailed.
+func TestGatewayCreateIssueRejectsInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("not-json\n")}}
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+
+	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
+	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 }
 
 func TestGatewayUpdateIssueMapsCommandArgs(t *testing.T) {

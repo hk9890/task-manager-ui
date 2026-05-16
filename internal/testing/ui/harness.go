@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -100,8 +101,21 @@ func AssertModelViewMatchesGoldenNormalized(tb testing.TB, model tea.Model, name
 // WaitForOutputContainsAll waits until output includes all snippets and returns matched render.
 func WaitForOutputContainsAll(tb testing.TB, output io.Reader, snippets ...string) string {
 	tb.Helper()
+	return WaitForOutputContainsAllWithTimeout(tb, output, 0, snippets...)
+}
+
+// WaitForOutputContainsAllWithTimeout is the same as WaitForOutputContainsAll
+// but allows callers to extend the WaitFor budget. Pass timeout == 0 to use the
+// teatest default. Use this for tests that exercise real bd subprocesses under
+// parallel `go test ./...` load, where the default 1s budget is insufficient.
+func WaitForOutputContainsAllWithTimeout(tb testing.TB, output io.Reader, timeout time.Duration, snippets ...string) string {
+	tb.Helper()
 
 	var matched string
+	opts := []teatest.WaitForOption{}
+	if timeout > 0 {
+		opts = append(opts, teatest.WithDuration(timeout))
+	}
 	teatest.WaitFor(tb, output, func(bts []byte) bool {
 		view := string(bts)
 		for _, snippet := range snippets {
@@ -112,7 +126,7 @@ func WaitForOutputContainsAll(tb testing.TB, output io.Reader, snippets ...strin
 
 		matched = view
 		return true
-	})
+	}, opts...)
 
 	return matched
 }

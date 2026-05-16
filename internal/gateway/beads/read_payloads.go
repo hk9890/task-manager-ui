@@ -271,12 +271,7 @@ func (p bdCatalogEntryPayload) toStatusOption(operation string) (domain.StatusOp
 		return domain.StatusOption{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
-	description, err := requiredString(p.Description, "description")
-	if err != nil {
-		return domain.StatusOption{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	return domain.StatusOption{Name: name, Description: description}, nil
+	return domain.StatusOption{Name: name, Description: optionalString(p.Description)}, nil
 }
 
 func (p bdCatalogEntryPayload) toTypeOption(operation string) (domain.TypeOption, error) {
@@ -285,12 +280,7 @@ func (p bdCatalogEntryPayload) toTypeOption(operation string) (domain.TypeOption
 		return domain.TypeOption{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
-	description, err := requiredString(p.Description, "description")
-	if err != nil {
-		return domain.TypeOption{}, newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
-	}
-
-	return domain.TypeOption{Name: name, Description: description}, nil
+	return domain.TypeOption{Name: name, Description: optionalString(p.Description)}, nil
 }
 
 func (p bdLabelCatalogEntryPayload) toLabelOption(operation string) (domain.LabelOption, error) {
