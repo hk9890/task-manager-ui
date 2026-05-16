@@ -2,6 +2,7 @@ package fakes
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
@@ -98,6 +99,18 @@ type AddCommentCall struct {
 //   - fixed return payloads for each gateway method,
 //   - per-method error injection for error-path testing,
 //   - call recording so tests can assert interactions.
+//
+// ShowIssuesByID is an optional ID-keyed map for ShowIssue. When set, ShowIssue
+// looks up the requested ID in the map and returns a domain.GatewayError with
+// ErrorCodeCommandFailed when the ID is absent (matching real bd behaviour).
+// When nil, ShowIssueResponse is returned for every ShowIssue call (legacy
+// behaviour, preserved for UI tests).
+//
+// SearchResultsByText is an optional text-keyed map for SearchIssues. When set,
+// SearchIssues looks up by query.Text (trimmed) and returns the matching page —
+// or an empty page if the key is absent. This lets contract tests verify
+// text-filtered search without breaking UI tests that use SearchIssuesResponse
+// as a verbatim stub.
 type FakeBeadsGateway struct {
 	mu sync.Mutex
 
@@ -105,7 +118,9 @@ type FakeBeadsGateway struct {
 	ReadyIssuesResponse   []domain.IssueSummary
 	BlockedIssuesResponse []domain.BlockedIssueView
 	ShowIssueResponse     domain.IssueDetail
+	ShowIssuesByID        map[string]domain.IssueDetail
 	SearchIssuesResponse  domain.SearchResultPage
+	SearchResultsByText   map[string]domain.SearchResultPage
 	QueryResponse         []domain.IssueSummary
 	ReadyExplainResponse  domain.ReadyExplainResult
 	CountIssuesResponse   domain.IssueCountResult
@@ -181,7 +196,23 @@ func (f *FakeBeadsGateway) ListIssues(_ context.Context, query domain.IssueListQ
 		return nil, err
 	}
 
-	return append([]domain.IssueSummary(nil), f.ListIssuesResponse...), nil
+	out := append([]domain.IssueSummary(nil), f.ListIssuesResponse...)
+
+	// Mirror real bd list behaviour: filter by status when statuses are specified.
+	if len(query.Statuses) > 0 {
+		filtered := out[:0]
+		for _, s := range out {
+			for _, status := range query.Statuses {
+				if s.Status == status {
+					filtered = append(filtered, s)
+					break
+				}
+			}
+		}
+		out = filtered
+	}
+
+	return out, nil
 }
 
 func (f *FakeBeadsGateway) ReadyIssues(_ context.Context, query domain.ReadyIssuesQuery) ([]domain.IssueSummary, error) {
@@ -217,6 +248,21 @@ func (f *FakeBeadsGateway) ShowIssue(_ context.Context, query domain.ShowIssueQu
 		return domain.IssueDetail{}, err
 	}
 
+	if f.ShowIssuesByID != nil {
+		detail, ok := f.ShowIssuesByID[query.IssueID]
+		if !ok {
+			// Mirror real bd behaviour: bd show <unknown-id> exits non-zero, which
+			// the real gateway maps to ErrorCodeCommandFailed (not ErrorCodeNotFound).
+			return domain.IssueDetail{}, domain.GatewayError{
+				Code:      domain.ErrorCodeCommandFailed,
+				Operation: "show issue",
+				Message:   "command exited with code 1: no issue found matching \"" + query.IssueID + "\"",
+			}
+		}
+
+		return detail, nil
+	}
+
 	return f.ShowIssueResponse, nil
 }
 
@@ -227,6 +273,24 @@ func (f *FakeBeadsGateway) SearchIssues(_ context.Context, query domain.SearchIs
 	f.Calls = append(f.Calls, GatewayCall{Method: MethodSearchIssues, Input: SearchIssuesCall{Query: query}})
 	if err := f.MethodErrors[MethodSearchIssues]; err != nil {
 		return domain.SearchResultPage{}, err
+	}
+
+	// SearchResultsByText opt-in: when set, look up by exact (trimmed) text key.
+	// This mirrors real gateway text-filter behaviour for contract tests without
+	// breaking UI tests that use SearchIssuesResponse as a verbatim stub.
+	if f.SearchResultsByText != nil {
+		text := strings.TrimSpace(query.Text)
+		page, ok := f.SearchResultsByText[text]
+		if !ok {
+			return domain.SearchResultPage{
+				Results:  nil,
+				Metadata: domain.SearchResultMetadata{ReturnedCount: 0},
+			}, nil
+		}
+		resultsCopy := append([]domain.SearchResult(nil), page.Results...)
+		metadata := page.Metadata
+		metadata.ReturnedCount = len(resultsCopy)
+		return domain.SearchResultPage{Results: resultsCopy, Metadata: metadata}, nil
 	}
 
 	resultsCopy := append([]domain.SearchResult(nil), f.SearchIssuesResponse.Results...)

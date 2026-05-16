@@ -40,6 +40,10 @@ var scheduleRefreshTickCmd = func() tea.Cmd {
 	})
 }
 
+var scheduleToastDismissCmd = func(d time.Duration) tea.Cmd {
+	return toaster.ScheduleDismiss(d)
+}
+
 var modelNow = time.Now
 
 type detailLoadedMsg struct {
@@ -896,7 +900,7 @@ func (m Model) renderFooter() string {
 
 func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	m.toast = m.toast.Show(message, style)
-	return toaster.ScheduleDismiss(3 * time.Second)
+	return scheduleToastDismissCmd(3 * time.Second)
 }
 
 func (m Model) boardIsLoading() bool {

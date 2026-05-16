@@ -4,62 +4,94 @@ This document defines the repository testing vocabulary, commands, and harness c
 
 **Automated tests are the primary proof of correctness.** For user-facing behavior, they must be complemented by a reproducible full-app verification run performed by the agent/operator. Do not rely on user confirmation for basic product validation that can be checked directly.
 
-## Test Vocabulary
+## Test Tiers
 
-The repository uses a two-tier model: **unit** and **integration**.
+The repository uses a three-tier model.
 
-- **Unit tests** (default — no build tag required)
-  - Fast, deterministic tests that isolate a package or function with test doubles.
-  - No dependency on a live beads project or shell state.
-  - Live in `*_test.go` files alongside the package under test.
-  - Examples: `internal/gateway/beads/*_test.go`, `internal/ui/*/*_test.go`, `internal/testing/fakes/*_test.go`.
-  - Run with: `mise run test`
+### Tier 1 — Unit (`mise run test`, ~0.6s, ~620 tests)
 
-- **Integration tests** (`//go:build integration` — real `bd` + embedded fixture)
-  - Tests that execute the real `bd` CLI against a controlled beads fixture repo/workspace.
-  - Verify command availability, real output shape, and behavior across package seams.
-  - Use the embedded-mode fixture harness in `internal/testing/e2e/embeddedfixture`.
-  - Live in `*_integration_test.go` files with `//go:build integration` at the top.
-  - Run with: `mise run test:integration`
+- Fast, deterministic. No external processes. No `bd`, `git`, or `jq`.
+- Uses `fakes.FakeBeadsGateway` from `internal/testing/fakes/beads_gateway.go`.
+- Asserts app behavior: model logic, view rendering, key handling.
+- Live in `*_test.go` files alongside the package under test (no build tag required).
+- Examples: `internal/mode/*/model_test.go`, `internal/ui/*/*_test.go`, `internal/app/model_test.go`.
 
-**Build-tag rule for new tests:** If your test forks a real subprocess, replays the embedded fixture, or otherwise costs >1s, put it in a `*_integration_test.go` file with `//go:build integration` at the top.
+### Tier 2a — Gateway-integration READ contract (`mise run test:integration`, `//go:build integration`)
 
-For current pass counts and wall-time baselines, see `docs/test-baseline-2026-05-16.md`.
+- Package: `internal/gateway/beads/contract/`.
+- Single parameterized function `RunReadContract(t, factory GatewayFactory)` wired against both `{fake, real}` factories.
+- Both factories must produce identical results — this is the **fake/real parity guarantee**.
+- Uses `embeddedfixture.SharedFixtureRepoPath(t)` for the real factory: seeds once per process, copies the pre-seeded cache directory per test (~100ms after the first call).
+- **Read-only.** Never mutate the shared fixture inside `RunReadContract`.
+- Covers all 12 read methods on `BeadsGateway` (see `internal/gateway/beads/interface.go`).
 
-- **Full-app verification**
-  - A real run of the built `bwb` binary against a deterministic fixture repo in a terminal session.
-  - Required for user-visible flows and major UX/layout changes.
-  - Confirms the app works as a product, not only as isolated render/test units.
-  - Must be performed by the agent/operator; do not hand this responsibility to the user.
+### Tier 2b — Gateway-integration MUTATING scenarios (`mise run test:integration`, `//go:build integration`)
+
+- Same `contract` package, separate `*_scenario_integration_test.go` files.
+- Two scenarios today:
+  - `TestRealGatewayIssueLifecycleScenario` — create → update → comment → close (all 4 write methods).
+  - `TestRealGatewayLinksAndDepsScenario` — `bd link`, `bd dep relate`, `bd dep add` with gateway read verification.
+- Use `embeddedfixture.TempRepoPath(t)` + `embeddedfixture.Seed(t, repoPath)` for a fresh per-test fixture (mutations OK).
+- Sized to be debuggable: ~5–10 steps per scenario. Cap at ~3 scenarios total.
+
+## Where Does My New Test Go?
+
+| What the test asserts | Where it goes | Tool |
+|---|---|---|
+| App behavior given any gateway state (model logic, view rendering, key handling) | Tier 1 — unit | `fakes.FakeBeadsGateway` |
+| The bd CLI adapter's contract (a read method produces correct output) | Tier 2a — add a `t.Run` block to `RunReadContract` | real CLI gateway via `SharedFixtureRepoPath` |
+| A multi-step bd write workflow (mutations + read verification) | Tier 2b — add to an existing scenario or create a new one | real CLI gateway via `TempRepoPath` + `Seed` |
+
+Decision rule: if the test does not fork a real subprocess and costs <100ms, it is a unit test. If it forks `bd`, it is integration.
+
+## Fixture Rules
+
+**Read operations** — use the shared pre-seeded snapshot:
+
+```go
+repoPath := embeddedfixture.SharedFixtureRepoPath(t)
+```
+
+Seeds the fixture once per process (slow, ~10s on first call); subsequent calls copy the pre-seeded directory (~100ms). Never write to this repo.
+
+**Mutating operations** — use a fresh per-test fixture:
+
+```go
+repoPath := embeddedfixture.TempRepoPath(t)
+embeddedfixture.Seed(t, repoPath)
+```
+
+Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
+
+## The Fake/Real Contract
+
+`RunReadContract` is the single function that bridges Tier 1 and Tier 2a.
+
+- `TestFakeGatewayReadContract` wires it against `fakes.FakeBeadsGateway` (unit, no build tag). Runs in the default `mise run test` pass.
+- `TestRealGatewayReadContract` wires it against the real `bd` CLI gateway (integration, `//go:build integration`).
+
+**Why it exists:** The fake is only load-bearing if it behaves identically to real `bd`. The contract enforces that.
+
+**When the contract catches a fake/real drift:** fix the fake to match real behavior. Never weaken the contract assertion to paper over a discrepancy. If the real CLI changed behavior, update both the fake and the contract assertion together.
 
 ## Commands
 
-Use `mise run` tasks from the repository root:
-
 ```bash
-mise run test                # unit tests only (fast, no real bd)
-mise run test:integration    # integration tests only (real bd, embedded fixture)
-mise run test:all            # unit + integration
-mise run test:verbose        # unit tests with -v flag
+mise run test                # unit tests only (~0.6s, no bd required)
+mise run test:integration    # unit + integration (real bd + embedded fixture)
+mise run test:verbose        # unit tests with -v
+mise run quality             # full pre-handoff gate (scripts, lint, guardrails, build, vet, test)
+mise run quality:fast        # lighter in-flight check (build, vet, test)
 ```
 
-Run `mise tasks` to see the full list of available tasks.
+Run `mise tasks` to see the full list.
 
-Recommended local quality checks:
-
-Run `mise run quality` for the authoritative pre-handoff gate sequence (see `docs/CODING.md` for details).
-Use `mise run quality:fast` for in-flight checks during active implementation.
-
-Harness-focused checks (package-scoped, no mise wrapper needed):
+Harness-focused runs (package-scoped):
 
 ```bash
 mise run test -- ./internal/testing/...
-mise run test -- ./internal/testing/ui -v
+mise run test -- ./internal/gateway/beads/contract/... -v
 ```
-
-Fast deterministic UI verification loop (common during active implementation):
-
-See `docs/RUNTIME_UI_VERIFICATION.md` for the focused scenario command.
 
 ## Runtime UI Verification Workflow (operator runbook)
 
@@ -133,7 +165,7 @@ Shared helpers live under `internal/testing/ui`:
 
 Golden file convention:
 
-- Store golden files under the tested package’s `testdata/` directory.
+- Store golden files under the tested package's `testdata/` directory.
 - Keep one scenario per golden for readable diffs.
 
 ### Dashboard UX verification workflow (required for redesign work)
@@ -152,14 +184,14 @@ Example focused runs:
 
 ```bash
 go test ./internal/mode/board -run TestBoardModeDashboardLayoutGoldensAcrossWidths -v
-go test ./internal/app -run 'TestModelEmbeddedFixtureFullBoardCaptureGolden|TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus' -v
+go test ./internal/app -run 'TestModelFixtureShapedBoardCaptureGolden|TestModelStartupBoardLayoutSanityAndNoRuntimeErrors' -v
 ```
 
 ### Exceptions
 
 If a surface is not practical for teatest+golden (for example, highly volatile ANSI animation timing), document the exception in the package test file and use the narrowest deterministic alternative (typically message/state assertions).
 
-## Shared Fake Seams for UI/Integration Tests
+## Shared Fake Seams for UI Tests
 
 The shared deterministic seams live in `internal/testing/fakes`:
 
@@ -168,6 +200,7 @@ The shared deterministic seams live in `internal/testing/fakes`:
   - Supports deterministic per-method responses.
   - Supports configurable per-method error injection via `SetError(method, err)` for error-path tests.
   - Records calls for interaction assertions.
+  - Used by both unit tests and the fake-side of `RunReadContract`.
 
 - **`FakeEditor`**
   - Deterministic non-interactive editor seam.
@@ -185,49 +218,22 @@ The shared deterministic seams live in `internal/testing/fakes`:
 
 These seams are required for tests that must not launch real editors or subprocesses.
 
-## Gateway Test Strategy (Phase 1)
-
-Gateway coverage is centered on deterministic unit tests with two seams:
-
-1. **Command seam**: `CommandExecutor` test doubles verify exact `bd` command construction and flag mapping.
-2. **Payload seam**: JSON fixtures under `internal/gateway/beads/testdata/` verify decoding against representative official `bd` payload shapes.
-
-### Coverage goals
-
-- Representative **read flow** command construction and decoding (`list`, `ready`, `blocked`, `show`, `search`, catalog commands).
-- Representative **write flow** command construction (`create`, `update`, `close`, `comments add`).
-- Failure behavior and error normalization for:
-  - process execution failures,
-  - non-zero exit codes,
-  - invalid JSON output,
-  - missing required fields,
-  - stderr propagation in gateway error messages.
-
-## Embedded-Mode Fixture Repository (integration/e2e)
-
-Deterministic fixture harness lives under `internal/testing/e2e/embeddedfixture`:
-
-- `seed.json`: source-of-truth seed data (issues, comments, labels, dependencies).
-- `setup.sh`: reproducible script that initializes an embedded-mode beads repo and seeds `seed.json`.
-- `Seed(...)` helper: test helper that invokes `setup.sh`.
-
-Typical usage in integration/e2e tests:
-
-1. `repoPath := embeddedfixture.TempRepoPath(t)`
-2. `embeddedfixture.Seed(t, repoPath)`
-3. Run real `bd`/gateway/app flow against `repoPath`
-
-Fixture expectations:
-
-- Seed data is deterministic and version-controlled.
-- Setup is idempotent enough for repeated test execution.
-- Tests should treat fixture data as read-only unless a scenario explicitly validates writes.
-
 ## Gateway Fixture Conventions (unit)
 
 - Store gateway JSON payload fixtures in `internal/gateway/beads/testdata/`.
 - Prefer realistic JSON copied from official command output shape (with sensitive data removed).
 - Keep fixtures small and focused so each test states one intent clearly.
+
+## Embedded-Mode Fixture Repository
+
+Deterministic fixture harness lives under `internal/testing/e2e/embeddedfixture`:
+
+- `seed.json`: source-of-truth seed data (issues, comments, labels, dependencies; prefix `bwf`, 3 issues).
+- `setup.sh`: reproducible script that initializes an embedded-mode beads repo and seeds `seed.json`.
+- `Seed(tb, repoPath)`: test helper that invokes `setup.sh` against a caller-supplied directory.
+- `TempRepoPath(tb)`: returns a `tb.TempDir()`-backed path suitable for a fresh mutable fixture.
+- `SharedFixtureRepoPath(tb)`: seeds once per process, returns a per-test copy (read-only use).
+- `ReadSeedSpec(tb)`: loads `seed.json` as a typed `Spec` struct — used by `fake_contract_test.go` to prime the fake from the same source of truth.
 
 ## Official `bd` command-surface limitations (known)
 

@@ -19,6 +19,13 @@ func TestExecProcessRunnerReapsChildren(t *testing.T) {
 	t.Parallel()
 
 	const n = 5
+
+	// Install the test hook so the reaper signals completion without sleeping.
+	// Use a buffered channel of size n so each goroutine never blocks.
+	hook := make(chan struct{}, n)
+	reaperHook = hook
+	t.Cleanup(func() { reaperHook = nil })
+
 	runner := NewExecProcessRunner()
 	ctx := context.Background()
 
@@ -28,15 +35,19 @@ func TestExecProcessRunnerReapsChildren(t *testing.T) {
 		}
 	}
 
-	// Allow the reaper goroutines time to finish.
-	// On a normally loaded machine the processes exit in <10 ms; 2 s is
-	// generous and avoids flakiness in CI.
-	time.Sleep(2 * time.Second)
+	// Wait for all n reaper goroutines to complete, with a 5s safety-net timeout.
+	timeout := time.After(5 * time.Second)
+	for range n {
+		select {
+		case <-hook:
+			// one reaper done
+		case <-timeout:
+			t.Fatal("timed out waiting for reaper goroutines to call Wait() — possible zombie leak")
+		}
+	}
 
-	// If we reach here without the process table filling up or the test
-	// runtime reporting leaked goroutines, the reaper is working.
-	// The absence of panic / resource exhaustion across N launches is the
-	// observable signal; the sleep gives Wait() time to complete.
+	// If we reach here, all reaper goroutines called Wait() and the children
+	// are fully reaped. No process-table zombies remain.
 }
 
 // TestExecProcessRunnerChildSurvivesParentCtxCancel verifies the fire-and-forget

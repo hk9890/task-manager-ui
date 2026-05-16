@@ -22,6 +22,7 @@ import (
 
 func TestMain(m *testing.M) {
 	scheduleRefreshTickCmd = func() tea.Cmd { return nil }
+	scheduleToastDismissCmd = func(_ time.Duration) tea.Cmd { return nil }
 	modelNow = time.Now
 	os.Exit(m.Run())
 }
@@ -1306,6 +1307,8 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 }
 
 func TestModelEditHotkeyUsesEditorService(t *testing.T) {
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Assignee: "hans", Labels: []string{"infra"}, Priority: 1}}}
 	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
@@ -1517,6 +1520,7 @@ func TestModelUpdateCloseAndCommentFlowsUseGatewayWrites(t *testing.T) {
 
 func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	t.Parallel()
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}}
@@ -2292,6 +2296,7 @@ func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T)
 
 func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	t.Parallel()
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}}
@@ -2716,6 +2721,202 @@ func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
 	if m.fatalErrTitle != "" {
 		t.Fatalf("expected fatalErr to be empty for non-GatewayError, got %q", m.fatalErrTitle)
 	}
+}
+
+// TestModelFixtureShapedBoardCaptureGolden verifies the full board rendering at
+// w120 against the embedded-fixture golden file, using fake data seeded to
+// match the same bwf-1/bwf-2 fixture shape. This replaces
+// TestModelEmbeddedFixtureFullBoardCaptureGolden (which used real bd+fixture).
+func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	// Match fixture shape: bwf-2 is Blocked (Not Ready lane), bwf-1 is Ready, no InProgress.
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready: []domain.IssueSummary{
+			{ID: "bwf-1", Title: "Seed fixture root task", Status: "open", Type: "task", Priority: 1, Assignee: "alice", Labels: []string{"fixture", "ui"}},
+		},
+		Blocked: []domain.BlockedIssueView{
+			{Issue: domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob", Labels: []string{"fixture", "blocking"}}},
+		},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.ShowIssuesByID = map[string]domain.IssueDetail{
+		"bwf-2": {
+			Summary:     domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob"},
+			Description: "Used to validate blocked/ready and dependency reads.",
+		},
+		"bwf-1": {
+			Summary:     domain.IssueSummary{ID: "bwf-1", Title: "Seed fixture root task", Status: "open", Type: "task", Priority: 1, Assignee: "alice"},
+			Description: "Root task used by integration and e2e smoke tests.",
+		},
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.width = 120
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	view := m.View()
+	if strings.Contains(view, "Selected Issue") {
+		t.Fatalf("expected board view without selected issue sidebar, got:\n%s", view)
+	}
+	if !strings.Contains(view, "bwf-1 Seed fixture roo") {
+		t.Fatalf("expected fixture-shaped issue title in board capture, got:\n%s", view)
+	}
+	if strings.Count(view, "│") < 20 {
+		t.Fatalf("expected full-height board lanes rather than floating boxes, got:\n%s", view)
+	}
+
+	ui.AssertMatchesGoldenNormalized(t, []byte(view), "model_embedded_board_w120.golden")
+}
+
+// TestModelStartupBoardLayoutSanityAndNoRuntimeErrors verifies that startup
+// renders a valid board layout with no error panels. This replaces
+// TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors
+// (which used real bd+fixture).
+func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready: []domain.IssueSummary{
+			{ID: "bwf-1", Title: "Seed fixture root task", Status: "open", Type: "task", Priority: 1},
+		},
+		Blocked: []domain.BlockedIssueView{
+			{Issue: domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0}},
+		},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.width = 120
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	view := m.View()
+	ui.AssertStartupBoardLayoutSanity(t, view)
+	ui.AssertContainsAll(t, view, "bwf-1")
+	ui.AssertNoObviousRuntimeErrorPanels(t, view)
+}
+
+// TestModelMutationModalsOpenWithoutCatalogDecodeToast verifies that c/u/a keys
+// open the respective action modals without triggering a "Failed to load
+// mutation catalogs" toast. This replaces
+// TestModelEmbeddedFixtureMutationModalsOpenWithoutCatalogDecodeToast
+// (which used real bd+fixture).
+func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Blocked: []domain.BlockedIssueView{
+			{Issue: domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0}},
+		},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "blocked"}, {Name: "in_progress"}}
+	gateway.TypeCatalogResponse = []domain.TypeOption{{Name: "task"}, {Name: "bug"}, {Name: "chore"}}
+	gateway.LabelCatalogResponse = []domain.LabelOption{{Name: "fixture"}, {Name: "blocking"}}
+	gateway.ShowIssuesByID = map[string]domain.IssueDetail{
+		"bwf-2": {
+			Summary:     domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob"},
+			Description: "Used to validate blocked/ready and dependency reads.",
+		},
+	}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.width = 120
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	assertModalOpenWithoutCatalogToast := func(model Model, wantTitle string) {
+		t.Helper()
+		if !model.showActionModal {
+			t.Fatalf("expected action modal %q to open", wantTitle)
+		}
+		if !strings.Contains(model.actionModal.View(), wantTitle) {
+			t.Fatalf("expected modal title %q, got:\n%s", wantTitle, model.actionModal.View())
+		}
+		if model.toast.Visible() {
+			t.Fatalf("expected no toast while opening %q modal, got:\n%s", wantTitle, model.View())
+		}
+		if strings.Contains(model.View(), "Failed to load mutation catalogs") {
+			t.Fatalf("expected no mutation catalog decode toast while opening %q modal, got:\n%s", wantTitle, model.View())
+		}
+	}
+
+	// 'c' opens Create Issue modal.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected create flow command")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	assertModalOpenWithoutCatalogToast(m, "Create Issue")
+
+	// Escape closes the modal.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		next, _ = m.Update(cmd())
+		m = next.(Model)
+	}
+	if m.showActionModal {
+		t.Fatal("expected create modal to close on escape")
+	}
+
+	// 'u' opens Update Issue modal (title includes selected issue ID).
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected update flow command")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	assertModalOpenWithoutCatalogToast(m, "Update Issue bwf-2")
+
+	// Escape closes the modal.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if cmd != nil {
+		next, _ = m.Update(cmd())
+		m = next.(Model)
+	}
+	if m.showActionModal {
+		t.Fatal("expected update modal to close on escape")
+	}
+
+	// Enter dedicated detail mode so the 'a' (add comment) hotkey works.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Detail {
+		t.Fatalf("expected detail mode before comment flow, got %s", m.active)
+	}
+
+	// 'a' opens Comment modal.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("expected comment flow command")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	assertModalOpenWithoutCatalogToast(m, "Comment on bwf-2")
 }
 
 func runBatch(cmd tea.Cmd) []tea.Msg {

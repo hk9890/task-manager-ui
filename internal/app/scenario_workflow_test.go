@@ -66,6 +66,7 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 
 func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *testing.T) {
 	t.Parallel()
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
 	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}

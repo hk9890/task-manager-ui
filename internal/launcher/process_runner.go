@@ -13,6 +13,13 @@ func NewExecProcessRunner() ProcessRunner {
 	return execProcessRunner{}
 }
 
+// reaperHook is a test-only hook. When non-nil, the reaper goroutine sends an
+// empty struct to this channel after each cmd.Wait() completes. Production code
+// never sets or reads this variable; it is nil at all times outside of tests.
+// Tests set it to a buffered channel of adequate capacity before launching
+// subprocesses and drain it to synchronize without sleeping.
+var reaperHook chan<- struct{}
+
 // Run starts an external process and returns immediately (fire-and-forget).
 //
 // Design decisions:
@@ -45,7 +52,13 @@ func (execProcessRunner) Run(_ context.Context, command string, args []string, d
 	}
 
 	// Reap the child so it does not remain a zombie in the process table.
-	go func() { _ = cmd.Wait() }()
+	// If reaperHook is set (tests only), signal completion after Wait returns.
+	go func() {
+		_ = cmd.Wait()
+		if h := reaperHook; h != nil {
+			h <- struct{}{}
+		}
+	}()
 
 	return nil
 }
