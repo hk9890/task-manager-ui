@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/hk9890/beads-workbench/internal/domain"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"

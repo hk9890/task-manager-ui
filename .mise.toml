@@ -6,7 +6,16 @@ CGO_ENABLED = "0"
 
 [tasks.build]
 description = "Build the bwb binary"
-run = "go build ./cmd/bwb"
+run = """
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+go build -ldflags "-s -w \
+  -X github.com/hk9890/beads-workbench/internal/version.Version=$VERSION \
+  -X github.com/hk9890/beads-workbench/internal/version.Commit=$COMMIT \
+  -X github.com/hk9890/beads-workbench/internal/version.Date=$DATE" \
+  ./cmd/bwb
+"""
 
 [tasks.fmt]
 description = "Format Go source"
@@ -34,6 +43,20 @@ CGO_ENABLED = "1"
 description = "Integration tests (real bd binary, embedded fixture)"
 run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- -race -tags=integration ./..."
 [tasks."test:integration".env]
+CGO_ENABLED = "1"
+
+[tasks."test:coverage"]
+description = "Run unit+integration tests and enforce coverage threshold"
+run = """
+go test -race -tags=integration -coverprofile=coverage.out -covermode=atomic ./...
+COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+COVERAGE_INT=${COVERAGE%.*}
+echo "Total coverage: ${COVERAGE}% (threshold: ${COVERAGE_THRESHOLD:-71}%)"
+if [ "$COVERAGE_INT" -lt "${COVERAGE_THRESHOLD:-71}" ]; then
+  echo "FAIL: below threshold"; exit 1
+fi
+"""
+[tasks."test:coverage".env]
 CGO_ENABLED = "1"
 
 [tasks."test:all"]
@@ -67,6 +90,23 @@ depends = ["vet", "lint", "guardrails", "test"]
 [tasks.quality]
 description = "Full pre-handoff gate (includes integration tests; ~2min)"
 depends = ["vet", "lint", "guardrails", "test", "test:integration"]
+
+[tasks."fmt:check"]
+description = "Check formatting (goimports + go mod tidy)"
+run = """
+OUT=$(go run golang.org/x/tools/cmd/goimports@$(cat .goimports-version) -local github.com/hk9890/beads-workbench -l cmd internal)
+if [ -n "$OUT" ]; then
+  echo "Files not formatted:"
+  echo "$OUT"
+  echo "Run: go run golang.org/x/tools/cmd/goimports@$(cat .goimports-version) -local github.com/hk9890/beads-workbench -w cmd internal"
+  exit 1
+fi
+go mod tidy
+if ! git diff --exit-code go.mod go.sum; then
+  echo "go.mod/go.sum not tidy. Run 'go mod tidy' and commit."
+  exit 1
+fi
+"""
 
 [tasks."hooks:install"]
 description = "Install repo git hooks (one-time setup)"

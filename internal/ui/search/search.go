@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"

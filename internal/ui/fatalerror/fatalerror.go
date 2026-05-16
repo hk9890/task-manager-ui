@@ -3,6 +3,7 @@ package fatalerror
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 

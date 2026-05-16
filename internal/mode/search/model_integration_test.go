@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"

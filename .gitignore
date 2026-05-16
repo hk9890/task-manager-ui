@@ -8,3 +8,6 @@
 .idea/
 .claude/
 /bwb
+coverage.out
+coverage-*.out
+dist/

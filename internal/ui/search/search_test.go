@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/hk9890/beads-workbench/internal/domain"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/muesli/termenv"
 )
 
 func assertGoldenNormalized(t *testing.T, output []byte, name string) {

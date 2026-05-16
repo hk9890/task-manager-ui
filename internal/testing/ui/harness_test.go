@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
+
 	"github.com/hk9890/beads-workbench/internal/ui/modal"
 )
 

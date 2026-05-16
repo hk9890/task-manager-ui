@@ -13,9 +13,11 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/logging"
-	"gopkg.in/yaml.v3"
+	bwbversion "github.com/hk9890/beads-workbench/internal/version"
 )
 
 func TestArchitectureGuardrails(t *testing.T) {
@@ -368,16 +370,6 @@ func TestRun_NonInteractiveDebugCreatesPersistentStartupLogs(t *testing.T) {
 func TestRun_VersionUsesFallback(t *testing.T) {
 	t.Parallel()
 
-	versionMu.Lock()
-	old := version
-	version = "dev"
-	versionMu.Unlock()
-	t.Cleanup(func() {
-		versionMu.Lock()
-		version = old
-		versionMu.Unlock()
-	})
-
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--version"}, &stdout, &stderr,
 		func(opts config.LoadOptions) (config.Result, error) {
@@ -389,8 +381,12 @@ func TestRun_VersionUsesFallback(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
-	if got := stdout.String(); got != "bwb dev\n" {
-		t.Fatalf("expected version output %q, got %q", "bwb dev\\n", got)
+	got := stdout.String()
+	if !strings.Contains(got, bwbversion.Version) {
+		t.Fatalf("expected version output to contain %q, got %q", bwbversion.Version, got)
+	}
+	if !strings.HasPrefix(got, "bwb ") {
+		t.Fatalf("expected version output to start with %q, got %q", "bwb ", got)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
@@ -493,8 +489,8 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if seenLoggerOpts.ProjectRoot != projectDir {
 		t.Fatalf("expected logger project root %q, got %q", projectDir, seenLoggerOpts.ProjectRoot)
 	}
-	if seenLoggerOpts.BuildVersion != getVersion() {
-		t.Fatalf("expected logger build version %q, got %q", getVersion(), seenLoggerOpts.BuildVersion)
+	if seenLoggerOpts.BuildVersion != bwbversion.Version {
+		t.Fatalf("expected logger build version %q, got %q", bwbversion.Version, seenLoggerOpts.BuildVersion)
 	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
 		t.Fatalf("expected debug session line, got %q", stderr.String())
@@ -505,7 +501,7 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") || !strings.Contains(stderr.String(), "cwd="+projectDir) {
 		t.Fatalf("expected debug cwd line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+getVersion()) {
+	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+bwbversion.Version) {
 		t.Fatalf("expected provenance in debug output, got %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=false") {

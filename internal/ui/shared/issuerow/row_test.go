@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/hk9890/beads-workbench/internal/domain"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	"github.com/muesli/termenv"
 )
 
 func TestRenderCompactSelectionAndMetadata(t *testing.T) {

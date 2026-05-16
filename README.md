@@ -64,6 +64,17 @@ For deeper design and planning context, see:
 - [`project-plan/EXECUTION-PLAN.md`](./project-plan/EXECUTION-PLAN.md)
 - [`CHANGELOG.md`](./CHANGELOG.md)
 
+## Verifying releases
+
+Each release includes a cosign-signed checksum file and per-archive SBOM (SPDX-JSON). Download the `.sig` and `.pem` files for the checksum from the GitHub release page, then run:
+
+```bash
+cosign verify-blob \
+  --signature bwb_<version>_checksums.txt.sig \
+  --certificate bwb_<version>_checksums.txt.pem \
+  bwb_<version>_checksums.txt
+```
+
 ## Release visibility policy
 
 This repository remains **private**. GitHub releases created here are
