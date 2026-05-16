@@ -1,6 +1,6 @@
 module github.com/hk9890/beads-workbench
 
-go 1.24.2
+go 1.26.3
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20260330094520-2dce04b6f8a4
 	github.com/muesli/termenv v0.16.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -46,5 +47,4 @@ require (
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
