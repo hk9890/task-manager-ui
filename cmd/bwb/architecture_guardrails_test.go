@@ -426,6 +426,17 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 		t.Fatalf("MkdirAll returned error: %v", err)
 	}
 
+	// On macOS, t.TempDir() returns a path under /var/folders which is a symlink
+	// to /private/var/folders.  os.Getwd() (called inside run()) returns the
+	// canonical form, so we canonicalize here so all subsequent comparisons use
+	// the same representation (beads-workbench-2rfx).
+	if canonical, err := filepath.EvalSymlinks(startDir); err == nil {
+		startDir = canonical
+	}
+	if canonical, err := filepath.EvalSymlinks(projectDir); err == nil {
+		projectDir = canonical
+	}
+
 	originalWD, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd returned error: %v", err)

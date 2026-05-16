@@ -201,13 +201,10 @@ func TestLoad_InvalidYAMLReturnsError(t *testing.T) {
 
 func TestLoad_DirectoryAtConfigPathReturnsError(t *testing.T) {
 	configHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", configHome)
-	t.Setenv("HOME", configHome)
-	// On Windows, os.UserConfigDir() uses APPDATA rather than XDG_CONFIG_HOME
-	// or HOME, so the resolved config path may live under the real system AppData
-	// tree. Ensure the parent directory (e.g. AppData\Roaming\bwb) exists before
-	// we attempt to create the "directory-at-config-file" scenario — on Windows
-	// runners the bwb sub-directory may not yet exist.
+	// Use setConfigHome so that os.UserConfigDir() points to the temp dir on all
+	// platforms, including Windows where APPDATA takes precedence over HOME
+	// (beads-workbench-2rfx).
+	setConfigHome(t, configHome)
 	path := filepath.Join(testUserConfigDir(t), configRelativePath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll parent returned error: %v", err)
@@ -540,6 +537,23 @@ func testUserConfigDir(t *testing.T) string {
 		t.Fatalf("os.UserConfigDir returned error: %v", err)
 	}
 	return dir
+}
+
+// setConfigHome sets all environment variables that os.UserConfigDir() consults
+// so that the test-scoped temp dir is used on every OS:
+//   - HOME           — read by Darwin and Linux
+//   - XDG_CONFIG_HOME — read by Linux (takes priority over HOME)
+//   - APPDATA        — read by Windows (os.UserConfigDir ignores HOME on Windows)
+//
+// Call this instead of individual t.Setenv("HOME", ...) in tests that need to
+// control the config directory (beads-workbench-2rfx).
+func setConfigHome(t *testing.T, configHome string) {
+	t.Helper()
+	t.Setenv("HOME", configHome)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", configHome)
+	}
 }
 
 // writeConfig writes body to the platform-resolved config path

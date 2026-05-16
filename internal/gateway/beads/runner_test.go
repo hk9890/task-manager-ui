@@ -264,15 +264,17 @@ func TestCommandRunnerRunSerializesWriteCalls(t *testing.T) {
 // TestRWMutexParallelReadOverlap verifies that concurrent read-flagged Run
 // calls execute in parallel rather than serially. 100 goroutines each sleep
 // 20 ms inside the executor; if reads were serialized the total wall time
-// would be ~2 s. We assert < 100 ms (5× the per-call sleep) per iteration,
-// repeated 5 times to catch flakiness.
+// would be ~2 s. We assert < 200 ms (10× the per-call sleep) per iteration,
+// repeated 5 times to catch flakiness.  The threshold is 200 ms (up from
+// 100 ms) to accommodate Windows scheduler latency without masking genuine
+// serialization bugs — serial execution would still take ~2 s (beads-workbench-2rfx).
 func TestRWMutexParallelReadOverlap(t *testing.T) {
 	t.Parallel()
 
 	const (
 		parallelReads = 100
 		sleepPerCall  = 20 * time.Millisecond
-		maxWallTime   = 100 * time.Millisecond
+		maxWallTime   = 200 * time.Millisecond
 		iterations    = 5
 	)
 
