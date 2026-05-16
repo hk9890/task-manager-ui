@@ -37,8 +37,12 @@ description = "Run unit + integration tests"
 depends = ["test", "test:integration"]
 
 [tasks."test:verbose"]
-description = "Unit tests with full output (for debugging a hang or noisy failure)"
+description = "Unit tests with full per-test output (for debugging a hang or noisy failure)"
 run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- ./..."
+
+[tasks."test:integration:verbose"]
+description = "Integration tests with full per-test output (=== RUN / --- PASS for every test)"
+run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- -tags=integration ./..."
 
 [tasks.scripts]
 description = "Validate script syntax (shell + python)"
