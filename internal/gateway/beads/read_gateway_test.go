@@ -18,7 +18,7 @@ func TestGatewayListIssuesBuildsCommandAndMapsSummaries(t *testing.T) {
 	t.Parallel()
 
 	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--status", "open,blocked", "--type", "task,bug", "--assignee", "alice", "--label", "ui", "--label", "backend", "--sort", "updated", "--reverse", "--limit", "2"}): {
+		argsKey([]string{"list", "--json", "--status", "open,blocked", "--type", "task,bug", "--assignee", "alice", "--label", "ui", "--label", "backend", "--sort", "updated", "--limit", "2"}): {
 			result: ExecResult{Stdout: readFixture(t, "list_issues.json")},
 		},
 	}
@@ -921,7 +921,7 @@ func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
 	t.Parallel()
 
 	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--reverse", "--limit", "5"}): {
+		argsKey([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--limit", "5"}): {
 			result: ExecResult{Stdout: []byte(`[
 				{"id":"bw-B","title":"B closed recent","status":"closed","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","closed_at":"2026-04-01T00:00:00Z"},
 				{"id":"bw-A","title":"A closed earlier updated later","status":"closed","issue_type":"task","priority":1,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z","closed_at":"2026-01-01T00:00:00Z"}
@@ -950,6 +950,99 @@ func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
 	if got[0].ID != "bw-B" || got[1].ID != "bw-A" {
 		t.Fatalf("expected B before A when sorted by closed_at desc, got %s, %s", got[0].ID, got[1].ID)
 	}
+}
+
+// TestGatewaySortDirectionDescendingEmitsNoReverseFlag is a regression test for the
+// sort-direction inversion bug (beads-workbench-zhef). bd --sort <field> defaults to
+// DESCENDING; emitting --reverse inverts to ASCENDING — the opposite of intent.
+//
+// Correct behaviour:
+//   - SortDirectionDescending: no --reverse flag (bd default = DESC = correct)
+//   - SortDirectionAscending: --reverse flag (inverts bd default DESC → ASC)
+//
+// To verify this test catches the regression: comment out the fix in read_gateway.go
+// (change SortDirectionAscending back to SortDirectionDescending), run this test, and
+// confirm it fails with "route not found" for the argv without --reverse.
+func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
+	t.Parallel()
+
+	minimalIssueJSON := `[{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}]`
+
+	// SortDirectionDescending must NOT emit --reverse (bd default is already DESC).
+	t.Run("DescendingOmitsReverse", func(t *testing.T) {
+		t.Parallel()
+
+		routes := map[string]routeResponse{
+			argsKey([]string{"list", "--json", "--sort", "updated"}): {
+				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
+			},
+		}
+		gw, _ := newTestGateway(routes)
+		_, err := gw.ListIssues(context.Background(), domain.IssueListQuery{
+			SortBy:    domain.SortFieldUpdatedAt,
+			SortOrder: domain.SortDirectionDescending,
+		})
+		if err != nil {
+			t.Fatalf("SortDirectionDescending should not emit --reverse; got error: %v", err)
+		}
+	})
+
+	// SortDirectionAscending MUST emit --reverse (to invert bd's default DESC → ASC).
+	t.Run("AscendingEmitsReverse", func(t *testing.T) {
+		t.Parallel()
+
+		routes := map[string]routeResponse{
+			argsKey([]string{"list", "--json", "--sort", "updated", "--reverse"}): {
+				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
+			},
+		}
+		gw, _ := newTestGateway(routes)
+		_, err := gw.ListIssues(context.Background(), domain.IssueListQuery{
+			SortBy:    domain.SortFieldUpdatedAt,
+			SortOrder: domain.SortDirectionAscending,
+		})
+		if err != nil {
+			t.Fatalf("SortDirectionAscending should emit --reverse; got error: %v", err)
+		}
+	})
+
+	// Same contract for Query (Done column path).
+	t.Run("QueryDescendingOmitsReverse", func(t *testing.T) {
+		t.Parallel()
+
+		routes := map[string]routeResponse{
+			argsKey([]string{"query", "status=closed", "--json", "--sort", "closed"}): {
+				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
+			},
+		}
+		gw, _ := newTestGateway(routes)
+		_, err := gw.Query(context.Background(), "status=closed", domain.QueryOptions{
+			SortBy:    domain.SortFieldClosedAt,
+			SortOrder: domain.SortDirectionDescending,
+		})
+		if err != nil {
+			t.Fatalf("Query SortDirectionDescending should not emit --reverse; got error: %v", err)
+		}
+	})
+
+	// Query Ascending must emit --reverse.
+	t.Run("QueryAscendingEmitsReverse", func(t *testing.T) {
+		t.Parallel()
+
+		routes := map[string]routeResponse{
+			argsKey([]string{"query", "status=closed", "--json", "--sort", "closed", "--reverse"}): {
+				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
+			},
+		}
+		gw, _ := newTestGateway(routes)
+		_, err := gw.Query(context.Background(), "status=closed", domain.QueryOptions{
+			SortBy:    domain.SortFieldClosedAt,
+			SortOrder: domain.SortDirectionAscending,
+		})
+		if err != nil {
+			t.Fatalf("Query SortDirectionAscending should emit --reverse; got error: %v", err)
+		}
+	})
 }
 
 func TestGatewayHealthCheckIssuesPingJSON(t *testing.T) {
@@ -1035,7 +1128,7 @@ func (e *routingExecutor) Run(_ context.Context, _ string, args []string, _ stri
 func newTestGateway(routes map[string]routeResponse) (*Gateway, *routingExecutor) {
 	exec := &routingExecutor{routes: routes}
 	runner := NewCommandRunner(RunnerConfig{Executor: exec})
-	return NewCLIGateway(runner), exec
+	return NewCLIGatewayRaw(runner), exec
 }
 
 func argsKey(args []string) string {
@@ -1087,7 +1180,7 @@ func TestGatewayQueryArgvAssemblyWithAllOptions(t *testing.T) {
 
 	// Limit=1, Offset=1 → withOffsetWindow(1,1)=2 → --limit 2; caller gets page [1:2]
 	routes := map[string]routeResponse{
-		argsKey([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--reverse", "--limit", "2"}): {
+		argsKey([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "2"}): {
 			result: ExecResult{Stdout: []byte(`[
 				{"id":"bw-A","title":"closed A","status":"closed","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"},
 				{"id":"bw-B","title":"closed B","status":"closed","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"}
@@ -1582,6 +1675,38 @@ func TestGatewayShowIssueAcceptsNullLabelsAndUnknownFields(t *testing.T) {
 
 	if !strings.Contains(got.Description, "Second paragraph") {
 		t.Fatalf("expected multi-paragraph description to contain 'Second paragraph', got %q", got.Description)
+	}
+}
+
+// TestGatewayShowIssueHandlesMissingDescription verifies that ShowIssue succeeds
+// and returns an empty Description when bd show omits the "description" key entirely
+// (the common case for issues created without --description).
+func TestGatewayShowIssueHandlesMissingDescription(t *testing.T) {
+	t.Parallel()
+
+	// JSON deliberately omits the "description" key — exactly what bd show emits
+	// for an issue that was created without a description.
+	routes := map[string]routeResponse{
+		argsKey([]string{"show", "bw-500", "--json"}): {
+			result: ExecResult{Stdout: []byte(`[
+				{"id":"bw-500","title":"no desc test","status":"open","issue_type":"task","priority":2,"created_at":"2026-05-16T10:00:00Z","updated_at":"2026-05-16T10:00:00Z"}
+			]`)},
+		},
+	}
+
+	gateway, _ := newTestGateway(routes)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-500"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error for issue with no description: %v", err)
+	}
+
+	if got.Description != "" {
+		t.Fatalf("expected empty Description when key absent, got %q", got.Description)
+	}
+
+	if got.Summary.ID != "bw-500" {
+		t.Fatalf("unexpected summary ID: %q", got.Summary.ID)
 	}
 }
 

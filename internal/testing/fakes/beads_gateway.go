@@ -122,8 +122,14 @@ type FakeBeadsGateway struct {
 	SearchIssuesResponse  domain.SearchResultPage
 	SearchResultsByText   map[string]domain.SearchResultPage
 	QueryResponse         []domain.IssueSummary
-	ReadyExplainResponse  domain.ReadyExplainResult
-	CountIssuesResponse   domain.IssueCountResult
+	// QueryResponsesByExpr is an optional expr-keyed map for Query. When set,
+	// Query looks up the expr in this map and returns the matching slice. If
+	// the key is absent the method falls back to QueryResponse (verbatim stub
+	// behaviour). This lets contract tests verify expression-filtered queries
+	// without breaking UI tests that use QueryResponse as a simple stub.
+	QueryResponsesByExpr map[string][]domain.IssueSummary
+	ReadyExplainResponse domain.ReadyExplainResult
+	CountIssuesResponse  domain.IssueCountResult
 
 	CreateIssueResponse domain.CreateIssueResult
 
@@ -304,6 +310,17 @@ func (f *FakeBeadsGateway) Query(_ context.Context, expr string, opts domain.Que
 	f.Calls = append(f.Calls, GatewayCall{Method: MethodQuery, Input: QueryCall{Expr: expr, Opts: opts}})
 	if err := f.MethodErrors[MethodQuery]; err != nil {
 		return nil, err
+	}
+
+	// QueryResponsesByExpr opt-in: when set, look up by exact expr string.
+	// Falls back to QueryResponse for callers that don't need per-expr fidelity.
+	if f.QueryResponsesByExpr != nil {
+		if results, ok := f.QueryResponsesByExpr[expr]; ok {
+			return append([]domain.IssueSummary(nil), results...), nil
+		}
+		// Expr not found in map — return empty slice (mirrors real bd returning
+		// no results for an unrecognised/unseeded expression).
+		return []domain.IssueSummary{}, nil
 	}
 
 	return append([]domain.IssueSummary(nil), f.QueryResponse...), nil

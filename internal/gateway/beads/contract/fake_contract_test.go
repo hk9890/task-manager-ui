@@ -53,11 +53,32 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 		}
 	}
 
-	// Query response: query "status = open" → only open issues.
+	// Query: use QueryResponsesByExpr so each expression returns a correctly
+	// filtered slice. This matches real bd's expression-filter behaviour and
+	// allows Invariants/Query/StatusFilterRespected to verify that Query
+	// results actually have the status the expression selected.
+	//
+	// Note: the contract tests also call Query(ctx, "status = open", ...) and
+	// Query(ctx, "status=open", ...) — both key forms are seeded to be safe.
+	var openSummaries, closedSummaries []domain.IssueSummary
 	for _, s := range summaries {
-		if s.Status == "open" {
-			fake.QueryResponse = append(fake.QueryResponse, s)
+		switch s.Status {
+		case "open":
+			openSummaries = append(openSummaries, s)
+		case "closed":
+			closedSummaries = append(closedSummaries, s)
 		}
+	}
+	fake.QueryResponsesByExpr = map[string][]domain.IssueSummary{
+		"status = open":   openSummaries,
+		"status=open":     openSummaries,
+		"status = closed": closedSummaries,
+		"status=closed":   closedSummaries,
+	}
+	// QueryResponse kept as a verbatim fallback for UI tests that set it directly
+	// and don't use QueryResponsesByExpr.
+	for _, s := range openSummaries {
+		fake.QueryResponse = append(fake.QueryResponse, s)
 	}
 
 	// Ready issues: issues with no open blockers (open and not blocked).
@@ -131,8 +152,14 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 		detail := domain.IssueDetail{
 			Summary:     summary,
 			Description: issue.Description,
+			// Real bd emits empty arrays (not null) for Comments and BlockedBy
+			// when there are none. Initialize to empty slices to match that
+			// invariant. Without this, Invariants/ShowIssue/CommentsNotNil and
+			// Invariants/ShowIssue/BlockedByNotNil fail.
+			Comments:  []domain.IssueComment{},
+			BlockedBy: []domain.IssueReference{},
 		}
-		// Attach BlockedBy references for blocked issues.
+		// Attach BlockedBy references for blocked issues (overrides empty default).
 		if refs, ok := blockers[issue.ID]; ok {
 			detail.BlockedBy = refs
 		}

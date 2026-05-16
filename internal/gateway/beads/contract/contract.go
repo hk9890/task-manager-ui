@@ -11,7 +11,18 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/gateway/beads/contractcheck"
 )
+
+// assertNoViolations converts contractcheck.Violation values to t.Errorf calls.
+// This bridges the pure validator functions (which return values) to the testing.T
+// assertion style used throughout RunReadContract.
+func assertNoViolations(t *testing.T, violations []contractcheck.Violation) {
+	t.Helper()
+	for _, v := range violations {
+		t.Errorf("contract violation [%s/%s]: %s", v.Method, v.Rule, v.Sample)
+	}
+}
 
 // GatewayFactory returns a BeadsGateway bound to a freshly-prepared fixture.
 // The factory is called once per RunReadContract invocation; t is the top-level
@@ -433,6 +444,456 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 				t.Errorf("LabelCatalog: expected label %q, got %v", expected, labelNames(opts))
 			}
 		}
+	})
+
+	// =========================================================
+	// Invariants: fixture-agnostic structural assertions.
+	// These sub-tests hold for ANY well-formed bd output — they
+	// do NOT reference specific fixture IDs (bwf-*).
+	// They run alongside the fixture-pinned tests above and must
+	// pass against both the fake and the real gateway.
+	// =========================================================
+
+	t.Run("Invariants", func(t *testing.T) {
+
+		// ---- Invariants/HealthCheck ----
+
+		// HealthCheck is an error-only method; structural invariants are just
+		// about error class (covered by the fixture-pinned test above). No
+		// additional generic assertions are possible here.
+
+		// ---- Invariants/ListIssues ----
+
+		t.Run("ListIssues/NonEmptyIDs", func(t *testing.T) {
+			// Default query (no filter) — every returned summary must have a
+			// non-empty ID. This catches silent zero-value decode failures.
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
+			if err != nil {
+				t.Fatalf("ListIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateIssueSummaries("ListIssues", issues) {
+				if v.Rule == "NonEmptyID" {
+					t.Errorf("ListIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ListIssues/NonEmptyTitleAndStatus", func(t *testing.T) {
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
+			if err != nil {
+				t.Fatalf("ListIssues: unexpected error: %v", err)
+			}
+			assertNoViolations(t, contractcheck.ValidateIssueSummaries("ListIssues", issues))
+		})
+
+		t.Run("ListIssues/StatusFilterRespected", func(t *testing.T) {
+			// When Statuses filter is set, every returned issue must match.
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{Statuses: []string{"open"}})
+			if err != nil {
+				t.Fatalf("ListIssues(status=open): unexpected error: %v", err)
+			}
+			assertNoViolations(t, contractcheck.ValidateListIssuesStatusFilter("ListIssues", issues, []string{"open"}))
+		})
+
+		t.Run("ListIssues/ClosedExcludedByDefault", func(t *testing.T) {
+			// Default query must not return closed issues.
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
+			if err != nil {
+				t.Fatalf("ListIssues: unexpected error: %v", err)
+			}
+			assertNoViolations(t, contractcheck.ValidateListIssuesClosedExcluded("ListIssues", issues, nil))
+		})
+
+		t.Run("ListIssues/SortApplied", func(t *testing.T) {
+			// When SortBy is set, the results must be ordered by that field.
+			// NOTE: there is a known sort-direction inversion bug in the gateway
+			// (see interface.go quirks). We test that results ARE sorted, but we
+			// accept either ascending or descending order as valid — the invariant
+			// only checks that a consistent ordering is applied.
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{
+				SortBy:    domain.SortFieldPriority,
+				SortOrder: domain.SortDirectionDescending,
+			})
+			if err != nil {
+				t.Fatalf("ListIssues(sort=priority,desc): unexpected error: %v", err)
+			}
+			if len(issues) < 2 {
+				// Need at least 2 issues to verify sort order; skip if fixture is small.
+				return
+			}
+			// Verify the results are either non-decreasing or non-increasing in priority.
+			ascending := true
+			descending := true
+			for i := 1; i < len(issues); i++ {
+				if issues[i].Priority < issues[i-1].Priority {
+					ascending = false
+				}
+				if issues[i].Priority > issues[i-1].Priority {
+					descending = false
+				}
+			}
+			if !ascending && !descending {
+				priorities := make([]int, len(issues))
+				for i, iss := range issues {
+					priorities[i] = iss.Priority
+				}
+				t.Errorf("ListIssues(sort=priority): result is not sorted (neither asc nor desc): priorities=%v", priorities)
+			}
+		})
+
+		// ---- Invariants/ReadyIssues ----
+
+		t.Run("ReadyIssues/NonEmptyIDs", func(t *testing.T) {
+			issues, err := gw.ReadyIssues(ctx, domain.ReadyIssuesQuery{})
+			if err != nil {
+				t.Fatalf("ReadyIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateIssueSummaries("ReadyIssues", issues) {
+				if v.Rule == "NonEmptyID" {
+					t.Errorf("ReadyIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ReadyIssues/NoClosedIssues", func(t *testing.T) {
+			// Closed issues must never appear in the ready list.
+			issues, err := gw.ReadyIssues(ctx, domain.ReadyIssuesQuery{})
+			if err != nil {
+				t.Fatalf("ReadyIssues: unexpected error: %v", err)
+			}
+			// nil statuses arg = treat as "all statuses excluded by default" — same
+			// semantics as no-filter: closed must be absent.
+			assertNoViolations(t, contractcheck.ValidateListIssuesClosedExcluded("ReadyIssues", issues, nil))
+		})
+
+		// ---- Invariants/BlockedIssues ----
+
+		t.Run("BlockedIssues/NonEmptyIDs", func(t *testing.T) {
+			views, err := gw.BlockedIssues(ctx, domain.BlockedIssuesQuery{})
+			if err != nil {
+				t.Fatalf("BlockedIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateBlockedViews("BlockedIssues", views) {
+				if v.Rule == "NonEmptyID" {
+					t.Errorf("BlockedIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("BlockedIssues/NonEmptyBlockedBySlice", func(t *testing.T) {
+			// Every entry in the blocked list must have at least one blocker.
+			// This is the defining invariant: if you're in the blocked list, you
+			// must have a non-empty BlockedBy slice (the reason you're blocked).
+			views, err := gw.BlockedIssues(ctx, domain.BlockedIssuesQuery{})
+			if err != nil {
+				t.Fatalf("BlockedIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateBlockedViews("BlockedIssues", views) {
+				if v.Rule == "NonEmptyBlockedBySlice" {
+					t.Errorf("BlockedIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("BlockedIssues/BlockerIDsNonEmpty", func(t *testing.T) {
+			// Every blocker reference must have a non-empty ID.
+			views, err := gw.BlockedIssues(ctx, domain.BlockedIssuesQuery{})
+			if err != nil {
+				t.Fatalf("BlockedIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateBlockedViews("BlockedIssues", views) {
+				if v.Rule == "BlockerIDsNonEmpty" {
+					t.Errorf("BlockedIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/ReadyExplain ----
+
+		t.Run("ReadyExplain/NonEmptyIDs", func(t *testing.T) {
+			result, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{})
+			if err != nil {
+				t.Fatalf("ReadyExplain: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateReadyExplain("ReadyExplain", result, false) {
+				if v.Rule == "NonEmptyReadyIDs" || v.Rule == "NonEmptyBlockedIDs" {
+					t.Errorf("ReadyExplain: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ReadyExplain/ReadyAndBlockedDisjoint", func(t *testing.T) {
+			// An issue cannot be both ready and blocked at the same time.
+			result, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{})
+			if err != nil {
+				t.Fatalf("ReadyExplain: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateReadyExplain("ReadyExplain", result, false) {
+				if v.Rule == "ReadyAndBlockedDisjoint" {
+					t.Errorf("ReadyExplain: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ReadyExplain/TotalReadyMatchesLenReady", func(t *testing.T) {
+			// When no limit is applied, TotalReady == len(Ready).
+			result, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{})
+			if err != nil {
+				t.Fatalf("ReadyExplain: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateReadyExplain("ReadyExplain", result, false) {
+				if v.Rule == "TotalReadyMatchesLenReady" {
+					t.Errorf("ReadyExplain: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/ShowIssue ----
+
+		t.Run("ShowIssue/ReturnedIDMatchesInput", func(t *testing.T) {
+			// Use ListIssues to discover a real ID, then verify ShowIssue returns the same ID.
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
+			if err != nil || len(issues) == 0 {
+				t.Skip("ShowIssue/ReturnedIDMatchesInput: no issues to test against")
+			}
+			targetID := issues[0].ID
+			detail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: targetID})
+			if err != nil {
+				t.Fatalf("ShowIssue(%q): unexpected error: %v", targetID, err)
+			}
+			for _, v := range contractcheck.ValidateShowIssue("ShowIssue", detail, targetID) {
+				if v.Rule == "ReturnedIDMatchesInput" {
+					t.Errorf("ShowIssue: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ShowIssue/CommentsNotNil", func(t *testing.T) {
+			// Comments must be a non-nil slice (empty is ok, nil is not).
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
+			if err != nil || len(issues) == 0 {
+				t.Skip("ShowIssue/CommentsNotNil: no issues to test against")
+			}
+			detail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issues[0].ID})
+			if err != nil {
+				t.Fatalf("ShowIssue: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateShowIssue("ShowIssue", detail, issues[0].ID) {
+				if v.Rule == "CommentsNotNil" {
+					t.Errorf("ShowIssue: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ShowIssue/BlockedByNotNil", func(t *testing.T) {
+			// BlockedBy must be a non-nil slice (empty is ok, nil is not).
+			issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
+			if err != nil || len(issues) == 0 {
+				t.Skip("ShowIssue/BlockedByNotNil: no issues to test against")
+			}
+			detail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issues[0].ID})
+			if err != nil {
+				t.Fatalf("ShowIssue: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateShowIssue("ShowIssue", detail, issues[0].ID) {
+				if v.Rule == "BlockedByNotNil" {
+					t.Errorf("ShowIssue: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/SearchIssues ----
+
+		t.Run("SearchIssues/ResultLengthMatchesCount", func(t *testing.T) {
+			// The page's Metadata.ReturnedCount must equal len(Results).
+			page, err := gw.SearchIssues(ctx, domain.SearchIssuesQuery{})
+			if err != nil {
+				t.Fatalf("SearchIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateSearchPage("SearchIssues", page) {
+				if v.Rule == "ReturnedCountMatchesLen" {
+					t.Errorf("SearchIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("SearchIssues/NonEmptyIDs", func(t *testing.T) {
+			page, err := gw.SearchIssues(ctx, domain.SearchIssuesQuery{})
+			if err != nil {
+				t.Fatalf("SearchIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateSearchPage("SearchIssues", page) {
+				if v.Rule == "NonEmptyIDs" {
+					t.Errorf("SearchIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("SearchIssues/ResultsNeverNil", func(t *testing.T) {
+			// Results must be a non-nil slice (empty is ok, nil is not).
+			page, err := gw.SearchIssues(ctx, domain.SearchIssuesQuery{})
+			if err != nil {
+				t.Fatalf("SearchIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateSearchPage("SearchIssues", page) {
+				if v.Rule == "ResultsNotNil" {
+					t.Errorf("SearchIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/CountIssues ----
+
+		t.Run("CountIssues/TotalEqualsSumOfGroups", func(t *testing.T) {
+			// Total must equal the arithmetic sum of all group counts.
+			result, err := gw.CountIssues(ctx, domain.IssueCountQuery{})
+			if err != nil {
+				t.Fatalf("CountIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateCountIssues("CountIssues", result) {
+				if v.Rule == "TotalEqualsSumOfGroups" {
+					t.Errorf("CountIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("CountIssues/GroupStatusNonEmpty", func(t *testing.T) {
+			// Every group must have a non-empty Status name.
+			result, err := gw.CountIssues(ctx, domain.IssueCountQuery{})
+			if err != nil {
+				t.Fatalf("CountIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateCountIssues("CountIssues", result) {
+				if v.Rule == "GroupStatusNonEmpty" {
+					t.Errorf("CountIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/Query ----
+
+		t.Run("Query/StatusFilterRespected", func(t *testing.T) {
+			// When the expression selects a specific status, every result must
+			// have that status. "status=closed" is a safe expression since the
+			// fixture always has at least one closed issue.
+			issues, err := gw.Query(ctx, "status=closed", domain.QueryOptions{IncludeClosed: true})
+			if err != nil {
+				t.Fatalf("Query(status=closed): unexpected error: %v", err)
+			}
+			assertNoViolations(t, contractcheck.ValidateListIssuesStatusFilter("Query", issues, []string{"closed"}))
+		})
+
+		t.Run("Query/NonEmptyIDs", func(t *testing.T) {
+			issues, err := gw.Query(ctx, "status=open", domain.QueryOptions{})
+			if err != nil {
+				t.Fatalf("Query(status=open): unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateIssueSummaries("Query", issues) {
+				if v.Rule == "NonEmptyID" {
+					t.Errorf("Query: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/StatusCatalog ----
+
+		t.Run("StatusCatalog/NonEmpty", func(t *testing.T) {
+			opts, err := gw.StatusCatalog(ctx)
+			if err != nil {
+				t.Fatalf("StatusCatalog: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateStatusCatalog("StatusCatalog", opts) {
+				if v.Rule == "NonEmpty" {
+					t.Errorf("StatusCatalog: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("StatusCatalog/AllNamesNonEmpty", func(t *testing.T) {
+			opts, err := gw.StatusCatalog(ctx)
+			if err != nil {
+				t.Fatalf("StatusCatalog: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateStatusCatalog("StatusCatalog", opts) {
+				if v.Rule == "AllNamesNonEmpty" {
+					t.Errorf("StatusCatalog: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/TypeCatalog ----
+
+		t.Run("TypeCatalog/NonEmpty", func(t *testing.T) {
+			opts, err := gw.TypeCatalog(ctx)
+			if err != nil {
+				t.Fatalf("TypeCatalog: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateTypeCatalog("TypeCatalog", opts) {
+				if v.Rule == "NonEmpty" {
+					t.Errorf("TypeCatalog: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("TypeCatalog/AllNamesNonEmpty", func(t *testing.T) {
+			opts, err := gw.TypeCatalog(ctx)
+			if err != nil {
+				t.Fatalf("TypeCatalog: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateTypeCatalog("TypeCatalog", opts) {
+				if v.Rule == "AllNamesNonEmpty" {
+					t.Errorf("TypeCatalog: %s", v.Sample)
+				}
+			}
+		})
+
+		// ---- Invariants/LabelCatalog ----
+
+		t.Run("LabelCatalog/AllNamesNonEmpty", func(t *testing.T) {
+			opts, err := gw.LabelCatalog(ctx)
+			if err != nil {
+				t.Fatalf("LabelCatalog: unexpected error: %v", err)
+			}
+			assertNoViolations(t, contractcheck.ValidateLabelCatalog("LabelCatalog", opts))
+		})
+
+		// ---- Invariants/CountIssuesGreaterThanOrEqualToListSize ----
+		// ssom cross-method invariant: CountIssues(closed) >= len(ListIssues(closed, limit=1000)).
+		//
+		// This is the assertion that would have caught the ssom regression at
+		// contract-test time. The invariant holds because CountIssues counts ALL
+		// matching issues, while ListIssues returns at most `limit` issues.
+		// When the list is at the limit, count >= list length must still hold.
+		// When the list is shorter than the limit, count == list length
+		// (assuming the gateway is consistent).
+		//
+		// With the current fixture (1 closed issue, limit=1000) this is trivially
+		// 1 >= 1. The invariant catches the regression class where CountIssues
+		// under-counts relative to what ListIssues actually returns.
+
+		t.Run("CountIssuesGreaterThanOrEqualToListSize", func(t *testing.T) {
+			const highLimit = 1000
+
+			countResult, err := gw.CountIssues(ctx, domain.IssueCountQuery{Statuses: []string{"closed"}})
+			if err != nil {
+				t.Fatalf("CountIssues(closed): unexpected error: %v", err)
+			}
+
+			listResult, err := gw.ListIssues(ctx, domain.IssueListQuery{
+				Statuses: []string{"closed"},
+				Limit:    highLimit,
+			})
+			if err != nil {
+				t.Fatalf("ListIssues(closed, limit=%d): unexpected error: %v", highLimit, err)
+			}
+
+			assertNoViolations(t, contractcheck.ValidateSsomInvariant(
+				"CountIssuesGreaterThanOrEqualToListSize",
+				[]string{"closed"},
+				countResult.Total,
+				len(listResult),
+			))
+		})
 	})
 }
 

@@ -41,8 +41,11 @@ type Gateway struct {
 	parentSiblingCache map[string][]domain.IssueReference
 }
 
-// NewCLIGateway builds a CLI-backed beads gateway.
-func NewCLIGateway(runner *CommandRunner) *Gateway {
+// NewCLIGatewayRaw builds a CLI-backed beads gateway without the contract
+// validation wrapper. Intended for tests that deliberately probe invariant-
+// violating responses (e.g. the contract test suite's negative tests).
+// Production code and integration tests should use NewCLIGateway instead.
+func NewCLIGatewayRaw(runner *CommandRunner) *Gateway {
 	if runner == nil {
 		runner = NewCommandRunner(RunnerConfig{})
 	}
@@ -51,6 +54,15 @@ func NewCLIGateway(runner *CommandRunner) *Gateway {
 		runner:             runner,
 		parentSiblingCache: make(map[string][]domain.IssueReference),
 	}
+}
+
+// NewCLIGateway builds a CLI-backed beads gateway wrapped with the contract
+// validation decorator. Every read response is validated against the contract
+// invariants; violations are logged at slog.Warn level to
+// ~/.local/state/bwb/bwb.log and never cause request failures.
+// Use NewCLIGatewayRaw to bypass validation (tests only).
+func NewCLIGateway(runner *CommandRunner) BeadsGateway {
+	return newValidatingGateway(NewCLIGatewayRaw(runner), nil)
 }
 
 // HealthCheck verifies that bd is reachable and a beads database exists in the
@@ -78,7 +90,7 @@ func (g *Gateway) ListIssues(ctx context.Context, query domain.IssueListQuery) (
 		}
 	}
 
-	if query.SortOrder == domain.SortDirectionDescending {
+	if query.SortOrder == domain.SortDirectionAscending {
 		args = append(args, "--reverse")
 	}
 
@@ -114,7 +126,7 @@ func (g *Gateway) Query(ctx context.Context, expr string, opts domain.QueryOptio
 		}
 	}
 
-	if opts.SortOrder == domain.SortDirectionDescending {
+	if opts.SortOrder == domain.SortDirectionAscending {
 		args = append(args, "--reverse")
 	}
 
@@ -249,10 +261,7 @@ func (g *Gateway) ShowIssue(ctx context.Context, query domain.ShowIssueQuery) (d
 		return domain.IssueDetail{}, err
 	}
 
-	description, err := requiredString(primary.Description, "description")
-	if err != nil {
-		return domain.IssueDetail{}, newGatewayError(domain.ErrorCodeDecodeFailed, operationShowIssue, "failed to decode command JSON output", err)
-	}
+	description := optionalString(primary.Description)
 
 	closedAt, err := optionalTimestamp(primary.ClosedAt, "closed_at")
 	if err != nil {
