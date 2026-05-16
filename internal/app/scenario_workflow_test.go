@@ -17,8 +17,8 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
@@ -68,8 +68,8 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}, Description: "detail"}
 

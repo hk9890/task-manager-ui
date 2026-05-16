@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
@@ -24,6 +25,9 @@ type Services struct {
 	Launcher launcher.Service
 	Editor   launchereditor.Service
 	Config   config.Model
+	// Logger is the optional runtime logger for dashboard/board warnings. When
+	// nil, mode/board/model.go falls back to slog.Default().
+	Logger *slog.Logger
 }
 
 // NewServices constructs the minimal app services container.

@@ -12,7 +12,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	boardmode "github.com/hk9890/beads-workbench/internal/mode/board"
@@ -188,7 +187,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) Model {
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		board:          boardmode.NewModel(services.Gateway, dashboard.NewBuiltInProvider(), keys),
+		board:          boardmode.NewModel(services.Gateway, services.Logger, keys),
 		search:         searchmode.NewModel(services.Gateway, keys),
 		detail:         detailsmode.Model{Keys: keys},
 		toast:          toaster.New(),

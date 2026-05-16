@@ -2,22 +2,18 @@ package board
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 )
-
-type staticProvider struct {
-	defs []dashboard.Definition
-	err  error
-}
 
 func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 	t.Helper()
@@ -28,39 +24,174 @@ func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 	return keys
 }
 
-func (p staticProvider) Dashboards(_ context.Context) ([]dashboard.Definition, error) {
-	if p.err != nil {
-		return nil, p.err
-	}
-	return p.defs, nil
+// newBoardModel builds a test board model with a no-op logger.
+func newBoardModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBindings) *Model {
+	return NewModel(gateway, slog.Default(), keys)
 }
 
-func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
+// --- call-recording helpers ---
+
+func countCalls(gateway *fakes.FakeBeadsGateway, method fakes.GatewayMethod) int {
+	n := 0
+	for _, c := range gateway.Calls {
+		if c.Method == method {
+			n++
+		}
+	}
+	return n
+}
+
+func firstQueryCall(gateway *fakes.FakeBeadsGateway) (fakes.QueryCall, bool) {
+	for _, c := range gateway.Calls {
+		if c.Method == fakes.MethodQuery {
+			qc, ok := c.Input.(fakes.QueryCall)
+			return qc, ok
+		}
+	}
+	return fakes.QueryCall{}, false
+}
+
+func queryCallsFor(gateway *fakes.FakeBeadsGateway, expr string) []fakes.QueryCall {
+	var out []fakes.QueryCall
+	for _, c := range gateway.Calls {
+		if c.Method == fakes.MethodQuery {
+			qc, ok := c.Input.(fakes.QueryCall)
+			if ok && qc.Expr == expr {
+				out = append(out, qc)
+			}
+		}
+	}
+	return out
+}
+
+// --- AC: exactly 3 gateway calls dispatched in a single batch ---
+
+func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{
-		{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"},
-		{ID: "bw-2", Title: "Ready second", Priority: 2, Status: "open", Type: "task"},
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+
+	cmds := m.Init()
+	if cmds == nil {
+		t.Fatalf("Init() must return a non-nil command")
 	}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-4", Title: "Blocked now", Priority: 1, Status: "blocked", Type: "bug"}}}
+	// Run the batch command: it returns a tea.BatchMsg which is a []tea.Cmd slice.
+	// In teatest the batch is run by the runtime; here we inspect it by
+	// executing the command and checking what messages come back.
+	// Run the returned command to get the BatchMsg.
+	msg := cmds()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("Init() must return a tea.Batch; got %T", msg)
+	}
+	if len(batch) != 3 {
+		t.Fatalf("expected exactly 3 commands in the batch, got %d", len(batch))
+	}
 
-	provider := staticProvider{defs: []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 0}}},
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 0}}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 0}}},
-			{ID: "done", Title: "Done", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"closed"}, SortBy: domain.SortFieldUpdatedAt, SortOrder: domain.SortDirectionDescending, Limit: 0}}},
+	// Execute each command in the batch to drive the gateway calls.
+	for _, cmd := range batch {
+		if cmd != nil {
+			_ = cmd()
+		}
+	}
+
+	if n := countCalls(gateway, fakes.MethodReadyExplain); n != 1 {
+		t.Errorf("expected 1 ReadyExplain call, got %d", n)
+	}
+	if n := countCalls(gateway, fakes.MethodQuery); n != 2 {
+		t.Errorf("expected 2 Query calls (in_progress + closed), got %d", n)
+	}
+	inProgressCalls := queryCallsFor(gateway, "status=in_progress")
+	if len(inProgressCalls) != 1 {
+		t.Errorf("expected 1 Query(status=in_progress) call, got %d", len(inProgressCalls))
+	}
+	closedCalls := queryCallsFor(gateway, "status=closed")
+	if len(closedCalls) != 1 {
+		t.Errorf("expected 1 Query(status=closed) call, got %d", len(closedCalls))
+	}
+	if len(closedCalls) == 1 {
+		if !closedCalls[0].Opts.IncludeClosed {
+			t.Errorf("Query(status=closed) must set IncludeClosed=true")
+		}
+		if closedCalls[0].Opts.SortBy != domain.SortFieldClosedAt {
+			t.Errorf("Query(status=closed) must sort by closed_at, got %q", closedCalls[0].Opts.SortBy)
+		}
+		if closedCalls[0].Opts.SortOrder != domain.SortDirectionDescending {
+			t.Errorf("Query(status=closed) must sort descending, got %q", closedCalls[0].Opts.SortOrder)
+		}
+	}
+}
+
+// --- AC: all-empty load ---
+
+func TestBoardModeAllEmptyLoad(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	// No responses set: all return empty slices.
+
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.loading = true
+	m.pendingResults = 3
+	// Use a wide enough terminal so all 4 columns are visible.
+	m.SetSize(200, 30)
+
+	// Feed all 3 results.
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+
+	if m.loading {
+		t.Fatal("expected loading=false after all 3 results arrived")
+	}
+	if m.loadError != "" {
+		t.Fatalf("expected no load error, got %q", m.loadError)
+	}
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
+	}
+
+	view := m.View()
+	if strings.Contains(view, "Loading") {
+		t.Fatalf("expected no loading indicator after all results, got: %s", view)
+	}
+	// All 4 section titles must appear in a wide render.
+	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
+		if !strings.Contains(view, title) {
+			t.Errorf("expected column title %q in view, got: %s", title, view)
+		}
+	}
+}
+
+// --- AC: all 3 groups populated ---
+
+func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"},
+			{ID: "bw-2", Title: "Ready second", Priority: 2, Status: "open", Type: "task"},
 		},
-	}}}
+		Blocked: []domain.BlockedIssueView{
+			{Issue: domain.IssueSummary{ID: "bw-4", Title: "Blocked now", Priority: 1, Status: "blocked", Type: "bug"}},
+		},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{
+		{ID: "bw-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"},
+	}
 
-	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: NewModel(gateway, provider, resolvedBoardKeys(t))})
+	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: newBoardModel(gateway, resolvedBoardKeys(t))})
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
-	testui.WaitForOutputContainsAll(t, tm.Output(), "Default", "Not Ready", "Ready", "In Progress", "bw-1", "bw-3")
+	// At width=120, 3 of 4 columns are visible (Not Ready, Ready, In Progress).
+	// Done is offscreen; only check visible sections and known issue IDs.
+	testui.WaitForOutputContainsAll(t, tm.Output(),
+		sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress,
+		"bw-1", "bw-4",
+	)
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("failed to quit teatest model: %v", err)
@@ -70,94 +201,108 @@ func TestBoardModeLoadsBuiltInQueriesAndRendersGolden(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected final model adapter")
 	}
-
 	finalModel, ok := final.Controller.(*Model)
 	if !ok {
 		t.Fatalf("expected wrapped board model, got %T", final.Controller)
 	}
 
 	if sel := finalModel.CurrentSelection(); sel == nil || sel.Issue.ID != "bw-4" {
-		t.Fatalf("expected initial selection bw-4 from Not Ready lane, got %#v", sel)
-	}
-
-	// Verify the board model applied a non-zero limit on section display queries derived from
-	// terminal height (not the provider's Limit==0 placeholder). Height=30 → sectionItemCapacity()=27.
-	// Count queries intentionally use Limit==0 (uncapped); we check that at least one
-	// section-display call per method used a non-zero limit.
-	sawReadyNonZero := false
-	sawListNonZero := false
-	sawBlockedNonZero := false
-	for _, call := range gateway.Calls {
-		switch call.Method {
-		case fakes.MethodReadyIssues:
-			c, ok := call.Input.(fakes.ReadyIssuesCall)
-			if !ok {
-				t.Fatalf("unexpected ReadyIssues call input type: %T", call.Input)
-			}
-			if c.Query.Limit != 0 {
-				sawReadyNonZero = true
-			}
-		case fakes.MethodListIssues:
-			c, ok := call.Input.(fakes.ListIssuesCall)
-			if !ok {
-				t.Fatalf("unexpected ListIssues call input type: %T", call.Input)
-			}
-			if c.Query.Limit != 0 {
-				sawListNonZero = true
-			}
-		case fakes.MethodBlockedIssues:
-			c, ok := call.Input.(fakes.BlockedIssuesCall)
-			if !ok {
-				t.Fatalf("unexpected BlockedIssues call input type: %T", call.Input)
-			}
-			if c.Query.Limit != 0 {
-				sawBlockedNonZero = true
-			}
-		}
-	}
-	if !sawReadyNonZero {
-		t.Fatalf("expected at least one ReadyIssues section-display call with non-zero Limit")
-	}
-	if !sawListNonZero {
-		t.Fatalf("expected at least one ListIssues section-display call with non-zero Limit")
-	}
-	if !sawBlockedNonZero {
-		t.Fatalf("expected at least one BlockedIssues section-display call with non-zero Limit")
+		t.Fatalf("expected initial selection bw-4 from Not Ready lane (earliest non-empty), got %#v", sel)
 	}
 
 	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View()), "model_loaded.golden")
 }
 
+// --- AC: ReadyExplain error path ---
+
+func TestBoardModeReadyExplainErrorPath(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.loading = true
+	m.pendingResults = 3
+
+	loadErr := errors.New("network timeout")
+	_ = m.Update(readyExplainLoadedMsg{err: loadErr})
+
+	if m.loading {
+		t.Fatal("expected loading=false after ReadyExplain error")
+	}
+	if !strings.Contains(m.loadError, "network timeout") {
+		t.Fatalf("expected load error to contain %q, got %q", "network timeout", m.loadError)
+	}
+	if m.columns != nil {
+		t.Fatal("expected columns to be nil after load error")
+	}
+	if m.pendingResults != 0 {
+		t.Fatalf("expected pendingResults=0 after error, got %d", m.pendingResults)
+	}
+}
+
+// --- AC: Query in_progress error path ---
+
+func TestBoardModeQueryInProgressErrorPath(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.loading = true
+	m.pendingResults = 3
+
+	loadErr := errors.New("bd unavailable")
+	_ = m.Update(inProgressLoadedMsg{err: loadErr})
+
+	if m.loading {
+		t.Fatal("expected loading=false after in_progress error")
+	}
+	if !strings.Contains(m.loadError, "bd unavailable") {
+		t.Fatalf("expected load error to contain %q, got %q", "bd unavailable", m.loadError)
+	}
+	if m.columns != nil {
+		t.Fatal("expected columns to be nil after load error")
+	}
+}
+
+// --- AC: Query closed error path ---
+
+func TestBoardModeQueryClosedErrorPath(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.loading = true
+	m.pendingResults = 3
+
+	loadErr := errors.New("bd query failed")
+	_ = m.Update(closedLoadedMsg{err: loadErr})
+
+	if m.loading {
+		t.Fatal("expected loading=false after closed error")
+	}
+	if !strings.Contains(m.loadError, "bd query failed") {
+		t.Fatalf("expected load error to contain %q, got %q", "bd query failed", m.loadError)
+	}
+	if m.columns != nil {
+		t.Fatal("expected columns to be nil after load error")
+	}
+}
+
+// --- Navigation tests ---
+
 func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{
-		{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"},
-		{ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"},
-	}
-
-	provider := staticProvider{defs: []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 25}}},
-		},
-	}}}
-
-	m := NewModel(gateway, provider, resolvedBoardKeys(t))
-	m.dashboardID = "default"
-	m.dashboardTitle = "Default"
-	m.sections = []sectionState{
-		{title: "Ready", issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, loaded: true},
-		{title: "In Progress", issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, loaded: true},
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.loading = false
+	m.columns = []columnData{
+		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
+		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
 	}
 	m.focusedColumn = 0
 	m.selectedRow[0] = 0
 	m.selectedRow[1] = 0
-	m.loading = false
 	m.SetSize(100, 24)
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -220,29 +365,15 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 	}
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}
-
-	provider := staticProvider{defs: []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 25}}},
-		},
-	}}}
-
-	m := NewModel(gateway, provider, keys)
-	m.dashboardID = "default"
-	m.dashboardTitle = "Default"
-	m.sections = []sectionState{
-		{title: "Ready", issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, loaded: true},
-		{title: "In Progress", issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, loaded: true},
+	m := newBoardModel(gateway, keys)
+	m.loading = false
+	m.columns = []columnData{
+		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
+		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
 	}
 	m.focusedColumn = 0
 	m.selectedRow[0] = 0
 	m.selectedRow[1] = 0
-	m.loading = false
 	m.SetSize(100, 24)
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
@@ -270,46 +401,59 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 
 	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
 	if cmd == nil || !m.loading {
-		t.Fatal("expected configured reload key to trigger dashboard reload")
+		t.Fatal("expected configured reload key to trigger board reload")
 	}
+}
+
+// --- Auto-refresh anchor tests ---
+
+func populatedModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBindings) *Model {
+	m := newBoardModel(gateway, keys)
+	m.loading = false
+	m.columns = []columnData{
+		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}, total: 1, exact: true},
+		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}, total: 2, exact: true},
+	}
+	m.focusedColumn = 1
+	m.selectedRow[0] = 0
+	m.selectedRow[1] = 1
+	return m
+}
+
+func feedAllResults(m *Model, readyExplain domain.ReadyExplainResult, inProgress []domain.IssueSummary, closed []domain.IssueSummary) {
+	m.pendingResults = 3
+	_ = m.Update(readyExplainLoadedMsg{result: readyExplain})
+	_ = m.Update(inProgressLoadedMsg{issues: inProgress})
+	_ = m.Update(closedLoadedMsg{issues: closed})
 }
 
 func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
-	m.loading = false
-	m.dashboardID = "default"
-	m.dashboardTitle = "Default"
-	m.sections = []sectionState{
-		{title: "Ready", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}},
-		{title: "In Progress", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}},
-	}
-	m.focusedColumn = 1
-	m.selectedRow[0] = 0
-	m.selectedRow[1] = 1
+	m := populatedModel(gateway, resolvedBoardKeys(t))
 
 	cmd := m.AutoRefresh()
 	if cmd == nil {
 		t.Fatalf("expected auto-refresh command")
 	}
 
-	defs := []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
+	feedAllResults(m,
+		domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{{ID: "bw-9", Title: "Ready refreshed"}},
 		},
-	}}
+		[]domain.IssueSummary{
+			{ID: "bw-8", Title: "Progress refreshed one"},
+			{ID: "bw-3", Title: "Progress two still here"},
+			{ID: "bw-10", Title: "Progress refreshed three"},
+		},
+		nil,
+	)
 
-	_ = m.Update(dashboardsLoadedMsg{dashboards: defs})
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-9", Title: "Ready refreshed"}}})
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-8", Title: "Progress refreshed one"}, {ID: "bw-3", Title: "Progress two still here"}, {ID: "bw-10", Title: "Progress refreshed three"}}})
-
-	if m.focusedColumn != 1 {
-		t.Fatalf("expected focused column 1 to be preserved, got %d", m.focusedColumn)
+	// After refresh: columns are [NotReady(0), Ready(1), InProgress(2), Done(3)].
+	// bw-3 is in InProgress = column 2.
+	if m.focusedColumn != 2 {
+		t.Fatalf("expected focused column 2 (InProgress) to be restored via anchor, got %d", m.focusedColumn)
 	}
 	sel := m.CurrentSelection()
 	if sel == nil || sel.Issue.ID != "bw-3" {
@@ -321,42 +465,33 @@ func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t 
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
-	m.loading = false
-	m.dashboardID = "default"
-	m.dashboardTitle = "Default"
-	m.sections = []sectionState{
-		{title: "Ready", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}},
-		{title: "In Progress", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}},
-	}
-	m.focusedColumn = 1
-	m.selectedRow[0] = 0
-	m.selectedRow[1] = 1
+	m := populatedModel(gateway, resolvedBoardKeys(t))
 
 	cmd := m.AutoRefresh()
 	if cmd == nil {
 		t.Fatalf("expected auto-refresh command")
 	}
 
-	defs := []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
+	feedAllResults(m,
+		domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{{ID: "bw-11", Title: "Ready refreshed"}},
 		},
-	}}
+		[]domain.IssueSummary{
+			{ID: "bw-12", Title: "Progress replacement"},
+		},
+		nil,
+	)
 
-	_ = m.Update(dashboardsLoadedMsg{dashboards: defs})
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-11", Title: "Ready refreshed"}}})
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-12", Title: "Progress replacement"}}})
-
+	// After refresh: columns are [NotReady(0), Ready(1), InProgress(2), Done(3)].
+	// bw-3 (anchor issue) is gone. The anchor's prior focusedColumn was 1 (InProgress
+	// in the 2-column model). Column 1 in the new 4-column model is Ready (has bw-11).
+	// restoreFromAnchor clamps the prior focusedColumn (1) and selects it.
 	if m.focusedColumn != 1 {
-		t.Fatalf("expected fallback to stay on prior focused column when it has rows, got %d", m.focusedColumn)
+		t.Fatalf("expected fallback to clamped prior focused column 1 (Ready), got %d", m.focusedColumn)
 	}
 	sel := m.CurrentSelection()
-	if sel == nil || sel.Issue.ID != "bw-12" {
-		t.Fatalf("expected deterministic row-clamp fallback selection bw-12, got %#v", sel)
+	if sel == nil || sel.Issue.ID != "bw-11" {
+		t.Fatalf("expected deterministic row-clamp fallback selection bw-11, got %#v", sel)
 	}
 }
 
@@ -364,212 +499,186 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
-	m.loading = false
-	m.dashboardID = "default"
-	m.dashboardTitle = "Default"
-	m.sections = []sectionState{
-		{title: "Ready", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}},
-		{title: "In Progress", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}},
-	}
-	m.focusedColumn = 1
-	m.selectedRow[0] = 0
-	m.selectedRow[1] = 1
+	m := populatedModel(gateway, resolvedBoardKeys(t))
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	if cmd == nil {
 		t.Fatalf("expected manual reload command")
 	}
 
-	defs := []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
+	feedAllResults(m,
+		domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{{ID: "bw-21", Title: "Ready refreshed"}},
 		},
-	}}
+		[]domain.IssueSummary{
+			{ID: "bw-22", Title: "Progress refreshed"},
+		},
+		nil,
+	)
 
-	_ = m.Update(dashboardsLoadedMsg{dashboards: defs})
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-21", Title: "Ready refreshed"}}})
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-22", Title: "Progress refreshed"}}})
-
-	if m.focusedColumn != 0 {
-		t.Fatalf("expected manual reload to reset focus to first available column, got %d", m.focusedColumn)
+	// Manual reload: focus settles to first available non-empty column.
+	// Columns: [NotReady(empty,0), Ready(bw-21,1), InProgress(bw-22,2), Done(empty,3)]
+	// First non-empty is col 1 (Ready, has bw-21).
+	if m.focusedColumn != 1 {
+		t.Fatalf("expected manual reload to reset focus to first non-empty column (Ready, col 1), got %d", m.focusedColumn)
 	}
 	sel := m.CurrentSelection()
 	if sel == nil || sel.Issue.ID != "bw-21" {
-		t.Fatalf("expected manual reload selection to reset with full reload semantics, got %#v", sel)
+		t.Fatalf("expected manual reload selection to be bw-21 (first issue in first non-empty col), got %#v", sel)
 	}
 }
 
-func TestBoardModeStartupFocusStableDuringAsyncLoadsAndSettlesByDashboardOrder(t *testing.T) {
+// --- All-or-nothing loading indicator ---
+
+func TestBoardModeShowsSingleLoadingSpinnerUntilAll3ResultsArrive(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, staticProvider{defs: []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues}},
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues}},
-		},
-	}}}, resolvedBoardKeys(t))
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
 
-	m.loading = false
-	m.sections = []sectionState{{title: "Not Ready", loaded: false}, {title: "Ready", loaded: false}, {title: "In Progress", loaded: false}}
-	m.pendingLoads = 3
-	m.focusedColumn = 0
-	m.selectedRow[0] = 0
-	m.selectedRow[1] = 0
-	m.selectedRow[2] = 0
-
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 2, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}}})
-
-	if m.focusedColumn != 0 {
-		t.Fatalf("expected startup focus to remain on first dashboard column while loads are pending, got %d", m.focusedColumn)
-	}
-	if sel := m.CurrentSelection(); sel != nil {
-		t.Fatalf("expected no selection while focused startup column has no rows, got %#v", sel)
-	}
-	if strings.Contains(m.View(), "› T P2 IP bw-7 Progress one") {
-		t.Fatalf("expected render to avoid mid-load focus jumps to later column, got:\n%s", m.View())
+	// Phase 1: initial loading state — m.loading=true.
+	view := m.View()
+	if !strings.Contains(view, "Loading") {
+		t.Fatalf("expected loading message before any results, got %q", view)
 	}
 
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 1, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}})
-	if m.focusedColumn != 0 {
-		t.Fatalf("expected startup focus to stay deterministic until all section loads complete, got %d", m.focusedColumn)
-	}
-	if strings.Contains(m.View(), "› T P1 OPN bw-1 Ready first") {
-		t.Fatalf("expected no row selection before all section loads complete, got:\n%s", m.View())
+	// Phase 2: simulate in-flight state (loading=true, pendingResults=3).
+	m.loading = true
+	m.pendingResults = 3
+
+	// Only 1 result arrives — still loading.
+	m.partialReadyExplain = &domain.ReadyExplainResult{}
+	m.pendingResults = 2
+
+	view = m.View()
+	if !strings.Contains(view, "Loading") {
+		t.Fatalf("expected loading message while 2 results still pending, got %q", view)
 	}
 
-	_ = m.Update(sectionLoadedMsg{sectionIndex: 0, issues: []domain.IssueSummary{{ID: "bw-0", Title: "Blocked first", Priority: 0, Status: "blocked", Type: "bug"}}})
+	// Phase 3: all results arrive via maybeCompose.
+	m.pendingResults = 0
+	m.partialInProgress = nil
+	m.partialClosed = nil
+	_ = m.maybeCompose()
 
-	if m.focusedColumn != 0 {
-		t.Fatalf("expected final focus to settle on earliest non-empty dashboard column, got %d", m.focusedColumn)
-	}
-	sel := m.CurrentSelection()
-	if sel == nil || sel.Issue.ID != "bw-0" {
-		t.Fatalf("expected current selection bw-0 after startup load completion, got %#v", sel)
-	}
-	if !strings.Contains(m.View(), "› B P0 BLK bw-0 Blocked first") {
-		t.Fatalf("expected runtime render to show startup focus on settled first column row, got:\n%s", m.View())
+	view = m.View()
+	if strings.Contains(view, "Loading issues") {
+		t.Fatalf("expected no loading indicator after composition, got %q", view)
 	}
 }
 
-func TestBoardModeRejectsInvalidProviderOutputBeforeSectionLoads(t *testing.T) {
+// --- closedLimit ---
+
+func TestClosedLimit(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		defs    []dashboard.Definition
-		wantErr string
+		height int
+		want   int
 	}{
-		{name: "zero dashboards", defs: nil, wantErr: "zero definitions"},
-		{name: "empty dashboard id", defs: []dashboard.Definition{{Title: "Default", Sections: []dashboard.Section{{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "id is required"},
-		{name: "empty dashboard title", defs: []dashboard.Definition{{ID: "default", Sections: []dashboard.Section{{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "title is required"},
-		{name: "zero sections", defs: []dashboard.Definition{{ID: "default", Title: "Default"}}, wantErr: "at least one section is required"},
-		{name: "empty section id", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "section[0]: id is required"},
-		{name: "empty section title", defs: []dashboard.Definition{{ID: "default", Title: "Default", Sections: []dashboard.Section{{ID: "ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues}}}}}, wantErr: "section[0]: title is required"},
+		{height: 0, want: 50},   // default: max(50, 20)
+		{height: 10, want: 50},  // 10-3=7; max(50,7)=50
+		{height: 53, want: 50},  // 53-3=50; max(50,50)=50
+		{height: 60, want: 57},  // 60-3=57; max(50,57)=57
+		{height: 100, want: 97}, // 100-3=97; max(50,97)=97
 	}
 
 	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			gateway := fakes.NewFakeBeadsGateway()
-			m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
-			m.loading = true
-
-			cmd := m.Update(dashboardsLoadedMsg{dashboards: tc.defs})
-			if cmd != nil {
-				t.Fatalf("expected no follow-up command for invalid dashboard definitions")
-			}
-
-			if m.loadError == "" || !strings.Contains(m.loadError, tc.wantErr) {
-				t.Fatalf("expected load error containing %q, got %q", tc.wantErr, m.loadError)
-			}
-			if m.sections != nil {
-				t.Fatalf("expected sections to be cleared on validation failure")
-			}
-			if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodBlockedIssues)) {
-				t.Fatalf("expected no section query calls on invalid provider output")
-			}
-		})
+		m := &Model{height: tc.height}
+		got := m.closedLimit()
+		if got != tc.want {
+			t.Errorf("closedLimit() with height=%d: got %d, want %d", tc.height, got, tc.want)
+		}
 	}
 }
 
-func TestBoardModeAcceptsValidMultiDashboardProviderOutput(t *testing.T) {
+// --- sectionItemCapacity (retained from old suite) ---
+
+func TestSectionItemCapacity(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}
-
-	defs := []dashboard.Definition{
-		{
-			ID:    "primary",
-			Title: "Primary",
-			Sections: []dashboard.Section{
-				{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 25}}},
-			},
-		},
-		{
-			ID:    "secondary",
-			Title: "Secondary",
-			Sections: []dashboard.Section{
-				{ID: "blocked", Title: "Blocked", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 25}}},
-			},
-		},
+	tests := []struct {
+		height int
+		want   int
+	}{
+		{height: 0, want: 20},  // safe default before first WindowSizeMsg
+		{height: 1, want: 1},   // clamp: 1-3=-2, clamped to 1
+		{height: 3, want: 1},   // clamp: 3-3=0, clamped to 1
+		{height: 4, want: 1},   // 4-3=1
+		{height: 24, want: 21}, // 24-3=21
+		{height: 30, want: 27}, // 30-3=27
+		{height: 34, want: 31}, // 34-3=31
 	}
 
-	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
-
-	cmd := m.Update(dashboardsLoadedMsg{dashboards: defs})
-	if cmd == nil {
-		t.Fatalf("expected section load commands for valid dashboards")
-	}
-
-	if m.loadError != "" {
-		t.Fatalf("expected no load error for valid dashboards, got %q", m.loadError)
-	}
-	if m.dashboardID != "primary" || m.dashboardTitle != "Primary" {
-		t.Fatalf("expected board to load first dashboard, got id=%q title=%q", m.dashboardID, m.dashboardTitle)
-	}
-	if len(m.sections) != 1 {
-		t.Fatalf("expected first dashboard sections to be loaded, got %d", len(m.sections))
+	for _, tc := range tests {
+		m := &Model{height: tc.height}
+		got := m.sectionItemCapacity()
+		if got != tc.want {
+			t.Errorf("sectionItemCapacity() with height=%d: got %d, want %d", tc.height, got, tc.want)
+		}
 	}
 }
+
+// --- slog warning capture ---
+
+func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
+	t.Parallel()
+
+	// Capture slog output by using a custom handler.
+	var capturedMessages []string
+	handler := &captureHandler{capture: &capturedMessages}
+	logger := slog.New(handler)
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, logger, resolvedBoardKeys(t))
+	m.loading = true
+	m.pendingResults = 3
+
+	// Feed all 3 results. No warnings expected from empty inputs.
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+
+	// With empty inputs no cardinality warning is expected.
+	if len(capturedMessages) != 0 {
+		t.Fatalf("expected no slog warnings for empty inputs, got %v", capturedMessages)
+	}
+}
+
+// captureHandler is a minimal slog.Handler that captures log messages for assertions.
+type captureHandler struct {
+	capture *[]string
+}
+
+func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *captureHandler) Handle(_ context.Context, record slog.Record) error {
+	*h.capture = append(*h.capture, record.Message)
+	return nil
+}
+func (h *captureHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
+
+// --- layout goldens ---
 
 func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{
-		{ID: "bw-1", Title: "Ready fix login prompt", Priority: 1, Status: "open", Type: "task"},
-		{ID: "bw-5", Title: "Ready improve docs outline", Priority: 2, Status: "open", Type: "task"},
-		{ID: "bw-6", Title: "Ready triage inbox", Priority: 2, Status: "open", Type: "chore"},
+	readyExplainResp := domain.ReadyExplainResult{
+		Ready: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Ready fix login prompt", Priority: 1, Status: "open", Type: "task"},
+			{ID: "bw-5", Title: "Ready improve docs outline", Priority: 2, Status: "open", Type: "task"},
+			{ID: "bw-6", Title: "Ready triage inbox", Priority: 2, Status: "open", Type: "chore"},
+		},
+		Blocked: []domain.BlockedIssueView{
+			{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked: API contract pending", Priority: 0, Status: "blocked", Type: "bug"}},
+			{Issue: domain.IssueSummary{ID: "bw-9", Title: "Blocked: migration sequencing", Priority: 1, Status: "blocked", Type: "task"}},
+		},
 	}
-	gateway.ListIssuesResponse = []domain.IssueSummary{
+	inProgressIssues := []domain.IssueSummary{
 		{ID: "bw-2", Title: "Implement board keyboard shortcuts", Priority: 1, Status: "in_progress", Type: "feature"},
 		{ID: "bw-7", Title: "Wire detail reload behavior", Priority: 1, Status: "in_progress", Type: "task"},
 		{ID: "bw-8", Title: "Polish header help copy", Priority: 2, Status: "in_progress", Type: "docs"},
 	}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{
-		{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked: API contract pending", Priority: 0, Status: "blocked", Type: "bug"}},
-		{Issue: domain.IssueSummary{ID: "bw-9", Title: "Blocked: migration sequencing", Priority: 1, Status: "blocked", Type: "task"}},
-	}
-
-	provider := staticProvider{defs: []dashboard.Definition{{
-		ID:    "default",
-		Title: "Default",
-		Sections: []dashboard.Section{
-			{ID: "not_ready", Title: "Not Ready", Query: dashboard.Query{Type: dashboard.QueryTypeBlockedIssues, BlockedIssues: domain.BlockedIssuesQuery{Limit: 0}}},
-			{ID: "ready", Title: "Ready", Query: dashboard.Query{Type: dashboard.QueryTypeReadyIssues, ReadyIssues: domain.ReadyIssuesQuery{Limit: 0}}},
-			{ID: "in_progress", Title: "In Progress", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"in_progress"}, Limit: 0}}},
-			{ID: "done", Title: "Done", Query: dashboard.Query{Type: dashboard.QueryTypeListIssues, ListIssues: domain.IssueListQuery{Statuses: []string{"closed"}, SortBy: domain.SortFieldUpdatedAt, SortOrder: domain.SortDirectionDescending, Limit: 0}}},
-		},
-	}}}
 
 	tests := []struct {
 		name     string
@@ -579,19 +688,19 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 		mustShow []string
 		minMeta  int
 	}{
-		{name: "w80", width: 80, height: 28, golden: "model_layout_w80.golden", mustShow: []string{"Default", "Not Ready", "Ready", "bw-1"}, minMeta: 4},
-		{name: "w120", width: 120, height: 30, golden: "model_layout_w120.golden", mustShow: []string{"Default", "Not Ready", "In Progress", "bw-1", "bw-3"}, minMeta: 6},
-		{name: "w180", width: 180, height: 34, golden: "model_layout_w180.golden", mustShow: []string{"Default", "Not Ready", "Done", "bw-1", "bw-2", "bw-3"}, minMeta: 8},
+		{name: "w80", width: 80, height: 28, golden: "model_layout_w80.golden", mustShow: []string{sectionTitleNotReady, sectionTitleReady, "bw-1"}, minMeta: 4},
+		{name: "w120", width: 120, height: 30, golden: "model_layout_w120.golden", mustShow: []string{sectionTitleNotReady, sectionTitleInProgress, "bw-1", "bw-3"}, minMeta: 6},
+		{name: "w180", width: 180, height: 34, golden: "model_layout_w180.golden", mustShow: []string{sectionTitleNotReady, sectionTitleDone, "bw-1", "bw-2", "bw-3"}, minMeta: 8},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			subGateway := fakes.NewFakeBeadsGateway()
-			subGateway.ReadyIssuesResponse = gateway.ReadyIssuesResponse
-			subGateway.ListIssuesResponse = gateway.ListIssuesResponse
-			subGateway.BlockedIssuesResponse = gateway.BlockedIssuesResponse
-			tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(subGateway, provider, resolvedBoardKeys(t))}, tc.width, tc.height)
+			subGateway.ReadyExplainResponse = readyExplainResp
+			subGateway.QueryResponse = inProgressIssues
+
+			tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: newBoardModel(subGateway, resolvedBoardKeys(t))}, tc.width, tc.height)
 			t.Cleanup(func() {
 				_ = tm.Quit()
 			})
@@ -612,141 +721,18 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 				t.Fatalf("expected wrapped board model, got %T", final.Controller)
 			}
 
-			// Assert the board applied a non-zero limit on section-display queries derived from
-			// terminal height, not the provider's Limit==0 placeholder. Count queries intentionally
-			// use Limit==0 (uncapped); verify at least one section-display call per method used a
-			// non-zero limit.
-			sawReadyNonZero := false
-			sawListNonZero := false
-			sawBlockedNonZero := false
-			for _, call := range subGateway.Calls {
-				switch call.Method {
-				case fakes.MethodReadyIssues:
-					c, ok := call.Input.(fakes.ReadyIssuesCall)
-					if !ok {
-						t.Fatalf("unexpected ReadyIssues call input type: %T", call.Input)
-					}
-					if c.Query.Limit != 0 {
-						sawReadyNonZero = true
-					}
-				case fakes.MethodListIssues:
-					c, ok := call.Input.(fakes.ListIssuesCall)
-					if !ok {
-						t.Fatalf("unexpected ListIssues call input type: %T", call.Input)
-					}
-					if c.Query.Limit != 0 {
-						sawListNonZero = true
-					}
-				case fakes.MethodBlockedIssues:
-					c, ok := call.Input.(fakes.BlockedIssuesCall)
-					if !ok {
-						t.Fatalf("unexpected BlockedIssues call input type: %T", call.Input)
-					}
-					if c.Query.Limit != 0 {
-						sawBlockedNonZero = true
-					}
-				}
+			// AC: exactly 1 ReadyExplain and 2 Query calls.
+			if n := countCalls(subGateway, fakes.MethodReadyExplain); n != 1 {
+				t.Errorf("expected 1 ReadyExplain call, got %d", n)
 			}
-			if !sawReadyNonZero {
-				t.Fatalf("expected at least one ReadyIssues section-display call with non-zero Limit for height=%d", tc.height)
-			}
-			if !sawListNonZero {
-				t.Fatalf("expected at least one ListIssues section-display call with non-zero Limit for height=%d", tc.height)
-			}
-			if !sawBlockedNonZero {
-				t.Fatalf("expected at least one BlockedIssues section-display call with non-zero Limit for height=%d", tc.height)
+			if n := countCalls(subGateway, fakes.MethodQuery); n != 2 {
+				t.Errorf("expected 2 Query calls, got %d", n)
 			}
 
 			view := finalModel.View()
 			testui.AssertMatchesGoldenNormalized(t, []byte(view), tc.golden)
 			assertCompactIssueRows(t, view, tc.minMeta)
 		})
-	}
-}
-
-func TestBoardModeViewShowsProgressCounterDuringSectionLoads(t *testing.T) {
-	t.Parallel()
-
-	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, staticProvider{}, resolvedBoardKeys(t))
-
-	// Phase 1: before dashboards are known — m.loading=true, sections empty.
-	// Should show the generic loading message (no section count yet).
-	view := m.View()
-	if !strings.Contains(view, "Loading") {
-		t.Fatalf("expected generic loading message before dashboards are known, got %q", view)
-	}
-	if strings.Contains(view, "/ 0 sections") {
-		t.Fatalf("expected no section counter before dashboard definition arrives, got %q", view)
-	}
-
-	// Phase 2: dashboards loaded — sections allocated, pendingLoads=3, m.loading set false.
-	m.loading = false
-	m.sections = []sectionState{
-		{title: "A", loaded: false},
-		{title: "B", loaded: false},
-		{title: "C", loaded: false},
-	}
-	m.pendingLoads = 3
-
-	view = m.View()
-	if !strings.Contains(view, "0 / 3 sections") {
-		t.Fatalf("expected progress counter '0 / 3 sections' at load start, got %q", view)
-	}
-	if !strings.Contains(view, "⏳") {
-		t.Fatalf("expected loading indicator in progress counter, got %q", view)
-	}
-
-	// Phase 3: one section arrives.
-	m.pendingLoads = 2
-	m.sections[0] = sectionState{title: "A", loaded: true, issues: []domain.IssueSummary{{ID: "bw-1"}}}
-
-	view = m.View()
-	if !strings.Contains(view, "1 / 3 sections") {
-		t.Fatalf("expected progress counter '1 / 3 sections' after first section, got %q", view)
-	}
-
-	// Phase 4: second section arrives.
-	m.pendingLoads = 1
-	m.sections[1] = sectionState{title: "B", loaded: true, issues: []domain.IssueSummary{{ID: "bw-2"}}}
-
-	view = m.View()
-	if !strings.Contains(view, "2 / 3 sections") {
-		t.Fatalf("expected progress counter '2 / 3 sections' after second section, got %q", view)
-	}
-
-	// Phase 5: all sections loaded — counter disappears and board renders.
-	m.pendingLoads = 0
-	m.sections[2] = sectionState{title: "C", loaded: true, issues: []domain.IssueSummary{{ID: "bw-3"}}}
-
-	view = m.View()
-	if strings.Contains(view, "/ 3 sections") {
-		t.Fatalf("expected no loading counter once all sections are loaded, got %q", view)
-	}
-}
-
-func TestSectionItemCapacity(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		height int
-		want   int
-	}{
-		{height: 0, want: 20},  // safe default before first WindowSizeMsg
-		{height: 1, want: 1},   // clamp: 1-3 = -2, clamped to 1
-		{height: 3, want: 1},   // clamp: 3-3 = 0, clamped to 1
-		{height: 4, want: 1},   // 4-3 = 1
-		{height: 24, want: 21}, // 24-3 = 21
-		{height: 30, want: 27}, // 30-3 = 27
-		{height: 34, want: 31}, // 34-3 = 31
-	}
-
-	for _, tc := range tests {
-		m := &Model{height: tc.height}
-		got := m.sectionItemCapacity()
-		if got != tc.want {
-			t.Errorf("sectionItemCapacity() with height=%d: got %d, want %d", tc.height, got, tc.want)
-		}
 	}
 }
 

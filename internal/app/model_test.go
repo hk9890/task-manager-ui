@@ -31,9 +31,11 @@ func TestMain(m *testing.M) {
 
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 1}}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready:   []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}},
+		Blocked: []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 1}}},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -58,14 +60,11 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 		t.Fatalf("expected board selection from board controller, got %q", got)
 	}
 
-	if !gateway.HasCall(string(fakes.MethodReadyIssues)) {
-		t.Fatalf("expected ready issues query from built-in dashboard")
+	if !gateway.HasCall(string(fakes.MethodReadyExplain)) {
+		t.Fatalf("expected ReadyExplain call from board controller")
 	}
-	if !gateway.HasCall(string(fakes.MethodListIssues)) {
-		t.Fatalf("expected list issues query from built-in dashboard")
-	}
-	if !gateway.HasCall(string(fakes.MethodBlockedIssues)) {
-		t.Fatalf("expected blocked issues query from built-in dashboard")
+	if !gateway.HasCall(string(fakes.MethodQuery)) {
+		t.Fatalf("expected Query calls from board controller")
 	}
 
 	if m.renderBody() == "" {
@@ -75,9 +74,8 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 
 func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "startup detail"}
 
@@ -126,12 +124,11 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 
 func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{
 		{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2},
 		{ID: "bw-4", Title: "In progress two", Status: "in_progress", Priority: 1},
 	}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -152,14 +149,16 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving board column")
 	}
-	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}, Description: "detail for bw-2"}
+	// After moving right: InProgress column sorted by priority: [bw-4(P1), bw-2(P2)].
+	// First item selected is bw-4 (highest priority).
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-4", Title: "In progress two", Status: "in_progress", Priority: 1}, Description: "detail for bw-4"}
 	m = applyMessages(t, m, runBatch(cmd))
-	if got := firstSelectionID(m, mode.Board); got != "bw-2" {
-		t.Fatalf("expected board selection bw-2 after moving right, got %q", got)
+	if got := firstSelectionID(m, mode.Board); got != "bw-4" {
+		t.Fatalf("expected board selection bw-4 after moving right, got %q", got)
 	}
 
-	if m.detail.Detail.Summary.ID != "bw-2" {
-		t.Fatalf("expected shell detail state to load bw-2, got %q", m.detail.Detail.Summary.ID)
+	if m.detail.Detail.Summary.ID != "bw-4" {
+		t.Fatalf("expected shell detail state to load bw-4, got %q", m.detail.Detail.Summary.ID)
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -167,14 +166,14 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving board row")
 	}
-	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-4", Title: "In progress two", Status: "in_progress", Priority: 1}, Description: "detail for bw-4"}
+	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}, Description: "detail for bw-2"}
 	m = applyMessages(t, m, runBatch(cmd))
-	if got := firstSelectionID(m, mode.Board); got != "bw-4" {
-		t.Fatalf("expected board selection bw-4 after moving down, got %q", got)
+	if got := firstSelectionID(m, mode.Board); got != "bw-2" {
+		t.Fatalf("expected board selection bw-2 after moving down, got %q", got)
 	}
 
-	if m.detail.Detail.Summary.ID != "bw-4" {
-		t.Fatalf("expected shell detail state to update to bw-4, got %q", m.detail.Detail.Summary.ID)
+	if m.detail.Detail.Summary.ID != "bw-2" {
+		t.Fatalf("expected shell detail state to update to bw-2, got %q", m.detail.Detail.Summary.ID)
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -188,21 +187,20 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		t.Fatalf("expected active mode detail after board enter, got %s", m.active)
 	}
 	if cmd != nil {
-		gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-4", Title: "In progress two", Status: "in_progress", Priority: 1}, Description: "detail for bw-4"}
+		gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}, Description: "detail for bw-2"}
 		next, _ = m.Update(cmd())
 		m = next.(Model)
 	}
 
-	if m.detail.TargetID != "bw-4" {
+	if m.detail.TargetID != "bw-2" {
 		t.Fatalf("expected detail target to track board selection, got %q", m.detail.TargetID)
 	}
 }
 
 func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -241,9 +239,8 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 
 func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -292,9 +289,8 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 
 func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -328,9 +324,8 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 	withModelNow(t, time.Unix(0, 0))
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -350,7 +345,7 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+	if !gateway.HasCall(string(fakes.MethodReadyExplain)) || !gateway.HasCall(string(fakes.MethodQuery)) {
 		t.Fatalf("expected board refresh from tick fallback without focus events, calls=%#v", gateway.Calls)
 	}
 }
@@ -359,9 +354,8 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -376,7 +370,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	next, cmd := m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) {
 		t.Fatalf("expected initial focus event not to force refresh, calls=%#v", gateway.Calls)
 	}
 
@@ -388,7 +382,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	next, cmd = m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+	if !gateway.HasCall(string(fakes.MethodReadyExplain)) || !gateway.HasCall(string(fakes.MethodQuery)) {
 		t.Fatalf("expected focus regain to refresh active board, calls=%#v", gateway.Calls)
 	}
 
@@ -396,7 +390,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	next, cmd = m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) {
 		t.Fatalf("expected repeated focus while focused to avoid refresh spam, calls=%#v", gateway.Calls)
 	}
 }
@@ -405,9 +399,8 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
 
@@ -440,7 +433,7 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	if !gateway.HasCall(string(fakes.MethodShowIssue)) {
 		t.Fatalf("expected focus regain to refresh active detail immediately, calls=%#v", gateway.Calls)
 	}
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodSearchIssues)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) || gateway.HasCall(string(fakes.MethodQuery)) || gateway.HasCall(string(fakes.MethodSearchIssues)) {
 		t.Fatalf("expected focus regain in detail to refresh only active detail surface, calls=%#v", gateway.Calls)
 	}
 }
@@ -449,9 +442,8 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -479,7 +471,7 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
 		t.Fatalf("expected search surface refresh on tick when search is active, calls=%#v", gateway.Calls)
 	}
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodShowIssue)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) || gateway.HasCall(string(fakes.MethodShowIssue)) {
 		t.Fatalf("expected tick refresh to target only active search surface, calls=%#v", gateway.Calls)
 	}
 }
@@ -488,9 +480,11 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 0}}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready:   []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}},
+		Blocked: []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 0}}},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -530,9 +524,8 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}}}}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -576,9 +569,8 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -621,7 +613,7 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
 		t.Fatalf("expected focus regain in search to refresh immediately, calls=%#v", gateway.Calls)
 	}
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodShowIssue)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) || gateway.HasCall(string(fakes.MethodQuery)) || gateway.HasCall(string(fakes.MethodShowIssue)) {
 		t.Fatalf("expected search focus regain to refresh only active search surface, calls=%#v", gateway.Calls)
 	}
 	ui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
@@ -631,9 +623,8 @@ func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{
 		Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}}},
 		Metadata: domain.SearchResultMetadata{ReturnedCount: 7, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore},
@@ -678,9 +669,8 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}}}}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-9", Title: "Search result", Status: "open", Priority: 1}, Description: "cached detail"}
 
@@ -738,9 +728,8 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -791,9 +780,8 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
 
@@ -839,9 +827,8 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
 
@@ -858,7 +845,7 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+	if !gateway.HasCall(string(fakes.MethodReadyExplain)) || !gateway.HasCall(string(fakes.MethodQuery)) {
 		t.Fatalf("expected board to refresh immediately when active and dirty after write, calls=%#v", gateway.Calls)
 	}
 	if gateway.HasCall(string(fakes.MethodSearchIssues)) {
@@ -886,7 +873,7 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
 		t.Fatalf("expected dirty search to refresh on activation, calls=%#v", gateway.Calls)
 	}
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) || gateway.HasCall(string(fakes.MethodQuery)) {
 		t.Fatalf("expected only newly active search to refresh on activation, calls=%#v", gateway.Calls)
 	}
 	if state := m.refreshStateBySurface[mode.Search]; state.dirty {
@@ -899,9 +886,8 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	withModelNow(t, time.Unix(0, 0))
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -919,7 +905,7 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) || gateway.HasCall(string(fakes.MethodQuery)) {
 		t.Fatalf("expected no board refresh before stale interval elapses, calls=%#v", gateway.Calls)
 	}
 
@@ -929,7 +915,7 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gateway.HasCall(string(fakes.MethodReadyIssues)) || !gateway.HasCall(string(fakes.MethodListIssues)) {
+	if !gateway.HasCall(string(fakes.MethodReadyExplain)) || !gateway.HasCall(string(fakes.MethodQuery)) {
 		t.Fatalf("expected board refresh at ~60s stale threshold, calls=%#v", gateway.Calls)
 	}
 }
@@ -943,8 +929,8 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 	})
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -969,8 +955,8 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -1006,7 +992,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	if len(gateway.Calls) == 0 {
 		t.Fatalf("expected manual reload to remain functional when auto-refresh disabled")
 	}
-	if !gateway.HasCall(string(fakes.MethodReadyIssues)) {
+	if !gateway.HasCall(string(fakes.MethodReadyExplain)) {
 		t.Fatalf("expected manual reload to include board data refresh, calls=%#v", gateway.Calls)
 	}
 }
@@ -1015,9 +1001,8 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"}
 
@@ -1046,16 +1031,15 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 	if !gateway.HasCall(string(fakes.MethodShowIssue)) {
 		t.Fatalf("expected active detail to refresh when eligible, calls=%#v", gateway.Calls)
 	}
-	if gateway.HasCall(string(fakes.MethodReadyIssues)) || gateway.HasCall(string(fakes.MethodListIssues)) || gateway.HasCall(string(fakes.MethodSearchIssues)) {
+	if gateway.HasCall(string(fakes.MethodReadyExplain)) || gateway.HasCall(string(fakes.MethodQuery)) || gateway.HasCall(string(fakes.MethodSearchIssues)) {
 		t.Fatalf("expected no background refresh of inactive board/search surfaces, calls=%#v", gateway.Calls)
 	}
 }
 
 func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -1104,9 +1088,8 @@ func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
 
 func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	cfg := config.Default()
@@ -1127,9 +1110,8 @@ func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
 
 func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}, Description: "detail"}
 
@@ -1221,9 +1203,9 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}, Description: "detail"}
 
@@ -1259,9 +1241,9 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 
 func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Assignee: "hans", Labels: []string{"infra"}, Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Assignee: "hans", Labels: []string{"infra"}, Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
+
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	fakeLauncher := &fakes.FakeLauncher{}
@@ -1293,9 +1275,8 @@ func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 
 func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	fakeLauncher := &fakes.FakeLauncher{}
@@ -1333,8 +1314,8 @@ func TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}}
 	gateway.TypeCatalogResponse = []domain.TypeOption{{Name: "task"}, {Name: "bug"}}
@@ -1392,8 +1373,8 @@ func TestModelUpdateCloseAndCommentFlowsUseGatewayWrites(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}
 	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}}
@@ -1472,8 +1453,8 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	fakeLauncher := &fakes.FakeLauncher{}
@@ -1525,9 +1506,9 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	}
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
@@ -1579,8 +1560,8 @@ func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *t
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
@@ -1675,8 +1656,8 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssu
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
@@ -1754,8 +1735,8 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
@@ -1836,8 +1817,8 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
 	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}}
@@ -1895,8 +1876,8 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
 	gateway.StatusCatalogResponse = []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}}
@@ -1965,8 +1946,8 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 4},
@@ -2047,8 +2028,8 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "Other", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 3}}
 
@@ -2106,8 +2087,8 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	fakeLauncher := &fakes.FakeLauncher{}
@@ -2132,9 +2113,9 @@ func TestModelDetailModeRendersStandaloneDetailGolden(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
@@ -2163,9 +2144,11 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Status: "in_progress", Type: "task", Priority: 1}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "beads-workbench-yze.4.5", Title: "Add editor and launcher integration tests", Status: "blocked", Type: "task", Priority: 1}}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready:   []domain.IssueSummary{{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Status: "open", Type: "task", Priority: 1}},
+		Blocked: []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "beads-workbench-yze.4.5", Title: "Add editor and launcher integration tests", Status: "blocked", Type: "task", Priority: 1}}},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Status: "in_progress", Type: "task", Priority: 1}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary: domain.IssueSummary{
@@ -2210,9 +2193,11 @@ func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T)
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Type: "bug", Priority: 0}}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready:   []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}},
+		Blocked: []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Type: "bug", Priority: 0}}},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
@@ -2243,8 +2228,8 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
@@ -2308,8 +2293,8 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
@@ -2751,9 +2736,11 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress one", Status: "in_progress", Type: "task", Priority: 1}}
-	gateway.BlockedIssuesResponse = []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked now", Status: "blocked", Type: "bug", Priority: 0}}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready:   []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}},
+		Blocked: []domain.BlockedIssueView{{Issue: domain.IssueSummary{ID: "bw-3", Title: "Blocked now", Status: "blocked", Type: "bug", Priority: 0}}},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress one", Status: "in_progress", Type: "task", Priority: 1}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 	gateway.ShowIssueResponse = domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
@@ -2831,8 +2818,8 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyIssuesResponse = []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}
-	gateway.ListIssuesResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}}
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}}}
+	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}}
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-2", Title: "In progress one", Status: "in_progress", Priority: 2}}}}
 	services, err := NewServices(gateway, config.Default(), t.TempDir())
 	if err != nil {

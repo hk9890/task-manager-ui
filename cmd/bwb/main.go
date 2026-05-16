@@ -42,6 +42,9 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize services: %w", err)
 	}
+	if opts.logManager != nil {
+		services.Logger = opts.logManager.Component("dashboard")
+	}
 
 	model := app.NewModelWithOptions(services, app.RuntimeOptions{DisableAutoRefresh: !opts.autoRefresh})
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())

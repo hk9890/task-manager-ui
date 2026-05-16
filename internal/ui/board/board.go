@@ -27,8 +27,11 @@ type Column struct {
 	Rows         []domain.IssueSummary
 	SelectedRow  int
 	Error        string
-	TotalCount   int
-	CountLoaded  bool
+	// Total is the number of issues in this column as reported by the gateway.
+	// TotalIsExact is false when the backend may have more issues than were returned
+	// (e.g. the Done column was capped), in which case the renderer shows "N+".
+	Total        int
+	TotalIsExact bool
 }
 
 // State is the full board renderer input.
@@ -73,10 +76,11 @@ func Render(state State) string {
 		}
 
 		rows := renderColumnRows(col, innerWidth)
-		topRight := ""
-		if col.CountLoaded {
-			topRight = fmt.Sprintf("%d", col.TotalCount)
+		plus := ""
+		if !col.TotalIsExact {
+			plus = "+"
 		}
+		topRight := fmt.Sprintf("%d%s", col.Total, plus)
 		renderedCols = append(renderedCols, styles.FormSection(styles.FormSectionConfig{
 			Width:              columnWidths[idx],
 			Height:             columnHeight,
