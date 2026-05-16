@@ -61,11 +61,13 @@ func New(opts Options) *Manager {
 	handlers := []slog.Handler{stderrHandler}
 
 	logPath, fileSink, err := buildPersistentSink(opts)
+	var closer io.Closer
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "bwb logging warning: persistent log unavailable; continuing with stderr-only logging: %v\n", err)
 	} else {
 		safe := newFailsafeSink(fileSink, stderr)
 		handlers = append(handlers, newJSONFileHandler(safe, opts.Debug))
+		closer = fileSink
 	}
 
 	root := slog.New(newTeeHandler(handlers...)).With(
@@ -81,7 +83,7 @@ func New(opts Options) *Manager {
 		root:      root,
 		sessionID: sessionID,
 		logPath:   logPath,
-		closer:    fileSink,
+		closer:    closer,
 	}
 }
 

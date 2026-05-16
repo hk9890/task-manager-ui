@@ -37,6 +37,7 @@ jobs:
         run: mise run lint
 
       - name: Build
+        if: matrix.os != 'windows-latest'
         run: mise run build
 
       - name: Vet

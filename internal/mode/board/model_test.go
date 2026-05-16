@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
@@ -735,6 +737,138 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 			assertCompactIssueRows(t, view, tc.minMeta)
 		})
 	}
+}
+
+// --- Real Gateway + RecordingExecutor subprocess-argv scenario ---
+
+// TestBoardInitRealGatewaySubprocessArgvCardinality wires the board model against
+// a real *beads.Gateway + *beads.CommandRunner backed by a *fakes.RecordingExecutor
+// (no FakeBeadsGateway). It asserts:
+//   - Exactly 3 subprocess invocations occur on Init (ReadyExplain + 2 Query).
+//   - Each invocation's argv matches the expected shape.
+//   - No "count" or "list --status" argv ever appears (regression guard against
+//     the pre-lgln per-section data layer).
+//
+// NOTE: The board model does NOT call bd ping --json during its own Init; that
+// health-check subprocess is dispatched at the app.Model layer. The board's Init
+// produces exactly 3 subprocess calls, not 4. See internal/app/model.go for the
+// HealthCheck dispatch context.
+func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
+	t.Parallel()
+
+	// Expected argv shapes for the 3 subprocess invocations the board fires.
+	// Closed query uses the default height=0 closedLimit() = 50.
+	argvReadyExplain := []string{"ready", "--explain", "--json"}
+	argvQueryInProgress := []string{"query", "status=in_progress", "--json"}
+	argvQueryClosed := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--reverse", "--limit", "50"}
+
+	rec := fakes.NewRecordingExecutor()
+
+	// Pre-register canned responses so the gateway parse path succeeds.
+	rec.OnArgs(argvReadyExplain).Return(beads.ExecResult{Stdout: []byte(`{
+		"ready": [
+			{"id":"bw-r1","title":"Ready one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+		],
+		"blocked": [],
+		"summary": {"total_ready": 1, "total_blocked": 0, "cycle_count": 0}
+	}`)}, nil)
+
+	rec.OnArgs(argvQueryInProgress).Return(beads.ExecResult{Stdout: []byte(`[
+		{"id":"bw-p1","title":"In progress one","status":"in_progress","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+	]`)}, nil)
+
+	rec.OnArgs(argvQueryClosed).Return(beads.ExecResult{Stdout: []byte(`[
+		{"id":"bw-c1","title":"Closed one","status":"closed","issue_type":"task","priority":1,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
+	]`)}, nil)
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		Command:  "bd",
+		Executor: rec,
+	})
+	gateway := beads.NewCLIGateway(runner)
+
+	m := NewModel(gateway, slog.Default(), resolvedBoardKeys(t))
+
+	// Drive Init: board.Init() returns a tea.Batch wrapping 3 commands.
+	initCmd := m.Init()
+	if initCmd == nil {
+		t.Fatalf("Init() must return a non-nil command")
+	}
+
+	// Execute the outer command to unwrap the tea.BatchMsg.
+	batchMsg := initCmd()
+	batch, ok := batchMsg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("Init() must produce a tea.BatchMsg; got %T", batchMsg)
+	}
+	if len(batch) != 3 {
+		t.Fatalf("expected exactly 3 commands in Init batch, got %d", len(batch))
+	}
+
+	// Run each command to drive the subprocess calls through the real gateway.
+	for _, cmd := range batch {
+		if cmd != nil {
+			_ = cmd()
+		}
+	}
+
+	calls := rec.Calls()
+
+	// AC: exactly 3 subprocess invocations (not 4; bd ping is dispatched at app level).
+	if len(calls) != 3 {
+		t.Fatalf("expected exactly 3 subprocess invocations on board Init, got %d: %v",
+			len(calls), formatArgvList(calls))
+	}
+
+	// AC: argv for each matches the expected shape. The 3 calls run in a tea.Batch
+	// so order is not guaranteed; match by content.
+	assertArgvPresent(t, calls, argvReadyExplain)
+	assertArgvPresent(t, calls, argvQueryInProgress)
+	assertArgvPresent(t, calls, argvQueryClosed)
+
+	// AC: regression guard — no "count" or "list --status" argv (old data layer).
+	for _, c := range calls {
+		for _, arg := range c.Args {
+			if arg == "count" {
+				t.Errorf("forbidden argv token 'count' observed in call %v (old data layer regression)", c.Args)
+			}
+		}
+		// Detect "list" followed by a "--status" flag anywhere in the same call.
+		if hasArg(c.Args, "list") && hasArg(c.Args, "--status") {
+			t.Errorf("forbidden 'list --status' pattern observed in call %v (old data layer regression)", c.Args)
+		}
+	}
+}
+
+// assertArgvPresent fails the test if none of the recorded calls has args
+// that exactly match want.
+func assertArgvPresent(t *testing.T, calls []fakes.RecordedCall, want []string) {
+	t.Helper()
+	for _, c := range calls {
+		if reflect.DeepEqual(c.Args, want) {
+			return
+		}
+	}
+	t.Errorf("expected subprocess call with argv %v; got calls: %v", want, formatArgvList(calls))
+}
+
+// hasArg reports whether args contains the given token.
+func hasArg(args []string, token string) bool {
+	for _, a := range args {
+		if a == token {
+			return true
+		}
+	}
+	return false
+}
+
+// formatArgvList returns a readable list of all recorded argv slices.
+func formatArgvList(calls []fakes.RecordedCall) [][]string {
+	out := make([][]string, len(calls))
+	for i, c := range calls {
+		out[i] = c.Args
+	}
+	return out
 }
 
 func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {

@@ -255,6 +255,42 @@ func TestFallbackWhenStateDirUnavailableWarnsOnceAndUsesStderrOnly(t *testing.T)
 	}
 }
 
+// TestManagerCloseDoesNotPanicWhenPersistentSinkUnavailable is a regression
+// test for the typed-nil interface bug: when buildPersistentSink fails, a
+// previous version of New assigned the (*lumberjack.Logger)(nil) return value
+// directly to the io.Closer interface field. The interface was non-nil (it had
+// a type but a nil pointer value), so the nil guard in Close was bypassed and
+// lumberjack.Logger.Close panicked with a nil dereference.
+//
+// This test must FAIL on the pre-fix code (closer == typed nil interface) and
+// PASS after the fix (closer == nil interface when sink construction fails).
+func TestManagerCloseDoesNotPanicWhenPersistentSinkUnavailable(t *testing.T) {
+	t.Parallel()
+
+	// Use a plain file path as the state dir so MkdirAll fails — simulating an
+	// environment where the log state directory cannot be created (e.g. HOME=/root
+	// with no write permission).
+	notDirectory := filepath.Join(t.TempDir(), "state-file")
+	if err := os.WriteFile(notDirectory, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	m := New(Options{StateDir: notDirectory, Stderr: &stderr})
+
+	// Close must not panic. On the buggy code this triggers a nil-dereference
+	// inside lumberjack.Logger.Close via the non-nil typed-nil interface value.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Manager.Close panicked when persistent sink unavailable: %v", r)
+		}
+	}()
+
+	if err := m.Close(); err != nil {
+		t.Fatalf("expected nil error from Close in fallback mode, got: %v", err)
+	}
+}
+
 func TestGenerateSessionIDReturnsHexOnSuccess(t *testing.T) {
 	t.Parallel()
 

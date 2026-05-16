@@ -1,5 +1,8 @@
 [tools]
 go = "1.26.3"
+"go:gotest.tools/gotestsum" = "1.13.0"
+"go:golang.org/x/tools/cmd/goimports" = "0.30.0"
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.1.6"
 
 [env]
 CGO_ENABLED = "0"
@@ -27,7 +30,7 @@ run = "go vet ./..."
 
 [tasks.lint]
 description = "Run golangci-lint at pinned version"
-run = "go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(cat .golangci-version) run --timeout=5m"
+run = "golangci-lint run --timeout=5m"
 
 [tasks.guardrails]
 description = "Architecture guardrails (fast)"
@@ -35,13 +38,13 @@ run = "go test ./cmd/bwb -run TestArchitectureGuardrails"
 
 [tasks.test]
 description = "Unit tests (fast, no external deps)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- -race ./..."
+run = "gotestsum --format pkgname-and-test-fails -- -race ./..."
 [tasks.test.env]
 CGO_ENABLED = "1"
 
 [tasks."test:integration"]
 description = "Integration tests (real bd binary, embedded fixture)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format pkgname-and-test-fails -- -race -tags=integration ./..."
+run = "gotestsum --format pkgname-and-test-fails -- -race -tags=integration ./..."
 [tasks."test:integration".env]
 CGO_ENABLED = "1"
 
@@ -65,13 +68,13 @@ depends = ["test", "test:integration"]
 
 [tasks."test:verbose"]
 description = "Unit tests with full per-test output (for debugging a hang or noisy failure)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- -race ./..."
+run = "gotestsum --format standard-verbose -- -race ./..."
 [tasks."test:verbose".env]
 CGO_ENABLED = "1"
 
 [tasks."test:integration:verbose"]
 description = "Integration tests with full per-test output (=== RUN / --- PASS for every test)"
-run = "go run gotest.tools/gotestsum@$(cat .gotestsum-version) --format standard-verbose -- -race -tags=integration ./..."
+run = "gotestsum --format standard-verbose -- -race -tags=integration ./..."
 [tasks."test:integration:verbose".env]
 CGO_ENABLED = "1"
 
@@ -94,11 +97,11 @@ depends = ["vet", "lint", "guardrails", "test", "test:integration"]
 [tasks."fmt:check"]
 description = "Check formatting (goimports + go mod tidy)"
 run = """
-OUT=$(go run golang.org/x/tools/cmd/goimports@$(cat .goimports-version) -local github.com/hk9890/beads-workbench -l cmd internal)
+OUT=$(goimports -local github.com/hk9890/beads-workbench -l cmd internal)
 if [ -n "$OUT" ]; then
   echo "Files not formatted:"
   echo "$OUT"
-  echo "Run: go run golang.org/x/tools/cmd/goimports@$(cat .goimports-version) -local github.com/hk9890/beads-workbench -w cmd internal"
+  echo "Run: goimports -local github.com/hk9890/beads-workbench -w cmd internal"
   exit 1
 fi
 go mod tidy

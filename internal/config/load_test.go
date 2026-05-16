@@ -19,7 +19,7 @@ func TestLoad_MissingConfigUsesDefaults(t *testing.T) {
 		t.Fatalf("Load returned error: %v", err)
 	}
 
-	expectedPath := filepath.Join(configHome, configRelativePath)
+	expectedPath := filepath.Join(testUserConfigDir(t), configRelativePath)
 	if result.Path != expectedPath {
 		t.Fatalf("expected config path %q, got %q", expectedPath, result.Path)
 	}
@@ -203,7 +203,7 @@ func TestLoad_DirectoryAtConfigPathReturnsError(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	path := filepath.Join(configHome, configRelativePath)
+	path := filepath.Join(testUserConfigDir(t), configRelativePath)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatalf("MkdirAll returned error: %v", err)
 	}
@@ -518,10 +518,30 @@ launcher:
 	}
 }
 
-func writeConfig(t *testing.T, configHome, body string) string {
+// testUserConfigDir returns the OS-resolved user config directory given the
+// HOME (and XDG_CONFIG_HOME on Linux) already set via t.Setenv. On Darwin,
+// os.UserConfigDir returns $HOME/Library/Application Support regardless of
+// XDG_CONFIG_HOME; on Linux it returns $XDG_CONFIG_HOME when set. Calling
+// os.UserConfigDir here (after t.Setenv has updated the process env) gives us
+// the same base path that load.go will use, making the tests portable across
+// platforms without requiring platform-conditional logic in test bodies.
+func testUserConfigDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatalf("os.UserConfigDir returned error: %v", err)
+	}
+	return dir
+}
+
+// writeConfig writes body to the platform-resolved config path
+// (<os.UserConfigDir>/bwb/config.yaml) so that Load() finds it regardless of
+// platform (Linux XDG vs macOS Library/Application Support). HOME and
+// XDG_CONFIG_HOME must already be set via t.Setenv before calling this helper.
+func writeConfig(t *testing.T, _ string, body string) string {
 	t.Helper()
 
-	path := filepath.Join(configHome, configRelativePath)
+	path := filepath.Join(testUserConfigDir(t), configRelativePath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll returned error: %v", err)
 	}
