@@ -44,6 +44,12 @@ type closedLoadedMsg struct {
 	err    error
 }
 
+// closedCountLoadedMsg carries the result of a CountIssues(status=closed) gateway call.
+type closedCountLoadedMsg struct {
+	count int
+	err   error
+}
+
 // columnData holds the loaded data for one board column after composition.
 type columnData struct {
 	title   string
@@ -78,16 +84,18 @@ type Model struct {
 	// columns holds the four fixed board columns after composition.
 	columns []columnData
 
-	// pendingResults counts how many of the 3 parallel gateway calls are outstanding.
+	// pendingResults counts how many of the 4 parallel gateway calls are outstanding.
 	pendingResults int
-	// partialReady / partialInProgress / partialClosed hold in-flight results
-	// until all 3 arrive and composition can run.
+	// partialReady / partialInProgress / partialClosed / partialClosedCount hold
+	// in-flight results until all 4 arrive and composition can run.
 	partialReadyExplain    *domain.ReadyExplainResult
 	partialReadyExplainErr error
 	partialInProgress      []domain.IssueSummary
 	partialInProgressErr   error
 	partialClosed          []domain.IssueSummary
 	partialClosedErr       error
+	partialClosedCount     int
+	partialClosedCountErr  error
 
 	focusedColumn int
 	selectedRow   map[int]int
@@ -167,6 +175,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.partialClosedErr = msg.err
 		if msg.err == nil {
 			m.partialClosed = msg.issues
+		}
+		m.pendingResults--
+		return m.maybeCompose()
+
+	case closedCountLoadedMsg:
+		m.partialClosedCountErr = msg.err
+		if msg.err == nil {
+			m.partialClosedCount = msg.count
 		}
 		m.pendingResults--
 		return m.maybeCompose()
@@ -327,13 +343,15 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		m.columns[i].err = nil
 	}
 
-	m.pendingResults = 3
+	m.pendingResults = 4
 	m.partialReadyExplain = nil
 	m.partialReadyExplainErr = nil
 	m.partialInProgress = nil
 	m.partialInProgressErr = nil
 	m.partialClosed = nil
 	m.partialClosedErr = nil
+	m.partialClosedCount = 0
+	m.partialClosedCountErr = nil
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
@@ -349,6 +367,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		loadReadyExplainCmd(m.gateway),
 		loadInProgressCmd(m.gateway),
 		loadClosedCmd(m.gateway, cl),
+		loadClosedCountCmd(m.gateway),
 	)
 }
 
@@ -371,6 +390,7 @@ func (m *Model) maybeCompose() tea.Cmd {
 		InProgress:  m.partialInProgress,
 		Closed:      m.partialClosed,
 		ClosedLimit: m.closedLimit(),
+		ClosedTotal: m.partialClosedCount,
 	})
 
 	// Emit warnings to slog.
@@ -609,5 +629,19 @@ func loadClosedCmd(gateway beads.BeadsGateway, limit int) tea.Cmd {
 			Limit:         limit,
 		})
 		return closedLoadedMsg{issues: issues, err: err}
+	}
+}
+
+// loadClosedCountCmd fires the CountIssues(status=closed) gateway call to get
+// the real DB population count of closed issues, independent of any display cap.
+func loadClosedCountCmd(gateway beads.BeadsGateway) tea.Cmd {
+	return func() tea.Msg {
+		result, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{
+			Statuses: []string{"closed"},
+		})
+		if err != nil {
+			return closedCountLoadedMsg{err: err}
+		}
+		return closedCountLoadedMsg{count: result.Total}
 	}
 }

@@ -52,25 +52,40 @@ Run from the repository root.
 
 3. Verify the release commit has a successful `CI` workflow run (release provenance checkpoint).
 
-4. Create an annotated tag on the release commit:
+4. **Smoke check** — run the data-consistency smoke suite from the repo root:
+
+   ```bash
+   mise run smoke
+   ```
+
+   - If exit code is non-zero (any check shows `FAIL`), **do NOT tag** — fix the failure first.
+   - Optional: validate against a second real DB to catch environment-specific issues (substitute any path that contains a `.beads/` directory):
+
+     ```bash
+     BWB_SMOKE_DIR=/path/to/external/repo mise run smoke
+     ```
+
+   See [`docs/RUNTIME_UI_VERIFICATION.md` — Pre-release data-consistency checks](./RUNTIME_UI_VERIFICATION.md#pre-release-data-consistency-checks) for a full explanation of what each check covers and which failures are release-blocking vs advisory.
+
+5. Create an annotated tag on the release commit:
 
    ```bash
    git tag -a vX.Y.Z -m "bwb vX.Y.Z"
    ```
 
-5. Push the tag to origin to trigger the automated release workflow:
+6. Push the tag to origin to trigger the automated release workflow:
 
    ```bash
    git push origin vX.Y.Z
    ```
 
-6. Watch the `Release` workflow complete successfully. It will:
+7. Watch the `Release` workflow complete successfully. It will:
 
    - build `bwb` archives for supported platforms
    - create or update the GitHub release for the tag
    - upload release assets and checksums
 
-7. Post-release verification:
+8. Post-release verification:
 
    ```bash
    gh release view vX.Y.Z

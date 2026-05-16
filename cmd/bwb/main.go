@@ -50,6 +50,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize app model: %w", err)
 	}
+
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("bwb failed: %w", err)
@@ -169,16 +170,31 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		return 0
 	}
 
-	if err := start(configResult.Config, startupOptions{
+	// Suppress stderr writes for the duration of the interactive session.
+	// tea.NewProgram (called inside start) owns the alt-screen TTY; any slog
+	// write to os.Stderr during this window corrupts the rendered frame.
+	// All log records still reach the persistent JSON file.
+	// Suppression is lifted after start() returns so post-exit error messages
+	// reach the terminal normally.
+	// Note: --debug does NOT re-enable stderr during interactive mode; debug
+	// output belongs in the file only. Users can tail -f the persistent log.
+	if logManager != nil {
+		logManager.SetStderrSuppressed(true)
+	}
+	startErr := start(configResult.Config, startupOptions{
 		projectRoot: resolvedCWD,
 		debug:       opts.debug,
 		autoRefresh: autoRefresh,
 		logManager:  logManager,
-	}); err != nil {
+	})
+	if logManager != nil {
+		logManager.SetStderrSuppressed(false)
+	}
+	if startErr != nil {
 		if startupLogger != nil {
-			startupLogger.Error("interactive startup failed", "error", err.Error())
+			startupLogger.Error("interactive startup failed", "error", startErr.Error())
 		} else {
-			_, _ = fmt.Fprintln(stderr, err.Error())
+			_, _ = fmt.Fprintln(stderr, startErr.Error())
 		}
 		return 1
 	}

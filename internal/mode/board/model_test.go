@@ -67,7 +67,7 @@ func queryCallsFor(gateway *fakes.FakeBeadsGateway, expr string) []fakes.QueryCa
 	return out
 }
 
-// --- AC: exactly 3 gateway calls dispatched in a single batch ---
+// --- AC: exactly 4 gateway calls dispatched in a single batch ---
 
 func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
 	t.Parallel()
@@ -88,8 +88,8 @@ func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
 	if !ok {
 		t.Fatalf("Init() must return a tea.Batch; got %T", msg)
 	}
-	if len(batch) != 3 {
-		t.Fatalf("expected exactly 3 commands in the batch, got %d", len(batch))
+	if len(batch) != 4 {
+		t.Fatalf("expected exactly 4 commands in the batch, got %d", len(batch))
 	}
 
 	// Execute each command in the batch to drive the gateway calls.
@@ -104,6 +104,9 @@ func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
 	}
 	if n := countCalls(gateway, fakes.MethodQuery); n != 2 {
 		t.Errorf("expected 2 Query calls (in_progress + closed), got %d", n)
+	}
+	if n := countCalls(gateway, fakes.MethodCountIssues); n != 1 {
+		t.Errorf("expected 1 CountIssues call (closed count), got %d", n)
 	}
 	inProgressCalls := queryCallsFor(gateway, "status=in_progress")
 	if len(inProgressCalls) != 1 {
@@ -124,6 +127,19 @@ func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
 			t.Errorf("Query(status=closed) must sort descending, got %q", closedCalls[0].Opts.SortOrder)
 		}
 	}
+	// Verify the CountIssues call uses status=closed.
+	for _, c := range gateway.Calls {
+		if c.Method == fakes.MethodCountIssues {
+			cc, ok := c.Input.(fakes.CountIssuesCall)
+			if !ok {
+				t.Errorf("CountIssues call input is not CountIssuesCall: %T", c.Input)
+				continue
+			}
+			if len(cc.Query.Statuses) != 1 || cc.Query.Statuses[0] != "closed" {
+				t.Errorf("CountIssues must filter status=closed, got statuses=%v", cc.Query.Statuses)
+			}
+		}
+	}
 }
 
 // --- AC: all-empty load ---
@@ -135,17 +151,18 @@ func TestBoardModeAllEmptyLoad(t *testing.T) {
 	// No responses set: all return empty slices.
 
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 3
+	m.pendingResults = 4
 	// Use a wide enough terminal so all 4 columns are visible.
 	m.SetSize(200, 30)
 
-	// Feed all 3 results.
+	// Feed all 4 results.
 	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
 	_ = m.Update(inProgressLoadedMsg{issues: nil})
 	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 3 results arrived")
+		t.Fatal("expected IsLoading()=false after all 4 results arrived")
 	}
 	for _, col := range m.columns {
 		if col.err != nil {
@@ -222,17 +239,18 @@ func TestBoardModeReadyExplainErrorPath(t *testing.T) {
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
 	m.SetSize(200, 30)
-	m.pendingResults = 3
+	m.pendingResults = 4
 
 	loadErr := errors.New("network timeout")
-	// Only the ReadyExplain result arrives with an error; feed the other two as
+	// Only the ReadyExplain result arrives with an error; feed the other three as
 	// success so maybeCompose runs and routes the error to the correct columns.
 	_ = m.Update(readyExplainLoadedMsg{err: loadErr})
 	_ = m.Update(inProgressLoadedMsg{issues: nil})
 	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 3 results arrived")
+		t.Fatal("expected IsLoading()=false after all 4 results arrived")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
@@ -266,15 +284,16 @@ func TestBoardModeQueryInProgressErrorPath(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 3
+	m.pendingResults = 4
 
 	loadErr := errors.New("bd unavailable")
 	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
 	_ = m.Update(inProgressLoadedMsg{err: loadErr})
 	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 3 results arrived")
+		t.Fatal("expected IsLoading()=false after all 4 results arrived")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
@@ -298,12 +317,13 @@ func TestBoardModeQueryClosedErrorPath(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 3
+	m.pendingResults = 4
 
 	loadErr := errors.New("bd query failed")
 	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
 	_ = m.Update(inProgressLoadedMsg{issues: nil})
 	_ = m.Update(closedLoadedMsg{err: loadErr})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	if m.IsLoading() {
 		t.Fatal("expected IsLoading()=false after all 3 results arrived")
@@ -453,10 +473,11 @@ func populatedModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBind
 }
 
 func feedAllResults(m *Model, readyExplain domain.ReadyExplainResult, inProgress []domain.IssueSummary, closed []domain.IssueSummary) {
-	m.pendingResults = 3
+	m.pendingResults = 4
 	_ = m.Update(readyExplainLoadedMsg{result: readyExplain})
 	_ = m.Update(inProgressLoadedMsg{issues: inProgress})
 	_ = m.Update(closedLoadedMsg{issues: closed})
+	_ = m.Update(closedCountLoadedMsg{count: len(closed)})
 }
 
 func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testing.T) {
@@ -591,9 +612,9 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 	}
 
 	// Phase 2: only 1 result arrives — still loading (all columns).
-	m.pendingResults = 3
+	m.pendingResults = 4
 	m.partialReadyExplain = &domain.ReadyExplainResult{}
-	m.pendingResults = 2
+	m.pendingResults = 3
 
 	if !m.IsLoading() {
 		t.Fatal("expected IsLoading()=true while 2 results still pending")
@@ -651,16 +672,17 @@ func TestBoardModeAtomicSwapAllColumnsAfterAllResults(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 3
+	m.pendingResults = 4
 
 	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{
 		Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one", Status: "open", Type: "task", Priority: 1}},
 	}})
 	_ = m.Update(inProgressLoadedMsg{issues: []domain.IssueSummary{{ID: "bw-2", Title: "IP one", Status: "in_progress", Type: "task", Priority: 1}}})
 	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 3 results arrived")
+		t.Fatal("expected IsLoading()=false after all 4 results arrived")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
@@ -679,12 +701,13 @@ func TestBoardModePartialErrorOnlyAffectsCorrectColumns(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 3
+	m.pendingResults = 4
 
-	// in_progress call fails; the other two succeed.
+	// in_progress call fails; the other three succeed.
 	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
 	_ = m.Update(inProgressLoadedMsg{err: errors.New("in_progress error")})
 	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	if m.IsLoading() {
 		t.Fatal("expected IsLoading()=false after all 3 results")
@@ -840,12 +863,13 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := NewModel(gateway, logger, resolvedBoardKeys(t))
-	m.pendingResults = 3
+	m.pendingResults = 4
 
-	// Feed all 3 results. No warnings expected from empty inputs.
+	// Feed all 4 results. No warnings expected from empty inputs.
 	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
 	_ = m.Update(inProgressLoadedMsg{issues: nil})
 	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
 
 	// With empty inputs no cardinality warning is expected.
 	if len(capturedMessages) != 0 {
@@ -929,12 +953,15 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 				t.Fatalf("expected wrapped board model, got %T", final.Controller)
 			}
 
-			// AC: exactly 1 ReadyExplain and 2 Query calls.
+			// AC: exactly 1 ReadyExplain, 2 Query calls, and 1 CountIssues call.
 			if n := countCalls(subGateway, fakes.MethodReadyExplain); n != 1 {
 				t.Errorf("expected 1 ReadyExplain call, got %d", n)
 			}
 			if n := countCalls(subGateway, fakes.MethodQuery); n != 2 {
 				t.Errorf("expected 2 Query calls, got %d", n)
+			}
+			if n := countCalls(subGateway, fakes.MethodCountIssues); n != 1 {
+				t.Errorf("expected 1 CountIssues call, got %d", n)
 			}
 
 			view := finalModel.View()
@@ -949,23 +976,24 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 // TestBoardInitRealGatewaySubprocessArgvCardinality wires the board model against
 // a real *beads.Gateway + *beads.CommandRunner backed by a *fakes.RecordingExecutor
 // (no FakeBeadsGateway). It asserts:
-//   - Exactly 3 subprocess invocations occur on Init (ReadyExplain + 2 Query).
+//   - Exactly 4 subprocess invocations occur on Init (ReadyExplain + 2 Query + 1 Count).
 //   - Each invocation's argv matches the expected shape.
-//   - No "count" or "list --status" argv ever appears (regression guard against
-//     the pre-lgln per-section data layer).
+//   - No "list --status" argv ever appears (regression guard against the pre-lgln
+//     per-section data layer).
 //
 // NOTE: The board model does NOT call bd ping --json during its own Init; that
 // health-check subprocess is dispatched at the app.Model layer. The board's Init
-// produces exactly 3 subprocess calls, not 4. See internal/app/model.go for the
+// produces exactly 4 subprocess calls. See internal/app/model.go for the
 // HealthCheck dispatch context.
 func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 	t.Parallel()
 
-	// Expected argv shapes for the 3 subprocess invocations the board fires.
+	// Expected argv shapes for the 4 subprocess invocations the board fires.
 	// Closed query uses the default height=0 closedLimit() = 50.
 	argvReadyExplain := []string{"ready", "--explain", "--json"}
 	argvQueryInProgress := []string{"query", "status=in_progress", "--json"}
-	argvQueryClosed := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--reverse", "--limit", "50"}
+	argvQueryClosed := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"}
+	argvCountClosed := []string{"count", "--by-status", "--json", "--status", "closed"}
 
 	rec := fakes.NewRecordingExecutor()
 
@@ -986,6 +1014,12 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 		{"id":"bw-c1","title":"Closed one","status":"closed","issue_type":"task","priority":1,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 	]`)}, nil)
 
+	rec.OnArgs(argvCountClosed).Return(beads.ExecResult{Stdout: []byte(`{
+		"groups": [{"group": "closed", "count": 452}],
+		"total": 452,
+		"schema_version": 1
+	}`)}, nil)
+
 	runner := beads.NewCommandRunner(beads.RunnerConfig{
 		Command:  "bd",
 		Executor: rec,
@@ -994,7 +1028,7 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 
 	m := NewModel(gateway, slog.Default(), resolvedBoardKeys(t))
 
-	// Drive Init: board.Init() returns a tea.Batch wrapping 3 commands.
+	// Drive Init: board.Init() returns a tea.Batch wrapping 4 commands.
 	initCmd := m.Init()
 	if initCmd == nil {
 		t.Fatalf("Init() must return a non-nil command")
@@ -1006,8 +1040,8 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 	if !ok {
 		t.Fatalf("Init() must produce a tea.BatchMsg; got %T", batchMsg)
 	}
-	if len(batch) != 3 {
-		t.Fatalf("expected exactly 3 commands in Init batch, got %d", len(batch))
+	if len(batch) != 4 {
+		t.Fatalf("expected exactly 4 commands in Init batch, got %d", len(batch))
 	}
 
 	// Run each command to drive the subprocess calls through the real gateway.
@@ -1019,25 +1053,21 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 
 	calls := rec.Calls()
 
-	// AC: exactly 3 subprocess invocations (not 4; bd ping is dispatched at app level).
-	if len(calls) != 3 {
-		t.Fatalf("expected exactly 3 subprocess invocations on board Init, got %d: %v",
+	// AC: exactly 4 subprocess invocations (bd ping is dispatched at app level, not here).
+	if len(calls) != 4 {
+		t.Fatalf("expected exactly 4 subprocess invocations on board Init, got %d: %v",
 			len(calls), formatArgvList(calls))
 	}
 
-	// AC: argv for each matches the expected shape. The 3 calls run in a tea.Batch
+	// AC: argv for each matches the expected shape. The 4 calls run in a tea.Batch
 	// so order is not guaranteed; match by content.
 	assertArgvPresent(t, calls, argvReadyExplain)
 	assertArgvPresent(t, calls, argvQueryInProgress)
 	assertArgvPresent(t, calls, argvQueryClosed)
+	assertArgvPresent(t, calls, argvCountClosed)
 
-	// AC: regression guard — no "count" or "list --status" argv (old data layer).
+	// AC: regression guard — no "list --status" argv (old data layer).
 	for _, c := range calls {
-		for _, arg := range c.Args {
-			if arg == "count" {
-				t.Errorf("forbidden argv token 'count' observed in call %v (old data layer regression)", c.Args)
-			}
-		}
 		// Detect "list" followed by a "--status" flag anywhere in the same call.
 		if hasArg(c.Args, "list") && hasArg(c.Args, "--status") {
 			t.Errorf("forbidden 'list --status' pattern observed in call %v (old data layer regression)", c.Args)

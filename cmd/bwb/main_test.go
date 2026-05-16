@@ -217,3 +217,106 @@ func TestRunCWDExecuteOnlyExitsWithCode1(t *testing.T) {
 // --- runWithLogger plumbing (no-op newLogger stub) ---
 
 func noopLogger(logging.Options) *logging.Manager { return nil }
+
+// --- stderr suppression around interactive runtime ---
+
+// TestStartInteractiveSuppressesStderrDuringRun verifies that startInteractive
+// calls SetStderrSuppressed(true) before starting the interactive program and
+// SetStderrSuppressed(false) after it returns. This is the integration-level
+// guard for the alt-screen corruption bug (o7tk root cause 2).
+//
+// The test uses a probe-logger seam: a *logging.Manager constructed against a
+// bytes.Buffer stderr, and a stubbed "start" function that fires a slog.Warn
+// via the manager's logger and records whether stderr was clear at that point.
+func TestStartInteractiveSuppressesStderrDuringRun(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	logMgr := logging.New(logging.Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		SessionID:    "integ-supp-test",
+		ProjectRoot:  t.TempDir(),
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() { _ = logMgr.Close() })
+
+	var stderrDuringRun string
+	var stderrAfterRun string
+
+	stubStart := func(cfg config.Model, opts startupOptions) error {
+		// This simulates the interactive window: fire a warn and capture stderr.
+		stderr.Reset()
+		opts.logManager.Logger().Warn("runtime-warn-during-interactive")
+		stderrDuringRun = stderr.String()
+		return nil
+	}
+
+	// Wire runWithLogger with a newLogger that returns our probe manager.
+	var stderr2 bytes.Buffer
+	code := runWithLogger(
+		[]string{"--cwd", t.TempDir()},
+		&bytes.Buffer{},
+		&stderr2,
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+		},
+		stubStart,
+		func(logging.Options) *logging.Manager { return logMgr },
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr2: %q)", code, stderr2.String())
+	}
+
+	// During interactive run, warn must NOT appear on stderr.
+	if strings.Contains(stderrDuringRun, "runtime-warn-during-interactive") {
+		t.Fatalf("regression: warn reached stderr during interactive window — alt-screen would be corrupted; stderr during run: %q", stderrDuringRun)
+	}
+
+	// After run, suppression must be lifted — a new warn must reach stderr.
+	stderr.Reset()
+	logMgr.Logger().Warn("post-run-warn")
+	stderrAfterRun = stderr.String()
+	if !strings.Contains(stderrAfterRun, "warn: post-run-warn") {
+		t.Fatalf("expected warn to reach stderr after interactive run exits, got %q", stderrAfterRun)
+	}
+}
+
+// TestStartInteractiveNoLogManagerDoesNotPanic verifies that startInteractive
+// works correctly when logManager is nil (no logger configured), which is a
+// supported path via the noopLogger stub.
+func TestStartInteractiveNoLogManagerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("startInteractive panicked with nil logManager: %v", r)
+		}
+	}()
+
+	stubStart := func(cfg config.Model, opts startupOptions) error {
+		// logManager is nil — SetStderrSuppressed must not be called on nil.
+		if opts.logManager != nil {
+			t.Fatal("expected nil logManager in this test path")
+		}
+		return nil
+	}
+
+	code := runWithLogger(
+		[]string{"--cwd", t.TempDir()},
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+		},
+		stubStart,
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+}

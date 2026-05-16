@@ -380,6 +380,113 @@ func TestGenerateSessionIDFallsBackToTimestampOnRandError(t *testing.T) {
 	}
 }
 
+// TestSetStderrSuppressedBlocksStderrButNotPersistentLog verifies that
+// Manager.SetStderrSuppressed(true) prevents warn+ records from reaching
+// stderr while the persistent file sink continues to receive all records.
+// This is the regression guard for the alt-screen corruption bug (o7tk root
+// cause 2): if suppression is removed, the first and third assertions will
+// pass but the second will fail because the warn line appears on stderr again.
+func TestSetStderrSuppressedBlocksStderrButNotPersistentLog(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		SessionID:    "supptest1",
+		ProjectRoot:  "/tmp/project-suppress",
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() { _ = m.Close() })
+
+	// Phase 1: suppression off — warn must reach stderr AND persistent file.
+	m.Logger().Warn("before-suppress")
+	if !strings.Contains(stderr.String(), "warn: before-suppress") {
+		t.Fatalf("phase 1: expected warn to reach stderr before suppression, got %q", stderr.String())
+	}
+
+	// Phase 2: suppression on — warn must NOT reach stderr; file still receives it.
+	m.SetStderrSuppressed(true)
+	stderr.Reset()
+	m.Logger().Warn("during-suppress")
+	if strings.Contains(stderr.String(), "during-suppress") {
+		t.Fatalf("phase 2 (regression): warn reached stderr while suppressed — alt-screen corruption would occur; got %q", stderr.String())
+	}
+
+	// Phase 3: suppression off again — warn must reach stderr again.
+	m.SetStderrSuppressed(false)
+	m.Logger().Warn("after-suppress")
+	if !strings.Contains(stderr.String(), "warn: after-suppress") {
+		t.Fatalf("phase 3: expected warn to reach stderr after unsuppression, got %q", stderr.String())
+	}
+
+	// All three messages must be in the persistent log.
+	content, err := os.ReadFile(m.LogPath())
+	if err != nil {
+		t.Fatalf("ReadFile log: %v", err)
+	}
+	for _, msg := range []string{"before-suppress", "during-suppress", "after-suppress"} {
+		if !strings.Contains(string(content), msg) {
+			t.Fatalf("persistent log missing message %q; log content: %s", msg, string(content))
+		}
+	}
+}
+
+// TestSetStderrSuppressedDebugModeAlsoSuppressed verifies that --debug mode
+// (which enables info/debug writes to stderr) is also suppressed during
+// interactive mode. No stderr writes may corrupt the alt-screen even in debug.
+func TestSetStderrSuppressedDebugModeAlsoSuppressed(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		Debug:        true,
+		SessionID:    "supptest2",
+		ProjectRoot:  "/tmp/project-debug-suppress",
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() { _ = m.Close() })
+
+	// Confirm debug info reaches stderr before suppression.
+	stderr.Reset() // clear the session_id line emitted by New
+	m.Logger().Info("pre-suppress-info")
+	if !strings.Contains(stderr.String(), "pre-suppress-info") {
+		t.Fatalf("expected info to reach stderr in debug mode before suppression, got %q", stderr.String())
+	}
+
+	// Suppress and verify nothing reaches stderr.
+	m.SetStderrSuppressed(true)
+	stderr.Reset()
+	m.Logger().Info("suppressed-info")
+	m.Logger().Warn("suppressed-warn")
+	m.Logger().Debug("suppressed-debug")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr while suppressed in debug mode, got %q", stderr.String())
+	}
+}
+
+// TestSetStderrSuppressedNilManagerIsNoop verifies that calling
+// SetStderrSuppressed on a nil Manager does not panic.
+func TestSetStderrSuppressedNilManagerIsNoop(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("SetStderrSuppressed on nil Manager panicked: %v", r)
+		}
+	}()
+
+	var m *Manager
+	m.SetStderrSuppressed(true)
+	m.SetStderrSuppressed(false)
+}
+
 func firstLineFromFile(t *testing.T, filePath string) string {
 	t.Helper()
 

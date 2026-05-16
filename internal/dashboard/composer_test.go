@@ -31,9 +31,6 @@ var (
 )
 
 // makeLarge returns n IssueSummary values with the same priority and UpdatedAt.
-// Use for active-group (Ready, Blocked, InProgress) cardinality tests only —
-// not for Closed slices, because equal UpdatedAt times trigger the defensive
-// sort warning.
 func makeLarge(n int) []domain.IssueSummary {
 	out := make([]domain.IssueSummary, n)
 	for i := range out {
@@ -42,8 +39,7 @@ func makeLarge(n int) []domain.IssueSummary {
 	return out
 }
 
-// makeClosedLarge returns n IssueSummary values with strictly descending
-// UpdatedAt so that the Done column's defensive sort check does not fire.
+// makeClosedLarge returns n IssueSummary values with strictly descending UpdatedAt.
 func makeClosedLarge(n int) []domain.IssueSummary {
 	base := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	out := make([]domain.IssueSummary, n)
@@ -81,6 +77,9 @@ func TestCompose(t *testing.T) {
 		wantReadyLen      int
 		wantInProgressLen int
 		wantDoneLen       int
+		// wantDoneTotal overrides the Done.Total assertion when non-zero.
+		// Use when ClosedTotal causes Done.Total to diverge from len(Done.Issues).
+		wantDoneTotal int
 
 		wantDoneTotalIsExact bool
 
@@ -244,8 +243,6 @@ func TestCompose(t *testing.T) {
 		},
 
 		// ---- Done "N+" indicator tests ----
-		// Note: use makeClosedLarge (strictly descending UpdatedAt) to avoid
-		// triggering the defensive sort warning in these cases.
 		{
 			name: "Done TotalIsExact=false when items == ClosedLimit",
 			in: Inputs{
@@ -335,39 +332,22 @@ func TestCompose(t *testing.T) {
 			wantInProgressIDs: []string{"z", "y", "x"},
 		},
 
-		// ---- defensive sort check for Done (backend sort assumption) ----
+		// ---- Done column: no sort warning emitted (check removed in kh54) ----
+		// The UpdatedAt-proxy defensive check was removed because it produced
+		// false-positives on real data (bulk-closed issues share UpdatedAt).
+		// Backend sort ordering is now verified by the parity test (izds) against
+		// real bd data rather than a runtime proxy.
 		{
-			name: "Done: defensive warning when Closed input is misordered (UpdatedAt proxy)",
+			name: "Done: no warning for empty Closed slice",
 			in: Inputs{
-				Closed: []domain.IssueSummary{
-					makeSummary("old", 1, t0), // older first — wrong: backend should return newest first
-					makeSummary("new", 1, t1),
-				},
 				ClosedLimit: 10,
 			},
-			wantDoneLen:          2,
-			wantDoneTotalIsExact: true,
-			// t0 is NOT after t1, so ordering is violated → warning
-			wantWarnings: []wantWarning{{"Closed", -1}},
-			// order is preserved as-is (no re-sort)
-			wantDoneIDs: []string{"old", "new"},
-		},
-		{
-			name: "Done: no defensive warning when Closed input is correctly ordered",
-			in: Inputs{
-				Closed: []domain.IssueSummary{
-					makeSummary("new", 1, t2), // newest first — correct
-					makeSummary("old", 1, t0),
-				},
-				ClosedLimit: 10,
-			},
-			wantDoneLen:          2,
+			wantDoneLen:          0,
 			wantDoneTotalIsExact: true,
 			wantWarnings:         nil,
-			wantDoneIDs:          []string{"new", "old"},
 		},
 		{
-			name: "Done: no defensive warning for single-item Closed slice",
+			name: "Done: no warning for single-item Closed slice",
 			in: Inputs{
 				Closed:      []domain.IssueSummary{makeSummary("c1", 1, t0)},
 				ClosedLimit: 10,
@@ -377,26 +357,91 @@ func TestCompose(t *testing.T) {
 			wantWarnings:         nil,
 		},
 		{
-			name: "Done: no defensive warning for empty Closed slice",
-			in: Inputs{
-				ClosedLimit: 10,
-			},
-			wantDoneLen:          0,
-			wantDoneTotalIsExact: true,
-			wantWarnings:         nil,
-		},
-		{
-			name: "Done: defensive warning when first two items have equal UpdatedAt (not strictly descending)",
+			name: "Done: no warning when first two items have equal UpdatedAt (was false-positive before kh54)",
 			in: Inputs{
 				Closed: []domain.IssueSummary{
 					makeSummary("a", 1, t1),
-					makeSummary("b", 1, t1), // equal — not After, so warning fires
+					makeSummary("b", 1, t1), // equal UpdatedAt — previously triggered false-positive warning
 				},
 				ClosedLimit: 10,
 			},
 			wantDoneLen:          2,
 			wantDoneTotalIsExact: true,
-			wantWarnings:         []wantWarning{{"Closed", -1}},
+			wantWarnings:         nil,
+			wantDoneIDs:          []string{"a", "b"},
+		},
+		{
+			name: "Done: no warning when Closed is in reverse-UpdatedAt order (ascending)",
+			in: Inputs{
+				Closed: []domain.IssueSummary{
+					makeSummary("old", 1, t0), // older first — UpdatedAt proxy would have fired warning
+					makeSummary("new", 1, t1),
+				},
+				ClosedLimit: 10,
+			},
+			wantDoneLen:          2,
+			wantDoneTotalIsExact: true,
+			wantWarnings:         nil,
+			wantDoneIDs:          []string{"old", "new"},
+		},
+
+		// ---- ClosedTotal: real DB count overrides len(Closed) as Done.Total ----
+		// These cases verify the fix for ssom (capped slice total bug).
+		{
+			name: "ClosedTotal>len(Closed): Done.Total uses ClosedTotal, TotalIsExact=false",
+			in: Inputs{
+				Closed:      makeClosedLarge(50),
+				ClosedLimit: 50,
+				ClosedTotal: 452,
+			},
+			wantDoneLen:          50,  // len(Issues) = 50 (capped)
+			wantDoneTotal:        452, // Total = real DB count
+			wantDoneTotalIsExact: false,
+			wantWarnings:         nil,
+		},
+		{
+			name: "ClosedTotal==len(Closed): Done.Total==ClosedTotal, TotalIsExact=true",
+			in: Inputs{
+				Closed:      makeClosedLarge(5),
+				ClosedLimit: 50,
+				ClosedTotal: 5,
+			},
+			wantDoneLen:          5,
+			wantDoneTotalIsExact: true,
+			wantWarnings:         nil,
+		},
+		{
+			name: "ClosedTotal<len(Closed) (defensive): Done.Total uses len(Closed), TotalIsExact=true",
+			in: Inputs{
+				Closed:      makeClosedLarge(10),
+				ClosedLimit: 50,
+				ClosedTotal: 3, // shouldn't happen, but defensive
+			},
+			wantDoneLen:          10,
+			wantDoneTotalIsExact: true,
+			wantWarnings:         nil,
+		},
+		{
+			name: "ClosedTotal==0 (unset): falls back to ClosedLimit heuristic, items==limit → not exact",
+			in: Inputs{
+				Closed:      makeClosedLarge(5),
+				ClosedLimit: 5,
+				ClosedTotal: 0,
+			},
+			wantDoneLen:          5,
+			wantDoneTotalIsExact: false,
+			wantWarnings:         nil,
+		},
+		{
+			name: "ClosedTotal==0 (unset): falls back to ClosedLimit heuristic, items<limit → exact",
+			in: Inputs{
+				Closed:      makeClosedLarge(4),
+				ClosedLimit: 5,
+				ClosedTotal: 0,
+			},
+			wantDoneLen:          4,
+			wantDoneTotalIsExact: true,
+			wantWarnings:         nil,
 		},
 
 		// ---- input isolation: Compose must not mutate caller's slices ----
@@ -441,8 +486,12 @@ func TestCompose(t *testing.T) {
 			if len(got.InProgress.Issues) != tc.wantInProgressLen {
 				t.Errorf("len(InProgress.Issues) = %d, want %d", len(got.InProgress.Issues), tc.wantInProgressLen)
 			}
-			if got.Done.Total != tc.wantDoneLen {
-				t.Errorf("Done.Total = %d, want %d", got.Done.Total, tc.wantDoneLen)
+			wantDoneTotal := tc.wantDoneLen
+			if tc.wantDoneTotal != 0 {
+				wantDoneTotal = tc.wantDoneTotal
+			}
+			if got.Done.Total != wantDoneTotal {
+				t.Errorf("Done.Total = %d, want %d", got.Done.Total, wantDoneTotal)
 			}
 			if len(got.Done.Issues) != tc.wantDoneLen {
 				t.Errorf("len(Done.Issues) = %d, want %d", len(got.Done.Issues), tc.wantDoneLen)

@@ -13,12 +13,16 @@ const cardinalityThreshold = 500
 // Inputs carries the four data groups returned by the dashboard fetch plan.
 // ClosedLimit is the cap that was sent to bd; it is used to compute the "N+"
 // badge on the Done column.
+// ClosedTotal is the real DB population count of closed issues (from CountIssues).
+// When > 0 it overrides len(Closed) as Done.Total so the header shows the
+// actual count rather than the capped slice size.
 type Inputs struct {
 	Ready       []domain.IssueSummary
 	Blocked     []domain.BlockedIssueView
 	InProgress  []domain.IssueSummary
 	Closed      []domain.IssueSummary
 	ClosedLimit int // the cap that was sent to bd; used to compute "N+" badge
+	ClosedTotal int // real DB count of closed issues; 0 means unset (falls back to len(Closed))
 }
 
 // Columns is the typed column data the board renderer consumes.
@@ -41,10 +45,8 @@ type ColumnData struct {
 // logging decisions are not made inside the pure composer function.
 //
 // For active groups (Ready, Blocked, InProgress), Threshold is 500.
-// For the Done column, Threshold is -1 (sentinel) and signals that the
-// backend's expected closed_at-desc ordering appears to be violated.
-// The caller should log a "backend sort assumption broken" alert when it
-// observes Threshold == -1.
+// Backend sort ordering for the Done column is no longer checked here;
+// it is verified by the sort-parity test (izds) against real bd data.
 type CardinalityWarning struct {
 	Group     string // "Ready", "Blocked", "InProgress", "Closed"
 	Count     int
@@ -110,27 +112,6 @@ func Compose(in Inputs) Columns {
 		})
 	}
 
-	// --- defensive sort check for Done (backend closed_at-desc assumption) ---
-	// IssueSummary does not carry ClosedAt, so UpdatedAt is used as a proxy for
-	// the backend's closed_at sort. When the first two items are not in
-	// descending order the assumption is flagged.
-	//
-	// Threshold -1 is a sentinel: it signals a broken sort assumption, not a
-	// population-size concern. The caller should log "backend sort assumption
-	// broken" when it observes Threshold == -1.
-	if len(in.Closed) >= 2 {
-		first, second := in.Closed[0], in.Closed[1]
-		// "non-descending" means first.UpdatedAt <= second.UpdatedAt,
-		// i.e. the later item is >= the earlier one — backend order broken.
-		if !first.UpdatedAt.After(second.UpdatedAt) {
-			warnings = append(warnings, CardinalityWarning{
-				Group:     "Closed",
-				Count:     len(in.Closed),
-				Threshold: -1, // sentinel: broken backend sort assumption
-			})
-		}
-	}
-
 	// --- build NotReady column (from Blocked) ---
 	notReadyIssues := mapBlockedToSummaries(in.Blocked)
 	issueSort(notReadyIssues)
@@ -164,12 +145,27 @@ func Compose(in Inputs) Columns {
 	// Preserve backend order; do not re-sort.
 	closedIssues := make([]domain.IssueSummary, len(in.Closed))
 	copy(closedIssues, in.Closed)
-	// TotalIsExact is false when the returned slice hit the cap, signalling
-	// that there may be more closed items beyond what bd returned.
-	totalIsExact := in.ClosedLimit <= 0 || len(closedIssues) < in.ClosedLimit
+
+	// Use the real DB population count when available; fall back to len(closedIssues).
+	doneTotal := len(closedIssues)
+	if in.ClosedTotal > doneTotal {
+		doneTotal = in.ClosedTotal
+	}
+
+	// TotalIsExact is true when the visible list covers the entire population
+	// (i.e. no items are hidden beyond the rendered cap). When ClosedTotal is
+	// set, exact = visible list reaches or matches the real count.
+	// When ClosedTotal is unset (0), fall back to the old ClosedLimit heuristic.
+	var totalIsExact bool
+	if in.ClosedTotal > 0 {
+		totalIsExact = len(closedIssues) >= in.ClosedTotal
+	} else {
+		totalIsExact = in.ClosedLimit <= 0 || len(closedIssues) < in.ClosedLimit
+	}
+
 	done := ColumnData{
 		Issues:       closedIssues,
-		Total:        len(closedIssues),
+		Total:        doneTotal,
 		TotalIsExact: totalIsExact,
 	}
 

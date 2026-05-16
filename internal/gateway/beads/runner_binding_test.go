@@ -2,6 +2,7 @@ package beads
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -159,5 +160,61 @@ func TestRunnerForcesBDNonInteractive(t *testing.T) {
 				t.Fatalf("BD_NON_INTERACTIVE=1 must be the LAST env entry (so it wins on duplicate keys); executor env=%v", execStub.env)
 			}
 		})
+	}
+}
+
+// TestRunnerReadOnlyPrependsFlag verifies that when RunnerConfig.ReadOnly is
+// true, "--readonly" is prepended to every argv before the executor sees it.
+// This is the unit-level enforcement of the read-only arg hook.
+func TestRunnerReadOnlyPrependsFlag(t *testing.T) {
+	t.Parallel()
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("[]")}}
+	runner := NewCommandRunner(RunnerConfig{
+		WorkDir:  "/some/dir",
+		Env:      []string{"PATH=/usr/bin"},
+		Executor: execStub,
+		ReadOnly: true,
+	})
+
+	_, err := runner.Run(context.Background(), CommandRequest{
+		Operation: "list issues",
+		Args:      []string{"list", "--json"},
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	// Executor must see --readonly prepended to the args.
+	want := []string{"--readonly", "list", "--json"}
+	if !reflect.DeepEqual(execStub.args, want) {
+		t.Fatalf("unexpected args: got %v, want %v", execStub.args, want)
+	}
+}
+
+// TestRunnerNonReadOnlyDoesNotPrependFlag verifies that when ReadOnly is false
+// (the default), "--readonly" is NOT added to the argv.
+func TestRunnerNonReadOnlyDoesNotPrependFlag(t *testing.T) {
+	t.Parallel()
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("[]")}}
+	runner := NewCommandRunner(RunnerConfig{
+		WorkDir:  "/some/dir",
+		Env:      []string{"PATH=/usr/bin"},
+		Executor: execStub,
+		ReadOnly: false,
+	})
+
+	_, err := runner.Run(context.Background(), CommandRequest{
+		Operation: "list issues",
+		Args:      []string{"list", "--json"},
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	want := []string{"list", "--json"}
+	if !reflect.DeepEqual(execStub.args, want) {
+		t.Fatalf("unexpected args: got %v, want %v (--readonly must not be present)", execStub.args, want)
 	}
 }

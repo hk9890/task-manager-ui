@@ -200,6 +200,16 @@ type Model struct {
 	width  int
 	height int
 
+	// sizeKnown is set to true once the first tea.WindowSizeMsg has been
+	// processed. View() returns an empty string until sizeKnown is true so that
+	// the first rendered frame always uses the actual terminal dimensions rather
+	// than the defaultViewportWidth/defaultViewportHeight placeholders. This
+	// prevents the "doubled column-top borders" artifact that occurred when
+	// Bubble Tea rendered a short default-size frame immediately on startup and
+	// then a taller post-resize frame that the terminal renderer could not fully
+	// overwrite (beads-workbench-o7tk).
+	sizeKnown bool
+
 	runtime RuntimeOptions
 }
 
@@ -317,6 +327,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.fatalErrTitle != "" {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
+			m.sizeKnown = true
 			m.width = msg.Width
 			m.height = msg.Height
 		case tea.KeyMsg:
@@ -334,6 +345,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showActionModal {
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.sizeKnown = true
 			m.width = size.Width
 			m.height = size.Height
 			m.actionModal.SetSize(m.width, m.height)
@@ -374,6 +386,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.help = nextHelp
 
 		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.sizeKnown = true
 			m.width = size.Width
 			m.height = size.Height
 			m.help.SetSize(m.width, m.height)
@@ -407,6 +420,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
 		return m, batchCmds(modeCmd, getSpinnerTickScheduler()())
 	case tea.WindowSizeMsg:
+		m.sizeKnown = true
 		m.width = msg.Width
 		m.height = msg.Height
 		m.applyWorkspaceSizeToBrowseModes()
@@ -784,6 +798,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the root shell.
 func (m Model) View() string {
+	// Suppress the very first render until the terminal has sent us its real
+	// dimensions via WindowSizeMsg. Without this guard the TUI emits a short
+	// frame (defaultViewportHeight lines) immediately on startup; when
+	// WindowSizeMsg then arrives the renderer produces a taller frame but only
+	// partially overwrites the first one, leaving stale column-top border rows
+	// visible above the correct render (beads-workbench-o7tk).
+	if !m.sizeKnown {
+		return ""
+	}
+
 	if m.fatalErrTitle != "" {
 		return fatalerror.View(m.fatalErrTitle, m.fatalErrBody, m.width, m.height)
 	}

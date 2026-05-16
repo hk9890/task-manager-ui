@@ -117,6 +117,14 @@ dir = "{{config_root}}"
 run = "git config core.hooksPath scripts/git-hooks"
 
 [tasks.bwb]
+description = "Build bwb and run interactively against this repo's own beads DB (release smoke check)"
+dir = "{{config_root}}"
+run = """
+go build -o /tmp/bwb ./cmd/bwb
+BD_NON_INTERACTIVE=1 /tmp/bwb
+"""
+
+[tasks."bwb:fixture"]
 description = "Build bwb and run interactively against the embedded fixture (fresh temp dir each run)"
 dir = "{{config_root}}"
 run = """
@@ -125,4 +133,12 @@ repoPath="$(mktemp -d)"
 sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
 echo "fixture: $repoPath"
 cd "$repoPath" && BD_NON_INTERACTIVE=1 /tmp/bwb
+"""
+
+[tasks.smoke]
+description = "Build and run the bwb-smoke release smoke check. Defaults to this repo's beads DB; override with BWB_SMOKE_DIR=/path/to/other/repo"
+dir = "{{config_root}}"
+run = """
+go build -o /tmp/bwb-smoke ./cmd/bwb-smoke
+BD_NON_INTERACTIVE=1 /tmp/bwb-smoke --dir "${BWB_SMOKE_DIR:-.}" --readonly
 """

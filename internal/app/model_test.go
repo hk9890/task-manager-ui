@@ -32,22 +32,32 @@ func TestMain(m *testing.M) {
 }
 
 // mustNewModel wraps NewModel and fails the test if an error is returned.
+// It pre-sets sizeKnown=true so tests that call View() without sending a
+// WindowSizeMsg receive a rendered view (not the empty pre-size guard string).
+// Tests that specifically validate the sizeKnown=false/empty-view behaviour
+// should call NewModelWithOptions directly and leave sizeKnown at its zero value.
 func mustNewModel(t *testing.T, services Services) Model {
 	t.Helper()
 	m, err := NewModel(services)
 	if err != nil {
 		t.Fatalf("NewModel returned unexpected error: %v", err)
 	}
+	m.sizeKnown = true
 	return m
 }
 
 // mustNewModelWithOptions wraps NewModelWithOptions and fails the test if an error is returned.
+// It pre-sets sizeKnown=true so tests that call View() without sending a
+// WindowSizeMsg receive a rendered view (not the empty pre-size guard string).
+// Tests that specifically validate the sizeKnown=false/empty-view behaviour
+// should call NewModelWithOptions directly and leave sizeKnown at its zero value.
 func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOptions) Model {
 	t.Helper()
 	m, err := NewModelWithOptions(services, runtime)
 	if err != nil {
 		t.Fatalf("NewModelWithOptions returned unexpected error: %v", err)
 	}
+	m.sizeKnown = true
 	return m
 }
 

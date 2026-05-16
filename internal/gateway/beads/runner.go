@@ -96,6 +96,11 @@ type RunnerConfig struct {
 	Env      []string
 	Executor CommandExecutor
 	Logger   *slog.Logger
+	// ReadOnly, when true, prepends "--readonly" to every bd argv. This causes
+	// bd to reject all write operations (create, update, close, comment add,
+	// dep add, etc.) with a non-zero exit code, protecting external or shared
+	// databases from accidental mutation during tests.
+	ReadOnly bool
 }
 
 // CommandRunner is a reusable execution layer for bd-backed gateway methods.
@@ -105,6 +110,7 @@ type CommandRunner struct {
 	defaultEnv     []string
 	executor       CommandExecutor
 	logger         *slog.Logger
+	readOnly       bool
 	runMu          sync.RWMutex
 }
 
@@ -132,6 +138,7 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		defaultEnv:     append([]string(nil), defaultEnv...),
 		executor:       executor,
 		logger:         cfg.Logger,
+		readOnly:       cfg.ReadOnly,
 	}
 }
 
@@ -159,8 +166,9 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 		defer r.runMu.RUnlock()
 	}
 	startedAt := time.Now()
-	result, err := r.executor.Run(ctx, r.command, req.Args, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
-	r.logExecution(req, result, err, time.Since(startedAt))
+	argv := r.resolveArgs(req.Args)
+	result, err := r.executor.Run(ctx, r.command, argv, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
+	r.logExecution(req, argv, result, err, time.Since(startedAt))
 	if err != nil {
 		return nil, normalizeExecutionError(ctx, req.Operation, result.Stderr, err)
 	}
@@ -254,7 +262,21 @@ func (r *CommandRunner) resolveWorkDir(_ string) string {
 	return r.defaultWorkDir
 }
 
-func (r *CommandRunner) logExecution(req CommandRequest, result ExecResult, err error, duration time.Duration) {
+// resolveArgs returns the effective argv for a command invocation. When the
+// runner is configured with ReadOnly == true, "--readonly" is prepended to
+// every argv so bd rejects write operations at the CLI layer. This protects
+// shared or external databases from accidental mutation during parity tests.
+func (r *CommandRunner) resolveArgs(args []string) []string {
+	if !r.readOnly {
+		return args
+	}
+	resolved := make([]string, 0, len(args)+1)
+	resolved = append(resolved, "--readonly")
+	resolved = append(resolved, args...)
+	return resolved
+}
+
+func (r *CommandRunner) logExecution(req CommandRequest, resolvedArgs []string, result ExecResult, err error, duration time.Duration) {
 	if r.logger == nil {
 		return
 	}
@@ -263,7 +285,7 @@ func (r *CommandRunner) logExecution(req CommandRequest, result ExecResult, err 
 	if err != nil && exitCode == 0 {
 		exitCode = -1
 	}
-	argv := append([]string{r.command}, req.Args...)
+	argv := append([]string{r.command}, resolvedArgs...)
 	attrs := []any{
 		"operation", req.Operation,
 		"argv", argv,

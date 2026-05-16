@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -39,10 +40,11 @@ type Options struct {
 
 // Manager owns the application root logger and session metadata.
 type Manager struct {
-	root      *slog.Logger
-	sessionID string
-	logPath   string
-	closer    io.Closer
+	root          *slog.Logger
+	sessionID     string
+	logPath       string
+	closer        io.Closer
+	stderrHandler *stderrHandler // retained so SetStderrSuppressed can toggle it
 }
 
 // New constructs the root logger with persistent JSON logs and stderr mirroring.
@@ -57,8 +59,8 @@ func New(opts Options) *Manager {
 		sessionID = generateSessionID()
 	}
 
-	stderrHandler := newStderrHandler(stderr, opts.Debug)
-	handlers := []slog.Handler{stderrHandler}
+	sh := newStderrHandler(stderr, opts.Debug)
+	handlers := []slog.Handler{sh}
 
 	logPath, fileSink, err := buildPersistentSink(opts)
 	var closer io.Closer
@@ -80,10 +82,11 @@ func New(opts Options) *Manager {
 	}
 
 	return &Manager{
-		root:      root,
-		sessionID: sessionID,
-		logPath:   logPath,
-		closer:    closer,
+		root:          root,
+		sessionID:     sessionID,
+		logPath:       logPath,
+		closer:        closer,
+		stderrHandler: sh,
 	}
 }
 
@@ -118,6 +121,22 @@ func (m *Manager) LogPath() string {
 		return ""
 	}
 	return m.logPath
+}
+
+// SetStderrSuppressed controls whether the stderr handler emits log records.
+//
+// Call with true immediately before tea.Program.Run() to prevent slog writes
+// from corrupting the alt-screen TTY during interactive mode. Call with false
+// (or defer the call) after program.Run() returns so post-exit messages reach
+// the terminal again.
+//
+// The persistent file sink is never affected; all records continue to be
+// written to the log file regardless of this setting.
+func (m *Manager) SetStderrSuppressed(suppressed bool) {
+	if m == nil || m.stderrHandler == nil {
+		return
+	}
+	m.stderrHandler.suppressed.Store(suppressed)
 }
 
 // Close closes any persistent sink resources.
@@ -298,18 +317,22 @@ func (h *teeHandler) WithGroup(name string) slog.Handler {
 }
 
 type stderrHandler struct {
-	mu      *sync.Mutex // shared across all derived handlers; allocated once in newStderrHandler
-	writer  io.Writer
-	debugOn bool
-	attrs   []slog.Attr
-	group   string
+	mu         *sync.Mutex  // shared across all derived handlers; allocated once in newStderrHandler
+	suppressed *atomic.Bool // shared across all derived handlers; when true, Enabled and Handle are no-ops
+	writer     io.Writer
+	debugOn    bool
+	attrs      []slog.Attr
+	group      string
 }
 
-func newStderrHandler(writer io.Writer, debug bool) slog.Handler {
-	return &stderrHandler{mu: &sync.Mutex{}, writer: writer, debugOn: debug}
+func newStderrHandler(writer io.Writer, debug bool) *stderrHandler {
+	return &stderrHandler{mu: &sync.Mutex{}, suppressed: &atomic.Bool{}, writer: writer, debugOn: debug}
 }
 
 func (h *stderrHandler) Enabled(_ context.Context, level slog.Level) bool {
+	if h.suppressed.Load() {
+		return false
+	}
 	if level >= slog.LevelWarn {
 		return true
 	}
@@ -320,6 +343,9 @@ func (h *stderrHandler) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 func (h *stderrHandler) Handle(_ context.Context, record slog.Record) error {
+	if h.suppressed.Load() {
+		return nil
+	}
 	parts := make([]string, 0, 8)
 	if record.Level < slog.LevelWarn {
 		parts = append(parts, "[bwb-debug]", record.Message)
@@ -344,11 +370,12 @@ func (h *stderrHandler) Handle(_ context.Context, record slog.Record) error {
 func (h *stderrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	copyAttrs := append(append([]slog.Attr(nil), h.attrs...), attrs...)
 	return &stderrHandler{
-		mu:      h.mu, // share the same mutex; do not allocate a fresh one
-		writer:  h.writer,
-		debugOn: h.debugOn,
-		attrs:   copyAttrs,
-		group:   h.group,
+		mu:         h.mu,         // share the same mutex; do not allocate a fresh one
+		suppressed: h.suppressed, // share the same suppression flag
+		writer:     h.writer,
+		debugOn:    h.debugOn,
+		attrs:      copyAttrs,
+		group:      h.group,
 	}
 }
 
@@ -358,11 +385,12 @@ func (h *stderrHandler) WithGroup(name string) slog.Handler {
 		nextGroup = h.group + "." + name
 	}
 	return &stderrHandler{
-		mu:      h.mu, // share the same mutex; do not allocate a fresh one
-		writer:  h.writer,
-		debugOn: h.debugOn,
-		attrs:   append([]slog.Attr(nil), h.attrs...),
-		group:   nextGroup,
+		mu:         h.mu,         // share the same mutex; do not allocate a fresh one
+		suppressed: h.suppressed, // share the same suppression flag
+		writer:     h.writer,
+		debugOn:    h.debugOn,
+		attrs:      append([]slog.Attr(nil), h.attrs...),
+		group:      nextGroup,
 	}
 }
 

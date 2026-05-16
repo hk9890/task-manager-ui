@@ -2,6 +2,51 @@
 
 Use this runbook when a change touches user-visible runtime behavior (layout, navigation, search, startup shell UX, editor/launcher flows).
 
+## Pre-release data-consistency checks
+
+Run these before tagging any release. They verify that what `bwb` renders on screen matches the live `bd` database.
+
+### Parity test packages
+
+| Package | What it verifies |
+|---------|-----------------|
+| `internal/dashboard/parity` | **Count parity** — column totals (NotReady/Ready/InProgress/Done) match `bd count`; **sort parity** — row order in each column matches `bd ready`, `bd blocked`, `bd list`. |
+| `internal/mode/search/parity` | Search result count and order match `bd search`. |
+| `internal/mode/board/render_regression_test.go` | Frame-stacking regression guard — confirms expected border count per rendered board frame. |
+| `internal/mode/search/render_regression_test.go` | Frame-stacking regression guard for search mode. |
+| `internal/logging/render_regression_test.go` | Log-bleed regression guard — confirms log output does not bleed into rendered frames. |
+
+### Commands
+
+```bash
+# Fast fixture-backed run (no live DB required, always available):
+mise run test:integration
+
+# Parity against this repo's live beads DB (~30 s):
+BWB_PARITY_THIS_REPO=1 mise run test:integration
+
+# Parity against an arbitrary external beads DB (read-only):
+BWB_PARITY_EXTERNAL_PATH=/path/to/external/repo mise run test:integration
+
+# Smoke check — builds bwb-smoke and runs all checks against this repo; prints PASS/FAIL report:
+mise run smoke
+
+# Smoke check against an arbitrary external repo (override via env var):
+BWB_SMOKE_DIR=/path/to/external/repo mise run smoke
+```
+
+### Release-blocking vs advisory
+
+| Check | Failure means | Action |
+|-------|--------------|--------|
+| count parity (dashboard) | Wrong numbers on screen | **Release blocker** |
+| sort parity (dashboard) | Wrong row order on screen | **Release blocker** |
+| search parity | Wrong search results on screen | **Release blocker** |
+| render regression (board/search/logging) | Visible UI artifact — frame bleed or corrupt borders | **Release blocker** |
+| `t.Logf` diagnostic with PASS status | Advisory only — e.g. `ClosedAtDescPreservedOnRealData` logs diagnostic counts but does not fail | Review the diagnostic; no hard block |
+
+Any test that prints a diagnostic message but ends in PASS is advisory: read the message, judge whether follow-up is needed, but do not hold the release for it.
+
 ## 1) Fast deterministic automated loop
 
 Run the focused scenario set first. These are all unit tests (no build tag required).

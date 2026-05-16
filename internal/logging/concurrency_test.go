@@ -19,7 +19,7 @@ func TestStderrHandlerDerivedHandlersShareMutex(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	root := newStderrHandler(&buf, true).(*stderrHandler)
+	root := newStderrHandler(&buf, true)
 
 	derived1 := root.WithAttrs([]slog.Attr{slog.String("k", "v")}).(*stderrHandler)
 	derived2 := root.WithGroup("g").(*stderrHandler)
