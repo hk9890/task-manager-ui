@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
@@ -18,12 +19,14 @@ import (
 	detailsmode "github.com/hk9890/beads-workbench/internal/mode/details"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/modal"
 )
 
 func TestMain(m *testing.M) {
 	scheduleRefreshTickCmd = func() tea.Cmd { return nil }
 	scheduleToastDismissCmd = func(_ time.Duration) tea.Cmd { return nil }
+	scheduleSpinnerTickCmd = func() tea.Cmd { return nil }
 	modelNow = time.Now
 	os.Exit(m.Run())
 }
@@ -3076,6 +3079,19 @@ func withRefreshTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
 	})
 }
 
+func withSpinnerTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
+	t.Helper()
+	schedulerMu.Lock()
+	original := scheduleSpinnerTickCmd
+	scheduleSpinnerTickCmd = scheduler
+	schedulerMu.Unlock()
+	t.Cleanup(func() {
+		schedulerMu.Lock()
+		scheduleSpinnerTickCmd = original
+		schedulerMu.Unlock()
+	})
+}
+
 func withToastDismissScheduler(t *testing.T, scheduler func(time.Duration) tea.Cmd) {
 	t.Helper()
 	schedulerMu.Lock()
@@ -3185,4 +3201,72 @@ func TestModeCycleDirections(t *testing.T) {
 				nextMode(mode.Detail, mode.Search))
 		}
 	})
+}
+
+// TestHeaderSpinnerCellWidthInvariance asserts that headerSpinnerCell returns a
+// string of identical lipgloss.Width whether or not any surface is loading.
+func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
+	t.Parallel()
+
+	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	services := Services{Gateway: gateway, Config: config.Default()}
+	m := mustNewModel(t, services)
+	// Drain Init so board loading completes and all surfaces are idle.
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// idle model — no loading states
+	idleCell := m.headerSpinnerCell()
+	idleWidth := lipgloss.Width(idleCell)
+
+	// simulate a loading state by setting detail.Loading
+	m.detail.Loading = true
+	loadingCell := m.headerSpinnerCell()
+	loadingWidth := lipgloss.Width(loadingCell)
+
+	if idleWidth != loadingWidth {
+		t.Errorf("headerSpinnerCell width not invariant: idle=%d loading=%d (idle=%q loading=%q)",
+			idleWidth, loadingWidth, idleCell, loadingCell)
+	}
+}
+
+// TestHeaderSpinnerCellContainsGlyphWhenLoading asserts that the spinner cell
+// contains one of the 10 pinned braille glyphs when loading is active, and
+// contains none of them when idle.
+func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
+	t.Parallel()
+
+	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	services := Services{Gateway: gateway, Config: config.Default()}
+	m := mustNewModel(t, services)
+	// Drain Init so board loading completes and all surfaces are idle.
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// Set a known frame that maps to a specific glyph.
+	m.spinnerFrame = 0
+	expectedGlyph := loading.Glyph(0)
+
+	// loading active — use detail.Loading to avoid triggering gateway calls
+	m.detail.Loading = true
+	loadingCell := m.headerSpinnerCell()
+	if !strings.Contains(loadingCell, expectedGlyph) {
+		t.Errorf("headerSpinnerCell when loading does not contain spinner glyph %q: got %q",
+			expectedGlyph, loadingCell)
+	}
+
+	// verify none of the 10 glyphs appear when idle (all loading cleared)
+	m.detail.Loading = false
+	idleCell := m.headerSpinnerCell()
+	for i, r := range loading.SpinnerFrames {
+		g := string(r)
+		if strings.Contains(idleCell, g) {
+			t.Errorf("headerSpinnerCell when idle contains spinner glyph[%d] %q: got %q",
+				i, g, idleCell)
+		}
+	}
 }

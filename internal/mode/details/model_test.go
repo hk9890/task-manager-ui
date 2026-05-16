@@ -10,6 +10,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
+	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 )
 
 func TestModelViewRendersRepresentativeStates(t *testing.T) {
@@ -25,13 +26,18 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		}
 	})
 
-	t.Run("loading", func(t *testing.T) {
+	t.Run("loading cold-start", func(t *testing.T) {
 		t.Parallel()
 
+		// Cold-start: Loading=true, no prior detail (Detail.Summary.ID == "").
+		// Expect skeleton placeholder, NOT a full-screen loading takeover.
 		m := Model{SelectionID: "bw-2", TargetID: "bw-2", Loading: true}
 		view := m.View(100, 20, false)
-		if !strings.Contains(view, "Loading details for") || !strings.Contains(view, "bw-2") {
-			t.Fatalf("expected loading detail state, got:\n%s", view)
+		if strings.Contains(view, "Loading details for") {
+			t.Fatalf("cold-start loading should NOT show full-screen takeover, got:\n%s", view)
+		}
+		if !strings.Contains(view, skeleton.SkeletonGlyph) {
+			t.Fatalf("cold-start loading should contain skeleton glyph, got:\n%s", view)
 		}
 	})
 
@@ -334,8 +340,8 @@ func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *tes
 	if render.Summary.ID != "bw-2" {
 		t.Fatalf("expected loading preview summary for target bw-2, got %q", render.Summary.ID)
 	}
-	if !strings.Contains(render.Description, "Loading details for bw-2") {
-		t.Fatalf("expected loading preview stub description, got %q", render.Description)
+	if !strings.Contains(render.Description, skeleton.SkeletonGlyph) {
+		t.Fatalf("expected placeholder description with skeleton glyph, got %q", render.Description)
 	}
 	if got := render.BlockedBy; len(got) != 1 || got[0].ID != "bw-2" {
 		t.Fatalf("expected dependency rail to stay anchored to base detail, got %#v", got)
@@ -681,6 +687,169 @@ func TestModelApplyLoadedDetailWithoutParentGroupDefaultsSelectionToFirstDepende
 		t.Fatalf("expected default dependency selection index 0, got %d", m.BrowserSelectedIndex)
 	}
 }
+
+// --- Tests for non-blocking loading UX (0x36.4) ---
+
+// TestColdStartViewRendersSkeleton verifies that when Loading=true and no prior
+// detail has been loaded (Summary.ID == ""), the view renders skeleton placeholders
+// rather than a full-screen loading takeover.
+func TestColdStartViewRendersSkeleton(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-5",
+		TargetID:    "bw-5",
+		Loading:     true,
+		// Detail.Summary.ID is "", simulating cold-start.
+	}
+
+	view := m.View(100, 20, false)
+
+	// Must NOT be a full-screen loading takeover.
+	if strings.Contains(view, "Loading details for") {
+		t.Fatalf("cold-start view should NOT show full-screen loading takeover, got:\n%s", view)
+	}
+
+	// Must contain the skeleton glyph from renderColdStartSkeleton.
+	if !strings.Contains(view, skeleton.SkeletonGlyph) {
+		t.Fatalf("cold-start view should contain skeleton glyph %q, got:\n%s", skeleton.SkeletonGlyph, view)
+	}
+}
+
+// TestRefreshSameIssueKeepsStaleContent verifies that when Loading=true and a
+// prior detail is already loaded (Summary.ID != ""), the existing content remains
+// visible (no full-screen takeover).
+func TestRefreshSameIssueKeepsStaleContent(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-7",
+		TargetID:    "bw-7",
+		Loading:     true,
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-7", Title: "Stale issue", Status: "open", Type: "task", Priority: 2},
+			Description: "Stale description visible during refresh",
+		},
+	}
+
+	view := m.View(100, 20, false)
+
+	// Must NOT be a full-screen loading takeover.
+	if strings.Contains(view, "Loading details for") {
+		t.Fatalf("same-issue refresh view should NOT show full-screen loading takeover, got:\n%s", view)
+	}
+
+	// Prior content must still be visible.
+	if !strings.Contains(view, "Stale issue") {
+		t.Fatalf("same-issue refresh view should keep prior title visible, got:\n%s", view)
+	}
+}
+
+// TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent verifies that when
+// switching to a different issue, prior content remains visible momentarily
+// (before the gateway response arrives).
+func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
+	t.Parallel()
+
+	// Simulate: issue A was loaded, selection moved to B, placeholder applied.
+	// At this point Detail still holds A's data with Summary.ID == "bw-A" but
+	// after ApplyLoadedDetail(placeholder), it holds the placeholder which has
+	// Summary.ID == "bw-B". Either way, Loading=true and Summary.ID != "".
+	m := Model{
+		SelectionID: "bw-B",
+		TargetID:    "bw-B",
+		Loading:     true,
+		Detail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-A", Title: "Previous issue A", Status: "open", Type: "task", Priority: 1},
+			Description: "Previous issue A description",
+		},
+	}
+
+	view := m.View(100, 20, false)
+
+	// Must NOT be a full-screen loading takeover.
+	if strings.Contains(view, "Loading details for") {
+		t.Fatalf("different-issue refresh view should NOT show full-screen loading takeover, got:\n%s", view)
+	}
+
+	// Prior content is still visible (stale data from issue A).
+	if !strings.Contains(view, "Previous issue A") {
+		t.Fatalf("different-issue refresh view should keep prior content visible, got:\n%s", view)
+	}
+}
+
+// TestScrollResetOnIssueSwitchViaApplyLoadedDetail is the regression test for
+// beads-workbench-db0z.7. It verifies that when the caller applies a placeholder
+// detail synchronously on selection-change (mimicking what app/model.go does),
+// all three scroll offsets are immediately zeroed before the gateway response
+// arrives.
+func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
+	t.Parallel()
+
+	issueA := domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "bw-1", Title: "Issue A"},
+		Description: strings.Repeat("line\n", 60),
+	}
+
+	m := Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-1",
+	}
+	m.ApplyLoadedDetail("bw-1", issueA)
+
+	// Simulate the user scrolling all three panes to non-zero offsets.
+	m.ContentScrollOffset = 15
+	m.MetadataScrollOffset = 7
+	m.DependenciesScrollOffset = 3
+	m.ScrollOffset = 15
+
+	// Simulate app-level selection change to bw-2: synchronously apply placeholder
+	// BEFORE the gateway response arrives (this is the mechanism from app/model.go).
+	m.Loading = true
+	m.SelectionID = "bw-2"
+	m.TargetID = "bw-2"
+	ref := domain.IssueReference{ID: "bw-2", Title: "Issue B"}
+	m.ApplyLoadedDetail("bw-2", PlaceholderDetail("bw-2", ref, true))
+
+	// All scroll offsets must be zero immediately (before gateway responds).
+	if m.ContentScrollOffset != 0 {
+		t.Errorf("ContentScrollOffset must be 0 immediately after issue switch, got %d", m.ContentScrollOffset)
+	}
+	if m.MetadataScrollOffset != 0 {
+		t.Errorf("MetadataScrollOffset must be 0 immediately after issue switch, got %d", m.MetadataScrollOffset)
+	}
+	if m.DependenciesScrollOffset != 0 {
+		t.Errorf("DependenciesScrollOffset must be 0 immediately after issue switch, got %d", m.DependenciesScrollOffset)
+	}
+	if m.ScrollOffset != 0 {
+		t.Errorf("ScrollOffset must be 0 immediately after issue switch, got %d", m.ScrollOffset)
+	}
+
+	// The view while loading with the placeholder must NOT be a full-screen
+	// loading takeover (Summary.ID is "bw-2" from the placeholder).
+	view := m.View(100, 20, false)
+	if strings.Contains(view, "Loading details for") {
+		t.Errorf("placeholder-loaded detail should NOT show full-screen loading takeover, got:\n%s", view)
+	}
+}
+
+// TestPlaceholderDetailContainsSkeletonGlyph verifies that PlaceholderDetail
+// builds a description string that contains the canonical skeleton glyph.
+func TestPlaceholderDetailContainsSkeletonGlyph(t *testing.T) {
+	t.Parallel()
+
+	ref := domain.IssueReference{ID: "bw-10", Title: "Some issue", Status: "open", Type: "task", Priority: 1}
+	detail := PlaceholderDetail("bw-10", ref, true)
+
+	if detail.Summary.ID != "bw-10" {
+		t.Errorf("expected placeholder summary ID bw-10, got %q", detail.Summary.ID)
+	}
+	if !strings.Contains(detail.Description, skeleton.SkeletonGlyph) {
+		t.Errorf("placeholder description should contain skeleton glyph %q, got %q", skeleton.SkeletonGlyph, detail.Description)
+	}
+}
+
+// --- End of non-blocking loading UX tests ---
 
 func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 	t.Parallel()

@@ -638,3 +638,65 @@ func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 		t.Fatalf("expected no new gateway calls on resize, got %d new call(s)", len(gateway.Calls)-callsBefore)
 	}
 }
+
+// TestSearchModeLoadingStaysSetDuringReload verifies that m.loading remains
+// true while a reload request is in flight. The app-level loadingStates()
+// function depends on this to drive the header spinner for the search surface.
+func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+	}}
+	m := initModel(gateway)
+
+	// After init+resolve, loading should be false.
+	if m.loading {
+		t.Fatalf("expected loading=false after init resolves, got true")
+	}
+
+	// Trigger a reload — loading must become true before the response arrives.
+	cmd := m.Reload()
+	if cmd == nil {
+		t.Fatal("expected Reload to return a command")
+	}
+	if !m.loading {
+		t.Fatalf("expected m.loading=true while reload is in flight, got false")
+	}
+	if !m.reloading {
+		t.Fatalf("expected m.reloading=true while reload is in flight (has prior page), got false")
+	}
+}
+
+// TestSearchModeTypingWhileLoadingIsAccepted is a regression test verifying
+// that handleKey accepts query edits even when m.loading is true. The model
+// must not gate text input on the loading flag.
+func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	m := NewModel(gateway)
+
+	// Manually set loading=true (simulating an in-flight request).
+	m.loading = true
+	m.focus = uisearch.FocusQuery
+
+	// Type a rune — should update draftQuery without blocking.
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if cmd != nil {
+		t.Fatalf("expected typing while loading to return nil cmd (no new search), got %T", cmd)
+	}
+	if m.draftQuery != "x" {
+		t.Fatalf("expected draftQuery to accept typed rune while loading, got %q", m.draftQuery)
+	}
+
+	// Backspace should also work.
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if cmd != nil {
+		t.Fatalf("expected backspace while loading to return nil cmd, got %T", cmd)
+	}
+	if m.draftQuery != "" {
+		t.Fatalf("expected backspace to remove typed rune while loading, got %q", m.draftQuery)
+	}
+}

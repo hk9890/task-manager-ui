@@ -8,6 +8,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -27,7 +28,14 @@ type Column struct {
 	Title       string
 	Rows        []domain.IssueSummary
 	SelectedRow int
-	Error       string
+	// Error is a non-empty string when a gateway call for this column failed.
+	// The renderer shows an inline error row at the top of the column content.
+	Error string
+	// Loading is true while the column's data is being fetched. When Loading
+	// is true and Rows is empty, the renderer shows skeleton placeholder rows.
+	// When Loading is true and Rows is non-empty, stale rows are shown as-is
+	// (the global header spinner from 0x36.6 signals the in-flight state).
+	Loading bool
 	// Total is the number of issues in this column as reported by the gateway.
 	// TotalIsExact is false when the backend may have more issues than were returned
 	// (e.g. the Done column was capped), in which case the renderer shows "N+".
@@ -179,16 +187,49 @@ func distributeWidths(total, count int) []int {
 	return widths
 }
 
+// skeletonRows returns ~6 skeleton placeholder rows for a loading column.
+func skeletonRows(maxWidth int) []string {
+	const numSkeletonRows = 6
+	rows := make([]string, 0, numSkeletonRows)
+	for i := 0; i < numSkeletonRows; i++ {
+		rows = append(rows, skeleton.SkeletonRow(maxWidth, 2))
+	}
+	return rows
+}
+
 func renderColumnRows(col Column, maxWidth int) []string {
+	var rows []string
+
+	// Inline error row at the top (if any).
 	if strings.TrimSpace(col.Error) != "" {
-		return []string{styles.TruncateString("Error: "+col.Error, maxWidth)}
+		errRow := styles.TruncateString("⚠ load failed: "+col.Error, maxWidth)
+		rows = append(rows, errRow)
 	}
 
-	if len(col.Rows) == 0 {
-		return []string{"(no issues)"}
+	if col.Loading {
+		if len(col.Rows) == 0 {
+			// Cold-start: no data yet — show skeleton rows.
+			rows = append(rows, skeletonRows(maxWidth)...)
+			return rows
+		}
+		// Refresh: stale rows on screen while new data is in flight.
+		for idx, issue := range col.Rows {
+			rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
+				Issue:    issue,
+				Selected: idx == col.SelectedRow,
+				Width:    maxWidth,
+				Styled:   true,
+			}))
+		}
+		return rows
 	}
 
-	rows := make([]string, 0, len(col.Rows))
+	// Not loading — render normally.
+	if len(rows) == 0 && len(col.Rows) == 0 {
+		rows = append(rows, "(no issues)")
+		return rows
+	}
+
 	for idx, issue := range col.Rows {
 		rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,

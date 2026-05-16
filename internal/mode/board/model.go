@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	uiboard "github.com/hk9890/beads-workbench/internal/ui/board"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
 )
 
 // Section titles for the fixed four-column layout.
@@ -48,10 +46,12 @@ type closedLoadedMsg struct {
 
 // columnData holds the loaded data for one board column after composition.
 type columnData struct {
-	title  string
-	issues []domain.IssueSummary
-	total  int
-	exact  bool
+	title   string
+	issues  []domain.IssueSummary
+	total   int
+	exact   bool
+	loading bool
+	err     error
 }
 
 type refreshMode int
@@ -69,13 +69,11 @@ type refreshAnchor struct {
 
 // Model is the standalone board mode controller backed by direct gateway calls.
 type Model struct {
-	gateway   beads.BeadsGateway
-	logger    *slog.Logger
-	keys      config.ResolvedKeyBindings
-	width     int
-	height    int
-	loading   bool
-	loadError string
+	gateway beads.BeadsGateway
+	logger  *slog.Logger
+	keys    config.ResolvedKeyBindings
+	width   int
+	height  int
 
 	// columns holds the four fixed board columns after composition.
 	columns []columnData
@@ -84,9 +82,12 @@ type Model struct {
 	pendingResults int
 	// partialReady / partialInProgress / partialClosed hold in-flight results
 	// until all 3 arrive and composition can run.
-	partialReadyExplain *domain.ReadyExplainResult
-	partialInProgress   []domain.IssueSummary
-	partialClosed       []domain.IssueSummary
+	partialReadyExplain    *domain.ReadyExplainResult
+	partialReadyExplainErr error
+	partialInProgress      []domain.IssueSummary
+	partialInProgressErr   error
+	partialClosed          []domain.IssueSummary
+	partialClosedErr       error
 
 	focusedColumn int
 	selectedRow   map[int]int
@@ -112,19 +113,30 @@ func NewModel(gateway beads.BeadsGateway, logger *slog.Logger, resolved ...confi
 		}
 	}
 
-	return &Model{
+	m := &Model{
 		gateway:     gateway,
 		logger:      logger,
 		keys:        keys,
-		loading:     true,
 		selectedRow: map[int]int{},
 		refreshMode: refreshModeManual,
+	}
+	m.columns = initialLoadingColumns()
+	return m
+}
+
+// initialLoadingColumns returns the 4 fixed board columns in their cold-start
+// loading state (loading=true, no issues, no error).
+func initialLoadingColumns() []columnData {
+	return []columnData{
+		{title: sectionTitleNotReady, loading: true},
+		{title: sectionTitleReady, loading: true},
+		{title: sectionTitleInProgress, loading: true},
+		{title: sectionTitleDone, loading: true},
 	}
 }
 
 // Init loads board data from the gateway via 3 parallel calls.
 func (m *Model) Init() tea.Cmd {
-	m.loading = true
 	return m.startReload(refreshModeManual)
 }
 
@@ -136,38 +148,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 
 	case readyExplainLoadedMsg:
-		if msg.err != nil {
-			m.loading = false
-			m.loadError = msg.err.Error()
-			m.columns = nil
-			m.pendingResults = 0
-			return nil
+		m.partialReadyExplainErr = msg.err
+		if msg.err == nil {
+			m.partialReadyExplain = &msg.result
 		}
-		m.partialReadyExplain = &msg.result
 		m.pendingResults--
 		return m.maybeCompose()
 
 	case inProgressLoadedMsg:
-		if msg.err != nil {
-			m.loading = false
-			m.loadError = msg.err.Error()
-			m.columns = nil
-			m.pendingResults = 0
-			return nil
+		m.partialInProgressErr = msg.err
+		if msg.err == nil {
+			m.partialInProgress = msg.issues
 		}
-		m.partialInProgress = msg.issues
 		m.pendingResults--
 		return m.maybeCompose()
 
 	case closedLoadedMsg:
-		if msg.err != nil {
-			m.loading = false
-			m.loadError = msg.err.Error()
-			m.columns = nil
-			m.pendingResults = 0
-			return nil
+		m.partialClosedErr = msg.err
+		if msg.err == nil {
+			m.partialClosed = msg.issues
 		}
-		m.partialClosed = msg.issues
 		m.pendingResults--
 		return m.maybeCompose()
 
@@ -224,12 +224,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the standalone board dashboard.
 func (m *Model) View() string {
-	if m.loading {
-		return loading.View(loading.State{Scope: loading.ScopeBoard})
-	}
-	if strings.TrimSpace(m.loadError) != "" {
-		return fmt.Sprintf("Unable to load board dashboards.\nError: %s", m.loadError)
-	}
 	if len(m.columns) == 0 {
 		return "No board sections available."
 	}
@@ -240,12 +234,18 @@ func (m *Model) View() string {
 		if colIdx == m.focusedColumn {
 			selectedRow = m.selectedRow[colIdx]
 		}
+		errStr := ""
+		if col.err != nil {
+			errStr = col.err.Error()
+		}
 		uiColumns = append(uiColumns, uiboard.Column{
 			Title:        col.title,
 			Rows:         col.issues,
 			SelectedRow:  selectedRow,
 			Total:        col.total,
 			TotalIsExact: col.exact,
+			Loading:      col.loading,
+			Error:        errStr,
 		})
 	}
 
@@ -293,9 +293,14 @@ func (m *Model) CurrentSelection() *mode.Selection {
 	return m.currentSelection()
 }
 
-// IsLoading reports whether data queries are still loading.
+// IsLoading reports whether any column is still loading.
 func (m *Model) IsLoading() bool {
-	return m.loading
+	for _, col := range m.columns {
+		if col.loading {
+			return true
+		}
+	}
+	return false
 }
 
 // AutoRefresh reloads board data while preserving user context when possible.
@@ -306,9 +311,9 @@ func (m *Model) AutoRefresh() tea.Cmd {
 	return m.startReload(refreshModeAuto)
 }
 
-// startReload captures the selection anchor (if auto), resets in-flight state,
-// and dispatches all 3 gateway calls in a single tea.Batch. It is the single
-// entry point for both manual reload and auto-refresh.
+// startReload captures the selection anchor (if auto), marks all columns
+// loading, and dispatches all 3 gateway calls in a single tea.Batch. It is
+// the single entry point for both manual reload and auto-refresh.
 func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Capture anchor before clearing state so it reflects the current selection.
 	var anchor *refreshAnchor
@@ -316,19 +321,27 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		anchor = m.captureRefreshAnchor()
 	}
 
-	m.loading = true
-	m.loadError = ""
+	// Mark all columns as loading, preserve existing issues for stale rendering.
+	for i := range m.columns {
+		m.columns[i].loading = true
+		m.columns[i].err = nil
+	}
+
 	m.pendingResults = 3
 	m.partialReadyExplain = nil
+	m.partialReadyExplainErr = nil
 	m.partialInProgress = nil
+	m.partialInProgressErr = nil
 	m.partialClosed = nil
+	m.partialClosedErr = nil
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
 	if rm == refreshModeManual {
-		// Full reset: move focus to col 0, clear selection map.
+		// Full reset: move focus to col 0, clear selection map, reset columns.
 		m.focusedColumn = 0
 		m.selectedRow = map[int]int{}
+		m.columns = initialLoadingColumns()
 	}
 
 	cl := m.closedLimit()
@@ -378,12 +391,20 @@ func (m *Model) maybeCompose() tea.Cmd {
 		}
 	}
 
-	// Build the four fixed columns.
+	// Determine per-region errors:
+	// Not Ready + Ready ← ReadyExplain error
+	// In Progress ← in_progress query error
+	// Done ← closed query error
+	readyExplainErr := m.partialReadyExplainErr
+	inProgressErr := m.partialInProgressErr
+	closedErr := m.partialClosedErr
+
+	// Build the four fixed columns, clearing loading flags atomically.
 	m.columns = []columnData{
-		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact},
-		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact},
-		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact},
-		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact},
+		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false, err: readyExplainErr},
+		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact, loading: false, err: readyExplainErr},
+		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false, err: inProgressErr},
+		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false, err: closedErr},
 	}
 
 	// Ensure selectedRow map has an entry for each column.
@@ -393,7 +414,6 @@ func (m *Model) maybeCompose() tea.Cmd {
 		}
 	}
 
-	m.loading = false
 	m.settleAfterRefreshLoad()
 	return m.selectionChangedCmd()
 }

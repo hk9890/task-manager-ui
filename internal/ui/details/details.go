@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/markdown"
+	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -96,13 +96,18 @@ func Render(state State) string {
 		return "No selected issue.\nSelect an issue in board/search first."
 	}
 
-	if state.Loading {
+	if state.Loading && strings.TrimSpace(state.Detail.Summary.ID) == "" {
+		// Cold start: no prior detail is available yet.  Render a skeleton
+		// placeholder so the layout stays stable without a full-screen takeover.
 		target := selected
 		if strings.TrimSpace(state.TargetID) != "" {
 			target = state.TargetID
 		}
-		return loading.View(loading.State{Scope: loading.ScopeDetail, Target: target})
+		return renderColdStartSkeleton(target, state.Width)
 	}
+	// Refresh (same or different previously-loaded issue): fall through to the
+	// normal detail layout so stale content stays visible while the spinner
+	// in the header signals the in-flight request.
 
 	if strings.TrimSpace(state.Error) != "" {
 		return fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, state.Error)
@@ -875,4 +880,26 @@ func emptyFallback(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// renderColdStartSkeleton renders a lightweight placeholder for the cold-start
+// case (no prior detail loaded). It shows the target issue ID followed by
+// skeleton rows in the description area so the layout is stable.
+func renderColdStartSkeleton(targetID string, width int) string {
+	if width <= 0 {
+		width = defaultDetailWidth
+	}
+	skeletonWidth := width - 4
+	if skeletonWidth < 10 {
+		skeletonWidth = 10
+	}
+
+	lines := make([]string, 0, 10)
+	lines = append(lines, styles.TruncateString(targetID, width))
+	lines = append(lines, "")
+	lines = append(lines, "Description")
+	for i := 0; i < 6; i++ {
+		lines = append(lines, skeleton.SkeletonRow(skeletonWidth, 3))
+	}
+	return strings.Join(lines, "\n")
 }

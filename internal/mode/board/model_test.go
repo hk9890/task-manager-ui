@@ -135,7 +135,6 @@ func TestBoardModeAllEmptyLoad(t *testing.T) {
 	// No responses set: all return empty slices.
 
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.loading = true
 	m.pendingResults = 3
 	// Use a wide enough terminal so all 4 columns are visible.
 	m.SetSize(200, 30)
@@ -145,20 +144,19 @@ func TestBoardModeAllEmptyLoad(t *testing.T) {
 	_ = m.Update(inProgressLoadedMsg{issues: nil})
 	_ = m.Update(closedLoadedMsg{issues: nil})
 
-	if m.loading {
-		t.Fatal("expected loading=false after all 3 results arrived")
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 3 results arrived")
 	}
-	if m.loadError != "" {
-		t.Fatalf("expected no load error, got %q", m.loadError)
+	for _, col := range m.columns {
+		if col.err != nil {
+			t.Fatalf("expected no column errors, got col %q err: %v", col.title, col.err)
+		}
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
 
 	view := m.View()
-	if strings.Contains(view, "Loading") {
-		t.Fatalf("expected no loading indicator after all results, got: %s", view)
-	}
 	// All 4 section titles must appear in a wide render.
 	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
 		if !strings.Contains(view, title) {
@@ -216,78 +214,112 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View()), "model_loaded.golden")
 }
 
-// --- AC: ReadyExplain error path ---
+// --- AC: ReadyExplain error path (per-column, non-aborting) ---
 
 func TestBoardModeReadyExplainErrorPath(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.loading = true
+	m.SetSize(200, 30)
 	m.pendingResults = 3
 
 	loadErr := errors.New("network timeout")
+	// Only the ReadyExplain result arrives with an error; feed the other two as
+	// success so maybeCompose runs and routes the error to the correct columns.
 	_ = m.Update(readyExplainLoadedMsg{err: loadErr})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
+	_ = m.Update(closedLoadedMsg{issues: nil})
 
-	if m.loading {
-		t.Fatal("expected loading=false after ReadyExplain error")
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 3 results arrived")
 	}
-	if !strings.Contains(m.loadError, "network timeout") {
-		t.Fatalf("expected load error to contain %q, got %q", "network timeout", m.loadError)
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
-	if m.columns != nil {
-		t.Fatal("expected columns to be nil after load error")
+	// Not Ready (col 0) and Ready (col 1) are affected by the ReadyExplain error.
+	for _, col := range m.columns[:2] {
+		if col.err == nil || !strings.Contains(col.err.Error(), "network timeout") {
+			t.Errorf("expected ReadyExplain error on column %q, got: %v", col.title, col.err)
+		}
 	}
-	if m.pendingResults != 0 {
-		t.Fatalf("expected pendingResults=0 after error, got %d", m.pendingResults)
+	// In Progress (col 2) and Done (col 3) must be unaffected.
+	for _, col := range m.columns[2:] {
+		if col.err != nil {
+			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+		}
+	}
+
+	// View must render 4-column layout (never the old loading.View).
+	view := m.View()
+	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
+		if !strings.Contains(view, title) {
+			t.Errorf("expected column title %q in view even on error, got: %s", title, view)
+		}
 	}
 }
 
-// --- AC: Query in_progress error path ---
+// --- AC: Query in_progress error path (per-column, non-aborting) ---
 
 func TestBoardModeQueryInProgressErrorPath(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.loading = true
 	m.pendingResults = 3
 
 	loadErr := errors.New("bd unavailable")
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
 	_ = m.Update(inProgressLoadedMsg{err: loadErr})
+	_ = m.Update(closedLoadedMsg{issues: nil})
 
-	if m.loading {
-		t.Fatal("expected loading=false after in_progress error")
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 3 results arrived")
 	}
-	if !strings.Contains(m.loadError, "bd unavailable") {
-		t.Fatalf("expected load error to contain %q, got %q", "bd unavailable", m.loadError)
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
-	if m.columns != nil {
-		t.Fatal("expected columns to be nil after load error")
+	// In Progress (col 2) must carry the error.
+	if m.columns[2].err == nil || !strings.Contains(m.columns[2].err.Error(), "bd unavailable") {
+		t.Errorf("expected in_progress error on In Progress column, got: %v", m.columns[2].err)
+	}
+	// Not Ready (col 0), Ready (col 1), Done (col 3) must be unaffected.
+	for _, col := range []columnData{m.columns[0], m.columns[1], m.columns[3]} {
+		if col.err != nil {
+			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+		}
 	}
 }
 
-// --- AC: Query closed error path ---
+// --- AC: Query closed error path (per-column, non-aborting) ---
 
 func TestBoardModeQueryClosedErrorPath(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.loading = true
 	m.pendingResults = 3
 
 	loadErr := errors.New("bd query failed")
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
 	_ = m.Update(closedLoadedMsg{err: loadErr})
 
-	if m.loading {
-		t.Fatal("expected loading=false after closed error")
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 3 results arrived")
 	}
-	if !strings.Contains(m.loadError, "bd query failed") {
-		t.Fatalf("expected load error to contain %q, got %q", "bd query failed", m.loadError)
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
-	if m.columns != nil {
-		t.Fatal("expected columns to be nil after load error")
+	// Done (col 3) must carry the error.
+	if m.columns[3].err == nil || !strings.Contains(m.columns[3].err.Error(), "bd query failed") {
+		t.Errorf("expected closed error on Done column, got: %v", m.columns[3].err)
+	}
+	// Not Ready, Ready, In Progress must be unaffected.
+	for _, col := range m.columns[:3] {
+		if col.err != nil {
+			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+		}
 	}
 }
 
@@ -298,7 +330,6 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.loading = false
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
@@ -369,7 +400,6 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, keys)
-	m.loading = false
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
@@ -403,7 +433,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 	}
 
 	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
-	if cmd == nil || !m.loading {
+	if cmd == nil || !m.IsLoading() {
 		t.Fatal("expected configured reload key to trigger board reload")
 	}
 }
@@ -412,7 +442,6 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 
 func populatedModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBindings) *Model {
 	m := newBoardModel(gateway, keys)
-	m.loading = false
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}, total: 2, exact: true},
@@ -531,31 +560,43 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 	}
 }
 
-// --- All-or-nothing loading indicator ---
+// --- Per-column loading state (replaces old single loading indicator) ---
 
-func TestBoardModeShowsSingleLoadingSpinnerUntilAll3ResultsArrive(t *testing.T) {
+func TestBoardModePerColumnLoadingState(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.SetSize(200, 30)
 
-	// Phase 1: initial loading state — m.loading=true.
+	// Phase 1: initial loading state — all 4 columns are loading.
+	if !m.IsLoading() {
+		t.Fatal("expected IsLoading()=true before any results")
+	}
+	for i, col := range m.columns {
+		if !col.loading {
+			t.Errorf("expected column %d (%q) loading=true in cold start", i, col.title)
+		}
+	}
+	// View must render 4-column layout with skeleton rows (░ chars), not a
+	// full-screen loading message.
 	view := m.View()
-	if !strings.Contains(view, "Loading") {
-		t.Fatalf("expected loading message before any results, got %q", view)
+	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
+		if !strings.Contains(view, title) {
+			t.Errorf("expected column title %q during cold-start, got: %s", title, view)
+		}
+	}
+	if !strings.Contains(view, "░") {
+		t.Fatalf("expected skeleton glyph ░ during cold-start loading, got: %s", view)
 	}
 
-	// Phase 2: simulate in-flight state (loading=true, pendingResults=3).
-	m.loading = true
+	// Phase 2: only 1 result arrives — still loading (all columns).
 	m.pendingResults = 3
-
-	// Only 1 result arrives — still loading.
 	m.partialReadyExplain = &domain.ReadyExplainResult{}
 	m.pendingResults = 2
 
-	view = m.View()
-	if !strings.Contains(view, "Loading") {
-		t.Fatalf("expected loading message while 2 results still pending, got %q", view)
+	if !m.IsLoading() {
+		t.Fatal("expected IsLoading()=true while 2 results still pending")
 	}
 
 	// Phase 3: all results arrive via maybeCompose.
@@ -564,9 +605,174 @@ func TestBoardModeShowsSingleLoadingSpinnerUntilAll3ResultsArrive(t *testing.T) 
 	m.partialClosed = nil
 	_ = m.maybeCompose()
 
-	view = m.View()
-	if strings.Contains(view, "Loading issues") {
-		t.Fatalf("expected no loading indicator after composition, got %q", view)
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all results arrived")
+	}
+	for i, col := range m.columns {
+		if col.loading {
+			t.Errorf("expected column %d (%q) loading=false after composition", i, col.title)
+		}
+	}
+}
+
+// --- New ticket-required tests (0x36.2) ---
+
+// TestBoardModeColdStartAllColumnsLoading verifies that after NewModel,
+// all 4 columns have loading=true and IsLoading() returns true.
+func TestBoardModeColdStartAllColumnsLoading(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+
+	if !m.IsLoading() {
+		t.Fatal("expected IsLoading()=true immediately after NewModel")
+	}
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns in cold start, got %d", len(m.columns))
+	}
+	for i, col := range m.columns {
+		if !col.loading {
+			t.Errorf("expected column %d (%q) loading=true in cold start", i, col.title)
+		}
+		if col.err != nil {
+			t.Errorf("expected column %d (%q) err=nil in cold start, got: %v", i, col.title, col.err)
+		}
+		if len(col.issues) != 0 {
+			t.Errorf("expected column %d (%q) empty in cold start, got %d issues", i, col.title, len(col.issues))
+		}
+	}
+}
+
+// TestBoardModeAtomicSwapAllColumnsAfterAllResults verifies that after all 3
+// gateway responses arrive, all 4 columns have loading=false.
+func TestBoardModeAtomicSwapAllColumnsAfterAllResults(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.pendingResults = 3
+
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{
+		Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one", Status: "open", Type: "task", Priority: 1}},
+	}})
+	_ = m.Update(inProgressLoadedMsg{issues: []domain.IssueSummary{{ID: "bw-2", Title: "IP one", Status: "in_progress", Type: "task", Priority: 1}}})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 3 results arrived")
+	}
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
+	}
+	for i, col := range m.columns {
+		if col.loading {
+			t.Errorf("expected column %d (%q) loading=false after atomic swap", i, col.title)
+		}
+	}
+}
+
+// TestBoardModePartialErrorOnlyAffectsCorrectColumns verifies that when one
+// gateway call fails, only the affected column(s) carry an error.
+func TestBoardModePartialErrorOnlyAffectsCorrectColumns(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.pendingResults = 3
+
+	// in_progress call fails; the other two succeed.
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
+	_ = m.Update(inProgressLoadedMsg{err: errors.New("in_progress error")})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 3 results")
+	}
+	// Not Ready (0), Ready (1) — unaffected.
+	for _, col := range m.columns[:2] {
+		if col.err != nil {
+			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+		}
+	}
+	// In Progress (2) — must have error.
+	if m.columns[2].err == nil {
+		t.Errorf("expected error on In Progress column, got nil")
+	}
+	// Done (3) — unaffected.
+	if m.columns[3].err != nil {
+		t.Errorf("expected no error on Done column, got: %v", m.columns[3].err)
+	}
+}
+
+// TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty verifies that
+// keyboard navigation during full cold-start (all columns empty) is a no-op
+// and does not panic.
+func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.SetSize(200, 30)
+
+	// All columns are in cold-start loading state with no issues.
+	// Navigation key presses must not panic.
+	keyTests := []tea.Msg{
+		tea.KeyMsg{Type: tea.KeyLeft},
+		tea.KeyMsg{Type: tea.KeyRight},
+		tea.KeyMsg{Type: tea.KeyUp},
+		tea.KeyMsg{Type: tea.KeyDown},
+		tea.KeyMsg{Type: tea.KeyEnter},
+	}
+
+	for _, k := range keyTests {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("keyboard navigation panicked during cold-start: %v", r)
+				}
+			}()
+			_ = m.Update(k)
+		}()
+	}
+
+	if m.CurrentSelection() != nil {
+		t.Fatalf("expected nil selection when all columns empty, got: %#v", m.CurrentSelection())
+	}
+}
+
+// TestBoardModeRefreshKeepsStaleIssuesVisible verifies that on auto-refresh,
+// columns with existing issues keep them visible while loading=true.
+func TestBoardModeRefreshKeepsStaleIssuesVisible(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+
+	// Seed the model with loaded data as if a prior load already completed.
+	m.columns = []columnData{
+		{title: sectionTitleNotReady, issues: nil, loading: false},
+		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}, loading: false, total: 1, exact: true},
+		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-2", Title: "IP one"}}, loading: false, total: 1, exact: true},
+		{title: sectionTitleDone, issues: nil, loading: false},
+	}
+
+	// Trigger auto-refresh (marks columns loading while preserving issues).
+	_ = m.AutoRefresh()
+
+	// All columns must now be loading.
+	if !m.IsLoading() {
+		t.Fatal("expected IsLoading()=true during auto-refresh")
+	}
+	// Columns with prior issues must still have them visible (stale rendering).
+	if len(m.columns[1].issues) == 0 {
+		t.Errorf("expected Ready column to retain stale issues during refresh, got empty")
+	}
+	if !m.columns[1].loading {
+		t.Errorf("expected Ready column loading=true during auto-refresh")
+	}
+	if len(m.columns[2].issues) == 0 {
+		t.Errorf("expected InProgress column to retain stale issues during refresh, got empty")
 	}
 }
 
@@ -634,7 +840,6 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 
 	gateway := fakes.NewFakeBeadsGateway()
 	m := NewModel(gateway, logger, resolvedBoardKeys(t))
-	m.loading = true
 	m.pendingResults = 3
 
 	// Feed all 3 results. No warnings expected from empty inputs.

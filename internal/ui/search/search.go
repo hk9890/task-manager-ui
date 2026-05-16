@@ -10,6 +10,7 @@ import (
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -67,10 +68,6 @@ type State struct {
 
 // Render renders the standalone search view.
 func Render(state State) string {
-	if state.Loading && len(state.Results) == 0 {
-		return loading.View(loading.State{Scope: loading.ScopeSearch})
-	}
-
 	width := state.Width
 	if width <= 0 {
 		width = defaultSearchWidth
@@ -283,6 +280,11 @@ func renderResultsBody(state State, width int) []string {
 		return lines
 	}
 
+	// Cold-start: loading with no prior results — render skeleton placeholder rows.
+	if state.Loading && len(state.Results) == 0 {
+		return renderSkeletonRows(width, 6)
+	}
+
 	if len(state.Results) == 0 {
 		return renderEmptyResultsBody(state, width)
 	}
@@ -314,6 +316,16 @@ func renderResultRows(state State, width int) []string {
 		}))
 	}
 
+	return lines
+}
+
+// renderSkeletonRows returns n skeleton placeholder rows for the cold-start
+// loading state. Each row uses skeleton.SkeletonRow with two slots (id + title).
+func renderSkeletonRows(width, n int) []string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = skeleton.SkeletonRow(width, 2)
+	}
 	return lines
 }
 

@@ -36,10 +36,11 @@ type refreshTickMsg struct{}
 
 type startupHealthCheckMsg struct{ err error }
 
-// schedulerMu guards the test seam variables scheduleRefreshTickCmd and
-// scheduleToastDismissCmd. Tests that run in parallel mutate these globals;
-// the mutex ensures reads in Init/Update/showToast and writes in test helpers
-// do not race. Production code never writes these after init.
+// schedulerMu guards the test seam variables scheduleRefreshTickCmd,
+// scheduleToastDismissCmd, and scheduleSpinnerTickCmd. Tests that run in
+// parallel mutate these globals; the mutex ensures reads in
+// Init/Update/showToast and writes in test helpers do not race. Production
+// code never writes these after init.
 var schedulerMu sync.Mutex
 
 var scheduleRefreshTickCmd = func() tea.Cmd {
@@ -50,6 +51,10 @@ var scheduleRefreshTickCmd = func() tea.Cmd {
 
 var scheduleToastDismissCmd = func(d time.Duration) tea.Cmd {
 	return toaster.ScheduleDismiss(d)
+}
+
+var scheduleSpinnerTickCmd = func() tea.Cmd {
+	return loading.SpinnerTickCmd(100 * time.Millisecond)
 }
 
 // getRefreshTickScheduler returns the current scheduleRefreshTickCmd under lock.
@@ -64,6 +69,13 @@ func getToastDismissScheduler() func(time.Duration) tea.Cmd {
 	schedulerMu.Lock()
 	defer schedulerMu.Unlock()
 	return scheduleToastDismissCmd
+}
+
+// getSpinnerTickScheduler returns the current scheduleSpinnerTickCmd under lock.
+func getSpinnerTickScheduler() func() tea.Cmd {
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+	return scheduleSpinnerTickCmd
 }
 
 var modelNow = time.Now
@@ -183,6 +195,8 @@ type Model struct {
 
 	refreshStateBySurface map[mode.ID]surfaceRefreshState
 
+	spinnerFrame int
+
 	width  int
 	height int
 
@@ -246,9 +260,9 @@ func (m Model) Init() tea.Cmd {
 		return startupHealthCheckMsg{err: err}
 	}
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, m.board.Init())
+		return tea.Batch(healthCheckCmd, m.board.Init(), getSpinnerTickScheduler()())
 	}
-	return tea.Batch(healthCheckCmd, m.board.Init(), getRefreshTickScheduler()())
+	return tea.Batch(healthCheckCmd, m.board.Init(), getRefreshTickScheduler()(), getSpinnerTickScheduler()())
 }
 
 // lazySearchInitCmd fires m.search.Init() exactly once — the first time the
@@ -389,6 +403,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, getRefreshTickScheduler()(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case loading.TickMsg:
+		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
+		return m, batchCmds(modeCmd, getSpinnerTickScheduler()())
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -823,10 +840,39 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 		return nil
 	}
 
+	// When the target issue changes (new selection, not just a refresh of the
+	// same issue), synchronously apply a placeholder detail BEFORE issuing the
+	// gateway call so that scroll offsets reset immediately rather than waiting
+	// for the ShowIssue response.
+	previousID := strings.TrimSpace(m.detail.Detail.Summary.ID)
+	newID := selection.Issue.ID
+	if previousID != strings.TrimSpace(newID) {
+		ref := domain.IssueReference{
+			ID:       selection.Issue.ID,
+			Title:    selection.Issue.Title,
+			Status:   selection.Issue.Status,
+			Type:     selection.Issue.Type,
+			Priority: selection.Issue.Priority,
+		}
+		m.detail.ApplyLoadedDetail(newID, detailsmode.PlaceholderDetail(newID, ref, true))
+	}
+
+	// Required: loadingStates() reads m.detail.Loading to drive the header spinner — do not remove.
 	m.detail.Loading = true
 	m.detail.Error = ""
 	m.detail.TargetID = selection.Issue.ID
 	return loadDetailCmd(m.services, selection.Issue.ID)
+}
+
+// headerSpinnerCell returns a fixed 2-cell string: the current braille spinner
+// glyph followed by a space when any surface is loading, or two literal spaces
+// when idle. Using a fixed-width cell keeps lipgloss.Width(headerLeft) invariant.
+func (m Model) headerSpinnerCell() string {
+	style := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
+	if len(m.loadingStates()) > 0 {
+		return style.Render(loading.Glyph(m.spinnerFrame) + " ")
+	}
+	return style.Render("  ")
 }
 
 func (m Model) renderHeader() string {
@@ -843,7 +889,7 @@ func (m Model) renderHeader() string {
 	left := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		title,
-		"  ",
+		m.headerSpinnerCell(),
 		tab(mode.Board, "Board"),
 		" ",
 		tab(mode.Search, "Search"),

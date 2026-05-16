@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 )
 
 func assertGoldenNormalized(t *testing.T, output []byte, name string) {
@@ -301,4 +302,86 @@ func TestRenderGoldens(t *testing.T) {
 
 		assertGoldenNormalized(t, []byte(view), "search_default_all_results_w120.golden")
 	})
+}
+
+// TestRenderColdStartLoadingShowsSkeletonAndInput verifies that when Loading is
+// true and there are no prior results (cold start), the search input is still
+// visible and the result area shows skeleton placeholder rows instead of a
+// full-screen loading takeover.
+func TestRenderColdStartLoadingShowsSkeletonAndInput(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Loading: true,
+		Results: nil,
+		Query:   "test",
+		Width:   120,
+		Height:  28,
+	})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// Search input must be visible — no full-screen takeover.
+	if !strings.Contains(plain, "Search") {
+		t.Fatalf("expected search input box to be visible in cold-start loading state, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "Results") {
+		t.Fatalf("expected results box to be visible in cold-start loading state, got:\n%s", plain)
+	}
+
+	// Skeleton glyph must appear in the result area.
+	if !strings.Contains(view, skeleton.SkeletonGlyph) {
+		t.Fatalf("expected skeleton glyph %q in cold-start loading state, got:\n%s", skeleton.SkeletonGlyph, view)
+	}
+}
+
+// TestRenderRefreshKeepsStaleResults verifies that when Loading is true and
+// there are existing results (refresh / reloading state), the stale result
+// rows remain visible and skeleton rows are NOT substituted.
+func TestRenderRefreshKeepsStaleResults(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Loading:   true,
+		Reloading: true,
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Stale Result One", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-2", Title: "Stale Result Two", Status: "in_progress", Type: "bug", Priority: 2},
+		},
+		SelectedID: "bw-1",
+		Width:      120,
+		Height:     28,
+	})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// Stale result titles must remain visible.
+	if !strings.Contains(plain, "Stale Result One") {
+		t.Fatalf("expected stale results to stay visible during refresh, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "Stale Result Two") {
+		t.Fatalf("expected all stale results to stay visible during refresh, got:\n%s", plain)
+	}
+}
+
+// TestRenderIdleStateUnchanged is a regression test verifying that the idle
+// state (no loading, results present) renders as expected with no skeleton rows.
+func TestRenderIdleStateUnchanged(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Loading: false,
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Idle Result", Status: "open", Type: "task", Priority: 1},
+		},
+		SelectedID: "bw-1",
+		Width:      120,
+		Height:     28,
+	})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	if !strings.Contains(plain, "Idle Result") {
+		t.Fatalf("expected idle state to show results normally, got:\n%s", plain)
+	}
+	if strings.Contains(view, skeleton.SkeletonGlyph) {
+		t.Fatalf("expected no skeleton glyph in idle state, got:\n%s", view)
+	}
 }

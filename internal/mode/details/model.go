@@ -9,7 +9,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
+	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 )
 
 // Model is the shell-owned standalone detail presentation state.
@@ -74,7 +74,7 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 	detail := m.RenderDetail()
-	blockingLoad := m.Loading && !m.isPreviewingTarget()
+	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
 
 	if compact || viewportHeight <= 0 {
 		return uidetails.Render(uidetails.State{
@@ -374,7 +374,7 @@ func (m *Model) RenderDetail() domain.IssueDetail {
 			content = m.PreviewDetail
 		} else {
 			ref, ok := m.browserReferenceByID(targetID)
-			content = loadingPreviewDetail(targetID, ref, ok)
+			content = PlaceholderDetail(targetID, ref, ok)
 		}
 	}
 
@@ -406,7 +406,12 @@ func (m *Model) browserReferenceByID(issueID string) (domain.IssueReference, boo
 	return domain.IssueReference{}, false
 }
 
-func loadingPreviewDetail(issueID string, ref domain.IssueReference, ok bool) domain.IssueDetail {
+// PlaceholderDetail returns a lightweight IssueDetail suitable for display while
+// the real gateway response is in-flight. The description is filled with skeleton
+// rows so the layout is stable and the content pane does not show a loading takeover.
+// It is exported so the app layer can call it synchronously on selection-change
+// (before the gateway response arrives) to reset scroll offsets immediately.
+func PlaceholderDetail(issueID string, ref domain.IssueReference, ok bool) domain.IssueDetail {
 	summary := domain.IssueSummary{
 		ID:       strings.TrimSpace(issueID),
 		Type:     ref.Type,
@@ -416,9 +421,15 @@ func loadingPreviewDetail(issueID string, ref domain.IssueReference, ok bool) do
 	if ok {
 		summary.Title = ref.Title
 	}
+
+	const placeholderWidth = 60
+	rows := make([]string, 6)
+	for i := range rows {
+		rows[i] = skeleton.SkeletonRow(placeholderWidth, 3)
+	}
 	return domain.IssueDetail{
 		Summary:     summary,
-		Description: loading.View(loading.State{Scope: loading.ScopeDetail, Target: strings.TrimSpace(issueID)}),
+		Description: strings.Join(rows, "\n"),
 	}
 }
 
