@@ -82,7 +82,7 @@ func newRegressionSearch(t *testing.T) *Model {
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings: %v", err)
 	}
-	return NewModel(gateway, keys)
+	return NewModel(gateway, nil, keys)
 }
 
 // feedSearchResults delivers a searchLoadedMsg to the model, simulating a

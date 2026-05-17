@@ -22,7 +22,7 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	gateway := newSearchFakeGateway()
 	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1}}}, Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact}}
 
-	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway)}, 120, 30)
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
@@ -190,7 +190,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error state", func(t *testing.T) {
-		m := NewModel(newSearchFakeGateway())
+		m := NewModel(newSearchFakeGateway(), nil)
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View()
@@ -200,7 +200,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("no results state", func(t *testing.T) {
-		m := NewModel(newSearchFakeGateway())
+		m := NewModel(newSearchFakeGateway(), nil)
 		m.draftQuery = "xyz"
 		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
 		if cmd != nil {
@@ -494,7 +494,7 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
 		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
 	}}
-	m := testui.InitializeController(NewModel(gateway, keys)).(*Model)
+	m := testui.InitializeController(NewModel(gateway, nil, keys)).(*Model)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -552,7 +552,7 @@ func newSearchFakeGateway() *fakes.FakeBeadsGateway {
 }
 
 func initModel(gateway *fakes.FakeBeadsGateway) *Model {
-	return testui.InitializeController(NewModel(gateway)).(*Model)
+	return testui.InitializeController(NewModel(gateway, nil)).(*Model)
 }
 
 func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
@@ -676,7 +676,7 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	t.Parallel()
 
 	gateway := newSearchFakeGateway()
-	m := NewModel(gateway)
+	m := NewModel(gateway, nil)
 
 	// Manually set loading=true (simulating an in-flight request).
 	m.loading = true

@@ -246,7 +246,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
 		board:          boardmode.NewModel(services.Gateway, services.Logger, keys),
-		search:         searchmode.NewModel(services.Gateway, keys),
+		search:         searchmode.NewModel(services.Gateway, services.Logger, keys),
 		detail:         detailsmode.Model{Keys: keys},
 		toast:          toaster.New(),
 		help:           help,

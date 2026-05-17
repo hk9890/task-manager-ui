@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,6 +39,7 @@ type SessionState struct {
 // Model is the standalone search mode controller.
 type Model struct {
 	gateway beads.BeadsGateway
+	logger  *slog.Logger
 	keys    config.ResolvedKeyBindings
 
 	width  int
@@ -66,7 +68,11 @@ type Model struct {
 }
 
 // NewModel creates a search mode controller.
-func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings) *Model {
+// logger may be nil; a nil logger falls back to slog.Default().
+func NewModel(gateway beads.BeadsGateway, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	var keys config.ResolvedKeyBindings
 	if len(resolved) > 0 {
 		keys = resolved[0]
@@ -79,6 +85,7 @@ func NewModel(gateway beads.BeadsGateway, resolved ...config.ResolvedKeyBindings
 	}
 	return &Model{
 		gateway:               gateway,
+		logger:                logger,
 		keys:                  keys,
 		focus:                 uisearch.FocusQuery,
 		metadataSelectedField: uidetails.MetadataFieldStatus,
@@ -241,7 +248,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.focus = uisearch.FocusQuery
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionReload, msg):
-		return m.triggerSearchPreservingSelection()
+		return m.Reload()
 	case msg.Type == tea.KeyRunes:
 		return nil
 	default:
@@ -379,6 +386,9 @@ func (m *Model) IsLoading() bool {
 // Reload refreshes current search results without mutating query input state.
 func (m *Model) Reload() tea.Cmd {
 	if m.loading {
+		m.logger.Debug("manual search refresh suppressed; refresh already in flight",
+			"component", "search",
+			"trigger", "search-manual")
 		return nil
 	}
 	return m.triggerSearchPreservingSelection()
