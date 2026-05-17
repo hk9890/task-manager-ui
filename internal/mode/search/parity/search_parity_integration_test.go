@@ -101,9 +101,26 @@ var queryMatrix = []queryCase{
 
 // TestSearchParityFixture runs the full parity matrix against the embedded
 // fixture dataset. Always runs (no env gate required).
+//
+// Routing: stays on minimal anchor — this test verifies base gateway routing
+// and count-vs-rows consistency; exact issue IDs are not asserted here but
+// the small corpus size ensures results are deterministic.
 func TestSearchParityFixture(t *testing.T) {
 	t.Parallel()
 	ds := datasets.Fixture(t)
+	runSearchParityMatrix(t, ds)
+}
+
+// TestSearchParityScaleFixture runs the full parity matrix against the scale
+// fixture (~590 issues). Gated behind BWB_SCALE_FIXTURE=1 (seeding takes
+// several minutes).
+//
+// Routing: migrated to scale — exercises search corpus depth (keywords appearing
+// in 20+ issues), relevance ordering under realistic data, and result-count
+// parity when limit < total results.
+func TestSearchParityScaleFixture(t *testing.T) {
+	t.Parallel()
+	ds := datasets.ScaleFixture(t) // skips if BWB_SCALE_FIXTURE != 1
 	runSearchParityMatrix(t, ds)
 }
 

@@ -1128,3 +1128,136 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 		}
 	}
 }
+
+// =============================================================================
+// ppja.3 — dynamic-limit argv boundary tests
+//
+// The board model's closedLimit() is driven by terminal height. These tests
+// wire a real *beads.Gateway + RecordingExecutor at specific heights and assert
+// the exact --limit value in the argv for the Query(status=closed) call.
+//
+// Boundary cases covered per the epic-review tightening:
+//   - height=0  (default before first WindowSizeMsg) → closedLimit=50
+//   - height=53 (sectionItemCapacity=50 = floor)     → closedLimit=50
+//   - height=54 (sectionItemCapacity=51 > floor)     → closedLimit=51
+//   - height=60 (sectionItemCapacity=57)             → closedLimit=57
+// =============================================================================
+
+// newRecordingBoardModel is a helper that wires a real beads.Gateway against
+// rec, creates a board.Model at the given height, and returns the model and runner.
+func newRecordingBoardModel(t *testing.T, rec *fakes.RecordingExecutor, height int) *Model {
+	t.Helper()
+
+	runner := beads.NewCommandRunner(beads.RunnerConfig{
+		Command:  "bd",
+		Executor: rec,
+	})
+	gateway := beads.NewCLIGateway(runner)
+	m := NewModel(gateway, slog.Default(), resolvedBoardKeys(t))
+	m.SetSize(80, height)
+	return m
+}
+
+// driveAllBoardInitCmds executes the tea.Batch returned by m.Init(), running
+// every command in the batch to drive subprocess calls through the gateway.
+func driveAllBoardInitCmds(t *testing.T, m *Model) {
+	t.Helper()
+
+	initCmd := m.Init()
+	if initCmd == nil {
+		t.Fatalf("Init() must return a non-nil command")
+	}
+
+	batchMsg := initCmd()
+	batch, ok := batchMsg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("Init() must produce a tea.BatchMsg; got %T", batchMsg)
+	}
+
+	for _, cmd := range batch {
+		if cmd != nil {
+			_ = cmd()
+		}
+	}
+}
+
+// TestBoardClosedQueryArgvLimitDynamicBoundaries pins the exact --limit value
+// in the bd query status=closed argv for four representative terminal heights.
+// Each height exercises a distinct region of closedLimit():
+//
+//   - height=0:  default (no WindowSizeMsg yet) → sectionItemCapacity=20,
+//     max(50,20)=50 → argv must contain --limit 50
+//   - height=53: sectionItemCapacity=50 = floor → max(50,50)=50 → --limit 50
+//   - height=54: sectionItemCapacity=51 > floor → max(50,51)=51 → --limit 51
+//   - height=60: sectionItemCapacity=57         → max(50,57)=57 → --limit 57
+//
+// This is ppja.3 backlog item 3 (board-level closed query limit boundary).
+func TestBoardClosedQueryArgvLimitDynamicBoundaries(t *testing.T) {
+	t.Parallel()
+
+	// Canned JSON for the four argv shapes that change per height.
+	minimalIssueJSON := `[{"id":"bw-c1","title":"Closed one","status":"closed","issue_type":"task","priority":1,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}]`
+	argvReadyExplain := []string{"ready", "--explain", "--json"}
+	argvQueryInProgress := []string{"query", "status=in_progress", "--json"}
+	argvCountClosed := []string{"count", "--by-status", "--json", "--status", "closed"}
+	readyExplainJSON := `{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`
+	countJSON := `{"groups":[{"group":"closed","count":1}],"total":1,"schema_version":1}`
+
+	cases := []struct {
+		name       string
+		height     int
+		wantLimit  string
+		closedArgv []string
+	}{
+		{
+			name:       "height=0 (default cap → limit=50)",
+			height:     0,
+			wantLimit:  "50",
+			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
+		},
+		{
+			name:       "height=53 (sectionItemCapacity=50 = floor → limit=50)",
+			height:     53,
+			wantLimit:  "50",
+			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
+		},
+		{
+			name:       "height=54 (sectionItemCapacity=51 > floor → limit=51)",
+			height:     54,
+			wantLimit:  "51",
+			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "51"},
+		},
+		{
+			name:       "height=60 (sectionItemCapacity=57 → limit=57)",
+			height:     60,
+			wantLimit:  "57",
+			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "57"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := fakes.NewRecordingExecutor()
+			rec.OnArgs(argvReadyExplain).Return(beads.ExecResult{Stdout: []byte(readyExplainJSON)}, nil)
+			rec.OnArgs(argvQueryInProgress).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+			rec.OnArgs(tc.closedArgv).Return(beads.ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+			rec.OnArgs(argvCountClosed).Return(beads.ExecResult{Stdout: []byte(countJSON)}, nil)
+
+			m := newRecordingBoardModel(t, rec, tc.height)
+			driveAllBoardInitCmds(t, m)
+
+			calls := rec.Calls()
+			assertArgvPresent(t, calls, tc.closedArgv)
+
+			// Guard: no unexpected "list --status" regressions.
+			for _, c := range calls {
+				if hasArg(c.Args, "list") && hasArg(c.Args, "--status") {
+					t.Errorf("forbidden 'list --status' argv in call %v", c.Args)
+				}
+			}
+		})
+	}
+}

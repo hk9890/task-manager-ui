@@ -215,7 +215,11 @@ func assertOrderParity(t *testing.T, column, dsName string, bwbIDs, bdIDs []stri
 // for each available dataset and each column.
 func TestSortParity(t *testing.T) {
 	allDatasets := []func(*testing.T) datasets.Dataset{
+		// Fixture: minimal anchor (3 issues) — always runs.
 		datasets.Fixture,
+		// ScaleFixture: ~590 issues — exercises sort tie-breaks on closed_at and
+		// Done-column cap; opt-in via BWB_SCALE_FIXTURE=1.
+		datasets.ScaleFixture,
 		datasets.ThisRepo,
 		datasets.External,
 	}
@@ -238,8 +242,14 @@ func runSortParityForDataset(t *testing.T, ds datasets.Dataset) {
 	// --- Ready column ---
 	// bd ready uses the same sort contract as bwb's issueSort
 	// (priority asc, updated_at desc, id asc), so we compare directly.
+	//
+	// Pass --limit 0 to match ReadyExplain's uncapped output: bd ready --json
+	// without --limit 0 caps at 100 items while bd ready --explain --json (the
+	// gateway path) returns all ready issues. Without --limit 0 on scale datasets
+	// assertOrderParity silently only checks the first 100 of 500+ positions.
+	// See interface.go "bd quirks observed at scale".
 	t.Run("Ready", func(t *testing.T) {
-		bdOut, err := datasets.BdReady(t, ds)
+		bdOut, err := datasets.BdReady(t, ds, "--limit", "0")
 		if err != nil {
 			t.Fatalf("BdReady failed: %v", err)
 		}

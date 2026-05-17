@@ -17,13 +17,10 @@ import (
 func TestGatewayListIssuesBuildsCommandAndMapsSummaries(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--status", "open,blocked", "--type", "task,bug", "--assignee", "alice", "--label", "ui", "--label", "backend", "--sort", "updated", "--limit", "2"}): {
-			result: ExecResult{Stdout: readFixture(t, "list_issues.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json", "--status", "open,blocked", "--type", "task,bug", "--assignee", "alice", "--label", "ui", "--label", "backend", "--sort", "updated", "--limit", "2"}).Return(ExecResult{Stdout: readFixture(t, "list_issues.json")}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	got, err := gateway.ListIssues(context.Background(), domain.IssueListQuery{
 		Statuses:  []string{"open", "blocked"},
@@ -47,24 +44,21 @@ func TestGatewayListIssuesBuildsCommandAndMapsSummaries(t *testing.T) {
 		t.Fatalf("unexpected issue summary: %#v", got[0])
 	}
 
-	if len(exec.calls) != 1 {
-		t.Fatalf("expected one command invocation, got %d", len(exec.calls))
+	if rec.CallCount() != 1 {
+		t.Fatalf("expected one command invocation, got %d", rec.CallCount())
 	}
 }
 
 func TestGatewayReadyIssuesPaginatesResults(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--json", "--limit", "2"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--json", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":2,"owner":"a","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"bug","priority":1,"owner":"b","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ReadyIssues(context.Background(), domain.ReadyIssuesQuery{Limit: 1, Offset: 1})
 	if err != nil {
@@ -79,15 +73,12 @@ func TestGatewayReadyIssuesPaginatesResults(t *testing.T) {
 func TestGatewayBlockedIssuesMapsBlockedBy(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"blocked", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"blocked", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"blocked","status":"blocked","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","blocked_by":["bw-0"]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.BlockedIssues(context.Background(), domain.BlockedIssuesQuery{})
 	if err != nil {
@@ -102,13 +93,10 @@ func TestGatewayBlockedIssuesMapsBlockedBy(t *testing.T) {
 func TestGatewayShowIssueMapsDetail(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-4", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "show_issue.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-4", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_issue.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-4"})
 	if err != nil {
@@ -172,20 +160,15 @@ func TestGatewayShowIssueMapsDetail(t *testing.T) {
 func TestGatewayShowIssueMapsParentGroupBrowserContextFromParentChildRelationships(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-42", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-42", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-42","title":"child issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"parent issue","issue_type":"epic","priority":1,"status":"open","dependency_type":"parent-child"},{"id":"bw-50","title":"blocker issue","issue_type":"bug","priority":1,"status":"open","dependency_type":"blocks"},{"id":"bw-90","title":"dependency-related issue","issue_type":"spike","priority":3,"status":"blocked","dependency_type":"related"}],"related":[{"id":"bw-91","title":"top-level related issue","issue_type":"task","priority":2,"status":"open"}]}
-			]`)},
-		},
-		argsKey([]string{"show", "bw-1", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+			]`)}, nil)
+	rec.OnArgs([]string{"show", "bw-1", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"parent issue","description":"detail","status":"open","issue_type":"epic","priority":1,"created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-04T10:00:00Z","dependents":[{"id":"bw-42","title":"child issue","issue_type":"task","priority":2,"status":"open","dependency_type":"parent-child"},{"id":"bw-43","title":"sibling issue","issue_type":"task","priority":3,"status":"in_progress","dependency_type":"parent-child"},{"id":"bw-99","title":"non-child dependent","issue_type":"task","priority":3,"status":"open","dependency_type":"blocks"}]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-42"})
 	if err != nil {
@@ -212,23 +195,20 @@ func TestGatewayShowIssueMapsParentGroupBrowserContextFromParentChildRelationshi
 		t.Fatalf("expected generic related refs to remain separate from parent-group, got %#v", got.Related)
 	}
 
-	if len(exec.calls) != 2 {
-		t.Fatalf("expected child and parent show calls, got %d", len(exec.calls))
+	if rec.CallCount() != 2 {
+		t.Fatalf("expected child and parent show calls, got %d", rec.CallCount())
 	}
 }
 
 func TestGatewayShowIssueReturnsEmptyParentGroupBrowserContextWhenNoParent(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-77", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-77", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-77","title":"no parent issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-50","title":"blocker issue","dependency_type":"blocks"}]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-77"})
 	if err != nil {
@@ -239,23 +219,20 @@ func TestGatewayShowIssueReturnsEmptyParentGroupBrowserContextWhenNoParent(t *te
 		t.Fatalf("expected empty parent-group browser context, got %#v", got.ParentGroupBrowser)
 	}
 
-	if len(exec.calls) != 1 {
-		t.Fatalf("expected no parent lookup when issue has no parent-child dependency, got %d calls", len(exec.calls))
+	if rec.CallCount() != 1 {
+		t.Fatalf("expected no parent lookup when issue has no parent-child dependency, got %d calls", rec.CallCount())
 	}
 }
 
 func TestGatewayShowIssuePrefersAssigneeOverOwner(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-7", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-7", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-7","title":"assignee precedence","description":"detail","status":"open","issue_type":"task","priority":1,"assignee":"bob","owner":"hans.kohlreiter@dynatrace.com","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-7"})
 	if err != nil {
@@ -270,15 +247,12 @@ func TestGatewayShowIssuePrefersAssigneeOverOwner(t *testing.T) {
 func TestGatewayShowIssueFallsBackToOwnerWhenAssigneeMissing(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-8", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-8", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-8","title":"assignee fallback","description":"detail","status":"open","issue_type":"task","priority":1,"owner":"legacy-owner","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-8"})
 	if err != nil {
@@ -297,15 +271,12 @@ func TestGatewayShowIssueFallsBackToOwnerWhenAssigneeMissing(t *testing.T) {
 func TestGatewayShowIssueLeavesCreatorAndCloseMetadataEmptyWhenAbsent(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-9", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-9", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-9","title":"metadata absent","description":"detail","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-9"})
 	if err != nil {
@@ -331,16 +302,13 @@ func TestGatewaySearchIssuesBuildsCommandAndReturnsPage(t *testing.T) {
 	priorityMin := 1
 	priorityMax := 2
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"search", "gateway", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"search", "gateway", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		Text:        "gateway",
@@ -365,16 +333,13 @@ func TestGatewaySearchIssuesBuildsCommandAndReturnsPage(t *testing.T) {
 func TestGatewaySearchIssuesEmptyTextUsesListCommandFallback(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--all", "--limit", "2"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json", "--all", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{Limit: 1, Offset: 1})
 	if err != nil {
@@ -391,16 +356,13 @@ func TestGatewaySearchIssuesEmptyTextWithFiltersUsesListCommandFallback(t *testi
 
 	priorityMin := 1
 	priorityMax := 2
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		Statuses:    []string{"open"},
@@ -426,17 +388,14 @@ func TestGatewaySearchIssuesWorkStateReadyUsesReadyAndLocalFilters(t *testing.T)
 
 	priorityMin := 1
 	priorityMax := 1
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"gateway parser","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"gateway parser docs","status":"open","issue_type":"task","priority":2,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-3","title":"other","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		Text:        "gateway",
@@ -462,17 +421,14 @@ func TestGatewaySearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters(t *testin
 
 	priorityMin := 0
 	priorityMax := 1
-	routes := map[string]routeResponse{
-		argsKey([]string{"blocked", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"blocked", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"gateway deadlock","status":"blocked","issue_type":"bug","priority":1,"owner":"alice","labels":["backend","ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"gateway deadlock","status":"blocked","issue_type":"bug","priority":2,"owner":"alice","labels":["backend","ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-3","title":"gateway deadlock","status":"blocked","issue_type":"task","priority":1,"owner":"alice","labels":["backend","ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		Text:        "gateway",
@@ -496,15 +452,12 @@ func TestGatewaySearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters(t *testin
 func TestGatewaySearchIssuesWithoutLimitMarksBackendResultsPartialNotExact(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"search", "gateway", "--json", "--status", "all"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"search", "gateway", "--json", "--status", "all"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{Text: "gateway"})
 	if err != nil {
@@ -521,7 +474,7 @@ func TestGatewaySearchIssuesRejectsInvalidPriorityRange(t *testing.T) {
 
 	priorityMin := 3
 	priorityMax := 1
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: &routingExecutor{routes: map[string]routeResponse{}}}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{PriorityMin: &priorityMin, PriorityMax: &priorityMax})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -530,19 +483,12 @@ func TestGatewaySearchIssuesRejectsInvalidPriorityRange(t *testing.T) {
 func TestGatewayCatalogReads(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"statuses", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "statuses.json")},
-		},
-		argsKey([]string{"types", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "types.json")},
-		},
-		argsKey([]string{"label", "list-all", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "labels.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"statuses", "--json"}).Return(ExecResult{Stdout: readFixture(t, "statuses.json")}, nil)
+	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: readFixture(t, "types.json")}, nil)
+	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(ExecResult{Stdout: readFixture(t, "labels.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	statuses, err := gateway.StatusCatalog(context.Background())
 	if err != nil {
@@ -575,13 +521,10 @@ func TestGatewayCatalogReads(t *testing.T) {
 func TestGatewayReadMethodsReturnNormalizedFailures(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json"}): {
-			result: ExecResult{ExitCode: 2, Stderr: []byte("bad args")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json"}).Return(ExecResult{ExitCode: 2, Stderr: []byte("bad args")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ListIssues(context.Background(), domain.IssueListQuery{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
@@ -590,14 +533,10 @@ func TestGatewayReadMethodsReturnNormalizedFailures(t *testing.T) {
 func TestGatewayReadMethodsSurfaceExecutorStderr(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json"}): {
-			result: ExecResult{Stderr: []byte("permission denied")},
-			err:    fmt.Errorf("spawn failed"),
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json"}).Return(ExecResult{Stderr: []byte("permission denied")}, fmt.Errorf("spawn failed"))
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ListIssues(context.Background(), domain.IssueListQuery{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
@@ -607,15 +546,12 @@ func TestGatewayReadMethodsSurfaceExecutorStderr(t *testing.T) {
 func TestGatewayReadMappingReturnsDecodeError(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ListIssues(context.Background(), domain.IssueListQuery{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -624,7 +560,7 @@ func TestGatewayReadMappingReturnsDecodeError(t *testing.T) {
 func TestGatewayShowIssueRequiresID(t *testing.T) {
 	t.Parallel()
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: &routingExecutor{routes: map[string]routeResponse{}}}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -633,13 +569,10 @@ func TestGatewayShowIssueRequiresID(t *testing.T) {
 func TestGatewayShowIssueReturnsNotFoundOnEmptyResponse(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-404", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[]`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-404", "--json"}).Return(ExecResult{Stdout: []byte(`[]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-404"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeNotFound)
@@ -648,15 +581,12 @@ func TestGatewayShowIssueReturnsNotFoundOnEmptyResponse(t *testing.T) {
 func TestGatewayShowIssueDecodeFailureWhenDependencyIsMissingTitle(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-9", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-9", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-9","title":"bad dependency","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1"}]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-9"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -665,15 +595,12 @@ func TestGatewayShowIssueDecodeFailureWhenDependencyIsMissingTitle(t *testing.T)
 func TestGatewayShowIssueReferenceMetadataIsOptional(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-10", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-10", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-10","title":"optional refs","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"dep"}],"dependents":[{"id":"bw-2","title":"child"}],"related":[{"id":"bw-3","title":"rel"}]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-10"})
 	if err != nil {
@@ -709,15 +636,12 @@ func TestGatewayShowIssueMapsRelatedFromDependenciesWhenDependencyTypeIsRelatedO
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			routes := map[string]routeResponse{
-				argsKey([]string{"show", "bw-11", "--json"}): {
-					result: ExecResult{Stdout: []byte(fmt.Sprintf(`[
+			rec := newTestRecordingExecutor()
+			rec.OnArgs([]string{"show", "bw-11", "--json"}).Return(ExecResult{Stdout: []byte(fmt.Sprintf(`[
 						{"id":"bw-11","title":"related in dependencies","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"real blocker","dependency_type":"blocks"},{"id":"bw-3","title":"real related","dependency_type":"%s"}],"dependents":[{"id":"bw-2","title":"child"}]}
-					]`, tc.dependencyType))},
-				},
-			}
+					]`, tc.dependencyType))}, nil)
 
-			gateway, _ := newTestGateway(routes)
+			gateway, _ := newTestGateway(rec)
 
 			got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-11"})
 			if err != nil {
@@ -738,15 +662,12 @@ func TestGatewayShowIssueMapsRelatedFromDependenciesWhenDependencyTypeIsRelatedO
 func TestGatewayShowIssueMapsRelatedFromDependentsWhenDependencyTypeIsRelatesTo(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-13", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-13", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-13","title":"related in dependents","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependents":[{"id":"bw-21","title":"true dependent","dependency_type":"blocks"},{"id":"bw-22","title":"related dependent","dependency_type":"relates-to"}]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-13"})
 	if err != nil {
@@ -765,15 +686,12 @@ func TestGatewayShowIssueMapsRelatedFromDependentsWhenDependencyTypeIsRelatesTo(
 func TestGatewayShowIssueMergesTopLevelAndDependencyRelatedWithoutDuplicates(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-12", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-12", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-12","title":"mixed related","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-4","title":"from deps related","dependency_type":"related"},{"id":"bw-5","title":"non related dep"}],"related":[{"id":"bw-4","title":"from top-level related"},{"id":"bw-6","title":"top-level only"}]}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-12"})
 	if err != nil {
@@ -796,13 +714,10 @@ func TestGatewayShowIssueMergesTopLevelAndDependencyRelatedWithoutDuplicates(t *
 func TestGatewayCountIssuesDecodesMultiGroup(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"count", "--by-status", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"},{"count":353,"group":"closed"}],"schema_version":1,"total":358}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"count", "--by-status", "--json"}).Return(ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"},{"count":353,"group":"closed"}],"schema_version":1,"total":358}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
 	if err != nil {
@@ -831,13 +746,10 @@ func TestGatewayCountIssuesDecodesMultiGroup(t *testing.T) {
 func TestGatewayCountIssuesDecodesSingleGroup(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"count", "--by-status", "--json", "--status", "open"}): {
-			result: ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"}],"schema_version":1,"total":5}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "open"}).Return(ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"}],"schema_version":1,"total":5}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{Statuses: []string{"open"}})
 	if err != nil {
@@ -860,13 +772,10 @@ func TestGatewayCountIssuesDecodesSingleGroup(t *testing.T) {
 func TestGatewayCountIssuesDecodesEmptyGroups(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"count", "--by-status", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{"groups":[],"schema_version":1,"total":0}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"count", "--by-status", "--json"}).Return(ExecResult{Stdout: []byte(`{"groups":[],"schema_version":1,"total":0}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
 	if err != nil {
@@ -885,13 +794,10 @@ func TestGatewayCountIssuesDecodesEmptyGroups(t *testing.T) {
 func TestGatewayCountIssuesPassesFilters(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"count", "--by-status", "--json", "--status", "closed", "--type", "bug", "--assignee", "alice", "--label", "backend"}): {
-			result: ExecResult{Stdout: []byte(`{"groups":[{"count":10,"group":"closed"}],"schema_version":1,"total":10}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "closed", "--type", "bug", "--assignee", "alice", "--label", "backend"}).Return(ExecResult{Stdout: []byte(`{"groups":[{"count":10,"group":"closed"}],"schema_version":1,"total":10}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{
 		Statuses: []string{"closed"},
@@ -920,16 +826,13 @@ func TestMapListSortFieldClosedAtMapsToClosedFlag(t *testing.T) {
 func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--limit", "5"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--limit", "5"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-B","title":"B closed recent","status":"closed","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","closed_at":"2026-04-01T00:00:00Z"},
 				{"id":"bw-A","title":"A closed earlier updated later","status":"closed","issue_type":"task","priority":1,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z","closed_at":"2026-01-01T00:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ListIssues(context.Background(), domain.IssueListQuery{
 		Statuses:  []string{"closed"},
@@ -962,7 +865,7 @@ func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
 //
 // To verify this test catches the regression: comment out the fix in read_gateway.go
 // (change SortDirectionAscending back to SortDirectionDescending), run this test, and
-// confirm it fails with "route not found" for the argv without --reverse.
+// confirm it fails with "unexpected args" for the argv without --reverse.
 func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 	t.Parallel()
 
@@ -972,12 +875,9 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 	t.Run("DescendingOmitsReverse", func(t *testing.T) {
 		t.Parallel()
 
-		routes := map[string]routeResponse{
-			argsKey([]string{"list", "--json", "--sort", "updated"}): {
-				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
-			},
-		}
-		gw, _ := newTestGateway(routes)
+		rec := newTestRecordingExecutor()
+		rec.OnArgs([]string{"list", "--json", "--sort", "updated"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		gw, _ := newTestGateway(rec)
 		_, err := gw.ListIssues(context.Background(), domain.IssueListQuery{
 			SortBy:    domain.SortFieldUpdatedAt,
 			SortOrder: domain.SortDirectionDescending,
@@ -991,12 +891,9 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 	t.Run("AscendingEmitsReverse", func(t *testing.T) {
 		t.Parallel()
 
-		routes := map[string]routeResponse{
-			argsKey([]string{"list", "--json", "--sort", "updated", "--reverse"}): {
-				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
-			},
-		}
-		gw, _ := newTestGateway(routes)
+		rec := newTestRecordingExecutor()
+		rec.OnArgs([]string{"list", "--json", "--sort", "updated", "--reverse"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		gw, _ := newTestGateway(rec)
 		_, err := gw.ListIssues(context.Background(), domain.IssueListQuery{
 			SortBy:    domain.SortFieldUpdatedAt,
 			SortOrder: domain.SortDirectionAscending,
@@ -1010,12 +907,9 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 	t.Run("QueryDescendingOmitsReverse", func(t *testing.T) {
 		t.Parallel()
 
-		routes := map[string]routeResponse{
-			argsKey([]string{"query", "status=closed", "--json", "--sort", "closed"}): {
-				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
-			},
-		}
-		gw, _ := newTestGateway(routes)
+		rec := newTestRecordingExecutor()
+		rec.OnArgs([]string{"query", "status=closed", "--json", "--sort", "closed"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		gw, _ := newTestGateway(rec)
 		_, err := gw.Query(context.Background(), "status=closed", domain.QueryOptions{
 			SortBy:    domain.SortFieldClosedAt,
 			SortOrder: domain.SortDirectionDescending,
@@ -1029,12 +923,9 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 	t.Run("QueryAscendingEmitsReverse", func(t *testing.T) {
 		t.Parallel()
 
-		routes := map[string]routeResponse{
-			argsKey([]string{"query", "status=closed", "--json", "--sort", "closed", "--reverse"}): {
-				result: ExecResult{Stdout: []byte(minimalIssueJSON)},
-			},
-		}
-		gw, _ := newTestGateway(routes)
+		rec := newTestRecordingExecutor()
+		rec.OnArgs([]string{"query", "status=closed", "--json", "--sort", "closed", "--reverse"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		gw, _ := newTestGateway(rec)
 		_, err := gw.Query(context.Background(), "status=closed", domain.QueryOptions{
 			SortBy:    domain.SortFieldClosedAt,
 			SortOrder: domain.SortDirectionAscending,
@@ -1048,38 +939,33 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 func TestGatewayHealthCheckIssuesPingJSON(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ping", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{"status":"ok","total_ms":42}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{Stdout: []byte(`{"status":"ok","total_ms":42}`)}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	err := gateway.HealthCheck(context.Background())
 	if err != nil {
 		t.Fatalf("HealthCheck returned unexpected error: %v", err)
 	}
 
-	if len(exec.calls) != 1 {
-		t.Fatalf("expected one command invocation, got %d", len(exec.calls))
+	if rec.CallCount() != 1 {
+		t.Fatalf("expected one command invocation, got %d", rec.CallCount())
 	}
 
-	if len(exec.calls[0]) != 2 || exec.calls[0][0] != "ping" || exec.calls[0][1] != "--json" {
-		t.Fatalf("expected argv [ping --json], got %v", exec.calls[0])
+	calls := rec.Calls()
+	if len(calls[0].Args) != 2 || calls[0].Args[0] != "ping" || calls[0].Args[1] != "--json" {
+		t.Fatalf("expected argv [ping --json], got %v", calls[0].Args)
 	}
 }
 
 func TestGatewayHealthCheckNoDatabaseReturnsNoDatabaseFound(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ping", "--json"}): {
-			result: ExecResult{ExitCode: 1, Stderr: []byte("Error: no beads database found")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{ExitCode: 1, Stderr: []byte("Error: no beads database found")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	err := gateway.HealthCheck(context.Background())
 	assertGatewayErrorCode(t, err, domain.ErrorCodeNoDatabaseFound)
@@ -1088,51 +974,18 @@ func TestGatewayHealthCheckNoDatabaseReturnsNoDatabaseFound(t *testing.T) {
 func TestGatewayHealthCheckBdNotFoundReturnsCommandUnavailable(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ping", "--json"}): {
-			err: exec.ErrNotFound,
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{}, exec.ErrNotFound)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	err := gateway.HealthCheck(context.Background())
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandUnavailable)
 }
 
-type routeResponse struct {
-	result ExecResult
-	err    error
-}
-
-type routingExecutor struct {
-	routes map[string]routeResponse
-	calls  [][]string
-}
-
-func (e *routingExecutor) Run(_ context.Context, _ string, args []string, _ string, _ []string) (ExecResult, error) {
-	e.calls = append(e.calls, append([]string(nil), args...))
-
-	resp, ok := e.routes[argsKey(args)]
-	if !ok {
-		return ExecResult{}, fmt.Errorf("unexpected args: %s", strings.Join(args, " "))
-	}
-
-	if resp.err != nil {
-		return resp.result, resp.err
-	}
-
-	return resp.result, nil
-}
-
-func newTestGateway(routes map[string]routeResponse) (*Gateway, *routingExecutor) {
-	exec := &routingExecutor{routes: routes}
-	runner := NewCommandRunner(RunnerConfig{Executor: exec})
-	return NewCLIGatewayRaw(runner), exec
-}
-
-func argsKey(args []string) string {
-	return strings.Join(args, "\x00")
+func newTestGateway(rec *testRecordingExecutor) (*Gateway, *testRecordingExecutor) {
+	runner := NewCommandRunner(RunnerConfig{Executor: rec})
+	return NewCLIGatewayRaw(runner), rec
 }
 
 func readFixture(t *testing.T, name string) []byte {
@@ -1150,16 +1003,13 @@ func readFixture(t *testing.T, name string) []byte {
 func TestGatewayQueryHappyPathReturnsIssueSummaries(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"query", "status=in_progress", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"query", "status=in_progress", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"in progress one","status":"in_progress","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"in progress two","status":"in_progress","issue_type":"bug","priority":1,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.Query(context.Background(), "status=in_progress", domain.QueryOptions{})
 	if err != nil {
@@ -1179,16 +1029,13 @@ func TestGatewayQueryArgvAssemblyWithAllOptions(t *testing.T) {
 	t.Parallel()
 
 	// Limit=1, Offset=1 → withOffsetWindow(1,1)=2 → --limit 2; caller gets page [1:2]
-	routes := map[string]routeResponse{
-		argsKey([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "2"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-A","title":"closed A","status":"closed","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"},
 				{"id":"bw-B","title":"closed B","status":"closed","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.Query(context.Background(), "status=closed", domain.QueryOptions{
 		Limit:         1,
@@ -1210,15 +1057,12 @@ func TestGatewayQueryArgvAssemblyWithAllOptions(t *testing.T) {
 func TestGatewayQueryArgvAssemblyLimitWithoutOffset(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"query", "status=open", "--json", "--sort", "updated", "--limit", "5"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"query", "status=open", "--json", "--sort", "updated", "--limit", "5"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"open one","status":"open","issue_type":"task","priority":1,"owner":"a","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{
 		Limit:  5,
@@ -1237,26 +1081,24 @@ func TestGatewayQueryArgvNoLimitProducesNoLimitFlag(t *testing.T) {
 	t.Parallel()
 
 	// When Limit=0 and Offset=0, no --limit flag should be appended.
-	routes := map[string]routeResponse{
-		argsKey([]string{"query", "priority=1", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[]`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"query", "priority=1", "--json"}).Return(ExecResult{Stdout: []byte(`[]`)}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	_, err := gateway.Query(context.Background(), "priority=1", domain.QueryOptions{})
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
 
-	if len(exec.calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(exec.calls))
+	if rec.CallCount() != 1 {
+		t.Fatalf("expected one call, got %d", rec.CallCount())
 	}
 
-	for _, arg := range exec.calls[0] {
+	calls := rec.Calls()
+	for _, arg := range calls[0].Args {
 		if arg == "--limit" {
-			t.Fatalf("unexpected --limit flag in argv: %v", exec.calls[0])
+			t.Fatalf("unexpected --limit flag in argv: %v", calls[0].Args)
 		}
 	}
 }
@@ -1264,7 +1106,7 @@ func TestGatewayQueryArgvNoLimitProducesNoLimitFlag(t *testing.T) {
 func TestGatewayQueryRejectsEmptyExpression(t *testing.T) {
 	t.Parallel()
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: &routingExecutor{routes: map[string]routeResponse{}}}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.Query(context.Background(), "", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -1273,7 +1115,7 @@ func TestGatewayQueryRejectsEmptyExpression(t *testing.T) {
 func TestGatewayQueryRejectsWhitespaceOnlyExpression(t *testing.T) {
 	t.Parallel()
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: &routingExecutor{routes: map[string]routeResponse{}}}))
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.Query(context.Background(), "   ", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -1282,13 +1124,10 @@ func TestGatewayQueryRejectsWhitespaceOnlyExpression(t *testing.T) {
 func TestGatewayQueryReturnsCommandFailedOnNonZeroExit(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"query", "status=open", "--json"}): {
-			result: ExecResult{ExitCode: 2, Stderr: []byte("bad expression")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"query", "status=open", "--json"}).Return(ExecResult{ExitCode: 2, Stderr: []byte("bad expression")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
@@ -1297,15 +1136,12 @@ func TestGatewayQueryReturnsCommandFailedOnNonZeroExit(t *testing.T) {
 func TestGatewayQueryReturnsDecodeErrorOnMissingID(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"query", "status=open", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"query", "status=open", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.Query(context.Background(), "status=open", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -1314,9 +1150,8 @@ func TestGatewayQueryReturnsDecodeErrorOnMissingID(t *testing.T) {
 func TestGatewayReadyExplainHappyPathDecodesSummaryAndQueues(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
 				"ready": [
 					{"id":"bw-1","title":"ready one","status":"open","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 					{"id":"bw-2","title":"ready two","status":"open","issue_type":"bug","priority":1,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
@@ -1325,11 +1160,9 @@ func TestGatewayReadyExplainHappyPathDecodesSummaryAndQueues(t *testing.T) {
 					{"id":"bw-3","title":"blocked one","status":"blocked","issue_type":"task","priority":2,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","blocked_by":[{"id":"bw-10","title":"blocker","priority":1,"status":"open"}]}
 				],
 				"summary": {"total_ready": 2, "total_blocked": 1, "cycle_count": 0}
-			}`)},
-		},
-	}
+			}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
 	if err != nil {
@@ -1373,17 +1206,14 @@ func TestGatewayReadyExplainHappyPathDecodesSummaryAndQueues(t *testing.T) {
 func TestGatewayReadyExplainWithLimitAppendsLimitFlag(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json", "--limit", "5"}): {
-			result: ExecResult{Stdout: []byte(`{
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json", "--limit", "5"}).Return(ExecResult{Stdout: []byte(`{
 				"ready": [],
 				"blocked": [],
 				"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0}
-			}`)},
-		},
-	}
+			}`)}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{Limit: 5})
 	if err != nil {
@@ -1394,42 +1224,41 @@ func TestGatewayReadyExplainWithLimitAppendsLimitFlag(t *testing.T) {
 		t.Fatalf("expected empty queues, got ready=%d blocked=%d", len(got.Ready), len(got.Blocked))
 	}
 
-	if len(exec.calls) != 1 {
-		t.Fatalf("expected one command call, got %d", len(exec.calls))
+	if rec.CallCount() != 1 {
+		t.Fatalf("expected one command call, got %d", rec.CallCount())
 	}
 
+	calls := rec.Calls()
 	found := false
-	for i, arg := range exec.calls[0] {
-		if arg == "--limit" && i+1 < len(exec.calls[0]) && exec.calls[0][i+1] == "5" {
+	for i, arg := range calls[0].Args {
+		if arg == "--limit" && i+1 < len(calls[0].Args) && calls[0].Args[i+1] == "5" {
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		t.Fatalf("expected --limit 5 in argv, got: %v", exec.calls[0])
+		t.Fatalf("expected --limit 5 in argv, got: %v", calls[0].Args)
 	}
 }
 
 func TestGatewayReadyExplainNoLimitProducesNoLimitFlag(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
 	if err != nil {
 		t.Fatalf("ReadyExplain returned error: %v", err)
 	}
 
-	for _, arg := range exec.calls[0] {
+	calls := rec.Calls()
+	for _, arg := range calls[0].Args {
 		if arg == "--limit" {
-			t.Fatalf("unexpected --limit flag in argv when Limit=0: %v", exec.calls[0])
+			t.Fatalf("unexpected --limit flag in argv when Limit=0: %v", calls[0].Args)
 		}
 	}
 }
@@ -1437,13 +1266,10 @@ func TestGatewayReadyExplainNoLimitProducesNoLimitFlag(t *testing.T) {
 func TestGatewayReadyExplainEmptyArraysDecodeToNonNilSlices(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
 	if err != nil {
@@ -1462,13 +1288,10 @@ func TestGatewayReadyExplainEmptyArraysDecodeToNonNilSlices(t *testing.T) {
 func TestGatewayReadyExplainReturnsCommandFailedOnNonZeroExit(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json"}): {
-			result: ExecResult{ExitCode: 1, Stderr: []byte("no database")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{ExitCode: 1, Stderr: []byte("no database")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
@@ -1477,17 +1300,14 @@ func TestGatewayReadyExplainReturnsCommandFailedOnNonZeroExit(t *testing.T) {
 func TestGatewayReadyExplainReturnsDecodeErrorOnMissingID(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
 				"ready": [{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}],
 				"blocked": [],
 				"summary": {"total_ready":1,"total_blocked":0,"cycle_count":0}
-			}`)},
-		},
-	}
+			}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -1496,9 +1316,8 @@ func TestGatewayReadyExplainReturnsDecodeErrorOnMissingID(t *testing.T) {
 func TestGatewayReadyExplainBlockedItemMultipleBlockedByRefs(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--explain", "--json"}): {
-			result: ExecResult{Stdout: []byte(`{
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
 				"ready": [],
 				"blocked": [
 					{"id":"bw-5","title":"multi-blocked","status":"blocked","issue_type":"bug","priority":2,"owner":"dave","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z",
@@ -1508,11 +1327,9 @@ func TestGatewayReadyExplainBlockedItemMultipleBlockedByRefs(t *testing.T) {
 					 ]}
 				],
 				"summary": {"total_ready":0,"total_blocked":1,"cycle_count":0}
-			}`)},
-		},
-	}
+			}`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
 	if err != nil {
@@ -1537,13 +1354,10 @@ func TestGatewayReadyExplainBlockedItemMultipleBlockedByRefs(t *testing.T) {
 func TestGatewayCatalogAcceptsNullStatusDescription(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"statuses", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "statuses_null_description.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"statuses", "--json"}).Return(ExecResult{Stdout: readFixture(t, "statuses_null_description.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	statuses, err := gateway.StatusCatalog(context.Background())
 	if err != nil {
@@ -1568,13 +1382,10 @@ func TestGatewayCatalogAcceptsNullStatusDescription(t *testing.T) {
 func TestGatewayCatalogAcceptsNullTypeDescription(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"types", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "types_null_description.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: readFixture(t, "types_null_description.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	types, err := gateway.TypeCatalog(context.Background())
 	if err != nil {
@@ -1599,13 +1410,10 @@ func TestGatewayCatalogAcceptsNullTypeDescription(t *testing.T) {
 func TestGatewayCatalogAcceptsNullLabelsList(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"label", "list-all", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "labels_null_list.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(ExecResult{Stdout: readFixture(t, "labels_null_list.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	labels, err := gateway.LabelCatalog(context.Background())
 	if err != nil {
@@ -1620,13 +1428,10 @@ func TestGatewayCatalogAcceptsNullLabelsList(t *testing.T) {
 func TestGatewayShowIssueAcceptsNullCommentText(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-301", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "show_issue_null_comment_text.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-301", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_issue_null_comment_text.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-301"})
 	if err != nil {
@@ -1646,13 +1451,10 @@ func TestGatewayShowIssueAcceptsNullCommentText(t *testing.T) {
 func TestGatewayShowIssueAcceptsNullLabelsAndUnknownFields(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-401", "--json"}): {
-			result: ExecResult{Stdout: readFixture(t, "show_issue_production_noise.json")},
-		},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-401", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_issue_production_noise.json")}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-401"})
 	if err != nil {
@@ -1686,15 +1488,12 @@ func TestGatewayShowIssueHandlesMissingDescription(t *testing.T) {
 
 	// JSON deliberately omits the "description" key — exactly what bd show emits
 	// for an issue that was created without a description.
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-500", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-500", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-500","title":"no desc test","status":"open","issue_type":"task","priority":2,"created_at":"2026-05-16T10:00:00Z","updated_at":"2026-05-16T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-500"})
 	if err != nil {
@@ -1724,22 +1523,21 @@ func TestGatewayShowIssueChildIssueIssuesAtMostOneBdShowSynchronouslyOnCachedPar
 		{"id":"bw-1","title":"parent issue","description":"detail","status":"open","issue_type":"epic","priority":1,"created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-04T10:00:00Z","dependents":[{"id":"bw-42","title":"child issue","issue_type":"task","priority":2,"status":"open","dependency_type":"parent-child"},{"id":"bw-43","title":"sibling issue","issue_type":"task","priority":3,"status":"in_progress","dependency_type":"parent-child"}]}
 	]`)
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"show", "bw-42", "--json"}): {result: ExecResult{Stdout: childJSON}},
-		argsKey([]string{"show", "bw-1", "--json"}):  {result: ExecResult{Stdout: parentJSON}},
-	}
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-42", "--json"}).Return(ExecResult{Stdout: childJSON}, nil)
+	rec.OnArgs([]string{"show", "bw-1", "--json"}).Return(ExecResult{Stdout: parentJSON}, nil)
 
-	gateway, exec := newTestGateway(routes)
+	gateway, rec := newTestGateway(rec)
 
 	// First detail load: fetches child and parent (2 bd show calls).
 	if _, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-42"}); err != nil {
 		t.Fatalf("first ShowIssue returned error: %v", err)
 	}
-	if len(exec.calls) != 2 {
-		t.Fatalf("expected 2 bd show calls on first load (child + parent), got %d", len(exec.calls))
+	if rec.CallCount() != 2 {
+		t.Fatalf("expected 2 bd show calls on first load (child + parent), got %d", rec.CallCount())
 	}
 
-	callsAfterFirst := len(exec.calls)
+	callsAfterFirst := rec.CallCount()
 
 	// Second detail load for the same child: parent siblings must come from
 	// cache — at most one bd show (for the child itself) is issued synchronously.
@@ -1747,7 +1545,7 @@ func TestGatewayShowIssueChildIssueIssuesAtMostOneBdShowSynchronouslyOnCachedPar
 		t.Fatalf("second ShowIssue returned error: %v", err)
 	}
 
-	newCalls := len(exec.calls) - callsAfterFirst
+	newCalls := rec.CallCount() - callsAfterFirst
 	if newCalls > 1 {
 		t.Fatalf("expected at most 1 bd show on second detail load for child issue (parent cached), got %d new calls", newCalls)
 	}
@@ -1762,16 +1560,13 @@ func TestGatewaySearchIssuePageFromRecordsCappedReadyBackendIsNotExact(t *testin
 
 	// Simulate a capped backend: bd ready returns exactly 2 items and limit=2
 	// so completeness should be MaybeMore (can't know if backend had more).
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"cap test one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"cap test two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		Text:      "cap test",
@@ -1810,15 +1605,12 @@ func TestGatewaySearchIssuePageFromRecordsCappedReadyBackendIsNotExact(t *testin
 func TestGatewaySearchIssuesEmptyTextWithWorkStateReadyAttachesNotice(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"ready", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"some ready issue","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		WorkState: domain.WorkStateReady,
@@ -1846,15 +1638,12 @@ func TestGatewaySearchIssuesEmptyTextWithWorkStateReadyAttachesNotice(t *testing
 func TestGatewaySearchIssuesEmptyTextWithWorkStateBlockedAttachesNotice(t *testing.T) {
 	t.Parallel()
 
-	routes := map[string]routeResponse{
-		argsKey([]string{"blocked", "--json"}): {
-			result: ExecResult{Stdout: []byte(`[
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"blocked", "--json"}).Return(ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"some blocked issue","status":"blocked","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-			]`)},
-		},
-	}
+			]`)}, nil)
 
-	gateway, _ := newTestGateway(routes)
+	gateway, _ := newTestGateway(rec)
 
 	got, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
 		WorkState: domain.WorkStateBlocked,
@@ -1875,4 +1664,482 @@ func TestGatewaySearchIssuesEmptyTextWithWorkStateBlockedAttachesNotice(t *testi
 	if got.Metadata.Source != domain.SearchResultSourceBlockedFilter {
 		t.Fatalf("expected source BlockedFilter, got %q", got.Metadata.Source)
 	}
+}
+
+// =============================================================================
+// ppja.3 — argv cardinality tests
+//
+// Each test below pins EXACTLY the argv shape emitted for a given gateway call
+// path. Failing assertions cite the exact shape that was recorded vs. what was
+// expected so accidental argv mutations trip immediately.
+// =============================================================================
+
+// assertExactArgv fails the test unless exactly one call was recorded and its
+// argv exactly matches want.
+func assertExactArgv(t *testing.T, rec *testRecordingExecutor, want []string) {
+	t.Helper()
+
+	calls := rec.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 subprocess call, got %d: %v",
+			len(calls), allArgvSlices(calls))
+	}
+
+	if !reflect.DeepEqual(calls[0].Args, want) {
+		t.Fatalf("argv mismatch:\n  got:  %v\n  want: %v", calls[0].Args, want)
+	}
+}
+
+// allArgvSlices formats recorded calls for failure messages.
+func allArgvSlices(calls []testRecordedCall) [][]string {
+	out := make([][]string, len(calls))
+	for i, c := range calls {
+		out[i] = c.Args
+	}
+	return out
+}
+
+// minimalIssueJSONArray is the smallest valid bd issue JSON array: a single
+// issue with all required fields populated.
+const minimalIssueJSONArray = `[{"id":"bw-1","title":"t","status":"open","issue_type":"task","priority":1,"owner":"a","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`
+
+// minimalReadyExplainJSON is the smallest valid bd ready --explain payload.
+const minimalReadyExplainJSON = `{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`
+
+// --- 1. ShowIssue parent-sibling fetch path ---
+
+// TestShowIssueParentSiblingArgvShape pins the second bd show call emitted by
+// ShowIssue when the queried issue has a parent-child dependency. The parent
+// sibling lookup issues `bd show <parentID> --json` as a second call.
+//
+// This is ppja.3 backlog item 1.
+func TestShowIssueParentSiblingArgvShape(t *testing.T) {
+	t.Parallel()
+
+	childJSON := `[{"id":"bw-child","title":"child","status":"open","issue_type":"task","priority":1,"owner":"a","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"id":"bw-parent","title":"parent","issue_type":"epic","priority":1,"status":"open","dependency_type":"parent-child"}]}]`
+	parentJSON := `[{"id":"bw-parent","title":"parent","status":"open","issue_type":"epic","priority":1,"owner":"a","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependents":[{"id":"bw-child","title":"child","issue_type":"task","priority":1,"status":"open","dependency_type":"parent-child"}]}]`
+
+	wantChildArgv := []string{"show", "bw-child", "--json"}
+	wantParentArgv := []string{"show", "bw-parent", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantChildArgv).Return(ExecResult{Stdout: []byte(childJSON)}, nil)
+	rec.OnArgs(wantParentArgv).Return(ExecResult{Stdout: []byte(parentJSON)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-child"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	calls := rec.Calls()
+	if len(calls) != 2 {
+		t.Fatalf("expected exactly 2 subprocess calls (child + parent sibling lookup), got %d: %v",
+			len(calls), allArgvSlices(calls))
+	}
+
+	// First call: the primary issue lookup.
+	if !reflect.DeepEqual(calls[0].Args, wantChildArgv) {
+		t.Errorf("first call argv mismatch:\n  got:  %v\n  want: %v", calls[0].Args, wantChildArgv)
+	}
+
+	// Second call: the parent sibling lookup — this is the contract we are pinning.
+	if !reflect.DeepEqual(calls[1].Args, wantParentArgv) {
+		t.Errorf("parent-sibling fetch argv mismatch:\n  got:  %v\n  want: %v", calls[1].Args, wantParentArgv)
+	}
+}
+
+// --- 2. ReadyExplain with non-zero limit — boundary parametrization ---
+
+// TestReadyExplainArgvBoundaryLimits pins the exact argv for ReadyExplain at
+// limit=1 (minimum), limit=20 (default before first WindowSizeMsg), and
+// limit=21 (one past the cap boundary).
+//
+// This is ppja.3 backlog item 2.
+func TestReadyExplainArgvBoundaryLimits(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		limit int
+		want  []string
+	}{
+		{"limit=1 (min boundary)", 1, []string{"ready", "--explain", "--json", "--limit", "1"}},
+		{"limit=20 (default cap)", 20, []string{"ready", "--explain", "--json", "--limit", "20"}},
+		{"limit=21 (one past default)", 21, []string{"ready", "--explain", "--json", "--limit", "21"}},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := newTestRecordingExecutor()
+			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(minimalReadyExplainJSON)}, nil)
+
+			gateway, rec := newTestGateway(rec)
+
+			_, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{Limit: tc.limit})
+			if err != nil {
+				t.Fatalf("ReadyExplain returned error: %v", err)
+			}
+
+			assertExactArgv(t, rec, tc.want)
+		})
+	}
+}
+
+// --- 3. Query general form — dynamic limit boundary variants ---
+
+// TestQueryArgvBoundaryLimits pins the exact argv for Query at representative
+// limit values beyond the board's two pinned cases (status=in_progress without
+// limit, status=closed with limit=50). This covers limit=1, limit=50 (the
+// closedLimit floor), and limit=51 (one past the floor).
+//
+// This is ppja.3 backlog item 3.
+func TestQueryArgvBoundaryLimits(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		expr string
+		opts domain.QueryOptions
+		want []string
+	}{
+		{
+			name: "status=in_progress limit=1 (min boundary)",
+			expr: "status=in_progress",
+			opts: domain.QueryOptions{Limit: 1},
+			want: []string{"query", "status=in_progress", "--json", "--limit", "1"},
+		},
+		{
+			name: "status=closed limit=50 (closedLimit floor)",
+			expr: "status=closed",
+			opts: domain.QueryOptions{IncludeClosed: true, SortBy: domain.SortFieldClosedAt, SortOrder: domain.SortDirectionDescending, Limit: 50},
+			want: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
+		},
+		{
+			name: "status=closed limit=51 (one past floor)",
+			expr: "status=closed",
+			opts: domain.QueryOptions{IncludeClosed: true, SortBy: domain.SortFieldClosedAt, SortOrder: domain.SortDirectionDescending, Limit: 51},
+			want: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "51"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := newTestRecordingExecutor()
+			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(`[]`)}, nil)
+
+			gateway, rec := newTestGateway(rec)
+
+			_, err := gateway.Query(context.Background(), tc.expr, tc.opts)
+			if err != nil {
+				t.Fatalf("Query returned error: %v", err)
+			}
+
+			assertExactArgv(t, rec, tc.want)
+		})
+	}
+}
+
+// --- 4. SearchIssues → empty text / no WorkState (bd list --json --all) ---
+
+// TestSearchIssuesEmptyTextNoWorkStateArgvShape pins the exact argv for the
+// SearchIssues path that routes to searchIssuesFromList with empty text and no
+// status filter: `bd list --json --all --limit N`.
+//
+// This is ppja.3 backlog item 4.
+func TestSearchIssuesEmptyTextNoWorkStateArgvShape(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		limit int
+		want  []string
+	}{
+		{
+			name:  "limit=0 (no limit flag)",
+			limit: 0,
+			want:  []string{"list", "--json", "--all"},
+		},
+		{
+			name:  "limit=20 (default capacity)",
+			limit: 20,
+			want:  []string{"list", "--json", "--all", "--limit", "20"},
+		},
+		{
+			name:  "limit=1 (min boundary)",
+			limit: 1,
+			want:  []string{"list", "--json", "--all", "--limit", "1"},
+		},
+		{
+			name:  "limit=21 (one past default)",
+			limit: 21,
+			want:  []string{"list", "--json", "--all", "--limit", "21"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := newTestRecordingExecutor()
+			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+
+			gateway, rec := newTestGateway(rec)
+
+			_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+				Text:      "", // empty text → searchIssuesFromList
+				WorkState: domain.WorkStateAny,
+				Limit:     tc.limit,
+			})
+			if err != nil {
+				t.Fatalf("SearchIssues returned error: %v", err)
+			}
+
+			assertExactArgv(t, rec, tc.want)
+		})
+	}
+}
+
+// --- 5. SearchIssues → status-filtered list path ---
+
+// TestSearchIssuesStatusFilteredListArgvShape pins the argv for the
+// searchIssuesFromList path when a status filter is applied:
+// `bd list --json --status <csv> --limit N`.
+//
+// This is ppja.3 backlog item 5.
+func TestSearchIssuesStatusFilteredListArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"list", "--json", "--status", "open,in_progress", "--limit", "20"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		Text:      "",
+		WorkState: domain.WorkStateAny,
+		Statuses:  []string{"open", "in_progress"},
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// --- 6. SearchIssues → text search path ---
+
+// TestSearchIssuesTextSearchArgvShape pins the argv for the non-empty text
+// search path: `bd search <text> --json --status all --limit N`.
+//
+// This is ppja.3 backlog item 6.
+func TestSearchIssuesTextSearchArgvShape(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		text  string
+		limit int
+		want  []string
+	}{
+		{
+			name:  "text+limit=20 (default)",
+			text:  "gateway",
+			limit: 20,
+			want:  []string{"search", "gateway", "--json", "--status", "all", "--limit", "20"},
+		},
+		{
+			name:  "text+limit=1 (min boundary)",
+			text:  "gateway",
+			limit: 1,
+			want:  []string{"search", "gateway", "--json", "--status", "all", "--limit", "1"},
+		},
+		{
+			name:  "text+limit=21 (one past default)",
+			text:  "gateway",
+			limit: 21,
+			want:  []string{"search", "gateway", "--json", "--status", "all", "--limit", "21"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := newTestRecordingExecutor()
+			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+
+			gateway, rec := newTestGateway(rec)
+
+			_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+				Text:      tc.text,
+				WorkState: domain.WorkStateAny,
+				Limit:     tc.limit,
+			})
+			if err != nil {
+				t.Fatalf("SearchIssues returned error: %v", err)
+			}
+
+			assertExactArgv(t, rec, tc.want)
+		})
+	}
+}
+
+// --- 7. SearchIssues → WorkState=Ready ---
+
+// TestSearchIssuesWorkStateReadyArgvShape pins the argv for the WorkState=Ready
+// path which routes to bd ready --json.
+//
+// This is ppja.3 backlog item 7.
+func TestSearchIssuesWorkStateReadyArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"ready", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		WorkState: domain.WorkStateReady,
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// --- 8. SearchIssues → WorkState=Blocked ---
+
+// TestSearchIssuesWorkStateBlockedArgvShape pins the argv for the
+// WorkState=Blocked path which routes to bd blocked --json.
+//
+// This is ppja.3 backlog item 8.
+func TestSearchIssuesWorkStateBlockedArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"blocked", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		WorkState: domain.WorkStateBlocked,
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// --- 9. StatusCatalog argv cardinality ---
+
+// TestStatusCatalogArgvShape pins the exact argv: `bd statuses --json`.
+//
+// This is ppja.3 backlog item 9.
+func TestStatusCatalogArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"statuses", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: readFixture(t, "statuses.json")}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.StatusCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("StatusCatalog returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// --- 10. TypeCatalog argv cardinality ---
+
+// TestTypeCatalogArgvShape pins the exact argv: `bd types --json`.
+//
+// This is ppja.3 backlog item 10.
+func TestTypeCatalogArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"types", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: readFixture(t, "types.json")}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.TypeCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("TypeCatalog returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// --- 11. LabelCatalog argv cardinality ---
+
+// TestLabelCatalogArgvShape pins the exact argv: `bd label list-all --json`.
+//
+// This is ppja.3 backlog item 11.
+func TestLabelCatalogArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"label", "list-all", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: readFixture(t, "labels.json")}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.LabelCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("LabelCatalog returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// --- 12. CountIssues without status filter ---
+
+// TestCountIssuesNoStatusFilterArgvShape pins the exact argv for CountIssues
+// with an empty query: `bd count --by-status --json` (no --status flag).
+//
+// This is ppja.3 backlog item 12.
+func TestCountIssuesNoStatusFilterArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"count", "--by-status", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`{"groups":[],"total":0,"schema_version":1}`)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
 }

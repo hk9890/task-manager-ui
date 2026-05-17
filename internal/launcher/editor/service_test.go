@@ -32,11 +32,16 @@ func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
 	t.Parallel()
 
 	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{
+	issue := domain.IssueDetail{Summary: domain.IssueSummary{
 		ID: "bw-7", Title: "Old", Status: "open", Type: "task", Priority: 2, Assignee: "hans", Labels: []string{"one"},
 	}, Description: "old desc"}
+	// Seed into both the legacy verbatim field (for ShowIssueResponse fallback callers
+	// that may still read it directly in test helpers) and the write-state store so that
+	// UpdateIssue can find and mutate the issue.
+	gateway.ShowIssueResponse = issue
+	gateway.SeedIssue(issue)
 
-	rendered := domain.RenderIssueEditDocument(gateway.ShowIssueResponse)
+	rendered := domain.RenderIssueEditDocument(issue)
 	edited := strings.Replace(rendered, "Old", "Updated title", 1)
 
 	opener := &fakeOpener{edit: edited}

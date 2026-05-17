@@ -2,8 +2,10 @@ package fakes
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
@@ -100,11 +102,29 @@ type AddCommentCall struct {
 //   - per-method error injection for error-path testing,
 //   - call recording so tests can assert interactions.
 //
+// Write-state store: CreateIssue, UpdateIssue, CloseIssue, and AddComment mutate
+// an internal in-memory issue store (issueStore). ShowIssue reads from that store
+// as a secondary source, falling through to ShowIssuesByID (keyed overrides) and
+// finally ShowIssueResponse (verbatim fallback for legacy UI tests). This means
+// CreateIssue/UpdateIssue/CloseIssue/AddComment are observable through ShowIssue
+// without any wrapper, satisfying RunWriteContract.
+//
+//   - CreateIssue validates that Title is non-empty (returns ErrorCodeCommandFailed
+//     for an empty title, matching real bd behaviour) and assigns a unique
+//     "tmp-<n>" ID, storing the issue in the write-state store.
+//   - UpdateIssue returns ErrorCodeCommandFailed for an ID absent from the store.
+//   - CloseIssue sets Status="closed" in the store; idempotent.
+//   - AddComment appends the comment body to the store entry.
+//   - CountIssues counts live from the write-state store when the store is
+//     non-empty; otherwise falls back to CountIssuesResponse (static stub).
+//
 // ShowIssuesByID is an optional ID-keyed map for ShowIssue. When set, ShowIssue
 // looks up the requested ID in the map and returns a domain.GatewayError with
 // ErrorCodeCommandFailed when the ID is absent (matching real bd behaviour).
 // When nil, ShowIssueResponse is returned for every ShowIssue call (legacy
 // behaviour, preserved for UI tests).
+//
+// Priority for ShowIssue: MethodErrors → issueStore → ShowIssuesByID → ShowIssueResponse.
 //
 // SearchResultsByText is an optional text-keyed map for SearchIssues. When set,
 // SearchIssues looks up by query.Text (trimmed) and returns the matching page —
@@ -112,7 +132,9 @@ type AddCommentCall struct {
 // text-filtered search without breaking UI tests that use SearchIssuesResponse
 // as a verbatim stub.
 type FakeBeadsGateway struct {
-	mu sync.Mutex
+	mu           sync.Mutex
+	issueStore   map[string]domain.IssueDetail
+	issueCounter atomic.Int64
 
 	ListIssuesResponse    []domain.IssueSummary
 	ReadyIssuesResponse   []domain.IssueSummary
@@ -147,7 +169,19 @@ var _ beads.BeadsGateway = (*FakeBeadsGateway)(nil)
 func NewFakeBeadsGateway() *FakeBeadsGateway {
 	return &FakeBeadsGateway{
 		MethodErrors: make(map[GatewayMethod]error),
+		issueStore:   make(map[string]domain.IssueDetail),
 	}
+}
+
+// SeedIssue inserts a pre-built IssueDetail directly into the write-state store.
+// Use this when a test needs a pre-existing issue that write operations (UpdateIssue,
+// CloseIssue, AddComment) can target without calling CreateIssue first.
+// The issue is also visible via ShowIssue at the seeded Summary.ID.
+func (f *FakeBeadsGateway) SeedIssue(detail domain.IssueDetail) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.issueStore[detail.Summary.ID] = detail
 }
 
 // SetError injects or clears the error returned by a given gateway method.
@@ -254,6 +288,13 @@ func (f *FakeBeadsGateway) ShowIssue(_ context.Context, query domain.ShowIssueQu
 		return domain.IssueDetail{}, err
 	}
 
+	// Priority 1: write-state store — populated by CreateIssue/UpdateIssue/CloseIssue/AddComment.
+	if detail, ok := f.issueStore[query.IssueID]; ok {
+		return detail, nil
+	}
+
+	// Priority 2: ShowIssuesByID keyed overrides — used by contract tests that seed
+	// canned issue states without going through the write path.
 	if f.ShowIssuesByID != nil {
 		detail, ok := f.ShowIssuesByID[query.IssueID]
 		if !ok {
@@ -269,6 +310,7 @@ func (f *FakeBeadsGateway) ShowIssue(_ context.Context, query domain.ShowIssueQu
 		return detail, nil
 	}
 
+	// Priority 3: verbatim fallback for UI tests that use ShowIssueResponse.
 	return f.ShowIssueResponse, nil
 }
 
@@ -355,6 +397,35 @@ func (f *FakeBeadsGateway) CountIssues(_ context.Context, query domain.IssueCoun
 		return domain.IssueCountResult{}, err
 	}
 
+	// When the write-state store has entries, count live from it so that
+	// CountIncrementInvariant passes: CreateIssue increments the count.
+	// When the store is empty, fall back to CountIssuesResponse for tests
+	// that use it as a static stub (they never call CreateIssue).
+	if len(f.issueStore) > 0 {
+		statusCounts := make(map[string]int)
+		for _, detail := range f.issueStore {
+			statusCounts[detail.Summary.Status]++
+		}
+
+		filterSet := make(map[string]struct{}, len(query.Statuses))
+		for _, s := range query.Statuses {
+			filterSet[s] = struct{}{}
+		}
+
+		groups := make([]domain.IssueStatusCount, 0, len(statusCounts))
+		total := 0
+		for status, count := range statusCounts {
+			if len(filterSet) > 0 {
+				if _, ok := filterSet[status]; !ok {
+					continue
+				}
+			}
+			groups = append(groups, domain.IssueStatusCount{Status: status, Count: count})
+			total += count
+		}
+		return domain.IssueCountResult{Groups: groups, Total: total}, nil
+	}
+
 	groupsCopy := append([]domain.IssueStatusCount(nil), f.CountIssuesResponse.Groups...)
 	return domain.IssueCountResult{Groups: groupsCopy, Total: f.CountIssuesResponse.Total}, nil
 }
@@ -368,7 +439,35 @@ func (f *FakeBeadsGateway) CreateIssue(_ context.Context, input domain.CreateIss
 		return domain.CreateIssueResult{}, err
 	}
 
-	return f.CreateIssueResponse, nil
+	// Validate: empty title → ErrorCodeCommandFailed (mirrors real bd).
+	if input.Title == "" {
+		return domain.CreateIssueResult{}, domain.GatewayError{
+			Code:      domain.ErrorCodeCommandFailed,
+			Operation: "create issue",
+			Message:   `command exited with code 1: {"error":"title required"}`,
+		}
+	}
+
+	id := fmt.Sprintf("tmp-%d", f.issueCounter.Add(1))
+
+	typ := input.Type
+	if typ == "" {
+		typ = "task"
+	}
+
+	f.issueStore[id] = domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:     id,
+			Title:  input.Title,
+			Status: "open",
+			Type:   typ,
+		},
+		Description: input.Description,
+		Comments:    []domain.IssueComment{},
+		BlockedBy:   []domain.IssueReference{},
+	}
+
+	return domain.CreateIssueResult{IssueID: id}, nil
 }
 
 func (f *FakeBeadsGateway) UpdateIssue(_ context.Context, issueID string, input domain.UpdateIssueInput) error {
@@ -380,6 +479,27 @@ func (f *FakeBeadsGateway) UpdateIssue(_ context.Context, issueID string, input 
 		return err
 	}
 
+	// Validate: unknown ID → ErrorCodeCommandFailed (mirrors real bd).
+	existing, ok := f.issueStore[issueID]
+	if !ok {
+		return domain.GatewayError{
+			Code:      domain.ErrorCodeCommandFailed,
+			Operation: "update issue",
+			Message:   fmt.Sprintf(`command exited with code 1: Error resolving %q: no issue found`, issueID),
+		}
+	}
+
+	if input.Title != nil {
+		existing.Summary.Title = *input.Title
+	}
+	if input.Description != nil {
+		existing.Description = *input.Description
+	}
+	if input.Status != nil {
+		existing.Summary.Status = *input.Status
+	}
+
+	f.issueStore[issueID] = existing
 	return nil
 }
 
@@ -392,6 +512,19 @@ func (f *FakeBeadsGateway) CloseIssue(_ context.Context, issueID string, input d
 		return err
 	}
 
+	// Validate: unknown ID → ErrorCodeCommandFailed (mirrors real bd).
+	existing, ok := f.issueStore[issueID]
+	if !ok {
+		return domain.GatewayError{
+			Code:      domain.ErrorCodeCommandFailed,
+			Operation: "close issue",
+			Message:   fmt.Sprintf(`command exited with code 1: Error resolving %q: no issue found`, issueID),
+		}
+	}
+
+	// Idempotent: already closed → still return nil.
+	existing.Summary.Status = "closed"
+	f.issueStore[issueID] = existing
 	return nil
 }
 
@@ -404,6 +537,20 @@ func (f *FakeBeadsGateway) AddComment(_ context.Context, issueID string, input d
 		return err
 	}
 
+	// Validate: unknown ID → ErrorCodeCommandFailed (mirrors real bd).
+	existing, ok := f.issueStore[issueID]
+	if !ok {
+		return domain.GatewayError{
+			Code:      domain.ErrorCodeCommandFailed,
+			Operation: "add comment",
+			Message:   fmt.Sprintf(`command exited with code 1: unknown issue %q`, issueID),
+		}
+	}
+
+	existing.Comments = append(existing.Comments, domain.IssueComment{
+		Body: input.Body,
+	})
+	f.issueStore[issueID] = existing
 	return nil
 }
 

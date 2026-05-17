@@ -146,20 +146,70 @@ func TestGatewayUpdateIssueMapsCommandArgs(t *testing.T) {
 	}
 }
 
-func TestGatewayUpdateIssueClearsLabelsWhenRequested(t *testing.T) {
+// TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels verifies that ClearLabels=true
+// first fetches the current labels via bd show and then emits bd update --remove-labels
+// with the comma-separated list of existing labels.
+// Workaround for bd 1.0.4 --set-labels ” silent no-op (see [[ubav]]).
+func TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	rec := newTestRecordingExecutor()
+	// ShowIssue call to fetch current labels.
+	rec.OnArgs([]string{"show", "bd-42", "--json"}).Return(ExecResult{Stdout: []byte(`[
+		{"id":"bd-42","title":"some issue","status":"open","issue_type":"task","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","labels":["alpha","beta"]}
+	]`)}, nil)
+	// UpdateIssue call that removes the labels.
+	rec.OnArgs([]string{"update", "bd-42", "--remove-labels", "alpha,beta"}).Return(ExecResult{Stdout: []byte("ok")}, nil)
+
+	gateway, _ := newTestGateway(rec)
 
 	err := gateway.UpdateIssue(context.Background(), "bd-42", domain.UpdateIssueInput{ClearLabels: true})
 	if err != nil {
 		t.Fatalf("UpdateIssue returned error: %v", err)
 	}
 
-	wantArgs := []string{"update", "bd-42", "--set-labels", ""}
-	if !reflect.DeepEqual(execStub.args, wantArgs) {
-		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", execStub.args, wantArgs)
+	calls := rec.Calls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 bd calls (show + update), got %d: %#v", len(calls), calls)
+	}
+
+	wantShowArgs := []string{"show", "bd-42", "--json"}
+	if !reflect.DeepEqual(calls[0].Args, wantShowArgs) {
+		t.Fatalf("unexpected first call args:\n got: %#v\nwant: %#v", calls[0].Args, wantShowArgs)
+	}
+
+	wantUpdateArgs := []string{"update", "bd-42", "--remove-labels", "alpha,beta"}
+	if !reflect.DeepEqual(calls[1].Args, wantUpdateArgs) {
+		t.Fatalf("unexpected second call args:\n got: %#v\nwant: %#v", calls[1].Args, wantUpdateArgs)
+	}
+}
+
+// TestGatewayUpdateIssueClearLabelsNoOpWhenNoLabels verifies that ClearLabels=true
+// skips the bd update call entirely when the issue has no labels (nothing to remove).
+func TestGatewayUpdateIssueClearLabelsNoOpWhenNoLabels(t *testing.T) {
+	t.Parallel()
+
+	rec := newTestRecordingExecutor()
+	// ShowIssue call returns issue with no labels.
+	rec.OnArgs([]string{"show", "bd-99", "--json"}).Return(ExecResult{Stdout: []byte(`[
+		{"id":"bd-99","title":"no labels issue","status":"open","issue_type":"task","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}
+	]`)}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	err := gateway.UpdateIssue(context.Background(), "bd-99", domain.UpdateIssueInput{ClearLabels: true})
+	if err != nil {
+		t.Fatalf("UpdateIssue returned error: %v", err)
+	}
+
+	calls := rec.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 bd call (show only, no update since no labels), got %d: %#v", len(calls), calls)
+	}
+
+	wantShowArgs := []string{"show", "bd-99", "--json"}
+	if !reflect.DeepEqual(calls[0].Args, wantShowArgs) {
+		t.Fatalf("unexpected call args:\n got: %#v\nwant: %#v", calls[0].Args, wantShowArgs)
 	}
 }
 

@@ -231,7 +231,10 @@ func runCountCheck(dir string, gw beads.BeadsGateway, readonly bool) CheckResult
 		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("parse bd count: %v", err)}
 	}
 
-	readyRaw, err := bdRun(dir, readonly, "ready", "--json")
+	// Pass --limit 0 to match ReadyExplain's uncapped output: bd ready --json
+	// without --limit 0 caps at 100 while bd ready --explain (used by the gateway)
+	// returns all ready issues. See interface.go "bd quirks observed at scale".
+	readyRaw, err := bdRun(dir, readonly, "ready", "--limit", "0", "--json")
 	if err != nil {
 		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("bd ready: %v", err)}
 	}
@@ -292,7 +295,9 @@ func runSortCheck(dir string, gw beads.BeadsGateway, readonly bool) CheckResult 
 	var mismatches []string
 
 	// Ready: bd ready --json, apply issueSort to both sides.
-	readyRaw, err := bdRun(dir, readonly, "ready", "--json")
+	// Pass --limit 0 to match ReadyExplain's uncapped output (bd default caps at 100).
+	// See interface.go "bd quirks observed at scale".
+	readyRaw, err := bdRun(dir, readonly, "ready", "--limit", "0", "--json")
 	if err != nil {
 		return CheckResult{Name: "sort", Status: "FAIL", Detail: fmt.Sprintf("bd ready: %v", err)}
 	}

@@ -9,8 +9,14 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 )
+
+// scaleSeedCompleteMarker is the sentinel file written inside the cache
+// directory after a successful full-scale-seed run.  Its presence means
+// every issue in scale-seed.json has been committed to the cache.
+const scaleSeedCompleteMarker = ".bwb-scale-seed-complete"
 
 // Spec is the fixture seed specification consumed by the setup script.
 type Spec struct {
@@ -87,6 +93,26 @@ var sharedCache struct {
 	initErr error
 }
 
+// sharedScaleCache holds the process-level shared scale fixture cache state.
+// Seeding scale-seed.json (~590 issues) takes several minutes.
+// This cache is opt-in: set BWB_SCALE_FIXTURE=1 to enable scale fixture seeding.
+var sharedScaleCache struct {
+	once    sync.Once
+	repoDir string
+	initErr error
+}
+
+// ScaleSeedPath returns the absolute path to scale-seed.json.
+func ScaleSeedPath(tb testing.TB) string {
+	tb.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		tb.Fatal("failed to resolve embeddedfixture paths via runtime.Caller")
+	}
+	return filepath.Join(filepath.Dir(file), "scale-seed.json")
+}
+
 // seedSharedCache seeds the fixture into a process-local cache directory and
 // verifies it with a bd sanity check, without going through testing.TB.Fatalf,
 // so errors can be captured cleanly inside sync.Once.
@@ -108,6 +134,46 @@ func seedSharedCache(scriptPath, seedPath, cacheDir string) error {
 	readyCmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
 	if out, err := readyCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sanity check 'bd ready' failed in cache repo %q: %w\n%s", cacheDir, err, out)
+	}
+	return nil
+}
+
+// seedScaleSharedCache seeds the scale fixture into cacheDir, protected by a
+// cross-process exclusive file lock.  Multiple test-binary processes can call
+// this concurrently: all but the winner block on the lock; when the winner
+// finishes and writes scaleSeedCompleteMarker the waiters check the marker and
+// skip re-seeding.
+//
+// The lock file is cacheDir + ".lock" — a sibling of the cache dir itself.
+func seedScaleSharedCache(scriptPath, seedPath, cacheDir string) error {
+	lockPath := cacheDir + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("open lock file %q: %w", lockPath, err)
+	}
+	defer func() { _ = lockFile.Close() }()
+
+	// Acquire an exclusive lock — blocks until any concurrent seeder finishes.
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("acquire scale fixture lock %q: %w", lockPath, err)
+	}
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+
+	// Under the lock: if a previous process already completed the seed, skip.
+	markerPath := filepath.Join(cacheDir, scaleSeedCompleteMarker)
+	if _, err := os.Stat(markerPath); err == nil {
+		// Marker present — cache is complete.
+		return nil
+	}
+
+	// Seed the cache.
+	if err := seedSharedCache(scriptPath, seedPath, cacheDir); err != nil {
+		return err
+	}
+
+	// Write the completion marker so subsequent processes skip seeding.
+	if err := os.WriteFile(markerPath, []byte("ok"), 0o600); err != nil {
+		return fmt.Errorf("write scale seed complete marker %q: %w", markerPath, err)
 	}
 	return nil
 }
@@ -156,6 +222,65 @@ func SharedFixtureRepoPath(tb testing.TB) string {
 		cmd := exec.Command("cp", "-a", src, dst)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			tb.Fatalf("SharedFixtureRepoPath: copy %q to %q: %v\n%s", src, dst, err, out)
+		}
+	}
+
+	return destDir
+}
+
+// SharedScaleFixtureRepoPath seeds the scale bd fixture (scale-seed.json, ~590
+// issues) once per process (sync.Once-guarded) in a process-local cache
+// directory and returns a fresh per-test copy of the seeded repository.
+//
+// Seeding ~590 issues via bd subprocesses takes several minutes. This function
+// is therefore opt-in: the test is skipped unless BWB_SCALE_FIXTURE=1 is set.
+//
+// The returned path is a tb.TempDir()-backed directory that is automatically
+// cleaned up when the test ends.
+//
+// The bd and git binaries must be on PATH.
+func SharedScaleFixtureRepoPath(tb testing.TB) string {
+	tb.Helper()
+
+	if os.Getenv("BWB_SCALE_FIXTURE") != "1" {
+		tb.Skip("scale fixture: set BWB_SCALE_FIXTURE=1 to enable (seeding ~590 issues takes several minutes)")
+	}
+
+	sharedScaleCache.once.Do(func() {
+		cacheDir := filepath.Join(os.TempDir(), "bwb-scale-fixture-cache")
+		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+			sharedScaleCache.initErr = fmt.Errorf("create scale fixture cache dir %q: %w", cacheDir, err)
+			return
+		}
+
+		scriptPath, _ := Paths(tb)
+		seedPath := ScaleSeedPath(tb)
+		// seedScaleSharedCache uses a cross-process file lock to prevent
+		// concurrent seeding from multiple test-binary processes, and
+		// skips re-seeding when the completion marker is already present.
+		if err := seedScaleSharedCache(scriptPath, seedPath, cacheDir); err != nil {
+			sharedScaleCache.initErr = fmt.Errorf("seed shared scale fixture cache in %q: %w", cacheDir, err)
+			return
+		}
+		sharedScaleCache.repoDir = cacheDir
+	})
+
+	if sharedScaleCache.initErr != nil {
+		tb.Fatalf("SharedScaleFixtureRepoPath: %v", sharedScaleCache.initErr)
+	}
+
+	// Create a fresh per-test copy by copying .git/ and .beads/ into a new tempdir.
+	destDir := filepath.Join(tb.TempDir(), "shared-scale-fixture")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		tb.Fatalf("SharedScaleFixtureRepoPath: create dest dir %q: %v", destDir, err)
+	}
+
+	for _, subdir := range []string{".git", ".beads"} {
+		src := filepath.Join(sharedScaleCache.repoDir, subdir)
+		dst := filepath.Join(destDir, subdir)
+		cmd := exec.Command("cp", "-a", src, dst)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			tb.Fatalf("SharedScaleFixtureRepoPath: copy %q to %q: %v\n%s", src, dst, err, out)
 		}
 	}
 

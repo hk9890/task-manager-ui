@@ -1,8 +1,15 @@
 // Package datasets provides read-only multi-DB test adapters for parity tests
 // that compare workbench data layer output against bd CLI output on real datasets.
 //
-// Three dataset sources are supported:
-//   - Fixture: a writable embedded fixture repo seeded from embeddedfixture.SharedFixtureRepoPath
+// # Dual-fixture policy
+//
+// Use Fixture for tests that need exact ID assertions (bwf-1, bwf-2, bwf-3 etc.);
+// use ScaleFixture for tests that need realistic edge cases (cap engagement on the
+// Done column, cardinality thresholds, sort tie-breaks, search corpus depth).
+//
+// Four dataset sources are supported:
+//   - Fixture: minimal anchor (3 issues) — exact-ID assertions, always available
+//   - ScaleFixture: realistic scale (~590 issues) — edge-case tests; opt-in via BWB_SCALE_FIXTURE=1
 //   - ThisRepo: this repository's own .beads/ (read-only; gated behind BWB_PARITY_THIS_REPO=1)
 //   - External: an arbitrary external repo at BWB_PARITY_EXTERNAL_PATH (read-only;
 //     skipped when the env var is unset or the path lacks .beads/)
@@ -33,6 +40,10 @@ const (
 	// EnvParityExternalPath points External at an arbitrary repo root that
 	// contains a .beads/ directory. Unset or empty → External skips cleanly.
 	EnvParityExternalPath = "BWB_PARITY_EXTERNAL_PATH"
+	// EnvScaleFixture gates ScaleFixture. Must be set to "1" to enable.
+	// Seeding the scale fixture (~590 issues via bd subprocesses) takes several
+	// minutes, so it is opt-in for integration speed.
+	EnvScaleFixture = "BWB_SCALE_FIXTURE"
 )
 
 // Dataset describes one beads database available to parity tests.
@@ -47,6 +58,37 @@ type Dataset struct {
 	ReadOnly bool
 }
 
+// WritableTempFixture returns a Dataset backed by a fresh empty beads database
+// created in a per-test temporary directory. The database has no issues; use it
+// for write-contract tests that need an isolated, mutable repository.
+//
+// The bd binary must be on PATH; the test is skipped otherwise.
+// The database is initialised with BD_NON_INTERACTIVE=1 bd init and is
+// automatically cleaned up when the test ends via t.TempDir().
+func WritableTempFixture(t *testing.T) Dataset {
+	t.Helper()
+
+	skipUnlessBdOnPath(t)
+
+	dir := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "bd", "init")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("WritableTempFixture: bd init failed in %q: %v\n%s", dir, err, out)
+	}
+
+	return Dataset{
+		Name:     "writable-temp",
+		Path:     dir,
+		ReadOnly: false,
+	}
+}
+
 // Fixture returns a Dataset backed by a fresh, writable copy of the embedded
 // fixture repository. The copy is seeded once per process via
 // embeddedfixture.SharedFixtureRepoPath and cleaned up automatically by t.
@@ -58,6 +100,29 @@ func Fixture(t *testing.T) Dataset {
 	repoPath := embeddedfixture.SharedFixtureRepoPath(t)
 	return Dataset{
 		Name:     "fixture",
+		Path:     repoPath,
+		ReadOnly: false,
+	}
+}
+
+// ScaleFixture returns a Dataset backed by a fresh, writable copy of the scale
+// embedded fixture repository (~590 issues, edge-case-designed). The copy is
+// seeded once per process via embeddedfixture.SharedScaleFixtureRepoPath and
+// cleaned up automatically by t.
+//
+// The test is skipped unless BWB_SCALE_FIXTURE=1 is set. Seeding ~590 issues
+// via bd subprocesses takes several minutes, so this dataset is opt-in for
+// integration speed.
+//
+// Use ScaleFixture for tests that need realistic edge cases: cap engagement on
+// the Done column (>50 closed issues), cardinality warnings (>500 active),
+// sort tie-breaks, and search corpus depth. Use Fixture for exact-ID assertions.
+func ScaleFixture(t *testing.T) Dataset {
+	t.Helper()
+
+	repoPath := embeddedfixture.SharedScaleFixtureRepoPath(t)
+	return Dataset{
+		Name:     "scale-fixture",
 		Path:     repoPath,
 		ReadOnly: false,
 	}

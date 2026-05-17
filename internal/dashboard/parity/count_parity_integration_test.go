@@ -142,7 +142,11 @@ func TestCountParityDashboardVsBdCount(t *testing.T) {
 		name string
 		get  func(t *testing.T) datasets.Dataset
 	}{
+		// fixture: minimal anchor (3 issues) — exact-ID baseline; always runs.
 		{"fixture", datasets.Fixture},
+		// scale-fixture: ~590 issues — exercises Done-column cap (>50 closed);
+		// opt-in via BWB_SCALE_FIXTURE=1 (seeding takes several minutes).
+		{"scale-fixture", datasets.ScaleFixture},
 		{"this-repo", datasets.ThisRepo},
 		{"external", datasets.External},
 	}
@@ -164,7 +168,13 @@ func TestCountParityDashboardVsBdCount(t *testing.T) {
 			statusCounts := parseBdCountByStatus(t, countRaw)
 
 			// Source-of-truth for Ready: bd ready --json | len
-			readyRaw, err := datasets.BdReady(t, ds)
+			//
+			// Pass --limit 0 to match ReadyExplain's uncapped output.
+			// bd ready --explain --json (used by ReadyExplain) bypasses the default
+			// 100-item limit; bd ready --json without --limit 0 caps at 100. On
+			// scale datasets with >100 ready issues the counts diverge by ~400
+			// without this flag. See interface.go "bd quirks observed at scale".
+			readyRaw, err := datasets.BdReady(t, ds, "--limit", "0")
 			if err != nil {
 				t.Fatalf("BdReady failed on dataset %q: %v", ds.Name, err)
 			}

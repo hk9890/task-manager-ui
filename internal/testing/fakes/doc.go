@@ -45,10 +45,55 @@
 //	the matching slice; falls back to QueryResponse when the key is absent.
 //	Discovered: 8qw9.3; surfaced by Invariants/Query/StatusFilterRespected.
 //
+// 2026-05-17: CreateIssue() returned CreateIssueResponse verbatim (empty ID,
+//
+//	no stored state); real bd generates a unique ID and the issue is
+//	retrievable via ShowIssue. Added in-memory write-state store (issueStore)
+//	initialised in NewFakeBeadsGateway. CreateIssue now validates empty title
+//	→ ErrorCodeCommandFailed, generates "tmp-<n>" IDs, and stores the issue.
+//	ShowIssue reads from the store first (then ShowIssuesByID, then
+//	ShowIssueResponse). SeedIssue() helper added for tests that need
+//	pre-existing issues without calling CreateIssue first.
+//	Discovered: 9x70.3; surfaced by CreateIssue/RequiredFields and
+//	CreateIssue/HappyPath in RunWriteContract.
+//
+// 2026-05-17: UpdateIssue() silently succeeded for unknown IDs; real bd exits
+//
+//	non-zero when the issueID cannot be resolved. UpdateIssue now checks
+//	the write-state store and returns ErrorCodeCommandFailed for absent IDs.
+//	Title/Description/Status mutations are reflected in the store and visible
+//	via ShowIssue. Discovered: 9x70.3; surfaced by UpdateIssue/NonExistent
+//	and UpdateIssue/HappyPath in RunWriteContract.
+//
+// 2026-05-17: CloseIssue() was a no-op; real bd sets the issue status to
+//
+//	"closed" and the change is visible via ShowIssue. CloseIssue now sets
+//	Status="closed" in the write-state store (idempotent). Returns
+//	ErrorCodeCommandFailed for unknown IDs.
+//	Discovered: 9x70.3; surfaced by CloseIssue/HappyPath in RunWriteContract.
+//
+// 2026-05-17: AddComment() was a no-op; real bd appends a comment visible via
+//
+//	ShowIssue. AddComment now appends to the Comments slice in the write-state
+//	store. Returns ErrorCodeCommandFailed for unknown IDs.
+//	Discovered: 9x70.3; surfaced by AddComment/HappyPath in RunWriteContract.
+//
+// 2026-05-17: CountIssues() returned CountIssuesResponse verbatim; that static
+//
+//	stub does not reflect CreateIssue calls. CountIssues now counts live from
+//	the write-state store when the store is non-empty, satisfying
+//	CountIncrementInvariant. Falls back to CountIssuesResponse when the store
+//	is empty (preserves existing UI-test stubs that never call CreateIssue).
+//	Discovered: 9x70.3; surfaced by CountIncrementInvariant in RunWriteContract.
+//
 // # See also
 //
 //   - internal/gateway/beads/interface.go — canonical contract spec
 //   - internal/gateway/beads/contract/contract.go — RunReadContract suite
 //   - internal/gateway/beads/contractcheck/ — pure validators shared by
 //     contract tests and the validatingGateway runtime decorator
+//   - internal/gateway/beads/doc.go (Argv contract testing section) — the
+//     outgoing-contract twin: pins the exact argv bwb sends to bd, ensuring
+//     the gateway calls the right verb with the right flags. RecordingExecutor
+//     in this package is the public executor used in those tests.
 package fakes

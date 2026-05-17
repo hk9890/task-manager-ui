@@ -59,6 +59,77 @@
 // across: no filter, single filter, multi-filter, sort, limit, and edge cases.
 // Replay: recreate by running `mktemp -d && cd <dir> && BD_NON_INTERACTIVE=1 bd init`
 // and issuing the commands listed in task beads-workbench-8qw9.1 comment thread.
+//
+// # Observed bd write quirks (audit 2026-05-17)
+//
+// Hands-on audit of bd 1.0.4 write behavior against a freshly initialised temp DB
+// at /tmp/tmp.8GmEk81tiS (mktemp -d && BD_NON_INTERACTIVE=1 bd init). All four write
+// methods exercised: CreateIssue (10 variants), UpdateIssue (12 variants), CloseIssue
+// (5 variants), AddComment (7 variants). Total: 34 distinct real-bd invocations, all
+// issued with BD_NON_INTERACTIVE=1. Full evidence log: /tmp/9x70-audit.log. See task
+// beads-workbench-9x70.1 for the invocation list and per-case outcomes.
+//
+// Write responses are NOT JSON by default.
+//   - bd create returns a JSON payload ({"id":"...", ...}) on stdout when --json is passed.
+//   - bd update returns the updated issue as a JSON array when --json is passed; without
+//     --json it emits a human-readable "✓ Updated issue: <id> — <title>" message.
+//   - bd close returns the closed issue as a JSON array when --json is passed; without
+//     --json it emits "✓ Closed <id> — <title>: <reason>" on stdout.
+//   - bd comments add always emits "Comment added to <id>" (no --json flag observed).
+//   - The current gateway uses --json only for CreateIssue (to capture the new ID).
+//     UpdateIssue, CloseIssue, and AddComment discard stdout. Disposition: ACCEPT.
+//
+// bd update --set-labels "" silently ignores the clear request (bd 1.0.4 bug).
+//   - Passing --set-labels "" exits 0 with a success message but labels remain unchanged.
+//   - Disposition: WORKAROUND LANDED (see [[ubav]]). The gateway's ClearLabels path
+//     now pre-fetches the current labels via ShowIssue, then emits
+//     `bd update --remove-labels <csv>` enumerating each existing label.
+//     If the issue has no labels, the bd update call is skipped entirely.
+//     The upstream bd bug is still present; this workaround bypasses it at the
+//     gateway layer.
+//
+// bd update with no field flags exits 0 with "No updates specified" on stdout.
+//   - When UpdateIssueInput has all nil pointer fields and ClearLabels=false, the gateway
+//     emits "bd update <id>" with no flags. bd exits 0. Gateway returns nil error.
+//   - Disposition: ACCEPT — this path is unreachable via the app's edit modal, which
+//     always populates at least one field before submitting.
+//
+// Actor attribution uses git user.name; --actor and BD_ACTOR can override it.
+//   - bd create, bd update, and bd comments add support --actor "<name>" to set the
+//     created_by / author field. Without --actor, bd uses the git user.name from the
+//     repository's git config.
+//   - BD_ACTOR env var also overrides the actor for bd create (confirmed in audit).
+//   - The gateway never passes --actor and filterEnvToAllowlist strips BD_ACTOR (it is
+//     a BD_* prefix var, not in the allowlist). All writes are attributed to the git
+//     user.name of the beads project's git config. Disposition: ACCEPT.
+//
+// CloseIssue is idempotent (exit 0 on re-close of an already-closed issue).
+//   - When no --reason is supplied, bd stores close_reason as "Closed" (the literal
+//     string), visible in ShowIssue. Disposition: ACCEPT.
+//
+// Writes are immediately consistent with subsequent reads (embedded dolt auto-commit).
+//   - bd uses an embedded dolt backend in auto-commit mode for standalone repos. Each
+//     write is committed before the command exits; a subsequent bd show / bd list in
+//     any process sees the updated state immediately. Disposition: ACCEPT.
+//
+// # Observed bd quirks at scale (faif.5 audit 2026-05-17, ~590 issue corpus)
+//
+// bd ready --json default 100-item cap vs bd ready --explain --json (uncapped).
+//   - bd ready --json without --limit has a server-side default of 100 items. At
+//     scale (>100 ready issues) it silently returns only the first 100 even when
+//     hundreds more exist; no error or warning is emitted to stdout or stderr.
+//   - bd ready --explain --json ignores the default limit and returns ALL ready and
+//     blocked issues regardless of corpus size. The explain payload was observed to
+//     return all 507 ready issues in the ~590-issue scale fixture.
+//   - Impact: ReadyExplain (used by the board model) is correct and complete.
+//     ReadyIssues (uses bd ready --json without --limit) is silently capped at 100
+//     on scale datasets. Callers using ReadyIssues on large repos will see at most
+//     100 ready issues — the remainder are invisible.
+//   - Parity test fix: BdReady calls in count/sort parity tests must pass --limit 0
+//     to match ReadyExplain's uncapped output; omitting it causes a false count
+//     mismatch (bwb_total=507 bd_count=100 delta=407 on the scale fixture).
+//   - Disposition: ACCEPT for ReadyExplain (correct). KNOWN LIMITATION for
+//     ReadyIssues — not used by the board model's hot path; acceptable for now.
 package beads
 
 import (
@@ -71,8 +142,9 @@ import (
 // A gateway instance is bound to one beads source/project.
 //
 // All read methods on BeadsGateway are safe for concurrent use.
-// Write methods (CreateIssue, UpdateIssue, CloseIssue, AddComment) are not
-// included in this contract; their spec is tracked in epic beads-workbench-9x70.
+// Write methods (CreateIssue, UpdateIssue, CloseIssue, AddComment) acquire an
+// exclusive runMu lock (CommandRunner.Run with IsWrite=true) and therefore
+// serialize against all concurrent reads and other writes.
 type BeadsGateway interface {
 	// HealthCheck verifies that the bd CLI is reachable and a beads database
 	// exists in the working directory.
@@ -256,6 +328,14 @@ type BeadsGateway interface {
 	//     decoder paths. Disposition: ACCEPT — each uses the appropriate decoder.
 	//   - schema_version field appears in the explain payload; decoder ignores it.
 	//     Disposition: ACCEPT.
+	//
+	// bd quirks observed at scale (faif.5 audit 2026-05-17, ~590-issue corpus):
+	//   - bd ready --explain --json ignores the default 100-item cap that
+	//     bd ready --json applies. At ~590 issues with 507 ready, explain returns
+	//     all 507 while plain bd ready --json returns only the first 100.
+	//     ReadyExplain is the authoritative path for the board model (opts.Limit=0
+	//     is always passed by the board). Disposition: ACCEPT — no gateway change
+	//     needed; parity tests must use --limit 0 when calling BdReady directly.
 	ReadyExplain(ctx context.Context, opts domain.ReadyExplainOptions) (domain.ReadyExplainResult, error)
 
 	// ShowIssue returns full detail for a single issue using `bd show <id> --json`.
@@ -374,20 +454,189 @@ type BeadsGateway interface {
 	//     Disposition: ACCEPT — documented as postcondition above.
 	CountIssues(ctx context.Context, query domain.IssueCountQuery) (domain.IssueCountResult, error)
 
-	// CreateIssue creates a new issue via bd create.
-	// Write-side contract pending; see epic beads-workbench-9x70.
+	// CreateIssue creates a new issue via `bd create --json`.
+	//
+	// Preconditions:
+	//   - ctx must be non-nil.
+	//   - input.Title must be non-empty; an empty title is passed to bd which exits 1
+	//     with {"error":"title required..."} — the gateway does NOT pre-validate Title.
+	//     The app layer is responsible for ensuring a non-empty title before calling.
+	//   - input.Type must be a valid bd type name (e.g. "task", "bug", "feature") or empty;
+	//     an invalid type causes bd to exit non-zero.
+	//   - input.Labels elements must not contain commas; the gateway joins them with
+	//     commas into a single --labels "a,b,c" flag and bd splits on commas.
+	//
+	// Postconditions:
+	//   - On success, result.IssueID is the newly assigned issue ID (non-empty, trimmed).
+	//   - The new issue is immediately visible to ShowIssue and ListIssues in subsequent
+	//     calls (embedded dolt auto-commit ensures read-after-write consistency).
+	//   - The issue is created with status "open" and the default priority (2) when
+	//     input.Priority is nil.
+	//   - When input.Labels is non-empty, labels are stored but NOT returned in the
+	//     create response JSON; use ShowIssue to confirm labels were applied.
+	//   - The created_by field is set to the git user.name of the repository; the gateway
+	//     never passes --actor, so the caller cannot override actor attribution.
+	//
+	// Side effects:
+	//   - A new issue record is written and committed to the dolt backend.
+	//   - The new issue becomes visible to ListIssues, ReadyIssues, and CountIssues.
+	//
+	// Idempotency:
+	//   - NOT idempotent. Each successful call creates a distinct issue with a new ID.
+	//     Identical inputs produce different IDs because the timestamp differs.
+	//
+	// Error semantics:
+	//   - ErrorCodeCommandFailed: bd exited non-zero (e.g. empty title, invalid type).
+	//   - ErrorCodeDecodeFailed: bd stdout was not parseable as JSON, or the returned
+	//     "id" field is empty.
+	//
+	// bd quirks observed (audit 2026-05-17):
+	//   - bd create --json returns a full issue object; only the "id" field is used.
+	//     Disposition: ACCEPT — createIssuePayload captures only "id".
+	//   - Labels passed via --labels are NOT reflected in the create response JSON.
+	//     Disposition: ACCEPT — callers needing label confirmation use ShowIssue.
+	//   - bd create --json exits 1 and emits {"error":"title required..."} as JSON
+	//     when --title is empty or omitted. Validation is the app layer's responsibility.
+	//     Disposition: ACCEPT.
 	CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error)
 
-	// UpdateIssue updates an existing issue via bd update.
-	// Write-side contract pending; see epic beads-workbench-9x70.
+	// UpdateIssue updates an existing issue via `bd update <id>`.
+	//
+	// Preconditions:
+	//   - ctx must be non-nil.
+	//   - issueID must be non-empty, non-whitespace; an empty ID returns
+	//     ErrorCodeValidationFailed without calling bd (validated by the gateway).
+	//   - All pointer fields in input are optional; nil fields are omitted from the call.
+	//     A pointer-to-empty-string (e.g. Description: ptr("")) clears that field in bd
+	//     (confirmed: bd omits the key on next show after --description "").
+	//   - input.Status, when non-nil, must be a valid bd status name; an invalid status
+	//     causes bd to exit 1. The app layer pre-validates Status against StatusCatalog.
+	//
+	// Postconditions:
+	//   - On success (nil error), updated fields are immediately visible to ShowIssue
+	//     (embedded dolt auto-commit, read-after-write consistent).
+	//   - A status transition to "in_progress" causes bd to set the started_at field
+	//     on the issue; this is then visible in ShowIssue.
+	//   - When all pointer fields are nil and ClearLabels is false, bd receives
+	//     "bd update <id>" with no flags, exits 0 with "No updates specified" on stdout
+	//     (not stderr), and the gateway returns nil error (silent no-op).
+	//
+	// Side effects:
+	//   - updated_at advances after any non-no-op update.
+	//   - Status transitions to "in_progress" also set started_at.
+	//
+	// Idempotency:
+	//   - Applying the same update twice is safe; final state reflects the last call.
+	//
+	// Error semantics:
+	//   - ErrorCodeValidationFailed: empty issueID before any bd call.
+	//   - ErrorCodeCommandFailed: bd exited non-zero (unknown ID, invalid status/type, etc.).
+	//
+	// bd quirks observed (audit 2026-05-17):
+	//   - bd update --set-labels "" silently does NOT clear labels (bd 1.0.4 bug).
+	//     Disposition: WORKAROUND LANDED (see [[ubav]]). ClearLabels causes UpdateIssue
+	//     to first fetch the issue's current labels via ShowIssue, then emit
+	//     `bd update --remove-labels <csv>` enumerating each label. If the issue has no
+	//     labels, the bd update call is skipped entirely (nothing to remove).
+	//   - bd update supports --json (returns updated issue as a JSON array). The gateway
+	//     does NOT use --json; stdout is discarded. Disposition: ACCEPT.
+	//   - "No updates specified" exits 0 on stdout (not stderr). Disposition: ACCEPT.
+	//   - Unknown issueID: bd exits 1 with "Error resolving <id>: no issue found..."
+	//     on stderr → ErrorCodeCommandFailed. No ErrorCodeNotFound path for writes.
+	//     Disposition: ACCEPT.
+	//   - Clearing description with --description "" works correctly (bd omits the key
+	//     on next show → IssueDetail.Description=""). Disposition: ACCEPT.
 	UpdateIssue(ctx context.Context, issueID string, input domain.UpdateIssueInput) error
 
-	// CloseIssue closes an issue via bd close.
-	// Write-side contract pending; see epic beads-workbench-9x70.
+	// CloseIssue closes an issue via `bd close <id>`.
+	//
+	// Preconditions:
+	//   - ctx must be non-nil.
+	//   - issueID must be non-empty, non-whitespace; an empty ID returns
+	//     ErrorCodeValidationFailed without calling bd (validated by the gateway).
+	//   - input.Reason is optional; when non-empty it is passed as --reason.
+	//
+	// Postconditions:
+	//   - On success (nil error), the issue status is "closed" and the closed_at
+	//     timestamp is set. Both are immediately visible to ShowIssue.
+	//   - When input.Reason is non-empty, close_reason is stored on the issue
+	//     and visible in ShowIssue. When empty, bd defaults close_reason to "Closed".
+	//   - The closed issue no longer appears in ListIssues (default open filter)
+	//     or ReadyIssues, but is returned by Query("status=closed", ...) and
+	//     ListIssues with Statuses:["closed"] or Statuses:["all"].
+	//
+	// Side effects:
+	//   - Issue status transitions to "closed"; closed_at and close_reason are set.
+	//   - The issue is removed from the open/in_progress/blocked set for future reads.
+	//
+	// Idempotency:
+	//   - IDEMPOTENT. Closing an already-closed issue exits 0 with the same success
+	//     message. No error is returned for repeated close calls.
+	//
+	// Confirmation prompts:
+	//   - bd close may prompt for confirmation when run interactively. The gateway
+	//     always passes BD_NON_INTERACTIVE=1 via resolveEnv, which bypasses all
+	//     interactive prompts. No prompt is expected during gateway use.
+	//
+	// Error semantics:
+	//   - ErrorCodeValidationFailed: empty issueID before any bd call.
+	//   - ErrorCodeCommandFailed: bd exited non-zero (unknown ID, etc.).
+	//
+	// bd quirks observed (audit 2026-05-17):
+	//   - bd close is idempotent (exit 0 on re-close). Disposition: ACCEPT.
+	//   - bd close supports --json (returns the closed issue as a JSON array). The gateway
+	//     does NOT use --json; stdout is discarded. Disposition: ACCEPT.
+	//   - When no --reason is supplied, bd stores close_reason as "Closed" (the literal
+	//     string). This is bd's default, not an error. Disposition: ACCEPT.
+	//   - Unknown issueID: bd exits 1 with "Error: resolving ID <id>: no issue found..."
+	//     on stderr → ErrorCodeCommandFailed. No dedicated ErrorCodeNotFound for writes.
+	//     Disposition: ACCEPT.
 	CloseIssue(ctx context.Context, issueID string, input domain.CloseIssueInput) error
 
-	// AddComment adds a comment to an issue via bd comments add.
-	// Write-side contract pending; see epic beads-workbench-9x70.
+	// AddComment adds a comment to an issue via `bd comments add <id> <body>`.
+	//
+	// Preconditions:
+	//   - ctx must be non-nil.
+	//   - issueID must be non-empty, non-whitespace; an empty ID returns
+	//     ErrorCodeValidationFailed without calling bd (validated by the gateway).
+	//   - input.Body must be non-empty; the gateway does NOT pre-validate Body.
+	//     An empty body causes bd to exit 1 with "comment text cannot be empty" on stderr.
+	//     The app layer pre-validates Body before calling (see model.go mutationComment).
+	//
+	// Postconditions:
+	//   - On success (nil error), the comment is immediately visible in ShowIssue
+	//     (embedded dolt auto-commit, read-after-write consistent).
+	//   - The comment's author is set to the git user.name of the repository; the
+	//     gateway never passes --actor.
+	//   - Comments can be added to closed issues; bd does not guard against this.
+	//   - Very long bodies (tested at 1000 chars) are accepted without error.
+	//   - Markdown content (headings, lists, bold, code, blockquotes) is accepted
+	//     verbatim and stored as-is; no escaping or stripping occurs.
+	//
+	// Side effects:
+	//   - A new comment record is appended to the issue's comment list.
+	//   - The issue's updated_at is NOT advanced by a comment addition (bd comment
+	//     is stored separately from the issue core record).
+	//
+	// Idempotency:
+	//   - NOT idempotent. Each call appends a new comment entry; duplicate calls
+	//     produce duplicate comments.
+	//
+	// Error semantics:
+	//   - ErrorCodeValidationFailed: empty issueID before any bd call.
+	//   - ErrorCodeCommandFailed: bd exited non-zero (unknown ID, empty body, etc.).
+	//
+	// bd quirks observed (audit 2026-05-17):
+	//   - bd comments add does not support --json; stdout is always "Comment added to <id>"
+	//     (human-readable). The gateway discards stdout. Disposition: ACCEPT.
+	//   - Empty body exits 1 with "Error: comment text cannot be empty" on stderr.
+	//     The gateway surfaces ErrorCodeCommandFailed; the app layer prevents this via
+	//     pre-validation. Disposition: ACCEPT.
+	//   - Comments on closed issues succeed (exit 0); bd does not enforce open-only
+	//     commenting. Disposition: ACCEPT.
+	//   - bd comments add supports --actor "<name>" to override the author field. The
+	//     gateway never passes --actor; author attribution always uses git user.name.
+	//     Disposition: ACCEPT.
 	AddComment(ctx context.Context, issueID string, input domain.AddCommentInput) error
 
 	// StatusCatalog returns all available issue statuses using `bd statuses --json`.

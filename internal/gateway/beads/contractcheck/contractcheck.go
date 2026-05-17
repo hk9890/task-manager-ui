@@ -479,3 +479,103 @@ func SelectIssueSummaries(items []domain.IssueSummary, indices []int) []domain.I
 	}
 	return out
 }
+
+// ============================================================
+// Write-contract validators
+//
+// These validators mirror the read-side validators above but
+// cover the write method postconditions documented in interface.go.
+// Each function is pure (no testing.T) and returns Violation slices.
+// ============================================================
+
+// ValidateCreateIssueResult checks postconditions on a CreateIssue result.
+//
+// Rules checked:
+//   - NonEmptyID: result.IssueID must be a non-empty, trimmed string.
+func ValidateCreateIssueResult(method string, result domain.CreateIssueResult) []Violation {
+	var vs []Violation
+
+	if result.IssueID == "" {
+		vs = append(vs, Violation{
+			Method: method,
+			Rule:   "NonEmptyID",
+			Sample: "CreateIssueResult.IssueID is empty",
+		})
+	}
+
+	return vs
+}
+
+// ValidateWriteVisibility checks the cross-method write-visibility invariant:
+// after a successful write, the written data must be visible via a subsequent read.
+//
+// The caller supplies the written value and the read-back value; this function
+// performs the structural comparison and emits violations when they diverge.
+//
+// Rules checked:
+//   - TitleRoundTrip: after a CreateIssue or UpdateIssue(title), ShowIssue.Summary.Title
+//     must equal the written title.
+//   - StatusAfterClose: after CloseIssue, ShowIssue.Summary.Status must be "closed".
+//   - CommentVisible: after AddComment, ShowIssue.Comments must contain a comment
+//     with the given body.
+func ValidateWriteVisibility(method string, rule string, detail domain.IssueDetail, want string) []Violation {
+	var vs []Violation
+
+	switch rule {
+	case "TitleRoundTrip":
+		if detail.Summary.Title != want {
+			vs = append(vs, Violation{
+				Method: method,
+				Rule:   "TitleRoundTrip",
+				Sample: fmt.Sprintf("ShowIssue.Summary.Title=%q, want %q", detail.Summary.Title, want),
+			})
+		}
+	case "StatusAfterClose":
+		if detail.Summary.Status != "closed" {
+			vs = append(vs, Violation{
+				Method: method,
+				Rule:   "StatusAfterClose",
+				Sample: fmt.Sprintf("ShowIssue.Summary.Status=%q after CloseIssue, want \"closed\"", detail.Summary.Status),
+			})
+		}
+	case "CommentVisible":
+		found := false
+		for _, c := range detail.Comments {
+			if c.Body == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			vs = append(vs, Violation{
+				Method: method,
+				Rule:   "CommentVisible",
+				Sample: fmt.Sprintf("comment body %q not found in %d comments after AddComment", want, len(detail.Comments)),
+			})
+		}
+	default:
+		vs = append(vs, Violation{
+			Method: method,
+			Rule:   rule,
+			Sample: fmt.Sprintf("unknown ValidateWriteVisibility rule %q", rule),
+		})
+	}
+
+	return vs
+}
+
+// ValidateCountIncrement checks the CountIncrementInvariant: after CreateIssue
+// with a given status, CountIssues for that status must increase by exactly 1.
+//
+// Rules checked:
+//   - CountIncreasedByOne: countAfter must equal countBefore + 1.
+func ValidateCountIncrement(method string, status string, countBefore, countAfter int) []Violation {
+	if countAfter != countBefore+1 {
+		return []Violation{{
+			Method: method,
+			Rule:   "CountIncreasedByOne",
+			Sample: fmt.Sprintf("status=%q: CountIssues went from %d to %d, want %d+1=%d", status, countBefore, countAfter, countBefore, countBefore+1),
+		}}
+	}
+	return nil
+}
