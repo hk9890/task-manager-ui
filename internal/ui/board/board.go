@@ -218,12 +218,15 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase int) []string {
 			return rows
 		}
 		// Refresh: stale rows on screen while new data is in flight.
+		// Dim the foreground with the current skeleton phase to signal motion.
 		for idx, issue := range col.Rows {
 			rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
 				Issue:    issue,
 				Selected: idx == col.SelectedRow,
 				Width:    maxWidth,
 				Styled:   true,
+				Dim:      true,
+				Phase:    skeletonPhase,
 			}))
 		}
 		return rows

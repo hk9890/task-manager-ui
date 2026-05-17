@@ -141,11 +141,26 @@ func Render(state State) string {
 		return renderCompact(detail, width)
 	}
 
+	var rendered string
 	if usesResponsiveDetailLayout(width) {
-		return renderResponsiveLayout(detail, state, width, height)
+		rendered = renderResponsiveLayout(detail, state, width, height)
+	} else {
+		rendered = renderThreePane(detail, state, width, height)
 	}
 
-	return renderThreePane(detail, state, width, height)
+	// Refresh with stale content: tint the pane block so the user sees local
+	// motion while waiting for the new detail to arrive. The tint cycles with
+	// the skeleton phase so refresh matches the established animation language.
+	if state.Loading && strings.TrimSpace(state.Detail.Summary.ID) != "" {
+		n := len(styles.SkeletonShades)
+		idx := state.SkeletonPhase % n
+		if idx < 0 {
+			idx = 0
+		}
+		rendered = lipgloss.NewStyle().Faint(true).Foreground(styles.SkeletonShades[idx]).Render(rendered)
+	}
+
+	return rendered
 }
 
 // MaxScrollOffsets returns deterministic scroll bounds for pane interactions.

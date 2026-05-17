@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
+	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
 // extractIssueIDsFromView returns the set of issue IDs visible in a rendered
@@ -284,5 +285,61 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 		if !afterCycleIDs[wantID] {
 			t.Fatalf("Board→Search→Board cycle: board row %q missing after round-trip\nfinal view:\n%s", wantID, afterCycleView)
 		}
+	}
+}
+
+// TestSkeletonPhaseCyclesThroughAllShades verifies that within 4×len(shades)
+// consecutive loading.TickMsg dispatches, the skeleton phase visits every
+// distinct shade index (0 through len(SkeletonShades)-1). This pins the
+// animation contract: the dim foreground cycles through all SkeletonShades
+// values during a refresh, not just one or two.
+func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	// Disable real tick schedulers so we control timing.
+	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	// Gateway that never returns — board stays in loading=true, cold-start.
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{}
+	gateway.QueryResponse = nil
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.Init()
+	m.spinnerFrame = 0
+
+	// Each phase step requires 4 TickMsgs (loading.SkeletonPhase = frame/4).
+	// Collect one View() per phase boundary (every 4 ticks).
+	numShades := len(styles.SkeletonShades)
+	views := make([]string, 0, numShades)
+	for tick := 0; tick < 4*numShades; tick++ {
+		next, _ := m.Update(loading.TickMsg{})
+		m = next.(Model)
+		if (tick+1)%4 == 0 {
+			views = append(views, m.View())
+		}
+	}
+
+	// Each phase boundary must produce a distinct styled output.
+	// Strip spinner glyphs (they change independently of phase) before comparing.
+	seen := make(map[string]bool, numShades)
+	for i, v := range views {
+		stripped := stripSpinnerGlyphs(v)
+		if seen[stripped] {
+			t.Fatalf("phase %d produced a duplicate styled view — phase did not cycle through all %d shades", i, numShades)
+		}
+		seen[stripped] = true
+	}
+	if len(seen) != numShades {
+		t.Fatalf("expected %d distinct phase views, got %d", numShades, len(seen))
 	}
 }

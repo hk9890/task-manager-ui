@@ -176,6 +176,45 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 	assertGoldenNormalized(t, []byte(Render(state)), "board_responsive_wide.golden")
 }
 
+// TestRefreshBoardCarriesDimPhaseStyle verifies that when a board column is
+// in the refresh state (Loading=true, existing rows present), the rendered
+// output contains the SkeletonShades[phase] ANSI color sequence, confirming
+// that Dim+Phase are threaded to RenderCompact.
+func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	const phase = 1 // pick a non-zero phase for a distinct shade
+
+	rows := renderColumnRows(Column{
+		Loading: true,
+		Rows: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Stale Board Issue", Status: "open", Type: "task", Priority: 1},
+		},
+		SelectedRow: -1,
+	}, 80, phase)
+
+	if len(rows) == 0 {
+		t.Fatal("expected at least one rendered row")
+	}
+
+	// The row must be visibly present after ANSI stripping.
+	plain := testui.AnsiEscapePattern.ReplaceAllString(rows[0], "")
+	if !strings.Contains(plain, "Stale Board Issue") {
+		t.Fatalf("stale row title not visible (ANSI-stripped), got: %q", plain)
+	}
+
+	// The row must contain the SkeletonShades[phase] dark-theme hex embedded in an ANSI escape.
+	// SkeletonShades[1] dark = "#696969" → RGB(105,105,105) → ANSI 38;2;105;105;105
+	const wantANSI = "38;2;105;105;105"
+	if !strings.Contains(rows[0], wantANSI) {
+		t.Fatalf("expected dim ANSI sequence %q in refresh row, got: %q", wantANSI, rows[0])
+	}
+}
+
 func assertEqualColumnHeights(t *testing.T, view string) {
 	t.Helper()
 

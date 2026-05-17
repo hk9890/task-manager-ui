@@ -391,3 +391,39 @@ func TestRenderIdleStateUnchanged(t *testing.T) {
 		t.Fatalf("expected no skeleton glyph in fully-loaded idle state, got:\n%s", view)
 	}
 }
+
+// TestRefreshSearchCarriesDimPhaseStyle verifies that when search is in the
+// refresh state (Loading=true, existing results present), the rendered output
+// contains the SkeletonShades[phase] ANSI color sequence.
+func TestRefreshSearchCarriesDimPhaseStyle(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	const phase = 2 // pick a non-zero phase for a distinct shade
+
+	view := Render(State{
+		Loading:   true,
+		Reloading: true,
+		Results: []domain.IssueSummary{
+			{ID: "bw-5", Title: "Stale Search Result", Status: "open", Type: "task", Priority: 1},
+		},
+		SelectedID:    "bw-5",
+		SkeletonPhase: phase,
+		Width:         120,
+		Height:        28,
+	})
+
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "Stale Search Result") {
+		t.Fatalf("stale result title not visible (ANSI-stripped), got:\n%s", plain)
+	}
+
+	// SkeletonShades[2] dark = "#7F7F7F" → RGB(127,127,127) → ANSI 38;2;127;127;127
+	const wantANSI = "38;2;127;127;127"
+	if !strings.Contains(view, wantANSI) {
+		t.Fatalf("expected dim ANSI sequence %q in refresh result row, got:\n%s", wantANSI, view)
+	}
+}

@@ -318,6 +318,8 @@ func renderEmptyResultsBody(state State, width int) []string {
 }
 
 func renderResultRows(state State, width int) []string {
+	// Dim rows when a refresh is in flight (stale data visible, new data pending).
+	dim := state.Loading && len(state.Results) > 0
 	lines := make([]string, 0, len(state.Results))
 	for _, issue := range state.Results {
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
@@ -325,6 +327,8 @@ func renderResultRows(state State, width int) []string {
 			Selected: issue.ID == state.SelectedID,
 			Width:    width,
 			Styled:   true,
+			Dim:      dim,
+			Phase:    state.SkeletonPhase,
 		}))
 	}
 

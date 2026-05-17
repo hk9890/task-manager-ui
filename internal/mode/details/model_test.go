@@ -9,6 +9,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
@@ -737,15 +738,16 @@ func TestRefreshSameIssueKeepsStaleContent(t *testing.T) {
 	}
 
 	view := m.View(100, 20, false, 0)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	// Must NOT be a full-screen loading takeover.
-	if strings.Contains(view, "Loading details for") {
-		t.Fatalf("same-issue refresh view should NOT show full-screen loading takeover, got:\n%s", view)
+	if strings.Contains(plain, "Loading details for") {
+		t.Fatalf("same-issue refresh view should NOT show full-screen loading takeover, got:\n%s", plain)
 	}
 
-	// Prior content must still be visible.
-	if !strings.Contains(view, "Stale issue") {
-		t.Fatalf("same-issue refresh view should keep prior title visible, got:\n%s", view)
+	// Prior content must still be visible (ANSI-stripped — dim tint wraps text).
+	if !strings.Contains(plain, "Stale issue") {
+		t.Fatalf("same-issue refresh view should keep prior title visible, got:\n%s", plain)
 	}
 }
 
@@ -770,15 +772,16 @@ func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 	}
 
 	view := m.View(100, 20, false, 0)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	// Must NOT be a full-screen loading takeover.
-	if strings.Contains(view, "Loading details for") {
-		t.Fatalf("different-issue refresh view should NOT show full-screen loading takeover, got:\n%s", view)
+	if strings.Contains(plain, "Loading details for") {
+		t.Fatalf("different-issue refresh view should NOT show full-screen loading takeover, got:\n%s", plain)
 	}
 
-	// Prior content is still visible (stale data from issue A).
-	if !strings.Contains(view, "Previous issue A") {
-		t.Fatalf("different-issue refresh view should keep prior content visible, got:\n%s", view)
+	// Prior content is still visible (stale data from issue A; ANSI-stripped — dim tint wraps text).
+	if !strings.Contains(plain, "Previous issue A") {
+		t.Fatalf("different-issue refresh view should keep prior content visible, got:\n%s", plain)
 	}
 }
 

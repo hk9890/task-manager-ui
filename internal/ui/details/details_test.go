@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
@@ -844,4 +845,48 @@ func mustTime(t *testing.T, value string) time.Time {
 	}
 
 	return ts
+}
+
+// TestRefreshDetailsCarriesDimPhaseStyle verifies that when details is in the
+// refresh state (Loading=true, Summary.ID != ""), the rendered pane block is
+// wrapped with a Faint+Foreground style sourced from SkeletonShades[phase].
+// The stale title must remain visible after ANSI-stripping.
+func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+	})
+
+	const phase = 0 // shade[0]: dark=#454545 → RGB(69,69,69)
+
+	view := Render(State{
+		SelectionID:   "bw-9",
+		Loading:       true,
+		SkeletonPhase: phase,
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-9",
+				Title:    "Stale Detail Title",
+				Status:   "open",
+				Type:     "task",
+				Priority: 1,
+			},
+			Description: "Stale description body",
+		},
+		Width:  120,
+		Height: 24,
+	})
+
+	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "Stale Detail Title") {
+		t.Fatalf("stale detail title not visible (ANSI-stripped), got:\n%s", plain)
+	}
+
+	// Faint+Foreground(SkeletonShades[0]) dark-theme: "\x1b[2;38;2;69;69;69m"
+	// Assert the foreground ANSI sequence is present (faint prefix may vary).
+	const wantANSI = "38;2;69;69;69"
+	if !strings.Contains(view, wantANSI) {
+		t.Fatalf("expected dim ANSI sequence %q in refresh detail view, got:\n%s", wantANSI, view)
+	}
 }
