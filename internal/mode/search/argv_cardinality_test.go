@@ -25,7 +25,7 @@ func newSearchRecordingModel(rec *fakes.RecordingExecutor) *Model {
 		Executor: rec,
 	})
 	gw := beads.NewCLIGateway(runner)
-	return NewModel(gw)
+	return NewModel(gw, nil)
 }
 
 // driveSearchInitCmd executes the tea.Cmd returned by m.Init() to drive the
