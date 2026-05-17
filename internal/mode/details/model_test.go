@@ -340,8 +340,12 @@ func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *tes
 	if render.Summary.ID != "bw-2" {
 		t.Fatalf("expected loading preview summary for target bw-2, got %q", render.Summary.ID)
 	}
-	if !strings.Contains(render.Description, issuerow.SkeletonGlyph) {
-		t.Fatalf("expected placeholder description with skeleton glyph, got %q", render.Description)
+	// PlaceholderDetail now stores Description="" and relies on State.Skeleton=true
+	// (set by View()) to render ▓ rows via the Skeleton seam.  Verify that the
+	// rendered view (which goes through the Skeleton seam) contains the glyph.
+	view := m.View(100, 20, false)
+	if !strings.Contains(view, issuerow.SkeletonGlyph) {
+		t.Fatalf("expected placeholder view to contain skeleton glyph, got:\n%s", view)
 	}
 	if got := render.BlockedBy; len(got) != 1 || got[0].ID != "bw-2" {
 		t.Fatalf("expected dependency rail to stay anchored to base detail, got %#v", got)
@@ -833,9 +837,11 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	}
 }
 
-// TestPlaceholderDetailContainsSkeletonGlyph verifies that PlaceholderDetail
-// builds a description string that contains the canonical skeleton glyph.
-func TestPlaceholderDetailContainsSkeletonGlyph(t *testing.T) {
+// TestPlaceholderDetailHasEmptyDescriptionAndSkeletonSeamRendersGlyph verifies
+// that PlaceholderDetail returns an empty Description (the Skeleton seam in
+// View() renders ▓ rows, bypassing markdown rendering) and that the rendered
+// view contains the skeleton glyph.
+func TestPlaceholderDetailHasEmptyDescriptionAndSkeletonSeamRendersGlyph(t *testing.T) {
 	t.Parallel()
 
 	ref := domain.IssueReference{ID: "bw-10", Title: "Some issue", Status: "open", Type: "task", Priority: 1}
@@ -844,8 +850,26 @@ func TestPlaceholderDetailContainsSkeletonGlyph(t *testing.T) {
 	if detail.Summary.ID != "bw-10" {
 		t.Errorf("expected placeholder summary ID bw-10, got %q", detail.Summary.ID)
 	}
-	if !strings.Contains(detail.Description, issuerow.SkeletonGlyph) {
-		t.Errorf("placeholder description should contain skeleton glyph %q, got %q", issuerow.SkeletonGlyph, detail.Description)
+	// Description must be empty — skeleton rows are rendered via State.Skeleton=true.
+	if detail.Description != "" {
+		t.Errorf("placeholder description should be empty (skeleton via seam), got %q", detail.Description)
+	}
+
+	// A model that is previewing a target (TargetID != SelectionID, no preview
+	// loaded) should render skeleton glyphs via the Skeleton seam in View().
+	m := Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-10",
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-10", Title: "Some issue", Status: "open", Type: "task", Priority: 1},
+		},
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-1"},
+		},
+	}
+	view := m.View(100, 20, false)
+	if !strings.Contains(view, issuerow.SkeletonGlyph) {
+		t.Errorf("expected rendered view to contain skeleton glyph %q via Skeleton seam, got:\n%s", issuerow.SkeletonGlyph, view)
 	}
 }
 

@@ -43,6 +43,7 @@ type State struct {
 	BrowserSelectedIssueID   string
 	QuickActions             QuickActionLabels
 	Loading                  bool
+	Skeleton                 bool // when true, Content pane renders skeleton rows instead of description body
 	Error                    string
 	Width                    int
 	Height                   int
@@ -102,7 +103,11 @@ func Render(state State) string {
 		if strings.TrimSpace(state.TargetID) != "" {
 			target = state.TargetID
 		}
-		return renderColdStartSkeleton(target, state.Width)
+		height := state.Height
+		if height <= 0 {
+			height = defaultDetailHeight
+		}
+		return renderColdStartSkeleton(target, state.Width, height)
 	}
 	// Refresh (same or different previously-loaded issue): fall through to the
 	// normal detail layout so stale content stays visible while the spinner
@@ -160,7 +165,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 		contentInnerHeight := max(1, contentHeight-2)
 		bottomInnerHeight := max(1, bottomHeight-2)
 		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2)
-		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight)
+		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight, state.Skeleton)
 		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions)
 
 		return ScrollOffsets{
@@ -174,7 +179,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 	innerHeight := max(1, height-2)
 
 	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2)
-	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight)
+	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight, state.Skeleton)
 	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions)
 
 	return ScrollOffsets{
@@ -192,7 +197,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 	contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
 	dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
 
-	contentBox := RenderContentPane(detail, width, contentHeight, state.FocusPane == FocusPaneContent, state.ContentScrollOffset)
+	contentBox := RenderContentPane(detail, width, contentHeight, state.FocusPane == FocusPaneContent, state.ContentScrollOffset, state.Skeleton)
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
 	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField, state.QuickActions)
 
@@ -296,7 +301,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 
-	contentBox := RenderContentPane(detail, contentWidth, height, state.FocusPane == FocusPaneContent, state.ContentScrollOffset)
+	contentBox := RenderContentPane(detail, contentWidth, height, state.FocusPane == FocusPaneContent, state.ContentScrollOffset, state.Skeleton)
 
 	selectedField := MetadataFieldNone
 	if state.FocusPane == FocusPaneMetadata {
@@ -333,7 +338,9 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 }
 
 // RenderContentPane renders the shared detail Content pane section.
-func RenderContentPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int) string {
+// When skeleton is true, the body renders ▓-filled placeholder rows instead of
+// the real description, bypassing markdown rendering.
+func RenderContentPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, skeleton bool) string {
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
@@ -342,7 +349,7 @@ func RenderContentPane(detail domain.IssueDetail, width, height int, focused boo
 	}
 
 	innerHeight := max(1, height-2)
-	content := renderContentPaneLines(detail, width-2, innerHeight)
+	content := renderContentPaneLines(detail, width-2, innerHeight, skeleton)
 	contentView, _ := sliceWithOffset(content, scrollOffset, innerHeight, width-2)
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
@@ -502,7 +509,7 @@ func countDependencyReferences(detail domain.IssueDetail) int {
 	return len(detail.BlockedBy) + len(detail.Blocks) + len(detail.Related)
 }
 
-func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int) []string {
+func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int, skeleton bool) []string {
 	upper := make([]string, 0, 48)
 	upper = append(upper, styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
 	summary := fmt.Sprintf("%s · %s · %s", emptyFallback(detail.Summary.ID, "(unknown)"), emptyFallback(detail.Summary.Status, "(unknown)"), formatPriority(detail.Summary.Priority))
@@ -510,6 +517,22 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 
 	upper = append(upper, "")
 	upper = append(upper, "Description")
+
+	if skeleton {
+		// Skeleton mode: render ▓-filled placeholder rows instead of the
+		// description body, bypassing markdown rendering so ANSI sequences
+		// are not corrupted.
+		n := max(1, availableHeight-len(upper))
+		for i := 0; i < n; i++ {
+			upper = append(upper, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+				Width:  width,
+				Seed:   i,
+				Styled: true,
+			}))
+		}
+		return upper
+	}
+
 	upper = append(upper, renderMarkdownMultiline(detail.Description, "(no description)", width)...)
 
 	if strings.TrimSpace(detail.Notes) != "" {
@@ -881,28 +904,42 @@ func emptyFallback(value, fallback string) string {
 	return value
 }
 
-// renderColdStartSkeleton renders a lightweight placeholder for the cold-start
-// case (no prior detail loaded). It shows the target issue ID followed by
-// skeleton rows in the description area so the layout is stable.
-func renderColdStartSkeleton(targetID string, width int) string {
+// skeletonDetail returns a synthetic IssueDetail for cold-start skeleton
+// rendering.  Only Summary.ID is set; everything else is empty/zero so the
+// Dependencies and Metadata panes render natural empty frames.
+func skeletonDetail(targetID string) domain.IssueDetail {
+	return domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:       targetID,
+			Title:    "",
+			Status:   "",
+			Priority: -1,
+			Type:     "",
+		},
+	}
+}
+
+// renderColdStartSkeleton renders the full 3-pane layout for the cold-start
+// case (no prior detail loaded).  It routes through renderResponsiveLayout /
+// renderThreePane with Skeleton=true so the layout is identical to a loaded
+// detail render and there is no visible jump when data arrives.
+func renderColdStartSkeleton(targetID string, width, height int) string {
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
-	skeletonWidth := width - 4
-	if skeletonWidth < 10 {
-		skeletonWidth = 10
+	if height <= 0 {
+		height = defaultDetailHeight
 	}
-
-	lines := make([]string, 0, 10)
-	lines = append(lines, styles.TruncateString(targetID, width))
-	lines = append(lines, "")
-	lines = append(lines, "Description")
-	for i := 0; i < 6; i++ {
-		lines = append(lines, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
-			Width:  skeletonWidth,
-			Seed:   i,
-			Styled: true,
-		}))
+	detail := skeletonDetail(targetID)
+	skeletonState := State{
+		Loading:  true,
+		Skeleton: true,
+		Detail:   detail,
+		Width:    width,
+		Height:   height,
 	}
-	return strings.Join(lines, "\n")
+	if usesResponsiveDetailLayout(width) {
+		return renderResponsiveLayout(detail, skeletonState, width, height)
+	}
+	return renderThreePane(detail, skeletonState, width, height)
 }

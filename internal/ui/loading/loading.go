@@ -2,7 +2,6 @@
 package loading
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -49,24 +48,6 @@ const (
 type State struct {
 	Scope  Scope
 	Target string
-}
-
-// View renders a user-facing loading message for a single shell surface.
-func View(state State) string {
-	message := "Loading…"
-
-	switch state.Scope {
-	case ScopeBoard, ScopeSearch:
-		message = "Loading issues from gateway…"
-	case ScopeDetail:
-		if strings.TrimSpace(state.Target) != "" {
-			message = fmt.Sprintf("Loading details for %s…", state.Target)
-		} else {
-			message = "Loading selected issue details…"
-		}
-	}
-
-	return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("⏳ " + message)
 }
 
 // Summary renders a shared footer/status-line summary for all active loading states.

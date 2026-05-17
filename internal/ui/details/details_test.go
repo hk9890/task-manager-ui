@@ -732,6 +732,109 @@ func TestRenderDoesNotPanicAtExactMinWidth(t *testing.T) {
 	}
 }
 
+// TestColdStartSkeletonLayoutStabilityMatchesLoadedDetail verifies that the
+// cold-start skeleton render has the same lipgloss.Width and lipgloss.Height
+// as a fully-loaded detail render at the same dimensions.  This is the primary
+// acceptance criterion for Part A: no layout jump when data arrives.
+func TestColdStartSkeletonLayoutStabilityMatchesLoadedDetail(t *testing.T) {
+	t.Parallel()
+
+	loadedDetail := domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:       "bw-99",
+			Title:    "Layout stability sample",
+			Status:   "open",
+			Type:     "task",
+			Priority: 2,
+		},
+		Description: "Some description body.",
+	}
+
+	tests := []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{name: "narrow", width: InspectorTwoColumnMinWidth - 10, height: 24},
+		{name: "wide", width: InspectorThreeColumnMinWidth + 20, height: 30},
+		{name: "two-column-breakpoint", width: InspectorTwoColumnMinWidth, height: 24},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Cold-start render: Loading=true, no prior detail (ID="").
+			skeletonView := Render(State{
+				SelectionID: "bw-99",
+				TargetID:    "bw-99",
+				Loading:     true,
+				Width:       tc.width,
+				Height:      tc.height,
+			})
+
+			// Loaded render: Loading=false, full detail present.
+			loadedView := Render(State{
+				SelectionID: "bw-99",
+				Detail:      loadedDetail,
+				Width:       tc.width,
+				Height:      tc.height,
+			})
+
+			skeletonW := lipgloss.Width(skeletonView)
+			skeletonH := lipgloss.Height(skeletonView)
+			loadedW := lipgloss.Width(loadedView)
+			loadedH := lipgloss.Height(loadedView)
+
+			if skeletonW != loadedW {
+				t.Errorf("width mismatch at %s (w=%d h=%d): skeleton=%d loaded=%d",
+					tc.name, tc.width, tc.height, skeletonW, loadedW)
+			}
+			if skeletonH != loadedH {
+				t.Errorf("height mismatch at %s (w=%d h=%d): skeleton=%d loaded=%d",
+					tc.name, tc.width, tc.height, skeletonH, loadedH)
+			}
+		})
+	}
+}
+
+// TestColdStartSkeletonContainsAllThreePaneSectionHeaders verifies that the
+// cold-start skeleton render includes all three pane section header strings.
+func TestColdStartSkeletonContainsAllThreePaneSectionHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		width int
+	}{
+		{name: "narrow (responsive layout)", width: InspectorTwoColumnMinWidth - 10},
+		{name: "wide (three-pane layout)", width: InspectorThreeColumnMinWidth + 20},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			view := Render(State{
+				SelectionID: "bw-99",
+				TargetID:    "bw-99",
+				Loading:     true,
+				Width:       tc.width,
+				Height:      24,
+			})
+
+			for _, header := range []string{"Dependencies", "Content", "Metadata"} {
+				if !strings.Contains(view, header) {
+					t.Errorf("expected pane header %q in cold-start skeleton at %s, got:\n%s",
+						header, tc.name, view)
+				}
+			}
+		})
+	}
+}
+
 func mustTime(t *testing.T, value string) time.Time {
 	t.Helper()
 

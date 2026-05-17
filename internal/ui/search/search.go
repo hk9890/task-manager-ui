@@ -8,7 +8,6 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
@@ -112,7 +111,8 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 	})
 
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
-	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0)
+	detailSkeleton := isDetailLoadingSkeleton(state)
+	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0, detailSkeleton)
 	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
 
 	return lipgloss.JoinHorizontal(
@@ -153,7 +153,8 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 	})
 
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
-	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0)
+	detailSkeleton := isDetailLoadingSkeleton(state)
+	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0, detailSkeleton)
 	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
 	right := lipgloss.JoinVertical(lipgloss.Left, contentBox, metadataBox)
 
@@ -189,8 +190,19 @@ func selectedDetailForRender(state State) domain.IssueDetail {
 func detailLoadingStub(summary domain.IssueSummary) domain.IssueDetail {
 	return domain.IssueDetail{
 		Summary:     summary,
-		Description: loading.View(loading.State{Scope: loading.ScopeDetail, Target: strings.TrimSpace(summary.ID)}),
+		Description: "",
 	}
+}
+
+// isDetailLoadingSkeleton reports whether the search detail preview pane should
+// render skeleton rows.  True when the preview detail is a loading stub (the
+// gateway response has not yet arrived for the selected result).
+func isDetailLoadingSkeleton(state State) bool {
+	_, ok := selectedSummary(state.Results, state.SelectedID)
+	if !ok {
+		return false
+	}
+	return state.DetailLoading || strings.TrimSpace(state.SelectedDetail.Summary.ID) != strings.TrimSpace(state.SelectedID)
 }
 
 func selectedSummary(results []domain.IssueSummary, selectedID string) (domain.IssueSummary, bool) {

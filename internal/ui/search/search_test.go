@@ -361,8 +361,9 @@ func TestRenderRefreshKeepsStaleResults(t *testing.T) {
 	}
 }
 
-// TestRenderIdleStateUnchanged is a regression test verifying that the idle
-// state (no loading, results present) renders as expected with no skeleton rows.
+// TestRenderIdleStateUnchanged is a regression test verifying that when results
+// are loaded AND the selected detail is loaded, the view renders normally with
+// no skeleton rows.
 func TestRenderIdleStateUnchanged(t *testing.T) {
 	t.Parallel()
 
@@ -372,8 +373,14 @@ func TestRenderIdleStateUnchanged(t *testing.T) {
 			{ID: "bw-1", Title: "Idle Result", Status: "open", Type: "task", Priority: 1},
 		},
 		SelectedID: "bw-1",
-		Width:      120,
-		Height:     28,
+		// SelectedDetail must match SelectedID; otherwise the detail pane renders
+		// a loading skeleton (correct behaviour — detail has not yet been fetched).
+		SelectedDetail: domain.IssueDetail{
+			Summary:     domain.IssueSummary{ID: "bw-1", Title: "Idle Result", Status: "open", Type: "task", Priority: 1},
+			Description: "Idle result description",
+		},
+		Width:  120,
+		Height: 28,
 	})
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
@@ -381,6 +388,6 @@ func TestRenderIdleStateUnchanged(t *testing.T) {
 		t.Fatalf("expected idle state to show results normally, got:\n%s", plain)
 	}
 	if strings.Contains(view, issuerow.SkeletonGlyph) {
-		t.Fatalf("expected no skeleton glyph in idle state, got:\n%s", view)
+		t.Fatalf("expected no skeleton glyph in fully-loaded idle state, got:\n%s", view)
 	}
 }

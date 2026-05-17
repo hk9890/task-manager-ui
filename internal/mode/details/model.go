@@ -9,7 +9,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
 
 // Model is the shell-owned standalone detail presentation state.
@@ -75,6 +74,10 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 	detail := m.RenderDetail()
 	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
+	// skeleton=true when rendering a placeholder stub (target differs from
+	// selection and preview detail has not yet loaded).  This routes through the
+	// Skeleton seam in the details renderer so ▓ rows bypass markdown rendering.
+	skeletonContent := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
 
 	if compact || viewportHeight <= 0 {
 		return uidetails.Render(uidetails.State{
@@ -88,10 +91,11 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 				CloseIssue:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
 				ReloadDetail: m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
 			},
-			Loading: blockingLoad,
-			Error:   m.Error,
-			Width:   maxWidth,
-			Compact: compact,
+			Loading:  blockingLoad,
+			Skeleton: skeletonContent,
+			Error:    m.Error,
+			Width:    maxWidth,
+			Compact:  compact,
 		})
 	}
 
@@ -112,6 +116,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 		}(),
 		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
 		Loading:                  blockingLoad,
+		Skeleton:                 skeletonContent,
 		Error:                    m.Error,
 		Width:                    maxWidth,
 		Height:                   viewportHeight,
@@ -407,8 +412,9 @@ func (m *Model) browserReferenceByID(issueID string) (domain.IssueReference, boo
 }
 
 // PlaceholderDetail returns a lightweight IssueDetail suitable for display while
-// the real gateway response is in-flight. The description is filled with skeleton
-// rows so the layout is stable and the content pane does not show a loading takeover.
+// the real gateway response is in-flight.  Description is empty — the caller
+// must set State.Skeleton=true so the Content pane renders ▓ rows via the
+// Skeleton seam (bypassing markdown rendering).
 // It is exported so the app layer can call it synchronously on selection-change
 // (before the gateway response arrives) to reset scroll offsets immediately.
 func PlaceholderDetail(issueID string, ref domain.IssueReference, ok bool) domain.IssueDetail {
@@ -422,22 +428,9 @@ func PlaceholderDetail(issueID string, ref domain.IssueReference, ok bool) domai
 		summary.Title = ref.Title
 	}
 
-	// Use Styled:false here: the Description field is rendered through markdown
-	// downstream, which corrupts ANSI escape sequences.  Plain ▓ characters
-	// survive markdown rendering intact and satisfy the skeleton-glyph assertions
-	// in model_test.go.  T2 will rework PlaceholderDetail to bypass markdown.
-	const placeholderWidth = 60
-	rows := make([]string, 6)
-	for i := range rows {
-		rows[i] = issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
-			Width:  placeholderWidth,
-			Seed:   i,
-			Styled: false,
-		})
-	}
 	return domain.IssueDetail{
 		Summary:     summary,
-		Description: strings.Join(rows, "\n"),
+		Description: "",
 	}
 }
 
