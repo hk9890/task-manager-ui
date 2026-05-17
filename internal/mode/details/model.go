@@ -74,10 +74,20 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
 	detail := m.RenderDetail()
 	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
-	// skeleton=true when rendering a placeholder stub (target differs from
-	// selection and preview detail has not yet loaded).  This routes through the
-	// Skeleton seam in the details renderer so ▓ rows bypass markdown rendering.
-	skeletonContent := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
+	// skeleton=true in two cases:
+	// 1. preview path: target differs from selection and preview detail has not yet loaded.
+	// 2. direct-nav path: a load is in flight and only the placeholder summary is
+	//    present — no description, comments, or relations yet. Without this branch
+	//    the user sees "(no description)" / "(none)" fallbacks during the in-flight
+	//    window, which misrepresents loading state as empty content.
+	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
+	directNavSkeleton := m.Loading && !m.isPreviewingTarget() &&
+		strings.TrimSpace(m.Detail.Description) == "" &&
+		len(m.Detail.Comments) == 0 &&
+		len(m.Detail.BlockedBy) == 0 &&
+		len(m.Detail.Blocks) == 0 &&
+		len(m.Detail.Related) == 0
+	skeletonContent := previewSkeleton || directNavSkeleton
 
 	if compact || viewportHeight <= 0 {
 		return uidetails.Render(uidetails.State{
