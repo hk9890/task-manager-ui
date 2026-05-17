@@ -13,7 +13,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 )
 
 func assertGoldenNormalized(t *testing.T, output []byte, name string) {
@@ -329,8 +328,8 @@ func TestRenderColdStartLoadingShowsSkeletonAndInput(t *testing.T) {
 	}
 
 	// Skeleton glyph must appear in the result area.
-	if !strings.Contains(view, skeleton.SkeletonGlyph) {
-		t.Fatalf("expected skeleton glyph %q in cold-start loading state, got:\n%s", skeleton.SkeletonGlyph, view)
+	if !strings.Contains(view, issuerow.SkeletonGlyph) {
+		t.Fatalf("expected skeleton glyph %q in cold-start loading state, got:\n%s", issuerow.SkeletonGlyph, view)
 	}
 }
 
@@ -381,7 +380,7 @@ func TestRenderIdleStateUnchanged(t *testing.T) {
 	if !strings.Contains(plain, "Idle Result") {
 		t.Fatalf("expected idle state to show results normally, got:\n%s", plain)
 	}
-	if strings.Contains(view, skeleton.SkeletonGlyph) {
+	if strings.Contains(view, issuerow.SkeletonGlyph) {
 		t.Fatalf("expected no skeleton glyph in idle state, got:\n%s", view)
 	}
 }

@@ -15,7 +15,91 @@ const (
 	minNarrowTitleWidth = 4
 	minCompactIDWidth   = 7
 	maxCompactIDWidth   = 12
+
+	// SkeletonGlyph is the canonical placeholder character used in skeleton rows.
+	// Test assertions reference this constant so no caller hard-codes the literal rune.
+	SkeletonGlyph = "▓"
 )
+
+// skeletonStyle applies the muted foreground colour to skeleton glyph blocks.
+var skeletonStyle = lipgloss.NewStyle().Foreground(styles.TextMutedColor)
+
+// skeletonTitleFractions is the normative table of title fill widths for
+// RenderCompactSkeleton.  Six values hand-picked so the average (≈ 0.66) matches
+// the median real-title length / available width in a 4-column board layout.
+// Indexed by ((Seed % 6) + 6) % 6 to handle negative seeds safely.
+var skeletonTitleFractions = [6]float64{0.70, 0.45, 0.85, 0.55, 0.80, 0.65}
+
+// SkeletonOpts configures skeleton row rendering.
+type SkeletonOpts struct {
+	Width  int
+	Seed   int  // selects title fill width from the normative table
+	Styled bool // when true, apply lipgloss muted foreground colour
+}
+
+// skeletonSegment renders one fixed-width segment of SkeletonGlyph characters,
+// styled when opts.Styled is true.
+func skeletonSegment(width int, styled bool) string {
+	block := strings.Repeat(SkeletonGlyph, width)
+	if styled {
+		return skeletonStyle.Render(block)
+	}
+	return block
+}
+
+// RenderCompactSkeleton renders a placeholder row shaped like RenderCompact.
+// It emits five ▓-filled segments (type=1, priority=2, state=3, id=CompactIDWidth,
+// title=variable) separated by single spaces so the visual structure mirrors a
+// real issue row.  lipgloss.Width of the result equals opts.Width.
+func RenderCompactSkeleton(opts SkeletonOpts) string {
+	width := opts.Width
+	if width <= 0 {
+		return ""
+	}
+
+	// Fixed segment widths matching the real compact row slot layout.
+	// type=1, priority=2, state=3 — same as CompactIssueType/Priority/State plain text widths.
+	typeWidth := 1
+	prioWidth := 2
+	stateWidth := 3
+	idWidth := CompactIDWidth(width)
+
+	// Gaps: four single spaces between the five segments.
+	const gaps = 4
+	titleWidth := width - typeWidth - prioWidth - stateWidth - idWidth - gaps
+	if titleWidth < 1 {
+		// Terminal too narrow: fall back to a single full-width block.
+		return skeletonSegment(width, opts.Styled)
+	}
+
+	// Select title fill fraction from the normative table.
+	idx := ((opts.Seed % 6) + 6) % 6
+	fraction := skeletonTitleFractions[idx]
+	fillWidth := int(float64(titleWidth) * fraction)
+	if fillWidth < 1 {
+		fillWidth = 1
+	}
+
+	// Build segments left-to-right: type | priority | state | id | title.
+	typeSeg := skeletonSegment(typeWidth, opts.Styled)
+	prioSeg := skeletonSegment(prioWidth, opts.Styled)
+	stateSeg := skeletonSegment(stateWidth, opts.Styled)
+	idSeg := skeletonSegment(idWidth, opts.Styled)
+	titleFill := skeletonSegment(fillWidth, opts.Styled)
+	titlePad := strings.Repeat(" ", titleWidth-fillWidth)
+
+	return typeSeg + " " + prioSeg + " " + stateSeg + " " + idSeg + " " + titleFill + titlePad
+}
+
+// RenderReferenceCompactSkeleton renders a placeholder row shaped like
+// RenderReferenceCompact.  It uses the same slot arithmetic and normative
+// title-fill table as RenderCompactSkeleton.
+func RenderReferenceCompactSkeleton(opts SkeletonOpts) string {
+	// ReferenceCompact uses the same slot widths as the regular compact row
+	// (type=1, priority=2, state=3, id=CompactIDWidth) so the implementation
+	// is identical.
+	return RenderCompactSkeleton(opts)
+}
 
 // RenderConfig configures compact issue row rendering.
 type RenderConfig struct {

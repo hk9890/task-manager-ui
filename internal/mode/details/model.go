@@ -9,7 +9,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
 
 // Model is the shell-owned standalone detail presentation state.
@@ -422,10 +422,18 @@ func PlaceholderDetail(issueID string, ref domain.IssueReference, ok bool) domai
 		summary.Title = ref.Title
 	}
 
+	// Use Styled:false here: the Description field is rendered through markdown
+	// downstream, which corrupts ANSI escape sequences.  Plain ▓ characters
+	// survive markdown rendering intact and satisfy the skeleton-glyph assertions
+	// in model_test.go.  T2 will rework PlaceholderDetail to bypass markdown.
 	const placeholderWidth = 60
 	rows := make([]string, 6)
 	for i := range rows {
-		rows[i] = skeleton.SkeletonRow(placeholderWidth, 3)
+		rows[i] = issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+			Width:  placeholderWidth,
+			Seed:   i,
+			Styled: false,
+		})
 	}
 	return domain.IssueDetail{
 		Summary:     summary,

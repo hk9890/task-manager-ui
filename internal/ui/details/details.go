@@ -11,7 +11,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/markdown"
-	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -899,7 +898,11 @@ func renderColdStartSkeleton(targetID string, width int) string {
 	lines = append(lines, "")
 	lines = append(lines, "Description")
 	for i := 0; i < 6; i++ {
-		lines = append(lines, skeleton.SkeletonRow(skeletonWidth, 3))
+		lines = append(lines, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+			Width:  skeletonWidth,
+			Seed:   i,
+			Styled: true,
+		}))
 	}
 	return strings.Join(lines, "\n")
 }

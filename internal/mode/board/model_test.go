@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
 
 func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
@@ -599,7 +600,7 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 			t.Errorf("expected column %d (%q) loading=true in cold start", i, col.title)
 		}
 	}
-	// View must render 4-column layout with skeleton rows (░ chars), not a
+	// View must render 4-column layout with skeleton rows (▓ chars), not a
 	// full-screen loading message.
 	view := m.View()
 	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
@@ -607,8 +608,8 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 			t.Errorf("expected column title %q during cold-start, got: %s", title, view)
 		}
 	}
-	if !strings.Contains(view, "░") {
-		t.Fatalf("expected skeleton glyph ░ during cold-start loading, got: %s", view)
+	if !strings.Contains(view, issuerow.SkeletonGlyph) {
+		t.Fatalf("expected skeleton glyph %q during cold-start loading, got: %s", issuerow.SkeletonGlyph, view)
 	}
 
 	// Phase 2: only 1 result arrives — still loading (all columns).

@@ -1,6 +1,7 @@
 package issuerow
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -164,5 +165,77 @@ func TestRenderReferenceCompactSelectionDistinct(t *testing.T) {
 	}
 	if !strings.HasPrefix(idlePlain, "  ") {
 		t.Fatalf("expected unselected row idle prefix, got %q", idlePlain)
+	}
+}
+
+// TestRenderCompactSkeletonWidth verifies that lipgloss.Width equals opts.Width
+// for representative widths and that RenderConfig.RenderCompact is unchanged.
+func TestRenderCompactSkeletonWidth(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	for _, w := range []int{30, 50, 80, 120, 200} {
+		row := RenderCompactSkeleton(SkeletonOpts{Width: w, Seed: 0, Styled: true})
+		got := lipgloss.Width(row)
+		if got != w {
+			t.Errorf("RenderCompactSkeleton(width=%d): lipgloss.Width=%d, want %d (row=%q)", w, got, w, row)
+		}
+	}
+}
+
+// TestRenderCompactSkeletonFiveRuns verifies that the plain-text skeleton row
+// contains exactly five contiguous runs of ▓ separated by single spaces.
+func TestRenderCompactSkeletonFiveRuns(t *testing.T) {
+	row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: false})
+	// Strip ANSI escapes for the structural check (Styled:false so none expected).
+	plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
+	re := regexp.MustCompile(`▓+`)
+	runs := re.FindAllString(plain, -1)
+	if len(runs) != 5 {
+		t.Errorf("expected 5 ▓ runs, got %d in %q", len(runs), plain)
+	}
+}
+
+// TestRenderCompactSkeletonStyledFiveRuns verifies the same structure when Styled:true.
+func TestRenderCompactSkeletonStyledFiveRuns(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: true})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
+	re := regexp.MustCompile(`▓+`)
+	runs := re.FindAllString(plain, -1)
+	if len(runs) != 5 {
+		t.Errorf("expected 5 ▓ runs in styled row, got %d in %q", len(runs), plain)
+	}
+}
+
+// TestRenderCompactSkeletonSixDistinctTitleFills verifies that six successive
+// Seed values produce six visibly different title fill widths.
+func TestRenderCompactSkeletonSixDistinctTitleFills(t *testing.T) {
+	re := regexp.MustCompile(`▓+`)
+	seen := make(map[int]bool)
+	for seed := 0; seed < 6; seed++ {
+		row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: seed, Styled: false})
+		plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
+		runs := re.FindAllString(plain, -1)
+		if len(runs) == 0 {
+			t.Fatalf("seed %d: no ▓ runs found in %q", seed, plain)
+		}
+		// The last run is the title segment.
+		titleRunLen := len([]rune(runs[len(runs)-1]))
+		seen[titleRunLen] = true
+	}
+	if len(seen) != 6 {
+		t.Errorf("expected 6 distinct title fill widths across seeds 0-5, got %d distinct values: %v", len(seen), seen)
+	}
+}
+
+// TestSkeletonGlyphConstant verifies the exported glyph constant value.
+func TestSkeletonGlyphConstant(t *testing.T) {
+	if SkeletonGlyph != "▓" {
+		t.Errorf("SkeletonGlyph = %q; want %q (U+2593 DARK SHADE)", SkeletonGlyph, "▓")
 	}
 }

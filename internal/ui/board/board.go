@@ -8,7 +8,6 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -192,7 +191,11 @@ func skeletonRows(maxWidth int) []string {
 	const numSkeletonRows = 6
 	rows := make([]string, 0, numSkeletonRows)
 	for i := 0; i < numSkeletonRows; i++ {
-		rows = append(rows, skeleton.SkeletonRow(maxWidth, 2))
+		rows = append(rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+			Width:  maxWidth,
+			Seed:   i,
+			Styled: true,
+		}))
 	}
 	return rows
 }

@@ -10,7 +10,6 @@ import (
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -320,11 +319,15 @@ func renderResultRows(state State, width int) []string {
 }
 
 // renderSkeletonRows returns n skeleton placeholder rows for the cold-start
-// loading state. Each row uses skeleton.SkeletonRow with two slots (id + title).
+// loading state. Each row uses RenderCompactSkeleton shaped like a real issue row.
 func renderSkeletonRows(width, n int) []string {
 	lines := make([]string, n)
 	for i := range lines {
-		lines[i] = skeleton.SkeletonRow(width, 2)
+		lines[i] = issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+			Width:  width,
+			Seed:   i,
+			Styled: true,
+		})
 	}
 	return lines
 }

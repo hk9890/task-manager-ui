@@ -10,7 +10,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/skeleton"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
 
 func TestModelViewRendersRepresentativeStates(t *testing.T) {
@@ -36,7 +36,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		if strings.Contains(view, "Loading details for") {
 			t.Fatalf("cold-start loading should NOT show full-screen takeover, got:\n%s", view)
 		}
-		if !strings.Contains(view, skeleton.SkeletonGlyph) {
+		if !strings.Contains(view, issuerow.SkeletonGlyph) {
 			t.Fatalf("cold-start loading should contain skeleton glyph, got:\n%s", view)
 		}
 	})
@@ -340,7 +340,7 @@ func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *tes
 	if render.Summary.ID != "bw-2" {
 		t.Fatalf("expected loading preview summary for target bw-2, got %q", render.Summary.ID)
 	}
-	if !strings.Contains(render.Description, skeleton.SkeletonGlyph) {
+	if !strings.Contains(render.Description, issuerow.SkeletonGlyph) {
 		t.Fatalf("expected placeholder description with skeleton glyph, got %q", render.Description)
 	}
 	if got := render.BlockedBy; len(got) != 1 || got[0].ID != "bw-2" {
@@ -711,8 +711,8 @@ func TestColdStartViewRendersSkeleton(t *testing.T) {
 	}
 
 	// Must contain the skeleton glyph from renderColdStartSkeleton.
-	if !strings.Contains(view, skeleton.SkeletonGlyph) {
-		t.Fatalf("cold-start view should contain skeleton glyph %q, got:\n%s", skeleton.SkeletonGlyph, view)
+	if !strings.Contains(view, issuerow.SkeletonGlyph) {
+		t.Fatalf("cold-start view should contain skeleton glyph %q, got:\n%s", issuerow.SkeletonGlyph, view)
 	}
 }
 
@@ -844,8 +844,8 @@ func TestPlaceholderDetailContainsSkeletonGlyph(t *testing.T) {
 	if detail.Summary.ID != "bw-10" {
 		t.Errorf("expected placeholder summary ID bw-10, got %q", detail.Summary.ID)
 	}
-	if !strings.Contains(detail.Description, skeleton.SkeletonGlyph) {
-		t.Errorf("placeholder description should contain skeleton glyph %q, got %q", skeleton.SkeletonGlyph, detail.Description)
+	if !strings.Contains(detail.Description, issuerow.SkeletonGlyph) {
+		t.Errorf("placeholder description should contain skeleton glyph %q, got %q", issuerow.SkeletonGlyph, detail.Description)
 	}
 }
 
