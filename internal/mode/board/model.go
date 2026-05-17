@@ -231,6 +231,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionOpenDetail}
 			}
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
+			if m.IsLoading() {
+				m.logger.Debug("manual board refresh suppressed; refresh already in flight",
+					"component", "board",
+					"trigger", "board-manual")
+				return nil
+			}
 			return m.startReload(refreshModeManual)
 		}
 	}
