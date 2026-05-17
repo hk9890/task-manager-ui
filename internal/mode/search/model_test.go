@@ -1,7 +1,9 @@
 package search
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -698,5 +700,49 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	}
 	if m.draftQuery != "" {
 		t.Fatalf("expected backspace to remove typed rune while loading, got %q", m.draftQuery)
+	}
+}
+
+// TestSearchModeLogCarriesComponentSearch asserts that debug records emitted by
+// the search model carry component=search (not component=dashboard or any
+// other inherited value).
+// Regression test for beads-workbench-okmo.
+func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
+	t.Parallel()
+
+	// Use a root logger (no component attached) — matching what main.go now
+	// passes via services.Logger after the okmo fix.
+	var buf bytes.Buffer
+	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	rootLogger := slog.New(jsonHandler)
+	// Derive the search logger exactly as NewModelWithOptions does via modeLogger.
+	searchLogger := rootLogger.With("component", "search")
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, searchLogger)
+
+	// Put the model into a loading state and call Reload(). The guard path in
+	// Reload (and triggerSearchWithAnchor) emits a Debug log when loading is
+	// already in flight — giving us a real slog record to inspect.
+	m.loading = true
+	_ = m.Reload()
+
+	output := buf.String()
+	if output == "" {
+		t.Fatal("expected at least one slog debug record, got empty output")
+	}
+
+	// Every emitted record must carry exactly one "component" key with value "search".
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		count := strings.Count(line, `"component":`)
+		if count != 1 {
+			t.Errorf("expected exactly 1 \"component\" key, got %d\nline: %s", count, line)
+		}
+		if !strings.Contains(line, `"component":"search"`) {
+			t.Errorf("expected component=search in log line, got:\n%s", line)
+		}
 	}
 }

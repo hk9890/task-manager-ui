@@ -1,8 +1,10 @@
 package board
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -875,6 +877,104 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 	// With empty inputs no cardinality warning is expected.
 	if len(capturedMessages) != 0 {
 		t.Fatalf("expected no slog warnings for empty inputs, got %v", capturedMessages)
+	}
+}
+
+// TestBoardModeWarningLogNoDuplicateComponentKey asserts that warning records
+// emitted via maybeCompose contain exactly one "component" JSON key.
+// Regression test for beads-workbench-xm6u: the logger handed to the board model
+// already carries component=dashboard; adding a second .With("component", ...) call
+// caused slog's JSON handler to emit the key twice.
+func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
+	t.Parallel()
+
+	// Use a real JSON handler writing to a buffer so we can inspect raw output.
+	var buf bytes.Buffer
+	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	// Simulate what main.go does: attach component=dashboard to the parent logger.
+	logger := slog.New(jsonHandler).With("component", "dashboard")
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, logger, resolvedBoardKeys(t))
+	m.pendingResults = 4
+
+	// Build 501 ready issues — enough to exceed the 500-item cardinality threshold
+	// and trigger a "cardinality threshold exceeded" warning from dashboard.Compose.
+	ready := make([]domain.IssueSummary, 501)
+	for i := range ready {
+		ready[i] = domain.IssueSummary{ID: fmt.Sprintf("bw-%d", i+1), Title: fmt.Sprintf("Issue %d", i+1)}
+	}
+
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{Ready: ready}})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
+
+	output := buf.String()
+	if output == "" {
+		t.Fatal("expected at least one slog warning record, got empty output")
+	}
+
+	// Count occurrences of `"component":` in each JSON line.
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		count := strings.Count(line, `"component":`)
+		if count != 1 {
+			t.Errorf("expected exactly 1 occurrence of \"component\": in log line, got %d\nline: %s", count, line)
+		}
+	}
+}
+
+// TestBoardModeLogCarriesComponentBoard asserts that warning records emitted by
+// the board model carry component=board (not component=dashboard or any other
+// inherited value).
+// Regression test for beads-workbench-okmo.
+func TestBoardModeLogCarriesComponentBoard(t *testing.T) {
+	t.Parallel()
+
+	// Use a root logger (no component attached) — matching what main.go now
+	// passes via services.Logger after the okmo fix.
+	var buf bytes.Buffer
+	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	rootLogger := slog.New(jsonHandler)
+	// Derive the board logger exactly as NewModelWithOptions does via modeLogger.
+	boardLogger := rootLogger.With("component", "board")
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := NewModel(gateway, boardLogger, resolvedBoardKeys(t))
+	m.pendingResults = 4
+
+	// 501 ready issues exceeds the 500-item cardinality threshold and triggers a
+	// "cardinality threshold exceeded" Warn record.
+	ready := make([]domain.IssueSummary, 501)
+	for i := range ready {
+		ready[i] = domain.IssueSummary{ID: fmt.Sprintf("bw-%d", i+1), Title: fmt.Sprintf("Issue %d", i+1)}
+	}
+
+	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{Ready: ready}})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
+
+	output := buf.String()
+	if output == "" {
+		t.Fatal("expected at least one slog warning record, got empty output")
+	}
+
+	// Every emitted record must carry exactly one "component" key with value "board".
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		count := strings.Count(line, `"component":`)
+		if count != 1 {
+			t.Errorf("expected exactly 1 \"component\" key, got %d\nline: %s", count, line)
+		}
+		if !strings.Contains(line, `"component":"board"`) {
+			t.Errorf("expected component=board in log line, got:\n%s", line)
+		}
 	}
 }
 

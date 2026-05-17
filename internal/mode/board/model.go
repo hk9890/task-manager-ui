@@ -240,7 +240,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			if m.inflight {
 				m.logger.Debug("manual board refresh suppressed; refresh already in flight",
-					"component", "board",
 					"trigger", "board-manual")
 				return nil
 			}
@@ -356,7 +355,6 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// of how startReload is called.
 	if m.inflight {
 		m.logger.Debug("startReload re-entry suppressed; refresh already in flight",
-			"component", "board",
 			"mode", rm)
 		return nil
 	}
@@ -425,16 +423,15 @@ func (m *Model) maybeCompose() tea.Cmd {
 	})
 
 	// Emit warnings to slog.
-	logger := m.logger.With("component", "dashboard")
 	for _, w := range cols.Warnings {
 		if w.Threshold == -1 {
-			logger.Warn("backend sort assumption broken",
+			m.logger.Warn("backend sort assumption broken",
 				"group", w.Group,
 				"count", w.Count,
 				"threshold", w.Threshold,
 			)
 		} else {
-			logger.Warn("cardinality threshold exceeded",
+			m.logger.Warn("cardinality threshold exceeded",
 				"group", w.Group,
 				"count", w.Count,
 				"threshold", w.Threshold,

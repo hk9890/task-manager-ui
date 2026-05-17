@@ -43,7 +43,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		return fmt.Errorf("failed to initialize services: %w", err)
 	}
 	if opts.logManager != nil {
-		services.Logger = opts.logManager.Component("dashboard")
+		services.Logger = opts.logManager.Logger()
 	}
 
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{DisableAutoRefresh: !opts.autoRefresh})

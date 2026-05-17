@@ -245,8 +245,8 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		board:          boardmode.NewModel(services.Gateway, services.Logger, keys),
-		search:         searchmode.NewModel(services.Gateway, services.Logger, keys),
+		board:          boardmode.NewModel(services.Gateway, modeLogger(services.Logger, "board"), keys),
+		search:         searchmode.NewModel(services.Gateway, modeLogger(services.Logger, "search"), keys),
 		detail:         detailsmode.Model{Keys: keys},
 		toast:          toaster.New(),
 		help:           help,
@@ -1768,6 +1768,19 @@ func parseRequiredPriority(value string) (*int, error) {
 	}
 
 	return &parsed, nil
+}
+
+// modeLogger derives a component-scoped logger for a mode.
+// When logger is nil, modeLogger returns nil so that each mode can fall back to
+// slog.Default() as usual.  When logger is non-nil it appends exactly one
+// "component" key — callers must NOT pre-attach "component" to the parent
+// logger they pass here (services.Logger must be the root logger, not a
+// component-scoped one).
+func modeLogger(logger *slog.Logger, component string) *slog.Logger {
+	if logger == nil {
+		return nil
+	}
+	return logger.With("component", component)
 }
 
 func emptyFallback(value, fallback string) string {

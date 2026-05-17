@@ -317,7 +317,6 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 	// so the invariant is maintained regardless of how triggerSearchWithAnchor is called.
 	if m.loading {
 		m.logger.Debug("triggerSearchWithAnchor re-entry suppressed; search already in flight",
-			"component", "search",
 			"query", queryText)
 		return nil
 	}
@@ -398,7 +397,6 @@ func (m *Model) IsLoading() bool {
 func (m *Model) Reload() tea.Cmd {
 	if m.loading {
 		m.logger.Debug("manual search refresh suppressed; refresh already in flight",
-			"component", "search",
 			"trigger", "search-manual")
 		return nil
 	}

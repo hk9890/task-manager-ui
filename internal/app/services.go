@@ -28,8 +28,10 @@ type Services struct {
 	Launcher launcher.Service
 	Editor   launchereditor.Service
 	Config   config.Model
-	// Logger is the optional runtime logger for dashboard/board warnings. When
-	// nil, mode/board/model.go falls back to slog.Default().
+	// Logger is the optional root runtime logger. It must NOT carry a
+	// "component" attribute; NewModelWithOptions derives per-mode loggers
+	// (component=board, component=search, …) via modeLogger. When nil, each
+	// mode falls back to slog.Default().
 	Logger *slog.Logger
 }
 
