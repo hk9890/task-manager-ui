@@ -1,0 +1,171 @@
+package app
+
+// Regression guard for the EXISTING boardIsLoading() guard at app/model.go:1076.
+//
+// This test is deliberately PASSING on current code — it is a regression prevention
+// test, not a bug exposure test. Its purpose is to lock down the existing app-level
+// guard so that future refactors cannot silently remove it.
+//
+// Context: The app-level refreshActiveSurfaceCmd (model.go:1073) has a guard:
+//
+//	case mode.Board:
+//	    if m.boardIsLoading() {
+//	        return nil
+//	    }
+//
+// This guard prevents app-triggered auto-refreshes from stacking while a board
+// refresh is already in flight. The tests below verify this invariant holds even
+// when refreshTickMsg fires multiple times in rapid succession.
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/hk9890/beads-workbench/internal/config"
+	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/mode"
+	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+)
+
+// countBoardGatewayCalls counts calls to the 4 board gateway methods.
+func countBoardGatewayCalls(gateway *fakes.FakeBeadsGateway) int {
+	n := 0
+	for _, c := range gateway.Calls {
+		switch c.Method {
+		case fakes.MethodReadyExplain, fakes.MethodQuery, fakes.MethodCountIssues:
+			n++
+		}
+	}
+	return n
+}
+
+// expandCmds recursively expands a tea.Cmd (which may return a BatchMsg) into
+// the set of individual leaf Cmds. This lets us inspect whether a second batch
+// of gateway calls was produced without actually executing them.
+func expandCmds(cmd tea.Cmd) []tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	var out []tea.Cmd
+	queue := []tea.Cmd{cmd}
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		msg := c()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			queue = append(queue, batch...)
+		} else {
+			// Re-wrap the already-invoked result so callers can still use it.
+			captured := msg
+			out = append(out, func() tea.Msg { return captured })
+		}
+	}
+	return out
+}
+
+// TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes guards the EXISTING
+// boardIsLoading() check at app/model.go:1076 against silent regression.
+//
+// This test PASSES on current code. It will fail if the guard is accidentally
+// removed or bypassed in a future refactor.
+func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
+	// Install deterministic tick schedulers — no real time advances during this test.
+	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
+		Ready: []domain.IssueSummary{
+			{ID: "bw-10", Title: "Ready alpha", Status: "open", Priority: 1},
+		},
+		Blocked: []domain.BlockedIssueView{
+			{Issue: domain.IssueSummary{ID: "bw-11", Title: "Blocked beta", Status: "blocked", Priority: 2}},
+		},
+	}
+	gateway.QueryResponse = []domain.IssueSummary{
+		{ID: "bw-12", Title: "In Progress gamma", Status: "in_progress", Priority: 1},
+	}
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	// --- Cold-start board load ---
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if m.active != mode.Board {
+		t.Fatalf("expected board active after init, got %s", m.active)
+	}
+	if m.boardIsLoading() {
+		t.Fatalf("expected board to have settled after draining init messages")
+	}
+
+	// Reset gateway call counter after cold-start.
+	gateway.ResetCalls()
+
+	// --- Phase 1: First refreshTickMsg — triggers an auto-refresh ---
+	// Mark board dirty so the surface refresh guard fires.
+	m.markSurfaceDirty(mode.Board)
+
+	// Fire first refreshTickMsg. The model calls maybeAutoRefreshActiveSurfaceCmd,
+	// which calls board.AutoRefresh() (since board is NOT loading). This sets
+	// board loading=true and returns 4 gateway Cmds.
+	next, firstRefreshCmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+
+	if !m.boardIsLoading() {
+		t.Fatalf("expected board to be loading after first refreshTickMsg")
+	}
+
+	// The first refresh Cmd should contain 4 gateway calls.
+	firstMsgs := runBatch(firstRefreshCmd)
+	callsFromFirst := countBoardGatewayCalls(gateway)
+	if callsFromFirst != 4 {
+		t.Fatalf("first refreshTickMsg: expected 4 gateway calls, got %d", callsFromFirst)
+	}
+
+	// Reset call counter to measure second-tick calls.
+	gateway.ResetCalls()
+
+	// --- Phase 2: Second refreshTickMsg while board is STILL loading ---
+	// Mark dirty again (simulating another mutation arriving while in-flight).
+	m.markSurfaceDirty(mode.Board)
+
+	// Fire second refreshTickMsg WITHOUT draining the first refresh's results.
+	// The boardIsLoading() guard at app/model.go:1076 should block this.
+	next, secondRefreshCmd := m.Update(refreshTickMsg{})
+	m = next.(Model)
+
+	// --- ASSERTION: second refreshTickMsg must NOT produce any board gateway calls ---
+	// Execute whatever the second refreshCmd contains and check for board calls.
+	if secondRefreshCmd != nil {
+		secondMsgs := runBatch(secondRefreshCmd)
+		// Filter: the second refreshTickMsg schedules the next tick (via getRefreshTickScheduler),
+		// so secondRefreshCmd may contain scheduler-level Cmds. We only care that
+		// NO additional board gateway calls were recorded.
+		_ = secondMsgs
+	}
+	callsFromSecond := countBoardGatewayCalls(gateway)
+	if callsFromSecond != 0 {
+		t.Errorf("second refreshTickMsg: expected 0 board gateway calls (boardIsLoading() guard should fire), got %d; app/model.go:1076 guard is broken", callsFromSecond)
+	}
+
+	// Board must still be loading (first refresh is still in-flight).
+	if !m.boardIsLoading() {
+		t.Errorf("board should still be loading after second refreshTickMsg — it was not drained")
+	}
+
+	// --- Phase 3: Drain the first refresh's results — board should settle cleanly ---
+	m = applyMessages(t, m, firstMsgs)
+
+	if m.boardIsLoading() {
+		t.Errorf("expected board to have settled after draining first refresh messages")
+	}
+}
