@@ -2,6 +2,7 @@ package beads
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -130,14 +131,29 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 	return err
 }
 
+// closeIssueNotFoundFragment is the bd 1.0.4 stderr substring emitted when
+// `bd close <id>` cannot find the issue via its internal lookup. The wording
+// differs from the generic ID-resolver path ("resolving ID X: no issue found
+// matching X") because bd close has its own filtered lookup. See the
+// CloseIssue idempotency note in interface.go.
+const closeIssueNotFoundFragment = "issue not found"
+
 // CloseIssue closes an issue through `bd close`.
+//
+// Idempotency emulation: bd 1.0.4 `bd close <id>` filters its ID lookup to
+// non-closed issues. Closing an already-closed issue therefore exits 1 with
+// "issue not found: <id>" — even though the issue still exists with
+// status=closed (verifiable via ShowIssue). The interface contract documents
+// CloseIssue as idempotent, so when bd returns the close-specific not-found
+// error we probe via ShowIssue: if the issue is already closed, return nil
+// (the desired end state is achieved). Truly missing issues still surface
+// the original error.
 func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.CloseIssueInput) error {
 	if strings.TrimSpace(issueID) == "" {
 		return newGatewayError(domain.ErrorCodeValidationFailed, opCloseIssue, "issue id is required", nil)
 	}
 
 	runner := g.runner
-	var err error
 
 	args := []string{"close", issueID}
 
@@ -145,13 +161,39 @@ func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.C
 		args = append(args, "--reason", input.Reason)
 	}
 
-	_, err = runner.Run(ctx, CommandRequest{
+	_, err := runner.Run(ctx, CommandRequest{
 		Operation: opCloseIssue,
 		Args:      args,
 		IsWrite:   true,
 	})
 
+	if err == nil {
+		return nil
+	}
+	if !isCloseNotFound(err) {
+		return err
+	}
+	// bd reported not-found; verify whether the issue is actually already
+	// closed (bd quirk) vs truly missing.
+	detail, showErr := g.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issueID})
+	if showErr != nil {
+		return err
+	}
+	if detail.Summary.Status == "closed" {
+		return nil
+	}
 	return err
+}
+
+func isCloseNotFound(err error) bool {
+	var gwErr domain.GatewayError
+	if !errors.As(err, &gwErr) {
+		return false
+	}
+	if gwErr.Code != domain.ErrorCodeCommandFailed {
+		return false
+	}
+	return strings.Contains(gwErr.Message, closeIssueNotFoundFragment)
 }
 
 // AddComment adds an issue comment through `bd comments add`.

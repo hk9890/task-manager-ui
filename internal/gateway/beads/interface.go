@@ -103,16 +103,25 @@
 //     a BD_* prefix var, not in the allowlist). All writes are attributed to the git
 //     user.name of the beads project's git config. Disposition: ACCEPT.
 //
-// CloseIssue is *usually* idempotent (exit 0 on re-close of an already-closed issue).
+// CloseIssue is idempotent (the gateway emulates this over a bd 1.0.4 bug).
 //   - When no --reason is supplied, bd stores close_reason as "Closed" (the literal
 //     string), visible in ShowIssue. Disposition: ACCEPT.
-//   - bd 1.0.4 flake: under concurrent subprocess load the second `bd close <id>`
-//     intermittently exits 1 with "issue not found: <id>" instead of being
-//     idempotent. The first close still persisted (ShowIssue returns
-//     status=closed); only the re-entry lookup is buggy. Callers that want
-//     end-state semantics should observe via ShowIssue rather than rely on
-//     bd close exit codes. The write contract test (CloseIssue/Idempotency)
-//     accepts both outcomes and pins the end-state via ShowIssue for this reason.
+//   - bd 1.0.4 bug: `bd close <id>` uses bd's default issue-set filter for its
+//     ID lookup, and that default filter excludes closed issues (the same way
+//     `bd list --json` returns [] for a DB containing only closed issues
+//     unless --all or --status closed is passed). Closing an already-closed
+//     issue therefore exits 1 with "issue not found: <id>" — but the issue
+//     still exists, just with status=closed (verifiable via ShowIssue or
+//     `bd list --status closed`). The failure is deterministic immediately
+//     after the first close and resolves after ~1s or after any intervening
+//     read (some internal index promotes the closed issue back into the
+//     filter close reads). Reproduced in /tmp/repro probes during 9x70
+//     follow-up: 4-11/20 sequential re-closes fail with no delay, 0/10 fail
+//     with sleep ≥1s.
+//   - Gateway behavior: CloseIssue catches the close-specific "issue not
+//     found" stderr, runs ShowIssue, and returns nil iff the issue exists
+//     with status=closed. Truly missing issues still surface the bd error.
+//     This preserves the documented idempotency contract for all callers.
 //
 // Writes are immediately consistent with subsequent reads (embedded dolt auto-commit).
 //   - bd uses an embedded dolt backend in auto-commit mode for standalone repos. Each

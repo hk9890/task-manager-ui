@@ -9,20 +9,11 @@
 // requires a fresh, writable database per invocation (not the shared read-only
 // fixture used by RunReadContract).
 //
-// Sub-tests run sequentially (no t.Parallel). bd 1.0.4 holds machine-wide
-// state outside the per-test temp dir (embedded-dolt + per-user files);
-// parallel bd subprocesses contend on that state and amplify the rare
-// CloseIssue/Idempotency flake described below. Sequential execution reduces
-// (but does not eliminate) the rate. The per-suite cost is small (~10-20s on
-// real bd) and the write contract suite is the integration tier — speed is
-// not the priority.
-//
-// CloseIssue/Idempotency known bd 1.0.4 flake: under load the second
-// `bd close <id>` of an already-closed issue intermittently exits 1 with
-// "issue not found: <id>" instead of being idempotent (exit 0). The issue
-// still exists with status=closed (verifiable via ShowIssue) — only the
-// close re-entry is buggy. The test accepts both outcomes and pins the
-// end-state invariant via ShowIssue rather than the bd exit code.
+// Sub-tests run sequentially (no t.Parallel). bd 1.0.4 makes real-bd
+// subprocess setup serial regardless (every test does `bd init` + several
+// writes), so the test-level parallelism wins very little and the
+// fixture-pool engineering would be complex. Sequential keeps the suite
+// straightforward to reason about.
 //
 // Wire RunWriteContract against:
 //   - FakeBeadsGateway (unit tier) via fake_write_contract_test.go
@@ -33,7 +24,6 @@ package contract
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
@@ -229,34 +219,14 @@ func RunWriteContract(t *testing.T, factory WritableGatewayFactory) {
 			t.Fatalf("CloseIssue (first): unexpected error: %v", err)
 		}
 
-		// Second close — the contract permits idempotent close.
-		// bd 1.0.4 is intermittently flaky here on the real CLI gateway: under
-		// concurrent subprocess pressure the second close may report
-		// "issue not found" even though the first close succeeded and the
-		// issue still exists with status=closed (verifiable via ShowIssue).
-		// Accept either outcome as satisfying the contract — both leave the
-		// issue closed from the caller's perspective. ShowIssue below pins
-		// the actual end-state invariant.
-		secondErr := gw.CloseIssue(ctx, createResult.IssueID, domain.CloseIssueInput{})
-		if secondErr != nil {
-			var gwErr domain.GatewayError
-			if !errors.As(secondErr, &gwErr) {
-				t.Errorf("CloseIssue (second): expected nil or domain.GatewayError, got %T: %v", secondErr, secondErr)
-			} else if gwErr.Code != domain.ErrorCodeCommandFailed || !strings.Contains(gwErr.Message, "issue not found") {
-				t.Errorf("CloseIssue (second): expected nil or 'issue not found' command failure, got %v", secondErr)
-			}
+		// Second close — must be idempotent. The gateway emulates idempotency
+		// over bd 1.0.4's known lookup bug (re-close within ~1s returns
+		// "issue not found" because bd close's ID lookup uses the default
+		// status filter that excludes already-closed issues). See the
+		// CloseIssue note in interface.go for the bd characterization.
+		if err := gw.CloseIssue(ctx, createResult.IssueID, domain.CloseIssueInput{}); err != nil {
+			t.Errorf("CloseIssue (second, idempotency): expected nil error, got %v", err)
 		}
-
-		// End-state invariant: regardless of which path the second close took,
-		// the issue must still be closed.
-		closedID := createResult.IssueID
-		detail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: closedID})
-		if err != nil {
-			t.Fatalf("ShowIssue after double-close: unexpected error: %v", err)
-		}
-		assertNoViolations(t, contractcheck.ValidateWriteVisibility(
-			"CloseIssue/Idempotency", "StatusAfterClose", detail, "",
-		))
 	})
 
 	// ---- AddComment ----
