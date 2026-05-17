@@ -7,6 +7,14 @@
 - Entrypoint: `cmd/bwb/main.go`
 - Primary runtime surfaces: Bubble Tea UI + `bd` CLI-backed gateway
 
+## Upstream dependency
+
+- `bd` (beads issue tracker): <https://github.com/gastownhall/beads>
+- bwb is a thin TUI over `bd`; gateway compatibility is pinned in `.mise.toml`
+  (`github:gastownhall/beads` version). When investigating gateway behavior
+  surprises, file bugs upstream or check the `bd` source/issues there before
+  patching workarounds in `internal/gateway/beads/`.
+
 ## CLI startup contract
 
 `bwb` includes a small pre-TUI CLI layer for help/version/config inspection and
