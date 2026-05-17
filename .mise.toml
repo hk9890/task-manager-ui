@@ -142,3 +142,8 @@ run = """
 go build -o /tmp/bwb-smoke ./cmd/bwb-smoke
 BD_NON_INTERACTIVE=1 /tmp/bwb-smoke --dir "${BWB_SMOKE_DIR:-.}" --readonly
 """
+
+[tasks."verify:refresh"]
+description = "Runtime verification of refresh-concurrency fix (5q6t.5)"
+dir = "{{config_root}}"
+run = "python scripts/verify_refresh_concurrency.py"
