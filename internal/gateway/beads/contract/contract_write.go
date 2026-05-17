@@ -220,10 +220,10 @@ func RunWriteContract(t *testing.T, factory WritableGatewayFactory) {
 		}
 
 		// Second close — must be idempotent. The gateway emulates idempotency
-		// over bd 1.0.4's known lookup bug (re-close within ~1s returns
-		// "issue not found" because bd close's ID lookup uses the default
-		// status filter that excludes already-closed issues). See the
-		// CloseIssue note in interface.go for the bd characterization.
+		// over bd 1.0.4's known close bug (re-close within the same wall-clock
+		// second produces RowsAffected==0 in bd's UPDATE, which bd misreports
+		// as "issue not found"). Filed upstream as gastownhall/beads#4025.
+		// See the CloseIssue note in interface.go for the full characterization.
 		if err := gw.CloseIssue(ctx, createResult.IssueID, domain.CloseIssueInput{}); err != nil {
 			t.Errorf("CloseIssue (second, idempotency): expected nil error, got %v", err)
 		}

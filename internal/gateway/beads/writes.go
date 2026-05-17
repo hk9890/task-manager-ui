@@ -131,23 +131,35 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 	return err
 }
 
-// closeIssueNotFoundFragment is the bd 1.0.4 stderr substring emitted when
-// `bd close <id>` cannot find the issue via its internal lookup. The wording
-// differs from the generic ID-resolver path ("resolving ID X: no issue found
-// matching X") because bd close has its own filtered lookup. See the
-// CloseIssue idempotency note in interface.go.
+// closeIssueNotFoundFragment is the bd 1.0.4 stderr substring emitted by
+// `bd close <id>` when its internal UPDATE returns RowsAffected==0. The
+// wording is distinct from the generic ID-resolver path ("resolving ID X:
+// no issue found matching X") and is produced by close-specific code in
+// internal/storage/issueops/close.go. See the CloseIssue idempotency note
+// in interface.go and upstream gastownhall/beads#4025.
 const closeIssueNotFoundFragment = "issue not found"
 
 // CloseIssue closes an issue through `bd close`.
 //
-// Idempotency emulation: bd 1.0.4 `bd close <id>` filters its ID lookup to
-// non-closed issues. Closing an already-closed issue therefore exits 1 with
-// "issue not found: <id>" — even though the issue still exists with
-// status=closed (verifiable via ShowIssue). The interface contract documents
-// CloseIssue as idempotent, so when bd returns the close-specific not-found
-// error we probe via ShowIssue: if the issue is already closed, return nil
-// (the desired end state is achieved). Truly missing issues still surface
-// the original error.
+// Idempotency emulation over upstream bd bug — REMOVE WHEN FIXED.
+//
+// bd 1.0.4 `bd close <id>` infers "issue not found" from
+// result.RowsAffected()==0. Because the schema's `closed_at`/`updated_at`
+// are DATETIME (second resolution) and a re-close within the same second
+// changes no columns (status/closed_at/updated_at/close_reason/closed_by_session
+// are all already at their target values), MySQL/Dolt returns
+// RowsAffected==0 and bd misreports the still-present issue as missing.
+// Filed upstream as gastownhall/beads#4025 with suggested fix
+// (SELECT status before/after UPDATE to disambiguate missing-row from
+// no-op-update). When that ships and we bump the mise-pinned bd version,
+// delete this recovery block (and the related unit tests in writes_test.go),
+// revert the interface.go CloseIssue note to plain "idempotent (exit 0)",
+// and let bd's native exit-0 carry the contract.
+//
+// Behavior while the upstream bug remains: on a close-specific not-found
+// error, probe via ShowIssue and return nil iff the issue exists with
+// status=closed. Truly missing issues and any non-closed end-state still
+// surface the original error.
 func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.CloseIssueInput) error {
 	if strings.TrimSpace(issueID) == "" {
 		return newGatewayError(domain.ErrorCodeValidationFailed, opCloseIssue, "issue id is required", nil)

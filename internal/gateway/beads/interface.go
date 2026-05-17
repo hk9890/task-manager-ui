@@ -106,22 +106,28 @@
 // CloseIssue is idempotent (the gateway emulates this over a bd 1.0.4 bug).
 //   - When no --reason is supplied, bd stores close_reason as "Closed" (the literal
 //     string), visible in ShowIssue. Disposition: ACCEPT.
-//   - bd 1.0.4 bug: `bd close <id>` uses bd's default issue-set filter for its
-//     ID lookup, and that default filter excludes closed issues (the same way
-//     `bd list --json` returns [] for a DB containing only closed issues
-//     unless --all or --status closed is passed). Closing an already-closed
-//     issue therefore exits 1 with "issue not found: <id>" — but the issue
-//     still exists, just with status=closed (verifiable via ShowIssue or
-//     `bd list --status closed`). The failure is deterministic immediately
-//     after the first close and resolves after ~1s or after any intervening
-//     read (some internal index promotes the closed issue back into the
-//     filter close reads). Reproduced in /tmp/repro probes during 9x70
-//     follow-up: 4-11/20 sequential re-closes fail with no delay, 0/10 fail
-//     with sleep ≥1s.
-//   - Gateway behavior: CloseIssue catches the close-specific "issue not
-//     found" stderr, runs ShowIssue, and returns nil iff the issue exists
-//     with status=closed. Truly missing issues still surface the bd error.
-//     This preserves the documented idempotency contract for all callers.
+//   - bd 1.0.4 bug (filed upstream as gastownhall/beads#4025):
+//     `bd close <id>` infers "issue not found" from result.RowsAffected()==0
+//     in internal/storage/issueops/close.go. The schema's `closed_at` and
+//     `updated_at` columns are DATETIME (second resolution per
+//     internal/storage/schema/migrations/0001_create_issues.up.sql:17-18),
+//     so a re-close within the same wall-clock second changes NO columns
+//     (status/closed_at/updated_at/close_reason/closed_by_session are all
+//     already at their target values). MySQL/Dolt returns RowsAffected==0
+//     and bd emits "Error closing <id>: issue not found: <id>" — but the
+//     issue still exists with status=closed (verifiable via ShowIssue or
+//     `bd list --status closed`). Decisive evidence: passing --reason
+//     "different reason" on the second close forces close_reason to
+//     change, RowsAffected==1, and the failure rate drops from ~40% to 0%.
+//     Earlier "default filter excludes closed" hypothesis was WRONG — the
+//     SQL is `WHERE id = ?` with no status filter; it's purely the
+//     RowsAffected semantic gap.
+//   - Gateway behavior (workaround — REMOVE WHEN UPSTREAM FIXED): see
+//     CloseIssue in writes.go. Catches the close-specific "issue not found"
+//     stderr, runs ShowIssue, returns nil iff the issue exists with
+//     status=closed. Truly missing issues still surface the bd error.
+//     Preserves the idempotency contract for all callers until bd ships
+//     the fix and we bump the mise-pinned version.
 //
 // Writes are immediately consistent with subsequent reads (embedded dolt auto-commit).
 //   - bd uses an embedded dolt backend in auto-commit mode for standalone repos. Each

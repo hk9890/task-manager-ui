@@ -255,12 +255,15 @@ func (e *verbDispatchExecutor) Run(_ context.Context, _ string, args []string, _
 }
 
 // TestGatewayCloseIssueEmulatesIdempotencyOnBdNotFound exercises the gateway's
-// emulation of CloseIssue idempotency over the bd 1.0.4 close-lookup bug
-// (re-closing an already-closed issue returns "issue not found: <id>"
-// because bd close's internal lookup filters out closed issues). The
-// gateway must detect this specific failure and probe via ShowIssue: when
-// the issue exists with status=closed, return nil. See writes.go and the
-// CloseIssue contract note in interface.go.
+// emulation of CloseIssue idempotency over the bd 1.0.4 close bug (re-closing
+// an already-closed issue within the same wall-clock second produces
+// RowsAffected==0 in bd's UPDATE, which bd misreports as "issue not found:
+// <id>"). Filed upstream as gastownhall/beads#4025. The gateway detects this
+// specific failure and probes via ShowIssue: when the issue exists with
+// status=closed, return nil. See writes.go and the CloseIssue contract note
+// in interface.go. Delete this test together with the recovery block in
+// writes.go once the upstream fix ships and we bump the mise-pinned bd
+// version.
 func TestGatewayCloseIssueEmulatesIdempotencyOnBdNotFound(t *testing.T) {
 	t.Parallel()
 
