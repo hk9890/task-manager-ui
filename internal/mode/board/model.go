@@ -84,6 +84,13 @@ type Model struct {
 	// columns holds the four fixed board columns after composition.
 	columns []columnData
 
+	// inflight is true while a startReload is in progress (set at startReload entry,
+	// cleared by maybeCompose when all 4 results land and composition runs).
+	// It is distinct from IsLoading() (column loading state) to avoid Init/cold-start
+	// ambiguity: initialLoadingColumns() sets column loading=true at construction, but
+	// inflight is false until the first startReload call.
+	inflight bool
+
 	// pendingResults counts how many of the 4 parallel gateway calls are outstanding.
 	pendingResults int
 	// partialReady / partialInProgress / partialClosed / partialClosedCount hold
@@ -231,7 +238,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionOpenDetail}
 			}
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
-			if m.IsLoading() {
+			if m.inflight {
 				m.logger.Debug("manual board refresh suppressed; refresh already in flight",
 					"component", "board",
 					"trigger", "board-manual")
@@ -315,7 +322,11 @@ func (m *Model) CurrentSelection() *mode.Selection {
 	return m.currentSelection()
 }
 
-// IsLoading reports whether any column is still loading.
+// IsLoading reports whether any column is still in its loading state.
+// This reflects the visual loading state of columns (true during cold-start and
+// while a refresh is in flight, false once composition completes).
+// For refresh-concurrency guards, use m.inflight directly — it is false at
+// construction so Init()/cold-start is not ambiguous.
 func (m *Model) IsLoading() bool {
 	for _, col := range m.columns {
 		if col.loading {
@@ -327,7 +338,7 @@ func (m *Model) IsLoading() bool {
 
 // AutoRefresh reloads board data while preserving user context when possible.
 func (m *Model) AutoRefresh() tea.Cmd {
-	if m.IsLoading() {
+	if m.inflight {
 		return nil
 	}
 	return m.startReload(refreshModeAuto)
@@ -337,6 +348,19 @@ func (m *Model) AutoRefresh() tea.Cmd {
 // loading, and dispatches all 3 gateway calls in a single tea.Batch. It is
 // the single entry point for both manual reload and auto-refresh.
 func (m *Model) startReload(rm refreshMode) tea.Cmd {
+	// Defense-in-depth: guard against re-entrant calls from future callers that
+	// may not check IsLoading() at the call site. The call-site guards in the
+	// keyboard handler (5q6t.1) and AutoRefresh are the primary protection; this
+	// guard is a second line of defense so the invariant is maintained regardless
+	// of how startReload is called.
+	if m.inflight {
+		m.logger.Debug("startReload re-entry suppressed; refresh already in flight",
+			"component", "board",
+			"mode", rm)
+		return nil
+	}
+	m.inflight = true
+
 	// Capture anchor before clearing state so it reflects the current selection.
 	var anchor *refreshAnchor
 	if rm == refreshModeAuto {
@@ -441,6 +465,9 @@ func (m *Model) maybeCompose() tea.Cmd {
 	}
 
 	m.settleAfterRefreshLoad()
+	// All results have landed and composition is complete — clear the in-flight flag
+	// so future reload requests (keyboard or auto-refresh) are permitted.
+	m.inflight = false
 	return m.selectionChangedCmd()
 }
 

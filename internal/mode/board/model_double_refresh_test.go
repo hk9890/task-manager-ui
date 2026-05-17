@@ -310,3 +310,85 @@ func TestBoardPendingResultsNeverGoesNegativeUnderKeySpam(t *testing.T) {
 		}
 	}
 }
+
+// TestBoardInternalStartReloadGuardedByInflightFlag verifies that the internal
+// defense-in-depth guard inside startReload itself suppresses re-entrant calls,
+// independently of the call-site guard that 5q6t.1 added at the keyboard handler.
+//
+// This test bypasses the keyboard handler and calls m.startReload directly twice,
+// proving that the inflight bool field prevents state corruption even if a future
+// caller forgets to check IsLoading() first.
+func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
+	t.Parallel()
+
+	gateway := newPopulatedGateway()
+	m := newSettledBoardModel(t, gateway)
+	gateway.ResetCalls()
+
+	// === First direct startReload call — must succeed and set inflight=true ===
+	firstCmd := m.startReload(refreshModeManual)
+	if firstCmd == nil {
+		t.Fatalf("first startReload: expected non-nil Cmd")
+	}
+	if m.pendingResults != 4 {
+		t.Fatalf("first startReload: expected pendingResults=4, got %d", m.pendingResults)
+	}
+	if !m.inflight {
+		t.Fatalf("first startReload: expected inflight=true after first call")
+	}
+
+	// Execute the batch to record gateway calls, but do NOT apply results to the model.
+	firstBatchMsgs := boardDrainCmd(firstCmd)
+	callsAfterFirst := countGatewayCalls(gateway)
+	if callsAfterFirst != 4 {
+		t.Fatalf("first startReload: expected 4 gateway calls, got %d", callsAfterFirst)
+	}
+	gateway.ResetCalls()
+
+	// Record partial state before second call — it must be preserved.
+	pendingBeforeSecond := m.pendingResults
+
+	// === Second direct startReload call — must be suppressed by the internal guard ===
+	secondCmd := m.startReload(refreshModeManual)
+
+	// Assert 1: second call returned nil (internal guard fired).
+	if secondCmd != nil {
+		secondBatchMsgs := boardDrainCmd(secondCmd)
+		_ = secondBatchMsgs
+		callsFromSecond := countGatewayCalls(gateway)
+		t.Errorf("second startReload: expected nil Cmd from internal guard, got non-nil Cmd; %d additional gateway calls recorded", callsFromSecond)
+	}
+
+	// Assert 2: pendingResults was not reset (partial buffers untouched).
+	if m.pendingResults != pendingBeforeSecond {
+		t.Errorf("second startReload: expected pendingResults=%d (unchanged), got %d", pendingBeforeSecond, m.pendingResults)
+	}
+
+	// Assert 3: no new gateway calls were dispatched.
+	callsFromSecond := countGatewayCalls(gateway)
+	if callsFromSecond != 0 {
+		t.Errorf("second startReload: expected 0 additional gateway calls, got %d", callsFromSecond)
+	}
+
+	// Assert 4: inflight is still true (second call did not clear it).
+	if !m.inflight {
+		t.Errorf("second startReload: expected inflight=true (guard did not clear it)")
+	}
+
+	// === Drain first batch — pendingResults must count down to 0 without going negative ===
+	for _, msg := range firstBatchMsgs {
+		prevPending := m.pendingResults
+		_ = m.Update(msg)
+		if m.pendingResults < 0 {
+			t.Errorf("pendingResults went negative: was %d before message %T, now %d", prevPending, msg, m.pendingResults)
+		}
+	}
+	if m.pendingResults != 0 {
+		t.Errorf("after draining first batch: expected pendingResults=0, got %d", m.pendingResults)
+	}
+
+	// Assert 5: inflight is cleared after composition completes.
+	if m.inflight {
+		t.Errorf("after composition: expected inflight=false, got true")
+	}
+}
