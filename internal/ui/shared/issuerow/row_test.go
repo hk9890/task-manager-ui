@@ -310,6 +310,17 @@ func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
 				t.Fatalf("phase %d: expected title in plain text, got: %q", phase, plain)
 			}
 
+			// Assert the specific SkeletonShades[phase] ANSI foreground sequence is present.
+			// Render a sentinel string with the expected color and extract the escape prefix
+			// (everything before the sentinel character) to check it appears in dimmed output.
+			sentinel := "\x00"
+			rendered := lipgloss.NewStyle().Foreground(skeletonColor(phase)).Render(sentinel)
+			ansiPrefix := strings.SplitN(rendered, sentinel, 2)[0]
+			if !strings.Contains(dimmed, ansiPrefix) {
+				t.Fatalf("phase %d: expected SkeletonShades[%d] ANSI sequence %q in dimmed row, got: %q",
+					phase, phase, ansiPrefix, dimmed)
+			}
+
 			// Verify the row with Dim differs from the same row without Dim.
 			undimmed := RenderCompact(RenderConfig{
 				Issue: domain.IssueSummary{
