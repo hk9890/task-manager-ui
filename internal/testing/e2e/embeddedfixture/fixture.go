@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 )
 
@@ -154,10 +153,10 @@ func seedScaleSharedCache(scriptPath, seedPath, cacheDir string) error {
 	defer func() { _ = lockFile.Close() }()
 
 	// Acquire an exclusive lock — blocks until any concurrent seeder finishes.
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+	if err := acquireFileLock(lockFile); err != nil {
 		return fmt.Errorf("acquire scale fixture lock %q: %w", lockPath, err)
 	}
-	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = releaseFileLock(lockFile) }()
 
 	// Under the lock: if a previous process already completed the seed, skip.
 	markerPath := filepath.Join(cacheDir, scaleSeedCompleteMarker)
