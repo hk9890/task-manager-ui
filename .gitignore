@@ -8,6 +8,9 @@
 .idea/
 .claude/
 /bwb
+/bwb-smoke
 coverage.out
 coverage-*.out
 dist/
+__pycache__/
+*.pyc
