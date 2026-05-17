@@ -1,0 +1,13 @@
+{
+  "capture": "search-refresh-via-board-reload",
+  "theme": "dark",
+  "ok": true,
+  "note": "Search mode could not be reached via PTY (F14 key not in capture keymap, ctrl+@ NUL byte not routable). Search dim+phase verified deterministically by TestRefreshSearchCarriesDimPhaseStyle (3/3 runs pass). Raw ANSI from this session (board context) shows all 3 SkeletonShades present.",
+  "skeleton_shades_ansi_found": {
+    "38;2;69;69;69 (dark dim #454545)": 270,
+    "38;2;105;105;105 (dark mid #696969)": 621,
+    "38;2;127;127;127 (dark bright #7F7F7F)": 180
+  },
+  "test_evidence": "TestRefreshSearchCarriesDimPhaseStyle: PASS 3/3",
+  "verdict": "PASS (unit test evidence; PTY capture for search mode blocked by keymap limitation)"
+}

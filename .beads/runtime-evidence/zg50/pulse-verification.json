@@ -1,0 +1,25 @@
+{
+  "purpose": "pulse-verification: all 3 SkeletonShades cycling through raw ANSI output",
+  "theme": "dark only (PTY OSC11 response fixed at rgb:0000/0000/0000; no env override for light theme exists)",
+  "light_theme_gap": "No env var override for lipgloss AdaptiveColor theme selection. Light theme not testable via PTY without a real light-background terminal. Documented in styles/colors.go comment: light-theme pulse may be less perceptible. Gap noted; not a blocker per project docs.",
+  "board_refresh_dark": {
+    "38;2;69;69;69 (dark dim #454545 = SkeletonShades[0].Dark)": 270,
+    "38;2;105;105;105 (dark mid #696969 = SkeletonShades[1].Dark)": 553,
+    "38;2;127;127;127 (dark bright #7F7F7F = SkeletonShades[2].Dark)": 180,
+    "verdict": "all 3 shades found"
+  },
+  "details_refresh_dark": {
+    "38;2;69;69;69": 180,
+    "38;2;105;105;105": 689,
+    "38;2;127;127;127": 90,
+    "stale_content_mid_reload": true,
+    "verdict": "all 3 shades found; stale content visible"
+  },
+  "search_refresh": {
+    "pty_capture": "not possible (F14 key not in capture keymap)",
+    "unit_test": "TestRefreshSearchCarriesDimPhaseStyle PASS 3/3 \u2014 asserts 38;2;127;127;127 in output",
+    "verdict": "PASS via unit test"
+  },
+  "TestSkeletonPhaseCyclesThroughAllShades": "PASS 3/3 \u2014 all len(SkeletonShades)=3 shades visited within 4x3=12 ticks",
+  "overall_verdict": "PASS \u2014 all 3 surfaces verified with ANSI evidence (board+details via PTY, search via unit test). All 3 SkeletonShades cycle confirmed."
+}
