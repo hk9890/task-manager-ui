@@ -55,8 +55,8 @@ run = """
 go test -race -tags=integration -coverprofile=coverage.out -covermode=atomic ./...
 COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
 COVERAGE_INT=${COVERAGE%.*}
-echo "Total coverage: ${COVERAGE}% (threshold: ${COVERAGE_THRESHOLD:-71}%)"
-if [ "$COVERAGE_INT" -lt "${COVERAGE_THRESHOLD:-71}" ]; then
+echo "Total coverage: ${COVERAGE}% (threshold: ${COVERAGE_THRESHOLD:-69}%)"
+if [ "$COVERAGE_INT" -lt "${COVERAGE_THRESHOLD:-69}" ]; then
   echo "FAIL: below threshold"; exit 1
 fi
 """

@@ -103,9 +103,16 @@
 //     a BD_* prefix var, not in the allowlist). All writes are attributed to the git
 //     user.name of the beads project's git config. Disposition: ACCEPT.
 //
-// CloseIssue is idempotent (exit 0 on re-close of an already-closed issue).
+// CloseIssue is *usually* idempotent (exit 0 on re-close of an already-closed issue).
 //   - When no --reason is supplied, bd stores close_reason as "Closed" (the literal
 //     string), visible in ShowIssue. Disposition: ACCEPT.
+//   - bd 1.0.4 flake: under concurrent subprocess load the second `bd close <id>`
+//     intermittently exits 1 with "issue not found: <id>" instead of being
+//     idempotent. The first close still persisted (ShowIssue returns
+//     status=closed); only the re-entry lookup is buggy. Callers that want
+//     end-state semantics should observe via ShowIssue rather than rely on
+//     bd close exit codes. The write contract test (CloseIssue/Idempotency)
+//     accepts both outcomes and pins the end-state via ShowIssue for this reason.
 //
 // Writes are immediately consistent with subsequent reads (embedded dolt auto-commit).
 //   - bd uses an embedded dolt backend in auto-commit mode for standalone repos. Each
