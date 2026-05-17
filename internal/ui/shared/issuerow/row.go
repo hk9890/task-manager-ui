@@ -117,6 +117,15 @@ type RenderConfig struct {
 	Selected bool
 	Width    int
 	Styled   bool
+
+	// Dim, when true, applies a SkeletonShades foreground tint to the rendered
+	// row text — used to signal that the surface is refreshing stale data.
+	// Phase selects the shade index (modulo applied internally).
+	// Selection-conflict rule: when Selected==true && Dim==true, the dim shade
+	// is applied to the foreground text only; the selection indicator is
+	// preserved unchanged so the selection highlight remains visually dominant.
+	Dim   bool
+	Phase int
 }
 
 // ReferenceRenderConfig configures compact related-issue row rendering.
@@ -159,7 +168,14 @@ func RenderCompact(config RenderConfig) string {
 		return styles.TruncateString(prefixPlain+metaPlain, config.Width)
 	}
 
-	return prefixStyled + metaStyled + " " + styles.TruncateString(title, titleWidth)
+	content := metaStyled + " " + styles.TruncateString(title, titleWidth)
+	if config.Dim && config.Styled {
+		// Apply a SkeletonShades foreground tint to the row content only.
+		// Selection-conflict rule: the prefix (prefixStyled) is left unchanged so
+		// the selection indicator remains visually dominant.
+		content = lipgloss.NewStyle().Foreground(skeletonColor(config.Phase)).Render(content)
+	}
+	return prefixStyled + content
 }
 
 // RenderReferenceCompact renders a one-line compact row for related issues.

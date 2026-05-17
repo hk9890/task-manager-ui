@@ -10,6 +10,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
 func TestRenderCompactSelectionAndMetadata(t *testing.T) {
@@ -237,6 +238,150 @@ func TestRenderCompactSkeletonSixDistinctTitleFills(t *testing.T) {
 func TestSkeletonGlyphConstant(t *testing.T) {
 	if SkeletonGlyph != "▓" {
 		t.Errorf("SkeletonGlyph = %q; want %q (U+2593 DARK SHADE)", SkeletonGlyph, "▓")
+	}
+}
+
+// TestRenderCompactDimFalseIsUnchanged is a regression guard: with Dim==false the
+// output must be byte-identical to the baseline (no Dim field set at all).
+func TestRenderCompactDimFalseIsUnchanged(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	cfg := RenderConfig{
+		Issue: domain.IssueSummary{
+			ID:       "beads-workbench-u5s",
+			Title:    "Regression guard row",
+			Type:     "task",
+			Status:   "open",
+			Priority: 2,
+		},
+		Selected: false,
+		Width:    72,
+		Styled:   true,
+	}
+
+	// Baseline: zero-value Dim and Phase (Dim==false is the default).
+	baseline := RenderCompact(cfg)
+
+	// Explicit Dim==false must be byte-identical.
+	cfg.Dim = false
+	cfg.Phase = 1
+	got := RenderCompact(cfg)
+
+	if got != baseline {
+		t.Fatalf("Dim==false output differs from baseline:\nbaseline: %q\ngot:      %q", baseline, got)
+	}
+}
+
+// TestRenderCompactDimAppliesSkeletonShadesForeground verifies that when
+// Dim==true && Selected==false the output contains the SkeletonShades[phase]
+// ANSI sequence as a foreground color code.
+func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	for phase := 0; phase < len(styles.SkeletonShades); phase++ {
+		phase := phase
+		t.Run("phase"+string(rune('0'+phase)), func(t *testing.T) {
+			dimmed := RenderCompact(RenderConfig{
+				Issue: domain.IssueSummary{
+					ID:       "beads-workbench-dim1",
+					Title:    "Dim foreground test",
+					Type:     "task",
+					Status:   "open",
+					Priority: 1,
+				},
+				Selected: false,
+				Width:    72,
+				Styled:   true,
+				Dim:      true,
+				Phase:    phase,
+			})
+
+			if !strings.Contains(dimmed, "\x1b[") {
+				t.Fatalf("phase %d: expected ANSI in dimmed row, got: %q", phase, dimmed)
+			}
+
+			// The plain text must still contain the issue content.
+			plain := testui.AnsiEscapePattern.ReplaceAllString(dimmed, "")
+			if !strings.Contains(plain, "Dim foreground test") {
+				t.Fatalf("phase %d: expected title in plain text, got: %q", phase, plain)
+			}
+
+			// Verify the row with Dim differs from the same row without Dim.
+			undimmed := RenderCompact(RenderConfig{
+				Issue: domain.IssueSummary{
+					ID:       "beads-workbench-dim1",
+					Title:    "Dim foreground test",
+					Type:     "task",
+					Status:   "open",
+					Priority: 1,
+				},
+				Selected: false,
+				Width:    72,
+				Styled:   true,
+				Dim:      false,
+			})
+			if dimmed == undimmed {
+				t.Fatalf("phase %d: Dim==true output identical to Dim==false — dim not applied", phase)
+			}
+		})
+	}
+}
+
+// TestRenderCompactDimSelectedPreservesSelectionAndDimsForeground verifies the
+// selection-conflict rule: when Selected==true && Dim==true the selection
+// indicator is preserved in the output AND a dim foreground ANSI code is
+// present in the content portion.
+func TestRenderCompactDimSelectedPreservesSelectionAndDimsForeground(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	dimmedSelected := RenderCompact(RenderConfig{
+		Issue: domain.IssueSummary{
+			ID:       "beads-workbench-sc1",
+			Title:    "Selection conflict test",
+			Type:     "bug",
+			Status:   "blocked",
+			Priority: 0,
+		},
+		Selected: true,
+		Width:    72,
+		Styled:   true,
+		Dim:      true,
+		Phase:    0,
+	})
+
+	// The plain text must still contain the selection prefix.
+	plain := testui.AnsiEscapePattern.ReplaceAllString(dimmedSelected, "")
+	if !strings.HasPrefix(plain, "› ") {
+		t.Fatalf("expected selection prefix '› ' in dimmed+selected row, got: %q", plain)
+	}
+
+	// The styled output must contain ANSI (both selection indicator and dim shade).
+	if !strings.Contains(dimmedSelected, "\x1b[") {
+		t.Fatalf("expected ANSI in dimmed+selected row, got: %q", dimmedSelected)
+	}
+
+	// The dimmed+selected row must differ from the selected-but-not-dimmed row.
+	selectedOnly := RenderCompact(RenderConfig{
+		Issue: domain.IssueSummary{
+			ID:       "beads-workbench-sc1",
+			Title:    "Selection conflict test",
+			Type:     "bug",
+			Status:   "blocked",
+			Priority: 0,
+		},
+		Selected: true,
+		Width:    72,
+		Styled:   true,
+		Dim:      false,
+	})
+	if dimmedSelected == selectedOnly {
+		t.Fatalf("expected dimmed+selected to differ from selected-only\ngot: %q", dimmedSelected)
 	}
 }
 
