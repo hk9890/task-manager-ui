@@ -20,7 +20,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		t.Parallel()
 
 		m := Model{}
-		view := m.View(100, 20, false)
+		view := m.View(100, 20, false, 0)
 		if !strings.Contains(view, "No selected issue.") {
 			t.Fatalf("expected no-selection state, got:\n%s", view)
 		}
@@ -32,7 +32,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		// Cold-start: Loading=true, no prior detail (Detail.Summary.ID == "").
 		// Expect skeleton placeholder, NOT a full-screen loading takeover.
 		m := Model{SelectionID: "bw-2", TargetID: "bw-2", Loading: true}
-		view := m.View(100, 20, false)
+		view := m.View(100, 20, false, 0)
 		if strings.Contains(view, "Loading details for") {
 			t.Fatalf("cold-start loading should NOT show full-screen takeover, got:\n%s", view)
 		}
@@ -45,7 +45,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 		t.Parallel()
 
 		m := Model{SelectionID: "bw-2", Error: "boom"}
-		view := m.View(100, 20, false)
+		view := m.View(100, 20, false, 0)
 		if !strings.Contains(view, "Failed to load details for bw-2") || !strings.Contains(view, "boom") {
 			t.Fatalf("expected detail error state, got:\n%s", view)
 		}
@@ -65,7 +65,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 		},
 	}
 
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 	if !strings.Contains(view, "Second issue") || !strings.Contains(view, "bw-2") || !strings.Contains(view, "Type    : task") {
 		t.Fatalf("expected bw-2 detail rendering, got:\n%s", view)
 	}
@@ -78,7 +78,7 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 		Summary: domain.IssueSummary{ID: "bw-4", Title: "Fourth issue", Status: "open", Type: "bug", Priority: 1},
 	}
 
-	view = m.View(100, 20, false)
+	view = m.View(100, 20, false, 0)
 	if !strings.Contains(view, "Fourth issue") || !strings.Contains(view, "bw-4") || !strings.Contains(view, "Type    : bug") {
 		t.Fatalf("expected bw-4 detail rendering after selection change, got:\n%s", view)
 	}
@@ -152,7 +152,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		},
 	}
 
-	initial := m.View(80, 10, false)
+	initial := m.View(80, 10, false, 0)
 	if !strings.Contains(initial, "Long issue") {
 		t.Fatalf("expected top-of-detail content in initial viewport, got:\n%s", initial)
 	}
@@ -160,7 +160,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
 		t.Fatalf("expected page down to be consumed")
 	}
-	after := m.View(80, 10, false)
+	after := m.View(80, 10, false, 0)
 	if after == initial {
 		t.Fatalf("expected viewport output to change after page down")
 	}
@@ -168,7 +168,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
 		t.Fatalf("expected end key to be consumed")
 	}
-	endView := m.View(80, 10, false)
+	endView := m.View(80, 10, false, 0)
 	if !strings.Contains(endView, "Line 40") {
 		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
 	}
@@ -176,7 +176,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
 		t.Fatalf("expected home key to be consumed")
 	}
-	homeView := m.View(80, 10, false)
+	homeView := m.View(80, 10, false, 0)
 	if !strings.Contains(homeView, "Long issue") {
 		t.Fatalf("expected home to return to top, got:\n%s", homeView)
 	}
@@ -194,7 +194,7 @@ func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
 		},
 	}
 
-	_ = m.View(120, 10, false)
+	_ = m.View(120, 10, false, 0)
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
 		t.Fatal("expected end key at wide width to be consumed")
 	}
@@ -343,7 +343,7 @@ func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *tes
 	// PlaceholderDetail now stores Description="" and relies on State.Skeleton=true
 	// (set by View()) to render ▓ rows via the Skeleton seam.  Verify that the
 	// rendered view (which goes through the Skeleton seam) contains the glyph.
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 	if !strings.Contains(view, issuerow.SkeletonGlyph) {
 		t.Fatalf("expected placeholder view to contain skeleton glyph, got:\n%s", view)
 	}
@@ -707,7 +707,7 @@ func TestColdStartViewRendersSkeleton(t *testing.T) {
 		// Detail.Summary.ID is "", simulating cold-start.
 	}
 
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 
 	// Must NOT be a full-screen loading takeover.
 	if strings.Contains(view, "Loading details for") {
@@ -736,7 +736,7 @@ func TestRefreshSameIssueKeepsStaleContent(t *testing.T) {
 		},
 	}
 
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 
 	// Must NOT be a full-screen loading takeover.
 	if strings.Contains(view, "Loading details for") {
@@ -769,7 +769,7 @@ func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 		},
 	}
 
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 
 	// Must NOT be a full-screen loading takeover.
 	if strings.Contains(view, "Loading details for") {
@@ -831,7 +831,7 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 
 	// The view while loading with the placeholder must NOT be a full-screen
 	// loading takeover (Summary.ID is "bw-2" from the placeholder).
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 	if strings.Contains(view, "Loading details for") {
 		t.Errorf("placeholder-loaded detail should NOT show full-screen loading takeover, got:\n%s", view)
 	}
@@ -867,7 +867,7 @@ func TestPlaceholderDetailHasEmptyDescriptionAndSkeletonSeamRendersGlyph(t *test
 			Summary: domain.IssueSummary{ID: "bw-1"},
 		},
 	}
-	view := m.View(100, 20, false)
+	view := m.View(100, 20, false, 0)
 	if !strings.Contains(view, issuerow.SkeletonGlyph) {
 		t.Errorf("expected rendered view to contain skeleton glyph %q via Skeleton seam, got:\n%s", issuerow.SkeletonGlyph, view)
 	}

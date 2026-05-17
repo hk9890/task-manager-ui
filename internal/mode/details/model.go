@@ -71,7 +71,7 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 }
 
 // View renders the detail surface for pane and dedicated detail mode.
-func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
+func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
 	detail := m.RenderDetail()
 	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
 	// skeleton=true when rendering a placeholder stub (target differs from
@@ -91,11 +91,12 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 				CloseIssue:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
 				ReloadDetail: m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
 			},
-			Loading:  blockingLoad,
-			Skeleton: skeletonContent,
-			Error:    m.Error,
-			Width:    maxWidth,
-			Compact:  compact,
+			Loading:       blockingLoad,
+			Skeleton:      skeletonContent,
+			SkeletonPhase: skeletonPhase,
+			Error:         m.Error,
+			Width:         maxWidth,
+			Compact:       compact,
 		})
 	}
 
@@ -117,6 +118,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool) string {
 		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
 		Loading:                  blockingLoad,
 		Skeleton:                 skeletonContent,
+		SkeletonPhase:            skeletonPhase,
 		Error:                    m.Error,
 		Width:                    maxWidth,
 		Height:                   viewportHeight,

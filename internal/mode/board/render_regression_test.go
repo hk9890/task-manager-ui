@@ -133,7 +133,7 @@ func TestBoardRenderColumnTopBordersAfterWindowSizeMsg(t *testing.T) {
 	// Width=180 ensures all 4 columns are visible.
 	m.SetSize(180, 30)
 
-	view := m.View()
+	view := m.View(0)
 	assertColumnTopCount(t, "after SetSize(180,30) no data", view, 4)
 }
 
@@ -147,7 +147,7 @@ func TestBoardRenderColumnTopBordersAfterData(t *testing.T) {
 	m.SetSize(180, 30)
 	feedAllColumnResults(m)
 
-	view := m.View()
+	view := m.View(0)
 	assertColumnTopCount(t, "after SetSize(180,30) + data", view, 4)
 }
 
@@ -165,7 +165,7 @@ func TestBoardRenderColumnTopBordersSmallToLargeResize(t *testing.T) {
 	// Small terminal: not all 4 columns visible (width=80 shows ~3 columns).
 	m.SetSize(80, 20)
 	feedAllColumnResults(m)
-	viewSmall := m.View()
+	viewSmall := m.View(0)
 	// At 80 wide we may only see 3 columns — don't assert count here.
 	_ = viewSmall
 
@@ -173,7 +173,7 @@ func TestBoardRenderColumnTopBordersSmallToLargeResize(t *testing.T) {
 	m.SetSize(200, 60)
 	// Feed fresh data at the new size.
 	feedAllColumnResults(m)
-	viewLarge := m.View()
+	viewLarge := m.View(0)
 	assertColumnTopCount(t, "after resize to 200x60 + fresh data", viewLarge, 4)
 }
 
@@ -188,23 +188,23 @@ func TestBoardRenderColumnTopBordersPresizeDataResize(t *testing.T) {
 	// Step 1: set size before any data.
 	m.SetSize(180, 30)
 	// Board model renders 4 loading column headers.
-	assertColumnTopCount(t, "step 1: SetSize before data (180x30)", m.View(), 4)
+	assertColumnTopCount(t, "step 1: SetSize before data (180x30)", m.View(0), 4)
 
 	// Step 2: load data.
 	feedAllColumnResults(m)
-	assertColumnTopCount(t, "step 2: after data at 180x30", m.View(), 4)
+	assertColumnTopCount(t, "step 2: after data at 180x30", m.View(0), 4)
 
 	// Step 3: resize.
 	m.SetSize(200, 60)
-	assertColumnTopCount(t, "step 3: after resize to 200x60", m.View(), 4)
+	assertColumnTopCount(t, "step 3: after resize to 200x60", m.View(0), 4)
 
 	// Step 4: load fresh data after resize.
 	feedAllColumnResults(m)
-	assertColumnTopCount(t, "step 4: after data at 200x60", m.View(), 4)
+	assertColumnTopCount(t, "step 4: after data at 200x60", m.View(0), 4)
 
 	// Step 5: resize again to a different wide size (must be ≥180 for all 4
 	// columns to fit; at 160 the renderer shows only 3).
 	m.SetSize(180, 40)
 	feedAllColumnResults(m)
-	assertColumnTopCount(t, "step 5: after data at 180x40", m.View(), 4)
+	assertColumnTopCount(t, "step 5: after data at 180x40", m.View(0), 4)
 }

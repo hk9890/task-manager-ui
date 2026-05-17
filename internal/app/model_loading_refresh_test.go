@@ -6,11 +6,15 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/muesli/termenv"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 )
 
@@ -35,6 +39,87 @@ func containsAnySpinnerGlyph(rendered string) bool {
 		}
 	}
 	return false
+}
+
+// stripSpinnerGlyphs removes all spinner frame glyphs from a string so that
+// plain-text comparisons are not confused by the header braille glyph changing
+// independently of skeleton color cycling.
+func stripSpinnerGlyphs(s string) string {
+	for _, r := range loading.SpinnerFrames {
+		s = strings.ReplaceAll(s, string(r), "")
+	}
+	return s
+}
+
+// TestSkeletonPhasePulse verifies that after enough loading.TickMsg dispatches
+// the rendered View string changes (skeleton phase advances) while the
+// ANSI-stripped, spinner-stripped plain text remains identical when a skeleton
+// is visible.
+//
+// The test forces the board into a cold-start loading state (no data), then
+// advances the spinner frame past the phase boundary (frame 0→4) and compares
+// View() output before and after. ANSI codes change but the printable ▓ glyphs
+// do not; only the header braille spinner glyph changes (handled by stripping).
+func TestSkeletonPhasePulse(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	// Disable real tick schedulers so we control timing.
+	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
+	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
+
+	// Gateway that never returns — board stays in loading=true, cold-start.
+	gateway := fakes.NewFakeBeadsGateway()
+	gateway.ReadyExplainResponse = domain.ReadyExplainResult{}
+	gateway.QueryResponse = nil
+	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+
+	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	// Init model but do NOT drain the batch — board stays loading=true, rows empty.
+	m := mustNewModel(t, services)
+	m.Init() // fire cmds but don't apply responses
+
+	// Ensure we are on the board surface.
+	if m.active != mode.Board {
+		t.Fatalf("expected board active after init, got %s", m.active)
+	}
+
+	// Force spinner frame to 0 (phase 0).
+	m.spinnerFrame = 0
+	viewPhase0 := m.View()
+	// Strip ANSI codes and spinner glyphs before comparing structure.
+	plainPhase0 := stripSpinnerGlyphs(testui.AnsiEscapePattern.ReplaceAllString(viewPhase0, ""))
+
+	// Advance spinner by 4 ticks to move from phase 0 to phase 1.
+	// Each loading.TickMsg increments spinnerFrame by 1; phase boundary is frame/4.
+	for i := 0; i < 4; i++ {
+		next, _ := m.Update(loading.TickMsg{})
+		m = next.(Model)
+	}
+
+	// spinnerFrame must now be 4 → phase 1.
+	if m.spinnerFrame != 4 {
+		t.Fatalf("expected spinnerFrame=4 after 4 ticks, got %d", m.spinnerFrame)
+	}
+
+	viewPhase1 := m.View()
+	plainPhase1 := stripSpinnerGlyphs(testui.AnsiEscapePattern.ReplaceAllString(viewPhase1, ""))
+
+	// Plain text (minus spinner glyph and ANSI codes) must be identical —
+	// skeleton ▓ shape does not change between phases.
+	if plainPhase0 != plainPhase1 {
+		t.Fatalf("plain text differs between phase 0 and phase 1 — skeleton shape changed unexpectedly\nphase0: %q\nphase1: %q", plainPhase0, plainPhase1)
+	}
+
+	// Styled output must differ — skeleton color changed.
+	if viewPhase0 == viewPhase1 {
+		t.Fatalf("View() output unchanged after 4 TickMsg dispatches — skeleton phase pulse not working\nview: %q", viewPhase0)
+	}
 }
 
 // TestNonBlockingRefreshBoardSearchBoardFlow is an in-process integration test

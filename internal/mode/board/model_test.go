@@ -174,7 +174,7 @@ func TestBoardModeAllEmptyLoad(t *testing.T) {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
 
-	view := m.View()
+	view := m.View(0)
 	// All 4 section titles must appear in a wide render.
 	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
 		if !strings.Contains(view, title) {
@@ -229,7 +229,7 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 		t.Fatalf("expected initial selection bw-4 from Not Ready lane (earliest non-empty), got %#v", sel)
 	}
 
-	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View()), "model_loaded.golden")
+	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View(0)), "model_loaded.golden")
 }
 
 // --- AC: ReadyExplain error path (per-column, non-aborting) ---
@@ -270,7 +270,7 @@ func TestBoardModeReadyExplainErrorPath(t *testing.T) {
 	}
 
 	// View must render 4-column layout (never the old loading.View).
-	view := m.View()
+	view := m.View(0)
 	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
 		if !strings.Contains(view, title) {
 			t.Errorf("expected column title %q in view even on error, got: %s", title, view)
@@ -399,7 +399,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		t.Fatalf("expected action %q got %q", mode.ActionOpenDetail, action.Action)
 	}
 
-	testui.AssertMatchesGoldenNormalized(t, []byte(m.View()), "model_navigation.golden")
+	testui.AssertMatchesGoldenNormalized(t, []byte(m.View(0)), "model_navigation.golden")
 }
 
 func TestBoardModeUsesConfiguredBindings(t *testing.T) {
@@ -602,7 +602,7 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 	}
 	// View must render 4-column layout with skeleton rows (▓ chars), not a
 	// full-screen loading message.
-	view := m.View()
+	view := m.View(0)
 	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
 		if !strings.Contains(view, title) {
 			t.Errorf("expected column title %q during cold-start, got: %s", title, view)
@@ -965,7 +965,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 				t.Errorf("expected 1 CountIssues call, got %d", n)
 			}
 
-			view := finalModel.View()
+			view := finalModel.View(0)
 			testui.AssertMatchesGoldenNormalized(t, []byte(view), tc.golden)
 			assertCompactIssueRows(t, view, tc.minMeta)
 		})

@@ -60,8 +60,9 @@ type State struct {
 	MetadataSelectedField uidetails.MetadataFieldKey
 	QuickActions          uidetails.QuickActionLabels
 
-	Width  int
-	Height int
+	Width         int
+	Height        int
+	SkeletonPhase int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
 }
 
 // Render renders the standalone search view.
@@ -112,7 +113,7 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
 	detailSkeleton := isDetailLoadingSkeleton(state)
-	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0, detailSkeleton)
+	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0, detailSkeleton, state.SkeletonPhase)
 	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
 
 	return lipgloss.JoinHorizontal(
@@ -154,7 +155,7 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
 	detailSkeleton := isDetailLoadingSkeleton(state)
-	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0, detailSkeleton)
+	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0, detailSkeleton, state.SkeletonPhase)
 	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
 	right := lipgloss.JoinVertical(lipgloss.Left, contentBox, metadataBox)
 

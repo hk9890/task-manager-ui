@@ -52,7 +52,7 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 			Priority: 0,
 		}},
 		SelectedRow: 0,
-	}, 72)[0]
+	}, 72, 0)[0]
 
 	if !strings.Contains(line, "\x1b[") {
 		t.Fatalf("expected ANSI styling in rendered row, got: %q", line)
@@ -74,7 +74,7 @@ func TestRenderColumnRowsUsesSharedIssueRowRenderer(t *testing.T) {
 	t.Parallel()
 
 	issue := domain.IssueSummary{ID: "beads-workbench-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
-	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60)
+	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0)
 	if len(rows) != 1 {
 		t.Fatalf("expected exactly one rendered row, got %d", len(rows))
 	}

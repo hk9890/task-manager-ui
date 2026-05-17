@@ -34,5 +34,5 @@ func (w detailsTestWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (w detailsTestWrapper) View() string {
-	return w.m.View(w.width, w.height, false)
+	return w.m.View(w.width, w.height, false, 0)
 }

@@ -252,7 +252,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 // View renders the standalone board dashboard.
-func (m *Model) View() string {
+func (m *Model) View(skeletonPhase int) string {
 	if len(m.columns) == 0 {
 		return "No board sections available."
 	}
@@ -284,6 +284,7 @@ func (m *Model) View() string {
 		FocusedColumn:  m.focusedColumn,
 		Width:          m.width,
 		Height:         m.height,
+		SkeletonPhase:  skeletonPhase,
 	})
 }
 

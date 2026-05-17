@@ -239,3 +239,46 @@ func TestSkeletonGlyphConstant(t *testing.T) {
 		t.Errorf("SkeletonGlyph = %q; want %q (U+2593 DARK SHADE)", SkeletonGlyph, "▓")
 	}
 }
+
+// TestRenderCompactSkeletonPhaseCyclesColor verifies that:
+//   - Phase 0 and Phase 1 produce different styled output (different ANSI sequences)
+//   - All three phases (0, 1, 2) produce three distinct styled outputs
+//   - Plain text (ANSI-stripped) is identical across phases for the same Width/Seed
+func TestRenderCompactSkeletonPhaseCyclesColor(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	const width = 80
+	const seed = 0
+
+	outputs := make([]string, 3)
+	plains := make([]string, 3)
+	for phase := 0; phase < 3; phase++ {
+		row := RenderCompactSkeleton(SkeletonOpts{Width: width, Seed: seed, Phase: phase, Styled: true})
+		outputs[phase] = row
+		plains[phase] = testui.AnsiEscapePattern.ReplaceAllString(row, "")
+	}
+
+	// Plain text must be identical across all three phases.
+	if plains[0] != plains[1] || plains[1] != plains[2] {
+		t.Fatalf("plain text differs across phases: phase0=%q phase1=%q phase2=%q", plains[0], plains[1], plains[2])
+	}
+
+	// Styled output must differ between phase 0 and phase 1.
+	if outputs[0] == outputs[1] {
+		t.Fatalf("Phase 0 and Phase 1 styled output are identical — color cycling not working\noutput: %q", outputs[0])
+	}
+
+	// All three phases must produce three distinct styled outputs.
+	seen := make(map[string]bool)
+	for i, out := range outputs {
+		if seen[out] {
+			t.Fatalf("Phase %d styled output is not distinct from a previous phase\noutput: %q", i, out)
+		}
+		seen[out] = true
+	}
+	if len(seen) != 3 {
+		t.Fatalf("expected 3 distinct styled outputs across Phase 0-2, got %d", len(seen))
+	}
+}

@@ -945,15 +945,17 @@ func (m Model) renderBody() string {
 	m.search.SetSize(workspaceWidth, workspaceHeight)
 	m.syncSearchPreviewDetailState()
 
+	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
+
 	if m.active == mode.Detail {
-		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false)
+		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false, skeletonPhase)
 	}
 
 	var browse string
 	if m.active == mode.Board {
-		browse = m.board.View()
+		browse = m.board.View(skeletonPhase)
 	} else {
-		browse = m.search.View()
+		browse = m.search.View(skeletonPhase)
 	}
 
 	return browse

@@ -109,7 +109,7 @@ func TestSearchRenderPaneTopBordersAfterSetSizeNoData(t *testing.T) {
 	// Width >= searchWideMinWidth (110) to use wide layout with all 4 panes.
 	m.SetSize(160, 40)
 
-	assertPaneTopCount(t, "wide layout no data (160x40)", m.View(), 4)
+	assertPaneTopCount(t, "wide layout no data (160x40)", m.View(0), 4)
 }
 
 // TestSearchRenderPaneTopBordersAfterData — Scenario C (data variant):
@@ -122,7 +122,7 @@ func TestSearchRenderPaneTopBordersAfterData(t *testing.T) {
 	m.SetSize(160, 40)
 	feedSearchResults(m)
 
-	assertPaneTopCount(t, "wide layout + data (160x40)", m.View(), 4)
+	assertPaneTopCount(t, "wide layout + data (160x40)", m.View(0), 4)
 }
 
 // TestSearchRenderPaneTopBordersSmallToLargeResize — Scenario D:
@@ -137,13 +137,13 @@ func TestSearchRenderPaneTopBordersSmallToLargeResize(t *testing.T) {
 	// Narrow terminal.
 	m.SetSize(80, 30)
 	feedSearchResults(m)
-	viewNarrow := m.View()
+	viewNarrow := m.View(0)
 	assertPaneTopCount(t, "narrow layout + data (80x30)", viewNarrow, 4)
 
 	// Wide terminal.
 	m.SetSize(200, 60)
 	feedSearchResults(m)
-	viewWide := m.View()
+	viewWide := m.View(0)
 	assertPaneTopCount(t, "wide layout + data after resize (200x60)", viewWide, 4)
 }
 
@@ -157,22 +157,22 @@ func TestSearchRenderPaneTopBordersPresizeDataResize(t *testing.T) {
 
 	// Step 1: size before any data.
 	m.SetSize(160, 40)
-	assertPaneTopCount(t, "step 1: SetSize before data (160x40)", m.View(), 4)
+	assertPaneTopCount(t, "step 1: SetSize before data (160x40)", m.View(0), 4)
 
 	// Step 2: load data.
 	feedSearchResults(m)
-	assertPaneTopCount(t, "step 2: after data at 160x40", m.View(), 4)
+	assertPaneTopCount(t, "step 2: after data at 160x40", m.View(0), 4)
 
 	// Step 3: resize.
 	m.SetSize(200, 60)
-	assertPaneTopCount(t, "step 3: after resize to 200x60", m.View(), 4)
+	assertPaneTopCount(t, "step 3: after resize to 200x60", m.View(0), 4)
 
 	// Step 4: fresh data after resize.
 	feedSearchResults(m)
-	assertPaneTopCount(t, "step 4: after data at 200x60", m.View(), 4)
+	assertPaneTopCount(t, "step 4: after data at 200x60", m.View(0), 4)
 
 	// Step 5: resize to narrow.
 	m.SetSize(80, 30)
 	feedSearchResults(m)
-	assertPaneTopCount(t, "step 5: after data at narrow 80x30", m.View(), 4)
+	assertPaneTopCount(t, "step 5: after data at narrow 80x30", m.View(0), 4)
 }

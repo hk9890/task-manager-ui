@@ -7,6 +7,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// SkeletonShades cycles through 3 muted lipgloss.AdaptiveColor values to
+// produce a ~1.2 s breathing pulse on cold-start placeholders. Hand-tuned
+// for both dark and light themes; the dark-theme dynamic range is wider by
+// design (TextMutedColor on light themes sits close to typical backgrounds,
+// so the light-theme pulse may be less perceptible than on dark themes —
+// this is documented and expected; T4 verification should note if it is
+// unusable on light terminals).
+var SkeletonShades = []lipgloss.AdaptiveColor{
+	{Light: "#C8CCC0", Dark: "#454545"}, // dim
+	{Light: "#D9DCCF", Dark: "#696969"}, // mid (matches TextMutedColor dark)
+	{Light: "#EAEDE0", Dark: "#7F7F7F"}, // bright
+}
+
 var (
 	// Text colors.
 	TextPrimaryColor   = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#CCCCCC"}

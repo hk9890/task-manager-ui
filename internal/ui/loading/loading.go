@@ -23,6 +23,18 @@ func NextFrame(prev int) int {
 	return (prev + 1) % len(SpinnerFrames)
 }
 
+// SkeletonPhase returns the skeleton color-cycle index for a given spinner
+// frame counter. Phase advances every 4 frames (~400 ms at the 100 ms spinner
+// tick), giving a full 3-shade cycle every ~1.2 s.
+// Negative frame values return 0 (no defined behavior for negative counts;
+// callers must pass a non-negative spinnerFrame).
+func SkeletonPhase(frame int) int {
+	if frame < 0 {
+		return 0
+	}
+	return frame / 4
+}
+
 // Glyph returns the spinner glyph string for the given frame index.
 // Defensive against negative input.
 func Glyph(frame int) string {

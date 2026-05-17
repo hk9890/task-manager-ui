@@ -48,8 +48,8 @@ func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 		t.Fatalf("expected empty init query to load default search results, calls=%#v", gateway.Calls)
 	}
 
-	if !strings.Contains(m.View(), "Default one") {
-		t.Fatalf("expected default results view after init, got:\n%s", m.View())
+	if !strings.Contains(m.View(0), "Default one") {
+		t.Fatalf("expected default results view after init, got:\n%s", m.View(0))
 	}
 }
 
@@ -181,8 +181,8 @@ func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected selection reset to first default result, got %#v", got)
 	}
-	if !strings.Contains(m.View(), "Default first") || !strings.Contains(m.View(), "Default second") {
-		t.Fatalf("expected restored default results in view, got:\n%s", m.View())
+	if !strings.Contains(m.View(0), "Default first") || !strings.Contains(m.View(0), "Default second") {
+		t.Fatalf("expected restored default results in view, got:\n%s", m.View(0))
 	}
 }
 
@@ -193,7 +193,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 		m := NewModel(newSearchFakeGateway(), nil)
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
-		view := m.View()
+		view := m.View(0)
 		if !strings.Contains(view, "Search failed.") || !strings.Contains(view, "boom") || !strings.Contains(view, "failed") {
 			t.Fatalf("expected error state in view, got:\n%s", view)
 		}
@@ -207,8 +207,8 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 			_ = cmd()
 		}
 
-		if !strings.Contains(m.View(), "No matches for \"xyz\".") {
-			t.Fatalf("expected no-results state in view, got:\n%s", m.View())
+		if !strings.Contains(m.View(0), "No matches for \"xyz\".") {
+			t.Fatalf("expected no-results state in view, got:\n%s", m.View(0))
 		}
 	})
 
@@ -422,8 +422,8 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected selection retained on reload error, got %#v", got)
 	}
-	if !strings.Contains(m.View(), "reload failed") || !strings.Contains(m.View(), "First") || !strings.Contains(m.View(), "failed") || !strings.Contains(m.View(), "abc") {
-		t.Fatalf("expected view to preserve rows and show refresh error, got:\n%s", m.View())
+	if !strings.Contains(m.View(0), "reload failed") || !strings.Contains(m.View(0), "First") || !strings.Contains(m.View(0), "failed") || !strings.Contains(m.View(0), "abc") {
+		t.Fatalf("expected view to preserve rows and show refresh error, got:\n%s", m.View(0))
 	}
 }
 

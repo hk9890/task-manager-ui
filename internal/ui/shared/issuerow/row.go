@@ -21,9 +21,6 @@ const (
 	SkeletonGlyph = "▓"
 )
 
-// skeletonStyle applies the muted foreground colour to skeleton glyph blocks.
-var skeletonStyle = lipgloss.NewStyle().Foreground(styles.TextMutedColor)
-
 // skeletonTitleFractions is the normative table of title fill widths for
 // RenderCompactSkeleton.  Six values hand-picked so the average (≈ 0.66) matches
 // the median real-title length / available width in a 4-column board layout.
@@ -34,17 +31,26 @@ var skeletonTitleFractions = [6]float64{0.70, 0.45, 0.85, 0.55, 0.80, 0.65}
 type SkeletonOpts struct {
 	Width  int
 	Seed   int  // selects title fill width from the normative table
+	Phase  int  // styles.SkeletonShades index; modulo applied internally
 	Styled bool // when true, apply lipgloss muted foreground colour
 }
 
-// skeletonSegment renders one fixed-width segment of SkeletonGlyph characters,
-// styled when opts.Styled is true.
-func skeletonSegment(width int, styled bool) string {
+// skeletonSegment renders one fixed-width segment of SkeletonGlyph characters.
+// When styled is true it applies the given foreground color via lipgloss.
+func skeletonSegment(width int, styled bool, color lipgloss.AdaptiveColor) string {
 	block := strings.Repeat(SkeletonGlyph, width)
 	if styled {
-		return skeletonStyle.Render(block)
+		return lipgloss.NewStyle().Foreground(color).Render(block)
 	}
 	return block
+}
+
+// skeletonColor returns the lipgloss.AdaptiveColor for the given phase index.
+// N = len(styles.SkeletonShades); safe-modulo handles any integer phase.
+func skeletonColor(phase int) lipgloss.AdaptiveColor {
+	n := len(styles.SkeletonShades)
+	idx := ((phase % n) + n) % n
+	return styles.SkeletonShades[idx]
 }
 
 // RenderCompactSkeleton renders a placeholder row shaped like RenderCompact.
@@ -67,9 +73,10 @@ func RenderCompactSkeleton(opts SkeletonOpts) string {
 	// Gaps: four single spaces between the five segments.
 	const gaps = 4
 	titleWidth := width - typeWidth - prioWidth - stateWidth - idWidth - gaps
+	color := skeletonColor(opts.Phase)
 	if titleWidth < 1 {
 		// Terminal too narrow: fall back to a single full-width block.
-		return skeletonSegment(width, opts.Styled)
+		return skeletonSegment(width, opts.Styled, color)
 	}
 
 	// Select title fill fraction from the normative table.
@@ -81,11 +88,11 @@ func RenderCompactSkeleton(opts SkeletonOpts) string {
 	}
 
 	// Build segments left-to-right: type | priority | state | id | title.
-	typeSeg := skeletonSegment(typeWidth, opts.Styled)
-	prioSeg := skeletonSegment(prioWidth, opts.Styled)
-	stateSeg := skeletonSegment(stateWidth, opts.Styled)
-	idSeg := skeletonSegment(idWidth, opts.Styled)
-	titleFill := skeletonSegment(fillWidth, opts.Styled)
+	typeSeg := skeletonSegment(typeWidth, opts.Styled, color)
+	prioSeg := skeletonSegment(prioWidth, opts.Styled, color)
+	stateSeg := skeletonSegment(stateWidth, opts.Styled, color)
+	idSeg := skeletonSegment(idWidth, opts.Styled, color)
+	titleFill := skeletonSegment(fillWidth, opts.Styled, color)
 	titlePad := strings.Repeat(" ", titleWidth-fillWidth)
 
 	return typeSeg + " " + prioSeg + " " + stateSeg + " " + idSeg + " " + titleFill + titlePad

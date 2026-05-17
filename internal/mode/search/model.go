@@ -334,7 +334,7 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 }
 
 // View renders the standalone search surface.
-func (m *Model) View() string {
+func (m *Model) View(skeletonPhase int) string {
 	return uisearch.Render(uisearch.State{
 		Loading:               m.loading,
 		Reloading:             m.reloading,
@@ -356,8 +356,9 @@ func (m *Model) View() string {
 			CloseIssue:   m.keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
 			ReloadDetail: m.keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
 		},
-		Width:  m.width,
-		Height: m.height,
+		Width:         m.width,
+		Height:        m.height,
+		SkeletonPhase: skeletonPhase,
 	})
 }
 

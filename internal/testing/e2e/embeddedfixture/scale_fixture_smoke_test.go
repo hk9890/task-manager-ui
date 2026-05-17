@@ -326,7 +326,7 @@ func TestScaleFixtureInvariant_NoDuplicatedBoardHeaders(t *testing.T) {
 	// FeedTestData simulates a completed board load with representative data.
 	board.FeedTestData(m)
 
-	view := m.View()
+	view := m.View(0)
 	got := countColumnTopBorders(view)
 	const wantBorders = 4
 	if got != wantBorders {

@@ -49,6 +49,7 @@ type State struct {
 	FocusedColumn  int
 	Width          int
 	Height         int
+	SkeletonPhase  int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
 }
 
 // Render renders a multi-column board dashboard using section borders.
@@ -83,7 +84,7 @@ func Render(state State) string {
 			innerWidth = 1
 		}
 
-		rows := renderColumnRows(col, innerWidth)
+		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase)
 		plus := ""
 		if !col.TotalIsExact {
 			plus = "+"
@@ -187,20 +188,21 @@ func distributeWidths(total, count int) []int {
 }
 
 // skeletonRows returns ~6 skeleton placeholder rows for a loading column.
-func skeletonRows(maxWidth int) []string {
+func skeletonRows(maxWidth, phase int) []string {
 	const numSkeletonRows = 6
 	rows := make([]string, 0, numSkeletonRows)
 	for i := 0; i < numSkeletonRows; i++ {
 		rows = append(rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 			Width:  maxWidth,
 			Seed:   i,
+			Phase:  phase,
 			Styled: true,
 		}))
 	}
 	return rows
 }
 
-func renderColumnRows(col Column, maxWidth int) []string {
+func renderColumnRows(col Column, maxWidth, skeletonPhase int) []string {
 	var rows []string
 
 	// Inline error row at the top (if any).
@@ -212,7 +214,7 @@ func renderColumnRows(col Column, maxWidth int) []string {
 	if col.Loading {
 		if len(col.Rows) == 0 {
 			// Cold-start: no data yet — show skeleton rows.
-			rows = append(rows, skeletonRows(maxWidth)...)
+			rows = append(rows, skeletonRows(maxWidth, skeletonPhase)...)
 			return rows
 		}
 		// Refresh: stale rows on screen while new data is in flight.

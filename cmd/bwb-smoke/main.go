@@ -463,28 +463,28 @@ func runRenderCheck() CheckResult {
 
 	// Step 1: SetSize — loading columns, no data yet.
 	m.SetSize(180, 30)
-	got := countColumnTopBorders(m.View())
+	got := countColumnTopBorders(m.View(0))
 	if got != 4 {
 		failures = append(failures, fmt.Sprintf("step1(SetSize 180x30): got %d ╭ want 4", got))
 	}
 
 	// Step 2: Resize (simulate resize before data).
 	m.SetSize(200, 40)
-	got = countColumnTopBorders(m.View())
+	got = countColumnTopBorders(m.View(0))
 	if got != 4 {
 		failures = append(failures, fmt.Sprintf("step2(resize 200x40): got %d ╭ want 4", got))
 	}
 
 	// Step 3: Feed data at current size.
 	feedRenderData(m)
-	got = countColumnTopBorders(m.View())
+	got = countColumnTopBorders(m.View(0))
 	if got != 4 {
 		failures = append(failures, fmt.Sprintf("step3(data at 200x40): got %d ╭ want 4", got))
 	}
 
 	// Step 4: Second resize.
 	m.SetSize(180, 30)
-	got = countColumnTopBorders(m.View())
+	got = countColumnTopBorders(m.View(0))
 	if got != 4 {
 		failures = append(failures, fmt.Sprintf("step4(resize 180x30): got %d ╭ want 4", got))
 	}
