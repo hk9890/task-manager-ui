@@ -58,8 +58,8 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 	if finalModel.ResultCount() == 0 {
 		t.Fatalf("expected fallback search to load fixture issues, got 0")
 	}
-	if strings.Contains(finalModel.View(), "Search failed") {
-		t.Fatalf("expected no runtime search failure in view, got:\n%s", finalModel.View())
+	if strings.Contains(finalModel.View(0), "Search failed") {
+		t.Fatalf("expected no runtime search failure in view, got:\n%s", finalModel.View(0))
 	}
 }
 
