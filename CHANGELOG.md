@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.1]
+
+### Fixed
+
+- Gateway emulates `CloseIssue` idempotency over a `bd` 1.0.4 close-lookup bug so repeated close attempts no longer surface as errors
+
+## [v0.5.0]
+
+### Added
+
+- Cold-start skeleton UX across all three panes (board, detail, search preview) with a color-cycle pulse animation; unified `RenderCompactSkeleton` primitive for issue-row-shaped placeholders
+- Non-blocking loading UX so board/search/detail surfaces remain responsive while data loads
+- Startup beads health check with a fatal error screen, plus a per-section load progress counter during board startup
+- Pre-release data-consistency smoke check (`mise run smoke` / `cmd/bwb-smoke`) and parity test suites for dashboard count/sort and search results
+- Gateway capabilities: `ReadyExplain` (via `bd ready --explain --json`), generic `Query(expr, opts)` wrapping `bd query --json`, and `bd ping --json`-backed startup health check
+- Test/CI infrastructure: stratified unit vs integration tiers with a `mise` execution layer, `mise run test:integration:verbose`, `-race` enabled across the suite, `mise run bwb:fixture` task, and a `RecordingExecutor` test helper for subprocess argv assertions
+
+### Changed
+
+- Dashboard board data layer rewritten as 3 parallel `bd` reads plus a pure `Compose` function; board model owns query routing
+- Dashboard provider collapsed to a metadata-only catalog (section IDs + titles)
+- Section totals and per-section item limits are now accurate
+- Gateway runner split into an `RWMutex` so reads run in parallel while writes remain serialized
+- Search results respect terminal height; result-pane prose wraps; query rail scales to ~30% of terminal width
+- Go toolchain bumped to 1.26.3; `bd` pinned in `.mise.toml`
+- `CLAUDE.md` simplified to `@AGENTS.md` reference
+
+### Fixed
+
+- Refresh concurrency: manual reload now guards against an in-flight refresh in board, search, and inside `startReload` / `triggerSearchWithAnchor` (defense in depth)
+- Cold-start skeleton renders correctly on direct-navigation cold start (no longer shows `(no description)`)
+- Cross-OS CI failures: Windows-safe file lock in the embedded fixture, Windows-specific test skips, and other cross-OS platform edges
+- Tolerate transient `CloseIssue` / idempotency flake against `bd` 1.0.4 in CI; coverage gate adjusted accordingly
+
 ## [v0.4.0]
 
 ### Added

@@ -59,6 +59,7 @@ gates, and `docs/CODING.md` for build/test details.
 
 For deeper design and planning context, see:
 
+- [`project-plan/PRODUCT.md`](./project-plan/PRODUCT.md)
 - [`project-plan/ARCHITECTURE.md`](./project-plan/ARCHITECTURE.md)
 - [`project-plan/IMPLEMENTATION.md`](./project-plan/IMPLEMENTATION.md)
 - [`project-plan/EXECUTION-PLAN.md`](./project-plan/EXECUTION-PLAN.md)

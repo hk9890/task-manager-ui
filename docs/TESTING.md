@@ -129,7 +129,7 @@ Notes:
 - For a repo-local reproducible capture path, use `scripts/capture_bwb_screen.py` with `pyte`; see `docs/RUNTIME_UI_VERIFICATION.md`.
 - Full-app verification complements automated tests; it does not replace them.
 
-### Process-level capture policy (gyg.4)
+### Process-level capture policy
 
 Current decision: **no new default process-level capture harness is added**.
 

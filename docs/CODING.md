@@ -65,9 +65,15 @@ bwb --check-config
 
 ### Version/build metadata behavior
 
-- `main.version` defaults to `dev` for local builds.
-- Release/snapshot builds inject version metadata via GoReleaser ldflags:
-  `-X main.version={{ .Version }}` (see `.goreleaser.yaml`).
+- `internal/version.Version`, `Commit`, and `Date` default to `dev` /
+  `unknown` / `unknown` for local builds (see `internal/version/version.go`).
+- Release/snapshot builds inject version metadata via GoReleaser ldflags
+  (see `.goreleaser.yaml`):
+  - `-X github.com/hk9890/beads-workbench/internal/version.Version={{ .Version }}`
+  - `-X github.com/hk9890/beads-workbench/internal/version.Commit={{ .ShortCommit }}`
+  - `-X github.com/hk9890/beads-workbench/internal/version.Date={{ .Date }}`
+- The `mise run build` task also injects the same three symbols using
+  `git describe` / `git rev-parse` / `date -u` for local dev builds.
 
 ### Debug diagnostics contract
 
@@ -103,7 +109,9 @@ For the current diagnostics/logging surface and capture guidance, see
 Current bootstrapped layout:
 
 ```
-cmd/bwb/             # binary entrypoint
+cmd/
+  bwb/               # primary TUI binary entrypoint
+  bwb-smoke/         # release-smoke data-consistency check binary (mise run smoke)
 internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
@@ -114,6 +122,8 @@ internal/
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
   mode/              # board/search/details feature models + shell message contracts
   ui/                # reusable rendering components (loading, modal, toaster, styles)
+  testing/           # fakes, ui harness, datasets, embedded-fixture helpers
+  version/           # build-time injected Version/Commit/Date symbols
 project-plan/        # product, architecture, and execution planning docs
 ```
 
@@ -440,7 +450,7 @@ Key tasks:
 | `mise run test:integration` | integration tests (real `bd` + embedded fixture) |
 | `mise run test:all` | unit + integration |
 | `mise run test:verbose` | unit tests with `-v` |
-| `mise run lint` | pinned `golangci-lint` via `.golangci-version` |
+| `mise run lint` | pinned `golangci-lint` (version from `.mise.toml` `[tools]`) |
 | `mise run guardrails` | `go test ./cmd/bwb -run TestArchitectureGuardrails` |
 | `mise run quality` | full pre-handoff gate (scripts:check, lint, guardrails, build, vet, test) |
 | `mise run quality:fast` | lighter in-flight check (build, vet, test) |
@@ -448,7 +458,7 @@ Key tasks:
 
 **Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) fork real `bd` subprocesses and use the embedded fixture harness; they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess, replays the embedded fixture, or costs >1s, it belongs in an integration test file.
 
-**`golangci-lint` version pin:** The version is in `.golangci-version` (leading-v convention, e.g. `v2.1.6`). The `mise run lint` task reads this file automatically. Similarly, `gotestsum` is pinned in `.gotestsum-version`.
+**Tool version pins:** `golangci-lint` and `gotestsum` are pinned in `.mise.toml` under `[tools]` (no leading `v`, e.g. `2.1.6`). `mise` installs and resolves these binaries on the `PATH` for tasks like `mise run lint` and `mise run test`.
 
 For the authoritative pre-handoff landing workflow, see
 `docs/CHANGE-WORKFLOW.md#code-change-verification-sequence`.
@@ -457,7 +467,7 @@ That verification sequence covers:
 
 - script syntax validation for `internal/testing/e2e/embeddedfixture/setup.sh`
   and `scripts/*.py`
-- pinned `golangci-lint` execution using `.golangci-version`
+- pinned `golangci-lint` execution using the version in `.mise.toml`
 - fast architecture-guardrail verification via
   `go test ./cmd/bwb -run TestArchitectureGuardrails`
 - core implementation gates: `go build ./cmd/bwb`, `go vet ./...`, and
@@ -465,9 +475,12 @@ That verification sequence covers:
 
 ### `golangci-lint` install/invocation policy
 
-- Version pin lives in `.golangci-version`.
-- Local and CI invocation both use `go run ...@${GOLANGCI_LINT_VERSION}` so
-  contributors do not need a separate global install.
+- Version pin lives in `.mise.toml` under `[tools]`
+  (`"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint"`).
+- Local and CI invocation both use the `mise`-installed binary on `PATH`:
+  `mise run lint` runs `golangci-lint run --timeout=5m`. CI activates `mise`
+  via `jdx/mise-action@v4` (see `.github/workflows/ci.yml`), so contributors
+  do not need a separate global install.
 - Lint scope is intentionally minimal for this repo: `staticcheck` and
   `errcheck` only (configured in `.golangci.yml`).
 - The initial lint pass is intentionally scoped to non-test packages
