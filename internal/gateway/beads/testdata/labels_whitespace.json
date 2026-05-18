@@ -1,0 +1,5 @@
+[
+  {"label": "normal-label", "count": 3},
+  {"label": "  whitespace-label  ", "count": 2},
+  {"label": "   ", "count": 1}
+]

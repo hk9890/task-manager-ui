@@ -109,7 +109,9 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 		// Workaround for bd 1.0.4: `bd update --set-labels ""` exits 0 but
 		// silently ignores the clear request, leaving labels unchanged (see [[ubav]]).
 		// Instead, fetch the current labels via ShowIssue and emit
-		// `bd update --remove-labels <csv>` enumerating each existing label.
+		// `bd update --remove-label <csv>` (singular flag — bd 1.0.4 does not
+		// accept a `--remove-labels` plural form; see py38) enumerating each
+		// existing label as a comma-separated value.
 		// If the issue has no labels, skip the bd update call entirely.
 		detail, showErr := g.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issueID})
 		if showErr != nil {
@@ -119,7 +121,7 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 			// Nothing to remove; issue has no labels.
 			return nil
 		}
-		args = append(args, "--remove-labels", strings.Join(detail.Summary.Labels, ","))
+		args = append(args, "--remove-label", strings.Join(detail.Summary.Labels, ","))
 	}
 
 	_, err = runner.Run(ctx, CommandRequest{

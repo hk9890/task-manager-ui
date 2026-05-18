@@ -157,6 +157,9 @@ func ValidateBlockedViews(method string, views []domain.BlockedIssueView) []Viol
 //   - NonEmptyBlockedIDs: every blocked view must have a non-empty Issue.ID.
 //   - ReadyAndBlockedDisjoint: an issue cannot appear in both Ready and Blocked.
 //   - TotalReadyMatchesLenReady: TotalReady must equal len(Ready) when no limit is applied.
+//   - TotalBlockedMatchesLenBlocked: TotalBlocked must equal len(Blocked) when no limit is applied.
+//   - BlockedByEnriched: every BlockedBy entry in Blocked must have non-empty Title and Status
+//     (ReadyExplain returns enriched blocker objects, not bare ID-only references).
 func ValidateReadyExplain(method string, result domain.ReadyExplainResult, limitApplied bool) []Violation {
 	var vs []Violation
 
@@ -177,6 +180,22 @@ func ValidateReadyExplain(method string, result domain.ReadyExplainResult, limit
 				Rule:   "NonEmptyBlockedIDs",
 				Sample: fmt.Sprintf("Blocked[%d]: Issue.ID is empty (title=%q)", i, view.Issue.Title),
 			})
+		}
+		for j, ref := range view.BlockedBy {
+			if ref.Title == "" {
+				vs = append(vs, Violation{
+					Method: method,
+					Rule:   "BlockedByEnriched",
+					Sample: fmt.Sprintf("Blocked[%d].BlockedBy[%d]: Title is empty (id=%q) — ReadyExplain blockers must be enriched", i, j, ref.ID),
+				})
+			}
+			if ref.Status == "" {
+				vs = append(vs, Violation{
+					Method: method,
+					Rule:   "BlockedByEnriched",
+					Sample: fmt.Sprintf("Blocked[%d].BlockedBy[%d]: Status is empty (id=%q) — ReadyExplain blockers must be enriched", i, j, ref.ID),
+				})
+			}
 		}
 	}
 
@@ -199,6 +218,14 @@ func ValidateReadyExplain(method string, result domain.ReadyExplainResult, limit
 			Method: method,
 			Rule:   "TotalReadyMatchesLenReady",
 			Sample: fmt.Sprintf("TotalReady=%d != len(Ready)=%d (no limit applied)", result.TotalReady, len(result.Ready)),
+		})
+	}
+
+	if !limitApplied && result.TotalBlocked != len(result.Blocked) {
+		vs = append(vs, Violation{
+			Method: method,
+			Rule:   "TotalBlockedMatchesLenBlocked",
+			Sample: fmt.Sprintf("TotalBlocked=%d != len(Blocked)=%d (no limit applied)", result.TotalBlocked, len(result.Blocked)),
 		})
 	}
 
@@ -288,6 +315,7 @@ func ValidateSearchPage(method string, page domain.SearchResultPage) []Violation
 // Rules checked:
 //   - TotalEqualsSumOfGroups: Total must equal the arithmetic sum of all group counts.
 //   - GroupStatusNonEmpty: each group must have a non-empty Status.
+//   - NoZeroCountGroups: Groups must not contain entries with Count == 0 (bd omits zero-count groups).
 func ValidateCountIssues(method string, result domain.IssueCountResult) []Violation {
 	var vs []Violation
 
@@ -299,6 +327,13 @@ func ValidateCountIssues(method string, result domain.IssueCountResult) []Violat
 				Method: method,
 				Rule:   "GroupStatusNonEmpty",
 				Sample: fmt.Sprintf("Groups[%d]: Status is empty", i),
+			})
+		}
+		if g.Count == 0 {
+			vs = append(vs, Violation{
+				Method: method,
+				Rule:   "NoZeroCountGroups",
+				Sample: fmt.Sprintf("Groups[%d]: status=%q has Count=0 — bd omits zero-count groups", i, g.Status),
 			})
 		}
 	}
@@ -518,6 +553,8 @@ func ValidateCreateIssueResult(method string, result domain.CreateIssueResult) [
 //   - StatusAfterClose: after CloseIssue, ShowIssue.Summary.Status must be "closed".
 //   - CommentVisible: after AddComment, ShowIssue.Comments must contain a comment
 //     with the given body.
+//   - LabelsAfterClear: after UpdateIssue(ClearLabels:true), ShowIssue.Summary.Labels
+//     must be empty (nil or zero-length). The want parameter is unused for this rule.
 func ValidateWriteVisibility(method string, rule string, detail domain.IssueDetail, want string) []Violation {
 	var vs []Violation
 
@@ -551,6 +588,14 @@ func ValidateWriteVisibility(method string, rule string, detail domain.IssueDeta
 				Method: method,
 				Rule:   "CommentVisible",
 				Sample: fmt.Sprintf("comment body %q not found in %d comments after AddComment", want, len(detail.Comments)),
+			})
+		}
+	case "LabelsAfterClear":
+		if len(detail.Summary.Labels) != 0 {
+			vs = append(vs, Violation{
+				Method: method,
+				Rule:   "LabelsAfterClear",
+				Sample: fmt.Sprintf("ShowIssue.Summary.Labels=%v after ClearLabels update, want empty", detail.Summary.Labels),
 			})
 		}
 	default:

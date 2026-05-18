@@ -63,9 +63,23 @@ Several argv shapes include dynamic/conditional flags:
 - `--limit <N>`: driven by `sectionItemCapacity()` (board) or `searchItemCapacity()` (search); both default to 20 before the first `tea.WindowSizeMsg`. `closedLimit()` enforces a floor of 50 for the Done column.
 - `--sort closed`: always present for the Done column (hardcoded `SortFieldClosedAt`).
 - `-a` (IncludeClosed): always present for the Done column (hardcoded `IncludeClosed: true`).
-- `--status <csv>`: present only when `query.Statuses` is non-empty (list/search) or hardcoded to `closed` (CountIssues for board).
+- `--status <csv>`: present only when `query.Statuses` has exactly one entry (list/search) or hardcoded to `closed` (CountIssues for board). See per-subcommand semantics below.
 - `--all`: present for `searchIssuesFromList` only when `query.Statuses` is empty.
 - Write flags (`--title`, `--description`, etc.): each present only when the corresponding `UpdateIssueInput` field is non-nil.
+
+## Per-subcommand --status semantics (bd 1.0.4 audit, g2h5)
+
+Verified against real bd 1.0.4 in a fresh workspace. See `CountIssues` in `read_gateway.go` for the workaround.
+
+| subcommand | `--status open,in_progress` (CSV) | `--status open --status in_progress` (repeated) | notes |
+|---|---|---|---|
+| `bd list` | WORKS — returns union of both statuses | not tested (CSV works) | CSV union is supported |
+| `bd count --by-status` | EMPTY — literal status name match, `"open,in_progress"` is not a real status | EMPTY — last value wins or repeated flags unsupported | Neither form works for multi-status |
+| `bd search <text>` | EMPTY — returns no results for CSV status token | n/a | Single-token only; CSV treated as literal |
+
+**Consequence for `CountIssues`**: when `len(query.Statuses) > 1`, the gateway omits `--status` entirely and fetches all groups, then filters in-memory to the requested set. Single-status and no-status queries continue to pass `--status` to bd count unchanged.
+
+**Consequence for `SearchIssues`** (text-search path via `bd search`): multi-status queries are not passed to bd. The `bd search` path is only invoked for non-empty text with `WorkState=Any`; in that context the gateway passes the first status only. In practice, no production call site passes more than one status to the `bd search` path.
 
 ## Distinct argv shape count
 
@@ -75,7 +89,7 @@ Collapsed to unique bd verb invocations:
 1. `bd ping --json`
 2. `bd ready --explain --json [--limit N]`
 3. `bd query <expr> --json [-a] [--sort <field>] [--limit N]`
-4. `bd count --by-status --json [--status <csv>]`
+4. `bd count --by-status --json [--status <single-value>]` (see per-subcommand --status semantics; multi-status omits the flag and filters in-memory)
 5. `bd show <id> --json`
 6. `bd list --json [--all | --status <csv>] [--type <csv>] [--priority-min N] [--priority-max N] [--assignee <name>] [--label <l>]... [--limit N]`
 7. `bd search <text> --json --status <token> [--type <csv>] [--priority-min N] [--priority-max N] [--assignee <name>] [--label <l>]... [--limit N]`

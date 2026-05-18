@@ -50,15 +50,16 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 	// ---- ListIssues ----
 
 	t.Run("ListIssues/NoFilter", func(t *testing.T) {
-		// bd list without filters returns non-closed issues only (bwf-1 and bwf-2).
+		// bd list without filters returns non-closed issues only
+		// (bwf-1, bwf-2, bwf-4, bwf-5 — all non-closed).
 		issues, err := gw.ListIssues(ctx, domain.IssueListQuery{})
 		if err != nil {
 			t.Fatalf("ListIssues(no filter): unexpected error: %v", err)
 		}
 
-		// Expect exactly 2 non-closed issues.
-		if len(issues) != 2 {
-			t.Errorf("ListIssues(no filter): expected 2 issues, got %d: %v", len(issues), issueIDs(issues))
+		// Expect exactly 4 non-closed issues.
+		if len(issues) != 4 {
+			t.Errorf("ListIssues(no filter): expected 4 issues, got %d: %v", len(issues), issueIDs(issues))
 		}
 
 		// Verify bwf-1 fields (open task).
@@ -97,6 +98,16 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 		if findByID(issues, "bwf-3") != nil {
 			t.Errorf("ListIssues(no filter): closed issue bwf-3 should not appear in default list")
 		}
+
+		// bwf-4 has no labels — validate Labels == nil (not empty slice).
+		// This pins the postcondition in interface.go: Labels may be nil (not an
+		// empty slice) for issues with no labels.
+		bwf4 := findByID(issues, "bwf-4")
+		if bwf4 == nil {
+			t.Errorf("ListIssues(no filter): bwf-4 (unlabeled issue) not found in results")
+		} else if bwf4.Labels != nil {
+			t.Errorf("ListIssues(no filter): bwf-4 Labels should be nil for issue with no labels, got %v", bwf4.Labels)
+		}
 	})
 
 	t.Run("ListIssues/StatusOpen", func(t *testing.T) {
@@ -111,13 +122,13 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			}
 		}
 
-		// Fixture has exactly 1 open issue (bwf-1).
-		if len(issues) != 1 {
-			t.Errorf("ListIssues(status=open): expected 1 issue, got %d: %v", len(issues), issueIDs(issues))
+		// Fixture has exactly 2 open issues (bwf-1 and bwf-4).
+		if len(issues) != 2 {
+			t.Errorf("ListIssues(status=open): expected 2 issues, got %d: %v", len(issues), issueIDs(issues))
 		}
 
-		if len(issues) > 0 && issues[0].ID != "bwf-1" {
-			t.Errorf("ListIssues(status=open): expected bwf-1, got %s", issues[0].ID)
+		if findByID(issues, "bwf-1") == nil {
+			t.Errorf("ListIssues(status=open): expected bwf-1 in results, got %v", issueIDs(issues))
 		}
 	})
 
@@ -129,21 +140,27 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatalf("ReadyIssues: unexpected error: %v", err)
 		}
 
-		// bwf-1 is open with no blockers — the only ready issue in the fixture.
-		if len(issues) != 1 {
-			t.Errorf("ReadyIssues: expected 1 ready issue, got %d: %v", len(issues), issueIDs(issues))
+		// bwf-1 and bwf-4 are open with no blockers — both ready.
+		if len(issues) != 2 {
+			t.Errorf("ReadyIssues: expected 2 ready issues, got %d: %v", len(issues), issueIDs(issues))
 		}
 
 		if bwf1 := findByID(issues, "bwf-1"); bwf1 == nil {
 			t.Errorf("ReadyIssues: expected bwf-1 in ready list, got %v", issueIDs(issues))
 		}
+		if bwf4 := findByID(issues, "bwf-4"); bwf4 == nil {
+			t.Errorf("ReadyIssues: expected bwf-4 in ready list, got %v", issueIDs(issues))
+		}
 
-		// bwf-2 is blocked, bwf-3 is closed — neither should be ready.
+		// bwf-2 is blocked, bwf-3 is closed, bwf-5 is stored-blocked — none should be ready.
 		if findByID(issues, "bwf-2") != nil {
 			t.Errorf("ReadyIssues: blocked issue bwf-2 should not appear in ready list")
 		}
 		if findByID(issues, "bwf-3") != nil {
 			t.Errorf("ReadyIssues: closed issue bwf-3 should not appear in ready list")
+		}
+		if findByID(issues, "bwf-5") != nil {
+			t.Errorf("ReadyIssues: stored-blocked bwf-5 should not appear in ready list")
 		}
 	})
 
@@ -155,9 +172,13 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatalf("BlockedIssues: unexpected error: %v", err)
 		}
 
-		// Fixture has exactly 1 blocked issue (bwf-2, blocked by bwf-1).
+		// Fixture has exactly 1 dep-blocked issue: bwf-2 (blocked by bwf-1).
+		// bwf-5 is stored-blocked (status=blocked) but has NO dependency — bd blocked
+		// must NOT include it. This pins the interface.go postcondition:
+		// "Issues with stored status 'blocked' (manually set) are NOT returned by
+		// bd blocked unless they also have unresolved dependency blockers."
 		if len(views) != 1 {
-			t.Fatalf("BlockedIssues: expected 1 blocked view, got %d", len(views))
+			t.Fatalf("BlockedIssues: expected 1 blocked view, got %d: %v", len(views), blockedViewIDs(views))
 		}
 
 		view := views[0]
@@ -166,6 +187,11 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 		}
 		if view.Issue.Status != "blocked" {
 			t.Errorf("BlockedIssues: expected status=blocked, got %q", view.Issue.Status)
+		}
+
+		// bwf-5 must NOT appear — it is stored-blocked with no dep.
+		if findBlockedViewByID(views, "bwf-5") != nil {
+			t.Errorf("BlockedIssues: stored-blocked-no-dep bwf-5 must not appear in bd blocked output")
 		}
 
 		// BlockedBy must reference bwf-1 — this is where fake/real drift hides.
@@ -289,12 +315,12 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatalf("SearchIssues(empty): unexpected error: %v", err)
 		}
 
-		// Empty query routes through bd list --all → all 3 fixture issues.
-		if len(page.Results) != 3 {
-			t.Errorf("SearchIssues(empty): expected 3 results, got %d: %v", len(page.Results), searchResultIDs(page.Results))
+		// Empty query routes through bd list --all → all 5 fixture issues.
+		if len(page.Results) != 5 {
+			t.Errorf("SearchIssues(empty): expected 5 results, got %d: %v", len(page.Results), searchResultIDs(page.Results))
 		}
 
-		expectedIDs := []string{"bwf-1", "bwf-2", "bwf-3"}
+		expectedIDs := []string{"bwf-1", "bwf-2", "bwf-3", "bwf-4", "bwf-5"}
 		for _, id := range expectedIDs {
 			if findSearchResultByID(page.Results, id) == nil {
 				t.Errorf("SearchIssues(empty): expected %s in results, got %v", id, searchResultIDs(page.Results))
@@ -328,19 +354,19 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatalf("Query(status=open): unexpected error: %v", err)
 		}
 
-		// Only bwf-1 has status=open in the fixture.
+		// bwf-1 and bwf-4 have status=open in the fixture.
 		for _, issue := range issues {
 			if issue.Status != "open" {
 				t.Errorf("Query(status=open): expected all results to have status=open, got %s with status=%s", issue.ID, issue.Status)
 			}
 		}
 
-		if len(issues) != 1 {
-			t.Errorf("Query(status=open): expected 1 result, got %d: %v", len(issues), issueIDs(issues))
+		if len(issues) != 2 {
+			t.Errorf("Query(status=open): expected 2 results, got %d: %v", len(issues), issueIDs(issues))
 		}
 
-		if len(issues) > 0 && issues[0].ID != "bwf-1" {
-			t.Errorf("Query(status=open): expected bwf-1, got %s", issues[0].ID)
+		if findByID(issues, "bwf-1") == nil {
+			t.Errorf("Query(status=open): expected bwf-1 in results, got %v", issueIDs(issues))
 		}
 	})
 
@@ -352,26 +378,41 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatalf("CountIssues: unexpected error: %v", err)
 		}
 
-		// Fixture has 3 issues total (1 open, 1 blocked, 1 closed).
-		if result.Total != 3 {
-			t.Errorf("CountIssues: expected Total=3, got %d", result.Total)
+		// Fixture has 5 issues total (2 open, 2 blocked, 1 closed).
+		if result.Total != 5 {
+			t.Errorf("CountIssues: expected Total=5, got %d", result.Total)
 		}
 
-		// Groups must contain at least the three statuses present in the fixture.
-		expectedStatuses := []string{"open", "blocked", "closed"}
-		for _, status := range expectedStatuses {
+		// Groups must contain the three statuses present in the fixture with correct counts.
+		type wantGroup struct {
+			status string
+			count  int
+		}
+		for _, wg := range []wantGroup{
+			{"open", 2},
+			{"blocked", 2},
+			{"closed", 1},
+		} {
 			found := false
 			for _, g := range result.Groups {
-				if g.Status == status {
+				if g.Status == wg.status {
 					found = true
-					if g.Count != 1 {
-						t.Errorf("CountIssues: expected count=1 for status=%q, got %d", status, g.Count)
+					if g.Count != wg.count {
+						t.Errorf("CountIssues: expected count=%d for status=%q, got %d", wg.count, wg.status, g.Count)
 					}
 					break
 				}
 			}
 			if !found {
-				t.Errorf("CountIssues: expected group for status=%q, groups=%v", status, result.Groups)
+				t.Errorf("CountIssues: expected group for status=%q, groups=%v", wg.status, result.Groups)
+			}
+		}
+
+		// Verify that the "deferred" status is NOT present in Groups — no issues have that
+		// status, so bd omits it (zero-count groups are never emitted).
+		for _, g := range result.Groups {
+			if g.Status == "deferred" {
+				t.Errorf("CountIssues: deferred status should not appear when count=0 (bd omits zero-count groups)")
 			}
 		}
 	})
@@ -388,15 +429,10 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatal("StatusCatalog: expected non-empty result")
 		}
 
-		// "open" must be present — it's a bd built-in status.
-		if !containsStatusName(opts, "open") {
-			t.Errorf("StatusCatalog: expected 'open' status option, got %v", statusNames(opts))
-		}
-
-		// "blocked" and "closed" are also built-in.
-		for _, expected := range []string{"blocked", "closed"} {
+		// All 7 bd 1.0.4 built-in statuses must be present.
+		for _, expected := range []string{"open", "in_progress", "blocked", "deferred", "closed", "pinned", "hooked"} {
 			if !containsStatusName(opts, expected) {
-				t.Errorf("StatusCatalog: expected %q status option, got %v", expected, statusNames(opts))
+				t.Errorf("StatusCatalog: expected built-in status %q, got %v", expected, statusNames(opts))
 			}
 		}
 	})
@@ -413,10 +449,10 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			t.Fatal("TypeCatalog: expected non-empty result")
 		}
 
-		// The fixture uses task/bug/chore — all three must be in the catalog.
-		for _, expected := range []string{"task", "bug", "chore"} {
+		// All 9 bd core types must be present.
+		for _, expected := range []string{"task", "bug", "feature", "chore", "epic", "decision", "spike", "story", "milestone"} {
 			if !containsTypeName(opts, expected) {
-				t.Errorf("TypeCatalog: expected type %q, got %v", expected, typeNames(opts))
+				t.Errorf("TypeCatalog: expected core type %q, got %v", expected, typeNames(opts))
 			}
 		}
 	})
@@ -648,6 +684,34 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			}
 		})
 
+		t.Run("ReadyExplain/TotalBlockedMatchesLenBlocked", func(t *testing.T) {
+			// When no limit is applied, TotalBlocked == len(Blocked).
+			result, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{})
+			if err != nil {
+				t.Fatalf("ReadyExplain: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateReadyExplain("ReadyExplain", result, false) {
+				if v.Rule == "TotalBlockedMatchesLenBlocked" {
+					t.Errorf("ReadyExplain: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("ReadyExplain/BlockedByEnriched", func(t *testing.T) {
+			// Every BlockedBy entry in Blocked must have non-empty Title and Status.
+			// This is the invariant that differentiates ReadyExplain from BlockedIssues:
+			// ReadyExplain returns enriched blocker objects, not bare ID-only references.
+			result, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{})
+			if err != nil {
+				t.Fatalf("ReadyExplain: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateReadyExplain("ReadyExplain", result, false) {
+				if v.Rule == "BlockedByEnriched" {
+					t.Errorf("ReadyExplain: %s", v.Sample)
+				}
+			}
+		})
+
 		// ---- Invariants/ShowIssue ----
 
 		t.Run("ShowIssue/ReturnedIDMatchesInput", func(t *testing.T) {
@@ -765,6 +829,21 @@ func RunReadContract(t *testing.T, factory GatewayFactory) {
 			}
 			for _, v := range contractcheck.ValidateCountIssues("CountIssues", result) {
 				if v.Rule == "GroupStatusNonEmpty" {
+					t.Errorf("CountIssues: %s", v.Sample)
+				}
+			}
+		})
+
+		t.Run("CountIssues/NoZeroCountGroups", func(t *testing.T) {
+			// bd omits zero-count groups — Groups must not contain entries with Count=0.
+			// This is the j0o5 invariant: even if a status is valid, if no issues have
+			// that status, bd will not emit a group for it.
+			result, err := gw.CountIssues(ctx, domain.IssueCountQuery{})
+			if err != nil {
+				t.Fatalf("CountIssues: unexpected error: %v", err)
+			}
+			for _, v := range contractcheck.ValidateCountIssues("CountIssues", result) {
+				if v.Rule == "NoZeroCountGroups" {
 					t.Errorf("CountIssues: %s", v.Sample)
 				}
 			}

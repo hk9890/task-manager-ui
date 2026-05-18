@@ -57,8 +57,12 @@ type bdStatusCatalogPayload struct {
 }
 
 type bdTypeCatalogPayload struct {
-	CoreTypes   []bdCatalogEntryPayload `json:"core_types"`
-	CustomTypes []bdCatalogEntryPayload `json:"custom_types"`
+	CoreTypes []bdCatalogEntryPayload `json:"core_types"`
+	// CustomTypes is a []string in bd 1.0.4 (bare names, no description).
+	// Core types are objects with {name, description}; custom types are bare
+	// strings because bd does not store descriptions for user-defined types.
+	// See puy3 for the divergence discovered during the contract audit.
+	CustomTypes []string `json:"custom_types"`
 }
 
 type bdLabelCatalogEntryPayload struct {

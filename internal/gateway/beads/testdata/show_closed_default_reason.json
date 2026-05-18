@@ -1,0 +1,15 @@
+[
+  {
+    "id": "bw-800",
+    "title": "Closed with default reason",
+    "description": "Issue closed without --reason flag; bd stores close_reason=Closed literal.",
+    "status": "closed",
+    "issue_type": "task",
+    "priority": 1,
+    "owner": "alice",
+    "closed_at": "2026-05-01T12:00:00Z",
+    "close_reason": "Closed",
+    "created_at": "2026-04-01T09:00:00Z",
+    "updated_at": "2026-05-01T12:00:00Z"
+  }
+]

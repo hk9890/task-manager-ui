@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
@@ -331,7 +332,7 @@ func (f *FakeBeadsGateway) SearchIssues(_ context.Context, query domain.SearchIs
 		page, ok := f.SearchResultsByText[text]
 		if !ok {
 			return domain.SearchResultPage{
-				Results:  nil,
+				Results:  []domain.SearchResult{},
 				Metadata: domain.SearchResultMetadata{ReturnedCount: 0},
 			}, nil
 		}
@@ -352,6 +353,13 @@ func (f *FakeBeadsGateway) Query(_ context.Context, expr string, opts domain.Que
 	f.Calls = append(f.Calls, GatewayCall{Method: MethodQuery, Input: QueryCall{Expr: expr, Opts: opts}})
 	if err := f.MethodErrors[MethodQuery]; err != nil {
 		return nil, err
+	}
+
+	if strings.TrimSpace(expr) == "" {
+		return nil, domain.GatewayError{
+			Code:    domain.ErrorCodeValidationFailed,
+			Message: "query expression must not be empty",
+		}
 	}
 
 	// QueryResponsesByExpr opt-in: when set, look up by exact expr string.
@@ -455,12 +463,15 @@ func (f *FakeBeadsGateway) CreateIssue(_ context.Context, input domain.CreateIss
 		typ = "task"
 	}
 
+	labels := append([]string(nil), input.Labels...)
+
 	f.issueStore[id] = domain.IssueDetail{
 		Summary: domain.IssueSummary{
 			ID:     id,
 			Title:  input.Title,
 			Status: "open",
 			Type:   typ,
+			Labels: labels,
 		},
 		Description: input.Description,
 		Comments:    []domain.IssueComment{},
@@ -498,6 +509,11 @@ func (f *FakeBeadsGateway) UpdateIssue(_ context.Context, issueID string, input 
 	if input.Status != nil {
 		existing.Summary.Status = *input.Status
 	}
+	if len(input.Labels) > 0 {
+		existing.Summary.Labels = append([]string(nil), input.Labels...)
+	} else if input.ClearLabels {
+		existing.Summary.Labels = []string{}
+	}
 
 	f.issueStore[issueID] = existing
 	return nil
@@ -524,6 +540,12 @@ func (f *FakeBeadsGateway) CloseIssue(_ context.Context, issueID string, input d
 
 	// Idempotent: already closed → still return nil.
 	existing.Summary.Status = "closed"
+	if input.Reason != "" {
+		existing.CloseReason = input.Reason
+	} else {
+		existing.CloseReason = "Closed"
+	}
+	existing.ClosedAt = time.Now().UTC()
 	f.issueStore[issueID] = existing
 	return nil
 }
@@ -548,7 +570,8 @@ func (f *FakeBeadsGateway) AddComment(_ context.Context, issueID string, input d
 	}
 
 	existing.Comments = append(existing.Comments, domain.IssueComment{
-		Body: input.Body,
+		Body:   input.Body,
+		Author: "fake-user",
 	})
 	f.issueStore[issueID] = existing
 	return nil
@@ -585,6 +608,10 @@ func (f *FakeBeadsGateway) LabelCatalog(_ context.Context) ([]domain.LabelOption
 	f.Calls = append(f.Calls, GatewayCall{Method: MethodLabelCatalog})
 	if err := f.MethodErrors[MethodLabelCatalog]; err != nil {
 		return nil, err
+	}
+
+	if f.LabelCatalogResponse == nil {
+		return []domain.LabelOption{}, nil
 	}
 
 	return append([]domain.LabelOption(nil), f.LabelCatalogResponse...), nil

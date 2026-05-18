@@ -86,6 +86,61 @@
 //	is empty (preserves existing UI-test stubs that never call CreateIssue).
 //	Discovered: 9x70.3; surfaced by CountIncrementInvariant in RunWriteContract.
 //
+// 2026-05-18: SearchIssues() cache miss (text key absent from SearchResultsByText)
+//
+//	returned Results: nil; real bd always returns a non-nil slice (empty []
+//	when no results). Fixed to return Results: []domain.SearchResult{}.
+//	Discovered: beads-workbench-ix3j; parent epic beads-workbench-yspw.
+//
+// 2026-05-18: CloseIssue() did not set CloseReason on the stored IssueDetail;
+//
+//	real bd sets the close reason field. Fixed: when input.Reason is non-empty
+//	it is used; otherwise the sentinel "Closed" is stored.
+//	Discovered: beads-workbench-eifk; parent epic beads-workbench-yspw.
+//
+// 2026-05-18: CloseIssue() did not set ClosedAt on the stored IssueDetail;
+//
+//	real bd records a close timestamp. Fixed: existing.ClosedAt = time.Now().UTC()
+//	is applied on every close (including idempotent re-close).
+//	Discovered: beads-workbench-jsxd; parent epic beads-workbench-yspw.
+//
+// 2026-05-18: AddComment() constructed IssueComment{Body: ...} without an Author;
+//
+//	real bd records the comment author. Fixed: Author is set to the "fake-user"
+//	sentinel, consistent with the fake's identity conventions.
+//	Discovered: beads-workbench-n63l; parent epic beads-workbench-yspw.
+//
+// 2026-05-18: Query() accepted an empty expression and returned the verbatim
+//
+//	QueryResponse stub; real bd rejects an empty expression with a validation
+//	error. Fixed: added a TrimSpace guard that returns GatewayError{Code:
+//	ErrorCodeValidationFailed} before any store lookup.
+//	Discovered: beads-workbench-tkgq; parent epic beads-workbench-yspw.
+//
+// 2026-05-18: LabelCatalog() returned nil when LabelCatalogResponse was unset;
+//
+//	real bd always returns a non-nil slice. Fixed: added a nil-check that
+//	returns []domain.LabelOption{} when LabelCatalogResponse is nil.
+//	Discovered: beads-workbench-fy7x; parent epic beads-workbench-yspw.
+//
+// 2026-05-18: CreateIssue() did not store input.Labels in the issueStore entry;
+//
+//	real bd persists labels and ShowIssue reflects them. Fixed: the labels slice
+//	is now copied into Summary.Labels on the stored IssueDetail.
+//	UpdateIssue() did not model Labels or ClearLabels mutations; real bd applies
+//	--set-labels and --remove-label. Fixed: when input.Labels is non-empty the
+//	stored Summary.Labels is replaced; when input.ClearLabels is true it is set
+//	to an empty slice ([]string{}).
+//	Discovered: beads-workbench-5toe; parent epic beads-workbench-yspw.
+//	Surfaced by UpdateIssue/ClearLabels in RunWriteContract.
+//
+// # Sort-direction note
+//
+// FakeBeadsGateway.ListIssues and FakeBeadsGateway.Query do NOT simulate
+// sort-direction. Both methods return results in insertion/seed order regardless
+// of any SortField or SortDirection options present on the query. Tests that need
+// to assert sort behaviour must use the real gateway (integration tier).
+//
 // # See also
 //
 //   - internal/gateway/beads/interface.go — canonical contract spec

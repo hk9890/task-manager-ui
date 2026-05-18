@@ -38,6 +38,28 @@
       "assignee": "carol",
       "labels": ["fixture", "docs"],
       "comments": []
+    },
+    {
+      "id": "bwf-4",
+      "title": "Unlabeled open task",
+      "description": "Issue with no labels — validates Labels==nil postcondition.",
+      "type": "task",
+      "priority": 2,
+      "status": "open",
+      "assignee": "dave",
+      "labels": [],
+      "comments": []
+    },
+    {
+      "id": "bwf-5",
+      "title": "Stored-blocked task with no dependency",
+      "description": "Status manually set to blocked but has no dependency blockers — must be absent from bd blocked output.",
+      "type": "task",
+      "priority": 2,
+      "status": "blocked",
+      "assignee": "eve",
+      "labels": ["fixture"],
+      "comments": []
     }
   ],
   "dependencies": [

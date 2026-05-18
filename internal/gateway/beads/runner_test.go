@@ -621,3 +621,92 @@ func assertLoggedFloatAtLeast(t *testing.T, got any, min float64) {
 		t.Fatalf("expected value >= %v, got %v", min, value)
 	}
 }
+
+// TestFilterEnvToAllowlistStripsBeadsActor verifies that BEADS_ACTOR is
+// stripped by filterEnvToAllowlist. The gateway never passes --actor to bd, so
+// BEADS_ACTOR in the parent process env must not leak to bd subprocesses —
+// doing so would let the ambient env silently override the actor attribution
+// that bd derives from git user.name. See the Actor attribution note in
+// interface.go (audit 2026-05-17).
+func TestFilterEnvToAllowlistStripsBeadsActor(t *testing.T) {
+	t.Parallel()
+
+	input := []string{
+		"BEADS_ACTOR=impersonator",
+		"PATH=/usr/bin",
+		"HOME=/home/user",
+	}
+
+	out := filterEnvToAllowlist(input)
+
+	for _, entry := range out {
+		if strings.HasPrefix(entry, "BEADS_ACTOR=") {
+			t.Fatalf("filterEnvToAllowlist: BEADS_ACTOR must be stripped but was present: %v", out)
+		}
+	}
+
+	// PATH and HOME must survive.
+	foundPATH, foundHOME := false, false
+	for _, entry := range out {
+		switch entry {
+		case "PATH=/usr/bin":
+			foundPATH = true
+		case "HOME=/home/user":
+			foundHOME = true
+		}
+	}
+	if !foundPATH {
+		t.Fatalf("filterEnvToAllowlist: PATH must survive allowlist; got %v", out)
+	}
+	if !foundHOME {
+		t.Fatalf("filterEnvToAllowlist: HOME must survive allowlist; got %v", out)
+	}
+}
+
+// TestCreateIssueDoesNotReceiveBeadsActorInEnv verifies the end-to-end
+// integration: when BEADS_ACTOR is present in the RunnerConfig.Env (simulating
+// a parent process that has it set), the executor invocation for CreateIssue
+// does NOT receive BEADS_ACTOR. This is the CreateIssue-level assertion
+// described in wgz0; filterEnvToAllowlist does the filtering.
+func TestCreateIssueDoesNotReceiveBeadsActorInEnv(t *testing.T) {
+	t.Parallel()
+
+	var capturedEnv []string
+	capturingExec := &envCapturingExecutor{
+		result: ExecResult{Stdout: []byte(`{"id":"bd-env-test"}`)},
+		captureEnv: func(env []string) {
+			capturedEnv = append([]string(nil), env...)
+		},
+	}
+
+	runner := NewCommandRunner(RunnerConfig{
+		Env:      []string{"BEADS_ACTOR=impersonator", "PATH=/usr/bin"},
+		Executor: capturingExec,
+	})
+	gateway := NewCLIGateway(runner)
+
+	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "env test"})
+	if err != nil {
+		t.Fatalf("CreateIssue returned error: %v", err)
+	}
+
+	for _, entry := range capturedEnv {
+		if strings.HasPrefix(entry, "BEADS_ACTOR=") {
+			t.Fatalf("executor received BEADS_ACTOR in env — must be stripped; env=%v", capturedEnv)
+		}
+	}
+}
+
+// envCapturingExecutor is a CommandExecutor that records the env slice passed
+// to Run so tests can assert filtering behavior.
+type envCapturingExecutor struct {
+	result     ExecResult
+	captureEnv func([]string)
+}
+
+func (e *envCapturingExecutor) Run(_ context.Context, _ string, _ []string, _ string, env []string) (ExecResult, error) {
+	if e.captureEnv != nil {
+		e.captureEnv(env)
+	}
+	return e.result, nil
+}

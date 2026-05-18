@@ -1,6 +1,7 @@
 package contract_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -32,8 +33,14 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 	spec := embeddedfixture.ReadSeedSpec(t)
 
 	// Build IssueSummary slice from the fixture spec.
+	// Labels is set to nil (not an empty slice) when the issue has no labels,
+	// mirroring the real bd behaviour and the postcondition in interface.go.
 	summaries := make([]domain.IssueSummary, 0, len(spec.Issues))
 	for _, issue := range spec.Issues {
+		var labels []string
+		if len(issue.Labels) > 0 {
+			labels = issue.Labels
+		}
 		summaries = append(summaries, domain.IssueSummary{
 			ID:       issue.ID,
 			Title:    issue.Title,
@@ -41,17 +48,23 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 			Priority: issue.Priority,
 			Status:   issue.Status,
 			Assignee: issue.Assignee,
-			Labels:   issue.Labels,
+			Labels:   labels,
 		})
 	}
 
 	// ListIssues (no filter): bd list --json excludes closed issues by default.
-	// Mirror that by seeding only non-closed summaries.
+	// Mirror that by seeding only non-closed summaries, sorted by priority
+	// descending to satisfy the SortApplied invariant (the fake does not sort
+	// dynamically, so we pre-sort the response to match what bd returns).
 	for _, s := range summaries {
 		if s.Status != "closed" {
 			fake.ListIssuesResponse = append(fake.ListIssuesResponse, s)
 		}
 	}
+	slices.SortStableFunc(fake.ListIssuesResponse, func(a, b domain.IssueSummary) int {
+		// Higher priority first (descending).
+		return b.Priority - a.Priority
+	})
 
 	// Query: use QueryResponsesByExpr so each expression returns a correctly
 	// filtered slice. This matches real bd's expression-filter behaviour and
@@ -69,6 +82,7 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 			closedSummaries = append(closedSummaries, s)
 		}
 	}
+	// openSummaries includes bwf-1 and bwf-4 (both status=open).
 	fake.QueryResponsesByExpr = map[string][]domain.IssueSummary{
 		"status = open":   openSummaries,
 		"status=open":     openSummaries,
@@ -96,10 +110,15 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 	}
 	for _, s := range summaries {
 		if s.Status == "blocked" {
-			fake.BlockedIssuesResponse = append(fake.BlockedIssuesResponse, domain.BlockedIssueView{
-				Issue:     s,
-				BlockedBy: blockers[s.ID],
-			})
+			// Only include issues that have actual dependency blockers.
+			// bd blocked excludes issues whose status is merely stored as "blocked"
+			// with no unresolved dep chain (interface.go postcondition).
+			if refs, ok := blockers[s.ID]; ok {
+				fake.BlockedIssuesResponse = append(fake.BlockedIssuesResponse, domain.BlockedIssueView{
+					Issue:     s,
+					BlockedBy: refs,
+				})
+			}
 		}
 	}
 
@@ -140,6 +159,10 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 	// unknown IDs return ErrorCodeNotFound (matching real bd behaviour).
 	fake.ShowIssuesByID = make(map[string]domain.IssueDetail)
 	for _, issue := range spec.Issues {
+		var showLabels []string
+		if len(issue.Labels) > 0 {
+			showLabels = issue.Labels
+		}
 		summary := domain.IssueSummary{
 			ID:       issue.ID,
 			Title:    issue.Title,
@@ -147,7 +170,7 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 			Priority: issue.Priority,
 			Status:   issue.Status,
 			Assignee: issue.Assignee,
-			Labels:   issue.Labels,
+			Labels:   showLabels,
 		}
 		detail := domain.IssueDetail{
 			Summary:     summary,
@@ -169,7 +192,7 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 	// SearchIssues: use SearchResultsByText opt-in map so text filtering is precise
 	// without affecting UI tests that use SearchIssuesResponse verbatim.
 	//
-	// "" (empty query) → bd list --all → all 3 fixture issues.
+	// "" (empty query) → bd list --all → all 5 fixture issues.
 	// "root"           → bd search root → only bwf-1 (title contains "root").
 	allSearchResults := make([]domain.SearchResult, 0, len(summaries))
 	for _, s := range summaries {
@@ -208,22 +231,28 @@ func primeFakeFromFixtureSpec(t *testing.T, fake *fakes.FakeBeadsGateway) {
 		Total:  len(spec.Issues),
 	}
 
-	// StatusCatalog: seed the built-in bd statuses that the fixture project exposes.
+	// StatusCatalog: seed all 7 bd 1.0.4 built-in statuses.
 	fake.StatusCatalogResponse = []domain.StatusOption{
 		{Name: "open", Description: "Available to work (default)"},
 		{Name: "in_progress", Description: "Actively being worked on"},
 		{Name: "blocked", Description: "Blocked by a dependency"},
 		{Name: "deferred", Description: "Deliberately put on ice for later"},
 		{Name: "closed", Description: "Completed"},
+		{Name: "pinned", Description: "Pinned for visibility"},
+		{Name: "hooked", Description: "Hooked — waiting on an external trigger"},
 	}
 
-	// TypeCatalog: seed the core bd types that the fixture project exposes.
+	// TypeCatalog: seed all 9 bd core types.
 	fake.TypeCatalogResponse = []domain.TypeOption{
 		{Name: "task", Description: "General work item (default)"},
 		{Name: "bug", Description: "Bug report or defect"},
 		{Name: "feature", Description: "New feature or enhancement"},
 		{Name: "chore", Description: "Maintenance or housekeeping"},
 		{Name: "epic", Description: "Large body of work spanning multiple issues"},
+		{Name: "decision", Description: "Architectural or design decision"},
+		{Name: "spike", Description: "Time-boxed research or investigation"},
+		{Name: "story", Description: "User story"},
+		{Name: "milestone", Description: "Project milestone"},
 	}
 
 	// LabelCatalog: seed the labels present in the fixture issues.

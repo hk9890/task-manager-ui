@@ -3,7 +3,6 @@
     {"name": "task", "description": "Task"},
     {"name": "bug", "description": "Bug"}
   ],
-  "custom_types": [
-    {"name": "spike", "description": "Spike"}
-  ]
+  "custom_types": ["spike"],
+  "schema_version": 1
 }

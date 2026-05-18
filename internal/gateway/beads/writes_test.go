@@ -146,11 +146,13 @@ func TestGatewayUpdateIssueMapsCommandArgs(t *testing.T) {
 	}
 }
 
-// TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels verifies that ClearLabels=true
-// first fetches the current labels via bd show and then emits bd update --remove-labels
+// TestGatewayUpdateIssueClearLabelsEmitsRemoveLabel verifies that ClearLabels=true
+// first fetches the current labels via bd show and then emits bd update --remove-label
 // with the comma-separated list of existing labels.
-// Workaround for bd 1.0.4 --set-labels ” silent no-op (see [[ubav]]).
-func TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels(t *testing.T) {
+// Workaround for bd 1.0.4 --set-labels "" silent no-op (see [[ubav]]).
+// Note: the correct flag is --remove-label (singular), NOT --remove-labels (plural).
+// The plural form is not a recognized bd 1.0.4 flag and causes a silent failure.
+func TestGatewayUpdateIssueClearLabelsEmitsRemoveLabel(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
@@ -158,8 +160,8 @@ func TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels(t *testing.T) {
 	rec.OnArgs([]string{"show", "bd-42", "--json"}).Return(ExecResult{Stdout: []byte(`[
 		{"id":"bd-42","title":"some issue","status":"open","issue_type":"task","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","labels":["alpha","beta"]}
 	]`)}, nil)
-	// UpdateIssue call that removes the labels.
-	rec.OnArgs([]string{"update", "bd-42", "--remove-labels", "alpha,beta"}).Return(ExecResult{Stdout: []byte("ok")}, nil)
+	// UpdateIssue call that removes the labels using the correct singular flag.
+	rec.OnArgs([]string{"update", "bd-42", "--remove-label", "alpha,beta"}).Return(ExecResult{Stdout: []byte("ok")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -178,7 +180,7 @@ func TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels(t *testing.T) {
 		t.Fatalf("unexpected first call args:\n got: %#v\nwant: %#v", calls[0].Args, wantShowArgs)
 	}
 
-	wantUpdateArgs := []string{"update", "bd-42", "--remove-labels", "alpha,beta"}
+	wantUpdateArgs := []string{"update", "bd-42", "--remove-label", "alpha,beta"}
 	if !reflect.DeepEqual(calls[1].Args, wantUpdateArgs) {
 		t.Fatalf("unexpected second call args:\n got: %#v\nwant: %#v", calls[1].Args, wantUpdateArgs)
 	}
@@ -409,4 +411,187 @@ func TestGatewayWriteOperationsPropagateNormalizedRunnerErrors(t *testing.T) {
 
 	err = gateway.AddComment(context.Background(), "bd-1", domain.AddCommentInput{Body: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
+}
+
+// --- wgz0: test gap coverage ---
+
+// TestGatewayCreateIssueLabelsAbsentFromResponse verifies that CreateIssue
+// succeeds when labels are passed via --labels but the bd create JSON response
+// does NOT include a "labels" field. bd 1.0.4 omits labels from the create
+// response payload; the gateway must not treat this as a decode failure.
+func TestGatewayCreateIssueLabelsAbsentFromResponse(t *testing.T) {
+	t.Parallel()
+
+	// Response has only "id" — no "labels" field, matching real bd 1.0.4 behavior.
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-500"}`)}}
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+
+	result, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
+		Title:  "labelled issue",
+		Labels: []string{"x", "y"},
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue returned error: %v", err)
+	}
+	if result.IssueID != "bd-500" {
+		t.Fatalf("unexpected IssueID: %q", result.IssueID)
+	}
+
+	// Assert the --labels flag was emitted.
+	wantArgs := []string{"create", "--json", "--title", "labelled issue", "--labels", "x,y"}
+	if !reflect.DeepEqual(execStub.args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", execStub.args, wantArgs)
+	}
+}
+
+// TestGatewayUpdateIssueAllNilFieldsNoOp verifies that UpdateIssueInput{} with
+// ClearLabels=false causes the gateway to emit `bd update <id>` with no
+// additional flags. bd 1.0.4 exits 0 with "No updates specified" in this case
+// and the gateway returns nil. The test asserts the exact argv shape.
+func TestGatewayUpdateIssueAllNilFieldsNoOp(t *testing.T) {
+	t.Parallel()
+
+	wantArgs := []string{"update", "bd-77"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgs).Return(ExecResult{Stdout: []byte("No updates specified")}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	err := gateway.UpdateIssue(context.Background(), "bd-77", domain.UpdateIssueInput{})
+	if err != nil {
+		t.Fatalf("UpdateIssue no-op returned error: %v", err)
+	}
+
+	calls := rec.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 bd call, got %d: %#v", len(calls), calls)
+	}
+	if !reflect.DeepEqual(calls[0].Args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", calls[0].Args, wantArgs)
+	}
+}
+
+// TestGatewayUpdateIssueStartedAtOnInProgressTransition verifies that setting
+// status to "in_progress" emits `bd update <id> --status in_progress`. The
+// gateway's responsibility is only to pass the flag correctly; started_at is
+// set by bd internally and is not part of the gateway's argv contract.
+func TestGatewayUpdateIssueStartedAtOnInProgressTransition(t *testing.T) {
+	t.Parallel()
+
+	status := "in_progress"
+	wantArgs := []string{"update", "bd-88", "--status", "in_progress"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgs).Return(ExecResult{Stdout: []byte("ok")}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	err := gateway.UpdateIssue(context.Background(), "bd-88", domain.UpdateIssueInput{Status: &status})
+	if err != nil {
+		t.Fatalf("UpdateIssue returned error: %v", err)
+	}
+
+	calls := rec.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 bd call, got %d: %#v", len(calls), calls)
+	}
+	if !reflect.DeepEqual(calls[0].Args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", calls[0].Args, wantArgs)
+	}
+}
+
+// TestGatewayCloseIssueDefaultCloseReasonOmitsFlag verifies that when
+// CloseIssueInput.Reason is empty, the gateway emits `bd close <id>` WITHOUT
+// the --reason flag. bd 1.0.4 then defaults the close_reason to "Closed".
+// The gateway must not inject a --reason flag when none was provided.
+func TestGatewayCloseIssueDefaultCloseReasonOmitsFlag(t *testing.T) {
+	t.Parallel()
+
+	wantArgs := []string{"close", "bd-99"}
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+
+	err := gateway.CloseIssue(context.Background(), "bd-99", domain.CloseIssueInput{})
+	if err != nil {
+		t.Fatalf("CloseIssue returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(execStub.args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v (--reason must be absent when Reason is empty)", execStub.args, wantArgs)
+	}
+}
+
+// TestGatewayAddCommentArgvShapeEmptyBodyAllowed verifies that AddComment
+// emits `bd comments add <id> <body>` even when body is an empty string.
+// The gateway does not validate body content; bd decides whether to accept it.
+// Behavioral verification (updated_at unchanged, not idempotent, works on
+// closed issues, long body stored verbatim, markdown stored verbatim) is bd's
+// responsibility and belongs in contract/integration tests, not unit tests.
+func TestGatewayAddCommentArgvShapeEmptyBodyAllowed(t *testing.T) {
+	t.Parallel()
+
+	wantArgs := []string{"comments", "add", "bd-10", ""}
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("Comment added to bd-10")}}
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+
+	err := gateway.AddComment(context.Background(), "bd-10", domain.AddCommentInput{Body: ""})
+	if err != nil {
+		t.Fatalf("AddComment returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(execStub.args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", execStub.args, wantArgs)
+	}
+}
+
+// TestGatewayAddCommentArgvShapeLongBody verifies that AddComment passes a
+// long body (1000 chars) as a single argv element without truncation or
+// modification. Whether bd stores the full body verbatim is bd's concern and
+// belongs in contract/integration tests.
+func TestGatewayAddCommentArgvShapeLongBody(t *testing.T) {
+	t.Parallel()
+
+	longBody := ""
+	for i := 0; i < 1000; i++ {
+		longBody += "x"
+	}
+	wantArgs := []string{"comments", "add", "bd-11", longBody}
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("Comment added to bd-11")}}
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+
+	err := gateway.AddComment(context.Background(), "bd-11", domain.AddCommentInput{Body: longBody})
+	if err != nil {
+		t.Fatalf("AddComment returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(execStub.args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", execStub.args, wantArgs)
+	}
+}
+
+// TestGatewayAddCommentArgvShapeMarkdownBody verifies that AddComment passes a
+// markdown body as-is without escaping or modification. Whether bd stores
+// markdown verbatim is bd's responsibility and belongs in contract/integration
+// tests.
+func TestGatewayAddCommentArgvShapeMarkdownBody(t *testing.T) {
+	t.Parallel()
+
+	markdownBody := "## heading\n\n- item 1\n- item 2\n\n```go\nfmt.Println(\"hello\")\n```"
+	wantArgs := []string{"comments", "add", "bd-12", markdownBody}
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("Comment added to bd-12")}}
+	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+
+	err := gateway.AddComment(context.Background(), "bd-12", domain.AddCommentInput{Body: markdownBody})
+	if err != nil {
+		t.Fatalf("AddComment returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(execStub.args, wantArgs) {
+		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", execStub.args, wantArgs)
+	}
 }

@@ -1,5 +1,20 @@
 // Package beads defines the BeadsGateway interface and its CLI-backed implementation.
 //
+// # Re-verification 2026-05-18 (epic yspw)
+//
+// All documented contract clauses across the 8 method groups were systematically
+// re-audited against bd 1.0.4, FakeBeadsGateway, and the test suites. The audit
+// surfaced 23 follow-up items (1 P1, 5 P2, 14 P3, 3 P4) — all closed. Notable
+// outcomes: (a) py38 P1 production bug fixed (UpdateIssue ClearLabels workaround
+// emitted `--remove-labels` plural; bd 1.0.4's actual flag is `--remove-label`
+// singular), (b) puy3 P2 TypeCatalog decoder updated to accept `custom_types` as
+// `[]string` (bd 1.0.4's actual shape), (c) uij1 ReadyIssues contract corrected
+// (bd ready returns ONLY status=open issues — in_progress is excluded), (d) 7
+// FakeBeadsGateway divergences closed for parity (see fakes/doc.go 2026-05-18
+// entries). Both upstream workarounds (CloseIssue idempotency over
+// gastownhall/beads#4025; UpdateIssue --set-labels "" silent fail) remain
+// necessary at bd 1.0.4.
+//
 // # Observed bd quirks (audit 2026-05-16)
 //
 // Systemic observations from a hands-on audit of bd version 1.0.4 behavior against a
@@ -81,10 +96,10 @@
 //
 // bd update --set-labels "" silently ignores the clear request (bd 1.0.4 bug).
 //   - Passing --set-labels "" exits 0 with a success message but labels remain unchanged.
-//   - Disposition: WORKAROUND LANDED (see [[ubav]]). The gateway's ClearLabels path
-//     now pre-fetches the current labels via ShowIssue, then emits
-//     `bd update --remove-labels <csv>` enumerating each existing label.
-//     If the issue has no labels, the bd update call is skipped entirely.
+//   - Disposition: WORKAROUND LANDED (see [[ubav]], fixed in py38). The gateway's
+//     ClearLabels path now pre-fetches the current labels via ShowIssue, then emits
+//     `bd update --remove-label <csv>` (singular flag, per bd 1.0.4) enumerating each
+//     existing label. If the issue has no labels, the bd update call is skipped entirely.
 //     The upstream bd bug is still present; this workaround bypasses it at the
 //     gateway layer.
 //
@@ -94,14 +109,15 @@
 //   - Disposition: ACCEPT — this path is unreachable via the app's edit modal, which
 //     always populates at least one field before submitting.
 //
-// Actor attribution uses git user.name; --actor and BD_ACTOR can override it.
+// Actor attribution uses git user.name; --actor and BEADS_ACTOR can override it.
 //   - bd create, bd update, and bd comments add support --actor "<name>" to set the
 //     created_by / author field. Without --actor, bd uses the git user.name from the
 //     repository's git config.
-//   - BD_ACTOR env var also overrides the actor for bd create (confirmed in audit).
-//   - The gateway never passes --actor and filterEnvToAllowlist strips BD_ACTOR (it is
-//     a BD_* prefix var, not in the allowlist). All writes are attributed to the git
-//     user.name of the beads project's git config. Disposition: ACCEPT.
+//   - BEADS_ACTOR env var also overrides the actor for bd create (bd 1.0.4 flag help:
+//     `--actor default: $BEADS_ACTOR, git user.name, $USER`).
+//   - The gateway never passes --actor and filterEnvToAllowlist strips BEADS_ACTOR
+//     (it is not in the allowlist and lacks the BWB_ prefix). All writes are attributed
+//     to the git user.name of the beads project's git config. Disposition: ACCEPT.
 //
 // CloseIssue is idempotent (the gateway emulates this over a bd 1.0.4 bug).
 //   - When no --reason is supplied, bd stores close_reason as "Closed" (the literal
@@ -243,11 +259,10 @@ type BeadsGateway interface {
 	//
 	// Postconditions:
 	//   - Each returned issue has no unresolved dependency blockers at call time.
-	//   - "Ready" is defined by the dependency graph, not the stored status field.
-	//     An issue with stored status "open" and no blocking deps is ready.
-	//     An issue with stored status "in_progress" and no blocking deps is also
-	//     returned by bd ready (bd ready is not limited to status=open).
-	//   - Closed issues are excluded regardless of their dependency state.
+	//   - "Ready" is defined by bd as: status=open with no dependency blockers.
+	//     Only issues with stored status "open" are eligible; bd ready explicitly
+	//     excludes in_progress, blocked, deferred, hooked, and closed issues
+	//     regardless of their dependency state (per bd 1.0.4 `bd ready --help`).
 	//   - Results are not explicitly sorted by bd ready; callers should not
 	//     assume any particular order.
 	//
@@ -324,8 +339,10 @@ type BeadsGateway interface {
 	// Preconditions:
 	//   - ctx must be non-nil.
 	//   - opts.Limit, if > 0, is forwarded as --limit to bd ready --explain.
-	//     The limit applies to the ready list; its effect on the blocked list is
-	//     unspecified by bd.
+	//     However, bd 1.0.4 ignores --limit in --explain mode and returns ALL ready
+	//     and blocked issues regardless of the value passed. The flag is forwarded
+	//     for argv cardinality tests and forward-compatibility, but has no observable
+	//     effect on bd output in explain mode (confirmed in real-bd audit).
 	//
 	// Postconditions:
 	//   - result.Ready contains issues with no unresolved dependency blockers.
@@ -377,7 +394,11 @@ type BeadsGateway interface {
 	//     (or absent/other types that are not "related", "relates-to", or "parent-child").
 	//   - result.Blocks is populated from Dependents with dependency_type "blocks".
 	//   - result.Related is merged from "related"/"relates-to" dependency types in both
-	//     Dependencies and Dependents arrays, plus the top-level Related array.
+	//     Dependencies and Dependents arrays. The top-level Related array (bdIssuePayload.Related)
+	//     is also merged in as a defensive measure: bd 1.0.4 does NOT emit a top-level
+	//     "related" key in bd show --json output (all related relationships appear inside
+	//     the dependencies/dependents arrays). The field is retained in case bd's schema
+	//     evolves to include it in a future release; in current bd 1.0.4 it is always empty.
 	//   - result.ParentGroupBrowser is populated when a parent-child dependency is
 	//     present; the gateway issues a second bd show call for the parent to fetch
 	//     siblings (cached per gateway instance across ShowIssue calls).
@@ -556,10 +577,11 @@ type BeadsGateway interface {
 	//
 	// bd quirks observed (audit 2026-05-17):
 	//   - bd update --set-labels "" silently does NOT clear labels (bd 1.0.4 bug).
-	//     Disposition: WORKAROUND LANDED (see [[ubav]]). ClearLabels causes UpdateIssue
-	//     to first fetch the issue's current labels via ShowIssue, then emit
-	//     `bd update --remove-labels <csv>` enumerating each label. If the issue has no
-	//     labels, the bd update call is skipped entirely (nothing to remove).
+	//     Disposition: WORKAROUND LANDED (see [[ubav]], fixed in py38). ClearLabels causes
+	//     UpdateIssue to first fetch the issue's current labels via ShowIssue, then emit
+	//     `bd update --remove-label <csv>` (singular flag, per bd 1.0.4's actual flag name)
+	//     enumerating each label. If the issue has no labels, the bd update call is skipped
+	//     entirely (nothing to remove).
 	//   - bd update supports --json (returns updated issue as a JSON array). The gateway
 	//     does NOT use --json; stdout is discarded. Disposition: ACCEPT.
 	//   - "No updates specified" exits 0 on stdout (not stderr). Disposition: ACCEPT.
@@ -706,6 +728,11 @@ type BeadsGateway interface {
 	// bd quirks observed (audit 2026-05-16):
 	//   - bd types --json omits the "custom_types" key entirely when no custom types
 	//     are configured. The decoder handles this correctly (nil slice). Disposition: ACCEPT.
+	//   - When custom types ARE configured (via `bd config set types.custom <value>`),
+	//     bd 1.0.4 returns "custom_types" as a JSON array of bare strings
+	//     (e.g. ["widget","gadget"]), not objects with name/description fields.
+	//     The decoder accepts both shapes as of puy3 (parent epic yspw): bare strings
+	//     are decoded as TypeOption{Name: s} with no description. Disposition: ACCEPT.
 	TypeCatalog(ctx context.Context) ([]domain.TypeOption, error)
 
 	// LabelCatalog returns all labels in use across the database using

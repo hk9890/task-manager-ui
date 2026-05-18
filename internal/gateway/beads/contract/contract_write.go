@@ -52,6 +52,7 @@ type WritableGatewayFactory func(t *testing.T) beads.BeadsGateway
 //	CreateIssue/RequiredFields      — empty title → ErrorCodeCommandFailed.
 //	UpdateIssue/HappyPath           — post-Update, ShowIssue reflects change.
 //	UpdateIssue/NonExistent         — unknown ID → ErrorCodeCommandFailed.
+//	UpdateIssue/ClearLabels         — post-Update(ClearLabels:true), ShowIssue.Labels empty.
 //	CloseIssue/HappyPath            — post-Close, ShowIssue.Status=="closed".
 //	CloseIssue/Idempotency          — re-closing exits 0 (no error).
 //	AddComment/HappyPath            — post-AddComment, ShowIssue includes comment.
@@ -170,6 +171,47 @@ func RunWriteContract(t *testing.T, factory WritableGatewayFactory) {
 		} else {
 			t.Errorf("UpdateIssue(nonexistent): expected domain.GatewayError, got %T: %v", err, err)
 		}
+	})
+
+	t.Run("UpdateIssue/ClearLabels", func(t *testing.T) {
+		gw := factory(t)
+
+		// Setup: create an issue with labels.
+		createResult, err := gw.CreateIssue(ctx, domain.CreateIssueInput{
+			Title:  "Issue with labels to clear",
+			Type:   "task",
+			Labels: []string{"alpha", "beta", "gamma"},
+		})
+		if err != nil {
+			t.Fatalf("CreateIssue setup: unexpected error: %v", err)
+		}
+
+		// Verify labels were applied before clearing.
+		beforeID := createResult.IssueID
+		beforeDetail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: beforeID})
+		if err != nil {
+			t.Fatalf("ShowIssue before ClearLabels: unexpected error: %v", err)
+		}
+		if len(beforeDetail.Summary.Labels) == 0 {
+			t.Logf("UpdateIssue/ClearLabels: warning: labels not present after CreateIssue (Labels=%v); ClearLabels postcondition still verified", beforeDetail.Summary.Labels)
+		}
+
+		// Clear all labels.
+		if err := gw.UpdateIssue(ctx, beforeID, domain.UpdateIssueInput{
+			ClearLabels: true,
+		}); err != nil {
+			t.Fatalf("UpdateIssue(ClearLabels:true): unexpected error: %v", err)
+		}
+
+		// Cross-method: ShowIssue must reflect empty labels.
+		clearedDetail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: beforeID})
+		if err != nil {
+			t.Fatalf("ShowIssue after ClearLabels: unexpected error: %v", err)
+		}
+
+		assertNoViolations(t, contractcheck.ValidateWriteVisibility(
+			"UpdateIssue/ClearLabels", "LabelsAfterClear", clearedDetail, "",
+		))
 	})
 
 	// ---- CloseIssue ----

@@ -399,14 +399,28 @@ func (g *Gateway) SearchIssues(ctx context.Context, query domain.SearchIssuesQue
 // CountIssues returns issue counts by status using `bd count --by-status --json`.
 // Zero-count groups are omitted by bd count; Groups in the result contains only
 // entries with a non-zero count.
+//
+// Multi-status filter note: bd 1.0.4 `bd count --status open,in_progress` treats
+// the CSV as a literal status name (not a union), returning zero groups.
+// `--status open --status in_progress` (repeated flag) also returns zero groups.
+// When len(query.Statuses) > 1 we therefore fetch all groups (no --status flag)
+// and filter in-memory to the requested set. The total is the sum of the matched
+// groups only. Single-status and no-status queries continue to use the --status
+// flag unchanged. See g2h5 for full per-subcommand --status semantics audit.
 func (g *Gateway) CountIssues(ctx context.Context, query domain.IssueCountQuery) (domain.IssueCountResult, error) {
 	args := []string{"count", "--by-status", "--json"}
-	args = append(args, buildFilterArgs(issueFilterArgs{
-		Statuses: query.Statuses,
+
+	// Omit --status when multiple statuses are requested; we filter in-memory
+	// after the call to work around bd 1.0.4's broken multi-status support.
+	filterArgs := issueFilterArgs{
 		Types:    query.Types,
 		Assignee: query.Assignee,
 		Labels:   query.Labels,
-	})...)
+	}
+	if len(query.Statuses) <= 1 {
+		filterArgs.Statuses = query.Statuses
+	}
+	args = append(args, buildFilterArgs(filterArgs)...)
 
 	payload, err := RunJSON[bdCountByStatusPayload](ctx, g.runner, CommandRequest{Operation: operationCountIssues, Args: args})
 	if err != nil {
@@ -414,16 +428,28 @@ func (g *Gateway) CountIssues(ctx context.Context, query domain.IssueCountQuery)
 	}
 
 	groups := make([]domain.IssueStatusCount, 0, len(payload.Groups))
+	total := 0
 	for _, g := range payload.Groups {
+		if len(query.Statuses) > 1 && !slices.Contains(query.Statuses, g.Group) {
+			continue
+		}
+
 		groups = append(groups, domain.IssueStatusCount{
 			Status: g.Group,
 			Count:  g.Count,
 		})
+		total += g.Count
+	}
+
+	// When no status filter is applied, trust the bd-computed total; otherwise
+	// use the sum of the matched groups (bd's total covers all statuses).
+	if len(query.Statuses) == 0 {
+		total = payload.Total
 	}
 
 	return domain.IssueCountResult{
 		Groups: groups,
-		Total:  payload.Total,
+		Total:  total,
 	}, nil
 }
 
@@ -689,15 +715,19 @@ func (g *Gateway) TypeCatalog(ctx context.Context) ([]domain.TypeOption, error) 
 		return nil, err
 	}
 
-	all := append(payload.CoreTypes, payload.CustomTypes...)
-	out := make([]domain.TypeOption, 0, len(all))
-	for _, typ := range all {
+	out := make([]domain.TypeOption, 0, len(payload.CoreTypes)+len(payload.CustomTypes))
+	for _, typ := range payload.CoreTypes {
 		mapped, mapErr := typ.toTypeOption(operationTypes)
 		if mapErr != nil {
 			return nil, mapErr
 		}
 
 		out = append(out, mapped)
+	}
+
+	// bd 1.0.4 returns custom_types as []string (bare names) with no descriptions.
+	for _, name := range payload.CustomTypes {
+		out = append(out, domain.TypeOption{Name: name})
 	}
 
 	return out, nil

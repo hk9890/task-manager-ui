@@ -509,7 +509,8 @@ func TestGatewayCatalogReads(t *testing.T) {
 		t.Fatalf("unexpected statuses: %#v", statuses)
 	}
 
-	if !reflect.DeepEqual(types, []domain.TypeOption{{Name: "task", Description: "Task"}, {Name: "bug", Description: "Bug"}, {Name: "spike", Description: "Spike"}}) {
+	// custom_types in bd 1.0.4 are bare strings with no description (puy3).
+	if !reflect.DeepEqual(types, []domain.TypeOption{{Name: "task", Description: "Task"}, {Name: "bug", Description: "Bug"}, {Name: "spike", Description: ""}}) {
 		t.Fatalf("unexpected types: %#v", types)
 	}
 
@@ -1396,14 +1397,24 @@ func TestGatewayCatalogAcceptsNullTypeDescription(t *testing.T) {
 		t.Fatalf("expected 3 types, got %d: %#v", len(types), types)
 	}
 
-	// The custom type "spike" has null description — expect it decoded as empty string.
+	// Core type "bug" has null description — expect it decoded as empty string.
+	bug := types[1]
+	if bug.Name != "bug" {
+		t.Fatalf("expected second type to be 'bug', got %q", bug.Name)
+	}
+
+	if bug.Description != "" {
+		t.Fatalf("expected empty description for null-description core type, got %q", bug.Description)
+	}
+
+	// Custom type "spike" is a bare string in bd 1.0.4 — description is always empty (puy3).
 	spike := types[2]
 	if spike.Name != "spike" {
 		t.Fatalf("expected third type to be 'spike', got %q", spike.Name)
 	}
 
 	if spike.Description != "" {
-		t.Fatalf("expected empty description for null-description type, got %q", spike.Description)
+		t.Fatalf("expected empty description for custom type bare-string, got %q", spike.Description)
 	}
 }
 
@@ -2139,6 +2150,375 @@ func TestCountIssuesNoStatusFilterArgvShape(t *testing.T) {
 	_, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{})
 	if err != nil {
 		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// =============================================================================
+// v2uv — ReadyExplain: CycleCount + schema_version tolerance unit tests
+// =============================================================================
+
+// TestGatewayReadyExplainDecodesNonZeroCycleCount seeds a payload with
+// cycle_count: 3 and asserts the decoded CycleCount field equals 3.
+// This exercises the pass-through field that had no prior test coverage.
+func TestGatewayReadyExplainDecodesNonZeroCycleCount(t *testing.T) {
+	t.Parallel()
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+		"ready": [],
+		"blocked": [],
+		"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 3}
+	}`)}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error: %v", err)
+	}
+
+	if got.CycleCount != 3 {
+		t.Fatalf("expected CycleCount=3 from payload, got %d", got.CycleCount)
+	}
+}
+
+// TestGatewayReadyExplainToleratesSchemaVersionField seeds a payload with
+// schema_version: 1 and asserts no decode error occurs and the result is valid.
+// This exercises the decoder's tolerance for unknown/ignored fields.
+func TestGatewayReadyExplainToleratesSchemaVersionField(t *testing.T) {
+	t.Parallel()
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+		"ready": [],
+		"blocked": [],
+		"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0},
+		"schema_version": 1
+	}`)}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	got, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{})
+	if err != nil {
+		t.Fatalf("ReadyExplain returned error on payload with schema_version field: %v", err)
+	}
+
+	// Decoder must ignore schema_version — result should still be valid.
+	if got.Ready == nil {
+		t.Fatal("expected non-nil Ready slice after tolerating schema_version field")
+	}
+}
+
+// =============================================================================
+// cnam — SearchIssues: INERT multi-status + text argv shape
+// =============================================================================
+
+// TestSearchIssuesInertMultiStatusTextArgvShape pins the INERT quirk documented
+// in interface.go: when SearchIssues is called with non-empty Text and multiple
+// Statuses, the gateway comma-joins the statuses into --status open,closed.
+// This is INERT because bd search --status treats comma-joined values as a
+// literal status name (not a union), silently returning empty results.
+// No UI path currently exercises this path; the test guards against unintended
+// regression — e.g., someone "fixing" the comma-join to pass --status all,
+// which would change the behavior in a way the interface contract doesn't promise.
+func TestSearchIssuesInertMultiStatusTextArgvShape(t *testing.T) {
+	t.Parallel()
+
+	// The gateway must emit --status open,closed (comma-joined statuses as-is).
+	// Do NOT change this to --status all without updating interface.go INERT note.
+	wantArgv := []string{"search", "foo", "--json", "--status", "open,closed"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{
+		Text:     "foo",
+		Statuses: []string{"open", "closed"},
+	})
+	if err != nil {
+		t.Fatalf("SearchIssues returned error: %v", err)
+	}
+
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// =============================================================================
+// wz3u — HealthCheck: CommandFailed on non-zero exit with generic stderr
+// =============================================================================
+
+// TestGatewayHealthCheckCommandFailed verifies that HealthCheck returns
+// ErrorCodeCommandFailed when bd ping exits non-zero with stderr that does NOT
+// match the "no beads database found" sentinel. This covers the third error-code
+// path that was previously untested at the HealthCheck level.
+func TestGatewayHealthCheckCommandFailed(t *testing.T) {
+	t.Parallel()
+
+	rec := newTestRecordingExecutor()
+	// Exit code 1 with generic error message — NOT the NoDatabaseFound sentinel.
+	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{ExitCode: 1, Stderr: []byte("internal error: unexpected state")}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	err := gateway.HealthCheck(context.Background())
+	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
+}
+
+// =============================================================================
+// 82lm — ShowIssue: close_reason="Closed" literal default
+// =============================================================================
+
+// TestGatewayShowIssueDecodesDefaultCloseReason asserts that the gateway
+// correctly decodes and passes through the close_reason="Closed" literal that
+// bd stores when an issue is closed without an explicit --reason flag.
+// This is bd's default — distinct from both explicit reasons ("completed") and
+// absent reason ("").
+func TestGatewayShowIssueDecodesDefaultCloseReason(t *testing.T) {
+	t.Parallel()
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"show", "bw-800", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_closed_default_reason.json")}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	got, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: "bw-800"})
+	if err != nil {
+		t.Fatalf("ShowIssue returned error: %v", err)
+	}
+
+	if got.CloseReason != "Closed" {
+		t.Fatalf("expected CloseReason=%q (bd literal default), got %q", "Closed", got.CloseReason)
+	}
+}
+
+// =============================================================================
+// kmfn — LabelCatalog: whitespace-strip + blank-skip
+// =============================================================================
+
+// TestGatewayCatalogStripsWhitespaceLabels verifies that:
+//   - An all-space label ("   ") is excluded from the output (toLabelOption maps
+//     it to Name="" after TrimSpace, and the gateway skips blank names).
+//   - A whitespace-padded label ("  whitespace-label  ") is trimmed to
+//     "whitespace-label" in the output.
+func TestGatewayCatalogStripsWhitespaceLabels(t *testing.T) {
+	t.Parallel()
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(ExecResult{Stdout: readFixture(t, "labels_whitespace.json")}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	labels, err := gateway.LabelCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("LabelCatalog returned error: %v", err)
+	}
+
+	// All-space entry must be excluded.
+	for _, l := range labels {
+		if l.Name == "" || l.Name == "   " {
+			t.Errorf("LabelCatalog: all-space entry should be excluded, found %q in output", l.Name)
+		}
+	}
+
+	// Padded entry must be trimmed.
+	foundTrimmed := false
+	for _, l := range labels {
+		if l.Name == "whitespace-label" {
+			foundTrimmed = true
+		}
+	}
+	if !foundTrimmed {
+		t.Errorf("LabelCatalog: whitespace-padded entry should appear trimmed as %q, got %v", "whitespace-label", labels)
+	}
+
+	// Normal label must be present unchanged.
+	foundNormal := false
+	for _, l := range labels {
+		if l.Name == "normal-label" {
+			foundNormal = true
+		}
+	}
+	if !foundNormal {
+		t.Errorf("LabelCatalog: normal label %q should be present, got %v", "normal-label", labels)
+	}
+
+	// Total: 2 entries (all-space excluded, padded trimmed, normal kept).
+	if len(labels) != 2 {
+		t.Errorf("LabelCatalog: expected 2 labels (all-space excluded), got %d: %v", len(labels), labels)
+	}
+}
+
+// ============================================================
+// puy3: TypeCatalog custom_types []string decode fix
+// ============================================================
+
+// TestGatewayTypeCatalogDecodesCustomTypesAsStrings verifies that TypeCatalog
+// correctly handles the bd 1.0.4 shape where custom_types is a JSON array of
+// bare strings, not objects.  Prior to puy3 the gateway would return
+// ErrorCodeDecodeFailed for any workspace with bd config set types.custom.
+func TestGatewayTypeCatalogDecodesCustomTypesAsStrings(t *testing.T) {
+	t.Parallel()
+
+	payload := `{
+		"core_types": [
+			{"name": "task", "description": "General work item"},
+			{"name": "bug", "description": "Bug report"}
+		],
+		"custom_types": ["widget", "gadget"],
+		"schema_version": 1
+	}`
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: []byte(payload)}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	got, err := gateway.TypeCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("TypeCatalog returned error for custom_types []string payload: %v", err)
+	}
+
+	if len(got) != 4 {
+		t.Fatalf("expected 4 type options (2 core + 2 custom), got %d: %#v", len(got), got)
+	}
+
+	// Core types first, with descriptions.
+	if got[0].Name != "task" || got[0].Description != "General work item" {
+		t.Errorf("unexpected core type[0]: %#v", got[0])
+	}
+
+	if got[1].Name != "bug" || got[1].Description != "Bug report" {
+		t.Errorf("unexpected core type[1]: %#v", got[1])
+	}
+
+	// Custom types appended as bare names with empty description.
+	if got[2].Name != "widget" || got[2].Description != "" {
+		t.Errorf("unexpected custom type[0]: %#v", got[2])
+	}
+
+	if got[3].Name != "gadget" || got[3].Description != "" {
+		t.Errorf("unexpected custom type[1]: %#v", got[3])
+	}
+}
+
+// TestGatewayTypeCatalogHandlesAbsentCustomTypes verifies that TypeCatalog
+// succeeds when custom_types is absent (default workspace, no custom types
+// configured) — the pre-existing nil-slice default must still work.
+func TestGatewayTypeCatalogHandlesAbsentCustomTypes(t *testing.T) {
+	t.Parallel()
+
+	payload := `{
+		"core_types": [
+			{"name": "task", "description": "General work item"}
+		],
+		"schema_version": 1
+	}`
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: []byte(payload)}, nil)
+
+	gateway, _ := newTestGateway(rec)
+
+	got, err := gateway.TypeCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("TypeCatalog returned error when custom_types absent: %v", err)
+	}
+
+	if len(got) != 1 || got[0].Name != "task" {
+		t.Fatalf("unexpected types when custom_types absent: %#v", got)
+	}
+}
+
+// ============================================================
+// g2h5: CountIssues multi-status filter in-memory fallback
+// ============================================================
+
+// TestCountIssuesMultiStatusArgvOmitsStatusFlag verifies that when multiple
+// statuses are requested, CountIssues does NOT pass --status to bd count
+// (which would return empty due to bd 1.0.4 literal-match semantics).
+// Instead, the call is issued without --status and filtering happens in-memory.
+func TestCountIssuesMultiStatusArgvOmitsStatusFlag(t *testing.T) {
+	t.Parallel()
+
+	// The argv must NOT include --status when multiple statuses are given.
+	wantArgv := []string{"count", "--by-status", "--json"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`{
+		"groups": [
+			{"group": "open", "count": 5},
+			{"group": "in_progress", "count": 3},
+			{"group": "closed", "count": 10}
+		],
+		"total": 18,
+		"schema_version": 1
+	}`)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{
+		Statuses: []string{"open", "in_progress"},
+	})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	// Only open and in_progress groups should be returned, not closed.
+	if len(got.Groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d: %#v", len(got.Groups), got.Groups)
+	}
+
+	totalInGroups := 0
+	for _, g := range got.Groups {
+		if g.Status != "open" && g.Status != "in_progress" {
+			t.Errorf("unexpected group status %q in result", g.Status)
+		}
+
+		totalInGroups += g.Count
+	}
+
+	// Total must be the sum of the matched groups only (5+3=8), not the
+	// bd-returned total of 18 which includes the unfiltered "closed" group.
+	if got.Total != 8 {
+		t.Errorf("expected total=8 (sum of matched groups), got %d", got.Total)
+	}
+
+	if totalInGroups != got.Total {
+		t.Errorf("group counts %d don't sum to result total %d", totalInGroups, got.Total)
+	}
+
+	// Verify argv: no --status flag present.
+	assertExactArgv(t, rec, wantArgv)
+}
+
+// TestCountIssuesSingleStatusArgvIncludesStatusFlag verifies that single-status
+// queries still pass --status to bd count (no regression from g2h5 fix).
+func TestCountIssuesSingleStatusArgvIncludesStatusFlag(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"count", "--by-status", "--json", "--status", "closed"}
+
+	rec := newTestRecordingExecutor()
+	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`{
+		"groups": [{"group": "closed", "count": 7}],
+		"total": 7,
+		"schema_version": 1
+	}`)}, nil)
+
+	gateway, rec := newTestGateway(rec)
+
+	got, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{
+		Statuses: []string{"closed"},
+	})
+	if err != nil {
+		t.Fatalf("CountIssues returned error: %v", err)
+	}
+
+	if got.Total != 7 || len(got.Groups) != 1 || got.Groups[0].Status != "closed" {
+		t.Fatalf("unexpected result: %#v", got)
 	}
 
 	assertExactArgv(t, rec, wantArgv)
