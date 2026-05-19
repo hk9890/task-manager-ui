@@ -2523,3 +2523,32 @@ func TestCountIssuesSingleStatusArgvIncludesStatusFlag(t *testing.T) {
 
 	assertExactArgv(t, rec, wantArgv)
 }
+
+func TestMapListSortFieldAllConstants(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		field domain.SortField
+		want  string
+	}{
+		{domain.SortFieldUpdatedAt, "updated"},
+		{domain.SortFieldCreatedAt, "created"},
+		{domain.SortFieldPriority, "priority"},
+		{domain.SortFieldID, "id"},
+		{domain.SortFieldClosedAt, "closed"},
+		// zero value (empty string SortField) falls through to default
+		{domain.SortField(""), ""},
+		// out-of-range / unknown value also hits the default branch
+		{domain.SortField("nonexistent_field"), ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(string(tc.field), func(t *testing.T) {
+			t.Parallel()
+			got := mapListSortField(tc.field)
+			if got != tc.want {
+				t.Errorf("mapListSortField(%q) = %q, want %q", tc.field, got, tc.want)
+			}
+		})
+	}
+}
