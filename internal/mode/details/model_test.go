@@ -969,3 +969,178 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 		}
 	})
 }
+
+func TestClampOffset(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		value     int
+		maxOffset int
+		want      int
+	}{
+		{"zero offset stays zero", 0, 10, 0},
+		{"offset within range unchanged", 5, 10, 5},
+		{"offset beyond max clamped to max", 15, 10, 10},
+		{"negative offset clamped to zero", -3, 10, 0},
+		{"max zero with positive offset clamped to zero", 5, 0, 0},
+		{"max zero with zero offset stays zero", 0, 0, 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := clampOffset(tc.value, tc.maxOffset)
+			if got != tc.want {
+				t.Fatalf("clampOffset(%d, %d) = %d, want %d", tc.value, tc.maxOffset, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClampScroll(t *testing.T) {
+	t.Parallel()
+
+	// Use a wide viewport (>= InspectorTwoColumnMinWidth) and long description so
+	// MaxScrollOffsets returns a positive Content bound we can overshoot.
+	const (
+		width  = 200
+		height = 10
+	)
+	longDesc := strings.Repeat("line\n", 60)
+
+	t.Run("scroll already in range is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{
+			SelectionID:         "bw-1",
+			TargetID:            "bw-1",
+			ContentScrollOffset: 2,
+			Detail: domain.IssueDetail{
+				Summary:     domain.IssueSummary{ID: "bw-1", Title: "issue"},
+				Description: longDesc,
+			},
+		}
+		m.ClampScroll(width, height)
+		if m.ContentScrollOffset < 0 || m.ContentScrollOffset > 2 {
+			t.Fatalf("expected ContentScrollOffset to stay <= 2, got %d", m.ContentScrollOffset)
+		}
+	})
+
+	t.Run("scroll beyond max is clamped down", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{
+			SelectionID:         "bw-1",
+			TargetID:            "bw-1",
+			ContentScrollOffset: 9999,
+			Detail: domain.IssueDetail{
+				Summary:     domain.IssueSummary{ID: "bw-1", Title: "issue"},
+				Description: longDesc,
+			},
+		}
+		before := m.ContentScrollOffset
+		m.ClampScroll(width, height)
+		if m.ContentScrollOffset >= before {
+			t.Fatalf("expected ContentScrollOffset to be clamped below %d, got %d", before, m.ContentScrollOffset)
+		}
+		if m.ContentScrollOffset < 0 {
+			t.Fatalf("expected ContentScrollOffset >= 0 after clamp, got %d", m.ContentScrollOffset)
+		}
+	})
+
+	t.Run("negative scroll clamped to zero", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{
+			SelectionID:              "bw-1",
+			TargetID:                 "bw-1",
+			ContentScrollOffset:      -5,
+			DependenciesScrollOffset: -3,
+			MetadataScrollOffset:     -1,
+			Detail: domain.IssueDetail{
+				Summary:     domain.IssueSummary{ID: "bw-1", Title: "issue"},
+				Description: longDesc,
+			},
+		}
+		m.ClampScroll(width, height)
+		if m.ContentScrollOffset != 0 {
+			t.Errorf("expected ContentScrollOffset clamped to 0, got %d", m.ContentScrollOffset)
+		}
+		if m.DependenciesScrollOffset != 0 {
+			t.Errorf("expected DependenciesScrollOffset clamped to 0, got %d", m.DependenciesScrollOffset)
+		}
+		if m.MetadataScrollOffset != 0 {
+			t.Errorf("expected MetadataScrollOffset clamped to 0, got %d", m.MetadataScrollOffset)
+		}
+	})
+
+	t.Run("zero viewportHeight is no-op", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{
+			SelectionID:         "bw-1",
+			ContentScrollOffset: 9999,
+			Detail: domain.IssueDetail{
+				Summary:     domain.IssueSummary{ID: "bw-1", Title: "issue"},
+				Description: longDesc,
+			},
+		}
+		m.ClampScroll(width, 0)
+		if m.ContentScrollOffset != 9999 {
+			t.Fatalf("expected no-op with zero viewportHeight, got ContentScrollOffset=%d", m.ContentScrollOffset)
+		}
+	})
+}
+
+func TestSelectBrowserIssue(t *testing.T) {
+	t.Parallel()
+
+	items := []domain.IssueReference{
+		{ID: "bw-1", Title: "First"},
+		{ID: "bw-2", Title: "Second"},
+		{ID: "bw-3", Title: "Third"},
+	}
+
+	t.Run("selects existing ID by index", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{BrowserItems: items, BrowserSelectedIndex: 0}
+		m.SelectBrowserIssue("bw-3")
+		if m.BrowserSelectedIndex != 2 {
+			t.Fatalf("expected BrowserSelectedIndex=2 for bw-3, got %d", m.BrowserSelectedIndex)
+		}
+	})
+
+	t.Run("selects first ID", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{BrowserItems: items, BrowserSelectedIndex: 2}
+		m.SelectBrowserIssue("bw-1")
+		if m.BrowserSelectedIndex != 0 {
+			t.Fatalf("expected BrowserSelectedIndex=0 for bw-1, got %d", m.BrowserSelectedIndex)
+		}
+	})
+
+	t.Run("unknown ID normalizes to last valid index", func(t *testing.T) {
+		// When the ID is not found, selectBrowserIssue falls through to
+		// normalizeRelatedSelection which clamps BrowserSelectedIndex to [0, len-1].
+		t.Parallel()
+
+		m := Model{BrowserItems: items, BrowserSelectedIndex: 5}
+		m.SelectBrowserIssue("bw-999")
+		if m.BrowserSelectedIndex < 0 || m.BrowserSelectedIndex >= len(items) {
+			t.Fatalf("expected BrowserSelectedIndex in valid range after unknown id, got %d", m.BrowserSelectedIndex)
+		}
+	})
+
+	t.Run("empty browser items sets index to -1", func(t *testing.T) {
+		t.Parallel()
+
+		m := Model{BrowserItems: nil, BrowserSelectedIndex: 2}
+		m.SelectBrowserIssue("bw-1")
+		if m.BrowserSelectedIndex != -1 {
+			t.Fatalf("expected BrowserSelectedIndex=-1 for empty items, got %d", m.BrowserSelectedIndex)
+		}
+	})
+}
