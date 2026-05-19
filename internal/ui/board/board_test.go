@@ -215,6 +215,29 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 	}
 }
 
+func TestSkeletonRows(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	const (
+		width       = 60
+		numExpected = 6
+	)
+
+	for _, phase := range []int{0, 1, 2} {
+		rows := skeletonRows(width, phase)
+		if len(rows) != numExpected {
+			t.Errorf("phase=%d: skeletonRows returned %d rows, want %d", phase, len(rows), numExpected)
+		}
+		for i, row := range rows {
+			if row == "" {
+				t.Errorf("phase=%d row[%d]: expected non-empty skeleton string", phase, i)
+			}
+		}
+	}
+}
+
 func assertEqualColumnHeights(t *testing.T, view string) {
 	t.Helper()
 

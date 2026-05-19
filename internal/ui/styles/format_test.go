@@ -38,6 +38,72 @@ func TestTruncateStringPreservesWellFormedANSI(t *testing.T) {
 	}
 }
 
+func TestWrapLines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		maxWidth int
+		wantLen  int    // expected number of returned lines
+		wantLine string // substring that must appear in the first line (empty = no check)
+	}{
+		{
+			name:     "short string fits in one line",
+			input:    "hello",
+			maxWidth: 20,
+			wantLen:  1,
+			wantLine: "hello",
+		},
+		{
+			name:     "empty string returns one line",
+			input:    "",
+			maxWidth: 20,
+			wantLen:  1,
+			wantLine: "",
+		},
+		{
+			name:     "maxWidth below 1 returns single empty line",
+			input:    "hello",
+			maxWidth: 0,
+			wantLen:  1,
+			wantLine: "",
+		},
+		{
+			name:     "maxWidth of -1 returns single empty line",
+			input:    "something long",
+			maxWidth: -1,
+			wantLen:  1,
+			wantLine: "",
+		},
+		{
+			name:     "long string wraps to multiple lines",
+			input:    "the quick brown fox jumps over the lazy dog",
+			maxWidth: 15,
+			wantLen:  3, // "the quick brown", "fox jumps over", "the lazy dog" (actual split depends on ansi.Wrap)
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := WrapLines(tc.input, tc.maxWidth)
+			if len(got) == 0 {
+				t.Fatalf("WrapLines(%q, %d) returned empty slice", tc.input, tc.maxWidth)
+			}
+			if tc.wantLen > 0 && len(got) != tc.wantLen {
+				t.Errorf("WrapLines(%q, %d) returned %d lines, want %d: %v",
+					tc.input, tc.maxWidth, len(got), tc.wantLen, got)
+			}
+			if tc.wantLine != "" && got[0] != tc.wantLine {
+				t.Errorf("WrapLines(%q, %d) first line = %q, want %q",
+					tc.input, tc.maxWidth, got[0], tc.wantLine)
+			}
+		})
+	}
+}
+
 func TestSelectionPrefix(t *testing.T) {
 	t.Run("idle prefix", func(t *testing.T) {
 		plain, rendered := SelectionPrefix(false, true)

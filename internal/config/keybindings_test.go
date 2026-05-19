@@ -102,3 +102,105 @@ func TestResolveKeyBindingsRejectsInvalidKeys(t *testing.T) {
 		t.Fatalf("expected invalid key error, got %v", err)
 	}
 }
+
+func resolvedDefault(t *testing.T) ResolvedKeyBindings {
+	t.Helper()
+	resolved, err := ResolveKeyBindings(DefaultKeyBindings())
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+	return resolved
+}
+
+func TestDisplayKeyName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"ctrl+@", "ctrl+space"},
+		{"ctrl+space", "ctrl+space"},
+		{"q", "q"},
+		{"ctrl+q", "ctrl+q"},
+		{"left", "left"},
+		{"f13", "f13"},
+		{"", ""},
+		{"Space", "space"},
+		{" ", "space"},
+	}
+
+	for _, tc := range tests {
+		got := DisplayKeyName(tc.input)
+		if got != tc.want {
+			t.Errorf("DisplayKeyName(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestResolvedKeyBindingsDisplayPrimary(t *testing.T) {
+	t.Parallel()
+
+	r := resolvedDefault(t)
+
+	// The toggle-search action uses ctrl+@ canonical; DisplayPrimary must return "ctrl+space".
+	got := r.DisplayPrimary(ShellContext, ShellActionToggleSearch)
+	if got != "ctrl+space" {
+		t.Errorf("DisplayPrimary(shell, toggle_search) = %q, want %q", got, "ctrl+space")
+	}
+
+	// A regular single-char binding: shell quit is ctrl+q.
+	got = r.DisplayPrimary(ShellContext, ShellActionQuit)
+	if got != "ctrl+q" {
+		t.Errorf("DisplayPrimary(shell, quit) = %q, want %q", got, "ctrl+q")
+	}
+}
+
+func TestResolvedKeyBindingsDisplayPrimaryMissingContextOrAction(t *testing.T) {
+	t.Parallel()
+
+	r := resolvedDefault(t)
+
+	if got := r.DisplayPrimary("nosuchcontext", ShellActionQuit); got != "" {
+		t.Errorf("DisplayPrimary(missing context) = %q, want empty", got)
+	}
+	if got := r.DisplayPrimary(ShellContext, "nosuchaction"); got != "" {
+		t.Errorf("DisplayPrimary(missing action) = %q, want empty", got)
+	}
+}
+
+func TestResolvedKeyBindingsDisplayLabel(t *testing.T) {
+	t.Parallel()
+
+	r := resolvedDefault(t)
+
+	// board move-right has keys "l", "right", "tab" → label is "l/right/tab".
+	got := r.DisplayLabel(BoardContext, BoardActionMoveRight)
+	if got != "l/right/tab" {
+		t.Errorf("DisplayLabel(board, move_right) = %q, want %q", got, "l/right/tab")
+	}
+
+	// Missing context / action must return "".
+	if got := r.DisplayLabel("nosuch", BoardActionMoveRight); got != "" {
+		t.Errorf("DisplayLabel(missing context) = %q, want empty", got)
+	}
+	if got := r.DisplayLabel(BoardContext, "nosuchaction"); got != "" {
+		t.Errorf("DisplayLabel(missing action) = %q, want empty", got)
+	}
+}
+
+func TestResolvedKeyBindingsIsZero(t *testing.T) {
+	t.Parallel()
+
+	// Zero value must report IsZero == true.
+	var zero ResolvedKeyBindings
+	if !zero.IsZero() {
+		t.Fatal("expected zero-value ResolvedKeyBindings to report IsZero() == true")
+	}
+
+	// Resolved from defaults must report IsZero == false.
+	r := resolvedDefault(t)
+	if r.IsZero() {
+		t.Fatal("expected populated ResolvedKeyBindings to report IsZero() == false")
+	}
+}
