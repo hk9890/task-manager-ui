@@ -570,15 +570,6 @@ func searchMetadataFromCappedBackendRecords(returnedCount int, requestedLimit in
 	}
 }
 
-func searchMetadataFromExactFilter(returnedCount int, requestedLimit int, source domain.SearchResultSource) domain.SearchResultMetadata {
-	return domain.SearchResultMetadata{
-		ReturnedCount:  returnedCount,
-		RequestedLimit: requestedLimit,
-		Completeness:   domain.SearchResultCompletenessExact,
-		Source:         source,
-	}
-}
-
 func filterIssueSummariesForSearch(items []domain.IssueSummary, query domain.SearchIssuesQuery) []domain.IssueSummary {
 	out := make([]domain.IssueSummary, 0, len(items))
 	for _, item := range items {

@@ -96,13 +96,6 @@ func AssertModelViewMatchesGolden(tb testing.TB, model tea.Model, name string) {
 	AssertMatchesGolden(tb, []byte(model.View()), name)
 }
 
-// AssertModelViewMatchesGoldenNormalized compares normalized model View() output to golden text.
-func AssertModelViewMatchesGoldenNormalized(tb testing.TB, model tea.Model, name string) {
-	tb.Helper()
-
-	AssertMatchesGoldenNormalized(tb, []byte(model.View()), name)
-}
-
 // WaitForOutputContainsAll waits until output includes all snippets and returns matched render.
 func WaitForOutputContainsAll(tb testing.TB, output io.Reader, snippets ...string) string {
 	tb.Helper()

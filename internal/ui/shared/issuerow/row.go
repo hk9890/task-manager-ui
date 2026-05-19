@@ -98,16 +98,6 @@ func RenderCompactSkeleton(opts SkeletonOpts) string {
 	return typeSeg + " " + prioSeg + " " + stateSeg + " " + idSeg + " " + titleFill + titlePad
 }
 
-// RenderReferenceCompactSkeleton renders a placeholder row shaped like
-// RenderReferenceCompact.  It uses the same slot arithmetic and normative
-// title-fill table as RenderCompactSkeleton.
-func RenderReferenceCompactSkeleton(opts SkeletonOpts) string {
-	// ReferenceCompact uses the same slot widths as the regular compact row
-	// (type=1, priority=2, state=3, id=CompactIDWidth) so the implementation
-	// is identical.
-	return RenderCompactSkeleton(opts)
-}
-
 // RenderConfig configures compact issue row rendering.
 type RenderConfig struct {
 	// Issue uses domain.IssueSummary directly because compact rows need only

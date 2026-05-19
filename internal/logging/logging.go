@@ -107,14 +107,6 @@ func (m *Manager) Component(name string) *slog.Logger {
 	return logger.With("component", name)
 }
 
-// SessionID returns the run-scoped session identifier.
-func (m *Manager) SessionID() string {
-	if m == nil {
-		return ""
-	}
-	return m.sessionID
-}
-
 // LogPath returns the persistent log path. Empty means stderr-only fallback.
 func (m *Manager) LogPath() string {
 	if m == nil {
