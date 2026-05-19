@@ -15,6 +15,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
+	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
 )
 
@@ -700,6 +701,74 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	}
 	if m.draftQuery != "" {
 		t.Fatalf("expected backspace to remove typed rune while loading, got %q", m.draftQuery)
+	}
+}
+
+// TestSearchModeMetadataPaneFocusAndSelection exercises ensureMetadataSelection
+// and moveMetadataSelection by driving focus to the metadata pane and sending
+// up/down arrow keys. It also verifies that ensureMetadataSelection resets a
+// stale (invalid) metadataSelectedField value before navigating.
+func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
+	}}
+	m := initModel(gateway)
+
+	// Navigate: Query -> Results -> Content -> Metadata.
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected down from query to move focus to results, got %v", m.focus)
+	}
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if m.focus != uisearch.FocusContent {
+		t.Fatalf("expected right from results to move focus to content, got %v", m.focus)
+	}
+	// This right-key triggers moveFocusRight -> ensureMetadataSelection.
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if m.focus != uisearch.FocusMetadata {
+		t.Fatalf("expected right from content to move focus to metadata, got %v", m.focus)
+	}
+	// ensureMetadataSelection should have left a valid field selected.
+	if m.metadataSelectedField != uidetails.MetadataFieldStatus && m.metadataSelectedField != uidetails.MetadataFieldPriority {
+		t.Fatalf("expected valid metadata field after entering metadata pane, got %q", m.metadataSelectedField)
+	}
+
+	// Initially on status; move down to priority (covers moveMetadataSelection(+1)).
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.metadataSelectedField != uidetails.MetadataFieldPriority {
+		t.Fatalf("expected down to move metadata selection to priority, got %q", m.metadataSelectedField)
+	}
+
+	// Move up back to status (covers moveMetadataSelection(-1)).
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if m.metadataSelectedField != uidetails.MetadataFieldStatus {
+		t.Fatalf("expected up to move metadata selection to status, got %q", m.metadataSelectedField)
+	}
+
+	// Verify clamping: down past the end stays at the last field.
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // status -> priority
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // already at last; must stay at priority
+	if m.metadataSelectedField != uidetails.MetadataFieldPriority {
+		t.Fatalf("expected selection clamped at priority on over-scroll, got %q", m.metadataSelectedField)
+	}
+
+	// Verify clamping at top: move up past first field stays at status.
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // priority -> status
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // already at first; must stay at status
+	if m.metadataSelectedField != uidetails.MetadataFieldStatus {
+		t.Fatalf("expected selection clamped at status on over-scroll, got %q", m.metadataSelectedField)
+	}
+
+	// Verify ensureMetadataSelection resets a stale/invalid field value.
+	// Inject an invalid MetadataFieldKey directly, then trigger ensureMetadataSelection
+	// via cycleFocus reaching the metadata pane.
+	m.metadataSelectedField = uidetails.MetadataFieldKey("stale-invalid")
+	m.ensureMetadataSelection()
+	if m.metadataSelectedField != uidetails.MetadataFieldStatus {
+		t.Fatalf("expected ensureMetadataSelection to reset stale field to status, got %q", m.metadataSelectedField)
 	}
 }
 
