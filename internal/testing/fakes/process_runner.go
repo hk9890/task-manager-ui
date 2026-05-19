@@ -39,11 +39,3 @@ func (f *FakeProcessRunner) Run(_ context.Context, command string, args []string
 
 	return f.Err
 }
-
-// ResetCalls clears recorded invocations.
-func (f *FakeProcessRunner) ResetCalls() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.Calls = nil
-}

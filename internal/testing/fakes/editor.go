@@ -35,11 +35,3 @@ func (f *FakeEditor) EditIssue(_ context.Context, issueID string) (launcheredito
 
 	return f.Result, nil
 }
-
-// ResetCalls clears recorded invocations.
-func (f *FakeEditor) ResetCalls() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.Calls = nil
-}

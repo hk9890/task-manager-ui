@@ -317,7 +317,10 @@ func (m *Model) closedLimit() int {
 	return cap
 }
 
-// CurrentSelection returns the current board issue selection.
+// CurrentSelection returns the active issue selection for tests. Production
+// code uses the unexported currentSelection helper directly; this exported
+// wrapper exists as a test seam so model_test.go can assert on selection
+// state without exposing internals to other packages.
 func (m *Model) CurrentSelection() *mode.Selection {
 	return m.currentSelection()
 }

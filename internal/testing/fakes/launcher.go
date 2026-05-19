@@ -32,11 +32,3 @@ func (f *FakeLauncher) Launch(_ context.Context, action string, issue domain.Iss
 	f.Calls = append(f.Calls, LauncherCall{Action: action, Issue: issue})
 	return f.Err
 }
-
-// ResetCalls clears recorded invocations.
-func (f *FakeLauncher) ResetCalls() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.Calls = nil
-}

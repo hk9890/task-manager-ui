@@ -129,11 +129,3 @@ func (r *RecordingExecutor) CallCount() int {
 
 	return len(r.calls)
 }
-
-// ResetCalls clears recorded invocations while keeping configured rules and defaults.
-func (r *RecordingExecutor) ResetCalls() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.calls = nil
-}

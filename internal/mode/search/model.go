@@ -434,11 +434,6 @@ func (m *Model) SessionState() SessionState {
 	}
 }
 
-// CurrentSelection returns the current search issue selection.
-func (m *Model) CurrentSelection() *mode.Selection {
-	return m.currentSelection()
-}
-
 func (m *Model) moveSelection(delta int) bool {
 	if !m.hasResults() {
 		return false
