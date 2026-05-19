@@ -7,8 +7,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
 
-// ---- Violation.String() ----
-
 func TestViolation_String(t *testing.T) {
 	v := Violation{Method: "ListIssues", Rule: "NonEmptyID", Sample: "items[0]: ID is empty"}
 	got := v.String()
@@ -17,8 +15,6 @@ func TestViolation_String(t *testing.T) {
 		t.Errorf("Violation.String() = %q, want %q", got, want)
 	}
 }
-
-// ---- ValidateIssueSummaries ----
 
 func TestValidateIssueSummaries(t *testing.T) {
 	t.Parallel()
@@ -91,8 +87,6 @@ func TestValidateIssueSummaries(t *testing.T) {
 	}
 }
 
-// ---- ValidateListIssuesStatusFilter ----
-
 func TestValidateListIssuesStatusFilter(t *testing.T) {
 	t.Parallel()
 
@@ -140,8 +134,6 @@ func TestValidateListIssuesStatusFilter(t *testing.T) {
 	}
 }
 
-// ---- ValidateListIssuesClosedExcluded ----
-
 func TestValidateListIssuesClosedExcluded(t *testing.T) {
 	t.Parallel()
 
@@ -179,8 +171,6 @@ func TestValidateListIssuesClosedExcluded(t *testing.T) {
 		})
 	}
 }
-
-// ---- ValidateBlockedViews ----
 
 func TestValidateBlockedViews(t *testing.T) {
 	t.Parallel()
@@ -255,8 +245,6 @@ func TestValidateBlockedViews(t *testing.T) {
 		})
 	}
 }
-
-// ---- ValidateReadyExplain ----
 
 func TestValidateReadyExplain(t *testing.T) {
 	t.Parallel()
@@ -405,8 +393,6 @@ func TestValidateReadyExplain(t *testing.T) {
 	}
 }
 
-// ---- ValidateShowIssue ----
-
 func TestValidateShowIssue(t *testing.T) {
 	t.Parallel()
 
@@ -479,8 +465,6 @@ func TestValidateShowIssue(t *testing.T) {
 	}
 }
 
-// ---- ValidateSearchPage ----
-
 func TestValidateSearchPage(t *testing.T) {
 	t.Parallel()
 
@@ -547,8 +531,6 @@ func TestValidateSearchPage(t *testing.T) {
 	}
 }
 
-// ---- ValidateCountIssues ----
-
 func TestValidateCountIssues(t *testing.T) {
 	t.Parallel()
 
@@ -608,8 +590,6 @@ func TestValidateCountIssues(t *testing.T) {
 	}
 }
 
-// ---- ValidateStatusCatalog ----
-
 func TestValidateStatusCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -648,8 +628,6 @@ func TestValidateStatusCatalog(t *testing.T) {
 		})
 	}
 }
-
-// ---- ValidateTypeCatalog ----
 
 func TestValidateTypeCatalog(t *testing.T) {
 	t.Parallel()
@@ -690,8 +668,6 @@ func TestValidateTypeCatalog(t *testing.T) {
 	}
 }
 
-// ---- ValidateLabelCatalog ----
-
 func TestValidateLabelCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -730,8 +706,6 @@ func TestValidateLabelCatalog(t *testing.T) {
 		})
 	}
 }
-
-// ---- ValidateSsomInvariant ----
 
 func TestValidateSsomInvariant(t *testing.T) {
 	t.Parallel()
@@ -788,8 +762,6 @@ func TestValidateSsomInvariant(t *testing.T) {
 		})
 	}
 }
-
-// ---- SpotCheckIndices ----
 
 func TestSpotCheckIndices(t *testing.T) {
 	t.Parallel()
@@ -876,8 +848,6 @@ func TestSpotCheckIndices(t *testing.T) {
 	})
 }
 
-// ---- SelectIssueSummaries ----
-
 func TestSelectIssueSummaries(t *testing.T) {
 	t.Parallel()
 
@@ -955,8 +925,6 @@ func TestSelectIssueSummaries(t *testing.T) {
 	})
 }
 
-// ---- ValidateCreateIssueResult ----
-
 func TestValidateCreateIssueResult(t *testing.T) {
 	t.Parallel()
 
@@ -985,8 +953,6 @@ func TestValidateCreateIssueResult(t *testing.T) {
 		})
 	}
 }
-
-// ---- ValidateWriteVisibility ----
 
 func TestValidateWriteVisibility(t *testing.T) {
 	t.Parallel()
@@ -1109,8 +1075,6 @@ func TestValidateWriteVisibility(t *testing.T) {
 	}
 }
 
-// ---- ValidateCountIncrement ----
-
 func TestValidateCountIncrement(t *testing.T) {
 	t.Parallel()
 
@@ -1160,8 +1124,6 @@ func TestValidateCountIncrement(t *testing.T) {
 		})
 	}
 }
-
-// ---- helpers ----
 
 // assertViolationRules checks that vs contains exactly the rules in wantRules
 // (order-insensitive). If wantRules is nil, asserts len(vs)==0.

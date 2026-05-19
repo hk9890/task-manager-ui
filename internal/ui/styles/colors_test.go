@@ -8,18 +8,22 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// sameStyle returns true when the two styles produce identical output for a
-// probe string. lipgloss.Style contains unexported func fields and is not
-// directly comparable with ==, so we compare rendered output instead.
+// lipgloss.Style has unexported func fields, so == doesn't work — compare via
+// rendered output for the same probe instead.
 func sameStyle(a, b lipgloss.Style) bool {
 	const probe = "X"
 	return a.Render(probe) == b.Render(probe)
 }
 
-func TestIssueTypeStyle(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
+func forceTrueColor(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
+
+func TestIssueTypeStyle(t *testing.T) {
+	forceTrueColor(t)
 
 	tests := []struct {
 		input string
@@ -47,9 +51,7 @@ func TestIssueTypeStyle(t *testing.T) {
 }
 
 func TestIssueTypeStyleDefaultBranch(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	forceTrueColor(t)
 
 	got := IssueTypeStyle("unknown-type")
 
@@ -77,9 +79,7 @@ func TestIssueTypeStyleDefaultBranch(t *testing.T) {
 }
 
 func TestIssuePriorityStyle(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	forceTrueColor(t)
 
 	tests := []struct {
 		priority int
@@ -103,9 +103,7 @@ func TestIssuePriorityStyle(t *testing.T) {
 }
 
 func TestIssueStatusStyle(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	forceTrueColor(t)
 
 	tests := []struct {
 		input string
@@ -133,9 +131,7 @@ func TestIssueStatusStyle(t *testing.T) {
 }
 
 func TestIssueStatusStyleDefaultBranch(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	forceTrueColor(t)
 
 	got := IssueStatusStyle("unknown-status")
 

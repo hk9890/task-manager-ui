@@ -399,6 +399,8 @@ func TestRenderIdleStateUnchanged(t *testing.T) {
 func TestSplitWideWidths(t *testing.T) {
 	t.Parallel()
 
+	// For very small totals, the rail/meta floors deliberately overshoot
+	// `available`; outputs are pinned to observed behavior.
 	tests := []struct {
 		name        string
 		total       int
@@ -406,25 +408,12 @@ func TestSplitWideWidths(t *testing.T) {
 		wantContent int
 		wantMeta    int
 	}{
-		// tiny: floor values (rail=12, meta=12) overshoot available=3;
-		// content=available-rail-meta=3-12-12=-21 → clamped to 1
 		{name: "zero total", total: 0, wantRail: 12, wantContent: 1, wantMeta: 12},
 		{name: "total=1", total: 1, wantRail: 12, wantContent: 1, wantMeta: 12},
-		// total=30: available=26, rail=clamp(26*30/100,40,120)=40>26, content adj fires
-		// after reductions: rail=12, meta=12, content=26-12-12=2
 		{name: "total=30 (very narrow)", total: 30, wantRail: 12, wantContent: 2, wantMeta: 12},
-		// total=60: available=56, rail=40, meta=34, content=56-40-34=-18<20 → adjust
-		// need=38: reduceRail=min(38,max(0,40-24))=16 → rail=24, need=22
-		// reduceMetadata=min(22,max(0,34-20))=14 → meta=20, need=8
-		// need>0: rail=max(12,24-4)=20, meta=max(12,20-4)=16
-		// final: content=56-20-16=20
 		{name: "total=60 (adjustment fires)", total: 60, wantRail: 20, wantContent: 20, wantMeta: 16},
-		// total=100: available=96, rail=clamp(96*30/100,40,120)=40, meta=34
-		// content=96-40-34=22 >= 20 → no adjustment
 		{name: "total=100 (no adjustment)", total: 100, wantRail: 40, wantContent: 22, wantMeta: 34},
-		// typical
 		{name: "total=120 (typical)", total: 120, wantRail: 40, wantContent: 42, wantMeta: 34},
-		// large: rail capped at max=120
 		{name: "total=220 (large)", total: 220, wantRail: 64, wantContent: 118, wantMeta: 34},
 	}
 
@@ -455,17 +444,11 @@ func TestSplitNarrowWidths(t *testing.T) {
 		wantLeft  int
 		wantRight int
 	}{
-		// zero/tiny: available clamped to rail+right min sum (34+26=60)
-		// left=34, right=26
 		{name: "zero total", total: 0, wantLeft: 34, wantRight: 26},
 		{name: "total=1", total: 1, wantLeft: 34, wantRight: 26},
-		// total=60: available=58 < 60 → clamped to 60; left=34, right=26
 		{name: "below minimum sum", total: searchRailMinWidthNarrow + searchRightMinWidthNarrow, wantLeft: 34, wantRight: 26},
-		// total=62 (exact min plus gap): available=60 == min sum; left=34, right=26
 		{name: "exact min plus gap", total: searchRailMinWidthNarrow + searchRightMinWidthNarrow + searchColumnGap, wantLeft: 34, wantRight: 26},
-		// total=80: available=78; left=(78*45)/100=35, right=43; both satisfy mins
 		{name: "total=80 (typical narrow)", total: 80, wantLeft: 35, wantRight: 43},
-		// total=200: available=198; left=(198*45)/100=89, right=109
 		{name: "total=200 (large)", total: 200, wantLeft: 89, wantRight: 109},
 	}
 
@@ -493,21 +476,14 @@ func TestSplitNarrowRightHeights(t *testing.T) {
 		wantContent  int
 		wantMetadata int
 	}{
-		// boundary: <=2 returns 1,1 exactly
 		{name: "total=0", total: 0, wantContent: 1, wantMetadata: 1},
 		{name: "total=1", total: 1, wantContent: 1, wantMetadata: 1},
 		{name: "total=2", total: 2, wantContent: 1, wantMetadata: 1},
-		// total=3: content=(3*3)/5=1 < 6 → content=6, meta=3-6=-3 < 6 → meta=6, content=3-6=-3 → content=1
 		{name: "total=3 (both min branches fire)", total: 3, wantContent: 1, wantMetadata: 6},
-		// total=9: content=(9*3)/5=5 < 6 → content=6, meta=9-6=3 < 6 → meta=6, content=9-6=3
 		{name: "total=9 (both min branches fire)", total: 9, wantContent: 3, wantMetadata: 6},
-		// total=12: content=(12*3)/5=7, meta=5 < 6 → meta=6, content=12-6=6
 		{name: "total=12 (metadata min branch)", total: 12, wantContent: 6, wantMetadata: 6},
-		// total=20: content=(20*3)/5=12, meta=8, both >= 6, no adjustment
 		{name: "total=20 (natural split)", total: 20, wantContent: 12, wantMetadata: 8},
-		// typical
 		{name: "total=24 (typical)", total: 24, wantContent: 14, wantMetadata: 10},
-		// large
 		{name: "total=60 (large)", total: 60, wantContent: 36, wantMetadata: 24},
 	}
 

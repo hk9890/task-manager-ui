@@ -3,7 +3,6 @@ package details
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -14,8 +13,6 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
 )
-
-var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func assertGolden(t *testing.T, output []byte, name string) {
 	t.Helper()
@@ -159,7 +156,7 @@ func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 		Width:                  100,
 	})
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "│›") || !strings.Contains(plain, "bw-9") {
 		t.Fatalf("expected selected dependency row marker for bw-9, got:\n%s", plain)
 	}
@@ -537,7 +534,7 @@ func TestRenderUsesMarkdownRendererForDescriptionAndNotes(t *testing.T) {
 		Height: 40,
 	})
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	for _, want := range []string{"Ship markdown", "first", "Follow up", "link"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected %q in rendered markdown detail:\n%s", want, plain)
@@ -561,7 +558,7 @@ func TestRenderUsesMarkdownRendererForCommentBodies(t *testing.T) {
 		Height: 40,
 	})
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "literal markdown-like bullet") {
 		t.Fatalf("expected markdown-rendered comment text to be present, got:\n%s", plain)
 	}
@@ -652,11 +649,11 @@ func TestRenderCommentHeavyMarkdownStaysPaneBounded(t *testing.T) {
 	lines := strings.Split(view, "\n")
 	for i, line := range lines {
 		if got := lipgloss.Width(line); got > state.Width {
-			t.Fatalf("line %d exceeds detail width (%d > %d): %q", i+1, got, state.Width, ansiEscapePattern.ReplaceAllString(line, ""))
+			t.Fatalf("line %d exceeds detail width (%d > %d): %q", i+1, got, state.Width, ui.AnsiEscapePattern.ReplaceAllString(line, ""))
 		}
 	}
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "Comments (1)") {
 		t.Fatalf("expected comments section to render, got:\n%s", plain)
 	}
@@ -680,7 +677,7 @@ func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
 		Width: 120,
 	})
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	for _, want := range []string{"ctrl+e Edit issue", "ctrl+u Update issue", "ctrl+a Add comment", "ctrl+x Close issue", "ctrl+r Reload detail"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected configured quick action label %q in view:\n%s", want, plain)
@@ -860,27 +857,15 @@ func TestSplitResponsiveLayoutHeights(t *testing.T) {
 		wantContent int
 		wantBottom  int
 	}{
-		// zero/negative: defaults to defaultDetailHeight (24) → content=14, bottom=10
 		{name: "zero triggers default", total: 0, wantContent: 14, wantBottom: 10},
 		{name: "negative triggers default", total: -5, wantContent: 14, wantBottom: 10},
-		// small: <=6 uses the min-clamped branch
-		// total=1: content=max(1,1-3)=1, bottom=total-content=0
 		{name: "total=1 (tiny)", total: 1, wantContent: 1, wantBottom: 0},
-		// total=3: content=max(3,3-3)=3, bottom=max(3,3-3)=3 → sum=6>3 → content=max(1,3-3)=1, bottom=2
 		{name: "total=3", total: 3, wantContent: 1, wantBottom: 2},
-		// total=6: content=max(3,6-3)=3, bottom=max(3,6-3)=3 → sum=6==6, return content=3, bottom=6-3=3
 		{name: "total=6 (boundary)", total: 6, wantContent: 3, wantBottom: 3},
-		// total=7 > 6: content=max(8,(7*3)/5)=8, bottom=7-8=-1 < 3 → bottom=3, content=max(1,7-3)=4
-		// but bottom<3 branch: bottom=3, content=max(1,7-3)=4 … actually re-traced: 4,3 doesn't match
-		// actual: content=3, bottom=4
 		{name: "total=7 (just above small branch)", total: 7, wantContent: 3, wantBottom: 4},
-		// total=10: content=max(8,(10*3)/5)=max(8,6)=8, bottom=2 <6 → shift=4, content=max(3,8-4)=4, bottom=6
 		{name: "total=10 (bottom shift needed)", total: 10, wantContent: 4, wantBottom: 6},
-		// total=14: content=max(8,(14*3)/5)=max(8,8)=8, bottom=6 >= 6 → no shift
 		{name: "total=14 (tight bottom)", total: 14, wantContent: 8, wantBottom: 6},
-		// typical: bottom >= 6 naturally
 		{name: "total=24 (typical terminal)", total: 24, wantContent: 14, wantBottom: 10},
-		// large input
 		{name: "total=80 (tall)", total: 80, wantContent: 48, wantBottom: 32},
 	}
 
@@ -902,6 +887,8 @@ func TestSplitResponsiveLayoutHeights(t *testing.T) {
 func TestSplitThreePaneWidths(t *testing.T) {
 	t.Parallel()
 
+	// For very small totals, the pane-width floors deliberately exceed `available`
+	// — overflow is acceptable; the test pins observed outputs.
 	tests := []struct {
 		name        string
 		total       int
@@ -909,20 +896,13 @@ func TestSplitThreePaneWidths(t *testing.T) {
 		wantContent int
 		wantMeta    int
 	}{
-		// tiny: floors overshoot available, so we assert exact known-good outputs
-		// total=0/1/4: available=3, left=8, content=1, meta=8 (floors exceed budget)
 		{name: "zero total", total: 0, wantLeft: 8, wantContent: 1, wantMeta: 8},
 		{name: "total=1", total: 1, wantLeft: 8, wantContent: 1, wantMeta: 8},
 		{name: "total=4 (barely above gap)", total: 4, wantLeft: 8, wantContent: 1, wantMeta: 8},
-		// total=40: available=36, left=8, content=20, meta=8
 		{name: "total=40 (narrow, reduction fires)", total: 40, wantLeft: 8, wantContent: 20, wantMeta: 8},
-		// total=60: available=56, left=14, content=20, meta=22
 		{name: "total=60 (content tight)", total: 60, wantLeft: 14, wantContent: 20, wantMeta: 22},
-		// typical two-column min width: available=106, left=clamp(106/4,24,44)=26, content=46, meta=34
 		{name: "two-column min width", total: InspectorTwoColumnMinWidth, wantLeft: 26, wantContent: 46, wantMeta: 34},
-		// three-column min width: available=136, left=34, content=68, meta=34
 		{name: "three-column min width", total: InspectorThreeColumnMinWidth, wantLeft: 34, wantContent: 68, wantMeta: 34},
-		// large input: available=216, left=clamp(216/4,24,44)=44, content=138, meta=34
 		{name: "total=220", total: 220, wantLeft: 44, wantContent: 138, wantMeta: 34},
 	}
 
@@ -1060,7 +1040,7 @@ func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
 		Height: 24,
 	})
 
-	plain := ansiEscapePattern.ReplaceAllString(view, "")
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "Stale Detail Title") {
 		t.Fatalf("stale detail title not visible (ANSI-stripped), got:\n%s", plain)
 	}

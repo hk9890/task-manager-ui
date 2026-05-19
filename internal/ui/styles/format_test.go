@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 func TestTruncateString(t *testing.T) {
@@ -120,9 +119,7 @@ func TestSelectionPrefix(t *testing.T) {
 	})
 
 	t.Run("selected styled", func(t *testing.T) {
-		previousProfile := lipgloss.ColorProfile()
-		lipgloss.SetColorProfile(termenv.TrueColor)
-		t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+		forceTrueColor(t)
 
 		plain, rendered := SelectionPrefix(true, true)
 		if plain != "› " {

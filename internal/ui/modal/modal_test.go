@@ -172,12 +172,10 @@ func TestPrevField(t *testing.T) {
 	t.Run("middle input: prev decrements focusedInput", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		// start at 0; tab forward to 1
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		if m.FocusedInput() != 1 {
 			t.Fatalf("setup: expected focusedInput=1, got %d", m.FocusedInput())
 		}
-		// shift-tab back to 0
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 		if m.FocusedInput() != 0 {
 			t.Fatalf("expected focusedInput=0 after prev, got %d", m.FocusedInput())
@@ -187,7 +185,6 @@ func TestPrevField(t *testing.T) {
 	t.Run("first input: prev wraps to buttons (FieldCancel)", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		// focusedInput starts at 0
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 		if m.FocusedInput() != -1 {
 			t.Fatalf("expected focusedInput=-1 after prev from first input, got %d", m.FocusedInput())
@@ -200,9 +197,8 @@ func TestPrevField(t *testing.T) {
 	t.Run("FieldCancel button: prev moves to FieldSave", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		// navigate: input0 → input1 → buttons(Save) → buttons(Cancel)
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 0→1
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 1→buttons/Save
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 1→Save
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // Save→Cancel
 		if m.FocusedInput() != -1 || m.FocusedField() != FieldCancel {
 			t.Fatalf("setup: expected buttons/Cancel, got input=%d field=%v", m.FocusedInput(), m.FocusedField())
@@ -219,9 +215,8 @@ func TestPrevField(t *testing.T) {
 	t.Run("FieldSave button with inputs: prev wraps to last input", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		// navigate: input0 → input1 → buttons(Save)
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 0→1
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 1→buttons/Save
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 1→Save
 		if m.FocusedInput() != -1 || m.FocusedField() != FieldSave {
 			t.Fatalf("setup: expected buttons/Save, got input=%d field=%v", m.FocusedInput(), m.FocusedField())
 		}
@@ -234,7 +229,6 @@ func TestPrevField(t *testing.T) {
 	t.Run("FieldSave button without inputs: prev wraps to FieldCancel", func(t *testing.T) {
 		t.Parallel()
 		m := New(Config{Title: "Confirm", Message: "Sure?"})
-		// confirm mode starts at buttons/Save (focusedInput=-1, focusedField=FieldSave)
 		if m.FocusedInput() != -1 || m.FocusedField() != FieldSave {
 			t.Fatalf("setup: expected buttons/Save, got input=%d field=%v", m.FocusedInput(), m.FocusedField())
 		}
