@@ -94,8 +94,8 @@ All config-loading startup paths initialize `internal/logging`, including
 interactive startup plus non-interactive `--print-config` and `--check-config`.
 That logger writes structured JSON Lines diagnostics to the default state path:
 
-- `$XDG_STATE_HOME/bwb/bwb.log`
-- fallback: `~/.local/state/bwb/bwb.log`
+- `$XDG_STATE_HOME/bwb/bwb-<session_id>.log`
+- fallback: `~/.local/state/bwb/bwb-<session_id>.log`
 
 Warnings and errors are mirrored to both stderr and the persistent log. When the
 persistent sink cannot be opened, BWB emits one stderr warning and continues

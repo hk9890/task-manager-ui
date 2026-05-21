@@ -19,7 +19,8 @@ import (
 
 const (
 	stateDirName         = "bwb"
-	defaultLogFileName   = "bwb.log"
+	logFilePrefix        = "bwb-"
+	logFileSuffix        = ".log"
 	rotationMaxSizeMB    = 10
 	rotationMaxBackups   = 5
 	rotationMaxAgeDays   = 30
@@ -62,7 +63,7 @@ func New(opts Options) *Manager {
 	sh := newStderrHandler(stderr, opts.Debug)
 	handlers := []slog.Handler{sh}
 
-	logPath, fileSink, err := buildPersistentSink(opts)
+	logPath, fileSink, err := buildPersistentSink(opts, sessionID)
 	var closer io.Closer
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "bwb logging warning: persistent log unavailable; continuing with stderr-only logging: %v\n", err)
@@ -139,8 +140,8 @@ func (m *Manager) Close() error {
 	return m.closer.Close()
 }
 
-func buildPersistentSink(opts Options) (string, *lumberjack.Logger, error) {
-	path, err := resolveLogPath(opts.StateDir)
+func buildPersistentSink(opts Options, sessionID string) (string, *lumberjack.Logger, error) {
+	path, err := resolveLogPath(opts.StateDir, sessionID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -198,7 +199,11 @@ func (s *failsafeSink) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func resolveLogPath(stateDirOverride string) (string, error) {
+// resolveLogPath returns the per-process log file path inside the bwb state
+// directory. The filename is bwb-<sessionID>.log so that concurrent BWB
+// processes never share a log file or its lumberjack rotation state, which
+// would cause torn JSON Lines records across a rotation boundary.
+func resolveLogPath(stateDirOverride string, sessionID string) (string, error) {
 	stateDir := strings.TrimSpace(stateDirOverride)
 	if stateDir == "" {
 		var err error
@@ -213,7 +218,13 @@ func resolveLogPath(stateDirOverride string) (string, error) {
 		return "", fmt.Errorf("create state directory %q: %w", bwbStateDir, err)
 	}
 
-	return filepath.Join(bwbStateDir, defaultLogFileName), nil
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		// Fallback: use the process ID when no session ID is available.
+		id = fmt.Sprintf("pid%d", os.Getpid())
+	}
+	fileName := logFilePrefix + id + logFileSuffix
+	return filepath.Join(bwbStateDir, fileName), nil
 }
 
 func defaultUserStateDir() (string, error) {

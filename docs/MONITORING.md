@@ -21,10 +21,12 @@ Runtime diagnostics are now centralized through `internal/logging` and used by
 
 Implemented behavior:
 
-- persistent JSON Lines log sink at `$XDG_STATE_HOME/bwb/bwb.log`
-  - fallback path: `~/.local/state/bwb/bwb.log`
-  - this sink is user/machine scoped and can contain sessions from multiple
-    beads projects and multiple BWB builds
+- persistent JSON Lines log sink at `$XDG_STATE_HOME/bwb/bwb-<session_id>.log`
+  - fallback path: `~/.local/state/bwb/bwb-<session_id>.log`
+  - each BWB process writes to its own file named after its `session_id`, so
+    concurrent processes never share a file or its rotation state
+  - this sink is user/machine scoped and the directory can contain log files
+    from multiple sessions, beads projects, and multiple BWB builds
 - per-run `session_id` attached to structured records
 - root provenance fields on every record:
   - `project_root`
@@ -49,9 +51,9 @@ Structured records include at least:
 - component-specific fields such as `component`, `argv`, `operation`,
   `exit_code`, and `duration_ms`
 
-To attribute a session safely in the shared sink, use `session_id` together with
-`project_root` and `build_version`. Startup and gateway records both inherit
-those root attributes automatically.
+To attribute a session safely in a collected set of log files, use `session_id`
+together with `project_root` and `build_version`. Startup and gateway records
+both inherit those root attributes automatically.
 
 ## `--debug` coverage
 
@@ -83,17 +85,31 @@ bwb --cwd /path/to/beads-project --debug --check-config 2> /tmp/bwb-debug-check.
 ```
 
 Use the persistent JSON Lines log when you need durable machine-readable
-diagnostics:
+diagnostics. Each process writes to its own file named after its `session_id`.
+To follow all active sessions at once, use a glob:
 
 ```bash
-tail -f "$XDG_STATE_HOME/bwb/bwb.log"
+tail -f ~/.local/state/bwb/bwb-*.log
 ```
 
-If `XDG_STATE_HOME` is unset, use `~/.local/state/bwb/bwb.log`.
+Or, if `XDG_STATE_HOME` is set:
 
-When inspecting a shared `bwb.log`, do not assume adjacent records came from the
-same repository or binary. Filter or inspect by `session_id`, `project_root`,
-and `build_version`.
+```bash
+tail -f "$XDG_STATE_HOME/bwb/bwb-*.log"
+```
+
+To follow a specific session by ID (the `session_id` is printed on `stderr`
+when `--debug` is set):
+
+```bash
+tail -f "$XDG_STATE_HOME/bwb/bwb-<session_id>.log"
+# e.g.:
+tail -f ~/.local/state/bwb/bwb-deadbeef.log
+```
+
+When inspecting multiple log files, do not assume adjacent records across files
+came from the same repository or binary. Filter or inspect by `session_id`,
+`project_root`, and `build_version`.
 
 Effective capture destinations therefore include:
 

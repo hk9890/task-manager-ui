@@ -59,7 +59,7 @@ func NewCLIGatewayRaw(runner *CommandRunner) *Gateway {
 // NewCLIGateway builds a CLI-backed beads gateway wrapped with the contract
 // validation decorator. Every read response is validated against the contract
 // invariants; violations are logged at slog.Warn level to
-// ~/.local/state/bwb/bwb.log and never cause request failures.
+// ~/.local/state/bwb/bwb-<session_id>.log and never cause request failures.
 // Use NewCLIGatewayRaw to bypass validation (tests only).
 func NewCLIGateway(runner *CommandRunner) BeadsGateway {
 	return newValidatingGateway(NewCLIGatewayRaw(runner), nil)

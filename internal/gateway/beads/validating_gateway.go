@@ -17,7 +17,7 @@ import (
 // result is always returned unchanged.
 //
 // Purpose: production tripwire. When bd's behavior drifts (schema change, edge
-// case, version skew), violations surface in ~/.local/state/bwb/bwb.log
+// case, version skew), violations surface in ~/.local/state/bwb/bwb-<session_id>.log
 // immediately, before users notice corrupted UI.
 //
 // Thread safety: validatingGateway is safe for concurrent use. The ssom state

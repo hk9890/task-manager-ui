@@ -354,12 +354,22 @@ func TestRun_NonInteractiveDebugCreatesPersistentStartupLogs(t *testing.T) {
 		t.Fatalf("expected startup debug diagnostics, got %q", stderr.String())
 	}
 
-	logPath := filepath.Join(stateDir, "bwb", "bwb.log")
-	content, err := os.ReadFile(logPath)
+	// Log file is now per-process: bwb-<session_id>.log. Use a glob to find it.
+	matches, err := filepath.Glob(filepath.Join(stateDir, "bwb", "bwb-*.log"))
 	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
+		t.Fatalf("Glob returned error: %v", err)
 	}
-	logText := string(content)
+	if len(matches) == 0 {
+		t.Fatalf("expected at least one bwb-*.log file in %s", filepath.Join(stateDir, "bwb"))
+	}
+	var logText string
+	for _, logPath := range matches {
+		content, err := os.ReadFile(logPath)
+		if err != nil {
+			t.Fatalf("ReadFile %q returned error: %v", logPath, err)
+		}
+		logText += string(content)
+	}
 	for _, want := range []string{"\"message\":\"resolved config path\"", "\"message\":\"resolved cwd\"", "\"message\":\"auto-refresh\""} {
 		if !strings.Contains(logText, want) {
 			t.Fatalf("expected persistent log to contain %q, got %q", want, logText)

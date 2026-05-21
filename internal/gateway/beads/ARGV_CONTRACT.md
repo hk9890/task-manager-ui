@@ -12,7 +12,7 @@ back through gateway methods to UI consumers in `internal/app/model.go`,
 `internal/mode/board/model.go`, `internal/mode/search/model.go`, and
 `internal/launcher/editor/service.go`.
 
-Dynamic cross-check: the bwb log (`~/.local/state/bwb/bwb.log`) was inspected.
+Dynamic cross-check: the bwb log (`~/.local/state/bwb/bwb-<session_id>.log`) was inspected.
 The most recent sessions in the log are from build `0.4.0`; the current codebase
 is a later build that replaced `bd list` + `bd ready` + `bd blocked` (old board
 data layer) with `bd ready --explain` + `bd query` (current). The log evidence is
