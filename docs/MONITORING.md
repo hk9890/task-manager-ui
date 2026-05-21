@@ -70,6 +70,12 @@ both inherit those root attributes automatically.
   - exit code
   - duration in milliseconds
 
+Each `bd` execution trace ("bd command finished") is logged at `INFO` when
+the command succeeds and at `WARN` when it exits non-zero (the `-1` sentinel
+exit code is used for processes that failed to execute). Because `WARN`
+records mirror to `stderr`, a failing `bd` subprocess is operator-visible
+without `--debug`.
+
 The startup debug stream also prints the run `session_id` once so operators can
 correlate stderr output with structured log records. This applies equally to
 interactive startup and startup-only commands such as `--check-config` and

@@ -404,6 +404,9 @@ func TestCommandRunnerRunLogsExecutionTraceOnSuccess(t *testing.T) {
 	if got := record["msg"]; got != "bd command finished" {
 		t.Fatalf("expected message %q, got %#v", "bd command finished", got)
 	}
+	if got := record["level"]; got != "INFO" {
+		t.Fatalf("expected successful trace at INFO level, got %#v", got)
+	}
 	assertLoggedArray(t, record["argv"], []string{"bd", "ready", "--json"})
 	assertLoggedFloatEquals(t, record["exit_code"], 0)
 	assertLoggedFloatAtLeast(t, record["duration_ms"], 0)
@@ -427,6 +430,9 @@ func TestCommandRunnerRunLogsExecutionTraceOnCommandFailure(t *testing.T) {
 		t.Fatal("expected command failure")
 	}
 	record := decodeLoggedRecord(t, sink.String())
+	if got := record["level"]; got != "WARN" {
+		t.Fatalf("expected non-zero exit trace at WARN level, got %#v", got)
+	}
 	assertLoggedFloatEquals(t, record["exit_code"], 2)
 	if got := record["stderr"]; got != "bad args" {
 		t.Fatalf("expected stderr field, got %#v", got)
@@ -448,6 +454,9 @@ func TestCommandRunnerRunLogsExecutionTraceOnExecutionError(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	record := decodeLoggedRecord(t, sink.String())
+	if got := record["level"]; got != "WARN" {
+		t.Fatalf("expected execution-error trace at WARN level, got %#v", got)
+	}
 	assertLoggedFloatEquals(t, record["exit_code"], -1)
 	if got := record["error"]; got == nil || !strings.Contains(fmt.Sprint(got), "executable file not found") {
 		t.Fatalf("expected execution error field, got %#v", got)

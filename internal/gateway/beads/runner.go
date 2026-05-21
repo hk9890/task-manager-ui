@@ -298,6 +298,14 @@ func (r *CommandRunner) logExecution(req CommandRequest, resolvedArgs []string, 
 	if err != nil {
 		attrs = append(attrs, "error", err.Error())
 	}
+	// Non-zero exit codes (including the -1 sentinel set above for execution
+	// errors) are real failures. Emit them at WARN so they surface above the
+	// INFO success stream and through stderr mirroring, rather than hiding
+	// among routine traces.
+	if exitCode != 0 {
+		r.logger.Warn("bd command finished", attrs...)
+		return
+	}
 	r.logger.Info("bd command finished", attrs...)
 }
 
