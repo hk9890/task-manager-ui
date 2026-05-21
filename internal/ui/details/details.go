@@ -274,10 +274,6 @@ func splitResponsiveLayoutHeights(total int) (content, bottom int) {
 		content = max(3, content-shift)
 		bottom = total - content
 	}
-	if bottom < 3 {
-		bottom = 3
-		content = max(1, total-bottom)
-	}
 	return content, bottom
 }
 
