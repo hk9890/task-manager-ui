@@ -261,8 +261,10 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 	}, nil
 }
 
-// Init loads initial board. Search is deferred until the user first switches to
-// search mode; see lazySearchInitCmd.
+// Init fires the startup health check and the spinner tick. Board loads are
+// deferred until the health check passes (see startupHealthCheckMsg handler in
+// Update). Search is deferred further until the user first switches to search
+// mode; see lazySearchInitCmd.
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
 	healthCheckCmd := func() tea.Msg {
@@ -270,9 +272,9 @@ func (m Model) Init() tea.Cmd {
 		return startupHealthCheckMsg{err: err}
 	}
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, m.board.Init(), getSpinnerTickScheduler()())
+		return tea.Batch(healthCheckCmd, getSpinnerTickScheduler()())
 	}
-	return tea.Batch(healthCheckCmd, m.board.Init(), getRefreshTickScheduler()(), getSpinnerTickScheduler()())
+	return tea.Batch(healthCheckCmd, getRefreshTickScheduler()(), getSpinnerTickScheduler()())
 }
 
 // lazySearchInitCmd fires m.search.Init() exactly once — the first time the
@@ -319,8 +321,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		// Health check passed — normal operation continues.
-		return m, nil
+		// Health check passed — fire board loads now. Calling m.board.Init()
+		// here (from Update, which returns the model) correctly persists the
+		// board mutation (pendingResults=4, inflight=true) unlike calling it
+		// from Init() (value receiver, mutations discarded).
+		return m, m.board.Init()
 	}
 
 	// When a fatal error is set, only handle window resize and quit.
