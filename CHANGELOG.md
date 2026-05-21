@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.2]
+
+### Changed
+
+- Startup now gates board section loads on the beads health check: a single `bd ping` detects a missing database instead of firing several `bd` subprocesses that all fail in a non-beads directory
+
+### Fixed
+
+- Persistent diagnostics now write per-process `bwb-<session_id>.log` files instead of a shared `bwb.log`, so concurrent BWB processes can no longer produce torn JSON Lines records across a rotation boundary
+- `bd` command execution traces with a non-zero exit code are logged at `WARN` instead of `INFO`, so failed subprocesses surface above the routine trace stream and through stderr mirroring
+
 ## [v0.5.1]
 
 ### Fixed
