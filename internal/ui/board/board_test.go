@@ -2,6 +2,7 @@ package board
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -242,6 +243,70 @@ func TestSkeletonRows(t *testing.T) {
 	if got := len(skeletonRows(width, 0, len(skeletonRowCounts))); got != skeletonRowCounts[0] {
 		t.Errorf("colIndex wrap: got %d rows, want %d", got, skeletonRowCounts[0])
 	}
+}
+
+// TestDoneColumnHeaderBadge verifies that the Done column renders the correct
+// header badge depending on whether the row list is truncated.
+//
+//   - TotalIsExact=true  → exact count, no lower-bound "+" or "N of M"
+//   - TotalIsExact=false → "N of M" affordance (e.g. "50 of 75"), never "75+"
+//
+// This covers the fix for bug beads-workbench-2ev4.3: an exact closed-count
+// was rendered as "75+" (lower-bound notation) because the row list was capped.
+func TestDoneColumnHeaderBadge(t *testing.T) {
+	t.Parallel()
+
+	makeState := func(rows int, total int, exact bool) State {
+		issues := make([]domain.IssueSummary, rows)
+		for i := range issues {
+			issues[i] = domain.IssueSummary{
+				ID:     fmt.Sprintf("bw-%d", i),
+				Title:  "Closed issue",
+				Status: "closed",
+				Type:   "task",
+			}
+		}
+		return State{
+			DashboardTitle: "Test",
+			FocusedColumn:  0,
+			Width:          100,
+			Height:         24,
+			Columns: []Column{{
+				Title:        "Done",
+				Rows:         issues,
+				Total:        total,
+				TotalIsExact: exact,
+			}},
+		}
+	}
+
+	t.Run("exact count shows plain number without plus", func(t *testing.T) {
+		state := makeState(75, 75, true)
+		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
+
+		if !strings.Contains(plain, "75") {
+			t.Fatalf("expected total count 75 in header, got:\n%s", plain)
+		}
+		if strings.Contains(plain, "75+") {
+			t.Fatalf("exact count must not render with lower-bound '+', got:\n%s", plain)
+		}
+		if strings.Contains(plain, "of") {
+			t.Fatalf("exact count must not render 'N of M', got:\n%s", plain)
+		}
+	})
+
+	t.Run("truncated list shows N of M not N+", func(t *testing.T) {
+		// 50 visible rows, 75 total — the classic Done-column cap scenario.
+		state := makeState(50, 75, false)
+		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
+
+		if !strings.Contains(plain, "50 of 75") {
+			t.Fatalf("expected '50 of 75' badge in header, got:\n%s", plain)
+		}
+		if strings.Contains(plain, "75+") {
+			t.Fatalf("truncated list must not render exact count as lower-bound '75+', got:\n%s", plain)
+		}
+	})
 }
 
 func assertEqualColumnHeights(t *testing.T, view string) {

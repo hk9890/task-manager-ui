@@ -242,7 +242,7 @@ func TestCompose(t *testing.T) {
 			},
 		},
 
-		// ---- Done "N+" indicator tests ----
+		// ---- Done "N of M" truncation indicator tests ----
 		{
 			name: "Done TotalIsExact=false when items == ClosedLimit",
 			in: Inputs{
