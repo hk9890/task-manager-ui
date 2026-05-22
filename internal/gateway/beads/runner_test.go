@@ -262,20 +262,26 @@ func TestCommandRunnerRunSerializesWriteCalls(t *testing.T) {
 }
 
 // TestRWMutexParallelReadOverlap verifies that concurrent read-flagged Run
-// calls execute in parallel rather than serially. 100 goroutines each sleep
-// 20 ms inside the executor; if reads were serialized the total wall time
-// would be ~2 s. We assert < 200 ms (10× the per-call sleep) per iteration,
-// repeated 5 times to catch flakiness.  The threshold is 200 ms (up from
-// 100 ms) to accommodate Windows scheduler latency without masking genuine
-// serialization bugs — serial execution would still take ~2 s (beads-workbench-2rfx).
+// calls execute in parallel up to the semaphore cap (bdSemCap).
+//
+// We run parallelReads == 2 × bdSemCap goroutines, each sleeping 20 ms.
+// With cap=2 these batch into 2 groups of 2, finishing in ~2 × sleep = ~40 ms.
+// If reads were fully serialized the wall time would be 4 × 20 ms = 80 ms;
+// the 70 ms threshold catches that while allowing scheduler jitter.
+//
+// The prior test ran 100 goroutines without any bound. With the bdSemCap
+// semaphore, 100 readers batch into 50 rounds and legitimately take ~1 s
+// — the burst-cap behavior is covered by TestConcurrencyCapBurst instead.
 func TestRWMutexParallelReadOverlap(t *testing.T) {
 	t.Parallel()
 
 	const (
-		parallelReads = 100
+		parallelReads = 2 * bdSemCap // 2 full batches at cap
 		sleepPerCall  = 20 * time.Millisecond
-		maxWallTime   = 200 * time.Millisecond
-		iterations    = 5
+		// 2 parallel batches -> ~40 ms expected. 70 ms catches full serialization
+		// (~80 ms) while leaving headroom for scheduler jitter.
+		maxWallTime = 70 * time.Millisecond
+		iterations  = 5
 	)
 
 	sleepingExec := &sleepingExecutor{sleep: sleepPerCall}
@@ -384,6 +390,142 @@ func TestRWMutexWriteExclusion(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// TestConcurrencyCapBurst verifies that a burst of N > bdSemCap concurrent
+// reads never runs more than bdSemCap subprocess execs simultaneously. We
+// launch burstSize goroutines, each performing a read; the peak-tracking
+// executor records the maximum observed concurrency and the test asserts it
+// never exceeds bdSemCap.
+func TestConcurrencyCapBurst(t *testing.T) {
+	t.Parallel()
+
+	const burstSize = 10 // well above bdSemCap
+
+	guard := &concurrencyGuardExecutor{}
+	runner := NewCommandRunner(RunnerConfig{Executor: guard})
+
+	var wg sync.WaitGroup
+	wg.Add(burstSize)
+
+	for i := 0; i < burstSize; i++ {
+		go func() {
+			defer wg.Done()
+			_, err := runner.Run(context.Background(), CommandRequest{
+				Operation: "list issues",
+				Args:      []string{"list", "--json"},
+				IsWrite:   false,
+			})
+			if err != nil {
+				t.Errorf("Run returned error: %v", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if guard.maxConcurrent > bdSemCap {
+		t.Fatalf("concurrency cap violated: max concurrent executions=%d, want <= %d", guard.maxConcurrent, bdSemCap)
+	}
+	if guard.maxConcurrent == 0 {
+		t.Fatal("no executions were observed; something is wrong with the test setup")
+	}
+}
+
+// TestConcurrencyCapContextCancelWhileWaiting verifies that a context
+// cancelled while waiting for a semaphore slot returns promptly without
+// executing the subprocess. We fill all bdSemCap slots with long-running
+// goroutines, then submit an additional read with a pre-cancelled context and
+// assert: (a) it returns promptly, (b) the executor was never called for it.
+func TestConcurrencyCapContextCancelWhileWaiting(t *testing.T) {
+	t.Parallel()
+
+	// gate controls when the slot-holding goroutines release their executions.
+	gate := make(chan struct{})
+	// entered signals each time a goroutine enters the executor (i.e. has taken
+	// a semaphore slot and is now inside executor.Run).
+	entered := make(chan struct{}, bdSemCap)
+
+	var execMu sync.Mutex
+	totalExecs := 0
+
+	blockingExec := newCallbackExecutor(func(_ bool) {
+		execMu.Lock()
+		totalExecs++
+		execMu.Unlock()
+		entered <- struct{}{} // signal: slot is now occupied
+		<-gate                // hold the slot until the gate is opened
+	})
+
+	runner := NewCommandRunner(RunnerConfig{Executor: blockingExec})
+
+	// Launch exactly bdSemCap goroutines to occupy all semaphore slots.
+	var slotHolderWg sync.WaitGroup
+	slotHolderWg.Add(bdSemCap)
+
+	for i := 0; i < bdSemCap; i++ {
+		go func() {
+			defer slotHolderWg.Done()
+			_, _ = runner.Run(context.Background(), CommandRequest{
+				Operation: "list issues",
+				Args:      []string{"list", "--json"},
+				IsWrite:   false,
+			})
+		}()
+	}
+
+	// Wait until all bdSemCap goroutines have entered executor.Run (all slots taken).
+	deadline := time.Now().Add(2 * time.Second)
+	for i := 0; i < bdSemCap; i++ {
+		select {
+		case <-entered:
+		case <-time.After(time.Until(deadline)):
+			t.Fatalf("timed out waiting for slot-holder goroutine %d to enter executor", i+1)
+		}
+	}
+
+	// Now submit one more read with a pre-cancelled context — all slots are full.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+
+	start := time.Now()
+	_, err := runner.Run(cancelledCtx, CommandRequest{
+		Operation: "list issues",
+		Args:      []string{"list", "--json"},
+		IsWrite:   false,
+	})
+	elapsed := time.Since(start)
+
+	// Must return promptly — well under any slot-holder sleep.
+	const promptReturn = 500 * time.Millisecond
+	if elapsed >= promptReturn {
+		t.Fatalf("cancelled request did not return promptly: elapsed=%v", elapsed)
+	}
+
+	// Must return a timeout or cancellation error.
+	if err == nil {
+		t.Fatal("expected error for cancelled context, got nil")
+	}
+	var gatewayErr domain.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatalf("expected domain.GatewayError, got %T (%v)", err, err)
+	}
+	if gatewayErr.Code != domain.ErrorCodeTimeout && gatewayErr.Code != domain.ErrorCodeCommandFailed {
+		t.Fatalf("unexpected error code %q; want Timeout or CommandFailed (cancel maps to CommandFailed)", gatewayErr.Code)
+	}
+
+	// Executor must NOT have been called for the cancelled request — total execs
+	// must still equal bdSemCap (only the slot-holders ran).
+	execMu.Lock()
+	execsAtCancel := totalExecs
+	execMu.Unlock()
+	if execsAtCancel != bdSemCap {
+		t.Fatalf("executor call count mismatch: got %d, want exactly %d (cancelled request must not execute)", execsAtCancel, bdSemCap)
+	}
+
+	// Release all slot-holding goroutines.
+	close(gate)
+	slotHolderWg.Wait()
 }
 
 func TestCommandRunnerRunLogsExecutionTraceOnSuccess(t *testing.T) {

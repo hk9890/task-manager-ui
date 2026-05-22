@@ -103,6 +103,16 @@ type RunnerConfig struct {
 	ReadOnly bool
 }
 
+// bdSemCap is the maximum number of bd subprocesses allowed to execute
+// concurrently. Empirical data: solo bd ≈ 0.28 s, 4-way contended calls
+// measured 1.25 s median / 6.1 s p100 (2578 log samples). A board auto-refresh
+// fans out 4 subprocess calls at once; capping at 2 forces contention down to
+// pairs, producing the largest relative latency improvement with minimal
+// throughput cost. Cap 3 would still queue one of the four burst callers but
+// allow slightly higher throughput on heterogeneous bursts; 2 is the more
+// conservative choice given the super-linear contention profile observed.
+const bdSemCap = 2
+
 // CommandRunner is a reusable execution layer for bd-backed gateway methods.
 type CommandRunner struct {
 	command        string
@@ -112,6 +122,12 @@ type CommandRunner struct {
 	logger         *slog.Logger
 	readOnly       bool
 	runMu          sync.RWMutex
+	// sem is a buffered-channel semaphore that caps concurrent bd subprocess
+	// executions to bdSemCap. A token is acquired immediately before calling
+	// executor.Run and released on return (deferred). Context cancellation while
+	// waiting for a token returns promptly without executing the subprocess.
+	sem   chan struct{}
+	cache *readCache
 }
 
 // NewCommandRunner creates a command runner for bd CLI interactions.
@@ -132,6 +148,11 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		executor = osCommandExecutor{}
 	}
 
+	sem := make(chan struct{}, bdSemCap)
+	for i := 0; i < bdSemCap; i++ {
+		sem <- struct{}{}
+	}
+
 	return &CommandRunner{
 		command:        command,
 		defaultWorkDir: cfg.WorkDir,
@@ -139,14 +160,39 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		executor:       executor,
 		logger:         cfg.Logger,
 		readOnly:       cfg.ReadOnly,
+		sem:            sem,
+		cache:          newReadCache(cfg.WorkDir),
 	}
 }
 
 // Run executes one command and returns stdout on success.
+//
+// For read requests (IsWrite == false), the result is served from the in-process
+// read cache when the .beads/last-touched mtime is unchanged. Identical
+// concurrent argv are collapsed to a single subprocess exec via singleflight.
+// Cache hits skip runMu and the semaphore entirely.
+//
+// For write requests (IsWrite == true), the cache is invalidated before exec so
+// that the next read re-execs bd. External writes are caught by the
+// .beads/last-touched mtime advancing on the next token check.
 func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, error) {
 	if r == nil {
 		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
+
+	// Resolve argv early so it is consistent between the cache key, the
+	// singleflight key, and the executor invocation.
+	argv := r.resolveArgs(req.Args)
+
+	// ---- read cache fast path ------------------------------------------------
+	// Check the cache before acquiring any lock. Hits return immediately without
+	// touching runMu or the semaphore.
+	if !req.IsWrite {
+		if cached, hit := r.cache.get(argv); hit {
+			return cached, nil
+		}
+	}
+	// ---- end fast path -------------------------------------------------------
 
 	// Locking contract:
 	//   - Read requests (IsWrite == false): acquire a shared RLock so multiple
@@ -161,12 +207,77 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 	if req.IsWrite {
 		r.runMu.Lock()
 		defer r.runMu.Unlock()
+		// Invalidate the read cache while holding the write lock. This ensures
+		// that the next read, which must hold at least an RLock, cannot see stale
+		// data from before this write. Belt-and-suspenders: external writes are
+		// also caught by the .beads/last-touched mtime advancing.
+		r.cache.invalidate()
 	} else {
 		r.runMu.RLock()
 		defer r.runMu.RUnlock()
 	}
+
+	if !req.IsWrite && r.cache.workDir != "" {
+		// Use singleflight so that concurrent identical argv misses collapse to
+		// one subprocess exec. The singleflight key is the same resolved argv
+		// string used by the cache. The result from the single exec is shared
+		// across all waiters; each waiter returns the same stdout bytes.
+		//
+		// Singleflight is only active when the cache is enabled (workDir set).
+		// When workDir is empty the cache and singleflight are both disabled so
+		// all concurrent callers get independent executor invocations — required
+		// by tests that construct runners without a WorkDir.
+		key := argvKey(argv)
+		type execResult struct {
+			stdout []byte
+			err    error
+		}
+		val, err, _ := r.cache.sg.Do(key, func() (any, error) {
+			// Sample the token BEFORE exec. If an external write lands during the
+			// exec, the token we stored will lag behind the current mtime on the
+			// next read, causing a cache miss — the conservative correct direction.
+			token, tokenOK := r.cache.currentToken()
+
+			stdout, execErr := r.execOnce(ctx, req, argv)
+			if execErr != nil {
+				return execResult{err: execErr}, nil
+			}
+			// Only cache successful reads.
+			if tokenOK {
+				r.cache.set(argv, token, stdout)
+			}
+			return execResult{stdout: stdout}, nil
+		})
+		if err != nil {
+			// singleflight itself does not return errors (we always return nil
+			// from the Do func), so this branch is unreachable in practice.
+			return nil, err
+		}
+		res := val.(execResult)
+		return res.stdout, res.err
+	}
+
+	// Write path: exec directly (cache was already invalidated above).
+	return r.execOnce(ctx, req, argv)
+}
+
+// execOnce acquires the semaphore, runs the subprocess, logs the result, and
+// returns stdout. It is called from Run after locking and (for reads) after
+// singleflight deduplication. argv must already be resolved via resolveArgs.
+func (r *CommandRunner) execOnce(ctx context.Context, req CommandRequest, argv []string) ([]byte, error) {
+	// Acquire a semaphore slot before executing. This limits the number of
+	// concurrent bd subprocesses to bdSemCap regardless of how many callers hold
+	// the RWMutex read lock simultaneously. Context cancellation or timeout while
+	// waiting returns promptly without running the subprocess.
+	select {
+	case <-r.sem:
+		// slot acquired
+	case <-ctx.Done():
+		return nil, normalizeExecutionError(ctx, req.Operation, nil, ctx.Err())
+	}
+	defer func() { r.sem <- struct{}{} }()
+
 	startedAt := time.Now()
-	argv := r.resolveArgs(req.Args)
 	result, err := r.executor.Run(ctx, r.command, argv, r.resolveWorkDir(req.WorkDir), r.resolveEnv(req.Env))
 	r.logExecution(req, argv, result, err, time.Since(startedAt))
 	if err != nil {
