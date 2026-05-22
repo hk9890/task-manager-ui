@@ -59,7 +59,8 @@ gates, and `docs/CODING.md` for build/test details.
 ## Docs
 
 - [`docs/OVERVIEW.md`](./docs/OVERVIEW.md) — runtime flow, package map, architecture boundaries
-- [`docs/CODING.md`](./docs/CODING.md) — build commands, config model, implementation constraints
+- [`docs/CODING.md`](./docs/CODING.md) — build commands, architectural rules, quality gates
+- [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) — runtime config model, keybindings, launcher reference
 - [`docs/TESTING.md`](./docs/TESTING.md) — test policy, fixtures, and runtime verification expectations
 - [`docs/MONITORING.md`](./docs/MONITORING.md) — centralized logging contract and evidence capture points
 - [`docs/RUNTIME_UI_VERIFICATION.md`](./docs/RUNTIME_UI_VERIFICATION.md) — built-binary runtime UI verification runbook

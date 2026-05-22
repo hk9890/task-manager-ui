@@ -69,9 +69,28 @@ capture paths.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
 - Dashboard definitions must validate before rendering; see `internal/dashboard/definition.go`.
 
+## UI component boundaries
+
+Rendering components live under `internal/ui/`:
+
+- `ui/shared/issuerow` is the single compact issue-row renderer for
+  board/search-style lists; keep row rendering shared here.
+- There is intentionally **no shared issue-list component** — board and search
+  containers differ materially (layout, empty-state, focus), so list/panel
+  containers stay mode-specific (`ui/board` columns vs `ui/search` panes).
+  Extract a minimal `internal/ui/shared/` list component only if real
+  duplication appears above the row level.
+- `ui/styles.FormSection` is the shared rounded-border section/container
+  primitive used to frame columns, panes, and detail shells.
+- `ui/details` is the dedicated issue-detail renderer, separate from compact
+  row/list rendering.
+- `ui/loading`, `ui/toaster`, and `ui/modal` provide shared loading, transient
+  toast, and overlay feedback primitives.
+
 ## Supporting docs
 
-- `docs/CODING.md` — build commands, package layout, guardrails, config and launcher contracts
+- `docs/CODING.md` — build commands, package layout, architectural rules, and quality gates
+- `docs/CONFIGURATION.md` — runtime config model, keybindings, and launcher interpolation reference
 - `docs/TESTING.md` — test policy, fixtures, and required verification depth
 - `docs/MONITORING.md` — centralized logging contract, capture points, and evidence guidance
 - `docs/RUNTIME_UI_VERIFICATION.md` — runtime UI runbook for built-binary checks

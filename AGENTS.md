@@ -12,6 +12,8 @@ Read `docs/OVERVIEW.md` for the runtime flow, package map, architectural boundar
 
 Read `docs/CODING.md` for build commands, package layout, and core architectural rules.
 
+Read `docs/CONFIGURATION.md` for the runtime config model, keybindings, and launcher interpolation reference.
+
 Run `mise tasks` to see all available build/test/quality tasks (`mise run <task>` to execute).
 
 ## Testing

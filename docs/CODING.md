@@ -77,32 +77,11 @@ bwb --check-config
 
 ### Debug diagnostics contract
 
-When `--debug` is set, diagnostics are emitted to stderr and prefixed with:
-
-```text
-[bwb-debug]
-```
-
-Event categories:
-
-- startup resolution (`resolved config path`, `resolved cwd`, `auto-refresh`)
-- one per-run `session_id` line for correlation
-- `bd` execution traces from the command runner (operation, full argv,
-  `exit_code`, `duration_ms`)
-
-All config-loading startup paths initialize `internal/logging`, including
-interactive startup plus non-interactive `--print-config` and `--check-config`.
-That logger writes structured JSON Lines diagnostics to the default state path:
-
-- `$XDG_STATE_HOME/bwb/bwb-<session_id>.log`
-- fallback: `~/.local/state/bwb/bwb-<session_id>.log`
-
-Warnings and errors are mirrored to both stderr and the persistent log. When the
-persistent sink cannot be opened, BWB emits one stderr warning and continues
-with stderr-only logging.
-
-For the current diagnostics/logging surface and capture guidance, see
-`docs/MONITORING.md`.
+`--debug` mirrors startup-resolution and `bd`-execution diagnostics to stderr
+(prefixed `[bwb-debug]`); every config-loading startup path also writes
+structured JSON Lines records to a persistent per-session log. `docs/MONITORING.md`
+owns the full contract — event categories, log paths, `session_id` correlation,
+fallback behavior, and capture commands.
 
 ## Package Layout
 
@@ -185,211 +164,13 @@ project-plan/        # product, architecture, and execution planning docs
 
 11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns gateway query routing and validates query types internally.
 
-## Runtime Configuration (v1)
+## Runtime Configuration
 
-Configuration lives in `internal/config` and is loaded once at startup via
-`config.LoadWithOptions(...)` (the startup path used by `cmd/bwb/main.go`;
-`config.Load()` is the simpler no-options variant).
-
-Runtime config path resolution uses `os.UserConfigDir()` and looks for:
-
-- `bwb/config.yaml`
-- on Linux this is typically `~/.config/bwb/config.yaml`
-
-Load semantics:
-
-- Missing config file is allowed; BWB starts with defaults.
-- Explicit config file values override environment-driven defaults.
-- Unknown YAML keys are ignored and surfaced as startup warnings.
-- Invalid YAML, unreadable existing config files, invalid values, and duplicate
-  launcher actions fail startup.
-
-The v1 model is intentionally small and only covers app-shell concerns:
-
-- `Editor.Command`
-  - Defaults to `$EDITOR` when set.
-  - Falls back to `vi` when `$EDITOR` is unset/empty.
-  - `editor.command` in `config.yaml` overrides both.
-- `Launcher.Definitions`
-  - Defaults to four built-in launcher actions:
-    - `editor` → launches the resolved editor command (`editor.command`, else `$EDITOR`, else `vi`).
-    - `nvim` → launches `nvim` with a read-only issue context buffer seeded from
-      interpolation placeholders.
-    - `opencode` → launches `opencode run` with issue metadata args/env.
-    - `shell-command` → launches `sh -lc` with a simple formatted issue-context
-      print command.
-  - Each definition supports:
-    - `Action` (required unique action key)
-    - `Command` (required executable/template string)
-    - `Args` (optional argv templates)
-    - `Env` (optional `KEY=value` templates)
-    - `WorkDir` (optional working-directory template; defaults to project root)
-  - YAML launcher overrides merge by `Action`:
-    - matching built-ins are replaced field-by-field from the provided override
-    - new action names are appended
-    - unspecified built-ins remain available
-    - `Args` and `Env` follow nil-sentinel semantics: omitting the key in YAML
-      leaves the field nil in the override struct, so the built-in value is
-      preserved; writing `args: []` produces a non-nil empty slice that
-      **replaces** the built-in args (use this to explicitly clear defaults)
-- `UI.ShowModeSwitcherHelp`
-  - Defaults to `true`.
-  - Controls whether the shell renders the mode hotkey hint line.
-
-Example config:
-
-```yaml
-editor:
-  command: nvim
-
-launcher:
-  definitions:
-    - action: opencode
-      command: opencode-dev
-      args:
-        - run
-        - --issue
-        - "{{issue.id}}"
-    - action: tmux-note
-      command: tmux
-      args:
-        - new-window
-        - "issue {{issue.id}}"
-
-ui:
-  show_mode_switcher_help: false
-
-keybindings:
-  shell:
-    quit: [ctrl+q]
-    toggle_help: [F1]
-  board:
-    move_left: [left]
-    move_right: [right]
-  search:
-    cycle_focus_next: [ctrl+n]
-    cycle_focus_prev: [ctrl+p]
-    open_detail: [space]
-  detail:
-    scroll_down: [ctrl+d]
-    scroll_up: [ctrl+u]
-  modal:
-    enter: [space]
-    escape: [q]
-```
-
-### Keybindings (v1)
-
-Keybindings are resolved once at startup from the `keybindings` section.
-
-- Supported contexts: `shell`, `board`, `search`, `detail`, `modal`
-- Overrides merge per action; you only need to specify actions you want to change
-- Unknown actions, invalid key names, missing required actions, and conflicting keys
-  in the same context fail startup
-- Search query typing still accepts normal text input; only configured search actions
-  intercept keys in search mode
-
-Supported actions by context:
-
-- `shell`
-  - `quit`, `toggle_help`, `mode_board`, `mode_search`, `toggle_search`,
-    `mode_detail`, `mode_cycle_next`, `mode_cycle_prev`, `escape`,
-    `reload_detail`, `edit_issue`, `create_issue`, `update_issue`,
-    `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
-    `launch_shell_command`
-- `board`
-  - `move_left`, `move_right`, `move_up`, `move_down`, `open_detail`, `reload`
-- `search`
-  - `move_up`, `move_down`, `focus_left`, `focus_right`, `focus_query`,
-    `reload`, `open_detail`, `cycle_focus_next`, `cycle_focus_prev`
-- `detail`
-  - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
-- `modal`
-  - `next`, `prev`, `left`, `right`, `enter`, `escape`
-
-### Launcher interpolation/context surface
-
-Launcher templates support these placeholders across `Command`, every `Args`
-entry, every `Env` entry, and `WorkDir`:
-
-- `{{issue.id}}`
-- `{{issue.title}}`
-- `{{issue.labels}}` (comma-joined label list)
-- `{{issue.assignee}}`
-- `{{project.root}}`
-
-Notes:
-
-- Unsupported placeholders are passed through literally.
-- Empty issue fields interpolate as empty strings.
-- `WorkDir` falls back to project root when blank.
-
-### Shell editor/launcher UX behavior (v1)
-
-- `e` opens the rich marker-based issue edit document flow for the currently
-  selected issue via `services.Editor`.
-- `n`, `p`, `l` trigger `nvim`, `opencode`, `shell-command` launchers from
-  detail mode.
-- If no issue is selected, the shell shows a warning toast and does not launch.
-- Successful rich editor updates trigger detail reload; launchers remain
-  non-blocking and do not auto-refresh issue detail.
-- Launcher actions are explicitly **background fire-and-forget** in v1 (no
-  managed terminal handoff/return contract). After launching, the app stays
-  active and shows guidance toast text; use `e` for edit/save flows that round
-  trip back into app state with detail reload.
-
-The rich marker-based edit document flow in `internal/launcher/editor` is the
-actual interactive shell edit path. Launcher definitions remain a separate
-external-tool surface for non-edit actions.
-
-### Testing references for editor/launcher behavior
-
-- Config defaults and built-ins: `internal/config/model_test.go`
-- Interpolation/runner behavior: `internal/launcher/service_test.go`
-- Shell key wiring and launcher actions: `internal/app/model_test.go`
-- Editor round-trip service seam: `internal/launcher/editor/service_test.go`
-- Embedded fixture smoke coverage for edit flow: `internal/app/model_test.go`
-
-For broader policy and full-app verification expectations, see `docs/TESTING.md`.
-
-Shared shell feedback primitives live under `internal/ui/`:
-
-- `ui/loading` renders loading/status feedback for board, search, and detail
-  surfaces.
-- `ui/toaster` renders transient error/warn/info/success feedback.
-- `ui/modal` renders help/confirmation overlays.
-- `ui/shared/issuerow` owns compact issue row rendering for list-like surfaces
-  (board/search): selected-row prefix, type/priority/status/ID token assembly,
-  and width-aware truncation.
-
-UI component responsibility boundary:
-
-- **Row component**: `ui/shared/issuerow` is the single compact issue-row
-  renderer for board/search-style lists.
-- **Optional list component**: there is currently **no shared issue-list
-  component**. Row-level sharing is sufficient for now because the remaining
-  board/search containers differ materially in layout and behavior.
-- **Panel/container component**: `ui/styles.FormSection` is the generic rounded
-  bordered section/container primitive used to frame board columns, search
-  panes, and detail shells.
-- **Detail component**: `ui/details` is the dedicated issue-detail renderer and
-  stays separate from compact row/list rendering.
-
-Issue-list responsibility boundary:
-
-- Keep **row rendering** shared via `ui/shared/issuerow`.
-- Keep **list/panel containers** mode-specific for now (`ui/board` columns vs
-  `ui/search` query/results/preview panes), because their layout, empty-state,
-  focus, and composition responsibilities still differ materially.
-- If future changes create meaningful duplication above the row level, extract a
-  minimal list component under `internal/ui/shared/` with focused tests.
-
-Design intent:
-
-- Keep config loading and access behind a clear boundary (`internal/config` +
-  `app.Services.Config`).
-- Avoid introducing legacy-style broad config surfaces (custom views, BQL,
-  orchestration settings, etc.).
+Runtime config loading, the config model, keybindings, and the launcher
+interpolation reference live in `docs/CONFIGURATION.md`. The shell-launcher
+security rule and the editor/launcher handoff rules are in the Core
+Architectural Rules above; UI component placement is in `docs/OVERVIEW.md`
+under Architectural boundaries.
 
 ## Donor Migration Rules (Perles → Beads Workbench)
 
