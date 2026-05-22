@@ -50,6 +50,15 @@ type closedCountLoadedMsg struct {
 	err   error
 }
 
+// storedBlockedLoadedMsg carries the result of a Query(status=blocked) gateway call.
+// This fetches issues with stored status=blocked regardless of dependency state,
+// so that issues manually set to blocked (with no dependency blocker) are visible
+// in the Not Ready column alongside dependency-blocked issues from ReadyExplain.
+type storedBlockedLoadedMsg struct {
+	issues []domain.IssueSummary
+	err    error
+}
+
 // columnData holds the loaded data for one board column after composition.
 type columnData struct {
 	title   string
@@ -91,18 +100,21 @@ type Model struct {
 	// inflight is false until the first startReload call.
 	inflight bool
 
-	// pendingResults counts how many of the 4 parallel gateway calls are outstanding.
+	// pendingResults counts how many of the 5 parallel gateway calls are outstanding.
 	pendingResults int
-	// partialReady / partialInProgress / partialClosed / partialClosedCount hold
-	// in-flight results until all 4 arrive and composition can run.
-	partialReadyExplain    *domain.ReadyExplainResult
-	partialReadyExplainErr error
-	partialInProgress      []domain.IssueSummary
-	partialInProgressErr   error
-	partialClosed          []domain.IssueSummary
-	partialClosedErr       error
-	partialClosedCount     int
-	partialClosedCountErr  error
+	// partialReady / partialInProgress / partialClosed / partialClosedCount /
+	// partialStoredBlocked hold in-flight results until all 5 arrive and
+	// composition can run.
+	partialReadyExplain     *domain.ReadyExplainResult
+	partialReadyExplainErr  error
+	partialInProgress       []domain.IssueSummary
+	partialInProgressErr    error
+	partialClosed           []domain.IssueSummary
+	partialClosedErr        error
+	partialClosedCount      int
+	partialClosedCountErr   error
+	partialStoredBlocked    []domain.IssueSummary
+	partialStoredBlockedErr error
 
 	focusedColumn int
 	selectedRow   map[int]int
@@ -190,6 +202,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.partialClosedCountErr = msg.err
 		if msg.err == nil {
 			m.partialClosedCount = msg.count
+		}
+		m.pendingResults--
+		return m.maybeCompose()
+
+	case storedBlockedLoadedMsg:
+		m.partialStoredBlockedErr = msg.err
+		if msg.err == nil {
+			m.partialStoredBlocked = msg.issues
 		}
 		m.pendingResults--
 		return m.maybeCompose()
@@ -375,7 +395,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		m.columns[i].err = nil
 	}
 
-	m.pendingResults = 4
+	m.pendingResults = 5
 	m.partialReadyExplain = nil
 	m.partialReadyExplainErr = nil
 	m.partialInProgress = nil
@@ -384,6 +404,8 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.partialClosedErr = nil
 	m.partialClosedCount = 0
 	m.partialClosedCountErr = nil
+	m.partialStoredBlocked = nil
+	m.partialStoredBlockedErr = nil
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
@@ -400,6 +422,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		loadInProgressCmd(m.gateway),
 		loadClosedCmd(m.gateway, cl),
 		loadClosedCountCmd(m.gateway),
+		loadStoredBlockedCmd(m.gateway),
 	)
 }
 
@@ -417,12 +440,13 @@ func (m *Model) maybeCompose() tea.Cmd {
 	}
 
 	cols := dashboard.Compose(dashboard.Inputs{
-		Ready:       ready.Ready,
-		Blocked:     ready.Blocked,
-		InProgress:  m.partialInProgress,
-		Closed:      m.partialClosed,
-		ClosedLimit: m.closedLimit(),
-		ClosedTotal: m.partialClosedCount,
+		Ready:         ready.Ready,
+		Blocked:       ready.Blocked,
+		StoredBlocked: m.partialStoredBlocked,
+		InProgress:    m.partialInProgress,
+		Closed:        m.partialClosed,
+		ClosedLimit:   m.closedLimit(),
+		ClosedTotal:   m.partialClosedCount,
 	})
 
 	// Emit warnings to slog.
@@ -443,16 +467,25 @@ func (m *Model) maybeCompose() tea.Cmd {
 	}
 
 	// Determine per-region errors:
-	// Not Ready + Ready ← ReadyExplain error
+	// Not Ready ← ReadyExplain error or storedBlocked query error (either or both)
+	// Ready     ← ReadyExplain error
 	// In Progress ← in_progress query error
 	// Done ← closed query error
 	readyExplainErr := m.partialReadyExplainErr
+	storedBlockedErr := m.partialStoredBlockedErr
 	inProgressErr := m.partialInProgressErr
 	closedErr := m.partialClosedErr
 
+	// notReadyErr is the first non-nil error from ReadyExplain or storedBlocked
+	// so the Not Ready column surface both error sources.
+	notReadyErr := readyExplainErr
+	if notReadyErr == nil {
+		notReadyErr = storedBlockedErr
+	}
+
 	// Build the four fixed columns, clearing loading flags atomically.
 	m.columns = []columnData{
-		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false, err: readyExplainErr},
+		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false, err: notReadyErr},
 		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact, loading: false, err: readyExplainErr},
 		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false, err: inProgressErr},
 		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false, err: closedErr},
@@ -677,5 +710,17 @@ func loadClosedCountCmd(gateway beads.BeadsGateway) tea.Cmd {
 			return closedCountLoadedMsg{err: err}
 		}
 		return closedCountLoadedMsg{count: result.Total}
+	}
+}
+
+// loadStoredBlockedCmd fires the Query(status=blocked) gateway call (uncapped).
+// This fetches issues whose stored status is "blocked" regardless of whether
+// they have an unresolved dependency blocker. Issues with status=blocked but
+// no dependency blocker are excluded from ReadyExplain.Blocked; this call
+// ensures they still appear in the Not Ready column.
+func loadStoredBlockedCmd(gateway beads.BeadsGateway) tea.Cmd {
+	return func() tea.Msg {
+		issues, err := gateway.Query(context.Background(), "status=blocked", domain.QueryOptions{Limit: 0})
+		return storedBlockedLoadedMsg{issues: issues, err: err}
 	}
 }

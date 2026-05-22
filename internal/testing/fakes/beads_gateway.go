@@ -373,7 +373,31 @@ func (f *FakeBeadsGateway) Query(_ context.Context, expr string, opts domain.Que
 		return []domain.IssueSummary{}, nil
 	}
 
+	// QueryResponse fallback: filter by status when the expression is a simple
+	// "status=<value>" form so that the fake more closely mirrors real bd
+	// (which only returns issues matching the expression). This prevents
+	// e.g. in_progress issues from leaking into a status=blocked query.
+	if wantStatus := parseSimpleStatusExpr(expr); wantStatus != "" {
+		var filtered []domain.IssueSummary
+		for _, s := range f.QueryResponse {
+			if s.Status == wantStatus {
+				filtered = append(filtered, s)
+			}
+		}
+		return filtered, nil
+	}
+
 	return append([]domain.IssueSummary(nil), f.QueryResponse...), nil
+}
+
+// parseSimpleStatusExpr returns the status value when expr is exactly
+// "status=<value>" (no spaces, no other clauses). Returns "" otherwise.
+func parseSimpleStatusExpr(expr string) string {
+	const prefix = "status="
+	if strings.HasPrefix(expr, prefix) && !strings.ContainsAny(expr, " \t&|()") {
+		return expr[len(prefix):]
+	}
+	return ""
 }
 
 func (f *FakeBeadsGateway) ReadyExplain(_ context.Context, opts domain.ReadyExplainOptions) (domain.ReadyExplainResult, error) {

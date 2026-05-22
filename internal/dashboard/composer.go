@@ -10,19 +10,28 @@ import (
 // is emitted for active groups (Ready, Blocked, InProgress).
 const cardinalityThreshold = 500
 
-// Inputs carries the four data groups returned by the dashboard fetch plan.
+// Inputs carries the five data groups returned by the dashboard fetch plan.
 // ClosedLimit is the cap that was sent to bd; it is used to compute the "N+"
 // badge on the Done column.
 // ClosedTotal is the real DB population count of closed issues (from CountIssues).
 // When > 0 it overrides len(Closed) as Done.Total so the header shows the
 // actual count rather than the capped slice size.
+//
+// StoredBlocked holds issues whose stored status == "blocked" (from
+// Query("status=blocked")). These are distinct from Blocked (dependency-blocked
+// issues from ReadyExplain). StoredBlocked issues that have no dependency
+// blocker are silently excluded from ReadyExplain.Blocked; without this field
+// they would fall through all four board columns and become invisible.
+// Compose deduplicates the union of Blocked and StoredBlocked into the
+// NotReady column so both populations are visible.
 type Inputs struct {
-	Ready       []domain.IssueSummary
-	Blocked     []domain.BlockedIssueView
-	InProgress  []domain.IssueSummary
-	Closed      []domain.IssueSummary
-	ClosedLimit int // the cap that was sent to bd; used to compute "N+" badge
-	ClosedTotal int // real DB count of closed issues; 0 means unset (falls back to len(Closed))
+	Ready         []domain.IssueSummary
+	Blocked       []domain.BlockedIssueView
+	StoredBlocked []domain.IssueSummary
+	InProgress    []domain.IssueSummary
+	Closed        []domain.IssueSummary
+	ClosedLimit   int // the cap that was sent to bd; used to compute "N+" badge
+	ClosedTotal   int // real DB count of closed issues; 0 means unset (falls back to len(Closed))
 }
 
 // Columns is the typed column data the board renderer consumes.
@@ -83,6 +92,44 @@ func mapBlockedToSummaries(blocked []domain.BlockedIssueView) []domain.IssueSumm
 	return out
 }
 
+// mergeNotReadyIssues returns the union of dep-blocked issues (from ReadyExplain)
+// and stored-blocked issues (from Query("status=blocked")), cross-deduplicated by
+// ID so that an issue present in BOTH populations appears exactly once.
+//
+// Within each source slice, duplicates are preserved unchanged (consistent with
+// the pre-existing behaviour for dep-blocked issues). Cross-source dedup uses
+// the dep-blocked source as authoritative so its richer BlockedBy fields are
+// retained when a conflict occurs.
+func mergeNotReadyIssues(blocked []domain.BlockedIssueView, storedBlocked []domain.IssueSummary) []domain.IssueSummary {
+	if len(storedBlocked) == 0 {
+		return mapBlockedToSummaries(blocked)
+	}
+	if len(blocked) == 0 {
+		out := make([]domain.IssueSummary, len(storedBlocked))
+		copy(out, storedBlocked)
+		return out
+	}
+
+	// Build a set of IDs already covered by the dep-blocked list.
+	depBlockedIDs := make(map[string]struct{}, len(blocked))
+	for _, b := range blocked {
+		depBlockedIDs[b.Issue.ID] = struct{}{}
+	}
+
+	// Start with all dep-blocked issues (preserving any intra-slice duplicates).
+	out := make([]domain.IssueSummary, 0, len(blocked)+len(storedBlocked))
+	for _, b := range blocked {
+		out = append(out, b.Issue)
+	}
+	// Append stored-blocked issues whose IDs are not already covered.
+	for _, s := range storedBlocked {
+		if _, covered := depBlockedIDs[s.ID]; !covered {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // Compose is a pure function — no I/O, no globals, no logging — that combines
 // the four data groups into the typed Columns value consumed by the board
 // renderer.
@@ -112,8 +159,10 @@ func Compose(in Inputs) Columns {
 		})
 	}
 
-	// --- build NotReady column (from Blocked) ---
-	notReadyIssues := mapBlockedToSummaries(in.Blocked)
+	// --- build NotReady column (union of dep-blocked and stored-blocked) ---
+	// mergeNotReadyIssues deduplicates by ID so an issue present in both
+	// populations appears exactly once.
+	notReadyIssues := mergeNotReadyIssues(in.Blocked, in.StoredBlocked)
 	issueSort(notReadyIssues)
 	notReady := ColumnData{
 		Issues:       notReadyIssues,

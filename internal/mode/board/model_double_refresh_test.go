@@ -83,6 +83,8 @@ func newSettledBoardModel(t *testing.T, gateway *fakes.FakeBeadsGateway) *Model 
 }
 
 // newPopulatedGateway returns a gateway with enough data for all 4 columns.
+// QueryResponsesByExpr is used so that the status=blocked query returns empty,
+// preventing in_progress issues from leaking into the Not Ready column.
 func newPopulatedGateway() *fakes.FakeBeadsGateway {
 	gw := fakes.NewFakeBeadsGateway()
 	gw.ReadyExplainResponse = domain.ReadyExplainResult{
@@ -93,14 +95,16 @@ func newPopulatedGateway() *fakes.FakeBeadsGateway {
 			{Issue: domain.IssueSummary{ID: "bw-2", Title: "Blocked one", Status: "blocked", Priority: 2}},
 		},
 	}
-	gw.QueryResponse = []domain.IssueSummary{
-		{ID: "bw-3", Title: "In Progress one", Status: "in_progress", Priority: 1},
+	gw.QueryResponsesByExpr = map[string][]domain.IssueSummary{
+		"status=in_progress": {{ID: "bw-3", Title: "In Progress one", Status: "in_progress", Priority: 1}},
+		"status=closed":      nil,
+		"status=blocked":     nil,
 	}
 	return gw
 }
 
-// countGatewayCalls returns the number of times any of the 4 board gateway
-// methods (ReadyExplain, Query×2, CountIssues) were called on the gateway.
+// countGatewayCalls returns the number of times any of the 5 board gateway
+// methods (ReadyExplain, Query×3, CountIssues) were called on the gateway.
 func countGatewayCalls(gateway *fakes.FakeBeadsGateway) int {
 	n := 0
 	for _, c := range gateway.Calls {
@@ -114,7 +118,7 @@ func countGatewayCalls(gateway *fakes.FakeBeadsGateway) int {
 
 // TestBoardManualReloadIgnoredWhileInFlight verifies that pressing 'r' a second
 // time while the first refresh is still in-flight is a no-op: pendingResults
-// stays at 4, selection state is not wiped, and no new gateway batch is sent.
+// stays at 5, selection state is not wiped, and no new gateway batch is sent.
 //
 // CURRENTLY FAILS: the bug at model.go:233-234 calls startReload unconditionally,
 // resetting pendingResults and wiping selection state on every keypress.
@@ -143,9 +147,9 @@ func TestBoardManualReloadIgnoredWhileInFlight(t *testing.T) {
 		t.Fatalf("first reload: expected non-nil Cmd from 'r' keypress")
 	}
 
-	// After first reload: pendingResults must be 4, all columns loading.
-	if m.pendingResults != 4 {
-		t.Fatalf("first reload: expected pendingResults=4, got %d", m.pendingResults)
+	// After first reload: pendingResults must be 5, all columns loading.
+	if m.pendingResults != 5 {
+		t.Fatalf("first reload: expected pendingResults=5, got %d", m.pendingResults)
 	}
 	for i, col := range m.columns {
 		if !col.loading {
@@ -155,12 +159,12 @@ func TestBoardManualReloadIgnoredWhileInFlight(t *testing.T) {
 
 	// Count gateway calls dispatched by first reload (the Cmds are closures,
 	// we need to execute the batch to actually record the calls).
-	// Execute the returned batch cmd to verify it dispatches 4 gateway calls.
+	// Execute the returned batch cmd to verify it dispatches 5 gateway calls.
 	firstBatchMsgs := boardDrainCmd(firstCmd)
 	callsAfterFirst := countGatewayCalls(gateway)
-	// First batch should dispatch 4 gateway calls (ReadyExplain + 2×Query + CountIssues).
-	if callsAfterFirst != 4 {
-		t.Fatalf("first reload: expected 4 gateway calls, got %d", callsAfterFirst)
+	// First batch should dispatch 5 gateway calls (ReadyExplain + 3×Query + CountIssues).
+	if callsAfterFirst != 5 {
+		t.Fatalf("first reload: expected 5 gateway calls, got %d", callsAfterFirst)
 	}
 
 	// Reset for tracking second-reload calls.
@@ -182,12 +186,12 @@ func TestBoardManualReloadIgnoredWhileInFlight(t *testing.T) {
 
 	// === ASSERTIONS — these FAIL on current (buggy) code ===
 
-	// Assert 1: pendingResults must still be 4 (not reset again from whatever value).
-	// BUG: startReload resets pendingResults=4 unconditionally, so this may coincidentally
-	// pass here. The real bug is that it ALSO dispatches 4 new gateway calls and wipes
+	// Assert 1: pendingResults must still be 5 (not reset again from whatever value).
+	// BUG: startReload resets pendingResults=5 unconditionally, so this may coincidentally
+	// pass here. The real bug is that it ALSO dispatches 5 new gateway calls and wipes
 	// selection. Assert selection was not wiped.
-	if m.pendingResults != 4 {
-		t.Errorf("second reload: expected pendingResults=4 (unchanged), got %d", m.pendingResults)
+	if m.pendingResults != 5 {
+		t.Errorf("second reload: expected pendingResults=5 (unchanged), got %d", m.pendingResults)
 	}
 
 	// Assert 2: selection state must be preserved — secondCmd must be nil (no new batch).
@@ -233,7 +237,7 @@ func TestBoardManualReloadIgnoredWhileInFlight(t *testing.T) {
 //
 // CURRENTLY FAILS: each 'r' keypress calls startReload unconditionally, adding
 // new in-flight Cmds whose results will decrement pendingResults below zero after
-// only the first batch's 4 results arrive.
+// only the first batch's 5 results arrive.
 func TestBoardPendingResultsNeverGoesNegativeUnderKeySpam(t *testing.T) {
 	t.Parallel()
 
@@ -251,8 +255,8 @@ func TestBoardPendingResultsNeverGoesNegativeUnderKeySpam(t *testing.T) {
 	// (This records calls on the gateway and returns the messages that would
 	// be sent back to the model — but we don't apply them yet.)
 	firstBatchMsgs := boardDrainCmd(firstCmd)
-	if len(firstBatchMsgs) != 4 {
-		t.Fatalf("expected 4 messages from first batch, got %d", len(firstBatchMsgs))
+	if len(firstBatchMsgs) != 5 {
+		t.Fatalf("expected 5 messages from first batch, got %d", len(firstBatchMsgs))
 	}
 
 	// Collect additional Cmds from 10 more keypresses, without draining any.
@@ -330,8 +334,8 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	if firstCmd == nil {
 		t.Fatalf("first startReload: expected non-nil Cmd")
 	}
-	if m.pendingResults != 4 {
-		t.Fatalf("first startReload: expected pendingResults=4, got %d", m.pendingResults)
+	if m.pendingResults != 5 {
+		t.Fatalf("first startReload: expected pendingResults=5, got %d", m.pendingResults)
 	}
 	if !m.inflight {
 		t.Fatalf("first startReload: expected inflight=true after first call")
@@ -340,8 +344,8 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	// Execute the batch to record gateway calls, but do NOT apply results to the model.
 	firstBatchMsgs := boardDrainCmd(firstCmd)
 	callsAfterFirst := countGatewayCalls(gateway)
-	if callsAfterFirst != 4 {
-		t.Fatalf("first startReload: expected 4 gateway calls, got %d", callsAfterFirst)
+	if callsAfterFirst != 5 {
+		t.Fatalf("first startReload: expected 5 gateway calls, got %d", callsAfterFirst)
 	}
 	gateway.ResetCalls()
 
