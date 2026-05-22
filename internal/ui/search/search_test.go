@@ -301,6 +301,27 @@ func TestRenderGoldens(t *testing.T) {
 
 		assertGoldenNormalized(t, []byte(view), "search_default_all_results_w120.golden")
 	})
+
+	// Stale-draft state: Query != AppliedQuery with prior results still visible.
+	// Reproduces the "zqx99 typed but 25 gateway rows still shown" scenario from
+	// ticket beads-workbench-2ev4.4.
+	t.Run("stale_draft_w120", func(t *testing.T) {
+		view := Render(State{
+			Query:        "zqx99",
+			AppliedQuery: "gateway",
+			Focus:        FocusQuery,
+			Results: []domain.IssueSummary{
+				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
+			},
+			Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore},
+			SelectedID: "bw-1",
+			Width:      120,
+			Height:     28,
+		})
+
+		assertGoldenNormalized(t, []byte(view), "search_results_stale_draft_w120.golden")
+	})
 }
 
 // TestRenderColdStartLoadingShowsSkeletonAndInput verifies that when Loading is
@@ -535,5 +556,150 @@ func TestRefreshSearchCarriesDimPhaseStyle(t *testing.T) {
 	const wantANSI = "38;2;127;127;127"
 	if !strings.Contains(view, wantANSI) {
 		t.Fatalf("expected dim ANSI sequence %q in refresh result row, got:\n%s", wantANSI, view)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Stale-draft indicator tests (beads-workbench-2ev4.4)
+// ---------------------------------------------------------------------------
+
+// TestRenderStaleDraftShowsBannerAndBadge verifies that when the typed draft
+// query differs from the last applied query (and no search is in flight), the
+// Results pane shows a stale-results banner and the Results badge includes
+// "stale", so the prior rows are never mistaken for matches of the new draft.
+func TestRenderStaleDraftShowsBannerAndBadge(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Query:        "zqx99",
+		AppliedQuery: "gateway",
+		Focus:        FocusQuery,
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
+		},
+		Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, Completeness: domain.SearchResultCompletenessMaybeMore},
+		SelectedID: "bw-1",
+		Width:      120,
+		Height:     28,
+	})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// The stale banner must appear — the prefix fits within the pane width.
+	if !strings.Contains(plain, "Results below are stale") {
+		t.Fatalf("expected stale-draft banner in results pane, got:\n%s", plain)
+	}
+	// The Results border badge must include "stale".
+	if !strings.Contains(plain, "stale") {
+		t.Fatalf("expected 'stale' in Results badge, got:\n%s", plain)
+	}
+	// Prior results must still be visible (not erased).
+	if !strings.Contains(plain, "Gateway result") {
+		t.Fatalf("expected prior results still visible, got:\n%s", plain)
+	}
+}
+
+// TestRenderStaleDraftBannerTextUntruncated verifies the raw banner text
+// (before pane-width truncation) includes the full search instruction and
+// the quoted draft query, using renderResultsBanner directly at a wide width.
+func TestRenderStaleDraftBannerTextUntruncated(t *testing.T) {
+	t.Parallel()
+
+	state := State{
+		Query:        "zqx99",
+		AppliedQuery: "gateway",
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+		},
+	}
+	banner := renderResultsBanner(state, 200) // wide enough to avoid truncation
+	if len(banner) != 1 {
+		t.Fatalf("expected exactly one banner line, got %d: %v", len(banner), banner)
+	}
+	want := `Results below are stale. Press Enter to search for "zqx99".`
+	if banner[0] != want {
+		t.Fatalf("unexpected banner text\nwant: %q\ngot:  %q", want, banner[0])
+	}
+}
+
+// TestRenderStaleDraftAbsentWhenApplied verifies that once the search is
+// applied (Query == AppliedQuery), neither the stale banner nor the "stale"
+// badge appear.
+func TestRenderStaleDraftAbsentWhenApplied(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Query:        "gateway",
+		AppliedQuery: "gateway",
+		Focus:        FocusResults,
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+		},
+		Metadata:   domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact},
+		SelectedID: "bw-1",
+		Width:      120,
+		Height:     28,
+	})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	if strings.Contains(plain, "stale") {
+		t.Fatalf("expected no stale indicator when applied==draft, got:\n%s", plain)
+	}
+	if strings.Contains(plain, "Press Enter to search") {
+		t.Fatalf("expected no stale banner when applied==draft, got:\n%s", plain)
+	}
+}
+
+// TestRenderStaleDraftAbsentWhenSearchInFlight verifies that while a search
+// is in flight (Loading=true, prior results visible), the stale-draft banner
+// is NOT shown — the "reload" query-box badge already communicates that state.
+func TestRenderStaleDraftAbsentWhenSearchInFlight(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		Query:        "zqx99",
+		AppliedQuery: "gateway",
+		Loading:      true,
+		Reloading:    true, // in-flight: hasDraftChanges is true but isInlineReload is also true
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+		},
+		Metadata:   domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessMaybeMore},
+		SelectedID: "bw-1",
+		Width:      120,
+		Height:     28,
+	})
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// No stale banner: the reload state is handled by the query-badge "reload" affordance.
+	if strings.Contains(plain, "Press Enter to search") {
+		t.Fatalf("expected no stale banner while search is in flight (reload badge covers it), got:\n%s", plain)
+	}
+	// "stale" badge must not appear either.
+	if strings.Contains(plain, "stale") {
+		t.Fatalf("expected no 'stale' badge while search is in flight, got:\n%s", plain)
+	}
+}
+
+// TestRenderStaleDraftEmptyDraftShowsClearHint verifies that when the draft
+// is cleared (empty) but prior results remain (Query="" != AppliedQuery="gateway"),
+// the banner text includes "Press Enter to clear" rather than an empty quoted draft.
+// The test uses renderResultsBanner directly at a wide width to avoid pane truncation.
+func TestRenderStaleDraftEmptyDraftShowsClearHint(t *testing.T) {
+	t.Parallel()
+
+	state := State{
+		Query:        "",
+		AppliedQuery: "gateway",
+		Results: []domain.IssueSummary{
+			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+		},
+	}
+	banner := renderResultsBanner(state, 200) // wide enough to avoid truncation
+	if len(banner) != 1 {
+		t.Fatalf("expected exactly one banner line, got %d: %v", len(banner), banner)
+	}
+	if !strings.Contains(banner[0], "Press Enter to clear") {
+		t.Fatalf("expected clear hint in banner when draft is empty, got: %q", banner[0])
 	}
 }

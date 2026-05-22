@@ -38,7 +38,9 @@ overridden through runtime config.
 
 ## Search Mode
 
-Typing while the query field is focused updates the search query directly.
+Typing in the query field edits a draft query; press Enter to run the search.
+Results are not updated until Enter is pressed — while the draft differs from
+the last applied query, the Results pane marks the displayed rows as stale.
 
 - `k`, `up` — move up in results
 - `j`, `down` — move down in results
@@ -46,7 +48,8 @@ Typing while the query field is focused updates the search query directly.
 - `l`, `right` — move focus right between panes
 - `/` — focus the query field
 - `r` — manually reload the current search immediately
-- `enter` — open selected result in detail mode
+- `enter` (query field focused) — submit the draft query and run the search
+- `enter` (results focused) — open selected result in detail mode
 - `tab`, `ctrl+j` — cycle focus to next search pane
 - `shift+tab`, `ctrl+k` — cycle focus to previous search pane
 - `backspace` — delete previous query character when query is focused (built-in behavior, not part of the configurable search keymap)

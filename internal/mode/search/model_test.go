@@ -772,6 +772,66 @@ func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 	}
 }
 
+// TestSearchModeStaleDraftIndicatorAppearsAndClears verifies the end-to-end
+// stale-results state machine (ticket beads-workbench-2ev4.4):
+//
+//   - After typing a new draft (before Enter), the view shows the stale banner
+//     and the Results badge contains "stale".
+//   - After pressing Enter (search applied), the stale indicator is gone.
+func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
+	t.Parallel()
+
+	gateway := newSearchFakeGateway()
+	gateway.SearchIssuesResponse = domain.SearchResultPage{
+		Results: []domain.SearchResult{
+			{Issue: domain.IssueSummary{ID: "bw-1", Title: "Prior result", Status: "open", Type: "task", Priority: 1}},
+		},
+		Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact},
+	}
+	m := initModel(gateway)
+	m.SetSize(120, 28)
+
+	// Apply an initial search so we have prior results.
+	pressAndResolve(m, testui.SearchTypeTextKeys("gateway")...)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Now type a new draft without pressing Enter.
+	pressAndResolve(m, testui.SearchTypeTextKeys("zqx")...)
+
+	// The draft differs from applied: stale indicator must appear.
+	if m.draftQuery != "gatewayzqx" {
+		t.Fatalf("expected draftQuery=gatewayzqx, got %q", m.draftQuery)
+	}
+	if m.appliedQuery != "gateway" {
+		t.Fatalf("expected appliedQuery=gateway, got %q", m.appliedQuery)
+	}
+	viewStale := m.View(0)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(viewStale, "")
+	if !strings.Contains(plain, "stale") {
+		t.Fatalf("expected 'stale' badge in view while draft != applied, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "Results below are stale") {
+		t.Fatalf("expected stale banner in view while draft != applied, got:\n%s", plain)
+	}
+
+	// Press Enter to apply the draft search.
+	gateway.SearchIssuesResponse = domain.SearchResultPage{
+		Results:  []domain.SearchResult{},
+		Metadata: domain.SearchResultMetadata{ReturnedCount: 0, Completeness: domain.SearchResultCompletenessExact},
+	}
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+
+	// After search applied, stale indicator must be gone.
+	viewApplied := m.View(0)
+	plainApplied := testui.AnsiEscapePattern.ReplaceAllString(viewApplied, "")
+	if strings.Contains(plainApplied, "stale") {
+		t.Fatalf("expected no 'stale' badge after search is applied, got:\n%s", plainApplied)
+	}
+	if strings.Contains(plainApplied, "Results below are stale") {
+		t.Fatalf("expected no stale banner after search is applied, got:\n%s", plainApplied)
+	}
+}
+
 // TestSearchModeLogCarriesComponentSearch asserts that debug records emitted by
 // the search model carry component=search (not component=dashboard or any
 // other inherited value).
