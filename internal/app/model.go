@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	boardmode "github.com/hk9890/beads-workbench/internal/mode/board"
 	detailsmode "github.com/hk9890/beads-workbench/internal/mode/details"
@@ -90,6 +92,19 @@ type editIssueResultMsg struct {
 	issueID string
 	updated bool
 	err     error
+}
+
+// editIssuePreparedMsg carries the result of the PrepareDocument phase.
+type editIssuePreparedMsg struct {
+	issueID  string
+	prepared launchereditor.Prepared
+	err      error
+}
+
+// editorExitedMsg is delivered by the tea.Exec callback when the editor process exits.
+type editorExitedMsg struct {
+	prepared launchereditor.Prepared
+	execErr  error
 }
 
 type launchActionResultMsg struct {
@@ -453,6 +468,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
+	case editIssuePreparedMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError))
+		}
+		editorCmd, err := m.services.Editor.BuildEditorCmd(msg.prepared.TempPath)
+		if err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to build editor command: %v", err), toaster.StyleError))
+		}
+		prepared := msg.prepared
+		execCommand := m.services.ExecCommandFactory(editorCmd)
+		return m, batchCmds(modeCmd, tea.Exec(execCommand, func(err error) tea.Msg {
+			return editorExitedMsg{prepared: prepared, execErr: err}
+		}))
+	case editorExitedMsg:
+		if msg.execErr != nil {
+			_ = os.Remove(msg.prepared.TempPath)
+			issueID := msg.prepared.IssueID
+			execErr := msg.execErr
+			return m, batchCmds(modeCmd, func() tea.Msg {
+				return editIssueResultMsg{issueID: issueID, err: fmt.Errorf("editor exited with error: %w", execErr)}
+			})
+		}
+		return m, batchCmds(modeCmd, applyEditsCmd(m.services, msg.prepared))
 	case editIssueResultMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError))
@@ -739,7 +777,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
 			}
-			return m, batchCmds(modeCmd, editIssueCmd(m.services, issueID))
+			return m, batchCmds(modeCmd, prepareEditCmd(m.services, issueID))
 		case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
 			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationCreate, domain.IssueSummary{}))
 		case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
@@ -1236,10 +1274,28 @@ func loadDetailCmd(services Services, issueID string) tea.Cmd {
 	}
 }
 
-func editIssueCmd(services Services, issueID string) tea.Cmd {
+// prepareEditCmd runs the PrepareDocument phase in a goroutine. The result is
+// delivered as editIssuePreparedMsg; the model then returns tea.Exec to hand
+// terminal control to the editor process.
+func prepareEditCmd(services Services, issueID string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := services.Editor.EditIssue(context.Background(), issueID)
-		return editIssueResultMsg{issueID: issueID, updated: result.Updated, err: err}
+		prepared, err := services.Editor.PrepareDocument(context.Background(), issueID)
+		return editIssuePreparedMsg{issueID: issueID, prepared: prepared, err: err}
+	}
+}
+
+// applyEditsCmd runs the ApplyEdits phase in a goroutine after the editor exits
+// cleanly (execErr == nil path). It reads the temp file, parses the document,
+// and calls UpdateIssue if there are changes. Temp-file cleanup is handled
+// inside ApplyEdits. On editor exec error the caller short-circuits before
+// reaching here, so no UpdateIssue call is possible from an error path.
+func applyEditsCmd(services Services, prepared launchereditor.Prepared) tea.Cmd {
+	return func() tea.Msg {
+		result, err := services.Editor.ApplyEdits(context.Background(), prepared.IssueID, prepared.Issue, prepared.TempPath)
+		if err != nil {
+			return editIssueResultMsg{issueID: prepared.IssueID, err: err}
+		}
+		return editIssueResultMsg{issueID: prepared.IssueID, updated: result.Updated}
 	}
 }
 
