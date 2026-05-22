@@ -5,7 +5,7 @@ GoReleaser.
 
 ## Scope and current state
 
-- CI provenance is available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which runs `go build ./cmd/bwb`, `go vet ./...`, and the unit test suite (equivalent to `mise run test`) on `push` and `pull_request`.
+- CI provenance is available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which on `push` and `pull_request` runs the full quality gate set — script syntax checks, format check, lint, build, vet, architecture guardrails, unit tests, and a `test:coverage` threshold gate — across an ubuntu/macos/windows matrix.
 - Release artifacts are published by `.github/workflows/release.yml` using `.goreleaser.yaml` whenever a `v*` tag is pushed.
 - Release/snapshot builds inject `bwb --version` metadata via GoReleaser ldflags into `github.com/hk9890/beads-workbench/internal/version` (`Version`, `Commit`, `Date`), while local developer builds keep the fallback `dev` / `unknown` values defined in `internal/version/version.go`. See `docs/CODING.md` Version/build metadata behavior for the full symbol list.
 - Release archives are intentionally named for installer compatibility, for example `bwb_0.2.0_linux_x64.tar.gz` and `bwb_0.2.0_macos_arm64.tar.gz`, so tools like `mise` can auto-detect the correct asset.
@@ -29,7 +29,8 @@ Run from the repository root.
    git status
    ```
 
-3. Run the required quality gates from `docs/CODING.md`.
+3. Run the pre-handoff quality gate (`mise run quality`); see `docs/CODING.md`
+   Quality Gates for the full task set.
 
 4. Confirm CI provenance for the candidate release commit:
 
@@ -92,6 +93,19 @@ Run from the repository root.
    gh release view vX.Y.Z --json assets
    git ls-remote --tags origin "refs/tags/vX.Y.Z"
    ```
+
+## Verifying a downloaded release
+
+Each release includes a cosign-signed checksum file and per-archive SBOM
+(SPDX-JSON). Download the `.sig` and `.pem` files for the checksum from the
+GitHub release page, then run:
+
+```bash
+cosign verify-blob \
+  --signature bwb_<version>_checksums.txt.sig \
+  --certificate bwb_<version>_checksums.txt.pem \
+  bwb_<version>_checksums.txt
+```
 
 ## Backfilling or correcting release assets
 

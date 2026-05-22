@@ -121,7 +121,7 @@ internal/
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
   mode/              # board/search/details feature models + shell message contracts
-  ui/                # reusable rendering components (loading, modal, toaster, styles)
+  ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, styles)
   testing/           # fakes, ui harness, datasets, embedded-fixture helpers
   version/           # build-time injected Version/Commit/Date symbols
 project-plan/        # product, architecture, and execution planning docs
@@ -188,7 +188,8 @@ project-plan/        # product, architecture, and execution planning docs
 ## Runtime Configuration (v1)
 
 Configuration lives in `internal/config` and is loaded once at startup via
-`config.Load()`.
+`config.LoadWithOptions(...)` (the startup path used by `cmd/bwb/main.go`;
+`config.Load()` is the simpler no-options variant).
 
 Runtime config path resolution uses `os.UserConfigDir()` and looks for:
 
@@ -392,7 +393,13 @@ Design intent:
 
 ## Donor Migration Rules (Perles → Beads Workbench)
 
-When adapting code from the donor repo (`/home/hans/dev/github/perles`), prefer **small, isolated UI primitives** and keep imports local to rendering concerns.
+This section applies only to a maintainer performing the Perles migration with a
+local checkout of the donor repo; the paths below are maintainer-local and not
+part of this repository.
+
+When adapting code from the donor repo (Perles, checked out locally — paths
+below assume `/home/hans/dev/github/perles`), prefer **small, isolated UI
+primitives** and keep imports local to rendering concerns.
 
 ### Allowed donor paths (UI primitive scope)
 
@@ -452,8 +459,12 @@ Key tasks:
 | `mise run test:verbose` | unit tests with `-v` |
 | `mise run lint` | pinned `golangci-lint` (version from `.mise.toml` `[tools]`) |
 | `mise run guardrails` | `go test ./cmd/bwb -run TestArchitectureGuardrails` |
-| `mise run quality` | full pre-handoff gate (scripts:check, lint, guardrails, build, vet, test) |
-| `mise run quality:fast` | lighter in-flight check (build, vet, test) |
+| `mise run fmt:check` | `goimports` formatting + `go mod tidy` cleanliness check (CI-enforced) |
+| `mise run scripts:check` | shell + Python script syntax validation (CI-enforced) |
+| `mise run test:coverage` | unit+integration tests with a coverage-threshold gate (CI-enforced) |
+| `mise run quality` | full pre-handoff gate: `vet`, `lint`, `guardrails`, unit `test`, `test:integration` |
+| `mise run quality:fast` | fast pre-commit gate: `vet`, `lint`, `guardrails`, unit `test` (skips `test:integration` only) |
+| `mise run smoke` | build + run the `bwb-smoke` release data-consistency check |
 | `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
 
 **Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) fork real `bd` subprocesses and use the embedded fixture harness; they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess, replays the embedded fixture, or costs >1s, it belongs in an integration test file.
@@ -463,15 +474,19 @@ Key tasks:
 For the authoritative pre-handoff landing workflow, see
 `docs/CHANGE-WORKFLOW.md#code-change-verification-sequence`.
 
-That verification sequence covers:
+`mise run quality` covers:
 
-- script syntax validation for `internal/testing/e2e/embeddedfixture/setup.sh`
-  and `scripts/*.py`
+- `go vet ./...`
 - pinned `golangci-lint` execution using the version in `.mise.toml`
 - fast architecture-guardrail verification via
   `go test ./cmd/bwb -run TestArchitectureGuardrails`
-- core implementation gates: `go build ./cmd/bwb`, `go vet ./...`, and
-  unit tests
+- unit tests and integration tests
+
+CI (`.github/workflows/ci.yml`) runs a **superset** of this on an
+ubuntu/macos/windows matrix: it additionally runs `scripts:check`,
+`fmt:check`, `build`, and the `test:coverage` threshold gate. A change can
+pass local `mise run quality` and still fail CI on one of those, so also run
+`mise run fmt:check` and `mise run scripts:check` before handoff.
 
 ### `golangci-lint` install/invocation policy
 

@@ -8,7 +8,7 @@ This document defines the repository testing vocabulary, commands, and harness c
 
 The repository uses a three-tier model.
 
-### Tier 1 — Unit (`mise run test`, ~0.6s, ~620 tests)
+### Tier 1 — Unit (`mise run test`, fast, no external processes)
 
 - Fast, deterministic. No external processes. No `bd`, `git`, or `jq`.
 - Uses `fakes.FakeBeadsGateway` from `internal/testing/fakes/beads_gateway.go`.
@@ -23,7 +23,7 @@ The repository uses a three-tier model.
 - Both factories must produce identical results — this is the **fake/real parity guarantee**.
 - Uses `embeddedfixture.SharedFixtureRepoPath(t)` for the real factory: seeds once per process, copies the pre-seeded cache directory per test (~100ms after the first call).
 - **Read-only.** Never mutate the shared fixture inside `RunReadContract`.
-- Covers all 12 read methods on `BeadsGateway` (see `internal/gateway/beads/interface.go`).
+- Covers every read method on `BeadsGateway` — `internal/gateway/beads/interface.go` is the source of truth for the method set.
 
 ### Tier 2b — Gateway-integration MUTATING scenarios (`mise run test:integration`, `//go:build integration`)
 
@@ -77,14 +77,17 @@ Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
 ## Commands
 
 ```bash
-mise run test                # unit tests only (~0.6s, no bd required)
-mise run test:integration    # unit + integration (real bd + embedded fixture)
+mise run test                # unit tests only (fast, no bd required)
+mise run test:integration    # integration tests only (real bd + embedded fixture)
+mise run test:all            # unit + integration tests
 mise run test:verbose        # unit tests with -v
-mise run quality             # full pre-handoff gate (scripts:check, lint, guardrails, build, vet, test)
-mise run quality:fast        # lighter in-flight check (build, vet, test)
+mise run quality             # full pre-handoff gate: vet, lint, guardrails, unit + integration tests
+mise run quality:fast        # fast pre-commit gate: vet, lint, guardrails, unit tests (skips integration only)
 ```
 
-Run `mise tasks` to see the full list.
+Run `mise tasks` to see the full list. CI additionally runs `fmt:check`,
+`scripts:check`, and a `test:coverage` threshold gate — see
+`docs/CODING.md` Quality Gates.
 
 Harness-focused runs (package-scoped):
 
@@ -124,6 +127,8 @@ During the run, verify the changed behavior directly:
 
 Notes:
 
+- `BD_NON_INTERACTIVE=1` suppresses interactive `bd` prompts so the app and
+  harness run deterministically; keep it set for any scripted/captured run.
 - Prefer the embedded fixture for repeatable verification.
 - If terminal capture is needed, use a method that records the visible rendered screen. Alt-screen TUIs may not be proven by raw stdout/transcript output alone.
 - For a repo-local reproducible capture path, use `scripts/capture_bwb_screen.py` with `pyte`; see `docs/RUNTIME_UI_VERIFICATION.md`.

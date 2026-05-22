@@ -2,10 +2,21 @@
 
 ## Tracker-first rule
 
-- Use `bd` for repository task tracking.
-- Run `bd prime` when you need the full tracker workflow/refresher.
-- Use `bd ready`, `bd list --status open`, and `bd show <id>` to pick up or inspect work.
-- Use `bd remember` for persistent repo knowledge; do not create markdown memory files.
+This project uses **bd (beads)** for issue tracking. Use `bd` for ALL task
+tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists.
+
+- Run `bd prime` for the full tracker workflow, command reference, and session-close protocol.
+- Use `bd remember` for persistent repo knowledge; do NOT create markdown memory files.
+
+Quick reference:
+
+```bash
+bd ready               # find available work
+bd show <id>           # view issue details
+bd update <id> --claim # claim work
+bd list --status open  # inspect open work
+bd close <id>          # complete work
+```
 
 ## Optional local pre-commit hook (staged Go formatting)
 
@@ -49,9 +60,16 @@ Use this sequence before handoff for code changes:
 mise run quality
 ```
 
-This runs the full gate sequence: script syntax checks, golangci-lint, architecture guardrails, build, vet, and unit tests. For individual tasks, see `docs/CODING.md`.
+This runs `go vet`, golangci-lint, architecture guardrails, unit tests, and
+integration tests. For individual tasks, see `docs/CODING.md`.
 
-Use `mise run quality:fast` for a lighter in-flight check (skips lint and integration tests). Run `mise tasks` for the full task list.
+Use `mise run quality:fast` for a lighter in-flight check (skips integration
+tests only). Run `mise tasks` for the full task list.
+
+CI runs a **superset** of `mise run quality` — it additionally runs
+`fmt:check`, `scripts:check`, `build`, and a `test:coverage` gate across an
+ubuntu/macos/windows matrix — so local-green does not guarantee CI-green. Run
+`mise run fmt:check` and `mise run scripts:check` before handoff.
 
 ## Landing the plane
 
@@ -66,6 +84,10 @@ bd dolt push
 git push
 git status
 ```
+
+`bd dolt push` syncs the beads issue database (a Dolt-backed store under
+`.beads/`) to its remote; it is separate from the source `git push`. Both must
+succeed for the session to be complete.
 
 If `git pull --rebase` changes the commit or requires conflict resolution,
 rerun the relevant verification before pushing.

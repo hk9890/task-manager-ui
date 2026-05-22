@@ -58,6 +58,8 @@ capture paths.
 | `internal/testing/*` | Fakes, UI harnesses, datasets, and embedded-fixture integration support |
 | `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
 | `project-plan/` | Deeper product, architecture, and implementation planning docs |
+| `.beads/` | On-disk beads issue database (Dolt-backed; the `bd` tracker store) |
+| `ai.package.yaml` | AI tooling package manifest — declares AI packages/skills used with this repo |
 
 ## Architectural boundaries
 

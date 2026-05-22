@@ -9,8 +9,18 @@ A standalone terminal UI for browsing and updating beads issues.
 
 ## Getting Started
 
+### Prerequisites
+
+- [mise](https://mise.jdx.dev/) — provisions the pinned Go toolchain and dev
+  tools from `.mise.toml`, so a separate Go install is not required.
+- `bd` (the beads issue tracker CLI) — required at runtime; `bwb` is a thin TUI
+  over `bd`.
+
+### Build and run
+
 ```bash
-go build ./cmd/bwb
+mise run build                    # build the bwb binary
+bwb --cwd /path/to/beads-project  # run against a directory containing a .beads/ repo
 ```
 
 ## CLI Surface
@@ -67,14 +77,8 @@ For deeper design and planning context, see:
 
 ## Verifying releases
 
-Each release includes a cosign-signed checksum file and per-archive SBOM (SPDX-JSON). Download the `.sig` and `.pem` files for the checksum from the GitHub release page, then run:
-
-```bash
-cosign verify-blob \
-  --signature bwb_<version>_checksums.txt.sig \
-  --certificate bwb_<version>_checksums.txt.pem \
-  bwb_<version>_checksums.txt
-```
+Releases include a cosign-signed checksum file and per-archive SBOMs. See
+[`docs/RELEASING.md`](./docs/RELEASING.md) for the verification commands.
 
 ## Release visibility policy
 
