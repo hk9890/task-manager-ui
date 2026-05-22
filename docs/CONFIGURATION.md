@@ -120,6 +120,11 @@ Supported actions by context:
 - `search`
   - `move_up`, `move_down`, `focus_left`, `focus_right`, `focus_query`,
     `reload`, `open_detail`, `cycle_focus_next`, `cycle_focus_prev`
+  - Note: Enter has a built-in submit-query role when the query field is
+    focused (submits the draft and runs the search), independent of the
+    configurable `open_detail` action. This mirrors `backspace` and `ctrl+u`,
+    which are also built-in query-editing keys not part of the configurable
+    search keymap.
 - `detail`
   - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
 - `modal`
@@ -152,7 +157,9 @@ Architectural Rules.
 ## Shell editor/launcher UX behavior (v1)
 
 - `e` opens the rich marker-based issue edit document flow for the currently
-  selected issue via `services.Editor`.
+  selected issue via `services.Editor`. The editor launch is routed through
+  `tea.Exec`, which suspends the TUI and fully restores it after the editor
+  exits — eliminating any TTY contention between the editor and Bubble Tea.
 - `n`, `p`, `l` trigger `nvim`, `opencode`, `shell-command` launchers from
   detail mode.
 - If no issue is selected, the shell shows a warning toast and does not launch.

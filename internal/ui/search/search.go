@@ -258,10 +258,20 @@ func queryStatusBadge(state State) string {
 func resultCountTitle(state State) string {
 	count := displayedResultCount(state)
 	badge := strings.TrimSpace(resultCompletenessBadge(state))
-	if badge == "" {
+	var parts []string
+	if badge != "" {
+		parts = append(parts, badge)
+	}
+	// Append "stale" to the Results badge when results are from a previous query
+	// and no search is currently in flight (in-flight case shows "reload" in the
+	// query-box badge instead).
+	if hasDraftChanges(state) && !isInlineReload(state) && len(state.Results) > 0 {
+		parts = append(parts, "stale")
+	}
+	if len(parts) == 0 {
 		return fmt.Sprintf("%d", count)
 	}
-	return fmt.Sprintf("%d %s", count, badge)
+	return fmt.Sprintf("%d %s", count, strings.Join(parts, " · "))
 }
 
 func renderResultsContent(state State, width int) []string {
@@ -279,6 +289,16 @@ func renderResultsContent(state State, width int) []string {
 func renderResultsBanner(state State, width int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) > 0 {
 		return []string{styles.TruncateString(state.Error, width)}
+	}
+	// Show a stale-results hint when the typed draft differs from the last
+	// applied query and a search is not already in flight (in-flight case has
+	// its own "reload" affordance in the query-box badge).
+	if hasDraftChanges(state) && !isInlineReload(state) && len(state.Results) > 0 {
+		draft := strings.TrimSpace(state.Query)
+		if draft == "" {
+			return []string{styles.TruncateString("Results below are from a previous query. Press Enter to clear.", width)}
+		}
+		return []string{styles.TruncateString(fmt.Sprintf("Results below are stale. Press Enter to search for %q.", draft), width)}
 	}
 	return nil
 }
@@ -318,8 +338,9 @@ func renderEmptyResultsBody(state State, width int) []string {
 }
 
 func renderResultRows(state State, width int) []string {
-	// Dim rows when a refresh is in flight (stale data visible, new data pending).
-	dim := state.Loading && len(state.Results) > 0
+	// Dim rows when a refresh is in flight (stale data visible, new data pending),
+	// or when the user has typed a draft query that has not yet been submitted.
+	dim := (state.Loading && len(state.Results) > 0) || (hasDraftChanges(state) && !isInlineReload(state))
 	lines := make([]string, 0, len(state.Results))
 	for _, issue := range state.Results {
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
