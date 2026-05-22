@@ -161,6 +161,12 @@ func buildPersistentSink(opts Options, sessionID string) (string, *lumberjack.Lo
 	}
 	_ = file.Close()
 
+	// Prune stale log files from previous sessions. lumberjack's MaxAge only
+	// ages out rotated backups of the current process's own file; it never
+	// touches other sessions' bwb-<session_id>.log files. Without an explicit
+	// prune step they accumulate indefinitely.
+	pruneStaleLogFiles(filepath.Dir(path), path)
+
 	sink := &lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    rotationMaxSizeMB,
@@ -170,6 +176,34 @@ func buildPersistentSink(opts Options, sessionID string) (string, *lumberjack.Lo
 	}
 
 	return path, sink, nil
+}
+
+// pruneStaleLogFiles removes bwb-*.log files in stateDir whose modification
+// time is older than rotationMaxAgeDays. It never removes currentLogPath (the
+// active log for this session). Errors from individual stat/remove calls are
+// silently ignored so that a prune failure never aborts startup.
+func pruneStaleLogFiles(stateDir, currentLogPath string) {
+	cutoff := time.Now().AddDate(0, 0, -rotationMaxAgeDays)
+
+	pattern := filepath.Join(stateDir, logFilePrefix+"*"+logFileSuffix)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		// Glob only returns an error for a malformed pattern; not possible here.
+		return
+	}
+
+	for _, p := range matches {
+		if p == currentLogPath {
+			continue
+		}
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(p)
+		}
+	}
 }
 
 // failsafeSink wraps an io.Writer (typically a lumberjack.Logger). On the

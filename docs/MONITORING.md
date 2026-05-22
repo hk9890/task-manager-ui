@@ -36,6 +36,10 @@ Implemented behavior:
   - max backups: 5
   - max age: 30 days
   - compression enabled
+- on startup, stale `bwb-*.log` files older than the rotation max age (30 days)
+  are pruned from the state directory; the current session's file is never
+  deleted regardless of age; errors from individual prune operations are
+  silently ignored so that cleanup never aborts startup
 - stderr mirroring for warnings/errors and debug-prefix compatibility
 - stderr-only fallback with a single warning if the persistent sink is
   unavailable

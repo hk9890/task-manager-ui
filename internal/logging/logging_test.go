@@ -542,6 +542,75 @@ func TestSetStderrSuppressedNilManagerIsNoop(t *testing.T) {
 	m.SetStderrSuppressed(false)
 }
 
+// TestPruneStaleLogFiles verifies that pruneStaleLogFiles removes log files
+// whose modification time is older than rotationMaxAgeDays, keeps files that
+// are within the age limit, and never removes the current session's own file
+// regardless of its modification time.
+func TestPruneStaleLogFiles(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	bwbDir := filepath.Join(stateDir, stateDirName)
+	if err := os.MkdirAll(bwbDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	writeFile := func(name string) string {
+		p := filepath.Join(bwbDir, name)
+		if err := os.WriteFile(p, []byte("log"), 0o644); err != nil {
+			t.Fatalf("WriteFile %q: %v", name, err)
+		}
+		return p
+	}
+
+	setMtime := func(p string, age time.Duration) {
+		mtime := time.Now().Add(-age)
+		if err := os.Chtimes(p, mtime, mtime); err != nil {
+			t.Fatalf("Chtimes %q: %v", p, err)
+		}
+	}
+
+	// staleAge is just over the threshold so ModTime is definitely before the cutoff.
+	staleAge := time.Duration(rotationMaxAgeDays+1) * 24 * time.Hour
+	freshAge := time.Duration(rotationMaxAgeDays-1) * 24 * time.Hour
+
+	staleA := writeFile("bwb-stale1.log")
+	staleB := writeFile("bwb-stale2.log")
+	freshFile := writeFile("bwb-fresh.log")
+	currentFile := writeFile("bwb-current.log")
+	unrelatedFile := writeFile("other-tool.log") // must not be touched
+
+	setMtime(staleA, staleAge)
+	setMtime(staleB, staleAge)
+	setMtime(freshFile, freshAge)
+	setMtime(currentFile, staleAge) // current file is old, but must be kept
+	setMtime(unrelatedFile, staleAge)
+
+	pruneStaleLogFiles(bwbDir, currentFile)
+
+	// Stale bwb-*.log files must be removed.
+	for _, p := range []string{staleA, staleB} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("expected stale file %q to be removed, stat err: %v", p, err)
+		}
+	}
+
+	// Fresh bwb-*.log file must be kept.
+	if _, err := os.Stat(freshFile); err != nil {
+		t.Errorf("expected fresh file %q to be kept, stat err: %v", freshFile, err)
+	}
+
+	// Current session's file must be kept even though its mtime is past the cutoff.
+	if _, err := os.Stat(currentFile); err != nil {
+		t.Errorf("expected current session file %q to be kept, stat err: %v", currentFile, err)
+	}
+
+	// Unrelated file (does not match bwb-*.log glob) must be kept.
+	if _, err := os.Stat(unrelatedFile); err != nil {
+		t.Errorf("expected unrelated file %q to be kept, stat err: %v", unrelatedFile, err)
+	}
+}
+
 func firstLineFromFile(t *testing.T, filePath string) string {
 	t.Helper()
 
