@@ -76,6 +76,12 @@ exit code is used for processes that failed to execute). Because `WARN`
 records mirror to `stderr`, a failing `bd` subprocess is operator-visible
 without `--debug`.
 
+Cache hits (reads returned from the in-process read cache keyed on resolved
+argv and the `.beads/last-touched` mtime token) do not emit a per-command
+trace. During steady-state board refreshes with an unchanged DB, you will
+therefore see fewer "bd command finished" records than the number of refresh
+ticks — this is expected behaviour, not a missing log entry.
+
 The startup debug stream also prints the run `session_id` once so operators can
 correlate stderr output with structured log records. This applies equally to
 interactive startup and startup-only commands such as `--check-config` and
