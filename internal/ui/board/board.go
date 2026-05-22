@@ -84,7 +84,7 @@ func Render(state State) string {
 			innerWidth = 1
 		}
 
-		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase)
+		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx)
 		plus := ""
 		if !col.TotalIsExact {
 			plus = "+"
@@ -187,11 +187,19 @@ func distributeWidths(total, count int) []int {
 	return widths
 }
 
-// skeletonRows returns ~6 skeleton placeholder rows for a loading column.
-func skeletonRows(maxWidth, phase int) []string {
-	const numSkeletonRows = 6
-	rows := make([]string, 0, numSkeletonRows)
-	for i := 0; i < numSkeletonRows; i++ {
+// skeletonRowCounts varies the number of skeleton rows per board column so the
+// cold-start loading state does not render as a uniform grid of identical
+// columns. Indexed by absolute column index; safe-modulo handles >4 columns.
+var skeletonRowCounts = [...]int{4, 6, 3, 5}
+
+// skeletonRows returns skeleton placeholder rows for a loading column. colIndex
+// selects the row count from skeletonRowCounts so adjacent columns differ in
+// length rather than forming an identical block.
+func skeletonRows(maxWidth, phase, colIndex int) []string {
+	n := len(skeletonRowCounts)
+	count := skeletonRowCounts[((colIndex%n)+n)%n]
+	rows := make([]string, 0, count)
+	for i := 0; i < count; i++ {
 		rows = append(rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 			Width:  maxWidth,
 			Seed:   i,
@@ -202,7 +210,7 @@ func skeletonRows(maxWidth, phase int) []string {
 	return rows
 }
 
-func renderColumnRows(col Column, maxWidth, skeletonPhase int) []string {
+func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int) []string {
 	var rows []string
 
 	// Inline error row at the top (if any).
@@ -214,7 +222,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase int) []string {
 	if col.Loading {
 		if len(col.Rows) == 0 {
 			// Cold-start: no data yet — show skeleton rows.
-			rows = append(rows, skeletonRows(maxWidth, skeletonPhase)...)
+			rows = append(rows, skeletonRows(maxWidth, skeletonPhase, colIndex)...)
 			return rows
 		}
 		// Refresh: stale rows on screen while new data is in flight.

@@ -52,7 +52,7 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 			Priority: 0,
 		}},
 		SelectedRow: 0,
-	}, 72, 0)[0]
+	}, 72, 0, 0)[0]
 
 	if !strings.Contains(line, "\x1b[") {
 		t.Fatalf("expected ANSI styling in rendered row, got: %q", line)
@@ -74,7 +74,7 @@ func TestRenderColumnRowsUsesSharedIssueRowRenderer(t *testing.T) {
 	t.Parallel()
 
 	issue := domain.IssueSummary{ID: "beads-workbench-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
-	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0)
+	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0, 0)
 	if len(rows) != 1 {
 		t.Fatalf("expected exactly one rendered row, got %d", len(rows))
 	}
@@ -195,7 +195,7 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 			{ID: "bw-1", Title: "Stale Board Issue", Status: "open", Type: "task", Priority: 1},
 		},
 		SelectedRow: -1,
-	}, 80, phase)
+	}, 80, phase, 0)
 
 	if len(rows) == 0 {
 		t.Fatal("expected at least one rendered row")
@@ -220,21 +220,27 @@ func TestSkeletonRows(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	const (
-		width       = 60
-		numExpected = 6
-	)
+	const width = 60
 
-	for _, phase := range []int{0, 1, 2} {
-		rows := skeletonRows(width, phase)
-		if len(rows) != numExpected {
-			t.Errorf("phase=%d: skeletonRows returned %d rows, want %d", phase, len(rows), numExpected)
-		}
-		for i, row := range rows {
-			if row == "" {
-				t.Errorf("phase=%d row[%d]: expected non-empty skeleton string", phase, i)
+	// Each column index draws its row count from skeletonRowCounts so adjacent
+	// columns differ in length; the count is stable across animation phases.
+	for colIndex, want := range skeletonRowCounts {
+		for _, phase := range []int{0, 1, 2} {
+			rows := skeletonRows(width, phase, colIndex)
+			if len(rows) != want {
+				t.Errorf("col=%d phase=%d: skeletonRows returned %d rows, want %d", colIndex, phase, len(rows), want)
+			}
+			for i, row := range rows {
+				if row == "" {
+					t.Errorf("col=%d phase=%d row[%d]: expected non-empty skeleton string", colIndex, phase, i)
+				}
 			}
 		}
+	}
+
+	// colIndex wraps via safe-modulo for boards with more columns than the table.
+	if got := len(skeletonRows(width, 0, len(skeletonRowCounts))); got != skeletonRowCounts[0] {
+		t.Errorf("colIndex wrap: got %d rows, want %d", got, skeletonRowCounts[0])
 	}
 }
 

@@ -185,59 +185,67 @@ func TestRenderCompactSkeletonWidth(t *testing.T) {
 	}
 }
 
-// TestRenderCompactSkeletonFiveRuns verifies that the plain-text skeleton row
-// contains exactly five contiguous runs of ▓ separated by single spaces.
-func TestRenderCompactSkeletonFiveRuns(t *testing.T) {
+// TestRenderCompactSkeletonSegmentStructure verifies that the plain-text skeleton
+// row has the expected segment shape: three "X" metadata runs (type/priority/
+// state) followed by two SkeletonGlyph bars (id + title).
+func TestRenderCompactSkeletonSegmentStructure(t *testing.T) {
 	row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: false})
 	// Strip ANSI escapes for the structural check (Styled:false so none expected).
 	plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
-	re := regexp.MustCompile(`▓+`)
-	runs := re.FindAllString(plain, -1)
-	if len(runs) != 5 {
-		t.Errorf("expected 5 ▓ runs, got %d in %q", len(runs), plain)
+
+	metaRuns := regexp.MustCompile(SkeletonMetaGlyph+"+").FindAllString(plain, -1)
+	if len(metaRuns) != 3 {
+		t.Errorf("expected 3 %s metadata runs, got %d in %q", SkeletonMetaGlyph, len(metaRuns), plain)
+	}
+	barRuns := regexp.MustCompile(SkeletonGlyph+"+").FindAllString(plain, -1)
+	if len(barRuns) != 2 {
+		t.Errorf("expected 2 %s bar runs (id + title), got %d in %q", SkeletonGlyph, len(barRuns), plain)
 	}
 }
 
-// TestRenderCompactSkeletonStyledFiveRuns verifies the same structure when Styled:true.
-func TestRenderCompactSkeletonStyledFiveRuns(t *testing.T) {
+// TestRenderCompactSkeletonStyledSegmentStructure verifies the same structure when Styled:true.
+func TestRenderCompactSkeletonStyledSegmentStructure(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
 	row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: true})
 	plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
-	re := regexp.MustCompile(`▓+`)
-	runs := re.FindAllString(plain, -1)
-	if len(runs) != 5 {
-		t.Errorf("expected 5 ▓ runs in styled row, got %d in %q", len(runs), plain)
+	if got := len(regexp.MustCompile(SkeletonMetaGlyph+"+").FindAllString(plain, -1)); got != 3 {
+		t.Errorf("expected 3 %s metadata runs in styled row, got %d in %q", SkeletonMetaGlyph, got, plain)
+	}
+	if got := len(regexp.MustCompile(SkeletonGlyph+"+").FindAllString(plain, -1)); got != 2 {
+		t.Errorf("expected 2 %s bar runs in styled row, got %d in %q", SkeletonGlyph, got, plain)
 	}
 }
 
 // TestRenderCompactSkeletonSixDistinctTitleFills verifies that six successive
-// Seed values produce six visibly different title fill widths.
+// Seed values produce six visibly different title bar widths.
 func TestRenderCompactSkeletonSixDistinctTitleFills(t *testing.T) {
-	re := regexp.MustCompile(`▓+`)
+	re := regexp.MustCompile(SkeletonGlyph + "+")
 	seen := make(map[int]bool)
 	for seed := 0; seed < 6; seed++ {
 		row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: seed, Styled: false})
 		plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
 		runs := re.FindAllString(plain, -1)
 		if len(runs) == 0 {
-			t.Fatalf("seed %d: no ▓ runs found in %q", seed, plain)
+			t.Fatalf("seed %d: no %s runs found in %q", seed, SkeletonGlyph, plain)
 		}
-		// The last run is the title segment.
-		titleRunLen := len([]rune(runs[len(runs)-1]))
-		seen[titleRunLen] = true
+		// The last bar run is the title segment.
+		seen[len([]rune(runs[len(runs)-1]))] = true
 	}
 	if len(seen) != 6 {
-		t.Errorf("expected 6 distinct title fill widths across seeds 0-5, got %d distinct values: %v", len(seen), seen)
+		t.Errorf("expected 6 distinct title bar widths across seeds 0-5, got %d: %v", len(seen), seen)
 	}
 }
 
-// TestSkeletonGlyphConstant verifies the exported glyph constant value.
-func TestSkeletonGlyphConstant(t *testing.T) {
-	if SkeletonGlyph != "▓" {
-		t.Errorf("SkeletonGlyph = %q; want %q (U+2593 DARK SHADE)", SkeletonGlyph, "▓")
+// TestSkeletonGlyphConstants verifies the exported placeholder glyph constants.
+func TestSkeletonGlyphConstants(t *testing.T) {
+	if SkeletonGlyph != "░" {
+		t.Errorf("SkeletonGlyph = %q; want %q (U+2591 LIGHT SHADE)", SkeletonGlyph, "░")
+	}
+	if SkeletonMetaGlyph != "X" {
+		t.Errorf("SkeletonMetaGlyph = %q; want %q", SkeletonMetaGlyph, "X")
 	}
 }
 

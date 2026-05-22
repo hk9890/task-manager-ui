@@ -16,14 +16,21 @@ const (
 	minCompactIDWidth   = 7
 	maxCompactIDWidth   = 12
 
-	// SkeletonGlyph is the canonical placeholder character used in skeleton rows.
+	// SkeletonGlyph is the canonical placeholder character for the loading-bar
+	// segments (id + title) of a skeleton row. It is U+2591 LIGHT SHADE — light
+	// enough to read as a placeholder rather than uniform noise.
 	// Test assertions reference this constant so no caller hard-codes the literal rune.
-	SkeletonGlyph = "▓"
+	SkeletonGlyph = "░"
+
+	// SkeletonMetaGlyph is the placeholder character for the type/priority/state
+	// metadata slots of a skeleton row. An "X" so the left edge reads like a real
+	// row's metadata columns (e.g. "T P1 OPN") rather than a featureless bar.
+	SkeletonMetaGlyph = "X"
 )
 
 // skeletonTitleFractions is the normative table of title fill widths for
-// RenderCompactSkeleton.  Six values hand-picked so the average (≈ 0.66) matches
-// the median real-title length / available width in a 4-column board layout.
+// RenderCompactSkeleton. Six values hand-picked so successive rows show visibly
+// different bar lengths and the column does not read as a uniform block.
 // Indexed by ((Seed % 6) + 6) % 6 to handle negative seeds safely.
 var skeletonTitleFractions = [6]float64{0.70, 0.45, 0.85, 0.55, 0.80, 0.65}
 
@@ -35,10 +42,10 @@ type SkeletonOpts struct {
 	Styled bool // when true, apply lipgloss muted foreground colour
 }
 
-// skeletonSegment renders one fixed-width segment of SkeletonGlyph characters.
+// skeletonSegment renders one fixed-width segment by repeating glyph.
 // When styled is true it applies the given foreground color via lipgloss.
-func skeletonSegment(width int, styled bool, color lipgloss.AdaptiveColor) string {
-	block := strings.Repeat(SkeletonGlyph, width)
+func skeletonSegment(glyph string, width int, styled bool, color lipgloss.AdaptiveColor) string {
+	block := strings.Repeat(glyph, width)
 	if styled {
 		return lipgloss.NewStyle().Foreground(color).Render(block)
 	}
@@ -54,9 +61,12 @@ func skeletonColor(phase int) lipgloss.AdaptiveColor {
 }
 
 // RenderCompactSkeleton renders a placeholder row shaped like RenderCompact.
-// It emits five ▓-filled segments (type=1, priority=2, state=3, id=CompactIDWidth,
-// title=variable) separated by single spaces so the visual structure mirrors a
-// real issue row.  lipgloss.Width of the result equals opts.Width.
+// The type/priority/state slots are filled with SkeletonMetaGlyph ("X") so the
+// left edge reads like a real row's metadata columns; the id and title slots are
+// SkeletonGlyph ("░") loading bars, the title bar's width varying by Seed so a
+// column of rows does not read as a uniform block. Segments are separated by
+// single spaces so the structure mirrors a real issue row, and lipgloss.Width of
+// the result equals opts.Width.
 func RenderCompactSkeleton(opts SkeletonOpts) string {
 	width := opts.Width
 	if width <= 0 {
@@ -75,24 +85,24 @@ func RenderCompactSkeleton(opts SkeletonOpts) string {
 	titleWidth := width - typeWidth - prioWidth - stateWidth - idWidth - gaps
 	color := skeletonColor(opts.Phase)
 	if titleWidth < 1 {
-		// Terminal too narrow: fall back to a single full-width block.
-		return skeletonSegment(width, opts.Styled, color)
+		// Terminal too narrow: fall back to a single full-width bar.
+		return skeletonSegment(SkeletonGlyph, width, opts.Styled, color)
 	}
 
-	// Select title fill fraction from the normative table.
+	// Select the title bar fill fraction from the normative table.
 	idx := ((opts.Seed % 6) + 6) % 6
-	fraction := skeletonTitleFractions[idx]
-	fillWidth := int(float64(titleWidth) * fraction)
+	fillWidth := int(float64(titleWidth) * skeletonTitleFractions[idx])
 	if fillWidth < 1 {
 		fillWidth = 1
 	}
 
 	// Build segments left-to-right: type | priority | state | id | title.
-	typeSeg := skeletonSegment(typeWidth, opts.Styled, color)
-	prioSeg := skeletonSegment(prioWidth, opts.Styled, color)
-	stateSeg := skeletonSegment(stateWidth, opts.Styled, color)
-	idSeg := skeletonSegment(idWidth, opts.Styled, color)
-	titleFill := skeletonSegment(fillWidth, opts.Styled, color)
+	// type/priority/state use "X" metadata placeholders; id and title are bars.
+	typeSeg := skeletonSegment(SkeletonMetaGlyph, typeWidth, opts.Styled, color)
+	prioSeg := skeletonSegment(SkeletonMetaGlyph, prioWidth, opts.Styled, color)
+	stateSeg := skeletonSegment(SkeletonMetaGlyph, stateWidth, opts.Styled, color)
+	idSeg := skeletonSegment(SkeletonGlyph, idWidth, opts.Styled, color)
+	titleFill := skeletonSegment(SkeletonGlyph, fillWidth, opts.Styled, color)
 	titlePad := strings.Repeat(" ", titleWidth-fillWidth)
 
 	return typeSeg + " " + prioSeg + " " + stateSeg + " " + idSeg + " " + titleFill + titlePad
