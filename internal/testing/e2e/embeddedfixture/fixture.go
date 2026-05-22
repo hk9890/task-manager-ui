@@ -191,7 +191,18 @@ func SharedFixtureRepoPath(tb testing.TB) string {
 	tb.Helper()
 
 	sharedCache.once.Do(func() {
-		cacheDir := filepath.Join(os.TempDir(), "bwb-embedded-fixture-cache")
+		// The cache is seeded once per process (sync.Once) and is not designed
+		// for cross-process sharing — unlike the scale cache, it has no lock or
+		// completion marker. A fixed path let a broken or half-seeded cache
+		// from a prior run, or a concurrent test-binary process, poison every
+		// subsequent seed: setup.sh skips `bd init` when .beads already exists,
+		// so a stale .beads fails later with "issue_prefix config is missing".
+		// A process-unique dir keeps each test binary isolated.
+		cacheDir := filepath.Join(os.TempDir(), fmt.Sprintf("bwb-embedded-fixture-cache-%d", os.Getpid()))
+		if err := os.RemoveAll(cacheDir); err != nil {
+			sharedCache.initErr = fmt.Errorf("clean fixture cache dir %q: %w", cacheDir, err)
+			return
+		}
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			sharedCache.initErr = fmt.Errorf("create fixture cache dir %q: %w", cacheDir, err)
 			return
