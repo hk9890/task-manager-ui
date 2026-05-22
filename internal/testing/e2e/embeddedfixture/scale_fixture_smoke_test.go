@@ -154,15 +154,15 @@ func TestScaleFixtureInvariant_DoneTotalMatchesClosedCount(t *testing.T) {
 		t.Errorf("ssom: Done.Total=%d; want %d (real closed count from spec)", cols.Done.Total, nClosed)
 	}
 	if cols.Done.TotalIsExact {
-		t.Error("ssom: Done.TotalIsExact should be false when visible list < ClosedTotal ('+badge' signal)")
+		t.Error("ssom: Done.TotalIsExact should be false when visible list < ClosedTotal ('N of M' badge signal)")
 	}
 }
 
-// ---- Invariant 2 — Done column cap + '+badge' signal -----------------------
+// ---- Invariant 2 — Done column cap + 'N of M' badge signal -----------------
 
 // TestScaleFixtureInvariant_DoneColumnBadgeWhenCapped guards the ssom regression
 // class: when the fixture has >50 closed issues, a 50-cap produces TotalIsExact=false
-// (the signal bwb uses to render the "N+" badge).
+// (the signal bwb uses to render the "N of M" badge).
 func TestScaleFixtureInvariant_DoneColumnBadgeWhenCapped(t *testing.T) {
 	t.Parallel()
 
@@ -186,7 +186,7 @@ func TestScaleFixtureInvariant_DoneColumnBadgeWhenCapped(t *testing.T) {
 		t.Errorf("ssom: Done.Issues len=%d; want <=%d (cap respected)", len(cols.Done.Issues), doneCap)
 	}
 	if cols.Done.TotalIsExact {
-		t.Errorf("ssom: Done.TotalIsExact=true; want false when %d closed > cap %d (badge should show)", nClosed, doneCap)
+		t.Errorf("ssom: Done.TotalIsExact=true; want false when %d closed > cap %d (N of M badge should show)", nClosed, doneCap)
 	}
 	if cols.Done.Total < nClosed {
 		t.Errorf("ssom: Done.Total=%d; want >=%d (real DB count preserved)", cols.Done.Total, nClosed)

@@ -36,8 +36,11 @@ type Column struct {
 	// (the global header spinner from 0x36.6 signals the in-flight state).
 	Loading bool
 	// Total is the number of issues in this column as reported by the gateway.
-	// TotalIsExact is false when the backend may have more issues than were returned
-	// (e.g. the Done column was capped), in which case the renderer shows "N+".
+	// TotalIsExact is false when the rendered row list is truncated to a height
+	// cap and not all issues are visible, in which case the renderer shows
+	// "N of M" (e.g. "50 of 75") to communicate that only N of the M total
+	// issues are shown. The exact total M is never rendered with a lower-bound
+	// "+" suffix to avoid misrepresenting an exact count.
 	Total        int
 	TotalIsExact bool
 }
@@ -85,11 +88,12 @@ func Render(state State) string {
 		}
 
 		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx)
-		plus := ""
-		if !col.TotalIsExact {
-			plus = "+"
+		var topRight string
+		if col.TotalIsExact {
+			topRight = fmt.Sprintf("%d", col.Total)
+		} else {
+			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
 		}
-		topRight := fmt.Sprintf("%d%s", col.Total, plus)
 		renderedCols = append(renderedCols, styles.FormSection(styles.FormSectionConfig{
 			Width:              columnWidths[idx],
 			Height:             columnHeight,

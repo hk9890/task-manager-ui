@@ -10,7 +10,7 @@ package parity_test
 //
 // Edge cases exercised:
 //   - Done column cap engagement: >50 closed issues forces ClosedTotal > ClosedLimit,
-//     which must produce TotalIsExact=false and the "+badge" signal. The 3-issue
+//     which must produce TotalIsExact=false and the "N of M" badge signal. The 3-issue
 //     minimal anchor has only 1 closed issue, so it cannot trigger this path.
 //   - Done.Total vs bd count parity under cap: when Done is capped at 50 rows,
 //     Done.Total must still match bd count --by-status closed (not 50).
@@ -24,14 +24,14 @@ import (
 
 // TestScaleParity_DoneColumnCapEngagement exercises the ssom regression class:
 // when >50 issues are closed, the Done column must report TotalIsExact=false
-// (the signal bwb uses to render the "N+" badge) and Done.Total must equal
+// (the signal bwb uses to render the "N of M" badge) and Done.Total must equal
 // the real DB count, not the capped row count.
 //
 // This test requires the scale fixture (>50 closed issues). The 3-issue minimal
 // anchor cannot trigger the cap path, so this test is scale-only.
 //
-// regression class: ssom (Done-column 50-cap badge; bwb reported rows ≤ 50 but
-// the real closed count is 75+).
+// regression class: ssom (Done-column cap badge; bwb reported rows ≤ 50 but
+// the real closed count is 75).
 func TestScaleParity_DoneColumnCapEngagement(t *testing.T) {
 	// datasets.ScaleFixture skips automatically when BWB_SCALE_FIXTURE != 1.
 	ds := datasets.ScaleFixture(t)
@@ -65,11 +65,11 @@ func TestScaleParity_DoneColumnCapEngagement(t *testing.T) {
 		}
 	})
 
-	// Done.TotalIsExact must be false when capped ("+badge" signal).
+	// Done.TotalIsExact must be false when capped ("N of M" badge signal).
 	t.Run("DoneTotalIsExactFalseWhenCapped", func(t *testing.T) {
 		if cols.Done.TotalIsExact {
 			t.Errorf(
-				"ssom: Done.TotalIsExact=true when %d closed > cap %d; expected false (+badge should show)",
+				"ssom: Done.TotalIsExact=true when %d closed > cap %d; expected false (N of M badge should show)",
 				bdClosed, closedCapForTest,
 			)
 		} else {

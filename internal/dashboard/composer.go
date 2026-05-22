@@ -11,8 +11,8 @@ import (
 const cardinalityThreshold = 500
 
 // Inputs carries the five data groups returned by the dashboard fetch plan.
-// ClosedLimit is the cap that was sent to bd; it is used to compute the "N+"
-// badge on the Done column.
+// ClosedLimit is the cap that was sent to bd; it is used to determine whether
+// the visible row list is truncated (i.e. whether to show the "N of M" badge).
 // ClosedTotal is the real DB population count of closed issues (from CountIssues).
 // When > 0 it overrides len(Closed) as Done.Total so the header shows the
 // actual count rather than the capped slice size.
@@ -30,7 +30,7 @@ type Inputs struct {
 	StoredBlocked []domain.IssueSummary
 	InProgress    []domain.IssueSummary
 	Closed        []domain.IssueSummary
-	ClosedLimit   int // the cap that was sent to bd; used to compute "N+" badge
+	ClosedLimit   int // the cap that was sent to bd; used to determine row-list truncation
 	ClosedTotal   int // real DB count of closed issues; 0 means unset (falls back to len(Closed))
 }
 
@@ -47,7 +47,7 @@ type Columns struct {
 type ColumnData struct {
 	Issues       []domain.IssueSummary
 	Total        int
-	TotalIsExact bool // false when "N+" should be rendered (closed only)
+	TotalIsExact bool // false when the visible row list is truncated; renderer shows "N of M" (closed only)
 }
 
 // CardinalityWarning is a data-level signal returned to the caller so that
