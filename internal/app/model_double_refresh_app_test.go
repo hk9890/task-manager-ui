@@ -28,7 +28,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
-// countBoardGatewayCalls counts calls to the 4 board gateway methods.
+// countBoardGatewayCalls counts calls to the 5 board gateway methods.
 func countBoardGatewayCalls(gateway *fakes.FakeBeadsGateway) int {
 	n := 0
 	for _, c := range gateway.Calls {
@@ -124,11 +124,11 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 		t.Fatalf("expected board to be loading after first refreshTickMsg")
 	}
 
-	// The first refresh Cmd should contain 4 gateway calls.
+	// The first refresh Cmd should contain 5 gateway calls.
 	firstMsgs := runBatch(firstRefreshCmd)
 	callsFromFirst := countBoardGatewayCalls(gateway)
-	if callsFromFirst != 4 {
-		t.Fatalf("first refreshTickMsg: expected 4 gateway calls, got %d", callsFromFirst)
+	if callsFromFirst != 5 {
+		t.Fatalf("first refreshTickMsg: expected 5 gateway calls, got %d", callsFromFirst)
 	}
 
 	// Reset call counter to measure second-tick calls.
