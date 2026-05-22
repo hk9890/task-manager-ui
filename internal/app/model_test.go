@@ -1455,7 +1455,7 @@ func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 	gateway.SearchIssuesResponse = domain.SearchResultPage{}
 
 	fakeLauncher := &fakes.FakeLauncher{}
-	fakeEditor := &fakes.FakeEditor{Err: errors.New("editor boom")}
+	fakeEditor := &fakes.FakeEditor{PrepareErr: errors.New("editor boom")}
 	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
 	if err != nil {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
@@ -2419,7 +2419,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}
 
-	fakeEditor := &fakes.FakeEditor{Result: launchereditor.Result{Updated: true}}
+	fakeEditor := &fakes.FakeEditor{ApplyResult: launchereditor.Result{Updated: true}}
 	services.Editor = fakeEditor
 
 	m := mustNewModel(t, services)
@@ -2435,17 +2435,32 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 	gateway.ResetCalls()
 
+	// Phase 1: press 'e' → prepareEditCmd.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected edit command from edit hotkey")
 	}
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatalf("expected reload command after successful editor update")
+
+	// Phase 2: run prepareEditCmd → editIssuePreparedMsg; model returns tea.Exec cmd.
+	preparedMsg := cmd()
+	prepared, ok := preparedMsg.(editIssuePreparedMsg)
+	if !ok {
+		t.Fatalf("expected editIssuePreparedMsg, got %T", preparedMsg)
 	}
-	m = applyMessages(t, m, runBatch(cmd))
+	next, execCmd := m.Update(prepared)
+	m = next.(Model)
+	if execCmd == nil {
+		t.Fatalf("expected tea.Exec command after prepare message")
+	}
+
+	// Phase 3: inject editorExitedMsg directly (bypasses real tea.Exec in unit tests).
+	next, applyCmd := m.Update(editorExitedMsg{prepared: prepared.prepared, execErr: nil})
+	m = next.(Model)
+	if applyCmd == nil {
+		t.Fatalf("expected apply command after editor exited message")
+	}
+	m = applyMessages(t, m, runBatch(applyCmd))
 
 	if len(fakeEditor.Calls) != 1 {
 		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))

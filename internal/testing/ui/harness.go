@@ -102,6 +102,24 @@ func WaitForOutputContainsAll(tb testing.TB, output io.Reader, snippets ...strin
 	return WaitForOutputContainsAllWithTimeout(tb, output, 0, snippets...)
 }
 
+// WaitForConditionWithTimeout polls cond every 10ms until it returns true or
+// timeout elapses. It is intended for synchronising test goroutines on
+// non-output state (e.g. checking a call counter on a fake). If timeout is
+// zero, the function returns without waiting.
+func WaitForConditionWithTimeout(tb testing.TB, timeout time.Duration, cond func() bool) {
+	tb.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !cond() {
+		tb.Fatalf("WaitForConditionWithTimeout: condition not met after %s", timeout)
+	}
+}
+
 // WaitForOutputContainsAllWithTimeout is the same as WaitForOutputContainsAll
 // but allows callers to extend the WaitFor budget. Pass timeout == 0 to use the
 // teatest default. Use this for tests that exercise real bd subprocesses under

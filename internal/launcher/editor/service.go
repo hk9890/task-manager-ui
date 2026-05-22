@@ -4,15 +4,39 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
-// Service defines the rich issue external-editor flow.
+// Service defines the rich issue external-editor flow split into a prepare and
+// apply phase so that tea.Exec can sit between them.
 type Service interface {
-	EditIssue(ctx context.Context, issueID string) (Result, error)
+	// PrepareDocument fetches the issue, renders the edit document, and writes
+	// it to a temp file. The returned Prepared value carries the temp path and
+	// original issue; it must be passed back to ApplyEdits after the editor exits.
+	PrepareDocument(ctx context.Context, issueID string) (Prepared, error)
+
+	// ApplyEdits reads the edited temp file, parses it, and applies changes via
+	// the gateway when the document differs from the original issue. The temp
+	// file is removed regardless of the outcome.
+	ApplyEdits(ctx context.Context, issueID string, issue domain.IssueDetail, path string) (Result, error)
+
+	// BuildEditorCmd constructs the *exec.Cmd that opens path in the configured
+	// editor. The command is passed to tea.Exec by the model.
+	BuildEditorCmd(path string) (*exec.Cmd, error)
+}
+
+// Prepared holds the intermediate state between PrepareDocument and ApplyEdits.
+type Prepared struct {
+	// IssueID is the issue being edited.
+	IssueID string
+	// Issue is the original issue fetched in PrepareDocument.
+	Issue domain.IssueDetail
+	// TempPath is the path to the temporary edit document.
+	TempPath string
 }
 
 // Result reports whether an editor flow produced issue updates.
@@ -20,58 +44,57 @@ type Result struct {
 	Updated bool
 }
 
-// Opener is the replaceable seam for launching the editor subprocess.
-// Tests should use fakes so no interactive editor process is spawned.
-type Opener interface {
-	Open(ctx context.Context, path string) error
-}
-
 // IssueEditor applies rich editor updates through the official gateway.
 type IssueEditor struct {
-	gateway beads.BeadsGateway
-	opener  Opener
-	tempDir string
+	gateway       beads.BeadsGateway
+	editorCommand string
+	tempDir       string
 }
 
 var _ Service = (*IssueEditor)(nil)
 
 // NewIssueEditor builds the default issue editor flow.
-func NewIssueEditor(gateway beads.BeadsGateway, opener Opener) (*IssueEditor, error) {
+func NewIssueEditor(gateway beads.BeadsGateway, editorCommand string) (*IssueEditor, error) {
 	if gateway == nil {
 		return nil, fmt.Errorf("gateway is required")
 	}
 
-	if opener == nil {
-		return nil, fmt.Errorf("editor opener is required")
-	}
-
 	return &IssueEditor{
-		gateway: gateway,
-		opener:  opener,
-		tempDir: os.TempDir(),
+		gateway:       gateway,
+		editorCommand: editorCommand,
+		tempDir:       os.TempDir(),
 	}, nil
 }
 
-// EditIssue runs the issue document round-trip and applies updates when changed.
-func (e *IssueEditor) EditIssue(ctx context.Context, issueID string) (Result, error) {
+// PrepareDocument fetches the issue, renders its edit document, and writes a
+// temp file. The caller must eventually pass TempPath to ApplyEdits (which
+// removes the file).
+func (e *IssueEditor) PrepareDocument(ctx context.Context, issueID string) (Prepared, error) {
 	issue, err := e.gateway.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issueID})
 	if err != nil {
-		return Result{}, err
+		return Prepared{}, err
 	}
 
 	doc := domain.RenderIssueEditDocument(issue)
 
 	path, err := e.writeTempDocument(issueID, doc)
 	if err != nil {
-		return Result{}, err
+		return Prepared{}, err
 	}
+
+	return Prepared{
+		IssueID:  issueID,
+		Issue:    issue,
+		TempPath: path,
+	}, nil
+}
+
+// ApplyEdits reads the edited temp file, parses it, diffs against the original,
+// and calls UpdateIssue when changed. The temp file is removed on all paths.
+func (e *IssueEditor) ApplyEdits(ctx context.Context, issueID string, issue domain.IssueDetail, path string) (Result, error) {
 	defer func() {
 		_ = os.Remove(path)
 	}()
-
-	if err := e.opener.Open(ctx, path); err != nil {
-		return Result{}, err
-	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -93,6 +116,22 @@ func (e *IssueEditor) EditIssue(ctx context.Context, issueID string) (Result, er
 	}
 
 	return Result{Updated: true}, nil
+}
+
+// BuildEditorCmd constructs the *exec.Cmd that opens path in the configured
+// editor. The model passes this to tea.Exec for terminal handover.
+func (e *IssueEditor) BuildEditorCmd(path string) (*exec.Cmd, error) {
+	return buildEditorCmd(e.editorCommand, path)
+}
+
+// buildEditorCmd parses the editor command string and appends path.
+func buildEditorCmd(editorCommand, path string) (*exec.Cmd, error) {
+	command, args, err := splitEditorCommand(resolveEditorCommand(editorCommand))
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, path)
+	return exec.Command(command, args...), nil
 }
 
 func (e *IssueEditor) writeTempDocument(issueID, content string) (string, error) {

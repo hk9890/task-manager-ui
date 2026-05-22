@@ -2,16 +2,46 @@ package app
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/launcher"
 	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
 )
+
+// execCmdWrapper wraps an *exec.Cmd so it satisfies the tea.ExecCommand interface.
+type execCmdWrapper struct{ cmd *exec.Cmd }
+
+func (w *execCmdWrapper) Run() error { return w.cmd.Run() }
+func (w *execCmdWrapper) SetStdin(r io.Reader) {
+	if w.cmd.Stdin == nil {
+		w.cmd.Stdin = r
+	}
+}
+func (w *execCmdWrapper) SetStdout(wr io.Writer) {
+	if w.cmd.Stdout == nil {
+		w.cmd.Stdout = wr
+	}
+}
+func (w *execCmdWrapper) SetStderr(wr io.Writer) {
+	if w.cmd.Stderr == nil {
+		w.cmd.Stderr = wr
+	}
+}
+
+// defaultExecCommandFactory wraps an *exec.Cmd as a tea.ExecCommand using the
+// same "set if unset" semantics as Bubble Tea's own wrapExecCommand helper.
+func defaultExecCommandFactory(cmd *exec.Cmd) tea.ExecCommand {
+	return &execCmdWrapper{cmd: cmd}
+}
 
 // Services is the intentionally small root app container.
 //
@@ -28,6 +58,11 @@ type Services struct {
 	Launcher launcher.Service
 	Editor   launchereditor.Service
 	Config   config.Model
+	// ExecCommandFactory wraps a *exec.Cmd as a tea.ExecCommand for the editor
+	// launch flow. It defaults to a thin wrapper with Bubble Tea's "set if unset"
+	// stdin/stdout/stderr semantics. Tests can inject a no-op implementation to
+	// avoid launching real editor processes.
+	ExecCommandFactory func(*exec.Cmd) tea.ExecCommand
 	// Logger is the optional root runtime logger. It must NOT carry a
 	// "component" attribute; NewModelWithOptions derives per-mode loggers
 	// (component=board, component=search, …) via modeLogger. When nil, each
@@ -57,7 +92,7 @@ func NewServices(gateway beads.BeadsGateway, cfg config.Model, projectRoot strin
 		return Services{}, err
 	}
 
-	editorService, err := launchereditor.NewIssueEditor(gateway, launchereditor.ProcessOpener{EditorCommand: cfg.Editor.Command})
+	editorService, err := launchereditor.NewIssueEditor(gateway, cfg.Editor.Command)
 	if err != nil {
 		return Services{}, err
 	}
@@ -65,10 +100,11 @@ func NewServices(gateway beads.BeadsGateway, cfg config.Model, projectRoot strin
 	go cleanStaleTempFiles(slog.Default())
 
 	return Services{
-		Gateway:  gateway,
-		Launcher: launcherService,
-		Editor:   editorService,
-		Config:   cfg,
+		Gateway:            gateway,
+		Launcher:           launcherService,
+		Editor:             editorService,
+		Config:             cfg,
+		ExecCommandFactory: defaultExecCommandFactory,
 	}, nil
 }
 
@@ -120,15 +156,16 @@ func NewServicesWithLauncher(gateway beads.BeadsGateway, cfg config.Model, launc
 		return Services{}, errors.New("launcher service is required")
 	}
 
-	editorService, err := launchereditor.NewIssueEditor(gateway, launchereditor.ProcessOpener{EditorCommand: cfg.Editor.Command})
+	editorService, err := launchereditor.NewIssueEditor(gateway, cfg.Editor.Command)
 	if err != nil {
 		return Services{}, err
 	}
 
 	return Services{
-		Gateway:  gateway,
-		Launcher: launcherService,
-		Editor:   editorService,
-		Config:   cfg,
+		Gateway:            gateway,
+		Launcher:           launcherService,
+		Editor:             editorService,
+		Config:             cfg,
+		ExecCommandFactory: defaultExecCommandFactory,
 	}, nil
 }
