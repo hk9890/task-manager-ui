@@ -163,5 +163,18 @@ func (c *readCache) bootstrap() error {
 	if _, err := os.Stat(beadsDir); err != nil {
 		return nil
 	}
-	return os.WriteFile(path, nil, 0o644)
+	// O_CREATE|O_EXCL closes the small TOCTOU window between the Stat above
+	// and the write: if bd creates the file in the meantime (writing a real
+	// issue ID), our create fails with EEXIST and we treat that as success —
+	// not as "must overwrite". Without this, we could truncate bd's freshly
+	// written content back to empty and lose its no-arg "use last touched"
+	// UX state for one cycle.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil
+		}
+		return err
+	}
+	return f.Close()
 }
