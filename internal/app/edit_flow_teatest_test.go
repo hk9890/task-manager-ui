@@ -18,6 +18,7 @@ package app
 // full filesystem and gateway round-trip is exercised.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -91,7 +92,13 @@ func editableDocWithTitle(issue domain.IssueDetail, newTitle string) string {
 // Bubble Tea runtime. Verifies that:
 //   - FakeExecCommand.Run is called exactly once
 //   - UpdateIssue is recorded on the gateway
-//   - "Updated issue <id>" toast appears in the rendered output
+//   - the "Updated issue <id>" success toast is set on the settled model
+//
+// Assertion strategy: see the package note on TestEditFlowEditorErrorTeatest.
+// We synchronise on mutex-guarded fake counters (RunCount, gateway HasCall)
+// to confirm the async chain ran, then assert on m.toast.View() via
+// FinalModel rather than scanning the teatest output buffer — post-tea.Exec
+// View() frames do not reliably reach the output pipe under CI load.
 func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	// Not parallel — modifies global scheduler vars via TestMain.
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
@@ -134,20 +141,48 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	tm := testui.NewTestModelWithSize(t, model, 120, 34)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 34})
 
-	// Drain the board init so there is a selected issue.
+	// Drain the board init so there is a selected issue. This runs before any
+	// tea.Exec, so the renderer is in steady state and output-buffer scanning
+	// is reliable here.
 	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, originalTitle)
 
 	// Press 'e' to trigger the edit flow.
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 
-	// Wait for the success toast. "Updated issue" is the toast prefix.
-	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, "Updated issue")
+	// Gate 1: tea.Exec dispatched and FakeExecCommand.Run ran.
+	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
+		return fakeCmd.RunCount() >= 1
+	})
+	// Gate 2: applyEditsCmd's goroutine reached the gateway. This proves the
+	// editor's ApplyEdits path produced a real update (success path), and is
+	// the last observable side-effect before editIssueResultMsg is returned
+	// from the closure to the BubbleTea msg loop.
+	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
+		return gateway.HasCall(string(fakes.MethodUpdateIssue))
+	})
+	// Settle: give the runtime time to dequeue editIssueResultMsg and run the
+	// Update handler that sets the toast before we send tea.Quit. Matches the
+	// 200 ms used by TestEditFlowEditorErrorTeatest.
+	time.Sleep(200 * time.Millisecond)
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("teatest Quit: %v", err)
 	}
 
-	// Post-run assertions on the fake.
+	// Assert on the settled model state via FinalModel — renderer-independent.
+	finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(editFlowTimeout))
+	m, ok := finalModel.(Model)
+	if !ok {
+		t.Fatalf("expected final model of type Model, got %T", finalModel)
+	}
+	if !m.toast.Visible() {
+		t.Errorf("expected success toast to be visible after successful edit; toast=%+v", m.toast)
+	}
+	wantToast := fmt.Sprintf("Updated issue %s", issueID)
+	if view := m.toast.View(); !strings.Contains(view, wantToast) {
+		t.Errorf("expected toast to contain %q, got: %q", wantToast, view)
+	}
+
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
@@ -158,7 +193,13 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 
 // TestEditFlowNoChangeTeatest verifies the no-change path: when the editor
 // writes back an identical document, no UpdateIssue is called and the
-// "No changes saved" toast is shown.
+// "No changes saved" toast is set on the settled model.
+//
+// Assertion strategy: see the package note on TestEditFlowEditorErrorTeatest.
+// Same FinalModel approach as the success-path test — output-buffer scanning
+// is not reliable for post-tea.Exec frames under CI load. Gating on
+// gateway.HasCall(UpdateIssue) is not available here (we are asserting the
+// opposite), so we use the same RunCount + settle pattern as test 3.
 func TestEditFlowNoChangeTeatest(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
@@ -197,14 +238,34 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 	tm := testui.NewTestModelWithSize(t, model, 120, 34)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 34})
 
+	// Drain the board init so a selection exists.
 	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, "Unchanged Title")
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 
-	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, "No changes saved for issue")
+	// Gate: tea.Exec dispatched and FakeExecCommand.Run ran. No further
+	// observable side-effect exists for the no-change path (the test asserts
+	// that UpdateIssue is NOT called), so settle on time alone afterwards.
+	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
+		return fakeCmd.RunCount() >= 1
+	})
+	time.Sleep(200 * time.Millisecond)
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("teatest Quit: %v", err)
+	}
+
+	finalModel := tm.FinalModel(t, teatest.WithFinalTimeout(editFlowTimeout))
+	m, ok := finalModel.(Model)
+	if !ok {
+		t.Fatalf("expected final model of type Model, got %T", finalModel)
+	}
+	if !m.toast.Visible() {
+		t.Errorf("expected info toast to be visible after no-change edit; toast=%+v", m.toast)
+	}
+	wantToast := fmt.Sprintf("No changes saved for issue %s", issueID)
+	if view := m.toast.View(); !strings.Contains(view, wantToast) {
+		t.Errorf("expected toast to contain %q, got: %q", wantToast, view)
 	}
 
 	if n := fakeCmd.RunCount(); n != 1 {
