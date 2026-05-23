@@ -563,11 +563,12 @@ func TestRefreshSearchCarriesDimPhaseStyle(t *testing.T) {
 // Stale-draft indicator tests (beads-workbench-2ev4.4)
 // ---------------------------------------------------------------------------
 
-// TestRenderStaleDraftShowsBannerAndBadge verifies that when the typed draft
-// query differs from the last applied query (and no search is in flight), the
-// Results pane shows a stale-results banner and the Results badge includes
-// "stale", so the prior rows are never mistaken for matches of the new draft.
-func TestRenderStaleDraftShowsBannerAndBadge(t *testing.T) {
+// TestRenderStaleDraftShowsBanner verifies that when the typed draft query
+// differs from the last applied query (and no search is in flight), the
+// Results pane shows a stale-results banner. The banner is the sole affordance
+// for the stale-draft state; there is no "stale" badge in the Results title
+// and result rows are not dimmed.
+func TestRenderStaleDraftShowsBanner(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
@@ -588,10 +589,6 @@ func TestRenderStaleDraftShowsBannerAndBadge(t *testing.T) {
 	// The stale banner must appear — the prefix fits within the pane width.
 	if !strings.Contains(plain, "Results below are stale") {
 		t.Fatalf("expected stale-draft banner in results pane, got:\n%s", plain)
-	}
-	// The Results border badge must include "stale".
-	if !strings.Contains(plain, "stale") {
-		t.Fatalf("expected 'stale' in Results badge, got:\n%s", plain)
 	}
 	// Prior results must still be visible (not erased).
 	if !strings.Contains(plain, "Gateway result") {

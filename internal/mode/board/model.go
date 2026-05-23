@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -476,12 +477,10 @@ func (m *Model) maybeCompose() tea.Cmd {
 	inProgressErr := m.partialInProgressErr
 	closedErr := m.partialClosedErr
 
-	// notReadyErr is the first non-nil error from ReadyExplain or storedBlocked
-	// so the Not Ready column surface both error sources.
-	notReadyErr := readyExplainErr
-	if notReadyErr == nil {
-		notReadyErr = storedBlockedErr
-	}
+	// notReadyErr joins both error sources so the Not Ready column surfaces
+	// failures from ReadyExplain and storedBlocked when both fail simultaneously.
+	// errors.Join returns nil when all inputs are nil, preserving the no-error path.
+	notReadyErr := errors.Join(readyExplainErr, storedBlockedErr)
 
 	// Build the four fixed columns, clearing loading flags atomically.
 	m.columns = []columnData{

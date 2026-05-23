@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -207,63 +206,6 @@ func TestWriteInvalidatesCache(t *testing.T) {
 	}
 }
 
-// TestSingleflightCollapsesIdenticalConcurrentArgv verifies that N concurrent
-// goroutines issuing the same argv collapse to a single executor call via
-// singleflight.
-func TestSingleflightCollapsesIdenticalConcurrentArgv(t *testing.T) {
-	t.Parallel()
-
-	workDir := newTmpBeadsDir(t)
-
-	// gate controls when the executor unblocks.
-	gate := make(chan struct{})
-	var execCount atomic.Int64
-
-	blockingExec := &gatedExecutor{
-		gate:   gate,
-		result: ExecResult{Stdout: []byte(`["item"]`)},
-		onExec: func() { execCount.Add(1) },
-	}
-
-	runner := NewCommandRunner(RunnerConfig{
-		WorkDir:  workDir,
-		Executor: blockingExec,
-	})
-
-	const goroutines = 10
-	var wg sync.WaitGroup
-	wg.Add(goroutines)
-	results := make([][]byte, goroutines)
-	errs := make([]error, goroutines)
-
-	for i := 0; i < goroutines; i++ {
-		i := i
-		go func() {
-			defer wg.Done()
-			results[i], errs[i] = runner.Run(context.Background(), CommandRequest{
-				Operation: "list issues",
-				Args:      []string{"list", "--json"},
-			})
-		}()
-	}
-
-	// Give all goroutines time to pile up inside singleflight.
-	time.Sleep(50 * time.Millisecond)
-	// Unblock the single exec.
-	close(gate)
-	wg.Wait()
-
-	for i, err := range errs {
-		if err != nil {
-			t.Errorf("goroutine %d returned error: %v", i, err)
-		}
-	}
-
-	if got := execCount.Load(); got != 1 {
-		t.Fatalf("expected exactly 1 executor call (singleflight), got %d", got)
-	}
-}
-
 // TestFailureNotCached verifies that a failed exec (non-zero exit code) is not
 // stored in the cache; the next call re-execs.
 func TestFailureNotCached(t *testing.T) {
@@ -337,9 +279,8 @@ func TestWriteNotCached(t *testing.T) {
 	}
 }
 
-// TestCacheNoCacheWhenWorkDirEmpty verifies that the cache and singleflight are
-// both inactive when WorkDir is empty, so all callers get independent executor
-// invocations.
+// TestCacheNoCacheWhenWorkDirEmpty verifies that the cache is inactive when
+// WorkDir is empty, so all callers get independent executor invocations.
 func TestCacheNoCacheWhenWorkDirEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -347,7 +288,7 @@ func TestCacheNoCacheWhenWorkDirEmpty(t *testing.T) {
 	counter := newCountingExecutor(stub)
 
 	runner := NewCommandRunner(RunnerConfig{
-		// WorkDir intentionally empty — cache and singleflight disabled.
+		// WorkDir intentionally empty — cache disabled.
 		Executor: counter,
 	})
 
@@ -413,21 +354,4 @@ func TestCacheDataRaceFree(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-// gatedExecutor blocks in Run until its gate channel is closed, then returns
-// the configured result. An optional onExec callback fires before blocking.
-type gatedExecutor struct {
-	gate   chan struct{}
-	result ExecResult
-	err    error
-	onExec func()
-}
-
-func (e *gatedExecutor) Run(_ context.Context, _ string, _ []string, _ string, _ []string) (ExecResult, error) {
-	if e.onExec != nil {
-		e.onExec()
-	}
-	<-e.gate
-	return e.result, e.err
 }

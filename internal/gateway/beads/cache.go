@@ -6,8 +6,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 // lastTouchedFile is the bd-maintained sentinel file whose mtime advances on
@@ -47,12 +45,13 @@ type cacheEntry struct {
 // # Concurrency
 //
 // cacheMu guards all cache state and is independent of the runner's runMu.
-// singleflight ensures that concurrent identical argv misses collapse to one
-// exec. Hits are served under cacheMu.RLock without acquiring runMu or sem.
+// Hits are served under cacheMu.RLock without acquiring runMu or sem.
 type readCache struct {
 	cacheMu sync.RWMutex
+	// entries is unbounded in principle but bounded in practice by user-driven argv variation:
+	// each distinct query/show argv adds one entry, all entries clear on any write
+	// (see invalidate()). No TTL/LRU until measurement shows steady-state growth.
 	entries map[string]cacheEntry
-	sg      singleflight.Group
 	workDir string // the runner's bound WorkDir; empty = cache disabled
 }
 

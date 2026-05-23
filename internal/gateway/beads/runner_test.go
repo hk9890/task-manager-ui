@@ -606,6 +606,7 @@ func TestCommandRunnerRunLogsExecutionTraceOnExecutionError(t *testing.T) {
 }
 
 type stubExecutor struct {
+	mu      sync.Mutex
 	command string
 	args    []string
 	workDir string
@@ -684,12 +685,15 @@ func (e *concurrencyGuardExecutor) Run(_ context.Context, _ string, _ []string, 
 }
 
 func (s *stubExecutor) Run(_ context.Context, command string, args []string, workDir string, env []string) (ExecResult, error) {
+	s.mu.Lock()
 	s.command = command
 	s.args = append([]string(nil), args...)
 	s.workDir = workDir
 	s.env = append([]string(nil), env...)
+	result, err := s.result, s.err
+	s.mu.Unlock()
 
-	return s.result, s.err
+	return result, err
 }
 
 func assertGatewayErrorCode(t *testing.T, err error, expected domain.ErrorCode) {
