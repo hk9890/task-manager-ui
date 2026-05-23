@@ -1,9 +1,14 @@
 name: Release
 
+# Tag-triggered auto-release is temporarily disabled while the private-repo
+# GitHub Actions billing is paused. Releases are built and published
+# locally with `goreleaser release` against a tagged commit; see
+# docs/RELEASING.md (Local release fallback section).
+#
+# Re-enable by restoring the `push: tags: v*` trigger when Actions billing
+# is restored.
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 # Top-level least-privilege default; the release job widens itself locally.
 permissions:

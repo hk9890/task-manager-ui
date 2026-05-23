@@ -94,6 +94,49 @@ Run from the repository root.
    git ls-remote --tags origin "refs/tags/vX.Y.Z"
    ```
 
+## Local release fallback (workflows paused)
+
+When the GitHub Actions workflows are temporarily disabled (for example, while
+private-repo Actions billing is paused), releases can be built and published
+locally from the same `.goreleaser.yaml` used by the CI release job. The
+substitute provenance is the local `mise run quality` + `mise run smoke`
+output recorded on the release commit.
+
+Prerequisites: `goreleaser` v2 in PATH (`go install github.com/goreleaser/goreleaser/v2@latest`), a `GITHUB_TOKEN` with `repo` scope (typically `gh auth token`), and a clean working tree on the release commit.
+
+Procedure:
+
+1. Confirm both `mise run quality` and `mise run smoke` pass on the release
+   commit (substitutes for the CI provenance gate).
+2. Create and push the annotated tag:
+
+   ```bash
+   git tag -a vX.Y.Z -m "bwb vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+3. Build, publish, and upload assets locally:
+
+   ```bash
+   GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --skip=sign --skip=sbom
+   ```
+
+   - `--skip=sign` skips cosign signing (requires `cosign` + interactive
+     Sigstore OIDC flow). Drop the flag and install `cosign` to restore
+     signed checksums.
+   - `--skip=sbom` skips SPDX SBOM generation (requires `syft`). Drop the
+     flag and install `syft` to restore per-archive SBOMs.
+   - SLSA build provenance (`actions/attest-build-provenance`) is workflow-only
+     and is not produced by this fallback path.
+
+4. Verify the release the same way as the CI flow (see Post-release
+   verification under the main release flow above).
+
+When Actions billing is restored, re-enable the `push`/`pull_request` and
+`push: tags: v*` triggers in `.github/workflows/ci.yml` and
+`.github/workflows/release.yml` to return to the documented tag-triggered
+flow.
+
 ## Verifying a downloaded release
 
 Each release includes a cosign-signed checksum file and per-archive SBOM

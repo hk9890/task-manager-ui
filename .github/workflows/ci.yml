@@ -1,8 +1,14 @@
 name: CI
 
+# Auto-triggers (push, pull_request) are temporarily disabled while the
+# private-repo GitHub Actions billing is paused. Local quality gates
+# (`mise run quality`, `mise run smoke`) substitute as release provenance
+# in this period — see docs/RELEASING.md.
+#
+# Re-enable by restoring the `push:` and `pull_request:` triggers when
+# Actions billing is restored.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 # Ratchet this value upward as coverage improves.
 # Baseline history:
