@@ -46,55 +46,39 @@ func TestFixtureDataset(t *testing.T) {
 // TestThisRepoSkipsWhenEnvNotSet verifies that ThisRepo skips cleanly when the
 // env gate is absent.
 func TestThisRepoSkipsWhenEnvNotSet(t *testing.T) {
-	// Do not call t.Parallel() — we manipulate env.
-	orig := os.Getenv(datasets.EnvParityThisRepo)
-	_ = os.Unsetenv(datasets.EnvParityThisRepo)
-	t.Cleanup(func() {
-		if orig != "" {
-			_ = os.Setenv(datasets.EnvParityThisRepo, orig)
-		}
-	})
-
-	// datasets.ThisRepo must call t.Skip when the env gate is off.
-	// We run it in a sub-test and verify the sub-test was skipped.
-	skipped := false
-	t.Run("gate-off", func(t *testing.T) {
-		datasets.ThisRepo(t)
-		// If we reach here the env was somehow set; record not-skipped.
-	})
-
-	for _, result := range []struct{ skipped bool }{{t.Failed()}} {
-		_ = result
+	if os.Getenv(datasets.EnvParityThisRepo) != "" {
+		t.Skipf("%s is set; this test verifies the skip path when it is unset", datasets.EnvParityThisRepo)
 	}
-	// Check by looking at sub-test outcome via a separate flag set in the
-	// cleanup before the sub-test's t.Cleanup fires.
-	_ = skipped // used below via the sub-test helper
-	// Simpler approach: just verify the behavior directly.
-	// The sub-test should have been skipped if the env was not set.
-	// We can't easily introspect t.Skipped() on a finished sub-test,
-	// so instead we verify the behavior via the function's documented contract:
-	// if BWB_PARITY_THIS_REPO is unset, ThisRepo must panic/skip — the test
-	// framework marks the sub-test as skipped and the parent continues.
-	// This test passing without panic confirms the skip path is safe.
+
+	var subT *testing.T
+	t.Run("gate-off", func(s *testing.T) {
+		subT = s
+		datasets.ThisRepo(s) // expected to call s.Skip() and abort this goroutine
+		// Unreachable when skip works correctly.
+	})
+
+	if !subT.Skipped() {
+		t.Fatalf("datasets.ThisRepo did not skip when %s was unset", datasets.EnvParityThisRepo)
+	}
 }
 
 // TestExternalSkipsWhenEnvNotSet verifies that External skips cleanly when
 // BWB_PARITY_EXTERNAL_PATH is absent.
 func TestExternalSkipsWhenEnvNotSet(t *testing.T) {
-	// Do not call t.Parallel() — we manipulate env.
-	orig := os.Getenv(datasets.EnvParityExternalPath)
-	_ = os.Unsetenv(datasets.EnvParityExternalPath)
-	t.Cleanup(func() {
-		if orig != "" {
-			_ = os.Setenv(datasets.EnvParityExternalPath, orig)
-		}
+	if os.Getenv(datasets.EnvParityExternalPath) != "" {
+		t.Skipf("%s is set; this test verifies the skip path when it is unset", datasets.EnvParityExternalPath)
+	}
+
+	var subT *testing.T
+	t.Run("gate-off", func(s *testing.T) {
+		subT = s
+		datasets.External(s) // expected to call s.Skip() and abort this goroutine
+		// Unreachable when skip works correctly.
 	})
 
-	// Run External in a sub-test — it must skip cleanly.
-	t.Run("gate-off", func(t *testing.T) {
-		datasets.External(t)
-	})
-	// If the sub-test completed without panicking, the skip path is safe.
+	if !subT.Skipped() {
+		t.Fatalf("datasets.External did not skip when %s was unset", datasets.EnvParityExternalPath)
+	}
 }
 
 // TestReadOnlyGatewayBlocksWrites verifies that a gateway built from a
