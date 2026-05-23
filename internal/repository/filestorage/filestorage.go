@@ -1,0 +1,211 @@
+// Package filestorage provides Save and Load for persisting a
+// memory.Repository to disk and restoring it.
+//
+// # File format
+//
+// Save writes two files:
+//
+//   - path — one JSON object per line (JSONL). Each line is a
+//     [memory.SnapshotIssue] including all fields: DependsOn, Comments, and
+//     all timestamps. The round-trip is lossless.
+//   - path + ".manifest.json" — a JSON object with schema_version, synced_at,
+//     and bd_commit_hash fields.
+//
+// Load reads the manifest first. If schema_version does not match
+// [SchemaVersion] it returns [repository.ErrSchemaMismatch] without attempting
+// to parse the JSONL. bd_commit_hash is left as empty string because Save
+// operates on a memory.Repository and has no access to bd project context;
+// Epic 2 will plumb commit info when it owns cache-dir derivation.
+//
+// # Signature constraints
+//
+// Save accepts *memory.Repository (not the generic repository.Repository
+// interface) so the serialiser can call Snapshot() directly rather than going
+// through the Search-based API. This keeps the surface small and avoids
+// coupling to the full Repository interface. The path is caller-supplied;
+// cache-directory derivation (~/.cache/bwb/<project-hash>/) is Epic 2's
+// concern.
+//
+// # Why a separate package
+//
+// file.go originally targeted the repository package, but repository already
+// imports repository/memory (via the interface types), and memory imports
+// repository — creating an import cycle. filestorage is a sibling package that
+// imports both without participating in either cycle.
+package filestorage
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/beads-workbench/internal/repository/memory"
+)
+
+// SchemaVersion is the JSONL schema version written by Save.
+// Load returns repository.ErrSchemaMismatch when the manifest's schema_version
+// differs from this constant.
+const SchemaVersion = 1
+
+// manifest is the structure written alongside the JSONL file.
+type manifest struct {
+	SchemaVersion int    `json:"schema_version"`
+	SyncedAt      string `json:"synced_at"`
+	BDCommitHash  string `json:"bd_commit_hash"`
+}
+
+// Save writes r's contents to path (JSONL) and path+".manifest.json".
+//
+// path is the JSONL file; the manifest is written as a sibling named
+// path+".manifest.json". Both files are written atomically (write to temp,
+// then rename) so a concurrent Load does not read a partial write.
+//
+// bd_commit_hash is always empty string; see package doc.
+func Save(r *memory.Repository, path string) error {
+	issues := r.Snapshot()
+
+	// Write JSONL to a temp file, then rename.
+	tmpJSONL, err := os.CreateTemp("", "bwb-repo-*.jsonl")
+	if err != nil {
+		return fmt.Errorf("filestorage.Save: create temp jsonl: %w", err)
+	}
+	tmpJSONLPath := tmpJSONL.Name()
+	defer func() { _ = os.Remove(tmpJSONLPath) }()
+
+	w := bufio.NewWriter(tmpJSONL)
+	enc := json.NewEncoder(w)
+	for _, iss := range issues {
+		if err := enc.Encode(iss); err != nil {
+			_ = tmpJSONL.Close()
+			return fmt.Errorf("filestorage.Save: encode issue %q: %w", iss.ID, err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		_ = tmpJSONL.Close()
+		return fmt.Errorf("filestorage.Save: flush jsonl: %w", err)
+	}
+	if err := tmpJSONL.Close(); err != nil {
+		return fmt.Errorf("filestorage.Save: close temp jsonl: %w", err)
+	}
+	if err := os.Rename(tmpJSONLPath, path); err != nil {
+		return fmt.Errorf("filestorage.Save: rename jsonl to %q: %w", path, err)
+	}
+
+	// Write manifest.
+	m := manifest{
+		SchemaVersion: SchemaVersion,
+		SyncedAt:      time.Now().UTC().Format(time.RFC3339),
+		BDCommitHash:  "",
+	}
+	mBytes, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return fmt.Errorf("filestorage.Save: marshal manifest: %w", err)
+	}
+
+	manifestPath := path + ".manifest.json"
+	tmpManifest, err := os.CreateTemp("", "bwb-manifest-*.json")
+	if err != nil {
+		return fmt.Errorf("filestorage.Save: create temp manifest: %w", err)
+	}
+	tmpManifestPath := tmpManifest.Name()
+	defer func() { _ = os.Remove(tmpManifestPath) }()
+
+	if _, err := tmpManifest.Write(mBytes); err != nil {
+		_ = tmpManifest.Close()
+		return fmt.Errorf("filestorage.Save: write manifest: %w", err)
+	}
+	if err := tmpManifest.Close(); err != nil {
+		return fmt.Errorf("filestorage.Save: close temp manifest: %w", err)
+	}
+	if err := os.Rename(tmpManifestPath, manifestPath); err != nil {
+		return fmt.Errorf("filestorage.Save: rename manifest to %q: %w", manifestPath, err)
+	}
+
+	return nil
+}
+
+// Load reads a JSONL file from path and returns a populated *memory.Repository.
+//
+// Load reads the manifest from path+".manifest.json" first. If schema_version
+// does not match [SchemaVersion], Load returns [repository.ErrSchemaMismatch]
+// without reading the JSONL. Load does not panic on malformed input; it
+// returns a descriptive error.
+//
+// The returned repository uses the default real-time clock and default ID
+// generator; timestamps from the JSONL file are preserved in the seeded
+// issues.
+func Load(path string) (*memory.Repository, error) {
+	// Read and check manifest.
+	manifestPath := path + ".manifest.json"
+	mBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("filestorage.Load: read manifest %q: %w", manifestPath, err)
+	}
+
+	var m manifest
+	if err := json.Unmarshal(mBytes, &m); err != nil {
+		return nil, fmt.Errorf("filestorage.Load: decode manifest %q: %w", manifestPath, err)
+	}
+
+	if m.SchemaVersion != SchemaVersion {
+		return nil, fmt.Errorf("%w: file has schema_version=%d, expected %d",
+			repository.ErrSchemaMismatch, m.SchemaVersion, SchemaVersion)
+	}
+
+	// Read JSONL.
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("filestorage.Load: open %q: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	r := memory.New()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var snap memory.SnapshotIssue
+		if err := json.Unmarshal(line, &snap); err != nil {
+			return nil, fmt.Errorf("filestorage.Load: decode issue line: %w", err)
+		}
+
+		r.Seed(memory.Issue{
+			ID:          snap.ID,
+			Title:       snap.Title,
+			Status:      snap.Status,
+			Priority:    snap.Priority,
+			Type:        snap.Type,
+			Assignee:    snap.Assignee,
+			Labels:      snap.Labels,
+			Description: snap.Description,
+			Notes:       snap.Notes,
+			DependsOn:   snap.DependsOn,
+			Created:     snap.Created,
+			Updated:     snap.Updated,
+		})
+
+		if len(snap.Comments) > 0 {
+			memComments := make([]memory.Comment, len(snap.Comments))
+			for i, c := range snap.Comments {
+				memComments[i] = memory.Comment(c)
+			}
+			r.SeedComments(snap.ID, memComments...)
+		}
+
+		// Restore closed state: Seed does not accept a closed timestamp,
+		// so we call SeedClosed for any issue that was closed.
+		if snap.Status == "closed" && !snap.Closed.IsZero() {
+			r.SeedClosed(snap.ID, snap.Closed, snap.CloseReason)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("filestorage.Load: scan jsonl: %w", err)
+	}
+
+	return r, nil
+}
