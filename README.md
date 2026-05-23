@@ -1,5 +1,7 @@
 # Beads Workbench
 
+[![CI](https://github.com/hk9890/beads-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/hk9890/beads-workbench/actions/workflows/ci.yml)
+
 A standalone terminal UI for browsing and updating beads issues.
 
 ## Repository Identity

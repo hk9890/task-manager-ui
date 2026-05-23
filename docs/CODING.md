@@ -246,6 +246,7 @@ Key tasks:
 | `mise run quality` | full pre-handoff gate: `vet`, `lint`, `guardrails`, unit `test`, `test:integration` |
 | `mise run quality:fast` | fast pre-commit gate: `vet`, `lint`, `guardrails`, unit `test` (skips `test:integration` only) |
 | `mise run smoke` | build + run the `bwb-smoke` release data-consistency check |
+| `mise run vuln` | `govulncheck ./...` — CVE scan against deps + stdlib (CI-enforced; needs network) |
 | `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
 
 **Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) fork real `bd` subprocesses and use the embedded fixture harness; they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess, replays the embedded fixture, or costs >1s, it belongs in an integration test file.
