@@ -77,10 +77,24 @@ records mirror to `stderr`, a failing `bd` subprocess is operator-visible
 without `--debug`.
 
 Cache hits (reads returned from the in-process read cache keyed on resolved
-argv and the `.beads/last-touched` mtime token) do not emit a per-command
-trace. During steady-state board refreshes with an unchanged DB, you will
-therefore see fewer "bd command finished" records than the number of refresh
-ticks — this is expected behaviour, not a missing log entry.
+argv and the `.beads/last-touched` mtime token) emit a `"bd command cache
+hit"` trace at `INFO` with `operation` and `argv` fields, mirroring the
+miss-side `"bd command finished"` record. Hit-rate analysis is therefore a
+single grep against the same log stream:
+
+```bash
+hits=$(grep -c "bd command cache hit"   ~/.local/state/bwb/bwb-<id>.log)
+miss=$(grep -c "bd command finished"    ~/.local/state/bwb/bwb-<id>.log)
+echo "hit rate: $((100 * hits / (hits + miss)))%"
+```
+
+The cache requires `.beads/last-touched` to exist (the change-token source).
+If absent, the runner bootstraps an empty file at startup so the cache works
+on projects where bd has never executed a tracked operation. If bootstrap
+fails (e.g. permission error), a `WARN` record `"failed to bootstrap cache
+token file; cache may be disabled"` is emitted and the cache stays inactive
+for the runner's lifetime — every read will then show up as `"bd command
+finished"` with no matching `"cache hit"` companion.
 
 The startup debug stream also prints the run `session_id` once so operators can
 correlate stderr output with structured log records. This applies equally to

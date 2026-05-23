@@ -153,6 +153,14 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		sem <- struct{}{}
 	}
 
+	cache := newReadCache(cfg.WorkDir)
+	if err := cache.bootstrap(); err != nil && cfg.Logger != nil {
+		cfg.Logger.Warn("failed to bootstrap cache token file; cache may be disabled",
+			"path", cache.tokenPath(),
+			"error", err.Error(),
+		)
+	}
+
 	return &CommandRunner{
 		command:        command,
 		defaultWorkDir: cfg.WorkDir,
@@ -161,7 +169,7 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		logger:         cfg.Logger,
 		readOnly:       cfg.ReadOnly,
 		sem:            sem,
-		cache:          newReadCache(cfg.WorkDir),
+		cache:          cache,
 	}
 }
 
@@ -185,9 +193,12 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 
 	// ---- read cache fast path ------------------------------------------------
 	// Check the cache before acquiring any lock. Hits return immediately without
-	// touching runMu or the semaphore.
+	// touching runMu or the semaphore. A successful hit is logged so operators
+	// can compute hit/miss ratios from the same log stream as "bd command
+	// finished" misses (see docs/MONITORING.md).
 	if !req.IsWrite {
 		if cached, hit := r.cache.get(argv); hit {
+			r.logCacheHit(req, argv)
 			return cached, nil
 		}
 	}
@@ -361,6 +372,21 @@ func (r *CommandRunner) resolveArgs(args []string) []string {
 	resolved = append(resolved, "--readonly")
 	resolved = append(resolved, args...)
 	return resolved
+}
+
+// logCacheHit records a per-call trace for a cache hit. Mirrors the operation
+// + argv fields of "bd command finished" so hit-rate analysis can be done with
+// a single grep against the same log file: "cache hit" lines are hits,
+// "bd command finished" lines with IsWrite=false are misses.
+func (r *CommandRunner) logCacheHit(req CommandRequest, resolvedArgs []string) {
+	if r.logger == nil {
+		return
+	}
+	argv := append([]string{r.command}, resolvedArgs...)
+	r.logger.Info("bd command cache hit",
+		"operation", req.Operation,
+		"argv", argv,
+	)
 }
 
 func (r *CommandRunner) logExecution(req CommandRequest, resolvedArgs []string, result ExecResult, err error, duration time.Duration) {

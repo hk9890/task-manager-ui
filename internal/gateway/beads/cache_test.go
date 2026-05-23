@@ -355,3 +355,127 @@ func TestCacheDataRaceFree(t *testing.T) {
 
 	wg.Wait()
 }
+
+// newTmpBeadsDirNoToken creates a tmp workDir that contains an empty .beads/
+// directory but NO last-touched file. Models a beads project where bd has
+// never executed a tracked operation (create/update/show/close) — the case
+// where the cache would silently disable itself without bootstrap.
+func newTmpBeadsDirNoToken(t *testing.T) string {
+	t.Helper()
+
+	workDir := t.TempDir()
+	beadsDir := filepath.Join(workDir, ".beads")
+	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll .beads: %v", err)
+	}
+	return workDir
+}
+
+// TestBootstrapCreatesLastTouchedWhenMissing verifies that bootstrap creates
+// an empty .beads/last-touched when none exists and .beads/ is present.
+func TestBootstrapCreatesLastTouchedWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDirNoToken(t)
+
+	cache := newReadCache(workDir)
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap returned error: %v", err)
+	}
+
+	path := filepath.Join(workDir, ".beads", "last-touched")
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("expected last-touched to exist after bootstrap, stat error: %v", err)
+	}
+	if fi.Size() != 0 {
+		t.Fatalf("expected empty last-touched file, got size %d", fi.Size())
+	}
+}
+
+// TestBootstrapPreservesExistingLastTouched verifies that bootstrap is a no-op
+// when the file already exists — content must be untouched.
+func TestBootstrapPreservesExistingLastTouched(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDir(t) // helper writes empty last-touched
+	path := filepath.Join(workDir, ".beads", "last-touched")
+	const want = "bd-existing\n"
+	if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+		t.Fatalf("seed write: %v", err)
+	}
+
+	cache := newReadCache(workDir)
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap returned error: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after bootstrap: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("bootstrap mutated existing last-touched content: got %q, want %q", got, want)
+	}
+}
+
+// TestBootstrapNoOpWhenBeadsDirMissing verifies bootstrap does not create
+// stray .beads/ directories in non-beads project paths.
+func TestBootstrapNoOpWhenBeadsDirMissing(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir() // no .beads/ created
+	cache := newReadCache(workDir)
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(workDir, ".beads")); !os.IsNotExist(err) {
+		t.Fatalf("bootstrap created .beads/ in a non-beads project (stat err=%v)", err)
+	}
+}
+
+// TestBootstrapNoOpWhenWorkDirEmpty verifies bootstrap is silent when the
+// runner has no WorkDir (cache is disabled anyway).
+func TestBootstrapNoOpWhenWorkDirEmpty(t *testing.T) {
+	t.Parallel()
+
+	cache := newReadCache("")
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap with empty workDir should not error, got: %v", err)
+	}
+}
+
+// TestCacheHitsAfterBootstrapOnTokenlessProject is the integration check that
+// closes the loop: a project that started with no .beads/last-touched (the
+// observed-broken case from session bwb-e49831f9) now produces cache hits on
+// repeat reads because NewCommandRunner bootstraps the file.
+func TestCacheHitsAfterBootstrapOnTokenlessProject(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDirNoToken(t)
+
+	stub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-1"}`)}}
+	counter := newCountingExecutor(stub)
+
+	runner := NewCommandRunner(RunnerConfig{
+		WorkDir:  workDir,
+		Executor: counter,
+	})
+
+	req := CommandRequest{
+		Operation: "show issue",
+		Args:      []string{"show", "bd-1", "--json"},
+	}
+
+	if _, err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("first Run error: %v", err)
+	}
+	if _, err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("second Run error: %v", err)
+	}
+
+	if got := counter.Count(); got != 1 {
+		t.Fatalf("expected 1 executor call (second served from cache after bootstrap), got %d", got)
+	}
+}

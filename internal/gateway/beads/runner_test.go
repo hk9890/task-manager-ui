@@ -605,6 +605,59 @@ func TestCommandRunnerRunLogsExecutionTraceOnExecutionError(t *testing.T) {
 	}
 }
 
+// TestCommandRunnerLogsCacheHit verifies that a cache hit emits a per-call
+// trace at INFO level with operation + argv fields, so hit/miss ratios can be
+// computed from the same log stream as "bd command finished" misses.
+func TestCommandRunnerLogsCacheHit(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDir(t)
+
+	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-1"}`)}}
+	var sink strings.Builder
+	runner := NewCommandRunner(RunnerConfig{
+		WorkDir:  workDir,
+		Executor: execStub,
+		Logger:   slog.New(slog.NewJSONHandler(&sink, nil)),
+	})
+
+	req := CommandRequest{
+		Operation: "show issue",
+		Args:      []string{"show", "bd-1", "--json"},
+	}
+
+	// First call: cache miss → emits "bd command finished".
+	if _, err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("first Run error: %v", err)
+	}
+	// Second call: cache hit → must emit "bd command cache hit".
+	if _, err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("second Run error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(sink.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected exactly 2 log records (miss + hit), got %d: %q", len(lines), sink.String())
+	}
+
+	missRecord := decodeLoggedRecord(t, lines[0])
+	if got := missRecord["msg"]; got != "bd command finished" {
+		t.Fatalf("expected first record to be miss trace, got msg=%v", got)
+	}
+
+	hitRecord := decodeLoggedRecord(t, lines[1])
+	if got := hitRecord["msg"]; got != "bd command cache hit" {
+		t.Fatalf("expected second record to be cache hit, got msg=%v", got)
+	}
+	if got := hitRecord["level"]; got != "INFO" {
+		t.Fatalf("expected cache hit at INFO level, got %v", got)
+	}
+	if got := hitRecord["operation"]; got != "show issue" {
+		t.Fatalf("expected operation field, got %v", got)
+	}
+	assertLoggedArray(t, hitRecord["argv"], []string{"bd", "show", "bd-1", "--json"})
+}
+
 type stubExecutor struct {
 	mu      sync.Mutex
 	command string

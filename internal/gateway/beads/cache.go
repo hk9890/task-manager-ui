@@ -129,3 +129,39 @@ func (c *readCache) invalidate() {
 	c.entries = make(map[string]cacheEntry)
 	c.cacheMu.Unlock()
 }
+
+// bootstrap ensures that .beads/last-touched exists so currentToken can return
+// a usable token from the first read onward.
+//
+// Why: bd writes this file only on tracked operations (create/update/show/close
+// per upstream commit a34f189). Projects where bd has never run those CLI ops
+// have no file, so currentToken() returns (zero, false) and the cache is
+// silently disabled for the runner's lifetime. Empirical measurement on session
+// bwb-e49831f9 (ai-marketplace project) showed 4 bd calls/min indefinitely with
+// hit rate ~0%; the equivalent session against beads-workbench (file present)
+// shows ~100% hit rate during idle.
+//
+// Creating an empty file is safe: bd's last_touched.go Get path treats empty
+// content as "no last touched ID" — the normal new-project state — and Set
+// will later overwrite with a real issue ID, advancing the mtime, which is
+// exactly the change signal the cache wants.
+//
+// No-op when workDir is empty (cache disabled), when .beads/ does not exist
+// (not a beads project — do not create stray dirs), or when the file already
+// exists.
+func (c *readCache) bootstrap() error {
+	if c.workDir == "" {
+		return nil
+	}
+	path := c.tokenPath()
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	beadsDir := filepath.Dir(path)
+	if _, err := os.Stat(beadsDir); err != nil {
+		return nil
+	}
+	return os.WriteFile(path, nil, 0o644)
+}
