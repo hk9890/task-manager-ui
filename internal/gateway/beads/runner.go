@@ -153,6 +153,14 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		sem <- struct{}{}
 	}
 
+	cache := newReadCache(cfg.WorkDir)
+	if err := cache.bootstrap(); err != nil && cfg.Logger != nil {
+		cfg.Logger.Warn("failed to bootstrap cache token file; cache may be disabled",
+			"path", cache.tokenPath(),
+			"error", err.Error(),
+		)
+	}
+
 	return &CommandRunner{
 		command:        command,
 		defaultWorkDir: cfg.WorkDir,
@@ -161,16 +169,15 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		logger:         cfg.Logger,
 		readOnly:       cfg.ReadOnly,
 		sem:            sem,
-		cache:          newReadCache(cfg.WorkDir),
+		cache:          cache,
 	}
 }
 
 // Run executes one command and returns stdout on success.
 //
 // For read requests (IsWrite == false), the result is served from the in-process
-// read cache when the .beads/last-touched mtime is unchanged. Identical
-// concurrent argv are collapsed to a single subprocess exec via singleflight.
-// Cache hits skip runMu and the semaphore entirely.
+// read cache when the .beads/last-touched mtime is unchanged. Cache hits skip
+// runMu and the semaphore entirely.
 //
 // For write requests (IsWrite == true), the cache is invalidated before exec so
 // that the next read re-execs bd. External writes are caught by the
@@ -180,15 +187,18 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
 
-	// Resolve argv early so it is consistent between the cache key, the
-	// singleflight key, and the executor invocation.
+	// Resolve argv early so it is consistent between the cache key and the
+	// executor invocation.
 	argv := r.resolveArgs(req.Args)
 
 	// ---- read cache fast path ------------------------------------------------
 	// Check the cache before acquiring any lock. Hits return immediately without
-	// touching runMu or the semaphore.
+	// touching runMu or the semaphore. A successful hit is logged so operators
+	// can compute hit/miss ratios from the same log stream as "bd command
+	// finished" misses (see docs/MONITORING.md).
 	if !req.IsWrite {
 		if cached, hit := r.cache.get(argv); hit {
+			r.logCacheHit(req, argv)
 			return cached, nil
 		}
 	}
@@ -217,44 +227,21 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 		defer r.runMu.RUnlock()
 	}
 
-	if !req.IsWrite && r.cache.workDir != "" {
-		// Use singleflight so that concurrent identical argv misses collapse to
-		// one subprocess exec. The singleflight key is the same resolved argv
-		// string used by the cache. The result from the single exec is shared
-		// across all waiters; each waiter returns the same stdout bytes.
-		//
-		// Singleflight is only active when the cache is enabled (workDir set).
-		// When workDir is empty the cache and singleflight are both disabled so
-		// all concurrent callers get independent executor invocations — required
-		// by tests that construct runners without a WorkDir.
-		key := argvKey(argv)
-		type execResult struct {
-			stdout []byte
-			err    error
-		}
-		val, err, _ := r.cache.sg.Do(key, func() (any, error) {
-			// Sample the token BEFORE exec. If an external write lands during the
-			// exec, the token we stored will lag behind the current mtime on the
-			// next read, causing a cache miss — the conservative correct direction.
-			token, tokenOK := r.cache.currentToken()
+	if !req.IsWrite {
+		// Sample the token BEFORE exec. If an external write lands during the
+		// exec, the token we stored will lag behind the current mtime on the
+		// next read, causing a cache miss — the conservative correct direction.
+		token, tokenOK := r.cache.currentToken()
 
-			stdout, execErr := r.execOnce(ctx, req, argv)
-			if execErr != nil {
-				return execResult{err: execErr}, nil
-			}
-			// Only cache successful reads.
-			if tokenOK {
-				r.cache.set(argv, token, stdout)
-			}
-			return execResult{stdout: stdout}, nil
-		})
-		if err != nil {
-			// singleflight itself does not return errors (we always return nil
-			// from the Do func), so this branch is unreachable in practice.
-			return nil, err
+		stdout, execErr := r.execOnce(ctx, req, argv)
+		if execErr != nil {
+			return nil, execErr
 		}
-		res := val.(execResult)
-		return res.stdout, res.err
+		// Only cache successful reads when the cache is enabled (workDir set).
+		if tokenOK {
+			r.cache.set(argv, token, stdout)
+		}
+		return stdout, nil
 	}
 
 	// Write path: exec directly (cache was already invalidated above).
@@ -262,8 +249,8 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 }
 
 // execOnce acquires the semaphore, runs the subprocess, logs the result, and
-// returns stdout. It is called from Run after locking and (for reads) after
-// singleflight deduplication. argv must already be resolved via resolveArgs.
+// returns stdout. It is called from Run after locking. argv must already be
+// resolved via resolveArgs.
 func (r *CommandRunner) execOnce(ctx context.Context, req CommandRequest, argv []string) ([]byte, error) {
 	// Acquire a semaphore slot before executing. This limits the number of
 	// concurrent bd subprocesses to bdSemCap regardless of how many callers hold
@@ -385,6 +372,21 @@ func (r *CommandRunner) resolveArgs(args []string) []string {
 	resolved = append(resolved, "--readonly")
 	resolved = append(resolved, args...)
 	return resolved
+}
+
+// logCacheHit records a per-call trace for a cache hit. Mirrors the operation
+// + argv fields of "bd command finished" so hit-rate analysis can be done with
+// a single grep against the same log file: "cache hit" lines are hits,
+// "bd command finished" lines with IsWrite=false are misses.
+func (r *CommandRunner) logCacheHit(req CommandRequest, resolvedArgs []string) {
+	if r.logger == nil {
+		return
+	}
+	argv := append([]string{r.command}, resolvedArgs...)
+	r.logger.Info("bd command cache hit",
+		"operation", req.Operation,
+		"argv", argv,
+	)
 }
 
 func (r *CommandRunner) logExecution(req CommandRequest, resolvedArgs []string, result ExecResult, err error, duration time.Duration) {

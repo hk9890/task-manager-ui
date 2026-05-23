@@ -6,8 +6,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 // lastTouchedFile is the bd-maintained sentinel file whose mtime advances on
@@ -47,12 +45,14 @@ type cacheEntry struct {
 // # Concurrency
 //
 // cacheMu guards all cache state and is independent of the runner's runMu.
-// singleflight ensures that concurrent identical argv misses collapse to one
-// exec. Hits are served under cacheMu.RLock without acquiring runMu or sem.
+// Hits are served under cacheMu.RLock without acquiring runMu or sem.
 type readCache struct {
 	cacheMu sync.RWMutex
+	// entries grows by one per distinct read argv. Any write clears the map
+	// (see invalidate()), so steady-state size is bounded by the number of
+	// distinct reads between writes — typically O(tens) for a TUI session.
+	// No TTL/LRU until measurement shows steady-state growth.
 	entries map[string]cacheEntry
-	sg      singleflight.Group
 	workDir string // the runner's bound WorkDir; empty = cache disabled
 }
 
@@ -129,4 +129,53 @@ func (c *readCache) invalidate() {
 	c.cacheMu.Lock()
 	c.entries = make(map[string]cacheEntry)
 	c.cacheMu.Unlock()
+}
+
+// bootstrap ensures that .beads/last-touched exists so currentToken can return
+// a usable token from the first read onward.
+//
+// Why: bd writes this file only on tracked operations (create/update/show/close
+// per upstream commit a34f189). Projects where bd has never run those CLI ops
+// have no file, so currentToken() returns (zero, false) and the cache is
+// silently disabled for the runner's lifetime. Empirical measurement on session
+// bwb-e49831f9 (ai-marketplace project) showed 4 bd calls/min indefinitely with
+// hit rate ~0%; the equivalent session against beads-workbench (file present)
+// shows ~100% hit rate during idle.
+//
+// Creating an empty file is safe: bd's last_touched.go Get path treats empty
+// content as "no last touched ID" — the normal new-project state — and Set
+// will later overwrite with a real issue ID, advancing the mtime, which is
+// exactly the change signal the cache wants.
+//
+// No-op when workDir is empty (cache disabled), when .beads/ does not exist
+// (not a beads project — do not create stray dirs), or when the file already
+// exists.
+func (c *readCache) bootstrap() error {
+	if c.workDir == "" {
+		return nil
+	}
+	path := c.tokenPath()
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	beadsDir := filepath.Dir(path)
+	if _, err := os.Stat(beadsDir); err != nil {
+		return nil
+	}
+	// O_CREATE|O_EXCL closes the small TOCTOU window between the Stat above
+	// and the write: if bd creates the file in the meantime (writing a real
+	// issue ID), our create fails with EEXIST and we treat that as success —
+	// not as "must overwrite". Without this, we could truncate bd's freshly
+	// written content back to empty and lose its no-arg "use last touched"
+	// UX state for one cycle.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil
+		}
+		return err
+	}
+	return f.Close()
 }

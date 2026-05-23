@@ -358,6 +358,79 @@ func TestBoardModeQueryClosedErrorPath(t *testing.T) {
 	}
 }
 
+// --- AC: both ReadyExplain and storedBlocked errors surface on Not Ready ---
+
+// TestBoardModeNotReadyBothErrorSourcesSurface asserts that when both readyExplainErr
+// and storedBlockedErr are non-nil, the Not Ready column's err contains substrings
+// from BOTH sources and errors.Is returns true for each sentinel.
+//
+// This verifies the errors.Join(readyExplainErr, storedBlockedErr) replacement of the
+// former first-non-nil pattern, which would silently discard storedBlockedErr when
+// readyExplainErr was also set.
+func TestBoardModeNotReadyBothErrorSourcesSurface(t *testing.T) {
+	t.Parallel()
+
+	gateway := fakes.NewFakeBeadsGateway()
+	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m.SetSize(200, 30)
+	m.pendingResults = 5
+
+	errReady := errors.New("readyexplain sentinel failure")
+	errStored := errors.New("storedblocked sentinel failure")
+
+	// Inject both errors via direct message injection — the same pattern used by
+	// TestBoardModeReadyExplainErrorPath and TestBoardModeQueryClosedErrorPath.
+	_ = m.Update(readyExplainLoadedMsg{err: errReady})
+	_ = m.Update(storedBlockedLoadedMsg{err: errStored})
+	_ = m.Update(inProgressLoadedMsg{issues: nil})
+	_ = m.Update(closedLoadedMsg{issues: nil})
+	_ = m.Update(closedCountLoadedMsg{count: 0})
+
+	if m.IsLoading() {
+		t.Fatal("expected IsLoading()=false after all 5 results arrived")
+	}
+	if len(m.columns) != 4 {
+		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
+	}
+
+	notReadyErr := m.columns[0].err
+	if notReadyErr == nil {
+		t.Fatal("expected non-nil err on Not Ready column when both error sources fail")
+	}
+
+	// Both substrings must appear in the joined error message.
+	if !strings.Contains(notReadyErr.Error(), "readyexplain sentinel failure") {
+		t.Errorf("Not Ready err missing readyExplain substring; got: %v", notReadyErr)
+	}
+	if !strings.Contains(notReadyErr.Error(), "storedblocked sentinel failure") {
+		t.Errorf("Not Ready err missing storedBlocked substring; got: %v", notReadyErr)
+	}
+
+	// errors.Is must unwrap both sentinels (errors.Join preserves the full chain).
+	if !errors.Is(notReadyErr, errReady) {
+		t.Errorf("errors.Is(notReadyErr, errReady) must be true; got false")
+	}
+	if !errors.Is(notReadyErr, errStored) {
+		t.Errorf("errors.Is(notReadyErr, errStored) must be true; got false")
+	}
+
+	// Ready column (col 1) carries only readyExplainErr — not the joined error.
+	readyErr := m.columns[1].err
+	if readyErr == nil || !strings.Contains(readyErr.Error(), "readyexplain sentinel failure") {
+		t.Errorf("Ready column must carry readyExplain error, got: %v", readyErr)
+	}
+	if errors.Is(readyErr, errStored) {
+		t.Errorf("Ready column must NOT wrap errStored; readyExplainErr only")
+	}
+
+	// In Progress (col 2) and Done (col 3) must be unaffected.
+	for _, col := range m.columns[2:] {
+		if col.err != nil {
+			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+		}
+	}
+}
+
 // --- Navigation tests ---
 
 func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) {

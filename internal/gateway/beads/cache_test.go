@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -207,63 +206,6 @@ func TestWriteInvalidatesCache(t *testing.T) {
 	}
 }
 
-// TestSingleflightCollapsesIdenticalConcurrentArgv verifies that N concurrent
-// goroutines issuing the same argv collapse to a single executor call via
-// singleflight.
-func TestSingleflightCollapsesIdenticalConcurrentArgv(t *testing.T) {
-	t.Parallel()
-
-	workDir := newTmpBeadsDir(t)
-
-	// gate controls when the executor unblocks.
-	gate := make(chan struct{})
-	var execCount atomic.Int64
-
-	blockingExec := &gatedExecutor{
-		gate:   gate,
-		result: ExecResult{Stdout: []byte(`["item"]`)},
-		onExec: func() { execCount.Add(1) },
-	}
-
-	runner := NewCommandRunner(RunnerConfig{
-		WorkDir:  workDir,
-		Executor: blockingExec,
-	})
-
-	const goroutines = 10
-	var wg sync.WaitGroup
-	wg.Add(goroutines)
-	results := make([][]byte, goroutines)
-	errs := make([]error, goroutines)
-
-	for i := 0; i < goroutines; i++ {
-		i := i
-		go func() {
-			defer wg.Done()
-			results[i], errs[i] = runner.Run(context.Background(), CommandRequest{
-				Operation: "list issues",
-				Args:      []string{"list", "--json"},
-			})
-		}()
-	}
-
-	// Give all goroutines time to pile up inside singleflight.
-	time.Sleep(50 * time.Millisecond)
-	// Unblock the single exec.
-	close(gate)
-	wg.Wait()
-
-	for i, err := range errs {
-		if err != nil {
-			t.Errorf("goroutine %d returned error: %v", i, err)
-		}
-	}
-
-	if got := execCount.Load(); got != 1 {
-		t.Fatalf("expected exactly 1 executor call (singleflight), got %d", got)
-	}
-}
-
 // TestFailureNotCached verifies that a failed exec (non-zero exit code) is not
 // stored in the cache; the next call re-execs.
 func TestFailureNotCached(t *testing.T) {
@@ -337,9 +279,8 @@ func TestWriteNotCached(t *testing.T) {
 	}
 }
 
-// TestCacheNoCacheWhenWorkDirEmpty verifies that the cache and singleflight are
-// both inactive when WorkDir is empty, so all callers get independent executor
-// invocations.
+// TestCacheNoCacheWhenWorkDirEmpty verifies that the cache is inactive when
+// WorkDir is empty, so all callers get independent executor invocations.
 func TestCacheNoCacheWhenWorkDirEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -347,7 +288,7 @@ func TestCacheNoCacheWhenWorkDirEmpty(t *testing.T) {
 	counter := newCountingExecutor(stub)
 
 	runner := NewCommandRunner(RunnerConfig{
-		// WorkDir intentionally empty — cache and singleflight disabled.
+		// WorkDir intentionally empty — cache disabled.
 		Executor: counter,
 	})
 
@@ -415,19 +356,126 @@ func TestCacheDataRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
-// gatedExecutor blocks in Run until its gate channel is closed, then returns
-// the configured result. An optional onExec callback fires before blocking.
-type gatedExecutor struct {
-	gate   chan struct{}
-	result ExecResult
-	err    error
-	onExec func()
+// newTmpBeadsDirNoToken creates a tmp workDir that contains an empty .beads/
+// directory but NO last-touched file. Models a beads project where bd has
+// never executed a tracked operation (create/update/show/close) — the case
+// where the cache would silently disable itself without bootstrap.
+func newTmpBeadsDirNoToken(t *testing.T) string {
+	t.Helper()
+
+	workDir := t.TempDir()
+	beadsDir := filepath.Join(workDir, ".beads")
+	if err := os.MkdirAll(beadsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll .beads: %v", err)
+	}
+	return workDir
 }
 
-func (e *gatedExecutor) Run(_ context.Context, _ string, _ []string, _ string, _ []string) (ExecResult, error) {
-	if e.onExec != nil {
-		e.onExec()
+// TestBootstrapCreatesLastTouchedWhenMissing verifies that bootstrap creates
+// an empty .beads/last-touched when none exists and .beads/ is present.
+func TestBootstrapCreatesLastTouchedWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDirNoToken(t)
+
+	cache := newReadCache(workDir)
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap returned error: %v", err)
 	}
-	<-e.gate
-	return e.result, e.err
+
+	path := filepath.Join(workDir, ".beads", "last-touched")
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("expected last-touched to exist after bootstrap, stat error: %v", err)
+	}
+	if fi.Size() != 0 {
+		t.Fatalf("expected empty last-touched file, got size %d", fi.Size())
+	}
+}
+
+// TestBootstrapPreservesExistingLastTouched verifies that bootstrap is a no-op
+// when the file already exists — content must be untouched.
+func TestBootstrapPreservesExistingLastTouched(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDir(t) // helper writes empty last-touched
+	path := filepath.Join(workDir, ".beads", "last-touched")
+	const want = "bd-existing\n"
+	if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+		t.Fatalf("seed write: %v", err)
+	}
+
+	cache := newReadCache(workDir)
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap returned error: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after bootstrap: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("bootstrap mutated existing last-touched content: got %q, want %q", got, want)
+	}
+}
+
+// TestBootstrapNoOpWhenBeadsDirMissing verifies bootstrap does not create
+// stray .beads/ directories in non-beads project paths.
+func TestBootstrapNoOpWhenBeadsDirMissing(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir() // no .beads/ created
+	cache := newReadCache(workDir)
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(workDir, ".beads")); !os.IsNotExist(err) {
+		t.Fatalf("bootstrap created .beads/ in a non-beads project (stat err=%v)", err)
+	}
+}
+
+// TestBootstrapNoOpWhenWorkDirEmpty verifies bootstrap is silent when the
+// runner has no WorkDir (cache is disabled anyway).
+func TestBootstrapNoOpWhenWorkDirEmpty(t *testing.T) {
+	t.Parallel()
+
+	cache := newReadCache("")
+	if err := cache.bootstrap(); err != nil {
+		t.Fatalf("bootstrap with empty workDir should not error, got: %v", err)
+	}
+}
+
+// TestCacheHitsAfterBootstrapOnTokenlessProject is the integration check that
+// closes the loop: a project that started with no .beads/last-touched (the
+// observed-broken case from session bwb-e49831f9) now produces cache hits on
+// repeat reads because NewCommandRunner bootstraps the file.
+func TestCacheHitsAfterBootstrapOnTokenlessProject(t *testing.T) {
+	t.Parallel()
+
+	workDir := newTmpBeadsDirNoToken(t)
+
+	stub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-1"}`)}}
+	counter := newCountingExecutor(stub)
+
+	runner := NewCommandRunner(RunnerConfig{
+		WorkDir:  workDir,
+		Executor: counter,
+	})
+
+	req := CommandRequest{
+		Operation: "show issue",
+		Args:      []string{"show", "bd-1", "--json"},
+	}
+
+	if _, err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("first Run error: %v", err)
+	}
+	if _, err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("second Run error: %v", err)
+	}
+
+	if got := counter.Count(); got != 1 {
+		t.Fatalf("expected 1 executor call (second served from cache after bootstrap), got %d", got)
+	}
 }
