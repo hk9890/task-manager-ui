@@ -48,9 +48,10 @@ type cacheEntry struct {
 // Hits are served under cacheMu.RLock without acquiring runMu or sem.
 type readCache struct {
 	cacheMu sync.RWMutex
-	// entries is unbounded in principle but bounded in practice by user-driven argv variation:
-	// each distinct query/show argv adds one entry, all entries clear on any write
-	// (see invalidate()). No TTL/LRU until measurement shows steady-state growth.
+	// entries grows by one per distinct read argv. Any write clears the map
+	// (see invalidate()), so steady-state size is bounded by the number of
+	// distinct reads between writes — typically O(tens) for a TUI session.
+	// No TTL/LRU until measurement shows steady-state growth.
 	entries map[string]cacheEntry
 	workDir string // the runner's bound WorkDir; empty = cache disabled
 }
