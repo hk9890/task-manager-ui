@@ -19,6 +19,23 @@ on:
 # Gate sits ~0.5pt below current to absorb minor fluctuation.
 env:
   COVERAGE_THRESHOLD: 69
+  # Disable mise's GitHub artifact-attestation verification for the `bd` install
+  # (`github:gastownhall/beads` backend). The verification path calls
+  # api.github.com/orgs/<org>/attestations/<digest>, which 401s against a
+  # different org with this workflow's GITHUB_TOKEN. Since gastownhall/beads
+  # publishes no attestations, the check has nothing to assert in the first
+  # place — we are explicitly returning to the trust posture that existed
+  # before mise added verification.
+  #   Canonical setting (per https://mise.jdx.dev/configuration/settings.html):
+  #     github_attestations (default true) ↔ MISE_GITHUB_ATTESTATIONS
+  #   Background: https://github.com/jdx/mise/discussions/9092
+  MISE_GITHUB_ATTESTATIONS: "0"
+  # Belt-and-suspenders: even with attestation verification off, mise still has
+  # adjacent provenance code paths (SLSA, sigstore) that may call GitHub APIs.
+  # Treat any provenance-API HTTP failure as a warning rather than a fatal
+  # install error, so a future code path swap can't bring this flake back.
+  #   provenance_api_failures_fatal (default true) ↔ MISE_PROVENANCE_API_FAILURES_FATAL
+  MISE_PROVENANCE_API_FAILURES_FATAL: "false"
 
 jobs:
   quality-gates:
@@ -34,6 +51,13 @@ jobs:
 
       - name: Install mise (handles Go toolchain via .mise.toml)
         uses: jdx/mise-action@v4
+        with:
+          # Pin the mise binary to a known-good release. `jdx/mise-action@v4`
+          # otherwise pulls "latest", which is what introduced the attestation-
+          # verification regression that prompted this PR. Bump deliberately
+          # rather than auto-floating; the env vars above mitigate the same
+          # class of bug if it recurs on a future bump.
+          version: 2026.5.15
 
       - name: Scripts syntax
         if: matrix.os != 'windows-latest'
