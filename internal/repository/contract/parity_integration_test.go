@@ -797,13 +797,12 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 
 	// ---- Scenario 10: Partial failure of Dashboard ----
 	//
-	// When 2 of the 5 underlying calls fail, Dashboard must return an error (not
-	// a partial result). Contract: Dashboard is atomic.
+	// When one of the five underlying bd calls fails, Dashboard must return an
+	// error (not a partial result). Contract: Dashboard is atomic — all-or-nothing.
 	//
-	// Both the memory and beads impls skip this scenario: memory has no external
-	// failure path, and the lean beads.Repository has no executor-level error
-	// injection seam yet. A CommandExecutor-level injection mechanism is tracked
-	// as k4g4.6; once that lands, this scenario can be enabled for beads.
+	// Enabled for the beads impl via a [WithCommandHook] that injects a failure
+	// for the blocked-issues query branch. The memory impl still skips because
+	// memory.Repository has no external failure path.
 	t.Run("PartialDashboardFailure", func(t *testing.T) {
 		t.Parallel()
 
@@ -814,10 +813,36 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 				"computations are local and cannot fail independently.")
 			return
 		case "beads":
-			t.Skip("Scenario10/PartialDashboardFailure: N/A for beads impl — " +
-				"the lean Repository has no executor-level error injection seam; " +
-				"Dashboard atomicity coverage is deferred to k4g4.6 which adds a " +
-				"CommandExecutor-level injection mechanism.")
+			// Build a fresh bd repo (no seed required — the hook fires before bd runs).
+			dir := filepath.Join(t.TempDir(), "bd-repo-s10")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("Scenario10/mkdir: %v", err)
+			}
+			initBDRepo(t, dir)
+
+			runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
+
+			injectedErr := errors.New("injected: blocked-issues branch failure")
+			r := repobeads.New(runner, repobeads.WithCommandHook(
+				func(ctx context.Context, req gateway.CommandRequest) ([]byte, error) {
+					// Fail the "query status=blocked" call that is one of Dashboard's
+					// five fan-out branches. All other calls delegate to the real runner.
+					for _, a := range req.Args {
+						if a == "status=blocked" {
+							return nil, injectedErr
+						}
+					}
+					return runner.Run(ctx, req)
+				},
+			))
+
+			_, err := r.Dashboard(ctx)
+			if err == nil {
+				t.Fatal("Scenario10/Dashboard: expected error when one fan-out branch fails, got nil")
+			}
+			if !errors.Is(err, injectedErr) {
+				t.Errorf("Scenario10/Dashboard: error does not wrap injected error; got: %v", err)
+			}
 			return
 		}
 	})

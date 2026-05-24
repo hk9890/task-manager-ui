@@ -349,9 +349,20 @@ func leanMapIssueSummaries(op string, records []leanIssuePayload, offset, limit 
 	return leanPaginate(out, offset, limit), nil
 }
 
-// leanDecodeIssueArray runs argv and decodes the JSON array into []leanIssuePayload.
-func leanDecodeIssueArray(ctx context.Context, runner *bdrunner.CommandRunner, op string, args []string) ([]leanIssuePayload, error) {
-	return bdrunner.RunJSON[[]leanIssuePayload](ctx, runner, bdrunner.CommandRequest{Operation: op, Args: args})
+// leanDecodeIssueArray runs argv through run and decodes the JSON array into
+// []leanIssuePayload. Callers pass r.run (the Repository's execution
+// chokepoint) so the call is interceptable by [WithCommandHook].
+func leanDecodeIssueArray(ctx context.Context, run runFn, op string, args []string) ([]leanIssuePayload, error) {
+	req := bdrunner.CommandRequest{Operation: op, Args: args}
+	out, err := run(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	var items []leanIssuePayload
+	if err := bdrunner.DecodeJSONInto(op, out, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // leanBuildFilterArgs constructs bd flag args for common filter fields.

@@ -22,7 +22,7 @@ const defaultLeanClosedLimit = 50
 
 // HealthCheck verifies bd is reachable and a beads database exists.
 func (r *Repository) HealthCheck(ctx context.Context) error {
-	_, err := r.runner.Run(ctx, bdrunner.CommandRequest{
+	_, err := r.run(ctx, bdrunner.CommandRequest{
 		Operation: leanOpHealthCheck,
 		Args:      []string{"ping", "--json"},
 	})
@@ -94,7 +94,7 @@ func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, 
 		return domain.IssueDetail{}, leanNewGWError(leanErrorCodeValidation, leanOpShowIssue, "issue id is required", nil)
 	}
 
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpShowIssue, []string{"show", id, "--json"})
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpShowIssue, []string{"show", id, "--json"})
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
@@ -220,7 +220,7 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 		args = append(args, "--limit", strconv.Itoa(limit))
 	}
 
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpSearchIssues, args)
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpSearchIssues, args)
 	if err != nil {
 		return domain.SearchResultPage{}, err
 	}
@@ -283,7 +283,7 @@ func (r *Repository) readyExplain(ctx context.Context, limit int) (domain.ReadyE
 		args = append(args, "--limit", strconv.Itoa(limit))
 	}
 
-	payload, err := bdrunner.RunJSON[leanReadyExplainPayload](ctx, r.runner, bdrunner.CommandRequest{
+	payload, err := repoRunJSON[leanReadyExplainPayload](ctx, r, bdrunner.CommandRequest{
 		Operation: leanOpReadyExplain,
 		Args:      args,
 	})
@@ -350,7 +350,7 @@ func (r *Repository) query(ctx context.Context, expr string, opts domain.QueryOp
 		args = append(args, "--limit", strconv.Itoa(limit))
 	}
 
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpQuery, args)
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpQuery, args)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func (r *Repository) countIssues(ctx context.Context, query domain.IssueCountQue
 	}
 	args = append(args, leanBuildFilterArgs(filterStatuses, query.Types, nil, nil, query.Assignee, query.Labels)...)
 
-	payload, err := bdrunner.RunJSON[leanCountByStatusPayload](ctx, r.runner, bdrunner.CommandRequest{
+	payload, err := repoRunJSON[leanCountByStatusPayload](ctx, r, bdrunner.CommandRequest{
 		Operation: leanOpCountIssues,
 		Args:      args,
 	})
@@ -400,7 +400,7 @@ func (r *Repository) countIssues(ctx context.Context, query domain.IssueCountQue
 
 // statusCatalog fetches `bd statuses --json`.
 func (r *Repository) statusCatalog(ctx context.Context) ([]domain.StatusOption, error) {
-	payload, err := bdrunner.RunJSON[leanStatusCatalogPayload](ctx, r.runner, bdrunner.CommandRequest{
+	payload, err := repoRunJSON[leanStatusCatalogPayload](ctx, r, bdrunner.CommandRequest{
 		Operation: leanOpStatuses,
 		Args:      []string{"statuses", "--json"},
 	})
@@ -422,7 +422,7 @@ func (r *Repository) statusCatalog(ctx context.Context) ([]domain.StatusOption, 
 
 // typeCatalog fetches `bd types --json`.
 func (r *Repository) typeCatalog(ctx context.Context) ([]domain.TypeOption, error) {
-	payload, err := bdrunner.RunJSON[leanTypeCatalogPayload](ctx, r.runner, bdrunner.CommandRequest{
+	payload, err := repoRunJSON[leanTypeCatalogPayload](ctx, r, bdrunner.CommandRequest{
 		Operation: leanOpTypes,
 		Args:      []string{"types", "--json"},
 	})
@@ -447,7 +447,7 @@ func (r *Repository) typeCatalog(ctx context.Context) ([]domain.TypeOption, erro
 
 // labelCatalog fetches `bd label list-all --json`.
 func (r *Repository) labelCatalog(ctx context.Context) ([]domain.LabelOption, error) {
-	labels, err := bdrunner.RunJSON[[]leanLabelEntryPayload](ctx, r.runner, bdrunner.CommandRequest{
+	labels, err := repoRunJSON[[]leanLabelEntryPayload](ctx, r, bdrunner.CommandRequest{
 		Operation: leanOpLabels,
 		Args:      []string{"label", "list-all", "--json"},
 	})
@@ -482,7 +482,7 @@ func (r *Repository) searchFromList(ctx context.Context, query domain.SearchIssu
 		args = append(args, "--limit", strconv.Itoa(limit))
 	}
 
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpSearchIssues, args)
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpSearchIssues, args)
 	if err != nil {
 		return domain.SearchResultPage{}, err
 	}
@@ -501,7 +501,7 @@ func (r *Repository) searchFromList(ctx context.Context, query domain.SearchIssu
 
 // searchFromReady handles WorkStateReady search via bd ready --json + in-memory filter.
 func (r *Repository) searchFromReady(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpSearchIssues, []string{"ready", "--json"})
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpSearchIssues, []string{"ready", "--json"})
 	if err != nil {
 		return domain.SearchResultPage{}, err
 	}
@@ -510,7 +510,7 @@ func (r *Repository) searchFromReady(ctx context.Context, query domain.SearchIss
 
 // searchFromBlocked handles WorkStateBlocked search via bd blocked --json + in-memory filter.
 func (r *Repository) searchFromBlocked(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpSearchIssues, []string{"blocked", "--json"})
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpSearchIssues, []string{"blocked", "--json"})
 	if err != nil {
 		return domain.SearchResultPage{}, err
 	}

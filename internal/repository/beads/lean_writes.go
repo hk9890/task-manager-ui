@@ -30,7 +30,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 		args = append(args, "--labels", strings.Join(input.Labels, ","))
 	}
 
-	payload, err := bdrunner.RunJSON[leanCreateResultPayload](ctx, r.runner, bdrunner.CommandRequest{
+	payload, err := repoRunJSON[leanCreateResultPayload](ctx, r, bdrunner.CommandRequest{
 		Operation: leanOpCreateIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -94,7 +94,7 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 		args = append(args, "--remove-label", strings.Join(detail.Summary.Labels, ","))
 	}
 
-	_, err := r.runner.Run(ctx, bdrunner.CommandRequest{
+	_, err := r.run(ctx, bdrunner.CommandRequest{
 		Operation: leanOpUpdateIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -124,7 +124,7 @@ func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.Clo
 		args = append(args, "--reason", input.Reason)
 	}
 
-	_, err := r.runner.Run(ctx, bdrunner.CommandRequest{
+	_, err := r.run(ctx, bdrunner.CommandRequest{
 		Operation: leanOpCloseIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -165,7 +165,7 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 		return leanNewGWError(leanErrorCodeValidation, leanOpAddComment, "issue id is required", nil)
 	}
 
-	_, err := r.runner.Run(ctx, bdrunner.CommandRequest{
+	_, err := r.run(ctx, bdrunner.CommandRequest{
 		Operation: leanOpAddComment,
 		Args:      []string{"comments", "add", id, input.Body},
 		IsWrite:   true,

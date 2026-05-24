@@ -25,6 +25,10 @@ import (
 	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
+// runFn is the function signature used by the internal run chokepoint and
+// helpers that need to be testable via [WithCommandHook].
+type runFn func(ctx context.Context, req bdrunner.CommandRequest) ([]byte, error)
+
 // Repository is the lean, CommandRunner-backed implementation of
 // [repository.Repository]. Construct with [New]; do not create a zero value
 // directly.
@@ -34,6 +38,11 @@ import (
 // in E4.3.
 type Repository struct {
 	runner *bdrunner.CommandRunner
+
+	// hook is an optional test-only command interception function installed via
+	// [WithCommandHook]. When non-nil every call to r.run goes through hook
+	// instead of r.runner.Run. Production callers never set this field.
+	hook runFn
 
 	// parentSiblingCacheMu guards parentSiblingCache.
 	parentSiblingCacheMu sync.RWMutex
@@ -49,11 +58,45 @@ var _ repository.Repository = (*Repository)(nil)
 
 // New returns a lean Repository backed directly by runner.
 // runner must be non-nil; passing nil will panic at the first method call.
-func New(runner *bdrunner.CommandRunner) *Repository {
-	return &Repository{
+// Optional [Option] values (e.g. [WithCommandHook]) customise the instance;
+// see each option's documentation for details.
+func New(runner *bdrunner.CommandRunner, opts ...Option) *Repository {
+	r := &Repository{
 		runner:             runner,
 		parentSiblingCache: make(map[string][]domain.IssueReference),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// run is the single execution chokepoint for all bd command calls. When a
+// [WithCommandHook] has been installed it delegates to the hook so tests can
+// intercept or fail specific requests. In the default case (hook == nil) it
+// calls r.runner.Run directly, preserving the runner's RW-lock and semaphore
+// semantics unchanged.
+func (r *Repository) run(ctx context.Context, req bdrunner.CommandRequest) ([]byte, error) {
+	if r.hook != nil {
+		return r.hook(ctx, req)
+	}
+	return r.runner.Run(ctx, req)
+}
+
+// repoRunJSON executes a command through the Repository's run chokepoint and
+// decodes the JSON response into T. It is the Repository-local analogue of
+// [bdrunner.RunJSON] but routes through r.run so that [WithCommandHook] is
+// honoured.
+func repoRunJSON[T any](ctx context.Context, r *Repository, req bdrunner.CommandRequest) (T, error) {
+	var value T
+	out, err := r.run(ctx, req)
+	if err != nil {
+		return value, err
+	}
+	if err := bdrunner.DecodeJSONInto(req.Operation, out, &value); err != nil {
+		return value, err
+	}
+	return value, nil
 }
 
 // parentChildSiblings returns the children of parentID by running
@@ -72,7 +115,7 @@ func (r *Repository) parentChildSiblings(ctx context.Context, parentID string) (
 		return cached, nil
 	}
 
-	items, err := leanDecodeIssueArray(ctx, r.runner, leanOpShowIssue, []string{"show", parentID, "--json"})
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpShowIssue, []string{"show", parentID, "--json"})
 	if err != nil {
 		return nil, err
 	}
