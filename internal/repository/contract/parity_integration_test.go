@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
+	bd "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	gateway "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/repository/memory"
@@ -222,7 +222,7 @@ func beadsFactory(t *testing.T, seed scenarioSeed) repository.Repository {
 		}
 	}
 
-	runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
+	runner := bd.NewCommandRunner(bd.RunnerConfig{WorkDir: dir})
 	return repobeads.New(runner)
 }
 
@@ -244,7 +244,7 @@ func TestRepositoryContract(t *testing.T) {
 		},
 		{
 			// beads exercises the lean Repository (repobeads.New(runner)) backed
-			// by a real bd binary. The legacy gateway-backed adapter has been
+			// by a real bd binary. The legacy repository-backed adapter has been
 			// removed; this is now the sole beads impl variant.
 			name: "beads",
 			build: func(t *testing.T, seed scenarioSeed) repository.Repository {
@@ -515,7 +515,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 
 		// For beads impl: seed with pre-closed issues using bd; rely on bd's
-		// timestamp ordering via the gateway's Query(status=closed, sortBy=closed_at, desc).
+		// timestamp ordering via the repository's Query(status=closed, sortBy=closed_at, desc).
 		// We seed three closed issues and verify Dashboard.Closed is DESC by ClosedAt.
 		seed2 := scenarioSeed{
 			issues: []seedIssue{
@@ -532,7 +532,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 
 		// For the beads impl we can only verify that Closed is non-empty and that
-		// bd's gateway requests DESC order. We can't control exact timestamps.
+		// bd's repository requests DESC order. We can't control exact timestamps.
 		// The structural assertion: len ≥ 3 and there are no obvious ordering errors.
 		if len(dash.Closed) < 3 {
 			t.Errorf("Scenario6/beads: expected >= 3 closed issues in Dashboard.Closed, got %d", len(dash.Closed))
@@ -744,7 +744,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 	// UpdateIssue, CloseIssue, and AddComment on a missing ID must return a
 	// wrapped error with domain.ErrorCodeCommandFailed for BOTH impls.
 	// DO NOT include Issue() here — memory returns ErrIssueNotFound (local-state
-	// carve-out) while beads returns GatewayError{ErrorCodeCommandFailed}.
+	// carve-out) while beads returns RepositoryError{ErrorCodeCommandFailed}.
 	t.Run("UnknownIDErrorCodes", func(t *testing.T) {
 		t.Parallel()
 		r := impl.build(t, scenarioSeed{})
@@ -783,9 +783,9 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 					t.Fatalf("Scenario9/%s: expected error for unknown ID, got nil", tc.name)
 				}
 
-				var gwErr domain.GatewayError
+				var gwErr domain.RepositoryError
 				if !errors.As(err, &gwErr) {
-					t.Errorf("Scenario9/%s: expected domain.GatewayError, got %T: %v", tc.name, err, err)
+					t.Errorf("Scenario9/%s: expected domain.RepositoryError, got %T: %v", tc.name, err, err)
 					return
 				}
 				if gwErr.Code != domain.ErrorCodeCommandFailed {
@@ -820,11 +820,11 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 			}
 			initBDRepo(t, dir)
 
-			runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
+			runner := bd.NewCommandRunner(bd.RunnerConfig{WorkDir: dir})
 
 			injectedErr := errors.New("injected: blocked-issues branch failure")
 			r := repobeads.New(runner, repobeads.WithCommandHook(
-				func(ctx context.Context, req gateway.CommandRequest) ([]byte, error) {
+				func(ctx context.Context, req bd.CommandRequest) ([]byte, error) {
 					// Fail the "query status=blocked" call that is one of Dashboard's
 					// five fan-out branches. All other calls delegate to the real runner.
 					for _, a := range req.Args {

@@ -27,7 +27,7 @@ type Column struct {
 	Title       string
 	Rows        []domain.IssueSummary
 	SelectedRow int
-	// Error is a non-empty string when a gateway call for this column failed.
+	// Error is a non-empty string when a repository call for this column failed.
 	// The renderer shows an inline error row at the top of the column content.
 	Error string
 	// Loading is true while the column's data is being fetched. When Loading
@@ -35,7 +35,7 @@ type Column struct {
 	// When Loading is true and Rows is non-empty, stale rows are shown as-is
 	// (the global header spinner from 0x36.6 signals the in-flight state).
 	Loading bool
-	// Total is the number of issues in this column as reported by the gateway.
+	// Total is the number of issues in this column as reported by the repository.
 	// TotalIsExact is false when the rendered row list is truncated to a height
 	// cap and not all issues are visible, in which case the renderer shows
 	// "N of M" (e.g. "50 of 75") to communicate that only N of the M total

@@ -16,7 +16,7 @@ func TestNewServicesWithLauncherRequiresDependencies(t *testing.T) {
 
 	_, err := NewServicesWithLauncher(nil, config.Default(), &fakes.FakeLauncher{})
 	if err == nil {
-		t.Fatal("expected error when gateway is nil")
+		t.Fatal("expected error when repository is nil")
 	}
 
 	_, err = NewServicesWithLauncher(memoryrepo.New(), config.Default(), nil)
@@ -28,7 +28,7 @@ func TestNewServicesWithLauncherRequiresDependencies(t *testing.T) {
 func TestNewServicesBuildsLauncherFromConfigDefinitions(t *testing.T) {
 	t.Parallel()
 
-	gateway := memoryrepo.New()
+	repository := memoryrepo.New()
 	cfg := config.Default()
 	cfg.Launcher.Definitions = []config.LauncherDefinition{
 		{
@@ -40,7 +40,7 @@ func TestNewServicesBuildsLauncherFromConfigDefinitions(t *testing.T) {
 		},
 	}
 
-	services, err := NewServices(gateway, cfg, "/tmp/beads-workbench")
+	services, err := NewServices(repository, cfg, "/tmp/beads-workbench")
 	if err != nil {
 		t.Fatalf("NewServices returned error: %v", err)
 	}

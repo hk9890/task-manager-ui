@@ -14,7 +14,7 @@
 // Consumers that need both runner and repository types use the two-import pattern:
 //
 //	import (
-//	    bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
+//	    bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 //	    repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 //	)
 //
@@ -59,4 +59,4 @@
 //	    calls := rec.Calls()
 //	    // assert calls[0].Args == wantArgv
 //	}
-package beads
+package bd

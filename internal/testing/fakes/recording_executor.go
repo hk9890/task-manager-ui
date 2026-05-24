@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/bd"
 )
 
 // RecordedCall captures one CommandExecutor.Run invocation.
@@ -22,17 +22,17 @@ type RecordedCall struct {
 // argsRule holds a configured argv match and its canned response.
 type argsRule struct {
 	args   []string
-	result beads.ExecResult
+	result bd.ExecResult
 	err    error
 }
 
-// RecordingExecutor implements beads.CommandExecutor and records every Run call.
+// RecordingExecutor implements bd.CommandExecutor and records every Run call.
 //
 // Usage:
 //
 //	rec := fakes.NewRecordingExecutor()
-//	rec.OnArgs([]string{"ping"}).Return(beads.ExecResult{Stdout: []byte("pong")}, nil)
-//	runner := beads.NewCommandRunner(beads.RunnerConfig{Executor: rec})
+//	rec.OnArgs([]string{"ping"}).Return(bd.ExecResult{Stdout: []byte("pong")}, nil)
+//	runner := bd.NewCommandRunner(bd.RunnerConfig{Executor: rec})
 //
 // Calls() returns all recorded invocations in order; safe to call concurrently.
 // If no argv rule matches the default result is used.
@@ -41,11 +41,11 @@ type RecordingExecutor struct {
 
 	calls         []RecordedCall
 	rules         []argsRule
-	defaultResult beads.ExecResult
+	defaultResult bd.ExecResult
 	defaultErr    error
 }
 
-var _ beads.CommandExecutor = (*RecordingExecutor)(nil)
+var _ bd.CommandExecutor = (*RecordingExecutor)(nil)
 
 // NewRecordingExecutor returns a RecordingExecutor with a default zero ExecResult.
 func NewRecordingExecutor() *RecordingExecutor {
@@ -53,7 +53,7 @@ func NewRecordingExecutor() *RecordingExecutor {
 }
 
 // SetDefault configures the result returned when no argv rule matches.
-func (r *RecordingExecutor) SetDefault(result beads.ExecResult, err error) {
+func (r *RecordingExecutor) SetDefault(result bd.ExecResult, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -74,7 +74,7 @@ func (r *RecordingExecutor) OnArgs(args []string) *argsRuleBuilder {
 }
 
 // Return completes an argv rule, associating result and err with the argv.
-func (b *argsRuleBuilder) Return(result beads.ExecResult, err error) {
+func (b *argsRuleBuilder) Return(result bd.ExecResult, err error) {
 	b.rec.mu.Lock()
 	defer b.rec.mu.Unlock()
 
@@ -91,7 +91,7 @@ func (b *argsRuleBuilder) Return(result beads.ExecResult, err error) {
 // need per-call IsWrite tracking should set it via RecordedCall.IsWrite
 // explicitly after the fact, or use a wrapper. For now IsWrite is always false
 // here because CommandExecutor.Run does not receive CommandRequest.
-func (r *RecordingExecutor) Run(_ context.Context, command string, args []string, workDir string, env []string) (beads.ExecResult, error) {
+func (r *RecordingExecutor) Run(_ context.Context, command string, args []string, workDir string, env []string) (bd.ExecResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

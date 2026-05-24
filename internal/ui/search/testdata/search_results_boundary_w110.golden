@@ -1,8 +1,8 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ─────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│gateway                               │  │Gateway search result         │  │  Core                          │
+│backend                               │  │Backend search result         │  │  Core                          │
 ╰──────────────────────────────────────╯  │bw-1 · open · P1              │  │  Type    : task                │
 ╭─ Results ────────────────── 2 exact ─╮  │                              │  │  Status  : open                │
-│› T P1 OPN bw-1 Gateway search result │  │Description                   │  │  Priority: P1                  │
+│› T P1 OPN bw-1 Backend search result │  │Description                   │  │  Priority: P1                  │
 │  B P0 IP bw-2 Another result         │  │Search preview description    │  │  ------------------------------│
 │                                      │  │                              │  │  Ownership                     │
 │                                      │  │                              │  │  Assignee: hans                │

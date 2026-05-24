@@ -235,7 +235,7 @@ def create_slow_bd_wrapper(tmpdir: str) -> str:
         raise RuntimeError("'bd' binary not found in PATH")
 
     wrapper_content = f"""#!/bin/bash
-# Test-only wrapper: adds a small delay to make in-flight gateway calls
+# Test-only wrapper: adds a small delay to make in-flight repository calls
 # detectable by rapid 'r' keypresses in the PTY harness.
 sleep 0.04
 exec {real_bd} "$@"
@@ -376,7 +376,7 @@ def run_verification() -> None:
         # ------------------------------------------------------------------ #
         # 2. Spawn bwb in a PTY
         # ------------------------------------------------------------------ #
-        # Create a slow bd wrapper so that search gateway calls take ~40ms.
+        # Create a slow bd wrapper so that search repository calls take ~40ms.
         # This ensures 'r' presses separated by ~10ms arrive while the first
         # search is still in-flight, allowing the Reload() guard (5q6t.2) to
         # fire.  Without this wrapper, 'bd search' against the embedded fixture
@@ -420,7 +420,7 @@ def run_verification() -> None:
         print("[ ok    ] board columns rendered (saw 'Ready')", flush=True)
 
         # Then wait for actual fixture data to load — the skeleton (░ rows) will
-        # be replaced once all 4 gateway calls return.  bwf-1 is in "Not Ready"
+        # be replaced once all 4 repository calls return.  bwf-1 is in "Not Ready"
         # (blocked), bwf-2 would be in "Ready". Wait for either to appear, or for
         # the status bar to stop saying "Loading: board".
         print("[ wait  ] fixture data loaded ...", flush=True)
@@ -506,7 +506,7 @@ def run_verification() -> None:
         # 6. Search scenario: hammer 'r' 20x
         #
         # Send a burst of 5 'r' keys immediately (no delay) to ensure at least
-        # one arrives while the first search gateway call is still in-flight,
+        # one arrives while the first search repository call is still in-flight,
         # then continue with small delays for the rest.  The guard fires when 'r'
         # arrives before the async searchLoadedMsg is processed.
         # ------------------------------------------------------------------ #

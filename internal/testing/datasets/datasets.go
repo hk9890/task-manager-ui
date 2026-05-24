@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	beads "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"

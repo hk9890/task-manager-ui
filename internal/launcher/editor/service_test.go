@@ -12,7 +12,7 @@ import (
 	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
-func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
+func TestIssueEditorAppliesRepositoryUpdateFromEditedDocument(t *testing.T) {
 	t.Parallel()
 
 	repo := memoryrepo.New()
@@ -66,7 +66,7 @@ func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
 	}
 }
 
-func TestIssueEditorNoChangesSkipsGatewayUpdate(t *testing.T) {
+func TestIssueEditorNoChangesSkipsRepositoryUpdate(t *testing.T) {
 	t.Parallel()
 
 	repo := memoryrepo.New()

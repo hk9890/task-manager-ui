@@ -1,4 +1,4 @@
-package beads_test
+package bd_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
@@ -18,21 +18,21 @@ func TestRecordingExecutorRecordsCalls(t *testing.T) {
 
 	rec := fakes.NewRecordingExecutor()
 
-	pingResponse := beads.ExecResult{Stdout: []byte("pong")}
-	readyResponse := beads.ExecResult{Stdout: []byte(`[]`)}
+	pingResponse := bd.ExecResult{Stdout: []byte("pong")}
+	readyResponse := bd.ExecResult{Stdout: []byte(`[]`)}
 
 	rec.OnArgs([]string{"ping"}).Return(pingResponse, nil)
 	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(readyResponse, nil)
-	rec.SetDefault(beads.ExecResult{Stdout: []byte("default")}, nil)
+	rec.SetDefault(bd.ExecResult{Stdout: []byte("default")}, nil)
 
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
+	runner := bd.NewCommandRunner(bd.RunnerConfig{
 		Command:  "bd",
 		WorkDir:  "/proj",
 		Executor: rec,
 	})
 
 	// First call: ping
-	_, err := runner.Run(context.Background(), beads.CommandRequest{
+	_, err := runner.Run(context.Background(), bd.CommandRequest{
 		Operation: "health-check",
 		Args:      []string{"ping"},
 	})
@@ -41,7 +41,7 @@ func TestRecordingExecutorRecordsCalls(t *testing.T) {
 	}
 
 	// Second call: ready
-	_, err = runner.Run(context.Background(), beads.CommandRequest{
+	_, err = runner.Run(context.Background(), bd.CommandRequest{
 		Operation: "ready-explain",
 		Args:      []string{"ready", "--explain", "--json"},
 	})
@@ -50,7 +50,7 @@ func TestRecordingExecutorRecordsCalls(t *testing.T) {
 	}
 
 	// Third call: unmatched — should hit default
-	_, err = runner.Run(context.Background(), beads.CommandRequest{
+	_, err = runner.Run(context.Background(), bd.CommandRequest{
 		Operation: "other",
 		Args:      []string{"list", "--json"},
 	})
@@ -95,9 +95,9 @@ func TestRecordingExecutorConcurrentCallsNoRace(t *testing.T) {
 	const goroutines = 50
 
 	rec := fakes.NewRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json"}).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+	rec.OnArgs([]string{"list", "--json"}).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
 
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
+	runner := bd.NewCommandRunner(bd.RunnerConfig{
 		Command:  "bd",
 		Executor: rec,
 	})
@@ -108,7 +108,7 @@ func TestRecordingExecutorConcurrentCallsNoRace(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			_, err := runner.Run(context.Background(), beads.CommandRequest{
+			_, err := runner.Run(context.Background(), bd.CommandRequest{
 				Operation: "list",
 				Args:      []string{"list", "--json"},
 				IsWrite:   false,

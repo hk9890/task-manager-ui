@@ -28,16 +28,16 @@ import (
 	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
-// countBoardGatewayCalls counts calls to the board gateway method (Dashboard).
+// countBoardRepositoryCalls counts calls to the board repository method (Dashboard).
 // The memory repo records a single MethodDashboard call per board refresh, unlike
 // FakeRepo which fanned out into 5 sub-calls (ReadyExplain + 3×Query + CountIssues).
-func countBoardGatewayCalls(gw *appTestGateway, start int) int {
+func countBoardRepositoryCalls(gw *appTestRepository, start int) int {
 	return gw.callCountSince(start, repository.MethodDashboard)
 }
 
 // expandCmds recursively expands a tea.Cmd (which may return a BatchMsg) into
 // the set of individual leaf Cmds. This lets us inspect whether a second batch
-// of gateway calls was produced without actually executing them.
+// of repository calls was produced without actually executing them.
 func expandCmds(cmd tea.Cmd) []tea.Cmd {
 	if cmd == nil {
 		return nil
@@ -72,7 +72,7 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-10", "Ready alpha", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-11", Title: "Blocked beta", Status: "blocked", Priority: 2})
 	gw.seedInProgress("bw-12", "In Progress gamma", "task", 1)
@@ -102,7 +102,7 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 
 	// Fire first refreshTickMsg. The model calls maybeAutoRefreshActiveSurfaceCmd,
 	// which calls board.AutoRefresh() (since board is NOT loading). This sets
-	// board loading=true and returns a Dashboard gateway Cmd.
+	// board loading=true and returns a Dashboard repository Cmd.
 	next, firstRefreshCmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 
@@ -110,11 +110,11 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 		t.Fatalf("expected board to be loading after first refreshTickMsg")
 	}
 
-	// The first refresh Cmd should contain 1 board gateway call (Dashboard).
+	// The first refresh Cmd should contain 1 board repository call (Dashboard).
 	firstMsgs := runBatch(firstRefreshCmd)
-	callsFromFirst := countBoardGatewayCalls(gw, markAfterInit)
+	callsFromFirst := countBoardRepositoryCalls(gw, markAfterInit)
 	if callsFromFirst != 1 {
-		t.Fatalf("first refreshTickMsg: expected 1 board gateway call, got %d", callsFromFirst)
+		t.Fatalf("first refreshTickMsg: expected 1 board repository call, got %d", callsFromFirst)
 	}
 
 	// Mark call count to measure second-tick calls.
@@ -129,18 +129,18 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 	next, secondRefreshCmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 
-	// --- ASSERTION: second refreshTickMsg must NOT produce any board gateway calls ---
+	// --- ASSERTION: second refreshTickMsg must NOT produce any board repository calls ---
 	// Execute whatever the second refreshCmd contains and check for board calls.
 	if secondRefreshCmd != nil {
 		secondMsgs := runBatch(secondRefreshCmd)
 		// Filter: the second refreshTickMsg schedules the next tick (via getRefreshTickScheduler),
 		// so secondRefreshCmd may contain scheduler-level Cmds. We only care that
-		// NO additional board gateway calls were recorded.
+		// NO additional board repository calls were recorded.
 		_ = secondMsgs
 	}
-	callsFromSecond := countBoardGatewayCalls(gw, markAfterFirst)
+	callsFromSecond := countBoardRepositoryCalls(gw, markAfterFirst)
 	if callsFromSecond != 0 {
-		t.Errorf("second refreshTickMsg: expected 0 board gateway calls (boardIsLoading() guard should fire), got %d; app/model.go:1076 guard is broken", callsFromSecond)
+		t.Errorf("second refreshTickMsg: expected 0 board repository calls (boardIsLoading() guard should fire), got %d; app/model.go:1076 guard is broken", callsFromSecond)
 	}
 
 	// Board must still be loading (first refresh is still in-flight).

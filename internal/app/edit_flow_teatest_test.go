@@ -15,7 +15,7 @@ package app
 //
 // FakeExecCommand intercepts only the subprocess launch; PrepareDocument and
 // ApplyEdits use the real IssueEditor wired to the memory repository so the
-// full filesystem and gateway round-trip is exercised.
+// full filesystem and repository round-trip is exercised.
 
 import (
 	"fmt"
@@ -38,14 +38,14 @@ import (
 const editFlowTimeout = 5 * time.Second
 
 // buildEditFlowServices creates a Services value suitable for the teatest edit
-// flow tests. It wires the real IssueEditor against the provided gateway and
+// flow tests. It wires the real IssueEditor against the provided repository and
 // injects the FakeExecCommand factory as the ExecCommandFactory seam.
 //
 // The returned *fakes.FakeExecCommand lets callers configure EditedContent /
 // RunErr and inspect RunCalled after the program settles.
 func buildEditFlowServices(
 	t *testing.T,
-	gw *appTestGateway,
+	gw *appTestRepository,
 	fakeCmd *fakes.FakeExecCommand,
 ) Services {
 	t.Helper()
@@ -58,9 +58,9 @@ func buildEditFlowServices(
 	return services
 }
 
-// seedEditIssue seeds an issue into the gateway and returns it. It also
+// seedEditIssue seeds an issue into the repository and returns it. It also
 // pre-seeds the board state so the initial board load succeeds.
-func seedEditIssue(t *testing.T, gw *appTestGateway, issue domain.IssueDetail) {
+func seedEditIssue(t *testing.T, gw *appTestRepository, issue domain.IssueDetail) {
 	t.Helper()
 	gw.seedIssueDetail(issue)
 	gw.seedReady(issue.Summary.ID, issue.Summary.Title, issue.Summary.Type, issue.Summary.Priority)
@@ -86,11 +86,11 @@ func editableDocWithTitle(issue domain.IssueDetail, newTitle string) string {
 // TestEditFlowSuccessPathTeatest drives the full 'e' flow through the real
 // Bubble Tea runtime. Verifies that:
 //   - FakeExecCommand.Run is called exactly once
-//   - UpdateIssue is recorded on the gateway
+//   - UpdateIssue is recorded on the repository
 //   - the "Updated issue <id>" success toast is set on the settled model
 //
 // Assertion strategy: see the package note on TestEditFlowEditorErrorTeatest.
-// We synchronise on mutex-guarded fake counters (RunCount, gateway HasCall)
+// We synchronise on mutex-guarded fake counters (RunCount, repository HasCall)
 // to confirm the async chain ran, then assert on m.toast.View() via
 // FinalModel rather than scanning the teatest output buffer — post-tea.Exec
 // View() frames do not reliably reach the output pipe under CI load.
@@ -116,7 +116,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	seedEditIssue(t, gw, issue)
 
 	// Pre-configure the fake ExecCommand with content that changes the title.
@@ -148,7 +148,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
 		return fakeCmd.RunCount() >= 1
 	})
-	// Gate 2: applyEditsCmd's goroutine reached the gateway. This proves the
+	// Gate 2: applyEditsCmd's goroutine reached the repository. This proves the
 	// editor's ApplyEdits path produced a real update (success path), and is
 	// the last observable side-effect before editIssueResultMsg is returned
 	// from the closure to the BubbleTea msg loop.
@@ -182,7 +182,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
 	if !gw.hasUpdateIssueCall() {
-		t.Errorf("expected UpdateIssue call on gateway after successful edit, calls=%#v", gw.Calls())
+		t.Errorf("expected UpdateIssue call on repository after successful edit, calls=%#v", gw.Calls())
 	}
 }
 
@@ -193,7 +193,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 // Assertion strategy: see the package note on TestEditFlowEditorErrorTeatest.
 // Same FinalModel approach as the success-path test — output-buffer scanning
 // is not reliable for post-tea.Exec frames under CI load. Gating on
-// gateway.HasCall(UpdateIssue) is not available here (we are asserting the
+// repository.HasCall(UpdateIssue) is not available here (we are asserting the
 // opposite), so we use the same RunCount + settle pattern as test 3.
 func TestEditFlowNoChangeTeatest(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
@@ -214,7 +214,7 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	seedEditIssue(t, gw, issue)
 
 	// EditedContent is the exact same rendered document — no changes.
@@ -301,7 +301,7 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	seedEditIssue(t, gw, issue)
 
 	// RunErr simulates the editor exiting with a non-zero status.

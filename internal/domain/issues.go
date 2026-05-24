@@ -75,7 +75,7 @@ const (
 	SearchResultCompletenessPartial   SearchResultCompleteness = "partial"
 )
 
-// SearchResultSource identifies how the gateway produced a search page.
+// SearchResultSource identifies how the repository produced a search page.
 type SearchResultSource string
 
 const (
@@ -94,7 +94,7 @@ type SearchResultMetadata struct {
 	Notice         string
 }
 
-// SearchResultPage represents a paged search response from the gateway.
+// SearchResultPage represents a paged search response from the repository.
 type SearchResultPage struct {
 	Results  []SearchResult
 	Metadata SearchResultMetadata

@@ -8,7 +8,7 @@
 // Exit codes: 0 if all selected checks PASS; 1 if any check FAILS or an error occurs.
 //
 // Safety: --readonly=true (the default) prepends --readonly to every bd invocation
-// and sets ReadOnly:true on the gateway runner, preventing any writes to the target DB.
+// and sets ReadOnly:true on the repository runner, preventing any writes to the target DB.
 // Always use --readonly when pointing at a shared or production database.
 package main
 
@@ -26,10 +26,10 @@ import (
 	"strings"
 	"time"
 
+	beads "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode/board"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"

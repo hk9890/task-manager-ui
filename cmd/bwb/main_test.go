@@ -760,7 +760,7 @@ func TestConstructRepositoryCachingWritesCacheFile(t *testing.T) {
 	})
 
 	// We need to inject a custom cache to avoid real bd subprocess calls.
-	// constructRepository wires the real beads gateway, so we cannot use it
+	// constructRepository wires the real beads repository, so we cannot use it
 	// directly with a stub backing. Instead, test the wiring components
 	// independently: Hydrate path + Start + Dashboard caching + SaveNow.
 	// The full constructRepository path is covered by integration tests
@@ -817,7 +817,7 @@ func TestConstructRepositoryCachingWritesCacheFile(t *testing.T) {
 //   - Call constructRepository with a "new session" repoFile pointing to
 //     <cacheBaseDir>/<hash>-newsess/repo.jsonl (same hash, different session ID).
 //
-// The backing beads gateway will fail on Issue() (no real bd binary / project),
+// The backing beads repository will fail on Issue() (no real bd binary / project),
 // so if the prior session's issue is returned without error it must have come
 // from the hydrated in-memory cache. If Hydrate failed to find the prior file
 // the backing call would fail and the test would surface that as an error.

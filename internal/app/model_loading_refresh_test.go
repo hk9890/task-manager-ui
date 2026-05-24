@@ -70,8 +70,8 @@ func TestSkeletonPhasePulse(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	// Empty gateway — board stays in loading=true, cold-start.
-	gw := newTestGateway()
+	// Empty repository — board stays in loading=true, cold-start.
+	gw := newTestRepository()
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -136,8 +136,8 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	// Configure the gateway with known, distinguishable issue IDs.
-	gw := newTestGateway()
+	// Configure the repository with known, distinguishable issue IDs.
+	gw := newTestRepository()
 	gw.seedReady("bw-10", "Ready issue alpha", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-11", Title: "Blocked issue beta", Status: "blocked", Priority: 2})
 	gw.seedInProgress("bw-12", "In Progress gamma", "task", 1)
@@ -184,7 +184,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// Send a refreshTickMsg. The model's Update immediately calls
 	// m.board.AutoRefresh() inside refreshActiveSurfaceCmd, which sets
 	// loading=true on each column but preserves existing issues. The returned
-	// cmd contains the pending gateway fetch commands — we capture them
+	// cmd contains the pending repository fetch commands — we capture them
 	// without running them yet, so the board is "in flight".
 	next, refreshCmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
@@ -194,7 +194,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 		t.Fatalf("expected board to be loading after refreshTickMsg with dirty surface")
 	}
 
-	// Capture View() BEFORE draining the in-flight gateway results.
+	// Capture View() BEFORE draining the in-flight repository results.
 	// Stale issue IDs must still be visible — NOT replaced by skeleton or blank.
 	inFlightView := m.View()
 	inFlightIDs := extractIssueIDsFromView(inFlightView)
@@ -220,11 +220,11 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 
 	// --- Phase 4: Spinner absent after results land ---
 
-	// Now drain the in-flight board refresh (gateway responds with same data).
+	// Now drain the in-flight board refresh (repository responds with same data).
 	m = applyMessages(t, m, runBatch(refreshCmd))
 
 	if m.boardIsLoading() {
-		t.Fatalf("expected board to have settled after draining refresh gateway results")
+		t.Fatalf("expected board to have settled after draining refresh repository results")
 	}
 
 	// Spinner glyph must be gone once all surfaces are idle.
@@ -288,8 +288,8 @@ func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	// Empty gateway — board stays in loading=true, cold-start.
-	gw := newTestGateway()
+	// Empty repository — board stays in loading=true, cold-start.
+	gw := newTestRepository()
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {

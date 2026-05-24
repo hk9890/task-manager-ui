@@ -1,4 +1,4 @@
-package beads
+package bd
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func TestVCStatusHashSuccess(t *testing.T) {
 }
 
 // TestVCStatusHashExecError verifies that an execution-level failure
-// (e.g. bd not on PATH) returns a wrapped GatewayError and does not panic.
+// (e.g. bd not on PATH) returns a wrapped RepositoryError and does not panic.
 func TestVCStatusHashExecError(t *testing.T) {
 	t.Parallel()
 
@@ -41,7 +41,7 @@ func TestVCStatusHashExecError(t *testing.T) {
 	runner := NewCommandRunner(RunnerConfig{Executor: stub})
 
 	_, err := VCStatusHash(context.Background(), runner)
-	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandUnavailable)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeCommandUnavailable)
 }
 
 // TestVCStatusHashEmptyCommit verifies that a response with an empty commit
@@ -76,7 +76,7 @@ func TestVCStatusHashEmptyCommit(t *testing.T) {
 			runner := NewCommandRunner(RunnerConfig{Executor: stub})
 
 			_, err := VCStatusHash(context.Background(), runner)
-			assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+			assertRepositoryErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 		})
 	}
 }

@@ -92,7 +92,7 @@ type IssueCountResult struct {
 	Total  int
 }
 
-// QueryOptions controls filtering and pagination for the generic Query gateway method.
+// QueryOptions controls filtering and pagination for the generic Query repository method.
 type QueryOptions struct {
 	// Limit is the maximum number of issues to return. A value of 0 means uncapped.
 	Limit int
@@ -106,7 +106,7 @@ type QueryOptions struct {
 	SortOrder SortDirection
 }
 
-// ReadyExplainOptions controls the ReadyExplain gateway call.
+// ReadyExplainOptions controls the ReadyExplain repository call.
 type ReadyExplainOptions struct {
 	// Limit is the maximum number of issues to return per section. A value of 0 means uncapped.
 	Limit int
@@ -138,7 +138,7 @@ type SearchIssuesQuery struct {
 
 	// WorkState maps to readiness/blocking narrowing used by browse/search flows.
 	// Note: `bd search` does not currently expose ready/blocked flags directly.
-	// Gateway implementations may route through `bd ready`/`bd blocked` and apply
+	// Repository implementations may route through `bd ready`/`bd blocked` and apply
 	// additional filters in-memory to preserve a stable UI-facing API.
 	WorkState WorkStateFilter
 

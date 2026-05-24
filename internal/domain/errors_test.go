@@ -7,35 +7,35 @@ import (
 )
 
 // sentinel is a package-level test sentinel error used to verify errors.Is
-// unwrap propagation through GatewayError.Unwrap.
+// unwrap propagation through RepositoryError.Unwrap.
 var errSentinel = errors.New("sentinel error")
 
-func TestGatewayErrorErrorWithoutCausePreservesBaseFormats(t *testing.T) {
+func TestRepositoryErrorErrorWithoutCausePreservesBaseFormats(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		err  GatewayError
+		err  RepositoryError
 		want string
 	}{
 		{
 			name: "empty message and operation uses code",
-			err:  GatewayError{Code: ErrorCodeTimeout},
+			err:  RepositoryError{Code: ErrorCodeTimeout},
 			want: string(ErrorCodeTimeout),
 		},
 		{
 			name: "empty message with operation uses operation and code",
-			err:  GatewayError{Code: ErrorCodeTimeout, Operation: "list issues"},
+			err:  RepositoryError{Code: ErrorCodeTimeout, Operation: "list issues"},
 			want: "list issues: timeout",
 		},
 		{
 			name: "message without operation uses message",
-			err:  GatewayError{Code: ErrorCodeTimeout, Message: "command timed out"},
+			err:  RepositoryError{Code: ErrorCodeTimeout, Message: "command timed out"},
 			want: "command timed out",
 		},
 		{
 			name: "message with operation uses operation and message",
-			err:  GatewayError{Code: ErrorCodeTimeout, Operation: "list issues", Message: "command timed out"},
+			err:  RepositoryError{Code: ErrorCodeTimeout, Operation: "list issues", Message: "command timed out"},
 			want: "list issues: command timed out",
 		},
 	}
@@ -52,14 +52,14 @@ func TestGatewayErrorErrorWithoutCausePreservesBaseFormats(t *testing.T) {
 	}
 }
 
-// TestGatewayErrorUnwrapPropagatesSentinel verifies that errors.Is correctly
-// traverses the GatewayError.Unwrap chain to find a wrapped sentinel. This
-// covers the contract that gateway callers relying on errors.Is(err, sentinel)
-// will find the root cause even after it has been wrapped in a GatewayError.
-func TestGatewayErrorUnwrapPropagatesSentinel(t *testing.T) {
+// TestRepositoryErrorUnwrapPropagatesSentinel verifies that errors.Is correctly
+// traverses the RepositoryError.Unwrap chain to find a wrapped sentinel. This
+// covers the contract that repository callers relying on errors.Is(err, sentinel)
+// will find the root cause even after it has been wrapped in a RepositoryError.
+func TestRepositoryErrorUnwrapPropagatesSentinel(t *testing.T) {
 	t.Parallel()
 
-	wrapped := GatewayError{
+	wrapped := RepositoryError{
 		Code:      ErrorCodeCommandFailed,
 		Operation: "test operation",
 		Message:   "something failed",
@@ -67,7 +67,7 @@ func TestGatewayErrorUnwrapPropagatesSentinel(t *testing.T) {
 	}
 
 	if !errors.Is(wrapped, errSentinel) {
-		t.Fatalf("errors.Is(wrapped, errSentinel) = false; want true — GatewayError.Unwrap must propagate the cause sentinel")
+		t.Fatalf("errors.Is(wrapped, errSentinel) = false; want true — RepositoryError.Unwrap must propagate the cause sentinel")
 	}
 
 	// Also verify a non-matching sentinel is not found.
@@ -77,51 +77,51 @@ func TestGatewayErrorUnwrapPropagatesSentinel(t *testing.T) {
 	}
 }
 
-// TestGatewayErrorUnwrapPropagatesThroughMultipleLayers verifies that
-// errors.Is traverses a chain of two GatewayError wrappers.
-func TestGatewayErrorUnwrapPropagatesThroughMultipleLayers(t *testing.T) {
+// TestRepositoryErrorUnwrapPropagatesThroughMultipleLayers verifies that
+// errors.Is traverses a chain of two RepositoryError wrappers.
+func TestRepositoryErrorUnwrapPropagatesThroughMultipleLayers(t *testing.T) {
 	t.Parallel()
 
-	inner := GatewayError{
+	inner := RepositoryError{
 		Code:    ErrorCodeTimeout,
 		Message: "inner timeout",
 		Cause:   errSentinel,
 	}
-	outer := GatewayError{
+	outer := RepositoryError{
 		Code:    ErrorCodeCommandFailed,
 		Message: "outer failure",
 		Cause:   inner,
 	}
 
 	if !errors.Is(outer, errSentinel) {
-		t.Fatalf("errors.Is(outer, errSentinel) = false; want true — errors.Is must traverse two GatewayError layers")
+		t.Fatalf("errors.Is(outer, errSentinel) = false; want true — errors.Is must traverse two RepositoryError layers")
 	}
 }
 
-func TestGatewayErrorErrorWithCauseAppendsCauseForAllBaseFormats(t *testing.T) {
+func TestRepositoryErrorErrorWithCauseAppendsCauseForAllBaseFormats(t *testing.T) {
 	t.Parallel()
 
 	cause := errors.New("transport reset")
 
 	tests := []struct {
 		name string
-		err  GatewayError
+		err  RepositoryError
 	}{
 		{
 			name: "code only",
-			err:  GatewayError{Code: ErrorCodeCommandFailed, Cause: cause},
+			err:  RepositoryError{Code: ErrorCodeCommandFailed, Cause: cause},
 		},
 		{
 			name: "operation plus code",
-			err:  GatewayError{Code: ErrorCodeCommandFailed, Operation: "list issues", Cause: cause},
+			err:  RepositoryError{Code: ErrorCodeCommandFailed, Operation: "list issues", Cause: cause},
 		},
 		{
 			name: "message only",
-			err:  GatewayError{Code: ErrorCodeCommandFailed, Message: "failed to execute command", Cause: cause},
+			err:  RepositoryError{Code: ErrorCodeCommandFailed, Message: "failed to execute command", Cause: cause},
 		},
 		{
 			name: "operation plus message",
-			err:  GatewayError{Code: ErrorCodeCommandFailed, Operation: "list issues", Message: "failed to execute command", Cause: cause},
+			err:  RepositoryError{Code: ErrorCodeCommandFailed, Operation: "list issues", Message: "failed to execute command", Cause: cause},
 		},
 	}
 

@@ -24,7 +24,7 @@ Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
 
 When fixing a bug whose root cause involves fake-vs-real divergence in the beads `Repository` implementation, follow the discipline in `internal/testing/fakes/doc.go`.
 
-When adding or modifying a bd subprocess call, follow the argv contract pattern in `internal/gateway/beads/doc.go` (Argv contract testing section).
+When adding or modifying a bd subprocess call, follow the argv contract pattern in `internal/bd/doc.go` (Argv contract testing section).
 
 ## Monitoring
 

@@ -51,7 +51,7 @@ The first implementation wave should establish:
 
 ### Epic Description
 
-Create the new repository foundation for Beads Workbench and implement the first production-ready backend seam that talks only to official beads surfaces. This epic should end with a tested gateway layer that the future UI can depend on directly, without SQL, BQL, or orchestration code in the critical path.
+Create the new repository foundation for Beads Workbench and implement the first production-ready backend seam that talks only to official beads surfaces. This epic should end with a tested repository layer that the future UI can depend on directly, without SQL, BQL, or orchestration code in the critical path.
 
 ### Epic Success Criteria
 
@@ -75,7 +75,7 @@ Set up the new repository so implementation can begin in `/home/hans/dev/github/
 - copy `docs/standalone/` into the new repo
 - create `go.mod` with `github.com/hk9890/beads-workbench`
 - add minimal `cmd/bwb` entrypoint
-- create initial package layout for app, gateway, launcher, dashboard, mode, and ui
+- create initial package layout for app, repository, launcher, dashboard, mode, and ui
 - add minimal README/provenance scaffolding as needed
 
 #### Acceptance Criteria
@@ -84,7 +84,7 @@ Set up the new repository so implementation can begin in `/home/hans/dev/github/
 - the docs folder exists in the new repo
 - package layout exists for the planned architecture
 
-### Task 2 — Define core domain and gateway interfaces
+### Task 2 — Define core domain and repository interfaces
 
 #### Purpose
 
@@ -120,10 +120,10 @@ Avoid scattering subprocess logic throughout the codebase.
 
 #### Acceptance Criteria
 
-- gateway implementation can use one shared command execution layer
+- repository implementation can use one shared command execution layer
 - command behavior is testable without fragile end-to-end shell dependence
 
-### Task 4 — Implement gateway read operations through official beads commands
+### Task 4 — Implement repository read operations through official beads commands
 
 #### Purpose
 
@@ -146,10 +146,10 @@ Deliver the first useful read path for the future UI.
 
 #### Acceptance Criteria
 
-- the gateway can successfully return typed read models
+- the repository can successfully return typed read models
 - read operations do not depend on SQL or BQL
 
-### Task 5 — Implement gateway write operations through official beads commands
+### Task 5 — Implement repository write operations through official beads commands
 
 #### Purpose
 
@@ -172,14 +172,14 @@ Complete the first end-to-end backend seam.
 
 #### Acceptance Criteria
 
-- write operations are available through the gateway interface
+- write operations are available through the repository interface
 - error behavior is consistent with the read-path error model
 
-### Task 6 — Verify gateway behavior with tests and fixture coverage
+### Task 6 — Verify repository behavior with tests and fixture coverage
 
 #### Purpose
 
-Make the gateway safe enough for UI work to begin.
+Make the repository safe enough for UI work to begin.
 
 #### Scope
 
@@ -191,10 +191,10 @@ Make the gateway safe enough for UI work to begin.
 
 #### Acceptance Criteria
 
-- the gateway layer has focused automated tests
+- the repository layer has focused automated tests
 - failures produce actionable errors for later UI integration
 
-### Task 7 — Acceptance Review: Phase 1 gateway foundation
+### Task 7 — Acceptance Review: Phase 1 repository foundation
 
 #### Purpose
 
@@ -205,12 +205,12 @@ Verify that the repository and backend seam are ready for the minimal app-shell 
 - all phase-1 implementation tasks are closed
 - `bwb` entrypoint exists in the new repository
 - the new code path depends on official beads surfaces only
-- no direct SQL/BQL/orchestration dependency is required for the gateway foundation
-- tests for the gateway foundation pass
+- no direct SQL/BQL/orchestration dependency is required for the repository foundation
+- tests for the repository foundation pass
 
 ## Recommended Follow-up Epics After Phase 1
 
-These should usually be separate epics in the new repository after the gateway foundation is complete.
+These should usually be separate epics in the new repository after the repository foundation is complete.
 
 ### Epic 2 — Build minimal Beads Workbench app shell
 
@@ -218,7 +218,7 @@ Purpose:
 
 - add Bubble Tea root app
 - add simplified services container
-- wire the UI to the new gateway
+- wire the UI to the new repository
 
 ### Epic 3 — Deliver browsing experience
 

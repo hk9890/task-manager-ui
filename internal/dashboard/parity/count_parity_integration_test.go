@@ -137,7 +137,7 @@ func parseBdBlockedOverlap(t *testing.T, rawA, rawB []byte) int {
 // any drift between the dashboard column totals reported by the bwb data path and
 // the source-of-truth counts from bd count --by-status.
 //
-// It runs the same 4 gateway calls that the board model fires on startup, feeds
+// It runs the same 4 repository calls that the board model fires on startup, feeds
 // the result through dashboard.Compose, and compares the resulting column Totals
 // against bd count and bd ready output per dataset.
 func TestCountParityDashboardVsBdCount(t *testing.T) {

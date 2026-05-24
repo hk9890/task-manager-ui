@@ -17,9 +17,9 @@ import (
 var errInjected = errors.New("injected mutation failure")
 
 // newMutationErrorServices returns a minimal Services container backed by the
-// supplied gateway. It uses config.Default() and a temp dir so no external
+// supplied repository. It uses config.Default() and a temp dir so no external
 // editor or launcher process is ever spawned.
-func newMutationErrorServices(t *testing.T, gw *appTestGateway) Services {
+func newMutationErrorServices(t *testing.T, gw *appTestRepository) Services {
 	t.Helper()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -28,13 +28,13 @@ func newMutationErrorServices(t *testing.T, gw *appTestGateway) Services {
 	return services
 }
 
-// TestMutationUpdateGatewayError verifies that a gateway failure in
+// TestMutationUpdateRepositoryError verifies that a repository failure in
 // mutationUpdate produces a result whose error begins with "update issue
 // failed:" and wraps the original error (i.e. errors.Is works).
-func TestMutationUpdateGatewayError(t *testing.T) {
+func TestMutationUpdateRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
 	gw.SetError(repository.MethodUpdateIssue, errInjected)
 
@@ -46,7 +46,7 @@ func TestMutationUpdateGatewayError(t *testing.T) {
 		// nil statusNames/typeNames/labelNames → len(nil)==0, guards skip
 	}
 	// priority must be a valid integer so parseRequiredPriority passes; value
-	// must survive all pre-gateway validation to reach the gateway call.
+	// must survive all pre-repository validation to reach the repository call.
 	values := map[string]string{
 		"title":    "Updated title",
 		"priority": "2",
@@ -59,7 +59,7 @@ func TestMutationUpdateGatewayError(t *testing.T) {
 		t.Fatalf("expected mutationResultMsg, got %T", msg)
 	}
 	if res.err == nil {
-		t.Fatal("expected non-nil error from mutationUpdate with injected gateway failure")
+		t.Fatal("expected non-nil error from mutationUpdate with injected repository failure")
 	}
 	const wantPrefix = "update issue failed:"
 	if !strings.HasPrefix(res.err.Error(), wantPrefix) {
@@ -70,13 +70,13 @@ func TestMutationUpdateGatewayError(t *testing.T) {
 	}
 }
 
-// TestMutationCloseGatewayError verifies that a gateway failure in
+// TestMutationCloseRepositoryError verifies that a repository failure in
 // mutationClose produces a result whose error begins with "close issue
 // failed:" and wraps the original error.
-func TestMutationCloseGatewayError(t *testing.T) {
+func TestMutationCloseRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
 	gw.SetError(repository.MethodCloseIssue, errInjected)
 
@@ -94,7 +94,7 @@ func TestMutationCloseGatewayError(t *testing.T) {
 		t.Fatalf("expected mutationResultMsg, got %T", msg)
 	}
 	if res.err == nil {
-		t.Fatal("expected non-nil error from mutationClose with injected gateway failure")
+		t.Fatal("expected non-nil error from mutationClose with injected repository failure")
 	}
 	const wantPrefix = "close issue failed:"
 	if !strings.HasPrefix(res.err.Error(), wantPrefix) {
@@ -105,13 +105,13 @@ func TestMutationCloseGatewayError(t *testing.T) {
 	}
 }
 
-// TestMutationCommentGatewayError verifies that a gateway failure in
+// TestMutationCommentRepositoryError verifies that a repository failure in
 // mutationComment produces a result whose error begins with "add comment
 // failed:" and wraps the original error.
-func TestMutationCommentGatewayError(t *testing.T) {
+func TestMutationCommentRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
 	gw.SetError(repository.MethodAddComment, errInjected)
 
@@ -121,7 +121,7 @@ func TestMutationCommentGatewayError(t *testing.T) {
 		kind:  mutationComment,
 		issue: domain.IssueSummary{ID: "bw-1"},
 	}
-	// body must be non-empty to pass the pre-gateway guard.
+	// body must be non-empty to pass the pre-repository guard.
 	values := map[string]string{"body": "looks good"}
 
 	msg := submitMutationCmd(services, state, values)()
@@ -130,7 +130,7 @@ func TestMutationCommentGatewayError(t *testing.T) {
 		t.Fatalf("expected mutationResultMsg, got %T", msg)
 	}
 	if res.err == nil {
-		t.Fatal("expected non-nil error from mutationComment with injected gateway failure")
+		t.Fatal("expected non-nil error from mutationComment with injected repository failure")
 	}
 	const wantPrefix = "add comment failed:"
 	if !strings.HasPrefix(res.err.Error(), wantPrefix) {
@@ -141,13 +141,13 @@ func TestMutationCommentGatewayError(t *testing.T) {
 	}
 }
 
-// TestMutationStatusGatewayError verifies that a gateway failure in
+// TestMutationStatusRepositoryError verifies that a repository failure in
 // mutationStatus (status-only UpdateIssue) produces a result whose error
 // begins with "update status failed:" and wraps the original error.
-func TestMutationStatusGatewayError(t *testing.T) {
+func TestMutationStatusRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
 	gw.SetError(repository.MethodUpdateIssue, errInjected)
 
@@ -168,7 +168,7 @@ func TestMutationStatusGatewayError(t *testing.T) {
 		t.Fatalf("expected mutationResultMsg, got %T", msg)
 	}
 	if res.err == nil {
-		t.Fatal("expected non-nil error from mutationStatus with injected gateway failure")
+		t.Fatal("expected non-nil error from mutationStatus with injected repository failure")
 	}
 	const wantPrefix = "update status failed:"
 	if !strings.HasPrefix(res.err.Error(), wantPrefix) {
@@ -179,13 +179,13 @@ func TestMutationStatusGatewayError(t *testing.T) {
 	}
 }
 
-// TestMutationPriorityGatewayError verifies that a gateway failure in
+// TestMutationPriorityRepositoryError verifies that a repository failure in
 // mutationPriority (priority-only UpdateIssue) produces a result whose error
 // begins with "update priority failed:" and wraps the original error.
-func TestMutationPriorityGatewayError(t *testing.T) {
+func TestMutationPriorityRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
 	gw.SetError(repository.MethodUpdateIssue, errInjected)
 
@@ -205,7 +205,7 @@ func TestMutationPriorityGatewayError(t *testing.T) {
 		t.Fatalf("expected mutationResultMsg, got %T", msg)
 	}
 	if res.err == nil {
-		t.Fatal("expected non-nil error from mutationPriority with injected gateway failure")
+		t.Fatal("expected non-nil error from mutationPriority with injected repository failure")
 	}
 	const wantPrefix = "update priority failed:"
 	if !strings.HasPrefix(res.err.Error(), wantPrefix) {

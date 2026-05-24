@@ -18,7 +18,7 @@ import (
 func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	// Seed the search result so typing "jkhlr" still matches via text search.
@@ -53,7 +53,7 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 
 	m = testui.ApplyKeySequence(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...).(Model)
 	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
-	// Verify the applied query directly from search state instead of gateway call inspection.
+	// Verify the applied query directly from search state instead of repository call inspection.
 	if got := m.search.SessionState().AppliedQuery; got != testui.SearchFragileQueryRunes() {
 		t.Fatalf("expected applied query %q after typing, got %q", testui.SearchFragileQueryRunes(), got)
 	}
@@ -86,7 +86,7 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 	t.Parallel()
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{

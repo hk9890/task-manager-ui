@@ -77,7 +77,7 @@ The new implementation repository is located at `/home/hans/dev/github/beads-wor
 ## Guiding Rules for Implementers
 
 1. **Do not reintroduce direct SQL as a convenience shortcut**
-   - If a feature needs issue data, route it through the gateway.
+   - If a feature needs issue data, route it through the repository.
 
 2. **Do not preserve old architecture just because it already exists**
    - Old mode/service shapes can be replaced if they pull SQL/BQL assumptions forward.
@@ -102,7 +102,7 @@ Before major implementation begins, the work should proceed in this order:
 2. create the new private GitHub repository `hk9890/beads-workbench`
 3. copy the Beads Workbench design docs into the new repository
 4. bootstrap the new module, app shell, and package layout
-5. implement the gateway seam first
+5. implement the repository seam first
 6. transplant or rewrite UI pieces against that seam
 
 This order is preferred over building the new architecture inside the old repository and moving it later.
@@ -137,7 +137,7 @@ Deliverables:
 - new `go.mod` with module path `github.com/hk9890/beads-workbench`
 - minimal `cmd/bwb` entrypoint
 - copied Beads Workbench product / architecture / implementation docs
-- initial package layout for gateway, app, modes, launcher, dashboard, and UI
+- initial package layout for repository, app, modes, launcher, dashboard, and UI
 
 Important note:
 
@@ -167,7 +167,7 @@ Important note:
 
 Goal:
 
-- stand up a small Bubble Tea app that depends only on the new gateway and UI services
+- stand up a small Bubble Tea app that depends only on the new repository and UI services
 
 Suggested features:
 
@@ -196,7 +196,7 @@ Suggested initial screens:
 
 Implementation rule:
 
-- board columns must map to supported gateway queries, not arbitrary query strings
+- board columns must map to supported repository queries, not arbitrary query strings
 
 ### Phase 4: deliver the editor and launcher story
 
@@ -226,7 +226,7 @@ Goal:
 Good candidates:
 
 - file-backed dashboard definition provider
-- federated multi-project read aggregation above per-project gateways
+- federated multi-project read aggregation above per-project repositorys
 - optional local caching layer
 - small local filter language
 
@@ -244,7 +244,7 @@ Exact names may change, but the shape should resemble:
 internal/
   app/                 # simplified Bubble Tea shell
   domain/              # Beads Workbench issue and dashboard models if needed
-  gateway/beads/       # UI-facing interface + CLI-backed implementation
+  repository/beads/       # UI-facing interface + CLI-backed implementation
   launcher/            # external editor + command launch actions
   dashboard/           # dashboard definitions + provider interfaces
   mode/                # board/search/details controllers
@@ -283,7 +283,7 @@ Recommended approach:
 1. keep the new docs as the design baseline
 2. create the new Beads Workbench repository
 3. bootstrap the new module and package layout there
-4. introduce the new gateway seam in the new repo
+4. introduce the new repository seam in the new repo
 5. build a reduced app shell in the new repo
 6. migrate or rewrite screens one by one against the new seam
 7. transplant only reusable UI and editor components from Perles
@@ -342,15 +342,15 @@ Recommended sequence:
 3. optionally allow local narrowing of already loaded results
 4. defer a dedicated mini-language until the browsing experience is proven
 
-If later work adds a local filter language, it should remain layered on top of the gateway-backed result model described in [ARCHITECTURE.md](./ARCHITECTURE.md).
+If later work adds a local filter language, it should remain layered on top of the repository-backed result model described in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Future Federation Guidance
 
-If Beads Workbench later gains federated mode, implement it as a layer **above** per-project gateways rather than by changing the core gateway into a global multi-project abstraction.
+If Beads Workbench later gains federated mode, implement it as a layer **above** per-project repositorys rather than by changing the core repository into a global multi-project abstraction.
 
 Recommended order:
 
-1. keep the v1 gateway source-specific
+1. keep the v1 repository source-specific
 2. add a source registry / source selection layer
 3. add federated read aggregation for browse and search flows
 4. keep writes routed through the selected issue's owning source
@@ -363,7 +363,7 @@ In v1:
 
 - implement built-in dashboard definitions only
 - keep the board renderer independent from the provider
-- model each board section as a supported gateway query type
+- model each board section as a supported repository query type
 
 Do not:
 
@@ -374,12 +374,12 @@ Do not:
 
 The editor handoff should likely use a temp-file flow:
 
-1. gateway loads issue details
+1. repository loads issue details
 2. Beads Workbench renders an editable issue document
 3. external editor opens the document
 4. Beads Workbench parses the saved result
 5. Beads Workbench computes the changed fields
-6. gateway applies the update
+6. repository applies the update
 
 Good reuse candidates in the current repo:
 
@@ -414,7 +414,7 @@ Launchers should stay intentionally thin. If a launcher starts doing workflow co
 Future implementation tasks should reference these docs directly:
 
 - use [PRODUCT.md](./PRODUCT.md) for feature scope decisions
-- use [ARCHITECTURE.md](./ARCHITECTURE.md) for gateway/provider/launcher boundaries
+- use [ARCHITECTURE.md](./ARCHITECTURE.md) for repository/provider/launcher boundaries
 - use this document for phase ordering and reuse guidance
 
 If future work changes scope, update the product and architecture docs before implementation continues.

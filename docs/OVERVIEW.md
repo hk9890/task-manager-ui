@@ -10,8 +10,8 @@
 ## Upstream dependency
 
 - `bd` (beads issue tracker): <https://github.com/gastownhall/beads>
-- bwb is a thin TUI over `bd`; gateway compatibility is pinned in `.mise.toml`
-  (`github:gastownhall/beads` version). When investigating gateway behavior
+- bwb is a thin TUI over `bd`; repository compatibility is pinned in `.mise.toml`
+  (`github:gastownhall/beads` version). When investigating repository behavior
   surprises, file bugs upstream or check the `bd` source/issues there before
   patching workarounds in `internal/repository/beads/`.
 
@@ -34,7 +34,7 @@ resolution behavior, see `docs/CODING.md`.
    `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
 
 When `--debug` is enabled, stderr diagnostics are prefixed with `[bwb-debug]`
-and include startup resolution events plus gateway execution traces, while the
+and include startup resolution events plus repository execution traces, while the
 same run also writes structured JSON Lines records with `session_id` to the
 persistent log file. See `docs/MONITORING.md` for the logging contract and
 capture paths.
@@ -48,9 +48,9 @@ capture paths.
 | `internal/app` | Root shell, mode lifecycle, selection/detail coordination |
 | `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
 | `internal/domain` | Issue, query, mutation, catalog, and error models |
-| `internal/gateway/beads` | `bd` subprocess runner and argv-level types (`CommandRunner`, `RunnerConfig`, `ExecResult`) |
+| `internal/bd` | `bd` subprocess runner and argv-level types (`CommandRunner`, `RunnerConfig`, `ExecResult`) |
 | `internal/repository/beads` | Lean `repository.Repository` implementation built directly on `CommandRunner`; typed `bd` payload decoding |
-| `internal/logging` | Central slog-based logging package used by startup and gateway code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
+| `internal/logging` | Central slog-based logging package used by startup and repository code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
 | `internal/dashboard` | Built-in dashboard definitions and validation |
 | `internal/mode/*` | Board, search, and details feature-local state/controllers |
 | `internal/launcher` | External tool launch actions and process runner |

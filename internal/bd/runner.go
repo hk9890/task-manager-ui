@@ -1,4 +1,4 @@
-package beads
+package bd
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 
 // envAllowlist is the fixed set of env var names passed to bd subprocesses.
 // All BD_* and other ambient vars are stripped; only these vars (and any
-// BWB_-prefixed var) survive. The gateway is bound to one project; env
+// BWB_-prefixed var) survive. The repository is bound to one project; env
 // isolation prevents stray BD_DB_PATH or XDG_CONFIG_HOME values from
 // redirecting bd to a different database.
 var envAllowlist = []string{
@@ -62,7 +62,7 @@ const defaultBDCommand = "bd"
 
 // CommandRequest describes one CLI invocation.
 type CommandRequest struct {
-	// Operation is a stable logical name used in gateway errors.
+	// Operation is a stable logical name used in repository errors.
 	Operation string
 	Args      []string
 	WorkDir   string
@@ -113,7 +113,7 @@ type RunnerConfig struct {
 // conservative choice given the super-linear contention profile observed.
 const bdSemCap = 2
 
-// CommandRunner is a reusable execution layer for bd-backed gateway methods.
+// CommandRunner is a reusable execution layer for bd-backed repository methods.
 type CommandRunner struct {
 	command        string
 	defaultWorkDir string
@@ -171,7 +171,7 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 // writers never overlap with readers or other writers.
 func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, error) {
 	if r == nil {
-		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
+		return nil, newRepositoryError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
 
 	argv := r.resolveArgs(req.Args)
@@ -231,14 +231,14 @@ func (r *CommandRunner) execOnce(ctx context.Context, req CommandRequest, argv [
 		// TestMissingBDDatabaseDetectionSubstringPin in runner_test.go will fail
 		// loudly if the wording changes, giving a clear signal to revisit.
 		if strings.Contains(stderr, "no beads database found") {
-			return nil, newGatewayError(domain.ErrorCodeNoDatabaseFound, req.Operation, stderr, nil)
+			return nil, newRepositoryError(domain.ErrorCodeNoDatabaseFound, req.Operation, stderr, nil)
 		}
 		message := fmt.Sprintf("command exited with code %d", result.ExitCode)
 		if stderr != "" {
 			message = fmt.Sprintf("%s: %s", message, stderr)
 		}
 
-		return nil, newGatewayError(domain.ErrorCodeCommandFailed, req.Operation, message, nil)
+		return nil, newRepositoryError(domain.ErrorCodeCommandFailed, req.Operation, message, nil)
 	}
 
 	return result.Stdout, nil
@@ -270,21 +270,21 @@ func RunJSON[T any](ctx context.Context, r *CommandRunner, req CommandRequest) (
 // NDJSON (newline-delimited JSON, i.e. multiple top-level JSON objects) is
 // intentionally unsupported. The second Decode call below detects any trailing
 // JSON content — including an NDJSON second record — and returns
-// ErrorCodeDecodeFailed. All bd commands that this gateway calls are expected
+// ErrorCodeDecodeFailed. All bd commands that this repository calls are expected
 // to emit exactly one JSON object on stdout.
 func DecodeJSONInto(operation string, stdout []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(stdout))
 
 	if err := decoder.Decode(target); err != nil {
-		return newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+		return newRepositoryError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
 	if err := decoder.Decode(new(struct{})); err != io.EOF {
 		if err == nil {
-			return newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", errors.New("extra trailing JSON content"))
+			return newRepositoryError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", errors.New("extra trailing JSON content"))
 		}
 
-		return newGatewayError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
+		return newRepositoryError(domain.ErrorCodeDecodeFailed, operation, "failed to decode command JSON output", err)
 	}
 
 	return nil
@@ -295,16 +295,16 @@ func (r *CommandRunner) resolveEnv(extra []string) []string {
 	env = append(env, filterEnvToAllowlist(extra)...)
 	// Force BD_NON_INTERACTIVE=1 last so it always wins over caller-supplied
 	// values that survived the allowlist. bwb is a programmatic caller and must
-	// never let a child bd process prompt for tty input (every gateway call
+	// never let a child bd process prompt for tty input (every repository call
 	// would hang). See the embedded-fixture integration tests in internal/app.
 	env = append(env, "BD_NON_INTERACTIVE=1")
 	return env
 }
 
-// resolveWorkDir always returns the gateway's bound defaultWorkDir.
-// CommandRequest.WorkDir is intentionally ignored: a gateway instance is bound
+// resolveWorkDir always returns the repository's bound defaultWorkDir.
+// CommandRequest.WorkDir is intentionally ignored: a repository instance is bound
 // to exactly one beads project and must not be redirected by per-request
-// values (see CODING.md rule #3 — gateway is source-specific).
+// values (see CODING.md rule #3 — repository is source-specific).
 func (r *CommandRunner) resolveWorkDir(_ string) string {
 	return r.defaultWorkDir
 }
@@ -365,7 +365,7 @@ func normalizeExecutionError(ctx context.Context, operation string, stderr []byt
 			message = fmt.Sprintf("%s: %s", message, trimmedStderr)
 		}
 
-		return newGatewayError(domain.ErrorCodeTimeout, operation, message, err)
+		return newRepositoryError(domain.ErrorCodeTimeout, operation, message, err)
 	}
 
 	if errors.Is(err, exec.ErrNotFound) {
@@ -374,7 +374,7 @@ func normalizeExecutionError(ctx context.Context, operation string, stderr []byt
 			message = fmt.Sprintf("%s: %s", message, trimmedStderr)
 		}
 
-		return newGatewayError(domain.ErrorCodeCommandUnavailable, operation, message, err)
+		return newRepositoryError(domain.ErrorCodeCommandUnavailable, operation, message, err)
 	}
 
 	message := "failed to execute command"
@@ -382,11 +382,11 @@ func normalizeExecutionError(ctx context.Context, operation string, stderr []byt
 		message = fmt.Sprintf("%s: %s", message, trimmedStderr)
 	}
 
-	return newGatewayError(domain.ErrorCodeCommandFailed, operation, message, err)
+	return newRepositoryError(domain.ErrorCodeCommandFailed, operation, message, err)
 }
 
-func newGatewayError(code domain.ErrorCode, operation, message string, cause error) error {
-	return domain.GatewayError{
+func newRepositoryError(code domain.ErrorCode, operation, message string, cause error) error {
+	return domain.RepositoryError{
 		Code:      code,
 		Operation: operation,
 		Message:   message,

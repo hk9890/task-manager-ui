@@ -119,7 +119,7 @@ func initialLoadingColumns() []columnData {
 	}
 }
 
-// Init loads board data from the gateway via 3 parallel calls.
+// Init loads board data from the repository via 3 parallel calls.
 func (m *Model) Init() tea.Cmd {
 	return m.startReload(refreshModeManual)
 }
@@ -288,7 +288,7 @@ func (m *Model) AutoRefresh() tea.Cmd {
 }
 
 // startReload captures the selection anchor (if auto), marks all columns
-// loading, and dispatches all 3 gateway calls in a single tea.Batch. It is
+// loading, and dispatches all 3 repository calls in a single tea.Batch. It is
 // the single entry point for both manual reload and auto-refresh.
 func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that

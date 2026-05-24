@@ -20,18 +20,18 @@ import (
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
 )
 
-// searchGateway bundles the memory repo (for seeding) and the error-injecting
+// searchRepo bundles the memory repo (for seeding) and the error-injecting
 // wrapper (for call tracking and error injection). It satisfies
 // repository.Repository via the embedded ErrorInjectingRepository.
-type searchGateway struct {
+type searchRepo struct {
 	repo *memoryrepo.Repository
 	*repository.ErrorInjectingRepository
 }
 
-// newSearchGateway creates a searchGateway with an empty memory repository.
-func newSearchGateway() *searchGateway {
+// newSearchRepo creates a searchRepo with an empty memory repository.
+func newSearchRepo() *searchRepo {
 	repo := memoryrepo.New()
-	return &searchGateway{
+	return &searchRepo{
 		repo:                     repo,
 		ErrorInjectingRepository: repository.NewErrorInjecting(repo),
 	}
@@ -45,17 +45,17 @@ func hasSearchCall(calls []repository.Call) bool {
 func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1})
+	gw := newSearchRepo()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Backend search", Status: "open", Type: "task", Priority: 1})
 
 	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gw, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		view := string(bts)
-		return strings.Contains(view, "g│") && strings.Contains(view, "Gateway search") && strings.Contains(view, "Content")
+		return strings.Contains(view, "b│") && strings.Contains(view, "Backend search") && strings.Contains(view, "Content")
 	})
 
 	if err := tm.Quit(); err != nil {
@@ -66,7 +66,7 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -79,10 +79,10 @@ func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	}
 }
 
-func TestSearchModeTextQuerySendsGatewaySearch(t *testing.T) {
+func TestSearchModeTextQuerySendsRepositorySearch(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "gw test issue", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -102,7 +102,7 @@ func TestSearchModeTextQuerySendsGatewaySearch(t *testing.T) {
 func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Titles contain "g" so the query "g" matches both.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
@@ -144,7 +144,7 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Titles contain "g" so the query "g" matches both.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
@@ -181,7 +181,7 @@ func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Seed issues: bw-1 and bw-2 match any query (no filter text), bw-9 matches "x".
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2})
@@ -218,7 +218,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error state", func(t *testing.T) {
-		m := NewModel(newSearchGateway(), nil)
+		m := NewModel(newSearchRepo(), nil)
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View(0)
@@ -228,7 +228,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("no results state", func(t *testing.T) {
-		m := NewModel(newSearchGateway(), nil)
+		m := NewModel(newSearchRepo(), nil)
 		m.draftQuery = "xyz"
 		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
 		if cmd != nil {
@@ -241,11 +241,11 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("open detail action from results", func(t *testing.T) {
-		gw := newSearchGateway()
-		// Title contains "g" so the query "g" returns this result.
-		gw.repo.Seed(memoryrepo.Issue{ID: "bw-7", Title: "Gateway result", Status: "open", Type: "task", Priority: 1})
+		gw := newSearchRepo()
+		// Title contains "b" so the query "b" returns this result.
+		gw.repo.Seed(memoryrepo.Issue{ID: "bw-7", Title: "Backend result", Status: "open", Type: "task", Priority: 1})
 		m := initModel(gw)
-		pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
+		pressAndResolve(m, testui.SearchTypeTextKeys("b")...)
 		pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -261,9 +261,9 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Title contains "g" so query "g" matches.
-	gw.repo.Seed(memoryrepo.Issue{ID: "bw-7", Title: "Gateway result", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-7", Title: "Repository result", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
@@ -289,7 +289,7 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "jkhlr test issue", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -308,7 +308,7 @@ func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Titles contain "x" so the query "x" matches both.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
@@ -348,7 +348,7 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	m := initModel(gw)
 
 	callsBefore := len(gw.Calls())
@@ -366,7 +366,7 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 	}
 
 	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
-		t.Fatalf("expected no gateway calls while editing query, got %#v", gw.Calls()[callsBefore:])
+		t.Fatalf("expected no repository calls while editing query, got %#v", gw.Calls()[callsBefore:])
 	}
 
 	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -383,7 +383,7 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Titles contain "x" so the query "x" matches both.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
@@ -426,7 +426,7 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First abc", Status: "open", Type: "task", Priority: 1,
 		Description: "abc tag"})
 	m := initModel(gw)
@@ -473,7 +473,7 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("foo")...)
@@ -492,7 +492,7 @@ func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
 func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -536,7 +536,7 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	// Titles contain "g" so the query "g" matches both.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
@@ -591,12 +591,12 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	}
 }
 
-func newSearchFakeGateway() *searchGateway {
-	return newSearchGateway()
+func newSearchFakeRepository() *searchRepo {
+	return newSearchRepo()
 }
 
-func initModel(gateway repository.Repository) *Model {
-	return testui.InitializeController(NewModel(gateway, nil)).(*Model)
+func initModel(repository repository.Repository) *Model {
+	return testui.InitializeController(NewModel(repository, nil)).(*Model)
 }
 
 func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
@@ -663,7 +663,7 @@ func TestSearchItemCapacity(t *testing.T) {
 func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -677,7 +677,7 @@ func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 	}
 
 	if len(gw.Calls()) != callsBefore {
-		t.Fatalf("expected no new gateway calls on resize, got %d new call(s)", len(gw.Calls())-callsBefore)
+		t.Fatalf("expected no new repository calls on resize, got %d new call(s)", len(gw.Calls())-callsBefore)
 	}
 }
 
@@ -687,7 +687,7 @@ func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -715,7 +715,7 @@ func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
 func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	m := NewModel(gw, nil)
 
 	// Manually set loading=true (simulating an in-flight request).
@@ -748,7 +748,7 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
+	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
@@ -816,25 +816,25 @@ func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchGateway()
-	// Seed an issue matching "gateway" so the first search returns a result.
-	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Prior gateway result", Status: "open", Type: "task", Priority: 1})
+	gw := newSearchRepo()
+	// Seed an issue matching "backend" so the first search returns a result.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Prior backend result", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 	m.SetSize(120, 28)
 
 	// Apply an initial search so we have prior results.
-	pressAndResolve(m, testui.SearchTypeTextKeys("gateway")...)
+	pressAndResolve(m, testui.SearchTypeTextKeys("backend")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Now type a new draft without pressing Enter.
 	pressAndResolve(m, testui.SearchTypeTextKeys("zqx")...)
 
 	// The draft differs from applied: stale indicator must appear.
-	if m.draftQuery != "gatewayzqx" {
-		t.Fatalf("expected draftQuery=gatewayzqx, got %q", m.draftQuery)
+	if m.draftQuery != "backendzqx" {
+		t.Fatalf("expected draftQuery=backendzqx, got %q", m.draftQuery)
 	}
-	if m.appliedQuery != "gateway" {
-		t.Fatalf("expected appliedQuery=gateway, got %q", m.appliedQuery)
+	if m.appliedQuery != "backend" {
+		t.Fatalf("expected appliedQuery=backend, got %q", m.appliedQuery)
 	}
 	viewStale := m.View(0)
 	plain := testui.AnsiEscapePattern.ReplaceAllString(viewStale, "")
@@ -845,7 +845,7 @@ func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
 		t.Fatalf("expected stale banner in view while draft != applied, got:\n%s", plain)
 	}
 
-	// Press Enter to apply the draft search (gatewayzqx — no issues match).
+	// Press Enter to apply the draft search (backendzqx — no issues match).
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
 	// After search applied, stale indicator must be gone.

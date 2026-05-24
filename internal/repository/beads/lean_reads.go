@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/repository"
 )
 

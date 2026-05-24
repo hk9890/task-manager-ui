@@ -3,17 +3,17 @@ package search
 // argv_cardinality_test.go — ppja.3
 //
 // These tests wire the search model against a lean beads.Repository backed by a
-// *fakes.RecordingExecutor (no fake gateway). They assert that Init() and
+// *fakes.RecordingExecutor (no fake repository). They assert that Init() and
 // triggerSearch() emit exactly the expected bd argv shapes.
 //
-// Pattern mirrors TestBoardInitRealGatewaySubprocessArgvCardinality in
+// Pattern mirrors TestBoardInitRealRepositorySubprocessArgvCardinality in
 // internal/mode/board/model_test.go.
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/bd"
 	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
@@ -21,7 +21,7 @@ import (
 // newSearchRecordingModel wires the search model against a lean beads.Repository
 // backed by rec so subprocess calls flow through the real argv assembly logic.
 func newSearchRecordingModel(rec *fakes.RecordingExecutor) *Model {
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
+	runner := bd.NewCommandRunner(bd.RunnerConfig{
 		Command:  "bd",
 		Executor: rec,
 	})
@@ -38,7 +38,7 @@ func driveSearchInitCmd(t *testing.T, m *Model) {
 	if cmd == nil {
 		t.Fatalf("search.Model.Init() must return a non-nil command")
 	}
-	_ = cmd() // executes the subprocess call through the real gateway
+	_ = cmd() // executes the subprocess call through the real repository
 }
 
 // assertSearchArgvPresent fails the test unless at least one recorded call
@@ -73,7 +73,7 @@ func TestSearchModeInitArgvShapeEmptyQuery(t *testing.T) {
 
 	rec := fakes.NewRecordingExecutor()
 	// Pre-register expected argv so the decode path succeeds.
-	rec.OnArgs(wantArgv).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+	rec.OnArgs(wantArgv).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
 
 	m := newSearchRecordingModel(rec)
 	driveSearchInitCmd(t, m)
@@ -139,7 +139,7 @@ func TestSearchModeInitArgvShapeAtLimitBoundaries(t *testing.T) {
 			t.Parallel()
 
 			rec := fakes.NewRecordingExecutor()
-			rec.OnArgs(tc.want).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+			rec.OnArgs(tc.want).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
 
 			m := newSearchRecordingModel(rec)
 			m.SetSize(80, tc.height)

@@ -1,4 +1,4 @@
-package beads
+package bd
 
 import (
 	"context"
@@ -30,8 +30,8 @@ func TestCommandRunnerRunUsesDefaultWorkDirAndIgnoresRequestWorkDir(t *testing.T
 		Executor: execStub,
 	})
 
-	// Pass a request WorkDir — the runner must ignore it and use the gateway's
-	// bound defaultWorkDir (CODING.md rule #3: gateway is source-specific).
+	// Pass a request WorkDir — the runner must ignore it and use the repository's
+	// bound defaultWorkDir (CODING.md rule #3: repository is source-specific).
 	out, err := runner.Run(context.Background(), CommandRequest{
 		Operation: "list issues",
 		Args:      []string{"ready", "--json"},
@@ -94,7 +94,7 @@ func TestCommandRunnerRunMapsExitCodeFailure(t *testing.T) {
 	runner := NewCommandRunner(RunnerConfig{Executor: execStub})
 
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "update issue"})
-	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeCommandFailed)
 	assertContains(t, err.Error(), "command exited with code 2")
 	assertContains(t, err.Error(), "bad args")
 }
@@ -109,7 +109,7 @@ func TestCommandRunnerRunMapsCommandUnavailable(t *testing.T) {
 	runner := NewCommandRunner(RunnerConfig{Executor: execStub})
 
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "ready issues"})
-	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandUnavailable)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeCommandUnavailable)
 	assertContains(t, err.Error(), "bd command is unavailable")
 	assertContains(t, err.Error(), "not installed")
 }
@@ -121,7 +121,7 @@ func TestCommandRunnerRunMapsTimeout(t *testing.T) {
 	runner := NewCommandRunner(RunnerConfig{Executor: execStub})
 
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "search issues"})
-	assertGatewayErrorCode(t, err, domain.ErrorCodeTimeout)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeTimeout)
 	assertContains(t, err.Error(), "command timed out")
 }
 
@@ -132,7 +132,7 @@ func TestCommandRunnerRunMapsGenericExecutionFailure(t *testing.T) {
 	runner := NewCommandRunner(RunnerConfig{Executor: execStub})
 
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "show issue"})
-	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeCommandFailed)
 	assertContains(t, err.Error(), "failed to execute command")
 }
 
@@ -183,7 +183,7 @@ func TestDecodeJSONIntoMapsDecodeFailure(t *testing.T) {
 	}
 
 	err := DecodeJSONInto("decode op", []byte(`{"value":`), &target)
-	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 	assertContains(t, err.Error(), "failed to decode command JSON output")
 }
 
@@ -195,7 +195,7 @@ func TestDecodeJSONIntoRejectsTrailingPayload(t *testing.T) {
 	}
 
 	err := DecodeJSONInto("decode op", []byte(`{"value":"x"} {"extra":true}`), &target)
-	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 	assertContains(t, err.Error(), "failed to decode command JSON output")
 }
 
@@ -218,7 +218,7 @@ func TestDecodeJSONIntoRejectsNDJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected NDJSON to be rejected, got nil error")
 	}
-	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeDecodeFailed)
 	assertContains(t, err.Error(), "failed to decode command JSON output")
 }
 
@@ -227,7 +227,7 @@ func TestCommandRunnerRunNilReceiver(t *testing.T) {
 
 	var runner *CommandRunner
 	_, err := runner.Run(context.Background(), CommandRequest{Operation: "op"})
-	assertGatewayErrorCode(t, err, domain.ErrorCodeUnknown)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeUnknown)
 }
 
 func TestCommandRunnerRunSerializesWriteCalls(t *testing.T) {
@@ -506,12 +506,12 @@ func TestConcurrencyCapContextCancelWhileWaiting(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for cancelled context, got nil")
 	}
-	var gatewayErr domain.GatewayError
-	if !errors.As(err, &gatewayErr) {
-		t.Fatalf("expected domain.GatewayError, got %T (%v)", err, err)
+	var repoErr domain.RepositoryError
+	if !errors.As(err, &repoErr) {
+		t.Fatalf("expected domain.RepositoryError, got %T (%v)", err, err)
 	}
-	if gatewayErr.Code != domain.ErrorCodeTimeout && gatewayErr.Code != domain.ErrorCodeCommandFailed {
-		t.Fatalf("unexpected error code %q; want Timeout or CommandFailed (cancel maps to CommandFailed)", gatewayErr.Code)
+	if repoErr.Code != domain.ErrorCodeTimeout && repoErr.Code != domain.ErrorCodeCommandFailed {
+		t.Fatalf("unexpected error code %q; want Timeout or CommandFailed (cancel maps to CommandFailed)", repoErr.Code)
 	}
 
 	// Executor must NOT have been called for the cancelled request — total execs
@@ -696,20 +696,20 @@ func (s *stubExecutor) Run(_ context.Context, command string, args []string, wor
 	return result, err
 }
 
-func assertGatewayErrorCode(t *testing.T, err error, expected domain.ErrorCode) {
+func assertRepositoryErrorCode(t *testing.T, err error, expected domain.ErrorCode) {
 	t.Helper()
 
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 
-	var gatewayErr domain.GatewayError
-	if !errors.As(err, &gatewayErr) {
-		t.Fatalf("expected domain.GatewayError, got %T (%v)", err, err)
+	var repoErr domain.RepositoryError
+	if !errors.As(err, &repoErr) {
+		t.Fatalf("expected domain.RepositoryError, got %T (%v)", err, err)
 	}
 
-	if gatewayErr.Code != expected {
-		t.Fatalf("unexpected error code: got %q want %q", gatewayErr.Code, expected)
+	if repoErr.Code != expected {
+		t.Fatalf("unexpected error code: got %q want %q", repoErr.Code, expected)
 	}
 }
 
@@ -778,7 +778,7 @@ func assertLoggedFloatAtLeast(t *testing.T, got any, min float64) {
 }
 
 // TestFilterEnvToAllowlistStripsBeadsActor verifies that BEADS_ACTOR is
-// stripped by filterEnvToAllowlist. The gateway never passes --actor to bd, so
+// stripped by filterEnvToAllowlist. The repository never passes --actor to bd, so
 // BEADS_ACTOR in the parent process env must not leak to bd subprocesses —
 // doing so would let the ambient env silently override the actor attribution
 // that bd derives from git user.name. See the Actor attribution note in
@@ -824,7 +824,7 @@ func TestFilterEnvToAllowlistStripsBeadsActor(t *testing.T) {
 // does NOT receive BEADS_ACTOR. This is the runner-level assertion described in
 // wgz0; filterEnvToAllowlist does the filtering. The test drives runner.Run
 // directly (IsWrite=true) to avoid a cross-package dependency on the
-// CLI-backed gateway constructor (which lives in repository/beads).
+// CLI-backed repository constructor (which lives in repository/beads).
 func TestCreateIssueDoesNotReceiveBeadsActorInEnv(t *testing.T) {
 	t.Parallel()
 

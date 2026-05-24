@@ -23,7 +23,7 @@
 //
 // Issue() returns repository.ErrIssueNotFound for unknown IDs — this is the
 // local-state carve-out documented in the interface godoc. UpdateIssue,
-// CloseIssue, and AddComment return domain.GatewayError{Code:
+// CloseIssue, and AddComment return domain.RepositoryError{Code:
 // ErrorCodeCommandFailed} to match bd's observable behavior, as documented in
 // the Repository interface.
 package memory
@@ -396,7 +396,7 @@ func (r *Repository) Dashboard(ctx context.Context) (repository.DashboardData, e
 // Issue implements repository.Repository.
 //
 // Returns repository.ErrIssueNotFound for unknown IDs (local-state carve-out
-// as documented in the Repository interface). The domain.GatewayError path is
+// as documented in the Repository interface). The domain.RepositoryError path is
 // reserved for bd-backed implementations.
 func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
 	if err := ctx.Err(); err != nil {
@@ -480,7 +480,7 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 
 // CreateIssue implements repository.Repository.
 //
-// Returns domain.GatewayError with ErrorCodeValidationFailed when Title is
+// Returns domain.RepositoryError with ErrorCodeValidationFailed when Title is
 // empty.
 func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	if err := ctx.Err(); err != nil {
@@ -488,7 +488,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 	}
 
 	if strings.TrimSpace(input.Title) == "" {
-		return domain.CreateIssueResult{}, domain.GatewayError{
+		return domain.CreateIssueResult{}, domain.RepositoryError{
 			Code:      domain.ErrorCodeValidationFailed,
 			Operation: "create issue",
 			Message:   "title must not be empty",
@@ -534,7 +534,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 
 // UpdateIssue implements repository.Repository.
 //
-// Returns domain.GatewayError{Code: ErrorCodeCommandFailed} for unknown IDs
+// Returns domain.RepositoryError{Code: ErrorCodeCommandFailed} for unknown IDs
 // to match bd's observable behavior, as documented in the Repository interface.
 func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
 	if err := ctx.Err(); err != nil {
@@ -546,7 +546,7 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 
 	si, ok := r.issues[id]
 	if !ok {
-		return domain.GatewayError{
+		return domain.RepositoryError{
 			Code:      domain.ErrorCodeCommandFailed,
 			Operation: "update issue",
 			Message:   fmt.Sprintf("command exited with code 1: Error resolving %q: no issue found", id),
@@ -586,7 +586,7 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 
 // CloseIssue implements repository.Repository.
 //
-// Returns domain.GatewayError{Code: ErrorCodeCommandFailed} for unknown IDs
+// Returns domain.RepositoryError{Code: ErrorCodeCommandFailed} for unknown IDs
 // to match bd's observable behavior, as documented in the Repository interface.
 func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
 	if err := ctx.Err(); err != nil {
@@ -598,7 +598,7 @@ func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.Clo
 
 	si, ok := r.issues[id]
 	if !ok {
-		return domain.GatewayError{
+		return domain.RepositoryError{
 			Code:      domain.ErrorCodeCommandFailed,
 			Operation: "close issue",
 			Message:   fmt.Sprintf("command exited with code 1: Error resolving %q: no issue found", id),
@@ -622,7 +622,7 @@ func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.Clo
 
 // AddComment implements repository.Repository.
 //
-// Returns domain.GatewayError{Code: ErrorCodeCommandFailed} for unknown IDs
+// Returns domain.RepositoryError{Code: ErrorCodeCommandFailed} for unknown IDs
 // to match bd's observable behavior, as documented in the Repository interface.
 func (r *Repository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
 	if err := ctx.Err(); err != nil {
@@ -634,7 +634,7 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 
 	si, ok := r.issues[id]
 	if !ok {
-		return domain.GatewayError{
+		return domain.RepositoryError{
 			Code:      domain.ErrorCodeCommandFailed,
 			Operation: "add comment",
 			Message:   fmt.Sprintf("command exited with code 1: unknown issue %q", id),

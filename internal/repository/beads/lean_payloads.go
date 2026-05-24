@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 // Operation names used in lean Repository errors.
@@ -37,7 +37,7 @@ const (
 )
 
 func leanNewGWError(code domain.ErrorCode, op, msg string, cause error) error {
-	return domain.GatewayError{Code: code, Operation: op, Message: msg, Cause: cause}
+	return domain.RepositoryError{Code: code, Operation: op, Message: msg, Cause: cause}
 }
 
 // -- JSON payload types --

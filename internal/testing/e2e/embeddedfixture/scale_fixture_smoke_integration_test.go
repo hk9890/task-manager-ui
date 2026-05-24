@@ -2,7 +2,7 @@
 
 package embeddedfixture
 
-// scale_fixture_smoke_integration_test.go — gateway-bound smoke invariants for
+// scale_fixture_smoke_integration_test.go — repository-bound smoke invariants for
 // the scale fixture (beads-workbench-faif.1).
 //
 // These tests fork real bd subprocesses and require the scale fixture to be
@@ -23,8 +23,8 @@ import (
 	"os"
 	"testing"
 
+	bd "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	beadsgateway "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 )
@@ -33,22 +33,22 @@ import (
 func checkScaleGateEnabled(tb testing.TB) {
 	tb.Helper()
 	if os.Getenv("BWB_SCALE_FIXTURE_SMOKE") != "1" {
-		tb.Skip("scale fixture gateway smoke: set BWB_SCALE_FIXTURE_SMOKE=1 to enable (seeding ~590 issues takes several minutes)")
+		tb.Skip("scale fixture repository smoke: set BWB_SCALE_FIXTURE_SMOKE=1 to enable (seeding ~590 issues takes several minutes)")
 	}
 }
 
 // newScaleRepository builds a lean Repository pointing at repoPath.
 func newScaleRepository(repoPath string) repository.Repository {
-	runner := beadsgateway.NewCommandRunner(beadsgateway.RunnerConfig{
+	runner := bd.NewCommandRunner(bd.RunnerConfig{
 		WorkDir: repoPath,
 	})
 	return repobeads.New(runner)
 }
 
-// TestScaleFixtureGateway_SearchKeywordReturnsGe20Results guards the search
+// TestScaleFixtureRepository_SearchKeywordReturnsGe20Results guards the search
 // corpus: searching for a shared keyword must return >=20 results in a
 // deterministic order (no panic, no empty result for a well-populated corpus).
-func TestScaleFixtureGateway_SearchKeywordReturnsGe20Results(t *testing.T) {
+func TestScaleFixtureRepository_SearchKeywordReturnsGe20Results(t *testing.T) {
 	// regression class: search corpus / deterministic search order
 	//
 	// Uses SharedScaleFixtureRepoPath (faif.4 shared cache, gated by
@@ -76,14 +76,14 @@ func TestScaleFixtureGateway_SearchKeywordReturnsGe20Results(t *testing.T) {
 	}
 }
 
-// TestScaleFixtureGateway_ShowIssueEdgeCases guards the gateway's ability to
+// TestScaleFixtureRepository_ShowIssueEdgeCases guards the repository's ability to
 // handle edge-case issue titles (emoji, shell metacharacters, max-length) and
 // the null-description issue (781a regression guard).
-func TestScaleFixtureGateway_ShowIssueEdgeCases(t *testing.T) {
-	// regression class: 781a (null description), gateway edge-case resilience
+func TestScaleFixtureRepository_ShowIssueEdgeCases(t *testing.T) {
+	// regression class: 781a (null description), repository edge-case resilience
 	//
 	// Uses SharedScaleFixtureRepoPath (faif.4 shared cache) — see
-	// TestScaleFixtureGateway_SearchKeywordReturnsGe20Results for rationale.
+	// TestScaleFixtureRepository_SearchKeywordReturnsGe20Results for rationale.
 	checkScaleGateEnabled(t) // checks BWB_SCALE_FIXTURE_SMOKE=1
 	spec := loadScaleSeed(t)
 	repoPath := SharedScaleFixtureRepoPath(t) // seeds once, checks BWB_SCALE_FIXTURE=1

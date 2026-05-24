@@ -1,10 +1,10 @@
 ╭─ Search ───────────────────── draft ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│zqx99│                                │  │Gateway search result                   │  │  Core                          │
+│zqx99│                                │  │Backend search result                   │  │  Core                          │
 ╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
 ╭─ Results ───────────────── 2 capped ─╮  │                                        │  │  Status  : open                │
 │Results below are stale. Press Ente...│  │Description                             │  │  Priority: P1                  │
 │                                      │  │X XX XXX ░░░░░░░░ ░░░░░░░░░░░░░░░       │  │  ------------------------------│
-│› T P1 OPN bw-1 Gateway search result │  │X XX XXX ░░░░░░░░ ░░░░░░░░░             │  │  Ownership                     │
+│› T P1 OPN bw-1 Backend search result │  │X XX XXX ░░░░░░░░ ░░░░░░░░░             │  │  Ownership                     │
 │  B P0 IP bw-2 Another result         │  │X XX XXX ░░░░░░░░ ░░░░░░░░░░░░░░░░░░    │  │  Assignee: hans                │
 │                                      │  │X XX XXX ░░░░░░░░ ░░░░░░░░░░░░          │  │  ------------------------------│
 │                                      │  │X XX XXX ░░░░░░░░ ░░░░░░░░░░░░░░░░░     │  │  Labels                        │

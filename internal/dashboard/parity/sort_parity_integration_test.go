@@ -6,15 +6,15 @@
 // # Design
 //
 // Each column comparison uses the bd command that most closely mirrors the
-// gateway call that feeds it:
+// repository call that feeds it:
 //
 //   - Ready:     bd ready --json         (same sort contract: priority asc, updated_at desc, id asc)
 //   - NotReady:  bd blocked --json       (same issues; bwb applies issueSort on top)
 //   - InProgress: bd list --status in_progress --json (same issues; bwb applies issueSort)
-//   - Done:      bdQueryClosed()          (bd query mirrors the gateway's bd query call exactly)
+//   - Done:      bdQueryClosed()          (bd query mirrors the repository's bd query call exactly)
 //
 // For active columns (Ready, NotReady, InProgress), bwb applies issueSort
-// (priority asc, updated_at desc, id asc) to the gateway results. To compare
+// (priority asc, updated_at desc, id asc) to the repository results. To compare
 // fairly on real datasets where many issues share a priority and updated_at
 // timestamp — producing tie-break positions that differ between bd and bwb —
 // we apply the same sort to the bd CLI output before comparing. This tests:
@@ -100,8 +100,8 @@ func applyIssueSort(items []bdIssueSortable) {
 }
 
 // bdQueryClosed runs bd query 'status=closed' -a --sort closed
-// --limit <cap> --json from ds.Path. This mirrors the exact gateway call that
-// feeds bwb's Done column (the gateway uses bd query, not bd list).
+// --limit <cap> --json from ds.Path. This mirrors the exact repository call that
+// feeds bwb's Done column (the repository uses bd query, not bd list).
 // bd --sort <field> defaults to DESCENDING (newest first); --reverse is NOT
 // emitted because the caller requests SortDirectionDescending.
 func bdQueryClosed(t *testing.T, ds datasets.Dataset, limit int) []byte {
@@ -223,7 +223,7 @@ func runSortParityForDataset(t *testing.T, ds datasets.Dataset) {
 	//
 	// Pass --limit 0 to match ReadyExplain's uncapped output: bd ready --json
 	// without --limit 0 caps at 100 items while bd ready --explain --json (the
-	// gateway path) returns all ready issues. Without --limit 0 on scale datasets
+	// repository path) returns all ready issues. Without --limit 0 on scale datasets
 	// assertOrderParity silently only checks the first 100 of 500+ positions.
 	// See interface.go "bd quirks observed at scale".
 	t.Run("Ready", func(t *testing.T) {
@@ -256,7 +256,7 @@ func runSortParityForDataset(t *testing.T, ds datasets.Dataset) {
 	})
 
 	// --- InProgress column ---
-	// bwb applies issueSort to gateway Query(in_progress) results.
+	// bwb applies issueSort to repository Query(in_progress) results.
 	// bd list --status in_progress uses a different default sort.
 	// Apply issueSort to both sides so the comparison tests:
 	//   (a) same issue IDs returned (set parity), and
@@ -275,8 +275,8 @@ func runSortParityForDataset(t *testing.T, ds datasets.Dataset) {
 
 	// --- Done column ---
 	// bwb does NOT re-sort the Done column; it preserves the order from the
-	// gateway Query(status=closed, sort=closed_at, order=desc, limit=cap).
-	// The gateway uses "bd query" (not "bd list") so we call bdQueryClosed
+	// repository Query(status=closed, sort=closed_at, order=desc, limit=cap).
+	// The repository uses "bd query" (not "bd list") so we call bdQueryClosed
 	// directly to get the same source-of-truth ordering.
 	t.Run("Done", func(t *testing.T) {
 		bdRaw := bdQueryClosed(t, ds, closedCapForTest)

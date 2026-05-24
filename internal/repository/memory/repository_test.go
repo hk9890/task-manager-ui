@@ -294,7 +294,7 @@ func TestCreateIssue_EmptyTitle(t *testing.T) {
 	if err == nil {
 		t.Fatal("CreateIssue: expected error for empty title")
 	}
-	var ge domain.GatewayError
+	var ge domain.RepositoryError
 	if !errors.As(err, &ge) || ge.Code != domain.ErrorCodeValidationFailed {
 		t.Errorf("CreateIssue: expected ErrorCodeValidationFailed, got %v", err)
 	}
@@ -397,7 +397,7 @@ func TestUpdateIssue_NonExistent(t *testing.T) {
 	if err == nil {
 		t.Fatal("UpdateIssue: expected error for unknown ID")
 	}
-	var ge domain.GatewayError
+	var ge domain.RepositoryError
 	if !errors.As(err, &ge) || ge.Code != domain.ErrorCodeCommandFailed {
 		t.Errorf("UpdateIssue: expected ErrorCodeCommandFailed, got %v", err)
 	}
@@ -476,7 +476,7 @@ func TestCloseIssue_NonExistent(t *testing.T) {
 	if err == nil {
 		t.Fatal("CloseIssue: expected error for unknown ID")
 	}
-	var ge domain.GatewayError
+	var ge domain.RepositoryError
 	if !errors.As(err, &ge) || ge.Code != domain.ErrorCodeCommandFailed {
 		t.Errorf("CloseIssue: expected ErrorCodeCommandFailed, got %v", err)
 	}
@@ -534,7 +534,7 @@ func TestAddComment_NonExistent(t *testing.T) {
 	if err == nil {
 		t.Fatal("AddComment: expected error for unknown ID")
 	}
-	var ge domain.GatewayError
+	var ge domain.RepositoryError
 	if !errors.As(err, &ge) || ge.Code != domain.ErrorCodeCommandFailed {
 		t.Errorf("AddComment: expected ErrorCodeCommandFailed, got %v", err)
 	}
@@ -709,11 +709,11 @@ func TestDashboard_ClosedTotal(t *testing.T) {
 
 func TestSearch_TextFilter(t *testing.T) {
 	r := memory.New()
-	r.Seed(memory.Issue{ID: "a", Title: "Fix the Gateway bug", Status: "open"})
+	r.Seed(memory.Issue{ID: "a", Title: "Fix the Repository bug", Status: "open"})
 	r.Seed(memory.Issue{ID: "b", Title: "Unrelated task", Status: "open"})
-	r.Seed(memory.Issue{ID: "c", Title: "nothing", Description: "GATEWAY mentioned here", Status: "open"})
+	r.Seed(memory.Issue{ID: "c", Title: "nothing", Description: "REPOSITORY mentioned here", Status: "open"})
 
-	page, err := r.Search(context.Background(), domain.SearchIssuesQuery{Text: "gateway"})
+	page, err := r.Search(context.Background(), domain.SearchIssuesQuery{Text: "repository"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}

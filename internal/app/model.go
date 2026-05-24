@@ -320,7 +320,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle startup health check result before any other processing.
 	if check, ok := msg.(startupHealthCheckMsg); ok {
 		if check.err != nil {
-			var gwErr domain.GatewayError
+			var gwErr domain.RepositoryError
 			if errors.As(check.err, &gwErr) {
 				switch gwErr.Code {
 				case domain.ErrorCodeCommandUnavailable:
@@ -909,7 +909,7 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 
 	// When the target issue changes (new selection, not just a refresh of the
 	// same issue), synchronously apply a placeholder detail BEFORE issuing the
-	// gateway call so that scroll offsets reset immediately rather than waiting
+	// repository call so that scroll offsets reset immediately rather than waiting
 	// for the ShowIssue response.
 	previousID := strings.TrimSpace(m.detail.Detail.Summary.ID)
 	newID := selection.Issue.ID
@@ -1349,7 +1349,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  use %s for edit/save round-trip that reloads detail", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
 		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
 		fmt.Sprintf("  detail scroll: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
-		fmt.Sprintf("  %s = reload detail mode from gateway", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
+		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
 		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),

@@ -7,7 +7,7 @@ package embeddedfixture
 // unit tests: no bd subprocess, no live database.  They load scale-seed.json
 // from disk and drive dashboard.Compose / board.Model.View() directly.
 //
-// Integration-tier smoke tests (gateway.SearchIssues, gateway.ShowIssue) live
+// Integration-tier smoke tests (repository.SearchIssues, repository.ShowIssue) live
 // in scale_fixture_smoke_integration_test.go.
 
 import (
@@ -464,7 +464,7 @@ func TestScaleFixtureInvariant_SpecStructuralCoverage(t *testing.T) {
 	})
 
 	t.Run("null_description_issue", func(t *testing.T) {
-		// 781a regression guard: gateway must handle missing description field
+		// 781a regression guard: repository must handle missing description field
 		var found bool
 		for _, iss := range spec.Issues {
 			if iss.Description == "" {

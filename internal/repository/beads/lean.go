@@ -1,5 +1,5 @@
 // Package beads implements [repository.Repository] directly on
-// [bdrunner.CommandRunner] with no intermediate gateway type.
+// [bdrunner.CommandRunner] with no intermediate repository type.
 //
 // File layout:
 //
@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
+	bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/repository"
 )
 

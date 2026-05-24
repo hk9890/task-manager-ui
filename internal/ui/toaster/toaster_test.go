@@ -38,7 +38,7 @@ func TestOverlayReturnsBackgroundWhenHidden(t *testing.T) {
 func TestViewStylesAreDistinctAndContainContent(t *testing.T) {
 	t.Parallel()
 
-	message := "gateway timeout"
+	message := "repository timeout"
 	model := New()
 
 	views := map[Style]string{

@@ -21,20 +21,20 @@ type Definition struct {
 }
 
 // Section describes one queue shown on a dashboard.
-// Providers supply IDs and titles only; the board model owns gateway query
+// Providers supply IDs and titles only; the board model owns repository query
 // routing for each section.
 type Section struct {
 	ID    string
 	Title string
 
 	// Query is a backward-compatibility shim retained until beads-workbench-lgln
-	// migrates the board model to own its own gateway calls. New providers should
+	// migrates the board model to own its own repository calls. New providers should
 	// leave this field at its zero value. It will be removed once the board model
 	// no longer reads it.
 	Query Query
 }
 
-// QueryType identifies which supported gateway query contract backs a section.
+// QueryType identifies which supported repository query contract backs a section.
 // This type is a backward-compatibility shim retained until
 // beads-workbench-lgln migrates the board model. New code should not reference
 // QueryType from dashboard definitions.
@@ -46,9 +46,9 @@ const (
 	QueryTypeBlockedIssues QueryType = "blocked_issues"
 )
 
-// Query describes the gateway query that backed a board section in the
+// Query describes the repository query that backed a board section in the
 // pre-lgln architecture. It is a backward-compatibility shim retained until
-// beads-workbench-lgln migrates the board model to own gateway query routing
+// beads-workbench-lgln migrates the board model to own repository query routing
 // directly. New providers should not set this field.
 type Query struct {
 	Type          QueryType

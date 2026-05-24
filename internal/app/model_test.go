@@ -64,7 +64,7 @@ func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOpt
 }
 
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	// bw-3 has status="blocked" → goes into DashboardData.Blocked → NotReady column.
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 1})
@@ -105,7 +105,7 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 // SearchIssues call.  Search init is deferred until the user first activates
 // search mode (ticket t8kp).
 func TestModelInitDoesNotPreloadSearch(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -128,7 +128,7 @@ func TestModelInitDoesNotPreloadSearch(t *testing.T) {
 func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -189,7 +189,7 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 }
 
 func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "startup detail"})
@@ -238,7 +238,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 }
 
 func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress one", "task", 2)
 	gw.seedInProgress("bw-4", "In progress two", "task", 1)
@@ -310,7 +310,7 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 }
 
 func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -351,7 +351,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 }
 
 func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -368,7 +368,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	// Trigger a gateway-backed search error.
+	// Trigger a repository-backed search error.
 	gw.SetError(repository.MethodSearch, errors.New("search boom"))
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
@@ -400,7 +400,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 }
 
 func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -433,7 +433,7 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 func TestModelSearchEscFromResultsFocusReturnsToBoard(t *testing.T) {
 	// Regression: Esc must trigger shell escape (return to board) even when
 	// search focus is on Results / Content / Metadata, not just on Query.
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	// bw-3 seeded so empty-query search returns it in the results panel.
@@ -482,7 +482,7 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withModelNow(t, time.Unix(0, 0))
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -511,7 +511,7 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -556,7 +556,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
@@ -598,7 +598,7 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -635,7 +635,7 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Priority: 0})
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
@@ -676,7 +676,7 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	// bw-9 appears in search results (empty-query matches all).
@@ -722,7 +722,7 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -779,7 +779,7 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	// Seed bw-9 with "x" in title so the query "x" matches it.
@@ -824,7 +824,7 @@ func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	// bw-9 with "x" in title so query "x" finds it.
@@ -882,7 +882,7 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -916,7 +916,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	m = applyMessages(t, m, runBatch(tickCmd))
 
 	if gw.callCountSince(mark, repository.MethodSearch) != 0 {
-		t.Fatalf("expected no gateway calls before queued typing command resolves, got %#v", gw.Calls())
+		t.Fatalf("expected no repository calls before queued typing command resolves, got %#v", gw.Calls())
 	}
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -934,7 +934,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
@@ -982,7 +982,7 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
@@ -1040,7 +1040,7 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withModelNow(t, time.Unix(0, 0))
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1082,7 +1082,7 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 		}
 	})
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1107,7 +1107,7 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1150,7 +1150,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
@@ -1186,7 +1186,7 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 }
 
 func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1235,7 +1235,7 @@ func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
 }
 
 func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1256,7 +1256,7 @@ func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
 }
 
 func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress", Status: "in_progress", Priority: 2}, Description: "detail"})
@@ -1348,7 +1348,7 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}, Description: "detail"})
@@ -1387,7 +1387,7 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) {
 		i.Assignee = "hans"
 		i.Labels = []string{"infra"}
@@ -1422,7 +1422,7 @@ func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 }
 
 func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1457,10 +1457,10 @@ func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 	}
 }
 
-func TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue(t *testing.T) {
+func TestModelCreateIssueFlowUsesRepositoryCatalogsAndCreateIssue(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedCatalogs(
@@ -1512,14 +1512,14 @@ func TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue(t *testing.T) {
 	}
 
 	if !gw.hasCreateIssueCall() {
-		t.Fatalf("expected create issue gateway call, calls=%#v", gw.Calls())
+		t.Fatalf("expected create issue repository call, calls=%#v", gw.Calls())
 	}
 }
 
-func TestModelUpdateCloseAndCommentFlowsUseGatewayWrites(t *testing.T) {
+func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}})
@@ -1601,7 +1601,7 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	t.Parallel()
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -1653,7 +1653,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 		longLines = append(longLines, "Line "+strconv.Itoa(i))
 	}
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-9", "Ninth", "task", 2)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{
@@ -1705,7 +1705,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-9", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{
@@ -1801,7 +1801,7 @@ func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *t
 func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssue(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-9", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{
@@ -1880,7 +1880,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssu
 func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-2", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
@@ -1951,7 +1951,7 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-2", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
@@ -2011,7 +2011,7 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-2", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
@@ -2082,7 +2082,7 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 4)
 	gw.seedInProgress("bw-2", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 4}})
@@ -2150,7 +2150,7 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-2", "Other", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 3}})
@@ -2206,7 +2206,7 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 
@@ -2231,7 +2231,7 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 func TestModelDetailModeRendersStandaloneDetailGolden(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-9", "Ninth", "task", 2)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{
@@ -2260,7 +2260,7 @@ func TestModelDetailModeRendersStandaloneDetailGolden(t *testing.T) {
 func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("beads-workbench-yze.4.2", "Implement create update close and comment actions in the app", "task", 1, func(iss *memoryrepo.Issue) {
 		iss.Assignee = "alice"
 		iss.Labels = []string{"ui", "shell"}
@@ -2309,7 +2309,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-3", Title: "Blocked", Status: "blocked", Type: "bug", Priority: 0})
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
@@ -2342,7 +2342,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	t.Parallel()
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-9", "Ninth", "task", 2)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	// Seed initial detail (before edit) — memory repo returns last-seeded for a given ID,
@@ -2424,7 +2424,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-9", "Ninth", "task", 2)
 	gw.seedInProgress("bw-2", "In progress", "task", 2)
 	gw.seedIssueDetail(domain.IssueDetail{
@@ -2477,7 +2477,7 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-3", Title: "Blocked now", Status: "blocked", Type: "bug", Priority: 0})
 	gw.seedInProgress("bw-2", "In progress one", "task", 1)
@@ -2553,7 +2553,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bw-1", "Ready first", "task", 1)
 	gw.seedInProgress("bw-2", "In progress one", "task", 2)
 	// Seed a search result so the search mode body renders something.
@@ -2613,8 +2613,8 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
-	gw.SetError(repository.MethodHealthCheck, domain.GatewayError{
+	gw := newTestRepository()
+	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeCommandUnavailable,
 		Operation: "health check",
 		Message:   "bd command is unavailable",
@@ -2637,7 +2637,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
 func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -2656,8 +2656,8 @@ func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
-	gw.SetError(repository.MethodHealthCheck, domain.GatewayError{
+	gw := newTestRepository()
+	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeCommandUnavailable,
 		Message: "bd command is unavailable",
 	})
@@ -2683,8 +2683,8 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
-	gw.SetError(repository.MethodHealthCheck, domain.GatewayError{
+	gw := newTestRepository()
+	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeCommandUnavailable,
 		Message: "bd command is unavailable",
 	})
@@ -2729,8 +2729,8 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
-	gw.SetError(repository.MethodHealthCheck, domain.GatewayError{
+	gw := newTestRepository()
+	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeNoDatabaseFound,
 		Operation: "health check",
 		Message:   "no beads database found",
@@ -2757,10 +2757,10 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 	}
 }
 
-func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
+func TestModelFatalErrIgnoresNonRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.SetError(repository.MethodHealthCheck, errors.New("some plain error"))
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -2772,9 +2772,9 @@ func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
-	// A non-GatewayError does not set fatalErr — app loads normally.
+	// A non-RepositoryError does not set fatalErr — app loads normally.
 	if m.fatalErrTitle != "" {
-		t.Fatalf("expected fatalErr to be empty for non-GatewayError, got %q", m.fatalErrTitle)
+		t.Fatalf("expected fatalErr to be empty for non-RepositoryError, got %q", m.fatalErrTitle)
 	}
 }
 
@@ -2783,7 +2783,7 @@ func TestModelFatalErrIgnoresNonGatewayError(t *testing.T) {
 // match the same bwf-1/bwf-2 fixture shape. This replaces
 // TestModelEmbeddedFixtureFullBoardCaptureGolden (which used real bd+fixture).
 func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	// Match fixture shape: bwf-2 is Blocked (Not Ready lane), bwf-1 is Ready, no InProgress.
 	gw.seedReady("bwf-1", "Seed fixture root task", "task", 1, func(iss *memoryrepo.Issue) {
 		iss.Assignee = "alice"
@@ -2825,10 +2825,10 @@ func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
 
 // TestModelStartupBoardLayoutSanityAndNoRuntimeErrors verifies that startup
 // renders a valid board layout with no error panels. This replaces
-// TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors
+// TestModelEmbeddedFixtureStartupLoadsBoardWithoutRepositorySectionErrors
 // (which used real bd+fixture).
 func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedReady("bwf-1", "Seed fixture root task", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0})
 
@@ -2854,7 +2854,7 @@ func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
 // TestModelEmbeddedFixtureMutationModalsOpenWithoutCatalogDecodeToast
 // (which used real bd+fixture).
 func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
-	gw := newTestGateway()
+	gw := newTestRepository()
 	gw.seedIssueSummary(domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0})
 	gw.seedIssueDetail(domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob"},
@@ -3059,7 +3059,7 @@ func withModelNow(t *testing.T, now time.Time) {
 func TestNewModelWithOptionsReturnsErrorOnInvalidKeyBindings(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	cfg := config.Default()
 	// Inject an invalid keybinding: empty key slice for a required action.
 	cfg.KeyBindings.Shell[config.ShellActionQuit] = []string{}
@@ -3149,7 +3149,7 @@ func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	services := Services{Repo: gw, Config: config.Default()}
 	m := mustNewModel(t, services)
 	// Drain Init so board loading completes and all surfaces are idle.
@@ -3179,7 +3179,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gw := newTestGateway()
+	gw := newTestRepository()
 	services := Services{Repo: gw, Config: config.Default()}
 	m := mustNewModel(t, services)
 	// Drain Init so board loading completes and all surfaces are idle.
@@ -3189,7 +3189,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	m.spinnerFrame = 0
 	expectedGlyph := loading.Glyph(0)
 
-	// loading active — use detail.Loading to avoid triggering gateway calls
+	// loading active — use detail.Loading to avoid triggering repository calls
 	m.detail.Loading = true
 	loadingCell := m.headerSpinnerCell()
 	if !strings.Contains(loadingCell, expectedGlyph) {

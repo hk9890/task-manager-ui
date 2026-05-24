@@ -1,4 +1,4 @@
-package beads
+package bd
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 
 // TestRunnerIgnoresRequestWorkDir verifies that a CommandRequest.WorkDir value
 // pointing at an arbitrary directory is silently ignored. The executor must
-// always receive the gateway's bound defaultWorkDir (CODING.md rule #3).
+// always receive the repository's bound defaultWorkDir (CODING.md rule #3).
 func TestRunnerIgnoresRequestWorkDir(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
 	runner := NewCommandRunner(RunnerConfig{
-		WorkDir:  "/gateway/bound/dir",
+		WorkDir:  "/repository/bound/dir",
 		Executor: execStub,
 	})
 
@@ -28,8 +28,8 @@ func TestRunnerIgnoresRequestWorkDir(t *testing.T) {
 		t.Fatalf("Run returned unexpected error: %v", err)
 	}
 
-	if execStub.workDir != "/gateway/bound/dir" {
-		t.Fatalf("executor received workDir %q; want bound /gateway/bound/dir (request WorkDir /tmp/x must be ignored)", execStub.workDir)
+	if execStub.workDir != "/repository/bound/dir" {
+		t.Fatalf("executor received workDir %q; want bound /repository/bound/dir (request WorkDir /tmp/x must be ignored)", execStub.workDir)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestRunnerAllowsAllowlistedEnvVars(t *testing.T) {
 // TestRunnerForcesBDNonInteractive verifies that BD_NON_INTERACTIVE=1 is
 // always injected into the child env, even when the caller did not provide it
 // and even if the caller tried to set it to a different value. Without this,
-// gateway calls to bd would hang waiting for tty input.
+// repository calls to bd would hang waiting for tty input.
 func TestRunnerForcesBDNonInteractive(t *testing.T) {
 	t.Parallel()
 

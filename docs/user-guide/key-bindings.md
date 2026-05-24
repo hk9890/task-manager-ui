@@ -17,7 +17,7 @@ overridden through runtime config.
 - `f16` — cycle to the previous mode
 - `3` — switch to detail mode
 - `esc` — return from detail/search to browse, or dismiss toast state
-- `r` — manually reload detail mode from the gateway immediately (detail mode only)
+- `r` — manually reload detail mode from the repository immediately (detail mode only)
 - `e` — edit selected issue in external editor
 - `c` — create issue
 - `u` — update selected issue metadata

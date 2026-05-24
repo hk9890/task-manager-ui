@@ -197,7 +197,7 @@ func detailLoadingStub(summary domain.IssueSummary) domain.IssueDetail {
 
 // isDetailLoadingSkeleton reports whether the search detail preview pane should
 // render skeleton rows.  True when the preview detail is a loading stub (the
-// gateway response has not yet arrived for the selected result).
+// repository response has not yet arrived for the selected result).
 func isDetailLoadingSkeleton(state State) bool {
 	_, ok := selectedSummary(state.Results, state.SelectedID)
 	if !ok {

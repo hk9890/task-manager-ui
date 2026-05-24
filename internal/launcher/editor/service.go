@@ -20,7 +20,7 @@ type Service interface {
 	PrepareDocument(ctx context.Context, issueID string) (Prepared, error)
 
 	// ApplyEdits reads the edited temp file, parses it, and applies changes via
-	// the gateway when the document differs from the original issue. The temp
+	// the repository when the document differs from the original issue. The temp
 	// file is removed regardless of the outcome.
 	ApplyEdits(ctx context.Context, issueID string, issue domain.IssueDetail, path string) (Result, error)
 

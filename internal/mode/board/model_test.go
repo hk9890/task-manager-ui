@@ -12,9 +12,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	beads "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
@@ -857,13 +857,13 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	}
 }
 
-// --- Real Gateway + RecordingExecutor subprocess-argv scenario ---
+// --- Real Repository + RecordingExecutor subprocess-argv scenario ---
 
-// TestBoardInitRealGatewaySubprocessArgvCardinality wires the board model against
-// a real *beads.Gateway + *beads.CommandRunner backed by a *fakes.RecordingExecutor.
+// TestBoardInitRealRepositorySubprocessArgvCardinality wires the board model against
+// a real *beads.Repository + *beads.CommandRunner backed by a *fakes.RecordingExecutor.
 // It asserts that exactly 5 subprocess invocations occur when the single Init cmd
 // is executed (Dashboard fans out ReadyExplain + 3 Query + 1 Count inside repo.Dashboard).
-func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
+func TestBoardInitRealRepositorySubprocessArgvCardinality(t *testing.T) {
 	t.Parallel()
 
 	// Expected argv shapes for the 5 subprocess invocations the board fires.
@@ -876,7 +876,7 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 
 	rec := fakes.NewRecordingExecutor()
 
-	// Pre-register canned responses so the gateway parse path succeeds.
+	// Pre-register canned responses so the repository parse path succeeds.
 	rec.OnArgs(argvReadyExplain).Return(beads.ExecResult{Stdout: []byte(`{
 		"ready": [
 			{"id":"bw-r1","title":"Ready one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}

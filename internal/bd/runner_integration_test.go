@@ -1,6 +1,6 @@
 //go:build integration
 
-package beads
+package bd
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func TestMissingBDDatabaseDetectionSubstringPin(t *testing.T) {
 	}
 
 	// Assert the runner mapped the result to ErrorCodeNoDatabaseFound.
-	assertGatewayErrorCode(t, err, domain.ErrorCodeNoDatabaseFound)
+	assertRepositoryErrorCode(t, err, domain.ErrorCodeNoDatabaseFound)
 
 	// Pin the exact substring that the detection logic in runner.go depends on.
 	// If bd renames this message in a future release this assertion will fail,

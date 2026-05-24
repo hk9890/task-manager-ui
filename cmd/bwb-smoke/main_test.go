@@ -175,7 +175,7 @@ func TestJSONOutputIsValidJSON(t *testing.T) {
 	}
 }
 
-// ── render check (unit, no gateway) ──────────────────────────────────────────
+// ── render check (unit, no repository) ──────────────────────────────────────────
 
 func TestRenderCheckPassesWithFakeBoard(t *testing.T) {
 	result := runRenderCheck()

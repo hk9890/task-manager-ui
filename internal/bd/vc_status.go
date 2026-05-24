@@ -1,4 +1,4 @@
-package beads
+package bd
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func VCStatusHash(ctx context.Context, runner *CommandRunner) (string, error) {
 
 	hash := strings.TrimSpace(payload.Commit)
 	if hash == "" {
-		return "", newGatewayError(domain.ErrorCodeDecodeFailed, operation, "bd vc status: commit hash is empty", nil)
+		return "", newRepositoryError(domain.ErrorCodeDecodeFailed, operation, "bd vc status: commit hash is empty", nil)
 	}
 
 	return hash, nil

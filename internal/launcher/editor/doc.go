@@ -18,7 +18,7 @@
 //  3. ApplyEdits(ctx, issueID, issue, path) — reads the temp file, parses the
 //     document, diffs it against the original, and calls UpdateIssue when
 //     changed. The temp file is removed on all paths (success, no-change, and
-//     parse/gateway error).
+//     parse/repository error).
 //
 // Editor exit code != 0, parse failure, and issue-deleted-between-prepare-and-apply
 // each surface as an error in editIssueResultMsg, shown by the existing error toast.

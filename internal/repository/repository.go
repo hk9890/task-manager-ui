@@ -31,7 +31,7 @@ import (
 //
 // # Error code stability
 //
-// Implementations return errors as *domain.GatewayError where a typed code is
+// Implementations return errors as *domain.RepositoryError where a typed code is
 // meaningful. Documented error codes per method are part of the stable API;
 // callers may switch on domain.ErrorCode* values. Unknown-ID methods (Issue,
 // UpdateIssue, CloseIssue, AddComment) wrap domain.ErrorCodeCommandFailed to
@@ -55,7 +55,7 @@ type Repository interface {
 	// Issue returns the full detail model for the issue identified by id.
 	//
 	// If id does not identify a known issue the implementation returns a
-	// *domain.GatewayError with Code == domain.ErrorCodeCommandFailed, matching
+	// *domain.RepositoryError with Code == domain.ErrorCodeCommandFailed, matching
 	// bd's failure behavior for unknown identifiers.
 	// ErrIssueNotFound is returned only by local-state paths (e.g. memory
 	// implementations) that can distinguish "never existed" from a bd error.
@@ -66,37 +66,37 @@ type Repository interface {
 	//
 	// Unknown filter field values (e.g. unrecognised status strings) are
 	// forwarded to the backing store without validation; the implementation
-	// surfaces any resulting error as *domain.GatewayError.
+	// surfaces any resulting error as *domain.RepositoryError.
 	Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error)
 
 	// CreateIssue creates a new issue and returns the assigned ID.
 	//
 	// Validation failures (e.g. empty title) are returned as
-	// *domain.GatewayError with Code == domain.ErrorCodeValidationFailed.
+	// *domain.RepositoryError with Code == domain.ErrorCodeValidationFailed.
 	CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error)
 
 	// UpdateIssue applies a partial update to the issue identified by id.
 	// Only non-nil fields in input are applied; nil fields are left unchanged.
 	//
-	// If id is not found the implementation returns *domain.GatewayError with
+	// If id is not found the implementation returns *domain.RepositoryError with
 	// Code == domain.ErrorCodeCommandFailed to match bd's behavior.
 	UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error
 
 	// CloseIssue closes the issue identified by id with the supplied reason.
 	//
-	// If id is not found the implementation returns *domain.GatewayError with
+	// If id is not found the implementation returns *domain.RepositoryError with
 	// Code == domain.ErrorCodeCommandFailed to match bd's behavior.
 	CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error
 
 	// AddComment appends a comment to the issue identified by id.
 	//
-	// If id is not found the implementation returns *domain.GatewayError with
+	// If id is not found the implementation returns *domain.RepositoryError with
 	// Code == domain.ErrorCodeCommandFailed to match bd's behavior.
 	AddComment(ctx context.Context, id string, input domain.AddCommentInput) error
 
 	// HealthCheck verifies that the backing store is reachable and usable.
 	// A nil return means the store is healthy. A non-nil return wraps a
-	// *domain.GatewayError; Code == domain.ErrorCodeNoDatabaseFound indicates
+	// *domain.RepositoryError; Code == domain.ErrorCodeNoDatabaseFound indicates
 	// a missing or inaccessible database, Code == domain.ErrorCodeCommandUnavailable
 	// indicates the bd CLI is not installed or not executable.
 	HealthCheck(ctx context.Context) error

@@ -27,7 +27,7 @@ const (
 	issueEditFieldLabelsEnd        = "<!-- BWB:FIELD:LABELS:END -->"
 )
 
-// IssueEditDocument captures editable fields supported by gateway update.
+// IssueEditDocument captures editable fields supported by repository update.
 //
 // Document contract:
 //   - Editable fields: title, description, status, type, priority, assignee, labels.
@@ -220,7 +220,7 @@ func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 }
 
 // BuildIssueUpdateInput compares parsed editable fields with original issue
-// detail and returns a gateway update input.
+// detail and returns a repository update input.
 func BuildIssueUpdateInput(original IssueDetail, edited IssueEditDocument) (UpdateIssueInput, bool) {
 	input := UpdateIssueInput{}
 	changed := false

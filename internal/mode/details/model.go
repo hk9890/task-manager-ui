@@ -424,11 +424,11 @@ func (m *Model) browserReferenceByID(issueID string) (domain.IssueReference, boo
 }
 
 // PlaceholderDetail returns a lightweight IssueDetail suitable for display while
-// the real gateway response is in-flight.  Description is empty — the caller
+// the real repository response is in-flight.  Description is empty — the caller
 // must set State.Skeleton=true so the Content pane renders ▓ rows via the
 // Skeleton seam (bypassing markdown rendering).
 // It is exported so the app layer can call it synchronously on selection-change
-// (before the gateway response arrives) to reset scroll offsets immediately.
+// (before the repository response arrives) to reset scroll offsets immediately.
 func PlaceholderDetail(issueID string, ref domain.IssueReference, ok bool) domain.IssueDetail {
 	summary := domain.IssueSummary{
 		ID:       strings.TrimSpace(issueID),

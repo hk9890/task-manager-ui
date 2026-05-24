@@ -98,7 +98,7 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 		t.Errorf("expected View() to return empty string before WindowSizeMsg, got %q (len=%d)", got, len(got))
 	}
 
-	// After Init() completes (gateway responses drained), still no WindowSizeMsg
+	// After Init() completes (repository responses drained), still no WindowSizeMsg
 	// has arrived — View() must still return empty.
 	m = applyMessages(t, m, runBatch(m.Init()))
 	got = m.View()
@@ -123,7 +123,7 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 // Sequence:
 //  1. Build model, send WindowSizeMsg{180, 60} — sizeKnown becomes true
 //  2. View() — assert exactly 1 column-top line
-//  3. Run Init() and drain all gateway responses
+//  3. Run Init() and drain all repository responses
 //  4. View() — assert exactly 1 column-top line (NOT 2)
 //  5. Resize to {200, 80}
 //  6. View() — assert exactly 1 column-top line
@@ -146,7 +146,7 @@ func TestNoDoubledColumnHeadersAfterWindowSizeMsg(t *testing.T) {
 		countColumnTopLines(v), debugColumnTopReport(v))
 	assertExactlyOneColumnTopLine(t, "step 1: after WindowSizeMsg, before init", v)
 
-	// --- Step 2: run Init() and drain all gateway responses ---
+	// --- Step 2: run Init() and drain all repository responses ---
 	m = applyMessages(t, m, runBatch(m.Init()))
 	v = m.View()
 	t.Logf("step2 (after init+data 180x60): %d column-top lines\n%s",

@@ -11,12 +11,12 @@
 // internal/repository/beads so it:
 //   - imports only domain + slog (no beads-specific types)
 //   - wraps any Repository implementation (memory, beads, caching)
-//   - allows E4.4 to delete the beads/validating_gateway.go without
+//   - allows E4.4 to delete the beads/validating_repository.go without
 //     moving this file
 //
 // # Rule migration
 //
-// Rules are reimplemented from specification (validating_gateway.go +
+// Rules are reimplemented from specification (validating_repository.go +
 // contractcheck/) over Repository domain types. The contractcheck package
 // is intentionally NOT imported — see rule-mapping comment per method.
 package repository
@@ -34,7 +34,7 @@ import (
 // result is always returned unchanged whether or not a violation was detected.
 //
 // Thread safety: safe for concurrent use. The decorator holds no per-call state
-// (the gateway-level ssom map and mutex are gone — Dashboard bundles count and
+// (the repository-level ssom map and mutex are gone — Dashboard bundles count and
 // list in one atomic return so the invariant is checked in-call).
 type validatingRepository struct {
 	inner  Repository
@@ -83,7 +83,7 @@ func (v *validatingRepository) HealthCheck(ctx context.Context) error {
 
 // Dashboard delegates to inner and validates the composite return value.
 //
-// Rules migrated from the legacy gateway-shape validator:
+// Rules migrated from the legacy repository-shape validator:
 //
 //   - ValidateIssueSummaries applied to all summary slices (InProgress, Closed,
 //     Blocked, ReadyExplain.Ready, ReadyExplain.Blocked[].Issue).
@@ -98,7 +98,7 @@ func (v *validatingRepository) HealthCheck(ctx context.Context) error {
 //   - ValidateListIssuesClosedExcluded: no "default no-filter list" surface on
 //     Repository. Dashboard.Closed intentionally fetches closed. InProgress and
 //     Blocked are status-constrained, covered by slot consistency above.
-//   - ValidateBlockedViews (gateway BlockedIssues): Dashboard.Blocked is
+//   - ValidateBlockedViews (repository BlockedIssues): Dashboard.Blocked is
 //     []IssueSummary with no BlockedBy info; that rule has no mapping here.
 //   - ValidateCountIssues (TotalEqualsSumOfGroups etc.): Dashboard.ClosedTotal
 //     is a scalar int with no Groups; sum-of-groups check has no mapping here.

@@ -3,7 +3,7 @@ package beads
 import (
 	"context"
 
-	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 )
 
 // Option is a functional constructor option for [Repository].
@@ -20,7 +20,7 @@ type Option func(*Repository)
 //
 // Example usage (parity test scenario 10 pattern):
 //
-//	runner := gateway.NewCommandRunner(...)
+//	runner := repository.NewCommandRunner(...)
 //	repo := beads.New(runner, beads.WithCommandHook(func(ctx context.Context, req bdrunner.CommandRequest) ([]byte, error) {
 //	    if shouldFail(req.Args) {
 //	        return nil, fmt.Errorf("injected error")

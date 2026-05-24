@@ -107,7 +107,7 @@ func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
 		_ = m.Close()
 	})
 
-	m.Component("gateway").Warn("gateway warning", "argv", []string{"bd", "ready", "--json"})
+	m.Component("repository").Warn("repository warning", "argv", []string{"bd", "ready", "--json"})
 
 	line := firstLineFromFile(t, m.LogPath())
 	record := decodeJSONLine(t, line)
@@ -121,8 +121,8 @@ func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
 	if got := record["level"]; got != "WARN" {
 		t.Fatalf("expected level WARN, got %#v", got)
 	}
-	if got := record["message"]; got != "gateway warning" {
-		t.Fatalf("expected message %q, got %#v", "gateway warning", got)
+	if got := record["message"]; got != "repository warning" {
+		t.Fatalf("expected message %q, got %#v", "repository warning", got)
 	}
 	if got := record["session_id"]; got != "deadbeef" {
 		t.Fatalf("expected session_id deadbeef, got %#v", got)
@@ -133,11 +133,11 @@ func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
 	if got := record["build_version"]; got != "dev" {
 		t.Fatalf("expected build_version dev, got %#v", got)
 	}
-	if got := record["component"]; got != "gateway" {
-		t.Fatalf("expected component gateway, got %#v", got)
+	if got := record["component"]; got != "repository" {
+		t.Fatalf("expected component repository, got %#v", got)
 	}
 
-	if got := stderr.String(); !strings.Contains(got, "warn: gateway warning") {
+	if got := stderr.String(); !strings.Contains(got, "warn: repository warning") {
 		t.Fatalf("expected warning mirrored to stderr, got %q", got)
 	}
 	if got := stderr.String(); !strings.Contains(got, "project_root=/tmp/project-a") || !strings.Contains(got, "build_version=dev") {
@@ -163,7 +163,7 @@ func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
 		_ = m.Close()
 	})
 
-	m.Component("gateway").Debug("bd argv trace", "argv", []string{"bd", "show", "ISSUE-1"})
+	m.Component("repository").Debug("bd argv trace", "argv", []string{"bd", "show", "ISSUE-1"})
 
 	gotStderr := stderr.String()
 	if !strings.Contains(gotStderr, "[bwb-debug] session_id=cafebabe") {

@@ -3,7 +3,7 @@
 ## Current diagnostics surface
 
 Runtime diagnostics are now centralized through `internal/logging` and used by
-`cmd/bwb/main.go` plus `internal/gateway/beads/runner.go`.
+`cmd/bwb/main.go` plus `internal/bd/runner.go`.
 
 - `stdout` remains the success surface for non-interactive `--help`, `--version`,
   `--print-config`, and `--check-config`
@@ -52,7 +52,7 @@ Structured records include at least:
   `exit_code`, and `duration_ms`
 
 To attribute a session safely in a collected set of log files, use `session_id`
-together with `project_root` and `build_version`. Startup and gateway records
+together with `project_root` and `build_version`. Startup and repository records
 both inherit those root attributes automatically.
 
 ## `--debug` coverage
@@ -64,7 +64,7 @@ both inherit those root attributes automatically.
   - resolved config path
   - resolved cwd
   - auto-refresh enabled/disabled
-- `bd` CLI execution traces from `internal/gateway/beads/runner.go`
+- `bd` CLI execution traces from `internal/bd/runner.go`
   - operation name
   - full argv
   - exit code
@@ -79,12 +79,12 @@ without `--debug`.
 The argv-level in-process read cache (previously keyed on resolved argv and
 the `.beads/last-touched` mtime token) was removed in 8pxi.7. All reads now
 go through the bd subprocess. The `"bd command cache hit"` log line is no
-longer emitted; all gateway activity appears as `"bd command finished"`.
+longer emitted; all repository activity appears as `"bd command finished"`.
 
 ### Dashboard refresh performance analysis
 
 Use `scripts/analyze_dashboard_perf.py` for structured analysis of the
-gateway log stream. The script parses every `bd-<session>.log` under the log
+repository log stream. The script parses every `bd-<session>.log` under the log
 directory and reports cold-load wall time, miss-latency distribution
 (p50/p95/max), and a per-call chronological trace. It groups by project so a
 single repo's perf can be compared against itself over time. Hit-rate columns
@@ -226,8 +226,8 @@ Effective capture destinations therefore include:
 - `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and caching backend construction (`constructRepository`)
 - `cmd/bwb/cache_resolver.go` — prior-session cache file discovery; emits WARN records for unreadable or schema-mismatched manifests
 - `internal/repository/caching/caching.go` — `CachingRepository` decorator; background tick loop and persistence methods (`Hydrate`, `SaveNow`)
-- `internal/gateway/beads/runner.go` — structured per-command `bd` execution traces
-- `internal/gateway/beads/runner_test.go` — execution trace coverage for argv/exit code/duration logging
+- `internal/bd/runner.go` — structured per-command `bd` execution traces
+- `internal/bd/runner_test.go` — execution trace coverage for argv/exit code/duration logging
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
 
@@ -251,4 +251,4 @@ The active runtime path still does not provide:
 - tracing/span export
 
 Update this file when `internal/logging/`, `cmd/bwb/main.go`, or
-`internal/gateway/beads/runner.go` changes the diagnostics contract.
+`internal/bd/runner.go` changes the diagnostics contract.

@@ -24,7 +24,7 @@ const (
 // BuiltInProvider is a metadata-only dashboard definition catalog.
 // It supplies section IDs and titles; in v1 it also populates Section.Query
 // for backward compatibility with the board model until beads-workbench-lgln
-// migrates the board model to own gateway query routing directly. Future
+// migrates the board model to own repository query routing directly. Future
 // providers should omit the Query field and rely on section ID and title only.
 type BuiltInProvider struct {
 }

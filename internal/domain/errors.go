@@ -2,7 +2,7 @@ package domain
 
 import "fmt"
 
-// ErrorCode identifies normalized gateway error categories for UI handling.
+// ErrorCode identifies normalized repository error categories for UI handling.
 type ErrorCode string
 
 const (
@@ -18,15 +18,15 @@ const (
 	ErrorCodeUnknown            ErrorCode = "unknown"
 )
 
-// GatewayError is a normalized source operation error for TUI presentation.
-type GatewayError struct {
+// RepositoryError is a normalized source operation error for TUI presentation.
+type RepositoryError struct {
 	Code      ErrorCode
 	Operation string
 	Message   string
 	Cause     error
 }
 
-func (e GatewayError) Error() string {
+func (e RepositoryError) Error() string {
 	var base string
 
 	if e.Message == "" {
@@ -48,6 +48,6 @@ func (e GatewayError) Error() string {
 	return base
 }
 
-func (e GatewayError) Unwrap() error {
+func (e RepositoryError) Unwrap() error {
 	return e.Cause
 }

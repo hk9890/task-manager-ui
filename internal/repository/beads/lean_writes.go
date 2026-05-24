@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 // CreateIssue creates a new issue via `bd create --json`.
@@ -49,7 +49,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 // UpdateIssue applies a partial update via `bd update <id>`.
 //
 // ClearLabels workaround: bd 1.0.4 `bd update --set-labels ""` silently ignores
-// the clear request. The lean Repository replicates the gateway workaround:
+// the clear request. The lean Repository replicates the repository workaround:
 // fetch current labels via Issue (bd show), then emit
 // `bd update --remove-label <csv>` (singular flag). If no labels exist, skip.
 func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
@@ -110,7 +110,7 @@ const leanCloseNotFoundFragment = "issue not found"
 //
 // Idempotency workaround: bd 1.0.4 emits "issue not found" when RowsAffected==0
 // on a re-close within the same second (schema DATETIME resolution means no
-// columns change). The lean Repository replicates the gateway workaround:
+// columns change). The lean Repository replicates the repository workaround:
 // on the close-specific not-found error, verify the issue exists with
 // status=closed; return nil iff it does. Filed upstream as
 // gastownhall/beads#4025.
@@ -149,7 +149,7 @@ func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.Clo
 }
 
 func leanIsCloseNotFound(err error) bool {
-	var gwErr domain.GatewayError
+	var gwErr domain.RepositoryError
 	if !errors.As(err, &gwErr) {
 		return false
 	}

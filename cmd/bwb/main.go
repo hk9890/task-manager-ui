@@ -16,8 +16,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/hk9890/beads-workbench/internal/app"
+	"github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/logging"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
@@ -56,16 +56,16 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 
 	case "caching":
 		// Construct backing beads repository.
-		runnerCfg := beads.RunnerConfig{WorkDir: opts.projectRoot}
+		runnerCfg := bd.RunnerConfig{WorkDir: opts.projectRoot}
 		if opts.logManager != nil {
-			runnerCfg.Logger = opts.logManager.Component("gateway")
+			runnerCfg.Logger = opts.logManager.Component("repository")
 		}
-		runner := beads.NewCommandRunner(runnerCfg)
+		runner := bd.NewCommandRunner(runnerCfg)
 		backing := repository.NewValidating(repositorybeads.New(runner), logManagerComponent(opts.logManager, "validating"))
 
 		// Bind vcStatusFunc.
 		vcStatusFunc := func(c context.Context) (string, error) {
-			return beads.VCStatusHash(c, runner)
+			return bd.VCStatusHash(c, runner)
 		}
 
 		// Construct CachingRepository.
@@ -126,11 +126,11 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 		return cache, cleanup, nil
 
 	default: // "beads" or unset (legacy path)
-		runnerCfg := beads.RunnerConfig{WorkDir: opts.projectRoot}
+		runnerCfg := bd.RunnerConfig{WorkDir: opts.projectRoot}
 		if opts.logManager != nil {
-			runnerCfg.Logger = opts.logManager.Component("gateway")
+			runnerCfg.Logger = opts.logManager.Component("repository")
 		}
-		runner := beads.NewCommandRunner(runnerCfg)
+		runner := bd.NewCommandRunner(runnerCfg)
 		return repository.NewValidating(repositorybeads.New(runner), logManagerComponent(opts.logManager, "validating")), noop, nil
 	}
 }
@@ -459,7 +459,7 @@ func resolveAndValidateCWD(startCWD, cwdOverride string) (string, error) {
 
 	// Probe for read access. os.Open on a directory succeeds only when the
 	// caller has at minimum read+execute permission, catching EACCES before the
-	// gateway encounters it with a confusing error.
+	// repository encounters it with a confusing error.
 	f, err := os.Open(resolved)
 	if err != nil {
 		return "", fmt.Errorf("path %q is not accessible: %w", resolved, err)

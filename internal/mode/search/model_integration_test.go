@@ -11,7 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/bd"
 	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
@@ -26,7 +26,7 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 	repoPath := embeddedfixture.TempRepoPath(t)
 	embeddedfixture.Seed(t, repoPath)
 
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
+	runner := bd.NewCommandRunner(bd.RunnerConfig{
 		WorkDir: repoPath,
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})

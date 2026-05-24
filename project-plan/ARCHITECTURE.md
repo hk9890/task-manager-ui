@@ -48,7 +48,7 @@ Beads Workbench is composed of five main areas:
    - lean `repository.Repository` implementation built directly on `CommandRunner`
    - implemented through official `bd` commands / official API surfaces only
    - typed CLI payload decoding + explicit domain mapping
-   - subprocess runner lives in `internal/gateway/beads` (runner plumbing only)
+   - subprocess runner lives in `internal/bd` (runner plumbing only)
 
 4. **Launcher layer (`internal/launcher`)**
    - editor handoff
@@ -110,7 +110,7 @@ App / cmd → repository.Repository
               ├──> caching.Repository       (internal/repository/caching)
               ├──> repository.NewValidating  (internal/repository/validating.go — decorator, warn-logs contract violations)
               └──> beads.Repository         (internal/repository/beads — lean, on *CommandRunner)
-                      └──> CommandRunner    (internal/gateway/beads — bd subprocess plumbing)
+                      └──> CommandRunner    (internal/bd — bd subprocess plumbing)
 ```
 
 ## Repository Implementation Strategy
@@ -152,10 +152,10 @@ Beads Workbench v1 is single-project first, but the architecture should leave ro
 
 ### Design rule
 
-- treat a gateway instance as bound to **one beads source/project**
+- treat a repository instance as bound to **one beads source/project**
 - do not assume the entire app will always talk to exactly one global source forever
 
-This allows a later federation layer to sit above the per-project gateway without changing the core UI-to-gateway contract.
+This allows a later federation layer to sit above the per-project repository without changing the core UI-to-repository contract.
 
 ### Preferred future shape
 
@@ -174,7 +174,7 @@ type SourceRef struct {
     Root string
 }
 
-type FederatedGateway interface {
+type FederatedRepository interface {
     Sources(ctx context.Context) ([]SourceRef, error)
     QueryAcrossSources(ctx context.Context, q FederatedQuery) ([]FederatedIssue, error)
 }
@@ -188,7 +188,7 @@ Federated mode should start as **read aggregation first**:
 - search across multiple projects
 - show which source/project an issue belongs to
 
-Write behavior should remain source-specific. Once a user selects a concrete issue, Beads Workbench can route follow-up actions through that issue's owning source gateway.
+Write behavior should remain source-specific. Once a user selects a concrete issue, Beads Workbench can route follow-up actions through that issue's owning source repository.
 
 This keeps federation compatible with the single-source architecture rather than forcing a separate product design.
 
@@ -207,8 +207,8 @@ This avoids a premature requirement to mirror the whole issue database into memo
 
 ### Examples
 
-- board columns load from targeted gateway queries
-- search uses gateway filtering first, not a mandatory local index
+- board columns load from targeted repository queries
+- search uses repository filtering first, not a mandatory local index
 - issue details load on selection
 - comments and dependency context can be lazy-loaded if needed
 
@@ -220,7 +220,7 @@ Beads Workbench keeps the concept of dashboards or boards, but simplifies how th
 
 - **dashboard renderer** and **dashboard definition provider** are separate
 - **dashboard definition provider** is a metadata-only catalog (section IDs and titles)
-- **board model** owns gateway query routing for each section
+- **board model** owns repository query routing for each section
 
 That means:
 
@@ -255,9 +255,9 @@ Later:
 
 After beads-workbench-lgln merges, the board model performs a 3-call fan-out on each dashboard load:
 
-1. `gateway.ListIssues` — in-progress and done sections
-2. `gateway.ReadyIssues` — ready section
-3. `gateway.BlockedIssues` — not-ready section
+1. `repository.ListIssues` — in-progress and done sections
+2. `repository.ReadyIssues` — ready section
+3. `repository.BlockedIssues` — not-ready section
 
 Results are composed and sorted by `internal/dashboard.Compose` before the board renders columns.
 
@@ -275,16 +275,16 @@ Search in Beads Workbench is intentionally smaller than Perles search.
 v1 search should be built from:
 
 - text input
-- structured filters exposed by the gateway
+- structured filters exposed by the repository
 - optional local narrowing of the currently loaded result set
 
 ### Search filter contract note (Phase 1)
 
-The gateway-level search query model includes `priority` and work-state narrowing
+The repository-level search query model includes `priority` and work-state narrowing
 (`ready` / `blocked`) so UI layers can issue one structured query contract.
 
 - Priority maps directly to official `bd search` filters (`--priority-min` / `--priority-max`).
-- Ready/blocked do not have direct `bd search` flags today. Gateway implementations should
+- Ready/blocked do not have direct `bd search` flags today. Repository implementations should
   route through official queue commands (`bd ready --json` / `bd blocked --json`) and apply
   any additional structured filters in-memory rather than requiring UI code to shell out.
 
@@ -310,14 +310,14 @@ The detail view may reuse rendering components from the current repo, but it mus
 Beads Workbench has two editing paths:
 
 1. **quick updates**
-   - direct metadata operations through the gateway
+   - direct metadata operations through the repository
    - good for status, priority, labels, close, comments
 
 2. **external editor flow**
    - preferred rich-edit path
    - opens a temp buffer representing the issue
    - user edits in `$EDITOR` / configured editor
-   - Beads Workbench parses the result and sends only supported changes back through the gateway
+   - Beads Workbench parses the result and sends only supported changes back through the repository
 
 Representative abstraction:
 
@@ -358,7 +358,7 @@ They should not become a hidden orchestration engine.
 
 ## Error Handling Model
 
-The gateway and launcher layers should normalize errors into UI-meaningful categories such as:
+The repository and launcher layers should normalize errors into UI-meaningful categories such as:
 
 - beads command unavailable
 - command failed

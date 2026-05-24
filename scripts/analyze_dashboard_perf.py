@@ -7,12 +7,12 @@ reports cold-load wall time, and per-call latency for the dashboard's
 5-command board refresh.
 
 The argv-level in-process read cache was removed in 8pxi.7. Sessions
-generated after that change will always report hit=0; all gateway activity
+generated after that change will always report hit=0; all repository activity
 now appears as "bd command finished". Hit-rate tracking is retained for
 backward compatibility with older log files that still contain cache hit
 lines.
 
-The gateway emits two log messages this script keys on:
+The repository emits two log messages this script keys on:
   - "bd command finished"   (a bd subprocess execution; all reads after 8pxi.7)
   - "bd command cache hit"  (a read from the in-process cache; pre-8pxi.7 only)
 
@@ -53,7 +53,7 @@ BOARD_OPERATIONS = frozenset({
 
 @dataclass
 class Call:
-    """One bd-gateway interaction, hit or miss."""
+    """One bd-repository interaction, hit or miss."""
     t_offset_s: float          # seconds since session start
     op: str                    # operation label
     argv: list[str]            # full argv (incl. "bd" head)
@@ -114,7 +114,7 @@ class Session:
 
 
 def load_session(path: Path) -> Session | None:
-    """Parse one JSONL log file. Returns None if it has no gateway records."""
+    """Parse one JSONL log file. Returns None if it has no repository records."""
     session_id = project_root = build_version = ""
     start_ts: datetime | None = None
     end_ts: datetime | None = None
@@ -147,7 +147,7 @@ def load_session(path: Path) -> Session | None:
                 msg = r.get("message", "")
                 if msg not in ("bd command finished", "bd command cache hit"):
                     continue
-                if r.get("component") != "gateway":
+                if r.get("component") != "repository":
                     continue
                 # Only count successful misses; non-zero exit codes are not
                 # representative of normal load behaviour.

@@ -388,7 +388,7 @@ func (m *Model) searchItemCapacity() int {
 	return rows
 }
 
-// IsLoading reports whether a gateway search is active.
+// IsLoading reports whether a repository search is active.
 func (m *Model) IsLoading() bool {
 	return m.loading
 }

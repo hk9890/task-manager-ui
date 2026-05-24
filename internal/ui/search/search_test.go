@@ -32,11 +32,11 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
-		Query:        "gateway",
-		AppliedQuery: "gateway",
+		Query:        "backend",
+		AppliedQuery: "backend",
 		Focus:        FocusResults,
 		Results: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1},
 			{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 		},
 		Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
@@ -51,12 +51,12 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		"Results",
 		"Content",
 		"Metadata",
-		"gateway",
+		"backend",
 		"shown",
 		"exact",
-		"› T P1 OPN bw-1 Gateway search result",
+		"› T P1 OPN bw-1 Backend search result",
 		"B P0 IP bw-2 Another result",
-		"Gateway search result",
+		"Backend search result",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected %q in view:\n%s", want, plain)
@@ -186,16 +186,16 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_with_preview_w120", func(t *testing.T) {
 		view := Render(State{
-			Query:        "gateway",
-			AppliedQuery: "gateway",
+			Query:        "backend",
+			AppliedQuery: "backend",
 			Focus:        FocusResults,
 			Results: []domain.IssueSummary{
-				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
 			Metadata:       domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 			SelectedID:     "bw-1",
-			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
+			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
 			Width:          120,
 			Height:         28,
 		})
@@ -205,12 +205,12 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_loading_stub_w120", func(t *testing.T) {
 		view := Render(State{
-			Query:        "gateway",
-			AppliedQuery: "gateway",
+			Query:        "backend",
+			AppliedQuery: "backend",
 			Focus:        FocusResults,
 			Reloading:    true,
 			Results: []domain.IssueSummary{
-				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
 			Metadata:      domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore, Notice: "Results may be incomplete because the backend limit may have capped additional matches."},
@@ -250,8 +250,8 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_narrow_w80", func(t *testing.T) {
 		view := Render(State{
-			Query:        "gateway",
-			AppliedQuery: "gateway",
+			Query:        "backend",
+			AppliedQuery: "backend",
 			Focus:        FocusResults,
 			Results: []domain.IssueSummary{
 				{ID: "beads-workbench-yze.4.2", Title: "Implement create update close and comment actions in the app", Status: "open", Type: "task", Priority: 1},
@@ -268,16 +268,16 @@ func TestRenderGoldens(t *testing.T) {
 
 	t.Run("results_boundary_w110", func(t *testing.T) {
 		view := Render(State{
-			Query:        "gateway",
-			AppliedQuery: "gateway",
+			Query:        "backend",
+			AppliedQuery: "backend",
 			Focus:        FocusResults,
 			Results: []domain.IssueSummary{
-				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
 			Metadata:       domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessExact},
 			SelectedID:     "bw-1",
-			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
+			SelectedDetail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}}, Description: "Search preview description"},
 			Width:          110,
 			Height:         28,
 		})
@@ -303,15 +303,15 @@ func TestRenderGoldens(t *testing.T) {
 	})
 
 	// Stale-draft state: Query != AppliedQuery with prior results still visible.
-	// Reproduces the "zqx99 typed but 25 gateway rows still shown" scenario from
+	// Reproduces the "zqx99 typed but 25 repository rows still shown" scenario from
 	// ticket beads-workbench-2ev4.4.
 	t.Run("stale_draft_w120", func(t *testing.T) {
 		view := Render(State{
 			Query:        "zqx99",
-			AppliedQuery: "gateway",
+			AppliedQuery: "backend",
 			Focus:        FocusQuery,
 			Results: []domain.IssueSummary{
-				{ID: "bw-1", Title: "Gateway search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
+				{ID: "bw-1", Title: "Backend search result", Status: "open", Type: "task", Priority: 1, Assignee: "hans", Labels: []string{"ui"}},
 				{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 			},
 			Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore},
@@ -573,10 +573,10 @@ func TestRenderStaleDraftShowsBanner(t *testing.T) {
 
 	view := Render(State{
 		Query:        "zqx99",
-		AppliedQuery: "gateway",
+		AppliedQuery: "backend",
 		Focus:        FocusQuery,
 		Results: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-1", Title: "Repository result", Status: "open", Type: "task", Priority: 1},
 			{ID: "bw-2", Title: "Another result", Status: "in_progress", Type: "bug", Priority: 0},
 		},
 		Metadata:   domain.SearchResultMetadata{ReturnedCount: 2, Completeness: domain.SearchResultCompletenessMaybeMore},
@@ -591,7 +591,7 @@ func TestRenderStaleDraftShowsBanner(t *testing.T) {
 		t.Fatalf("expected stale-draft banner in results pane, got:\n%s", plain)
 	}
 	// Prior results must still be visible (not erased).
-	if !strings.Contains(plain, "Gateway result") {
+	if !strings.Contains(plain, "Repository result") {
 		t.Fatalf("expected prior results still visible, got:\n%s", plain)
 	}
 }
@@ -604,9 +604,9 @@ func TestRenderStaleDraftBannerTextUntruncated(t *testing.T) {
 
 	state := State{
 		Query:        "zqx99",
-		AppliedQuery: "gateway",
+		AppliedQuery: "backend",
 		Results: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-1", Title: "Repository result", Status: "open", Type: "task", Priority: 1},
 		},
 	}
 	banner := renderResultsBanner(state, 200) // wide enough to avoid truncation
@@ -626,11 +626,11 @@ func TestRenderStaleDraftAbsentWhenApplied(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
-		Query:        "gateway",
-		AppliedQuery: "gateway",
+		Query:        "backend",
+		AppliedQuery: "backend",
 		Focus:        FocusResults,
 		Results: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-1", Title: "Repository result", Status: "open", Type: "task", Priority: 1},
 		},
 		Metadata:   domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact},
 		SelectedID: "bw-1",
@@ -655,11 +655,11 @@ func TestRenderStaleDraftAbsentWhenSearchInFlight(t *testing.T) {
 
 	view := Render(State{
 		Query:        "zqx99",
-		AppliedQuery: "gateway",
+		AppliedQuery: "backend",
 		Loading:      true,
 		Reloading:    true, // in-flight: hasDraftChanges is true but isInlineReload is also true
 		Results: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-1", Title: "Repository result", Status: "open", Type: "task", Priority: 1},
 		},
 		Metadata:   domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessMaybeMore},
 		SelectedID: "bw-1",
@@ -679,7 +679,7 @@ func TestRenderStaleDraftAbsentWhenSearchInFlight(t *testing.T) {
 }
 
 // TestRenderStaleDraftEmptyDraftShowsClearHint verifies that when the draft
-// is cleared (empty) but prior results remain (Query="" != AppliedQuery="gateway"),
+// is cleared (empty) but prior results remain (Query="" != AppliedQuery="backend"),
 // the banner text includes "Press Enter to clear" rather than an empty quoted draft.
 // The test uses renderResultsBanner directly at a wide width to avoid pane truncation.
 func TestRenderStaleDraftEmptyDraftShowsClearHint(t *testing.T) {
@@ -687,9 +687,9 @@ func TestRenderStaleDraftEmptyDraftShowsClearHint(t *testing.T) {
 
 	state := State{
 		Query:        "",
-		AppliedQuery: "gateway",
+		AppliedQuery: "backend",
 		Results: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Gateway result", Status: "open", Type: "task", Priority: 1},
+			{ID: "bw-1", Title: "Repository result", Status: "open", Type: "task", Priority: 1},
 		},
 	}
 	banner := renderResultsBanner(state, 200) // wide enough to avoid truncation

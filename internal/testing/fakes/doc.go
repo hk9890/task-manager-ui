@@ -1,7 +1,7 @@
 // Package fakes provides contract-conforming fake implementations of
 // external dependencies used in tests across this module.
 //
-// After the 8pxi refactor, the fake gateway and its contract tests were
+// After the 8pxi refactor, the fake repository and its contract tests were
 // removed. The lean beads.Repository (internal/repository/beads) is now used
 // directly in all integration-tier tests via the embedded fixture.
 //
@@ -15,12 +15,12 @@
 //
 // # RecordingExecutor
 //
-// RecordingExecutor implements gateway/beads.CommandExecutor and records each
+// RecordingExecutor implements repository/beads.CommandExecutor and records each
 // Run invocation (argv, workDir, envLen) so tests can assert exact bd argv
-// shapes. Use it in tests outside internal/gateway/beads/ that need to verify
+// shapes. Use it in tests outside internal/repository/beads/ that need to verify
 // the exact bd verb and flags bwb emits.
 //
-// Tests within internal/gateway/beads/ use package-internal stubs to avoid
+// Tests within internal/repository/beads/ use package-internal stubs to avoid
 // the import cycle: this package imports beads, so beads tests cannot import
 // fakes.
 //
@@ -33,5 +33,5 @@
 //	calls := rec.Calls()
 //	// assert calls[0].Args == expected
 //
-// See also internal/gateway/beads/ARGV_CONTRACT.md for the full argv inventory.
+// See also internal/repository/beads/ARGV_CONTRACT.md for the full argv inventory.
 package fakes

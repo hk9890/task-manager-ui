@@ -1,5 +1,5 @@
 // Package beads implements [repository.Repository] directly on
-// [bdrunner.CommandRunner] with no intermediate gateway type.
+// [bdrunner.CommandRunner] with no intermediate repository type.
 //
 // # File layout
 //
@@ -19,19 +19,19 @@
 //	              ├──> caching.Repository       (internal/repository/caching)
 //	              ├──> repository.NewValidating  (internal/repository/validating.go)
 //	              └──> beads.Repository          ← this package
-//	                      └──> CommandRunner     (internal/gateway/beads)
+//	                      └──> CommandRunner     (internal/repository/beads)
 //
 // Construct with [New]; do not create a [Repository] zero value directly.
 //
 // # Argv contract
 //
-// ARGV_CONTRACT.md in [internal/gateway/beads] is the single source of truth
+// ARGV_CONTRACT.md in [internal/repository/beads] is the single source of truth
 // for every distinct bd argv shape bwb emits at runtime. When adding or
 // modifying a bd call site:
 //
 //  1. Add (or update) the row in ARGV_CONTRACT.md.
 //  2. Add a pinning test in this package using [fakes.RecordingExecutor]
-//     (see the canonical pattern in [internal/gateway/beads/doc.go]).
+//     (see the canonical pattern in [internal/repository/beads/doc.go]).
 //  3. For any dynamic flag (e.g. --limit driven by terminal height), pin
 //     default + max + min + 1 boundary value — not just the common case.
 //

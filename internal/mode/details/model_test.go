@@ -753,7 +753,7 @@ func TestRefreshSameIssueKeepsStaleContent(t *testing.T) {
 
 // TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent verifies that when
 // switching to a different issue, prior content remains visible momentarily
-// (before the gateway response arrives).
+// (before the repository response arrives).
 func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 	t.Parallel()
 
@@ -788,7 +788,7 @@ func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 // TestScrollResetOnIssueSwitchViaApplyLoadedDetail is the regression test for
 // beads-workbench-db0z.7. It verifies that when the caller applies a placeholder
 // detail synchronously on selection-change (mimicking what app/model.go does),
-// all three scroll offsets are immediately zeroed before the gateway response
+// all three scroll offsets are immediately zeroed before the repository response
 // arrives.
 func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	t.Parallel()
@@ -811,14 +811,14 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	m.ScrollOffset = 15
 
 	// Simulate app-level selection change to bw-2: synchronously apply placeholder
-	// BEFORE the gateway response arrives (this is the mechanism from app/model.go).
+	// BEFORE the repository response arrives (this is the mechanism from app/model.go).
 	m.Loading = true
 	m.SelectionID = "bw-2"
 	m.TargetID = "bw-2"
 	ref := domain.IssueReference{ID: "bw-2", Title: "Issue B"}
 	m.ApplyLoadedDetail("bw-2", PlaceholderDetail("bw-2", ref, true))
 
-	// All scroll offsets must be zero immediately (before gateway responds).
+	// All scroll offsets must be zero immediately (before repository responds).
 	if m.ContentScrollOffset != 0 {
 		t.Errorf("ContentScrollOffset must be 0 immediately after issue switch, got %d", m.ContentScrollOffset)
 	}

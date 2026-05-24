@@ -56,7 +56,7 @@ Non-interactive flags (`--help`, `--version`, `--print-config`,
 
 - `--config` sets an explicit config file path. Relative paths resolve against
   the process start cwd.
-- `--cwd` sets the target beads project directory used by gateway commands.
+- `--cwd` sets the target beads project directory used by repository commands.
   Relative paths also resolve against process start cwd.
 - `--print-config` loads config, prints the resolved source comment and YAML,
   then exits.
@@ -111,9 +111,9 @@ internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
-  gateway/beads/     # bd subprocess runner and argv-level types (CommandRunner, RunnerConfig, ExecResult)
+  repository/beads/     # bd subprocess runner and argv-level types (CommandRunner, RunnerConfig, ExecResult)
   repository/beads/  # lean repository.Repository built directly on CommandRunner; typed bd payload decoding
-  logging/           # central slog logging package used by runtime startup and gateway tracing
+  logging/           # central slog logging package used by runtime startup and repository tracing
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
   mode/              # board/search/details feature models + shell message contracts
@@ -177,9 +177,9 @@ project-plan/        # product, architecture, and execution planning docs
 
 9. **Selection/detail sync is event-driven, not polled.** Browse modes emit `SelectionChangedMsg` when selection changes; app reacts by updating shared selection state and (when needed) issuing detail loads. Do not reintroduce polling-based synchronization loops.
 
-10. **Gateway decoding is typed and operation-scoped.** `internal/repository/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
+10. **Repository decoding is typed and operation-scoped.** `internal/repository/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
 
-11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns gateway query routing and validates query types internally.
+11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns repository query routing and validates query types internally.
 
 ## Runtime Configuration
 

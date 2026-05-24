@@ -1,12 +1,12 @@
 //go:build integration
 
 // Package parity contains integration tests that assert bwb's SearchIssues
-// gateway output matches what `bd search` (or `bd list`/`bd ready`/`bd blocked`)
+// repository output matches what `bd search` (or `bd list`/`bd ready`/`bd blocked`)
 // returns for the same query on the same database.
 //
 // # Flag-parity notes
 //
-// The SearchIssues gateway uses different bd verbs for different query shapes:
+// The SearchIssues repository uses different bd verbs for different query shapes:
 //
 //   - Empty text + WorkStateAny → `bd list --json --all [--limit N]`
 //     (no `bd search` equivalent for "all issues unfiltered")
@@ -17,7 +17,7 @@
 //
 // For ready/blocked cases there is no `bd search` equivalent. These sub-tests
 // compare against `bd ready --json` / `bd blocked --json` (raw backend source)
-// after applying the same in-memory filtering the gateway applies. The
+// after applying the same in-memory filtering the repository applies. The
 // divergence is intentional by design; see docs/TESTING.md §known limitations.
 package parity_test
 
@@ -102,7 +102,7 @@ var queryMatrix = []queryCase{
 // TestSearchParityFixture runs the full parity matrix against the embedded
 // fixture dataset. Always runs (no env gate required).
 //
-// Routing: stays on minimal anchor — this test verifies base gateway routing
+// Routing: stays on minimal anchor — this test verifies base repository routing
 // and count-vs-rows consistency; exact issue IDs are not asserted here but
 // the small corpus size ensures results are deterministic.
 func TestSearchParityFixture(t *testing.T) {
@@ -204,7 +204,7 @@ func runSearchParityMatrix(t *testing.T, ds datasets.Dataset) {
 }
 
 // assertCountVsRows asserts that Metadata.ReturnedCount == len(Results).
-// This catches a count-vs-rows mismatch class where the gateway reports a
+// This catches a count-vs-rows mismatch class where the repository reports a
 // different number than it actually returns in the results slice.
 func assertCountVsRows(t *testing.T, page domain.SearchResultPage) {
 	t.Helper()
@@ -217,7 +217,7 @@ func assertCountVsRows(t *testing.T, page domain.SearchResultPage) {
 	}
 }
 
-// assertParityWithBd compares the gateway's SearchIssues output against the
+// assertParityWithBd compares the repository's SearchIssues output against the
 // appropriate bd CLI command for the given query case.
 func assertParityWithBd(t *testing.T, ds datasets.Dataset, qc queryCase, page domain.SearchResultPage) {
 	t.Helper()
@@ -240,7 +240,7 @@ func assertParityWithBd(t *testing.T, ds datasets.Dataset, qc queryCase, page do
 	}
 }
 
-// assertParityBdList compares gateway output (from bd list --all) against
+// assertParityBdList compares repository output (from bd list --all) against
 // bd list --json --all --limit N.
 func assertParityBdList(t *testing.T, ds datasets.Dataset, qc queryCase, gwPage domain.SearchResultPage) {
 	t.Helper()
@@ -269,7 +269,7 @@ func assertParityBdList(t *testing.T, ds datasets.Dataset, qc queryCase, gwPage 
 
 	bdItems := decodeBdIssueArray(t, raw)
 	bdIDs := extractIDs(bdItems)
-	// Apply paginate(offset, limit) to match gateway
+	// Apply paginate(offset, limit) to match repository
 	bdIDs = applyPaginate(bdIDs, q.Offset, q.Limit)
 
 	gwIDs := extractResultIDs(gwPage.Results)
@@ -279,7 +279,7 @@ func assertParityBdList(t *testing.T, ds datasets.Dataset, qc queryCase, gwPage 
 	assertCompletenessConsistency(t, gwPage, q.Limit)
 }
 
-// assertParityBdSearch compares gateway output (from bd search) against
+// assertParityBdSearch compares repository output (from bd search) against
 // bd search <text> --json --status <s> --limit N.
 func assertParityBdSearch(t *testing.T, ds datasets.Dataset, qc queryCase, gwPage domain.SearchResultPage) {
 	t.Helper()
@@ -319,12 +319,12 @@ func assertParityBdSearch(t *testing.T, ds datasets.Dataset, qc queryCase, gwPag
 	assertCompletenessConsistency(t, gwPage, q.Limit)
 }
 
-// assertParityReadyWorkState compares gateway output (from bd ready +
-// in-memory filter) against bd ready --json. The gateway applies additional
+// assertParityReadyWorkState compares repository output (from bd ready +
+// in-memory filter) against bd ready --json. The repository applies additional
 // in-memory filtering that bd ready does not natively support, so we replicate
 // the same filter logic here.
 //
-// Design note: `bd search` has no ready-state semantics. The gateway
+// Design note: `bd search` has no ready-state semantics. The repository
 // intentionally routes through `bd ready --json` and filters in-memory.
 // This sub-test therefore validates the in-memory filter correctness, not
 // a `bd search` round-trip.
@@ -339,7 +339,7 @@ func assertParityReadyWorkState(t *testing.T, ds datasets.Dataset, qc queryCase,
 	}
 
 	bdItems := decodeBdIssueArray(t, raw)
-	// Apply the same in-memory filter the gateway uses (issueMatchesSearchQuery).
+	// Apply the same in-memory filter the repository uses (issueMatchesSearchQuery).
 	filtered := inMemoryFilter(bdItems, q)
 	bdIDs := extractIDs(filtered)
 	bdIDs = applyPaginate(bdIDs, q.Offset, q.Limit)
@@ -413,9 +413,9 @@ func assertLeadingIDsMatch(t *testing.T, dataset, query, bdSource string, gwIDs,
 }
 
 // assertCompletenessConsistency checks that the Completeness flag in the
-// gateway metadata is consistent with whether bd hit its limit.
+// repository metadata is consistent with whether bd hit its limit.
 //
-// When the gateway returns exactly `limit` results and limit > 0, the
+// When the repository returns exactly `limit` results and limit > 0, the
 // Completeness must be MaybeMore (bd may have more). When fewer than limit
 // results are returned, Completeness should not be MaybeMore (unless the
 // source is capped-backend like ready/blocked, which use their own cap).
@@ -513,7 +513,7 @@ func extractResultIDs(results []domain.SearchResult) []string {
 	return ids
 }
 
-// applyPaginate replicates the gateway's paginate(offset, limit) helper.
+// applyPaginate replicates the repository's paginate(offset, limit) helper.
 func applyPaginate(ids []string, offset, limit int) []string {
 	if offset < 0 {
 		offset = 0
@@ -531,7 +531,7 @@ func applyPaginate(ids []string, offset, limit int) []string {
 	return page[:limit]
 }
 
-// withOffsetWindow replicates the gateway's withOffsetWindow helper.
+// withOffsetWindow replicates the repository's withOffsetWindow helper.
 func withOffsetWindow(limit, offset int) int {
 	if limit <= 0 {
 		return 0
@@ -542,12 +542,12 @@ func withOffsetWindow(limit, offset int) int {
 	return limit + offset
 }
 
-// inMemoryFilter replicates the gateway's filterIssueSummariesForSearch /
+// inMemoryFilter replicates the repository's filterIssueSummariesForSearch /
 // issueMatchesSearchQuery logic applied to raw bd items.
 //
-// This is intentionally a faithful replication of the gateway's filtering so
+// This is intentionally a faithful replication of the repository's filtering so
 // that ready/blocked parity tests exercise the same logic path without
-// importing the internal gateway package.
+// importing the internal repository package.
 func inMemoryFilter(items []minimalBdIssue, q domain.SearchIssuesQuery) []minimalBdIssue {
 	out := make([]minimalBdIssue, 0, len(items))
 	for _, item := range items {

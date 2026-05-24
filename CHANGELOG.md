@@ -20,7 +20,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
-- Gateway emulates `CloseIssue` idempotency over a `bd` 1.0.4 close-lookup bug so repeated close attempts no longer surface as errors
+- Repository emulates `CloseIssue` idempotency over a `bd` 1.0.4 close-lookup bug so repeated close attempts no longer surface as errors
 
 ## [v0.5.0]
 
@@ -30,7 +30,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Non-blocking loading UX so board/search/detail surfaces remain responsive while data loads
 - Startup beads health check with a fatal error screen, plus a per-section load progress counter during board startup
 - Pre-release data-consistency smoke check (`mise run smoke` / `cmd/bwb-smoke`) and parity test suites for dashboard count/sort and search results
-- Gateway capabilities: `ReadyExplain` (via `bd ready --explain --json`), generic `Query(expr, opts)` wrapping `bd query --json`, and `bd ping --json`-backed startup health check
+- Repository capabilities: `ReadyExplain` (via `bd ready --explain --json`), generic `Query(expr, opts)` wrapping `bd query --json`, and `bd ping --json`-backed startup health check
 - Test/CI infrastructure: stratified unit vs integration tiers with a `mise` execution layer, `mise run test:integration:verbose`, `-race` enabled across the suite, `mise run bwb:fixture` task, and a `RecordingExecutor` test helper for subprocess argv assertions
 
 ### Changed
@@ -38,7 +38,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Dashboard board data layer rewritten as 3 parallel `bd` reads plus a pure `Compose` function; board model owns query routing
 - Dashboard provider collapsed to a metadata-only catalog (section IDs + titles)
 - Section totals and per-section item limits are now accurate
-- Gateway runner split into an `RWMutex` so reads run in parallel while writes remain serialized
+- Repository runner split into an `RWMutex` so reads run in parallel while writes remain serialized
 - Search results respect terminal height; result-pane prose wraps; query rail scales to ~30% of terminal width
 - Go toolchain bumped to 1.26.3; `bd` pinned in `.mise.toml`
 - `CLAUDE.md` simplified to `@AGENTS.md` reference
@@ -120,4 +120,4 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Configurable external launcher system (nvim, opencode, shell commands) with issue context interpolation
 - Runtime YAML configuration for editor, launchers, keybindings, and UI preferences (`~/.config/bwb/config.yaml`)
 - Context-sensitive help overlay for keybinding reference
-- Architecture foundations: `bd` CLI gateway abstraction (no direct SQL or Dolt internals), Bubble Tea TUI with controller/view separation, and automated architecture guardrail tests
+- Architecture foundations: `bd` CLI repository abstraction (no direct SQL or Dolt internals), Bubble Tea TUI with controller/view separation, and automated architecture guardrail tests
