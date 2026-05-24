@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hk9890/beads-workbench/internal/repository"
@@ -79,8 +80,10 @@ func Save(r *memory.Repository, path string) error {
 func SaveWithHash(r *memory.Repository, path string, bdCommitHash string) error {
 	issues := r.Snapshot()
 
-	// Write JSONL to a temp file, then rename.
-	tmpJSONL, err := os.CreateTemp("", "bwb-repo-*.jsonl")
+	// Write JSONL to a temp file in the same directory as the destination so
+	// that os.Rename never crosses a filesystem boundary (avoids EXDEV on
+	// Linux systems where /tmp is tmpfs and ~/.cache is on the root FS).
+	tmpJSONL, err := os.CreateTemp(filepath.Dir(path), "bwb-repo-*.jsonl")
 	if err != nil {
 		return fmt.Errorf("filestorage.Save: create temp jsonl: %w", err)
 	}
@@ -118,7 +121,7 @@ func SaveWithHash(r *memory.Repository, path string, bdCommitHash string) error 
 	}
 
 	manifestPath := path + ".manifest.json"
-	tmpManifest, err := os.CreateTemp("", "bwb-manifest-*.json")
+	tmpManifest, err := os.CreateTemp(filepath.Dir(manifestPath), "bwb-manifest-*.json")
 	if err != nil {
 		return fmt.Errorf("filestorage.Save: create temp manifest: %w", err)
 	}

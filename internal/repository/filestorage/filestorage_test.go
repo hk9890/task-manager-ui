@@ -369,6 +369,55 @@ func TestLoadManifestCorrupt(t *testing.T) {
 	}
 }
 
+// TestSaveWithHash_TempInDestinationDir verifies that SaveWithHash creates temp
+// files in the same directory as the destination path rather than in $TMPDIR.
+// When $TMPDIR is a non-existent path, any os.CreateTemp("", ...) call returns
+// an error; the fix — os.CreateTemp(filepath.Dir(path), ...) — is unaffected
+// and the call succeeds.
+func TestSaveWithHash_TempInDestinationDir(t *testing.T) {
+	// Allocate the temp dir BEFORE clobbering TMPDIR — t.TempDir() itself
+	// calls os.MkdirTemp which honors TMPDIR and would fail otherwise.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	// Now point TMPDIR at a path that does not exist.  Any remaining call to
+	// os.CreateTemp("", ...) in SaveWithHash will return an error and fail
+	// the test; the fix (filepath.Dir(path)) ignores TMPDIR entirely.
+	t.Setenv("TMPDIR", "/nonexistent/tmpdir-should-not-be-used")
+
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:     "dest-dir-1",
+		Title:  "temp-in-dest-dir test",
+		Status: "open",
+		Type:   "task",
+	})
+
+	if err := filestorage.SaveWithHash(r, path, "testhash"); err != nil {
+		t.Fatalf("SaveWithHash: unexpected error (TMPDIR was overridden to non-existent path — check that both CreateTemp calls use filepath.Dir): %v", err)
+	}
+
+	// Destination file and manifest must exist.
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("jsonl file not created: %v", err)
+	}
+	if _, err := os.Stat(path + ".manifest.json"); err != nil {
+		t.Errorf("manifest file not created: %v", err)
+	}
+
+	// No orphan temp files should remain in the destination dir after Save.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if name != "repo.jsonl" && name != "repo.jsonl.manifest.json" {
+			t.Errorf("unexpected file in destination dir (orphaned temp?): %q", name)
+		}
+	}
+}
+
 func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 	// Verify existing Save/Load signatures are preserved and still work.
 	r := memory.New()
