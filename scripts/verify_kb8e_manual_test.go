@@ -874,6 +874,23 @@ func TestKB8EVerification(t *testing.T) {
 
 	// -----------------------------------------------------------------------
 	// F14: new child visible after external add + RefreshIfChanged
+	//
+	// This test exercises the parentSiblingCache.Invalidate() path added in
+	// kb8e.14. The cache is only populated when a CHILD issue is fetched
+	// (hasParent=true), so we must call Issue(childID) — not Issue(epicID) —
+	// to prove that the Invalidate() hook actually clears stale sibling data.
+	//
+	// Flow:
+	//   1. Create epic P + child c1 (--parent P)
+	//   2. Issue(c1) → hasParent=true → parentChildSiblings(P) → cache[P]=[c1]
+	//   3. Prime RefreshIfChanged baseline (hash A)
+	//   4. Externally add child c2 (--parent P)
+	//   5. Record hash B, store in atomic
+	//   6. RefreshIfChanged → detects A→B → memory.Reset() + backing.Invalidate()
+	//      (clears parentSiblingCache)
+	//   7. Issue(c1) again → cache miss → re-fetches c1 from bd →
+	//      parentChildSiblings(P) runs fresh → returns [c1, c2]
+	//   8. Assert ParentGroupBrowser.Children contains both c1 and c2
 	// -----------------------------------------------------------------------
 	t.Run("F14_new_child_visible_after_external_add", func(t *testing.T) {
 		proj := newProject(t)
@@ -883,9 +900,14 @@ func TestKB8EVerification(t *testing.T) {
 		if epicID == "" {
 			t.Fatalf("could not extract epic ID from: %s", epicOut)
 		}
-		mustRunBD(t, proj, "create", "F14 Child initial", "--parent", epicID)
 
-		// Get baseline hash.
+		c1Out := mustRunBD(t, proj, "create", "F14 Child 1", "--parent", epicID, "--json")
+		c1ID := extractJSONField(c1Out, "id")
+		if c1ID == "" {
+			t.Fatalf("could not extract c1 ID from: %s", c1Out)
+		}
+
+		// Get baseline hash AFTER creating P and c1.
 		hashA, err := currentHash(proj)
 		if err != nil {
 			record("F14 new child visible after external add", fail,
@@ -910,20 +932,28 @@ func TestKB8EVerification(t *testing.T) {
 		// Prime the baseline: RefreshIfChanged call 1 sets lastHash = hashA.
 		c.RefreshIfChanged(ctx)
 
-		// Fetch epic to populate the parentSiblingCache.
-		detail1, err := c.Issue(ctx, epicID)
+		// Fetch CHILD c1 (not the epic) to populate parentSiblingCache[epicID].
+		// hasParent=true for c1 → parentChildSiblings(epicID) → cache[epicID]=[c1].
+		detail1, err := c.Issue(ctx, c1ID)
 		if err != nil {
 			record("F14 new child visible after external add", fail,
-				fmt.Sprintf("Issue(epic) before add: %v", err))
+				fmt.Sprintf("Issue(c1) before add: %v", err))
 			return
 		}
-		initialChildCount := len(detail1.Children)
+		// Sanity: c1's ParentGroupBrowser must reference epic as parent.
+		if detail1.ParentGroupBrowser.Parent.ID != epicID {
+			record("F14 new child visible after external add", fail,
+				fmt.Sprintf("c1.ParentGroupBrowser.Parent.ID: want %s, got %s",
+					epicID, detail1.ParentGroupBrowser.Parent.ID))
+			return
+		}
+		initialSiblingCount := len(detail1.ParentGroupBrowser.Children)
 
-		// Externally add a new child.
-		c3Out := mustRunBD(t, proj, "create", "F14 Child new", "--parent", epicID, "--json")
-		c3ID := extractJSONField(c3Out, "id")
-		if c3ID == "" {
-			t.Fatalf("could not extract new child ID from: %s", c3Out)
+		// Externally add a second child c2.
+		c2Out := mustRunBD(t, proj, "create", "F14 Child 2", "--parent", epicID, "--json")
+		c2ID := extractJSONField(c2Out, "id")
+		if c2ID == "" {
+			t.Fatalf("could not extract c2 ID from: %s", c2Out)
 		}
 
 		// Record new hash after mutation.
@@ -938,30 +968,36 @@ func TestKB8EVerification(t *testing.T) {
 		// RefreshIfChanged sees hash change → Reset memory + Invalidate parentSiblingCache.
 		c.RefreshIfChanged(ctx)
 
-		// Re-fetch epic: should now include the new child.
-		detail2, err := c.Issue(ctx, epicID)
+		// Re-fetch CHILD c1: cache miss → re-fetches from bd →
+		// parentChildSiblings(epicID) runs fresh (cache was cleared) → returns [c1, c2].
+		detail2, err := c.Issue(ctx, c1ID)
 		if err != nil {
 			record("F14 new child visible after external add", fail,
-				fmt.Sprintf("Issue(epic) after add: %v", err))
+				fmt.Sprintf("Issue(c1) after add: %v", err))
 			return
 		}
 
-		foundC3 := false
-		for _, ch := range detail2.Children {
-			if ch.ID == c3ID {
-				foundC3 = true
-				break
+		foundC1, foundC2 := false, false
+		for _, ch := range detail2.ParentGroupBrowser.Children {
+			if ch.ID == c1ID {
+				foundC1 = true
+			}
+			if ch.ID == c2ID {
+				foundC2 = true
 			}
 		}
-		if !foundC3 {
+		if !foundC1 || !foundC2 {
 			record("F14 new child visible after external add", fail,
-				fmt.Sprintf("new child %s not visible after RefreshIfChanged: children=%v",
-					c3ID, detail2.Children))
+				fmt.Sprintf("parentSiblingCache.Invalidate() did not expose c2: "+
+					"siblings before=%d after=%d; want [%s,%s] in ParentGroupBrowser.Children=%v",
+					initialSiblingCount, len(detail2.ParentGroupBrowser.Children),
+					c1ID, c2ID, detail2.ParentGroupBrowser.Children))
 			return
 		}
 		record("F14 new child visible after external add", pass,
-			fmt.Sprintf("children before=%d after=%d; new child %s visible after RefreshIfChanged",
-				initialChildCount, len(detail2.Children), c3ID))
+			fmt.Sprintf("siblings before=%d after=%d; c1=%s and c2=%s both in "+
+				"ParentGroupBrowser.Children after RefreshIfChanged (parentSiblingCache.Invalidate confirmed)",
+				initialSiblingCount, len(detail2.ParentGroupBrowser.Children), c1ID, c2ID))
 	})
 
 	// -----------------------------------------------------------------------
