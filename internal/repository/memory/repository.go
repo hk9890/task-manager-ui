@@ -49,6 +49,7 @@ type storedIssue struct {
 	priority    int
 	issueType   string
 	assignee    string
+	creator     string
 	labels      []string
 	description string
 	notes       string
@@ -718,6 +719,7 @@ type SnapshotIssue struct {
 	Priority    int
 	Type        string
 	Assignee    string
+	Creator     string
 	Labels      []string
 	Description string
 	Notes       string
@@ -814,6 +816,7 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			Priority:      si.priority,
 			Type:          si.issueType,
 			Assignee:      si.assignee,
+			Creator:       si.creator,
 			Labels:        labels,
 			Description:   si.description,
 			Notes:         si.notes,
@@ -1011,6 +1014,7 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 
 	return domain.IssueDetail{
 		Summary:            sum,
+		Creator:            si.creator,
 		Description:        si.description,
 		Notes:              si.notes,
 		ClosedAt:           si.closed,

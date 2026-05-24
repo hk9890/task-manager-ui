@@ -56,17 +56,21 @@ func (r *Repository) SeedFromSnapshot(snap SnapshotIssue) {
 		Updated:     snap.Updated,
 	})
 
-	// Restore cross-reference metadata when present.
-	// The nil check is the sentinel: nil → leave storedIssue field nil (re-resolve).
-	hasRefs := snap.BlockedByRefs != nil ||
+	// Restore cross-reference metadata and Creator when present.
+	// The nil check is the sentinel for refs: nil → leave storedIssue field nil (re-resolve).
+	hasExtras := snap.BlockedByRefs != nil ||
 		snap.RelatedRefs != nil ||
 		snap.ParentRef != nil ||
-		snap.ChildrenRefs != nil
+		snap.ChildrenRefs != nil ||
+		snap.Creator != ""
 
-	if hasRefs {
+	if hasExtras {
 		r.mu.Lock()
 		si := r.issues[snap.ID]
 
+		if snap.Creator != "" {
+			si.creator = snap.Creator
+		}
 		if snap.BlockedByRefs != nil {
 			refs := make([]domain.IssueReference, len(snap.BlockedByRefs))
 			copy(refs, snap.BlockedByRefs)
@@ -189,6 +193,7 @@ func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 		priority:      sum.Priority,
 		issueType:     sum.Type,
 		assignee:      sum.Assignee,
+		creator:       detail.Creator,
 		labels:        labels,
 		description:   detail.Description,
 		notes:         detail.Notes,

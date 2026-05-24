@@ -1359,3 +1359,69 @@ func TestSeedDetail_RoundTrip(t *testing.T) {
 		t.Errorf("Description: got %q, want %q", got.Description, detail.Description)
 	}
 }
+
+// TestSeedDetail_PreservesCreator verifies that SeedDetail preserves the
+// Creator field and that a subsequent Issue call returns it correctly.
+func TestSeedDetail_PreservesCreator(t *testing.T) {
+	r := memory.New()
+
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:     "creator-1",
+			Title:  "issue with creator",
+			Status: "open",
+			Type:   "task",
+		},
+		Creator: "alice",
+	}
+
+	r.SeedDetail(detail)
+
+	got, err := r.Issue(context.Background(), "creator-1")
+	if err != nil {
+		t.Fatalf("Issue after SeedDetail: %v", err)
+	}
+	if got.Creator != "alice" {
+		t.Errorf("Creator: got %q, want %q", got.Creator, "alice")
+	}
+}
+
+// TestSnapshotRoundTrip_PreservesCreator verifies that Creator survives a
+// Snapshot → JSON marshal/unmarshal → SeedFromSnapshot → Issue round-trip.
+func TestSnapshotRoundTrip_PreservesCreator(t *testing.T) {
+	src := memory.New()
+
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:     "snap-creator-1",
+			Title:  "issue for snapshot creator test",
+			Status: "open",
+			Type:   "task",
+		},
+		Creator: "alice",
+	}
+	src.SeedDetail(detail)
+
+	snaps := src.Snapshot()
+
+	dst := memory.New()
+	for _, snap := range snaps {
+		raw, err := json.Marshal(snap)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		var decoded memory.SnapshotIssue
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal: %v", err)
+		}
+		dst.SeedFromSnapshot(decoded)
+	}
+
+	got, err := dst.Issue(context.Background(), "snap-creator-1")
+	if err != nil {
+		t.Fatalf("Issue after SeedFromSnapshot: %v", err)
+	}
+	if got.Creator != "alice" {
+		t.Errorf("Creator after round-trip: got %q, want %q", got.Creator, "alice")
+	}
+}
