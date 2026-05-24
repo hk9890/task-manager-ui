@@ -13,7 +13,10 @@ import (
 	"reflect"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/hk9890/beads-workbench/internal/bd"
+	"github.com/hk9890/beads-workbench/internal/domain"
 	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
@@ -91,6 +94,70 @@ func TestSearchModeInitArgvShapeEmptyQuery(t *testing.T) {
 	}
 
 	assertSearchArgvPresent(t, calls, wantArgv)
+}
+
+// TestSearchModeTextSearchArgvShape verifies that a typed-then-Enter search
+// emits exactly:
+//
+//	bd search <text> --json --limit N
+//
+// (no --status flag: bd search excludes closed by default when no --status is
+// given, matching bd's own default behavior — czkq.4 fix).
+func TestSearchModeTextSearchArgvShape(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"search", "task", "--json", "--limit", "20"}
+
+	rec := fakes.NewRecordingExecutor()
+	// Init empty-query call.
+	rec.OnArgs([]string{"list", "--json", "--all", "--limit", "20"}).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
+	// Text search call.
+	rec.OnArgs(wantArgv).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
+
+	m := newSearchRecordingModel(rec)
+	initCmd := m.Init()
+	// Drain Init before simulating the text+Enter sequence.
+	for _, msg := range drainCmd(initCmd) {
+		_ = m.Update(msg)
+	}
+
+	// Type "task" and press Enter.
+	for _, r := range []rune("task") {
+		_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	searchCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if searchCmd != nil {
+		_ = searchCmd() // drive the subprocess call
+	}
+
+	// Assert the text-search argv was emitted.
+	assertSearchArgvPresent(t, rec.Calls(), wantArgv)
+}
+
+// TestSearchModeTextSearchArgvShape_WithExplicitStatus verifies that when
+// a status filter is explicitly provided, --status is passed to bd search.
+func TestSearchModeTextSearchArgvShape_WithExplicitStatus(t *testing.T) {
+	t.Parallel()
+
+	wantArgv := []string{"search", "task", "--json", "--status", "closed", "--limit", "20"}
+
+	rec := fakes.NewRecordingExecutor()
+	rec.OnArgs([]string{"list", "--json", "--all", "--limit", "20"}).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
+	rec.OnArgs(wantArgv).Return(bd.ExecResult{Stdout: []byte(`[]`)}, nil)
+
+	runner := bd.NewCommandRunner(bd.RunnerConfig{Command: "bd", Executor: rec})
+	repo := repositorybeads.New(runner)
+	// Use the repository directly since the model doesn't expose status-filter selection yet.
+	cmd := loadSearchCmd(repo, domain.SearchIssuesQuery{
+		Text:     "task",
+		Statuses: []string{"closed"},
+		Limit:    20,
+	})
+	if cmd != nil {
+		_ = cmd()
+	}
+
+	assertSearchArgvPresent(t, rec.Calls(), wantArgv)
 }
 
 // TestSearchModeInitArgvShapeAtLimitBoundaries verifies the --limit value in

@@ -219,11 +219,12 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 	}
 	args = append(args, "--json")
 
-	filterStatuses := query.Statuses
-	if len(filterStatuses) == 0 {
-		filterStatuses = []string{"all"}
-	}
-	args = append(args, leanBuildFilterArgs(filterStatuses, query.Types, query.PriorityMin, query.PriorityMax, query.Assignee, query.Labels)...)
+	// When no explicit statuses are requested, pass query.Statuses as-is (empty
+	// slice). leanBuildFilterArgs omits --status entirely when the slice is
+	// empty, letting bd search use its own default which excludes closed issues.
+	// Callers who want closed issues must set query.Statuses = []string{"closed"}
+	// or []string{"all"} explicitly.
+	args = append(args, leanBuildFilterArgs(query.Statuses, query.Types, query.PriorityMin, query.PriorityMax, query.Assignee, query.Labels)...)
 
 	if limit := leanWithOffsetWindow(query.Limit, query.Offset); limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(limit))

@@ -10,7 +10,8 @@
 //
 //   - Empty text + WorkStateAny → `bd list --json --all [--limit N]`
 //     (no `bd search` equivalent for "all issues unfiltered")
-//   - Text present + WorkStateAny → `bd search <text> --json --status all [--limit N]`
+//   - Text present + WorkStateAny, no Statuses → `bd search <text> --json [--limit N]`
+//     (no --status flag; bd search excludes closed by default)
 //   - Text present + status filter → `bd search <text> --json --status <s> [--limit N]`
 //   - WorkStateReady (any text) → `bd ready --json` + in-memory text/priority filter
 //   - WorkStateBlocked (any text) → `bd blocked --json` + in-memory text/priority filter
@@ -62,6 +63,10 @@ var queryMatrix = []queryCase{
 	{
 		name:  "text=test",
 		query: domain.SearchIssuesQuery{Text: "test", Limit: parityLimit},
+	},
+	{
+		name:  "text=task",
+		query: domain.SearchIssuesQuery{Text: "task", Limit: parityLimit},
 	},
 	{
 		name:  "text=fix",
@@ -288,15 +293,15 @@ func assertParityBdSearch(t *testing.T, ds datasets.Dataset, qc queryCase, gwPag
 	text := strings.TrimSpace(q.Text)
 
 	// Replicate what SearchIssues sends to bd search:
-	// bd search <text> --json --status all|<s> [--limit N]
+	// bd search <text> --json [--status <s>] [--limit N]
+	// When no explicit statuses are set, no --status flag is passed — bd search
+	// uses its own default which excludes closed issues.
 	var bdArgs []string
 	bdArgs = append(bdArgs, text)
 
-	statuses := q.Statuses
-	if len(statuses) == 0 {
-		statuses = []string{"all"}
+	if len(q.Statuses) > 0 {
+		bdArgs = append(bdArgs, "--status", strings.Join(q.Statuses, ","))
 	}
-	bdArgs = append(bdArgs, "--status", strings.Join(statuses, ","))
 
 	limit := withOffsetWindow(q.Limit, q.Offset)
 	if limit > 0 {

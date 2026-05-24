@@ -65,6 +65,12 @@ type Model struct {
 	pendingOpenPriorityDialog bool
 
 	pendingSelectionAnchor *selectionAnchor
+
+	// pendingDraft holds a typed+submitted draft query that arrived while a
+	// search was already in flight. When the in-flight search resolves, this
+	// pending submit is automatically re-fired so the user's Enter intent is
+	// never silently discarded.
+	pendingDraft *string
 }
 
 // NewModel creates a search mode controller.
@@ -135,6 +141,19 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.normalizeSelection()
 		}
 		m.selectedDetail = domain.IssueDetail{}
+
+		// If the user pressed Enter while this search was in flight, consume the
+		// queued intent and fire the pending search now that we're no longer loading.
+		// Only re-fire when the pending query actually differs from what just landed;
+		// if they match, the result set is already correct.
+		if m.pendingDraft != nil {
+			pending := *m.pendingDraft
+			m.pendingDraft = nil
+			if pending != m.appliedQuery {
+				return m.triggerSearchWithAnchor(pending, nil)
+			}
+		}
+
 		return m.selectionChangedCmd()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -184,6 +203,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.typing = true
 		return nil
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusQuery:
+		if m.loading {
+			// A search is already in flight (often the Init empty-query load).
+			// Queue this submit so it fires once the in-flight search resolves.
+			// The searchLoadedMsg handler will consume pendingDraft and re-fire.
+			draft := strings.TrimSpace(m.draftQuery)
+			m.pendingDraft = &draft
+			return nil
+		}
 		return m.triggerSearch()
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusMetadata:
 		switch m.metadataSelectedField {

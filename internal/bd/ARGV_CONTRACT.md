@@ -36,7 +36,8 @@ the only current dynamic cross-check (see Pinning Test Coverage below).
 | `launcher/editor.IssueEditor.EditIssue` | `ShowIssue` | `bd show <issueID> --json` | `internal/launcher/editor/service.go:57` |
 | `search.loadSearchCmd` (empty text, no WorkState filter) | `SearchIssues` → `searchIssuesFromList` | `bd list --json --all [--limit <N>]` | `internal/repository/beads/read_repository.go:431–448` |
 | `search.loadSearchCmd` (empty text, with status filter) | `SearchIssues` → `searchIssuesFromList` | `bd list --json --status <csv> [--limit <N>]` | `internal/repository/beads/read_repository.go:431–448` |
-| `search.loadSearchCmd` (non-empty text, WorkState=Any) | `SearchIssues` | `bd search <text> --json --status all [--status <csv>] [--type <csv>] [--priority-min <N>] [--priority-max <N>] [--assignee <name>] [--label <l>]... [--limit <N>]` | `internal/repository/beads/read_repository.go:354–396` |
+| `search.loadSearchCmd` (non-empty text, WorkState=Any, no status filter) | `SearchIssues` | `bd search <text> --json [--type <csv>] [--priority-min <N>] [--priority-max <N>] [--assignee <name>] [--label <l>]... [--limit <N>]` | `internal/repository/beads/lean_reads.go:215–247` |
+| `search.loadSearchCmd` (non-empty text, WorkState=Any, with status filter) | `SearchIssues` | `bd search <text> --json --status <token> [--type <csv>] [--priority-min <N>] [--priority-max <N>] [--assignee <name>] [--label <l>]... [--limit <N>]` | `internal/repository/beads/lean_reads.go:215–247` |
 | `search.loadSearchCmd` (WorkState=Ready) | `SearchIssues` → `searchIssuesFromReady` | `bd ready --json` | `internal/repository/beads/read_repository.go:473` |
 | `search.loadSearchCmd` (WorkState=Blocked) | `SearchIssues` → `searchIssuesFromBlocked` | `bd blocked --json` | `internal/repository/beads/read_repository.go:484` |
 | `app.loadMutationCatalogsCmd` (create/update/comment) | `StatusCatalog` | `bd statuses --json` | `internal/repository/beads/read_repository.go:666` |
@@ -92,7 +93,7 @@ Collapsed to unique bd verb invocations:
 4. `bd count --by-status --json [--status <single-value>]` (see per-subcommand --status semantics; multi-status omits the flag and filters in-memory)
 5. `bd show <id> --json`
 6. `bd list --json [--all | --status <csv>] [--type <csv>] [--priority-min N] [--priority-max N] [--assignee <name>] [--label <l>]... [--limit N]`
-7. `bd search <text> --json --status <token> [--type <csv>] [--priority-min N] [--priority-max N] [--assignee <name>] [--label <l>]... [--limit N]`
+7. `bd search <text> --json [--status <token>] [--type <csv>] [--priority-min N] [--priority-max N] [--assignee <name>] [--label <l>]... [--limit N]` (no --status when Statuses is empty — bd excludes closed by default)
 8. `bd ready --json`
 9. `bd blocked --json`
 10. `bd statuses --json`
@@ -120,7 +121,8 @@ Collapsed to unique bd verb invocations:
 | `bd query <expr> --json --limit N` (dynamic limits) | YES — `TestQueryArgvBoundaryLimits` (limit=1, 50, 51) + `TestBoardClosedQueryArgvLimitDynamicBoundaries` (height-driven) (ppja.3) | `read_repository_test.go` + `internal/mode/board/model_test.go` |
 | `bd list --json --all [--limit N]` (SearchIssues empty-text path) | YES — `TestSearchIssuesEmptyTextNoWorkStateArgvShape` (limit=0,1,20,21) + `TestSearchModeInitArgvShape*` (ppja.3) | `read_repository_test.go` + `internal/mode/search/argv_cardinality_test.go` |
 | `bd list --json --status <csv> [filters]` (SearchIssues with status filter) | YES — `TestSearchIssuesStatusFilteredListArgvShape` (ppja.3) | `internal/repository/beads/read_repository_test.go` |
-| `bd search <text> --json --status all [--limit N]` | YES — `TestSearchIssuesTextSearchArgvShape` (limit=1, 20, 21) (ppja.3) | `internal/repository/beads/read_repository_test.go` |
+| `bd search <text> --json [--limit N]` (no status filter — bd default excludes closed) | YES — `TestSearchModeTextSearchArgvShape` (czkq.4) | `internal/mode/search/argv_cardinality_test.go` |
+| `bd search <text> --json --status <token> [--limit N]` (explicit status filter) | YES — `TestSearchModeTextSearchArgvShape_WithExplicitStatus` (czkq.4) | `internal/mode/search/argv_cardinality_test.go` |
 | `bd ready --json` (SearchIssues WorkState=Ready path) | YES — `TestSearchIssuesWorkStateReadyArgvShape` (ppja.3) | `internal/repository/beads/read_repository_test.go` |
 | `bd blocked --json` (SearchIssues WorkState=Blocked path) | YES — `TestSearchIssuesWorkStateBlockedArgvShape` (ppja.3) | `internal/repository/beads/read_repository_test.go` |
 | `bd statuses --json` | YES — `TestStatusCatalogArgvShape` (ppja.3) | `internal/repository/beads/read_repository_test.go` |
