@@ -207,6 +207,11 @@ func LoadWithManifest(path string) (*memory.Repository, Manifest, error) {
 
 	r := memory.New()
 	scanner := bufio.NewScanner(f)
+	// Raise the per-token cap to 16 MiB. The default 64 KiB limit causes
+	// scanner.Scan to return false with bufio.ErrTooLong for any issue whose
+	// serialised SnapshotIssue JSON line exceeds that size (e.g. an issue with
+	// a long markdown design doc in its Description field).
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

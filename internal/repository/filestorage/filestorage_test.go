@@ -1,9 +1,11 @@
 package filestorage_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -442,5 +444,46 @@ func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 	snap := loaded.Snapshot()
 	if len(snap) != 1 || snap[0].ID != "legacy-1" {
 		t.Fatalf("round-trip: expected issue legacy-1, got %v", snap)
+	}
+}
+
+// TestLoad_LargeIssueLine verifies that Load succeeds when a SnapshotIssue JSON
+// line exceeds the bufio.Scanner default 64 KiB token limit. Before the fix,
+// scanner.Scan returned false with bufio.ErrTooLong and Load failed wholesale.
+func TestLoad_LargeIssueLine(t *testing.T) {
+	const descLen = 200_000 // well above the 64 KiB default limit
+	longDesc := strings.Repeat("a", descLen)
+
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:          "large-1",
+		Title:       "issue with large description",
+		Status:      "open",
+		Type:        "task",
+		Description: longDesc,
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "large.jsonl")
+
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: unexpected error: %v", err)
+	}
+
+	loaded, err := filestorage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error (large description line exceeded scanner buffer?): %v", err)
+	}
+
+	detail, err := loaded.Issue(context.Background(), "large-1")
+	if err != nil {
+		t.Fatalf("Issue(large-1): unexpected error: %v", err)
+	}
+
+	if len(detail.Description) != descLen {
+		t.Errorf("Description length: got %d, want %d", len(detail.Description), descLen)
+	}
+	if !strings.HasPrefix(detail.Description, "aaaa") {
+		t.Errorf("Description prefix: got %q..., want all 'a'", detail.Description[:min(20, len(detail.Description))])
 	}
 }
