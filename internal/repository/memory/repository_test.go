@@ -1239,6 +1239,90 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 
 // ---- SeedDetail tests ----
 
+// TestSeedDetail_PreservesCrossRefMetadata verifies that SeedDetail stores full
+// IssueReference metadata (Title, Status, Type, Priority) for cross-referenced
+// issues, and that a subsequent Issue call returns those fields verbatim — even
+// when the referenced issues (B, R, P, C1) were never seeded into the store.
+func TestSeedDetail_PreservesCrossRefMetadata(t *testing.T) {
+	r := memory.New()
+
+	// Seed ONLY issue A; do NOT seed B, R, P, or C1.
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:       "A",
+			Title:    "Issue A",
+			Status:   "open",
+			Type:     "task",
+			Priority: 0,
+		},
+		BlockedBy: []domain.IssueReference{
+			{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1},
+		},
+		Related: []domain.IssueReference{
+			{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0},
+		},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{
+				ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2,
+			},
+			Children: []domain.IssueReference{
+				{ID: "C1", Title: "Child", Status: "open", Type: "task", Priority: 0},
+			},
+		},
+	}
+
+	r.SeedDetail(detail)
+
+	got, err := r.Issue(context.Background(), "A")
+	if err != nil {
+		t.Fatalf("Issue(A) after SeedDetail: %v", err)
+	}
+
+	// BlockedBy: cross-ref B was never seeded — must preserve all metadata.
+	if len(got.BlockedBy) != 1 {
+		t.Fatalf("BlockedBy: got %d entries, want 1", len(got.BlockedBy))
+	}
+	wantBlockedBy := domain.IssueReference{
+		ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1,
+	}
+	if !reflect.DeepEqual(got.BlockedBy[0], wantBlockedBy) {
+		t.Errorf("BlockedBy[0]:\n  got  %+v\n  want %+v", got.BlockedBy[0], wantBlockedBy)
+	}
+
+	// Related: cross-ref R was never seeded — must preserve all metadata.
+	if len(got.Related) != 1 {
+		t.Fatalf("Related: got %d entries, want 1", len(got.Related))
+	}
+	wantRelated := domain.IssueReference{
+		ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0,
+	}
+	if !reflect.DeepEqual(got.Related[0], wantRelated) {
+		t.Errorf("Related[0]:\n  got  %+v\n  want %+v", got.Related[0], wantRelated)
+	}
+
+	// ParentGroupBrowser.Parent: cross-ref P was never seeded — must preserve metadata.
+	wantParent := domain.IssueReference{
+		ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2,
+	}
+	if !reflect.DeepEqual(got.ParentGroupBrowser.Parent, wantParent) {
+		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v",
+			got.ParentGroupBrowser.Parent, wantParent)
+	}
+
+	// ParentGroupBrowser.Children: cross-ref C1 was never seeded — must preserve metadata.
+	if len(got.ParentGroupBrowser.Children) != 1 {
+		t.Fatalf("ParentGroupBrowser.Children: got %d entries, want 1",
+			len(got.ParentGroupBrowser.Children))
+	}
+	wantChild := domain.IssueReference{
+		ID: "C1", Title: "Child", Status: "open", Type: "task", Priority: 0,
+	}
+	if !reflect.DeepEqual(got.ParentGroupBrowser.Children[0], wantChild) {
+		t.Errorf("ParentGroupBrowser.Children[0]:\n  got  %+v\n  want %+v",
+			got.ParentGroupBrowser.Children[0], wantChild)
+	}
+}
+
 func TestSeedDetail_RoundTrip(t *testing.T) {
 	r := memory.New()
 

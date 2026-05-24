@@ -62,6 +62,17 @@ type storedIssue struct {
 	updated     time.Time
 	closed      time.Time
 	closeReason string
+
+	// Full IssueReference metadata for cross-ref projection, stored at SeedDetail
+	// time so that toDetailLocked can return them verbatim without re-resolving
+	// against r.issues. These are nil when the issue was seeded via Seed (not
+	// SeedDetail); toDetailLocked falls back to re-resolution in that case.
+	// The nil-vs-non-nil distinction is the sentinel: non-nil (even empty slice)
+	// means "use verbatim"; nil means "re-resolve from memory map".
+	blockedByRefs []domain.IssueReference // corresponds to dependsOn
+	relatedRefs   []domain.IssueReference // corresponds to related
+	parentRef     *domain.IssueReference  // corresponds to parentID (nil = re-resolve)
+	childrenRefs  []domain.IssueReference // corresponds to childrenIDs
 }
 
 // storedComment is a comment record inside a storedIssue.
@@ -785,24 +796,37 @@ func (r *Repository) toSummaryLocked(si *storedIssue) domain.IssueSummary {
 
 // toDetailLocked projects a storedIssue to domain.IssueDetail with resolved
 // dep references. Caller must hold at least RLock.
+//
+// When blockedByRefs/relatedRefs/parentRef/childrenRefs are non-nil (set by
+// SeedDetail), they are returned verbatim without re-resolving against r.issues.
+// When those fields are nil (set by Seed), the classic re-resolution path is
+// used instead. The nil-vs-non-nil distinction is the sentinel.
 func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	sum := r.toSummaryLocked(si)
 
 	// Resolve DependsOn as BlockedBy references.
-	blockedBy := make([]domain.IssueReference, 0, len(si.dependsOn))
-	for _, depID := range si.dependsOn {
-		dep, ok := r.issues[depID]
-		if !ok {
-			blockedBy = append(blockedBy, domain.IssueReference{ID: depID})
-			continue
+	// Use stored refs verbatim when available (SeedDetail path); otherwise
+	// re-resolve from the in-memory map (Seed path).
+	var blockedBy []domain.IssueReference
+	if si.blockedByRefs != nil {
+		blockedBy = make([]domain.IssueReference, len(si.blockedByRefs))
+		copy(blockedBy, si.blockedByRefs)
+	} else {
+		blockedBy = make([]domain.IssueReference, 0, len(si.dependsOn))
+		for _, depID := range si.dependsOn {
+			dep, ok := r.issues[depID]
+			if !ok {
+				blockedBy = append(blockedBy, domain.IssueReference{ID: depID})
+				continue
+			}
+			blockedBy = append(blockedBy, domain.IssueReference{
+				ID:       dep.id,
+				Title:    dep.title,
+				Type:     dep.issueType,
+				Priority: dep.priority,
+				Status:   dep.status,
+			})
 		}
-		blockedBy = append(blockedBy, domain.IssueReference{
-			ID:       dep.id,
-			Title:    dep.title,
-			Type:     dep.issueType,
-			Priority: dep.priority,
-			Status:   dep.status,
-		})
 	}
 
 	// Resolve Blocks: if blocksIDs is explicitly set, use it; otherwise fall
@@ -855,25 +879,37 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	}
 
 	// Resolve Related references.
-	related := make([]domain.IssueReference, 0, len(si.related))
-	for _, relID := range si.related {
-		rel, ok := r.issues[relID]
-		if !ok {
-			related = append(related, domain.IssueReference{ID: relID})
-			continue
+	// Use stored refs verbatim when available (SeedDetail path); otherwise re-resolve.
+	var related []domain.IssueReference
+	if si.relatedRefs != nil {
+		related = make([]domain.IssueReference, len(si.relatedRefs))
+		copy(related, si.relatedRefs)
+	} else {
+		related = make([]domain.IssueReference, 0, len(si.related))
+		for _, relID := range si.related {
+			rel, ok := r.issues[relID]
+			if !ok {
+				related = append(related, domain.IssueReference{ID: relID})
+				continue
+			}
+			related = append(related, domain.IssueReference{
+				ID:       rel.id,
+				Title:    rel.title,
+				Type:     rel.issueType,
+				Priority: rel.priority,
+				Status:   rel.status,
+			})
 		}
-		related = append(related, domain.IssueReference{
-			ID:       rel.id,
-			Title:    rel.title,
-			Type:     rel.issueType,
-			Priority: rel.priority,
-			Status:   rel.status,
-		})
 	}
 
 	// Resolve ParentGroupBrowserContext.
+	// Use stored refs verbatim when available (SeedDetail path); otherwise re-resolve.
 	var parentGroupBrowser domain.ParentGroupBrowserContext
-	if si.parentID != "" {
+	if si.parentRef != nil {
+		// SeedDetail path: parentRef was stored verbatim.
+		parentGroupBrowser.Parent = *si.parentRef
+	} else if si.parentID != "" {
+		// Seed path: re-resolve from memory map.
 		parent, ok := r.issues[si.parentID]
 		if ok {
 			parentGroupBrowser.Parent = domain.IssueReference{
@@ -887,20 +923,28 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 			parentGroupBrowser.Parent = domain.IssueReference{ID: si.parentID}
 		}
 	}
-	children := make([]domain.IssueReference, 0, len(si.childrenIDs))
-	for _, childID := range si.childrenIDs {
-		child, ok := r.issues[childID]
-		if !ok {
-			children = append(children, domain.IssueReference{ID: childID})
-			continue
+	var children []domain.IssueReference
+	if si.childrenRefs != nil {
+		// SeedDetail path: childrenRefs were stored verbatim.
+		children = make([]domain.IssueReference, len(si.childrenRefs))
+		copy(children, si.childrenRefs)
+	} else {
+		// Seed path: re-resolve from memory map.
+		children = make([]domain.IssueReference, 0, len(si.childrenIDs))
+		for _, childID := range si.childrenIDs {
+			child, ok := r.issues[childID]
+			if !ok {
+				children = append(children, domain.IssueReference{ID: childID})
+				continue
+			}
+			children = append(children, domain.IssueReference{
+				ID:       child.id,
+				Title:    child.title,
+				Type:     child.issueType,
+				Priority: child.priority,
+				Status:   child.status,
+			})
 		}
-		children = append(children, domain.IssueReference{
-			ID:       child.id,
-			Title:    child.title,
-			Type:     child.issueType,
-			Priority: child.priority,
-			Status:   child.status,
-		})
 	}
 	parentGroupBrowser.Children = children
 

@@ -30,28 +30,44 @@ func (r *Repository) Reset() {
 // memory.Issue. The caller always returns the backing's IssueDetail directly
 // to the end caller, so any minor projection differences (e.g. reverse Blocks
 // lookup) do not affect the user-visible result.
+//
+// SeedDetail stores the full IssueReference metadata for BlockedBy, Related,
+// and ParentGroupBrowser cross-references on the storedIssue. This ensures
+// that a subsequent Issue(id) call (cache hit) returns the full metadata
+// verbatim, even when the referenced issues have never been seeded themselves.
 func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 	sum := detail.Summary
 
 	labels := make([]string, len(sum.Labels))
 	copy(labels, sum.Labels)
 
-	// Translate BlockedBy references back to raw dep IDs.
+	// Translate BlockedBy references back to raw dep IDs (for depStateLocked /
+	// matchesSearchLocked / Dashboard which only need IDs), and also store the
+	// full IssueReference slice verbatim so toDetailLocked can return them
+	// without re-resolving.
 	dependsOn := make([]string, 0, len(detail.BlockedBy))
-	for _, ref := range detail.BlockedBy {
+	blockedByRefs := make([]domain.IssueReference, len(detail.BlockedBy))
+	for i, ref := range detail.BlockedBy {
 		dependsOn = append(dependsOn, ref.ID)
+		blockedByRefs[i] = ref
 	}
 
 	// Translate Blocks references back to explicit blocksIDs.
+	// Note: the stored blocksRefs are NOT stored separately; the Blocks bucket
+	// in toDetailLocked remains a computed reverse-lookup (or explicit blocksIDs
+	// re-resolution). This matches the task scope — only BlockedBy, Related, and
+	// ParentGroupBrowser cross-refs are preserved verbatim.
 	blocksIDs := make([]string, 0, len(detail.Blocks))
 	for _, ref := range detail.Blocks {
 		blocksIDs = append(blocksIDs, ref.ID)
 	}
 
-	// Translate Related references back to raw IDs.
+	// Translate Related references back to raw IDs and store full refs.
 	related := make([]string, 0, len(detail.Related))
-	for _, ref := range detail.Related {
+	relatedRefs := make([]domain.IssueReference, len(detail.Related))
+	for i, ref := range detail.Related {
 		related = append(related, ref.ID)
+		relatedRefs[i] = ref
 	}
 
 	// Translate Comments.
@@ -65,34 +81,47 @@ func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 		}
 	}
 
-	// Translate ParentGroupBrowser.
+	// Translate ParentGroupBrowser: store both the raw ID fields (for
+	// backward-compatible re-resolution paths) and the full IssueReference
+	// metadata (for verbatim projection on cache hit).
 	parentID := detail.ParentGroupBrowser.Parent.ID
+	var parentRef *domain.IssueReference
+	if parentID != "" {
+		ref := detail.ParentGroupBrowser.Parent
+		parentRef = &ref
+	}
 
 	childrenIDs := make([]string, 0, len(detail.ParentGroupBrowser.Children))
-	for _, ref := range detail.ParentGroupBrowser.Children {
+	childrenRefs := make([]domain.IssueReference, len(detail.ParentGroupBrowser.Children))
+	for i, ref := range detail.ParentGroupBrowser.Children {
 		childrenIDs = append(childrenIDs, ref.ID)
+		childrenRefs[i] = ref
 	}
 
 	si := &storedIssue{
-		id:          sum.ID,
-		title:       sum.Title,
-		status:      sum.Status,
-		priority:    sum.Priority,
-		issueType:   sum.Type,
-		assignee:    sum.Assignee,
-		labels:      labels,
-		description: detail.Description,
-		notes:       detail.Notes,
-		dependsOn:   dependsOn,
-		blocksIDs:   blocksIDs,
-		related:     related,
-		parentID:    parentID,
-		childrenIDs: childrenIDs,
-		comments:    comments,
-		created:     sum.CreatedAt,
-		updated:     sum.UpdatedAt,
-		closed:      detail.ClosedAt,
-		closeReason: detail.CloseReason,
+		id:            sum.ID,
+		title:         sum.Title,
+		status:        sum.Status,
+		priority:      sum.Priority,
+		issueType:     sum.Type,
+		assignee:      sum.Assignee,
+		labels:        labels,
+		description:   detail.Description,
+		notes:         detail.Notes,
+		dependsOn:     dependsOn,
+		blocksIDs:     blocksIDs,
+		related:       related,
+		parentID:      parentID,
+		childrenIDs:   childrenIDs,
+		comments:      comments,
+		created:       sum.CreatedAt,
+		updated:       sum.UpdatedAt,
+		closed:        detail.ClosedAt,
+		closeReason:   detail.CloseReason,
+		blockedByRefs: blockedByRefs,
+		relatedRefs:   relatedRefs,
+		parentRef:     parentRef,
+		childrenRefs:  childrenRefs,
 	}
 
 	r.mu.Lock()
