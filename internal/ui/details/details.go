@@ -180,9 +180,9 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 
 		contentInnerHeight := max(1, contentHeight-2)
 		bottomInnerHeight := max(1, bottomHeight-2)
-		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2)
+		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2, state.Skeleton, state.SkeletonPhase)
 		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight, state.Skeleton, state.SkeletonPhase)
-		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions)
+		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 		return ScrollOffsets{
 			Dependencies: max(0, len(deps)-bottomInnerHeight),
@@ -194,9 +194,9 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 	innerHeight := max(1, height-2)
 
-	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2)
+	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight, state.Skeleton, state.SkeletonPhase)
-	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions)
+	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 	return ScrollOffsets{
 		Dependencies: max(0, len(deps)-innerHeight),
@@ -215,7 +215,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 	contentBox := RenderContentPane(detail, width, contentHeight, state.FocusPane == FocusPaneContent, state.ContentScrollOffset, state.Skeleton, state.SkeletonPhase)
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
-	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField, state.QuickActions)
+	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField, state.QuickActions, state.Skeleton)
 
 	contentLines := strings.Split(contentBox, "\n")
 	dependencyLines := strings.Split(dependenciesBox, "\n")
@@ -241,13 +241,17 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 func renderDependenciesPane(detail domain.IssueDetail, state State, width, height int) string {
 	innerHeight := max(1, height-2)
-	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2)
+	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2, state.Skeleton, state.SkeletonPhase)
 	dependenciesView, _ := sliceWithOffset(dependencies, state.DependenciesScrollOffset, innerHeight, width-2)
+	topRight := fmt.Sprintf("%d", countDependencyReferences(detail))
+	if state.Skeleton {
+		topRight = issuerow.SkeletonGlyph
+	}
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
 		Height:             height,
 		TopLeft:            "Dependencies",
-		TopRight:           fmt.Sprintf("%d", countDependencyReferences(detail)),
+		TopRight:           topRight,
 		Content:            dependenciesView,
 		Focused:            state.FocusPane == FocusPaneDependencies,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -300,14 +304,18 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 
 	depGroups := dependencyGroups(detail, state.BrowserItems)
-	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2)
+	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	innerHeight := max(1, height-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
+	depTopRight := fmt.Sprintf("%d", countDependencyReferences(detail))
+	if state.Skeleton {
+		depTopRight = issuerow.SkeletonGlyph
+	}
 	leftBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              leftWidth,
 		Height:             height,
 		TopLeft:            "Dependencies",
-		TopRight:           fmt.Sprintf("%d", countDependencyReferences(detail)),
+		TopRight:           depTopRight,
 		Content:            depView,
 		Focused:            state.FocusPane == FocusPaneDependencies,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -319,7 +327,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	if state.FocusPane == FocusPaneMetadata {
 		selectedField = state.MetadataSelectedField
 	}
-	metaBox := RenderMetadataPane(detail, metadataWidth, height, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, selectedField, state.QuickActions)
+	metaBox := RenderMetadataPane(detail, metadataWidth, height, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, selectedField, state.QuickActions, state.Skeleton)
 
 	leftLines := strings.Split(leftBox, "\n")
 	contentLines := strings.Split(contentBox, "\n")
@@ -364,11 +372,15 @@ func RenderContentPane(detail domain.IssueDetail, width, height int, focused boo
 	innerHeight := max(1, height-2)
 	content := renderContentPaneLines(detail, width-2, innerHeight, skeleton, skeletonPhase)
 	contentView, _ := sliceWithOffset(content, scrollOffset, innerHeight, width-2)
+	commentsTopRight := fmt.Sprintf("%d comments", len(detail.Comments))
+	if skeleton {
+		commentsTopRight = issuerow.SkeletonGlyph + issuerow.SkeletonGlyph + " comments"
+	}
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
 		Height:             height,
 		TopLeft:            "Content",
-		TopRight:           fmt.Sprintf("%d comments", len(detail.Comments)),
+		TopRight:           commentsTopRight,
 		Content:            contentView,
 		Focused:            focused,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -376,7 +388,9 @@ func RenderContentPane(detail domain.IssueDetail, width, height int, focused boo
 }
 
 // RenderMetadataPane renders the shared detail Metadata pane section.
-func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, selectedField MetadataFieldKey, quickActions QuickActionLabels) string {
+// When skeleton is true, the Counts group renders placeholder glyphs instead of
+// real numeric values, matching the Description pane's loading-state treatment.
+func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) string {
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
@@ -389,7 +403,7 @@ func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bo
 	}
 
 	innerHeight := max(1, height-2)
-	metadata := renderMetadataPaneLines(detail, width-2, selectedField, quickActions)
+	metadata := renderMetadataPaneLines(detail, width-2, selectedField, quickActions, skeleton)
 	metaView, _ := sliceWithOffset(metadata, scrollOffset, innerHeight, width-2)
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
@@ -454,8 +468,8 @@ func splitThreeColumnWidths(total int) (left, content, metadata int) {
 	return splitThreePaneWidths(total)
 }
 
-func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domain.IssueReference, selectedIssueID string, width int) []string {
-	return renderRelationshipGroups(dependencyGroups(detail, browserItems), selectedIssueID, width)
+func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domain.IssueReference, selectedIssueID string, width int, skeleton bool, skeletonPhase int) []string {
+	return renderRelationshipGroups(dependencyGroups(detail, browserItems), selectedIssueID, width, skeleton, skeletonPhase)
 }
 
 func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueReference) []relationshipGroup {
@@ -490,7 +504,7 @@ func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueRefe
 	return out
 }
 
-func renderRelationshipGroups(groups []relationshipGroup, selectedIssueID string, width int) []string {
+func renderRelationshipGroups(groups []relationshipGroup, selectedIssueID string, width int, skeleton bool, skeletonPhase int) []string {
 	out := make([]string, 0, 32)
 	selectedIssueID = strings.TrimSpace(selectedIssueID)
 	selectedMatched := false
@@ -498,6 +512,16 @@ func renderRelationshipGroups(groups []relationshipGroup, selectedIssueID string
 		ordered := orderedReferences(group.Refs)
 		if len(out) > 0 {
 			out = append(out, "")
+		}
+		if skeleton {
+			out = append(out, styles.TruncateString(fmt.Sprintf("%s (%s)", group.Label, issuerow.SkeletonGlyph), width))
+			out = append(out, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+				Width:  width,
+				Seed:   len(out),
+				Phase:  skeletonPhase,
+				Styled: true,
+			}))
+			continue
 		}
 		out = append(out, styles.TruncateString(fmt.Sprintf("%s (%d)", group.Label, len(ordered)), width))
 		if len(ordered) == 0 {
@@ -578,10 +602,10 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	return out
 }
 
-func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels) []string {
+func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) []string {
 	quickActions = quickActions.withDefaults()
 	out := make([]string, 0, 48)
-	out = append(out, renderMetadataRail(detail, width, selectedField)...)
+	out = append(out, renderMetadataRail(detail, width, selectedField, skeleton)...)
 	out = append(out, "")
 	out = append(out,
 		"Quick actions",
@@ -671,7 +695,7 @@ func renderCompact(detail domain.IssueDetail, width int) string {
 		styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width),
 		styles.TruncateString(fmt.Sprintf("%s · %s", detail.Summary.ID, emptyFallback(detail.Summary.Status, "(unknown)")), width),
 	)
-	metadata := renderMetadataRail(detail, width, MetadataFieldNone)
+	metadata := renderMetadataRail(detail, width, MetadataFieldNone, false)
 	if len(metadata) > 0 {
 		out = append(out, "")
 		out = append(out, "Metadata")

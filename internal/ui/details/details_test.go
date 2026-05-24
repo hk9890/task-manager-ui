@@ -12,6 +12,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
 
 func assertGolden(t *testing.T, output []byte, name string) {
@@ -503,7 +504,7 @@ func TestRenderDependenciesPaneLinesDoNotRenderDuplicateIssueRowsAcrossGroups(t 
 			{ID: "bw-1", Title: "Duplicate from blocked-by"},
 			{ID: "bw-3", Title: "Related unique"},
 		},
-	}, nil, "bw-3", 80)
+	}, nil, "bw-3", 80, false, 0)
 
 	joined := strings.Join(lines, "\n")
 	if got := strings.Count(joined, "bw-1"); got != 1 {
@@ -1050,5 +1051,115 @@ func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
 	const wantANSI = "38;2;69;69;69"
 	if !strings.Contains(view, wantANSI) {
 		t.Fatalf("expected dim ANSI sequence %q in refresh detail view, got:\n%s", wantANSI, view)
+	}
+}
+
+// TestSkeletonRenderDoesNotShowLiteralZeroOrNoneInCountsAndDeps is a regression
+// test for beads-workbench-czkq.2: with state.Skeleton==true, the Counts panel
+// must not render literal "0" values and the Dependencies pane must not render
+// "(none)" — both must use placeholder glyphs instead.
+func TestSkeletonRenderDoesNotShowLiteralZeroOrNoneInCountsAndDeps(t *testing.T) {
+	t.Parallel()
+
+	// Use the cold-start skeleton path: Loading=true, Skeleton=true, no prior detail.
+	view := Render(State{
+		SelectionID: "bw-sk",
+		TargetID:    "bw-sk",
+		Loading:     true,
+		Skeleton:    true,
+		Width:       180,
+		Height:      30,
+	})
+
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// Counts panel must not show literal "0" values for any count field.
+	for _, forbidden := range []string{"Comments: 0", "Blocked by: 0", "Blocks: 0", "Related: 0"} {
+		if strings.Contains(plain, forbidden) {
+			t.Errorf("expected no literal zero count in skeleton render, but found %q:\n%s", forbidden, plain)
+		}
+	}
+
+	// Dependencies pane must not show "(none)" — should show skeleton glyphs instead.
+	if strings.Contains(plain, "(none)") {
+		t.Errorf("expected no '(none)' in skeleton render dependencies pane, got:\n%s", plain)
+	}
+
+	// Content pane TopRight must not show "0 comments" — should show skeleton glyphs.
+	if strings.Contains(plain, "0 comments") {
+		t.Errorf("expected no '0 comments' in skeleton render content pane header, got:\n%s", plain)
+	}
+
+	// Skeleton glyph must be present (confirms loading-state treatment is active).
+	if !strings.Contains(plain, issuerow.SkeletonGlyph) {
+		t.Errorf("expected skeleton glyph %q in skeleton render, got:\n%s", issuerow.SkeletonGlyph, plain)
+	}
+}
+
+// TestSkeletonRenderAtTwoColumnWidthDoesNotShowLiteralZeroOrNone tests the same
+// invariant at a width that uses the responsive (two-pane bottom) layout path.
+func TestSkeletonRenderAtTwoColumnWidthDoesNotShowLiteralZeroOrNone(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-sk2",
+		TargetID:    "bw-sk2",
+		Loading:     true,
+		Skeleton:    true,
+		Width:       InspectorTwoColumnMinWidth,
+		Height:      30,
+	})
+
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	for _, forbidden := range []string{"Comments: 0", "Blocked by: 0", "Blocks: 0", "Related: 0"} {
+		if strings.Contains(plain, forbidden) {
+			t.Errorf("expected no literal zero count in two-column skeleton render, but found %q:\n%s", forbidden, plain)
+		}
+	}
+
+	if strings.Contains(plain, "(none)") {
+		t.Errorf("expected no '(none)' in two-column skeleton render, got:\n%s", plain)
+	}
+}
+
+// TestSkeletonFalseStillShowsRealCountsAndDeps ensures the non-skeleton path
+// continues to render real data correctly (regression guard for Skeleton=false).
+func TestSkeletonFalseStillShowsRealCountsAndDeps(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-real",
+		Skeleton:    false,
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-real",
+				Title:    "Real detail",
+				Status:   "blocked",
+				Type:     "task",
+				Priority: 2,
+			},
+			Comments:  []domain.IssueComment{{ID: "c-1"}, {ID: "c-2"}},
+			BlockedBy: []domain.IssueReference{{ID: "bw-dep", Title: "Dep"}},
+		},
+		Width:  180,
+		Height: 30,
+	})
+
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// Counts section uses aligned label format, e.g. "Comments  : 2" — check label and value separately.
+	if !strings.Contains(plain, "Comments") || !strings.Contains(plain, ": 2") {
+		t.Errorf("expected real comment count '2' when skeleton=false, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "Blocked by") || !strings.Contains(plain, ": 1") {
+		t.Errorf("expected real blocked-by count '1' when skeleton=false, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "Blocked by (1)") {
+		t.Errorf("expected real dep header 'Blocked by (1)' when skeleton=false, got:\n%s", plain)
+	}
+	// Skeleton glyph must NOT appear as a count placeholder in the Counts section.
+	if strings.Contains(plain, ": "+issuerow.SkeletonGlyph) {
+		t.Errorf("expected no skeleton glyphs in non-skeleton render Counts, but found in:\n%s", plain)
 	}
 }

@@ -114,7 +114,7 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
 	detailSkeleton := isDetailLoadingSkeleton(state)
 	contentBox := uidetails.RenderContentPane(selectedDetail, contentWidth, height, state.Focus == FocusContent, 0, detailSkeleton, state.SkeletonPhase)
-	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
+	metadataBox := uidetails.RenderMetadataPane(selectedDetail, metadataWidth, height, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions, detailSkeleton)
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
@@ -156,7 +156,7 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 	left := lipgloss.JoinVertical(lipgloss.Left, queryBox, resultsBox)
 	detailSkeleton := isDetailLoadingSkeleton(state)
 	contentBox := uidetails.RenderContentPane(selectedDetail, rightWidth, contentHeight, state.Focus == FocusContent, 0, detailSkeleton, state.SkeletonPhase)
-	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions)
+	metadataBox := uidetails.RenderMetadataPane(selectedDetail, rightWidth, metadataHeight, state.Focus == FocusMetadata, 0, state.MetadataSelectedField, state.QuickActions, detailSkeleton)
 	right := lipgloss.JoinVertical(lipgloss.Left, contentBox, metadataBox)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", searchColumnGap), right)

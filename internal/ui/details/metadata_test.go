@@ -54,7 +54,7 @@ func TestMetadataCoreFieldsKeepStatusAsFirstEditableField(t *testing.T) {
 
 	groups := metadataGroups(domain.IssueDetail{
 		Summary: domain.IssueSummary{Type: "task", Priority: 2, Status: "open"},
-	})
+	}, false)
 	if len(groups) == 0 {
 		t.Fatal("expected metadata groups")
 	}
@@ -108,7 +108,7 @@ func TestRenderMetadataRailRespectsWidth(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"this-is-an-extremely-long-label-that-must-be-truncated"},
 		},
-	}, 20, MetadataFieldNone)
+	}, 20, MetadataFieldNone, false)
 
 	if len(lines) == 0 {
 		t.Fatal("expected metadata lines")
@@ -131,7 +131,7 @@ func TestRenderMetadataRailReservesIdleGutterWhenUnfocused(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"ui"},
 		},
-	}, 44, MetadataFieldNone)
+	}, 44, MetadataFieldNone, false)
 
 	if len(lines) == 0 {
 		t.Fatal("expected metadata lines")
@@ -157,7 +157,7 @@ func TestRenderMetadataRailHighlightsSelectedStatusField(t *testing.T) {
 			Priority: 1,
 			Status:   "open",
 		},
-	}, 40, MetadataFieldStatus)
+	}, 40, MetadataFieldStatus, false)
 
 	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
 	if !strings.Contains(joined, "› Status") {
@@ -174,7 +174,7 @@ func TestRenderMetadataRailHighlightsSelectedPriorityField(t *testing.T) {
 			Priority: 1,
 			Status:   "open",
 		},
-	}, 40, MetadataFieldPriority)
+	}, 40, MetadataFieldPriority, false)
 
 	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
 	if !strings.Contains(joined, "› Priority") {
@@ -191,7 +191,7 @@ func TestRenderMetadataRailShowsSelectedMarkerOnlyOnSelectedRow(t *testing.T) {
 			Priority: 1,
 			Status:   "open",
 		},
-	}, 40, MetadataFieldStatus)
+	}, 40, MetadataFieldStatus, false)
 
 	selectedCount := 0
 	for _, line := range lines {
@@ -216,7 +216,7 @@ func TestRenderMetadataRailLabelLinesAlignWithFieldColumn(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"backend"},
 		},
-	}, 48, MetadataFieldNone)
+	}, 48, MetadataFieldNone, false)
 
 	typeLine := findLineContaining(t, lines, "Type")
 	labelLine := findLineContaining(t, lines, "• backend")
@@ -242,7 +242,7 @@ func TestRenderMetadataRailDividerUsesReservedGutterAlignment(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"ui"},
 		},
-	}, 32, MetadataFieldNone)
+	}, 32, MetadataFieldNone, false)
 
 	divider := findLineContaining(t, lines, "----")
 	plain := metadataANSIPattern.ReplaceAllString(divider, "")
@@ -261,7 +261,7 @@ func TestRenderMetadataRailVeryNarrowWidthsDegradeSafely(t *testing.T) {
 				Priority: 1,
 				Status:   "open",
 			},
-		}, width, MetadataFieldStatus)
+		}, width, MetadataFieldStatus, false)
 
 		if len(lines) == 0 {
 			t.Fatalf("expected metadata lines for width=%d", width)
@@ -284,7 +284,7 @@ func TestRenderMetadataRailSelectedFieldKeepsLabelAlignmentStable(t *testing.T) 
 			Priority: 1,
 			Status:   "open",
 		},
-	}, 40, MetadataFieldStatus)
+	}, 40, MetadataFieldStatus, false)
 
 	plainLines := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -323,8 +323,8 @@ func TestRenderMetadataRailSelectionMovementKeepsValueColumnStable(t *testing.T)
 		},
 	}
 
-	prioritySelected := renderMetadataRail(detail, 48, MetadataFieldPriority)
-	statusSelected := renderMetadataRail(detail, 48, MetadataFieldStatus)
+	prioritySelected := renderMetadataRail(detail, 48, MetadataFieldPriority, false)
+	statusSelected := renderMetadataRail(detail, 48, MetadataFieldStatus, false)
 
 	priorityLineSelected := findLineContaining(t, prioritySelected, "Priority")
 	priorityLineIdle := findLineContaining(t, statusSelected, "Priority")
@@ -377,7 +377,7 @@ func TestMetadataGroupsIncludeLabelsAsDedicatedSection(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"ui", "backend"},
 		},
-	})
+	}, false)
 
 	if len(groups) < 3 {
 		t.Fatalf("expected grouped metadata sections, got %d", len(groups))

@@ -34,8 +34,8 @@ type metadataGroup struct {
 
 const metadataDividerRune = "-"
 
-func renderMetadataRail(detail domain.IssueDetail, width int, selectedField MetadataFieldKey) []string {
-	groups := metadataGroups(detail)
+func renderMetadataRail(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, skeleton bool) []string {
+	groups := metadataGroups(detail, skeleton)
 	if len(groups) == 0 || width < 1 {
 		return nil
 	}
@@ -100,7 +100,7 @@ func renderMetadataPrefixedLine(content string, width int, selected bool) string
 }
 
 func metadataFields(detail domain.IssueDetail) []metadataField {
-	groups := metadataGroups(detail)
+	groups := metadataGroups(detail, false)
 	fields := make([]metadataField, 0, 16)
 	for _, group := range groups {
 		fields = append(fields, group.fields...)
@@ -108,7 +108,11 @@ func metadataFields(detail domain.IssueDetail) []metadataField {
 	return fields
 }
 
-func metadataGroups(detail domain.IssueDetail) []metadataGroup {
+// skeletonCountValue is the placeholder string used in the Counts metadata
+// group when skeleton is true, keeping the value column stable.
+const skeletonCountValue = "░░"
+
+func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 	summary := detail.Summary
 	groups := make([]metadataGroup, 0, 6)
 
@@ -161,12 +165,21 @@ func metadataGroups(detail domain.IssueDetail) []metadataGroup {
 	}
 
 	counts := metadataGroup{title: "Counts"}
-	counts.fields = append(counts.fields,
-		metadataField{label: "Comments", value: fmt.Sprintf("%d", len(detail.Comments))},
-		metadataField{label: "Blocked by", value: fmt.Sprintf("%d", len(detail.BlockedBy))},
-		metadataField{label: "Blocks", value: fmt.Sprintf("%d", len(detail.Blocks))},
-		metadataField{label: "Related", value: fmt.Sprintf("%d", len(detail.Related))},
-	)
+	if skeleton {
+		counts.fields = append(counts.fields,
+			metadataField{label: "Comments", value: skeletonCountValue},
+			metadataField{label: "Blocked by", value: skeletonCountValue},
+			metadataField{label: "Blocks", value: skeletonCountValue},
+			metadataField{label: "Related", value: skeletonCountValue},
+		)
+	} else {
+		counts.fields = append(counts.fields,
+			metadataField{label: "Comments", value: fmt.Sprintf("%d", len(detail.Comments))},
+			metadataField{label: "Blocked by", value: fmt.Sprintf("%d", len(detail.BlockedBy))},
+			metadataField{label: "Blocks", value: fmt.Sprintf("%d", len(detail.Blocks))},
+			metadataField{label: "Related", value: fmt.Sprintf("%d", len(detail.Related))},
+		)
+	}
 	groups = append(groups, counts)
 
 	return groups
