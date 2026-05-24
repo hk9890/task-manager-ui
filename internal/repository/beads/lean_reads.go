@@ -537,8 +537,8 @@ func (r *Repository) searchPageFromRecords(items []leanIssuePayload, query domai
 	paged := leanPaginate(filtered, query.Offset, query.Limit)
 	results := leanToSearchResults(paged)
 
-	completeness := domain.SearchResultCompletenessMaybeMore
-	if query.Limit <= 0 || len(results) < query.Limit {
+	completeness := domain.SearchResultCompletenessExact
+	if query.Limit > 0 && len(results) >= query.Limit {
 		completeness = domain.SearchResultCompletenessPartial
 	}
 
@@ -611,15 +611,15 @@ func leanToSearchResults(issues []domain.IssueSummary) []domain.SearchResult {
 
 // leanSearchMetadataFromBackend builds search metadata for direct-backend results.
 func leanSearchMetadataFromBackend(returnedCount, requestedLimit int, source domain.SearchResultSource) domain.SearchResultMetadata {
-	metadata := domain.SearchResultMetadata{
+	completeness := domain.SearchResultCompletenessExact
+	if requestedLimit > 0 && returnedCount >= requestedLimit {
+		completeness = domain.SearchResultCompletenessPartial
+	}
+	return domain.SearchResultMetadata{
 		ReturnedCount:  returnedCount,
 		RequestedLimit: requestedLimit,
-		Completeness:   domain.SearchResultCompletenessMaybeMore,
+		Completeness:   completeness,
 		Source:         source,
 		Notice:         searchNoticeMaybeMore,
 	}
-	if requestedLimit <= 0 || returnedCount < requestedLimit {
-		metadata.Completeness = domain.SearchResultCompletenessPartial
-	}
-	return metadata
 }
