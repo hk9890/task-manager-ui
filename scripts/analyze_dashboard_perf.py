@@ -3,12 +3,18 @@
 
 Reads JSONL log files written by `internal/logging` (default location:
 $XDG_STATE_HOME/bwb/bwb-<session_id>.log, fallback ~/.local/state/bwb/) and
-reports cold-load wall time, cache hit rate, and per-call latency for the
-dashboard's 5-command board refresh.
+reports cold-load wall time, and per-call latency for the dashboard's
+5-command board refresh.
+
+The argv-level in-process read cache was removed in 8pxi.7. Sessions
+generated after that change will always report hit=0; all gateway activity
+now appears as "bd command finished". Hit-rate tracking is retained for
+backward compatibility with older log files that still contain cache hit
+lines.
 
 The gateway emits two log messages this script keys on:
-  - "bd command finished"   (a real bd subprocess execution / cache miss)
-  - "bd command cache hit"  (a read served from the in-process cache)
+  - "bd command finished"   (a bd subprocess execution; all reads after 8pxi.7)
+  - "bd command cache hit"  (a read from the in-process cache; pre-8pxi.7 only)
 
 Usage
 -----

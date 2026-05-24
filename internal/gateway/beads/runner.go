@@ -126,8 +126,7 @@ type CommandRunner struct {
 	// executions to bdSemCap. A token is acquired immediately before calling
 	// executor.Run and released on return (deferred). Context cancellation while
 	// waiting for a token returns promptly without executing the subprocess.
-	sem   chan struct{}
-	cache *readCache
+	sem chan struct{}
 }
 
 // NewCommandRunner creates a command runner for bd CLI interactions.
@@ -153,14 +152,6 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		sem <- struct{}{}
 	}
 
-	cache := newReadCache(cfg.WorkDir)
-	if err := cache.bootstrap(); err != nil && cfg.Logger != nil {
-		cfg.Logger.Warn("failed to bootstrap cache token file; cache may be disabled",
-			"path", cache.tokenPath(),
-			"error", err.Error(),
-		)
-	}
-
 	return &CommandRunner{
 		command:        command,
 		defaultWorkDir: cfg.WorkDir,
@@ -169,40 +160,21 @@ func NewCommandRunner(cfg RunnerConfig) *CommandRunner {
 		logger:         cfg.Logger,
 		readOnly:       cfg.ReadOnly,
 		sem:            sem,
-		cache:          cache,
 	}
 }
 
 // Run executes one command and returns stdout on success.
 //
-// For read requests (IsWrite == false), the result is served from the in-process
-// read cache when the .beads/last-touched mtime is unchanged. Cache hits skip
-// runMu and the semaphore entirely.
-//
-// For write requests (IsWrite == true), the cache is invalidated before exec so
-// that the next read re-execs bd. External writes are caught by the
-// .beads/last-touched mtime advancing on the next token check.
+// Read requests (IsWrite == false) acquire a shared RLock so multiple
+// concurrent read calls (e.g. dashboard section loads via tea.Batch) run in
+// parallel. Write requests (IsWrite == true) acquire an exclusive Lock so
+// writers never overlap with readers or other writers.
 func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, error) {
 	if r == nil {
 		return nil, newGatewayError(domain.ErrorCodeUnknown, req.Operation, "command runner is not configured", nil)
 	}
 
-	// Resolve argv early so it is consistent between the cache key and the
-	// executor invocation.
 	argv := r.resolveArgs(req.Args)
-
-	// ---- read cache fast path ------------------------------------------------
-	// Check the cache before acquiring any lock. Hits return immediately without
-	// touching runMu or the semaphore. A successful hit is logged so operators
-	// can compute hit/miss ratios from the same log stream as "bd command
-	// finished" misses (see docs/MONITORING.md).
-	if !req.IsWrite {
-		if cached, hit := r.cache.get(argv); hit {
-			r.logCacheHit(req, argv)
-			return cached, nil
-		}
-	}
-	// ---- end fast path -------------------------------------------------------
 
 	// Locking contract:
 	//   - Read requests (IsWrite == false): acquire a shared RLock so multiple
@@ -217,34 +189,11 @@ func (r *CommandRunner) Run(ctx context.Context, req CommandRequest) ([]byte, er
 	if req.IsWrite {
 		r.runMu.Lock()
 		defer r.runMu.Unlock()
-		// Invalidate the read cache while holding the write lock. This ensures
-		// that the next read, which must hold at least an RLock, cannot see stale
-		// data from before this write. Belt-and-suspenders: external writes are
-		// also caught by the .beads/last-touched mtime advancing.
-		r.cache.invalidate()
 	} else {
 		r.runMu.RLock()
 		defer r.runMu.RUnlock()
 	}
 
-	if !req.IsWrite {
-		// Sample the token BEFORE exec. If an external write lands during the
-		// exec, the token we stored will lag behind the current mtime on the
-		// next read, causing a cache miss — the conservative correct direction.
-		token, tokenOK := r.cache.currentToken()
-
-		stdout, execErr := r.execOnce(ctx, req, argv)
-		if execErr != nil {
-			return nil, execErr
-		}
-		// Only cache successful reads when the cache is enabled (workDir set).
-		if tokenOK {
-			r.cache.set(argv, token, stdout)
-		}
-		return stdout, nil
-	}
-
-	// Write path: exec directly (cache was already invalidated above).
 	return r.execOnce(ctx, req, argv)
 }
 
@@ -372,21 +321,6 @@ func (r *CommandRunner) resolveArgs(args []string) []string {
 	resolved = append(resolved, "--readonly")
 	resolved = append(resolved, args...)
 	return resolved
-}
-
-// logCacheHit records a per-call trace for a cache hit. Mirrors the operation
-// + argv fields of "bd command finished" so hit-rate analysis can be done with
-// a single grep against the same log file: "cache hit" lines are hits,
-// "bd command finished" lines with IsWrite=false are misses.
-func (r *CommandRunner) logCacheHit(req CommandRequest, resolvedArgs []string) {
-	if r.logger == nil {
-		return
-	}
-	argv := append([]string{r.command}, resolvedArgs...)
-	r.logger.Info("bd command cache hit",
-		"operation", req.Operation,
-		"argv", argv,
-	)
 }
 
 func (r *CommandRunner) logExecution(req CommandRequest, resolvedArgs []string, result ExecResult, err error, duration time.Duration) {

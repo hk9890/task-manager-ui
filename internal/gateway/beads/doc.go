@@ -1,14 +1,14 @@
-// Package beads provides the subprocess runner and argv-level read cache for
-// the beads (bd) CLI.
+// Package beads provides the subprocess runner for the beads (bd) CLI.
 //
 // After the 8pxi refactor, the BeadsGateway interface and all gateway method
 // implementations (read_gateway.go, writes.go, validating_gateway.go, etc.)
-// live in internal/repository/beads. This package retains:
+// live in internal/repository/beads. The argv-level read cache was removed in
+// 8pxi.7; all reads now go through the subprocess. This package
+// retains:
 //
 //   - CommandRunner / RunnerConfig / CommandRequest (runner.go)
 //   - RunJSON generic helper (runner.go)
 //   - DecodeJSONInto / ExecResult / CommandExecutor (runner.go)
-//   - The read cache (cache.go) — deferred to 8pxi.7
 //
 // Consumers that need both runner and gateway types use the two-import pattern:
 //

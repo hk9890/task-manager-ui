@@ -76,26 +76,21 @@ exit code is used for processes that failed to execute). Because `WARN`
 records mirror to `stderr`, a failing `bd` subprocess is operator-visible
 without `--debug`.
 
-Cache hits (reads returned from the in-process read cache keyed on resolved
-argv and the `.beads/last-touched` mtime token) emit a `"bd command cache
-hit"` trace at `INFO` with `operation` and `argv` fields, mirroring the
-miss-side `"bd command finished"` record.
-
-The cache requires `.beads/last-touched` to exist (the change-token source).
-If absent, the runner bootstraps an empty file at startup so the cache works
-on projects where bd has never executed a tracked operation. If bootstrap
-fails (e.g. permission error), a `WARN` record `"failed to bootstrap cache
-token file; cache may be disabled"` is emitted and the cache stays inactive
-for the runner's lifetime — every read will then show up as `"bd command
-finished"` with no matching `"cache hit"` companion.
+The argv-level in-process read cache (previously keyed on resolved argv and
+the `.beads/last-touched` mtime token) was removed in 8pxi.7. All reads now
+go through the bd subprocess. The `"bd command cache hit"` log line is no
+longer emitted; all gateway activity appears as `"bd command finished"`.
 
 ### Dashboard refresh performance analysis
 
 Use `scripts/analyze_dashboard_perf.py` for structured analysis of the
 gateway log stream. The script parses every `bd-<session>.log` under the log
-directory and reports cold-load wall time, cache hit rate, miss-latency
-distribution (p50/p95/max), and a per-call chronological trace. It groups by
-project so a single repo's perf can be compared against itself over time.
+directory and reports cold-load wall time, miss-latency distribution
+(p50/p95/max), and a per-call chronological trace. It groups by project so a
+single repo's perf can be compared against itself over time. Hit-rate columns
+in the output will always show 0 hits for sessions generated after 8pxi.7
+(the argv cache is gone); old log files from before 8pxi.7 still report
+non-zero hit counts.
 
 ```bash
 # list projects with sessions (and how many) — the discovery view
@@ -119,12 +114,12 @@ the first contiguous miss burst (gap > 1.5s ends the burst). This handles
 the common interleaving where `bd show` lands between the board's 5-command
 fan-out and the second auto-refresh.
 
-The grep recipe still works for a quick one-liner check without Python:
+A quick count of bd subprocess calls (all misses since the argv cache was
+removed in 8pxi.7):
 
 ```bash
-hits=$(grep -c "bd command cache hit"   ~/.local/state/bwb/bwb-<id>.log)
-miss=$(grep -c "bd command finished"    ~/.local/state/bwb/bwb-<id>.log)
-echo "hit rate: $((100 * hits / (hits + miss)))%"
+miss=$(grep -c "bd command finished" ~/.local/state/bwb/bwb-<id>.log)
+echo "bd calls this session: $miss"
 ```
 
 The startup debug stream also prints the run `session_id` once so operators can
