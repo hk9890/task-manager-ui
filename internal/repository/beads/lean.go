@@ -1,8 +1,5 @@
-// Package beads — lean Repository implementation.
-//
-// This file defines the lean [Repository] struct and its constructor. The lean
-// Repository implements [repository.Repository] directly on
-// [bdrunner.CommandRunner], with no intermediate BeadsGateway or Gateway type.
+// Package beads implements [repository.Repository] directly on
+// [bdrunner.CommandRunner] with no intermediate gateway type.
 //
 // File layout:
 //
@@ -10,9 +7,6 @@
 //   - lean_reads.go     — Dashboard, Issue, Search, HealthCheck, Catalogs
 //   - lean_writes.go    — CreateIssue, UpdateIssue, CloseIssue, AddComment
 //   - lean_payloads.go  — package-private JSON DTOs and scalar helpers
-//
-// The legacy gateway-backed adapter (repository.go, NewFromGateway) is preserved
-// until E4.3 switches app wiring and E4.4 deletes the legacy code.
 package beads
 
 import (
@@ -29,13 +23,9 @@ import (
 // helpers that need to be testable via [WithCommandHook].
 type runFn func(ctx context.Context, req bdrunner.CommandRequest) ([]byte, error)
 
-// Repository is the lean, CommandRunner-backed implementation of
+// Repository is the CommandRunner-backed implementation of
 // [repository.Repository]. Construct with [New]; do not create a zero value
 // directly.
-//
-// The lean implementation is introduced alongside the legacy gateway-backed
-// adapter (NewFromGateway) so both compile while the app wiring switch happens
-// in E4.3.
 type Repository struct {
 	runner *bdrunner.CommandRunner
 
