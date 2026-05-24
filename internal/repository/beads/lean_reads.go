@@ -18,6 +18,14 @@ import (
 // inside Dashboard. Matches the floor from board.closedLimit().
 const defaultLeanClosedLimit = 50
 
+// searchNoticeMaybeMore is attached to search result metadata when the backend
+// limit may have capped additional matches.
+const searchNoticeMaybeMore = "Results may be incomplete because the backend limit may have capped additional matches."
+
+// searchNoticeNoTextFilter is attached to search result metadata when a
+// ready/blocked work-state search is performed without a text filter.
+const searchNoticeNoTextFilter = "No text filter applied; returning entire ready/blocked queue."
+
 // -- Read methods --
 
 // HealthCheck verifies bd is reachable and a beads database exists.
