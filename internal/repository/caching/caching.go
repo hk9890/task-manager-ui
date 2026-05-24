@@ -171,6 +171,12 @@ func (c *CachingRepository) RefreshIfChanged(ctx context.Context) {
 	c.lastHash = h
 	c.dashboardDirty = true
 	c.memory.Reset()
+	// If the backing store maintains its own cache (e.g. beads.Repository's
+	// parentSiblingCache), drain it too. The type assertion keeps the
+	// dependency narrow — no import of internal/repository/beads required.
+	if r, ok := c.backing.(interface{ Invalidate() }); ok {
+		r.Invalidate()
+	}
 }
 
 // tickLoop is the body of the background refresh goroutine. It runs two

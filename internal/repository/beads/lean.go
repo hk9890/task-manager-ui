@@ -136,6 +136,17 @@ func (r *Repository) parentChildSiblings(ctx context.Context, parentID string) (
 	return out, nil
 }
 
+// Invalidate clears the parentSiblingCache so that subsequent
+// parentChildSiblings calls re-fetch from the bd subprocess. It is called by
+// CachingRepository.RefreshIfChanged (via type assertion) whenever the bd
+// commit hash changes, ensuring that newly-added children become visible
+// without a process restart.
+func (r *Repository) Invalidate() {
+	r.parentSiblingCacheMu.Lock()
+	clear(r.parentSiblingCache)
+	r.parentSiblingCacheMu.Unlock()
+}
+
 // leanMergeUniqueRefs merges reference slices, deduplicating by ID.
 func leanMergeUniqueRefs(groups ...[]domain.IssueReference) []domain.IssueReference {
 	seen := make(map[string]struct{})

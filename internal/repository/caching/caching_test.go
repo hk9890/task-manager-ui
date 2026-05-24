@@ -2692,3 +2692,42 @@ func TestSaveNow_AtomicWithRespectToReset(t *testing.T) {
 		}
 	})
 }
+
+// ---- RefreshIfChanged backing Invalidate tests ----
+
+// invalidatingStub wraps stubRepository and additionally implements Invalidate()
+// so the type assertion in RefreshIfChanged can trigger it. A separate type is
+// used rather than embedding the method into stubRepository to avoid
+// accidentally activating Invalidate in tests that don't expect it.
+type invalidatingStub struct {
+	*stubRepository
+	invalidateCalls atomic.Int64
+}
+
+func (s *invalidatingStub) Invalidate() {
+	s.invalidateCalls.Add(1)
+}
+
+// TestCachingRepository_RefreshIfChanged_InvalidatesBacking verifies that
+// RefreshIfChanged calls Invalidate on the backing store when the bd hash
+// changes, using a type assertion to the anonymous interface{ Invalidate() }.
+func TestCachingRepository_RefreshIfChanged_InvalidatesBacking(t *testing.T) {
+	stub := &invalidatingStub{stubRepository: &stubRepository{}}
+	// Two hashes: first call records baseline (no invalidation), second call
+	// detects change (triggers invalidation).
+	fn, _ := vcStatusFuncFromSlice([]string{"hash-a", "hash-b"})
+	c := caching.New(stub, caching.WithVCStatusFunc(fn))
+	ctx := context.Background()
+
+	// Tick 1: baseline — Invalidate must NOT be called.
+	c.RefreshIfChanged(ctx)
+	if n := stub.invalidateCalls.Load(); n != 0 {
+		t.Fatalf("after baseline tick: expected 0 Invalidate calls, got %d", n)
+	}
+
+	// Tick 2: hash changed — Invalidate must be called exactly once.
+	c.RefreshIfChanged(ctx)
+	if n := stub.invalidateCalls.Load(); n != 1 {
+		t.Fatalf("after hash-change tick: expected 1 Invalidate call, got %d", n)
+	}
+}
