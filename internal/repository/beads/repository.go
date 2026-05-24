@@ -34,25 +34,32 @@ import (
 // so the repository always returns at least 50 recently-closed issues.
 const defaultClosedLimit = 50
 
-// Repository wraps a BeadsGateway and implements repository.Repository.
-// Construct with [New]; do not create a zero value directly.
-type Repository struct {
+// legacyRepository wraps a BeadsGateway and implements repository.Repository.
+// Construct with [NewFromGateway]; do not create a zero value directly.
+//
+// This type is preserved for callers that still use NewCLIGateway + NewFromGateway.
+// The lean constructor New(runner) is the canonical path introduced in E4.1;
+// app wiring switches in E4.3 and this type is deleted in E4.4.
+type legacyRepository struct {
 	gw BeadsGateway
 }
 
-// Compile-time interface assertion.
-var _ repository.Repository = (*Repository)(nil)
+// Compile-time interface assertion for the legacy adapter.
+var _ repository.Repository = (*legacyRepository)(nil)
 
-// New returns a Repository backed by the given gateway.
+// NewFromGateway returns a repository.Repository backed by the given BeadsGateway.
 // gw must be non-nil; passing nil will panic at the first method call.
-func New(gw BeadsGateway) *Repository {
-	return &Repository{gw: gw}
+//
+// This constructor is the renamed form of the pre-E4.1 New(gw BeadsGateway).
+// New(runner *bdrunner.CommandRunner) is the lean constructor introduced in E4.1.
+func NewFromGateway(gw BeadsGateway) repository.Repository {
+	return &legacyRepository{gw: gw}
 }
 
 // Dashboard fans out five gateway calls in parallel and assembles
 // [repository.DashboardData]. Any single failure cancels the remaining calls
 // and causes Dashboard to return that error; no partial result is returned.
-func (r *Repository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (r *legacyRepository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	var readyExplain domain.ReadyExplainResult
@@ -114,37 +121,37 @@ func (r *Repository) Dashboard(ctx context.Context) (repository.DashboardData, e
 // Issue returns full detail for the issue identified by id.
 // An unknown id returns a *domain.GatewayError with Code ==
 // domain.ErrorCodeCommandFailed (bd's behavior for unknown identifiers).
-func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
+func (r *legacyRepository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
 	return r.gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: id})
 }
 
 // Search delegates directly to the gateway's SearchIssues method.
-func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+func (r *legacyRepository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	return r.gw.SearchIssues(ctx, query)
 }
 
 // CreateIssue is a 1:1 pass-through to the gateway.
-func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+func (r *legacyRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	return r.gw.CreateIssue(ctx, input)
 }
 
 // UpdateIssue is a 1:1 pass-through to the gateway.
-func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
+func (r *legacyRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
 	return r.gw.UpdateIssue(ctx, id, input)
 }
 
 // CloseIssue is a 1:1 pass-through to the gateway.
-func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
+func (r *legacyRepository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
 	return r.gw.CloseIssue(ctx, id, input)
 }
 
 // AddComment is a 1:1 pass-through to the gateway.
-func (r *Repository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
+func (r *legacyRepository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
 	return r.gw.AddComment(ctx, id, input)
 }
 
 // HealthCheck delegates directly to the gateway.
-func (r *Repository) HealthCheck(ctx context.Context) error {
+func (r *legacyRepository) HealthCheck(ctx context.Context) error {
 	return r.gw.HealthCheck(ctx)
 }
 
@@ -152,7 +159,7 @@ func (r *Repository) HealthCheck(ctx context.Context) error {
 // [repository.Catalogs] value. Any single failure cancels the remaining
 // calls and causes Catalogs to return that error; no partial result is
 // returned.
-func (r *Repository) Catalogs(ctx context.Context) (repository.Catalogs, error) {
+func (r *legacyRepository) Catalogs(ctx context.Context) (repository.Catalogs, error) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	var statuses []domain.StatusOption

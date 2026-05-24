@@ -26,7 +26,7 @@ func newSearchRecordingModel(rec *fakes.RecordingExecutor) *Model {
 		Executor: rec,
 	})
 	gw := repositorybeads.NewCLIGateway(runner)
-	repo := repositorybeads.New(gw)
+	repo := repositorybeads.NewFromGateway(gw)
 	return NewModel(repo, nil)
 }
 

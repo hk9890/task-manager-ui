@@ -224,7 +224,74 @@ func beadsFactory(t *testing.T, seed scenarioSeed) repository.Repository {
 
 	runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
 	gw := repobeads.NewCLIGateway(runner)
-	return repobeads.New(gw)
+	return repobeads.NewFromGateway(gw)
+}
+
+// beadsLeanFactory constructs a lean beads.Repository backed by a real bd repo
+// seeded from seed. It uses the same seeding logic as beadsFactory but wires
+// the lean constructor (repobeads.New(runner)) instead of the legacy gateway
+// adapter.
+func beadsLeanFactory(t *testing.T, seed scenarioSeed) repository.Repository {
+	t.Helper()
+
+	dir := filepath.Join(t.TempDir(), "bd-lean-repo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %q: %v", dir, err)
+	}
+
+	runBD := initBDRepo(t, dir)
+
+	// Create issues in order (mirrors beadsFactory seeding logic).
+	for _, iss := range seed.issues {
+		args := []string{
+			"create",
+			"--id", iss.id,
+			"--title", iss.title,
+		}
+		if iss.description != "" {
+			args = append(args, "--description", iss.description)
+		}
+		if iss.notes != "" {
+			args = append(args, "--notes", iss.notes)
+		}
+		if iss.issueType != "" {
+			args = append(args, "--type", iss.issueType)
+		}
+		if iss.priority != 0 {
+			args = append(args, "--priority", fmt.Sprintf("%d", iss.priority))
+		}
+		if iss.assignee != "" {
+			args = append(args, "--assignee", iss.assignee)
+		}
+		if len(iss.labels) > 0 {
+			args = append(args, "--labels", strings.Join(iss.labels, ","))
+		}
+		runBD(args...)
+
+		switch iss.status {
+		case "closed":
+			runBD("close", iss.id, "--reason", "fixture seeded closed status")
+		case "in_progress", "blocked", "deferred", "pinned":
+			runBD("update", iss.id, "--status", iss.status)
+		}
+
+		for _, body := range iss.comments {
+			runBD("comments", "add", iss.id, body)
+		}
+	}
+
+	for _, d := range seed.deps {
+		cmd := exec.Command("bd", "dep", "add", d.blockedID, d.blockerID)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil && !strings.Contains(string(out), "already") {
+			t.Fatalf("bd dep add %s %s: %v\n%s", d.blockedID, d.blockerID, err, out)
+		}
+	}
+
+	runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
+	return repobeads.New(runner)
 }
 
 // -- Stub gateway for scenario 10 --
@@ -379,6 +446,14 @@ func TestRepositoryContract(t *testing.T) {
 			name: "beads",
 			build: func(t *testing.T, seed scenarioSeed) repository.Repository {
 				return beadsFactory(t, seed)
+			},
+		},
+		{
+			// beads_lean exercises the lean Repository (New(runner)) alongside
+			// the legacy gateway-backed adapter. Both must pass identical assertions.
+			name: "beads_lean",
+			build: func(t *testing.T, seed scenarioSeed) repository.Repository {
+				return beadsLeanFactory(t, seed)
 			},
 		},
 	}
@@ -937,11 +1012,18 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 	t.Run("PartialDashboardFailure", func(t *testing.T) {
 		t.Parallel()
 
-		if impl.name == "memory" {
+		switch impl.name {
+		case "memory":
 			t.Skip("Scenario10/PartialDashboardFailure: N/A for memory impl — " +
 				"memory.Repository has no external failure path, all underlying " +
 				"computations are local and cannot fail independently. " +
 				"The atomicity contract is enforced by the beads impl test only.")
+			return
+		case "beads_lean":
+			t.Skip("Scenario10/PartialDashboardFailure: N/A for beads_lean impl — " +
+				"the lean Repository has no BeadsGateway seam for error injection; " +
+				"Dashboard atomicity is covered by the legacy beads impl. " +
+				"A CommandExecutor-level injection mechanism is tracked as a follow-up.")
 			return
 		}
 
@@ -961,7 +1043,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		stub.setError("ReadyExplain", injectedErr)
 		stub.setError("CountIssues", injectedErr)
 
-		stubbedRepo := repobeads.New(stub)
+		stubbedRepo := repobeads.NewFromGateway(stub)
 		_, err := stubbedRepo.Dashboard(ctx)
 		if err == nil {
 			t.Error("Scenario10/Dashboard: expected error when 2 of 5 underlying calls fail, got nil")

@@ -31,7 +31,7 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 		Env:     append(os.Environ(), "BD_NON_INTERACTIVE=1"),
 	})
 	gateway := repositorybeads.NewCLIGateway(runner)
-	repo := repositorybeads.New(gateway)
+	repo := repositorybeads.NewFromGateway(gateway)
 
 	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(repo, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})

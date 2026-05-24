@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	repbeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 )
 
@@ -158,7 +159,7 @@ func TestHealthCheck_Delegates(t *testing.T) {
 	stub := &stubGateway{
 		healthCheckFn: func(_ context.Context) error { return nil },
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	if err := repo.HealthCheck(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestHealthCheck_BubblesError(t *testing.T) {
 	stub := &stubGateway{
 		healthCheckFn: func(_ context.Context) error { return gwErr },
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	err := repo.HealthCheck(context.Background())
 	var got domain.GatewayError
 	if !errors.As(err, &got) {
@@ -196,7 +197,7 @@ func TestIssue_Delegates(t *testing.T) {
 			return want, nil
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	got, err := repo.Issue(context.Background(), "abc-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -213,7 +214,7 @@ func TestIssue_BubblesOriginalErrorCode(t *testing.T) {
 			return domain.IssueDetail{}, gwErr
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	_, err := repo.Issue(context.Background(), "unknown-id")
 	var got domain.GatewayError
 	if !errors.As(err, &got) {
@@ -239,7 +240,7 @@ func TestSearch_Delegates(t *testing.T) {
 			return want, nil
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	got, err := repo.Search(context.Background(), domain.SearchIssuesQuery{Text: "hello"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -263,7 +264,7 @@ func TestCreateIssue_Delegates(t *testing.T) {
 			return want, nil
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	got, err := repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "New issue"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -288,7 +289,7 @@ func TestUpdateIssue_Delegates(t *testing.T) {
 			return nil
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	if err := repo.UpdateIssue(context.Background(), "abc-1", domain.UpdateIssueInput{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -315,7 +316,7 @@ func TestCloseIssue_Delegates(t *testing.T) {
 			return nil
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	if err := repo.CloseIssue(context.Background(), "abc-2", domain.CloseIssueInput{Reason: "done"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -342,7 +343,7 @@ func TestAddComment_Delegates(t *testing.T) {
 			return nil
 		},
 	}
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	if err := repo.AddComment(context.Background(), "abc-3", domain.AddCommentInput{Body: "hello"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -407,7 +408,7 @@ func TestDashboard_SuccessPath(t *testing.T) {
 		},
 	}
 
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	data, err := repo.Dashboard(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -452,7 +453,7 @@ func TestDashboard_PartialFailure_ReturnsError(t *testing.T) {
 		},
 	}
 
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	data, err := repo.Dashboard(context.Background())
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -492,7 +493,7 @@ func TestDashboard_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	_, err := repo.Dashboard(ctx)
 	if err == nil {
 		t.Fatal("expected error from cancelled context, got nil")
@@ -523,7 +524,7 @@ func TestCatalogs_SuccessPath(t *testing.T) {
 		},
 	}
 
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	cats, err := repo.Catalogs(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -558,7 +559,7 @@ func TestCatalogs_PartialFailure_ReturnsError(t *testing.T) {
 		},
 	}
 
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	cats, err := repo.Catalogs(context.Background())
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -597,7 +598,7 @@ func TestCatalogs_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	repo := repbeads.New(stub)
+	repo := repbeads.NewFromGateway(stub)
 	_, err := repo.Catalogs(ctx)
 	if err == nil {
 		t.Fatal("expected error from cancelled context, got nil")
@@ -618,13 +619,13 @@ func TestErrorPreservation_NoDoubleWrap(t *testing.T) {
 	cases := []struct {
 		name   string
 		code   domain.ErrorCode
-		callFn func(repo *repbeads.Repository) error
+		callFn func(repo repository.Repository) error
 		stubFn func(code domain.ErrorCode) *stubGateway
 	}{
 		{
 			name: "HealthCheck",
 			code: domain.ErrorCodeCommandUnavailable,
-			callFn: func(repo *repbeads.Repository) error {
+			callFn: func(repo repository.Repository) error {
 				return repo.HealthCheck(context.Background())
 			},
 			stubFn: func(code domain.ErrorCode) *stubGateway {
@@ -638,7 +639,7 @@ func TestErrorPreservation_NoDoubleWrap(t *testing.T) {
 		{
 			name: "Issue",
 			code: domain.ErrorCodeCommandFailed,
-			callFn: func(repo *repbeads.Repository) error {
+			callFn: func(repo repository.Repository) error {
 				_, err := repo.Issue(context.Background(), "x")
 				return err
 			},
@@ -653,7 +654,7 @@ func TestErrorPreservation_NoDoubleWrap(t *testing.T) {
 		{
 			name: "Search",
 			code: domain.ErrorCodeCommandFailed,
-			callFn: func(repo *repbeads.Repository) error {
+			callFn: func(repo repository.Repository) error {
 				_, err := repo.Search(context.Background(), domain.SearchIssuesQuery{})
 				return err
 			},
@@ -668,7 +669,7 @@ func TestErrorPreservation_NoDoubleWrap(t *testing.T) {
 		{
 			name: "CreateIssue",
 			code: domain.ErrorCodeCommandFailed,
-			callFn: func(repo *repbeads.Repository) error {
+			callFn: func(repo repository.Repository) error {
 				_, err := repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "t"})
 				return err
 			},
@@ -685,7 +686,7 @@ func TestErrorPreservation_NoDoubleWrap(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			stub := tc.stubFn(tc.code)
-			repo := repbeads.New(stub)
+			repo := repbeads.NewFromGateway(stub)
 			err := tc.callFn(repo)
 			if err == nil {
 				t.Fatal("expected error, got nil")
