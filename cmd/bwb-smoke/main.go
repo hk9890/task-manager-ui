@@ -235,7 +235,7 @@ func runCountCheck(dir string, repo repository.Repository, readonly bool) CheckR
 	}
 
 	// Pass --limit 0 to match ReadyExplain's uncapped output: bd ready --json
-	// without --limit 0 caps at 100 while bd ready --explain (used by the gateway)
+	// without --limit 0 caps at 100 while bd ready --explain (used by the Repository)
 	// returns all ready issues. See interface.go "bd quirks observed at scale".
 	readyRaw, err := bdRun(dir, readonly, "ready", "--limit", "0", "--json")
 	if err != nil {
@@ -530,11 +530,11 @@ func countColumnTopBorders(view string) int {
 	return strings.Count(view, "╭")
 }
 
-// feedRenderData drives all four gateway result messages into the board model,
+// feedRenderData drives all four Repository result messages into the board model,
 // simulating a completed board load. This mirrors feedAllColumnResults from the
 // render_regression_test.go but operates via the exported board.Model.Update path.
 //
-// Because the render check uses a real fake gateway (not a recording fake), we
+// Because the render check uses a real Repository (not a recording fake), we
 // call board.FeedTestData which is exported from the board package for this purpose.
 //
 // If board.FeedTestData is not available, we fall back to driving the model via
@@ -584,7 +584,7 @@ func bdRun(dir string, readonly bool, verb string, extraArgs ...string) ([]byte,
 	return cmd.Output()
 }
 
-// bdQueryClosed mirrors the exact bd query call the gateway uses for the Done column.
+// bdQueryClosed mirrors the exact bd query call the Repository uses for the Done column.
 func bdQueryClosed(dir string, readonly bool, limit int) ([]byte, error) {
 	argv := make([]string, 0, 10)
 	if readonly {

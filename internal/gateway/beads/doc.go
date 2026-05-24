@@ -1,13 +1,15 @@
 // Package beads provides the subprocess runner for the beads (bd) CLI.
 //
-// After the 8pxi refactor, the gateway types (interface, implementations,
-// validating_gateway.go, etc.) live in internal/repository/beads. The
-// argv-level read cache was removed in 8pxi.7; all reads now go through the
-// subprocess. This package retains:
+// This package is the bd-subprocess primitive. The bd-backed
+// repository.Repository implementation lives in internal/repository/beads and
+// is built on top of CommandRunner from this package. All bd reads go through
+// the subprocess; the argv-level read cache was removed in 8pxi.7. This
+// package exposes:
 //
 //   - CommandRunner / RunnerConfig / CommandRequest (runner.go)
 //   - RunJSON generic helper (runner.go)
 //   - DecodeJSONInto / ExecResult / CommandExecutor (runner.go)
+//   - VCStatusHash + helpers (vc_status.go) for cache-invalidation signals
 //
 // Consumers that need both runner and repository types use the two-import pattern:
 //

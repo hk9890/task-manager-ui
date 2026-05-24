@@ -10,7 +10,7 @@ import (
 	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
-// Operation names used in lean gateway errors.
+// Operation names used in lean Repository errors.
 const (
 	leanOpHealthCheck  = "health check"
 	leanOpDashboard    = "dashboard"
