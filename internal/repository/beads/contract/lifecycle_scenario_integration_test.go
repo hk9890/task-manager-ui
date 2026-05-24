@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	beads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 )
 
@@ -27,7 +28,7 @@ func TestRealGatewayIssueLifecycleScenario(t *testing.T) {
 	repoPath := embeddedfixture.TempRepoPath(t)
 	embeddedfixture.Seed(t, repoPath)
 
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
+	runner := bdrunner.NewCommandRunner(bdrunner.RunnerConfig{
 		WorkDir: repoPath,
 	})
 	gw := beads.NewCLIGateway(runner)

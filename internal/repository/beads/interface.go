@@ -3,17 +3,17 @@
 // # Re-verification 2026-05-18 (epic yspw)
 //
 // All documented contract clauses across the 8 method groups were systematically
-// re-audited against bd 1.0.4, FakeBeadsGateway, and the test suites. The audit
-// surfaced 23 follow-up items (1 P1, 5 P2, 14 P3, 3 P4) — all closed. Notable
-// outcomes: (a) py38 P1 production bug fixed (UpdateIssue ClearLabels workaround
-// emitted `--remove-labels` plural; bd 1.0.4's actual flag is `--remove-label`
-// singular), (b) puy3 P2 TypeCatalog decoder updated to accept `custom_types` as
-// `[]string` (bd 1.0.4's actual shape), (c) uij1 ReadyIssues contract corrected
-// (bd ready returns ONLY status=open issues — in_progress is excluded), (d) 7
-// FakeBeadsGateway divergences closed for parity (see fakes/doc.go 2026-05-18
-// entries). Both upstream workarounds (CloseIssue idempotency over
+// re-audited against bd 1.0.4 and the test suites. The audit surfaced 23
+// follow-up items (1 P1, 5 P2, 14 P3, 3 P4) — all closed. Notable outcomes:
+// (a) py38 P1 production bug fixed (UpdateIssue ClearLabels workaround emitted
+// `--remove-labels` plural; bd 1.0.4's actual flag is `--remove-label`
+// singular), (b) puy3 P2 TypeCatalog decoder updated to accept `custom_types`
+// as `[]string` (bd 1.0.4's actual shape), (c) uij1 ReadyIssues contract
+// corrected (bd ready returns ONLY status=open issues — in_progress is
+// excluded). Both upstream workarounds (CloseIssue idempotency over
 // gastownhall/beads#4025; UpdateIssue --set-labels "" silent fail) remain
-// necessary at bd 1.0.4.
+// necessary at bd 1.0.4. (Note: FakeBeadsGateway referenced in the original
+// audit was removed in the 8pxi refactor.)
 //
 // # Observed bd quirks (audit 2026-05-16)
 //

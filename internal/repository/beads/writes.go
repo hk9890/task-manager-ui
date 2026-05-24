@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 // createIssuePayload is the JSON response shape for `bd create --json`.
@@ -52,7 +53,7 @@ func (g *Gateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput
 		args = append(args, "--labels", strings.Join(input.Labels, ","))
 	}
 
-	payload, err := RunJSON[createIssuePayload](ctx, runner, CommandRequest{
+	payload, err := bdrunner.RunJSON[createIssuePayload](ctx, runner, bdrunner.CommandRequest{
 		Operation: opCreateIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -124,7 +125,7 @@ func (g *Gateway) UpdateIssue(ctx context.Context, issueID string, input domain.
 		args = append(args, "--remove-label", strings.Join(detail.Summary.Labels, ","))
 	}
 
-	_, err = runner.Run(ctx, CommandRequest{
+	_, err = runner.Run(ctx, bdrunner.CommandRequest{
 		Operation: opUpdateIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -175,7 +176,7 @@ func (g *Gateway) CloseIssue(ctx context.Context, issueID string, input domain.C
 		args = append(args, "--reason", input.Reason)
 	}
 
-	_, err := runner.Run(ctx, CommandRequest{
+	_, err := runner.Run(ctx, bdrunner.CommandRequest{
 		Operation: opCloseIssue,
 		Args:      args,
 		IsWrite:   true,
@@ -219,7 +220,7 @@ func (g *Gateway) AddComment(ctx context.Context, issueID string, input domain.A
 	runner := g.runner
 	var err error
 
-	_, err = runner.Run(ctx, CommandRequest{
+	_, err = runner.Run(ctx, bdrunner.CommandRequest{
 		Operation: opAddComment,
 		Args:      []string{"comments", "add", issueID, input.Body},
 		IsWrite:   true,

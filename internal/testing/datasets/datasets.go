@@ -31,6 +31,7 @@ import (
 	"time"
 
 	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 )
 
@@ -178,7 +179,7 @@ func External(t *testing.T) Dataset {
 // When ds.ReadOnly is true the runner is configured with ReadOnly: true, which
 // causes --readonly to be prepended to every bd argv. Any attempted write
 // through the returned gateway will fail with ErrorCodeCommandFailed.
-func NewGateway(t *testing.T, ds Dataset) beads.BeadsGateway {
+func NewGateway(t *testing.T, ds Dataset) repobeads.BeadsGateway {
 	t.Helper()
 
 	runner := beads.NewCommandRunner(beads.RunnerConfig{
@@ -186,7 +187,7 @@ func NewGateway(t *testing.T, ds Dataset) beads.BeadsGateway {
 		ReadOnly: ds.ReadOnly,
 	})
 
-	return beads.NewCLIGateway(runner)
+	return repobeads.NewCLIGateway(runner)
 }
 
 // BdCount runs "bd [--readonly] count <args> --json" from ds.Path and returns

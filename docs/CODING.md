@@ -95,7 +95,8 @@ internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
-  gateway/beads/     # BeadsGateway interface + CLI adapter with typed bd payload decoding
+  gateway/beads/     # bd subprocess runner, read cache, and argv-level types (RunnerConfig, ExecResult)
+  repository/beads/  # BeadsGateway interface + CLI adapter with typed bd payload decoding
   logging/           # central slog logging package used by runtime startup and gateway tracing
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
@@ -160,7 +161,7 @@ project-plan/        # product, architecture, and execution planning docs
 
 9. **Selection/detail sync is event-driven, not polled.** Browse modes emit `SelectionChangedMsg` when selection changes; app reacts by updating shared selection state and (when needed) issuing detail loads. Do not reintroduce polling-based synchronization loops.
 
-10. **Gateway decoding is typed and operation-scoped.** `internal/gateway/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
+10. **Gateway decoding is typed and operation-scoped.** `internal/repository/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
 
 11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns gateway query routing and validates query types internally.
 

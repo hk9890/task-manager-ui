@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads/contractcheck"
+	beads "github.com/hk9890/beads-workbench/internal/repository/beads"
+	"github.com/hk9890/beads-workbench/internal/repository/beads/contractcheck"
 )
 
 // assertNoViolations converts contractcheck.Violation values to t.Errorf calls.

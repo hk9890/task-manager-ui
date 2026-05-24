@@ -9,7 +9,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	beadsgateway "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/datasets"
 )
 
@@ -39,7 +39,7 @@ type bdBlockedIssue struct {
 //
 // closedLimit mirrors model.closedLimit(); 50 is the default safe floor used
 // by the board model before the first WindowSizeMsg.
-func runDashboardFetch(t *testing.T, gw beadsgateway.BeadsGateway, closedLimit int) dashboard.Columns {
+func runDashboardFetch(t *testing.T, gw repobeads.BeadsGateway, closedLimit int) dashboard.Columns {
 	t.Helper()
 
 	if closedLimit <= 0 {

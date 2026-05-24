@@ -4,6 +4,8 @@ import (
 	"context"
 	"reflect"
 	"sync"
+
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 // testRecordedCall captures one Run invocation.
@@ -14,7 +16,7 @@ type testRecordedCall struct {
 // testArgsRule holds a configured argv match and its canned response.
 type testArgsRule struct {
 	args   []string
-	result ExecResult
+	result bdrunner.ExecResult
 	err    error
 }
 
@@ -29,11 +31,11 @@ type testRecordingExecutor struct {
 
 	calls         []testRecordedCall
 	rules         []testArgsRule
-	defaultResult ExecResult
+	defaultResult bdrunner.ExecResult
 	defaultErr    error
 }
 
-var _ CommandExecutor = (*testRecordingExecutor)(nil)
+var _ bdrunner.CommandExecutor = (*testRecordingExecutor)(nil)
 
 func newTestRecordingExecutor() *testRecordingExecutor {
 	return &testRecordingExecutor{}
@@ -51,7 +53,7 @@ func (r *testRecordingExecutor) OnArgs(args []string) *testArgsRuleBuilder {
 }
 
 // Return completes an argv rule.
-func (b *testArgsRuleBuilder) Return(result ExecResult, err error) {
+func (b *testArgsRuleBuilder) Return(result bdrunner.ExecResult, err error) {
 	b.rec.mu.Lock()
 	defer b.rec.mu.Unlock()
 
@@ -63,7 +65,7 @@ func (b *testArgsRuleBuilder) Return(result ExecResult, err error) {
 }
 
 // Run records the invocation and returns the configured response.
-func (r *testRecordingExecutor) Run(_ context.Context, _ string, args []string, _ string, _ []string) (ExecResult, error) {
+func (r *testRecordingExecutor) Run(_ context.Context, _ string, args []string, _ string, _ []string) (bdrunner.ExecResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

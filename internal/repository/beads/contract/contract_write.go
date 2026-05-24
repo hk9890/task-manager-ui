@@ -16,7 +16,6 @@
 // straightforward to reason about.
 //
 // Wire RunWriteContract against:
-//   - FakeBeadsGateway (unit tier) via fake_write_contract_test.go
 //   - Real CLI gateway with a per-test mktemp DB (integration tier) via
 //     real_write_contract_integration_test.go
 package contract
@@ -27,8 +26,8 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads/contractcheck"
+	beads "github.com/hk9890/beads-workbench/internal/repository/beads"
+	"github.com/hk9890/beads-workbench/internal/repository/beads/contractcheck"
 )
 
 // WritableGatewayFactory returns a BeadsGateway bound to a fresh, writable DB.
@@ -37,8 +36,7 @@ import (
 // invocation; cleanup is registered via t.Cleanup.
 //
 // For real-bd tests this means calling WritableTempFixture(t) from the
-// datasets package (mktemp + bd init, unique per test). For fake tests,
-// a freshly-constructed FakeBeadsGateway with write support is sufficient.
+// datasets package (mktemp + bd init, unique per test).
 type WritableGatewayFactory func(t *testing.T) beads.BeadsGateway
 
 // RunWriteContract runs one sub-test per write method on BeadsGateway, plus

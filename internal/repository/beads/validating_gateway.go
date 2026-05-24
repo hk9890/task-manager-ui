@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads/contractcheck"
+	"github.com/hk9890/beads-workbench/internal/repository/beads/contractcheck"
 )
 
 // validatingGateway is a BeadsGateway decorator that delegates every call to an

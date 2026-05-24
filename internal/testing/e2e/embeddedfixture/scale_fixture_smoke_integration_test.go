@@ -25,6 +25,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	beadsgateway "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 )
 
 // checkScaleGateEnabled skips the test unless BWB_SCALE_FIXTURE_SMOKE=1.
@@ -36,11 +37,11 @@ func checkScaleGateEnabled(tb testing.TB) {
 }
 
 // newScaleGateway builds a CLI gateway pointing at repoPath.
-func newScaleGateway(repoPath string) beadsgateway.BeadsGateway {
+func newScaleGateway(repoPath string) repobeads.BeadsGateway {
 	runner := beadsgateway.NewCommandRunner(beadsgateway.RunnerConfig{
 		WorkDir: repoPath,
 	})
-	return beadsgateway.NewCLIGateway(runner)
+	return repobeads.NewCLIGateway(runner)
 }
 
 // TestScaleFixtureGateway_SearchKeywordReturnsGe20Results guards the search

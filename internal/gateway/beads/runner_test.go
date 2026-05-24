@@ -873,9 +873,11 @@ func TestFilterEnvToAllowlistStripsBeadsActor(t *testing.T) {
 
 // TestCreateIssueDoesNotReceiveBeadsActorInEnv verifies the end-to-end
 // integration: when BEADS_ACTOR is present in the RunnerConfig.Env (simulating
-// a parent process that has it set), the executor invocation for CreateIssue
-// does NOT receive BEADS_ACTOR. This is the CreateIssue-level assertion
-// described in wgz0; filterEnvToAllowlist does the filtering.
+// a parent process that has it set), the executor invocation for a write command
+// does NOT receive BEADS_ACTOR. This is the runner-level assertion described in
+// wgz0; filterEnvToAllowlist does the filtering. The test drives runner.Run
+// directly (IsWrite=true) to avoid a cross-package dependency on NewCLIGateway
+// (which lives in repository/beads after the 8pxi refactor).
 func TestCreateIssueDoesNotReceiveBeadsActorInEnv(t *testing.T) {
 	t.Parallel()
 
@@ -891,11 +893,16 @@ func TestCreateIssueDoesNotReceiveBeadsActorInEnv(t *testing.T) {
 		Env:      []string{"BEADS_ACTOR=impersonator", "PATH=/usr/bin"},
 		Executor: capturingExec,
 	})
-	gateway := NewCLIGateway(runner)
 
-	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "env test"})
+	// Drive a write-flagged Run to trigger the same env-filtering path that
+	// CreateIssue exercises via the runner. The response payload is ignored.
+	_, err := runner.Run(context.Background(), CommandRequest{
+		Operation: "create issue",
+		Args:      []string{"create", "--title", "env test", "--json"},
+		IsWrite:   true,
+	})
 	if err != nil {
-		t.Fatalf("CreateIssue returned error: %v", err)
+		t.Fatalf("runner.Run returned error: %v", err)
 	}
 
 	for _, entry := range capturedEnv {

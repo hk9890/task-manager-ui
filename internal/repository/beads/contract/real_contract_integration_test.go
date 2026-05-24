@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads/contract"
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	beads "github.com/hk9890/beads-workbench/internal/repository/beads"
+	"github.com/hk9890/beads-workbench/internal/repository/beads/contract"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 )
 
@@ -23,7 +24,7 @@ func TestRealGatewayReadContract(t *testing.T) {
 
 		repoPath := embeddedfixture.SharedFixtureRepoPath(t)
 
-		runner := beads.NewCommandRunner(beads.RunnerConfig{
+		runner := bdrunner.NewCommandRunner(bdrunner.RunnerConfig{
 			WorkDir: repoPath,
 		})
 

@@ -11,19 +11,18 @@ The repository uses a three-tier model.
 ### Tier 1 — Unit (`mise run test`, fast, no external processes)
 
 - Fast, deterministic. No external processes. No `bd`, `git`, or `jq`.
-- Uses `fakes.FakeBeadsGateway` from `internal/testing/fakes/beads_gateway.go`.
+- Uses stub gateways or a `fakes.RecordingExecutor`-backed real `BeadsGateway` for argv-level assertions.
 - Asserts app behavior: model logic, view rendering, key handling.
 - Live in `*_test.go` files alongside the package under test (no build tag required).
 - Examples: `internal/mode/*/model_test.go`, `internal/ui/*/*_test.go`, `internal/app/model_test.go`.
 
 ### Tier 2a — Gateway-integration READ contract (`mise run test:integration`, `//go:build integration`)
 
-- Package: `internal/gateway/beads/contract/`.
-- Single parameterized function `RunReadContract(t, factory GatewayFactory)` wired against both `{fake, real}` factories.
-- Both factories must produce identical results — this is the **fake/real parity guarantee**.
+- Package: `internal/repository/beads/contract/`.
+- Single parameterized function `RunReadContract(t, factory GatewayFactory)` wired against a real CLI factory.
 - Uses `embeddedfixture.SharedFixtureRepoPath(t)` for the real factory: seeds once per process, copies the pre-seeded cache directory per test (~100ms after the first call).
 - **Read-only.** Never mutate the shared fixture inside `RunReadContract`.
-- Covers every read method on `BeadsGateway` — `internal/gateway/beads/interface.go` is the source of truth for the method set.
+- Covers every read method on `BeadsGateway` — `internal/repository/beads/interface.go` is the source of truth for the method set.
 
 ### Tier 2b — Gateway-integration MUTATING scenarios (`mise run test:integration`, `//go:build integration`)
 
@@ -38,7 +37,7 @@ The repository uses a three-tier model.
 
 | What the test asserts | Where it goes | Tool |
 |---|---|---|
-| App behavior given any gateway state (model logic, view rendering, key handling) | Tier 1 — unit | `fakes.FakeBeadsGateway` |
+| App behavior given any gateway state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub gateway or `fakes.RecordingExecutor` |
 | The bd CLI adapter's contract (a read method produces correct output) | Tier 2a — add a `t.Run` block to `RunReadContract` | real CLI gateway via `SharedFixtureRepoPath` |
 | A multi-step bd write workflow (mutations + read verification) | Tier 2b — add to an existing scenario or create a new one | real CLI gateway via `TempRepoPath` + `Seed` |
 
@@ -67,12 +66,9 @@ Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
 
 `RunReadContract` is the single function that bridges Tier 1 and Tier 2a.
 
-- `TestFakeGatewayReadContract` wires it against `fakes.FakeBeadsGateway` (unit, no build tag). Runs in the default `mise run test` pass.
 - `TestRealGatewayReadContract` wires it against the real `bd` CLI gateway (integration, `//go:build integration`).
 
-**Why it exists:** The fake is only load-bearing if it behaves identically to real `bd`. The contract enforces that.
-
-**When the contract catches a fake/real drift:** fix the fake to match real behavior. Never weaken the contract assertion to paper over a discrepancy. If the real CLI changed behavior, update both the fake and the contract assertion together.
+**Why it exists:** The contract pins the exact behavior of every read method against real `bd` output, so regressions in parsing are caught automatically.
 
 ## Commands
 
@@ -93,7 +89,7 @@ Harness-focused runs (package-scoped):
 
 ```bash
 mise run test -- ./internal/testing/...
-mise run test -- ./internal/gateway/beads/contract/... -v
+mise run test -- ./internal/repository/beads/contract/... -v
 ```
 
 ## Runtime UI Verification Workflow (operator runbook)
@@ -200,13 +196,6 @@ If a surface is not practical for teatest+golden (for example, highly volatile A
 
 The shared deterministic seams live in `internal/testing/fakes`:
 
-- **`FakeBeadsGateway`**
-  - Implements `beads.BeadsGateway`.
-  - Supports deterministic per-method responses.
-  - Supports configurable per-method error injection via `SetError(method, err)` for error-path tests.
-  - Records calls for interaction assertions.
-  - Used by both unit tests and the fake-side of `RunReadContract`.
-
 - **`FakeEditor`**
   - Deterministic non-interactive editor seam.
   - Returns configured edit result or error.
@@ -225,7 +214,7 @@ These seams are required for tests that must not launch real editors or subproce
 
 ## Gateway Fixture Conventions (unit)
 
-- Store gateway JSON payload fixtures in `internal/gateway/beads/testdata/`.
+- Store gateway JSON payload fixtures in `internal/repository/beads/testdata/`.
 - Prefer realistic JSON copied from official command output shape (with sensitive data removed).
 - Keep fixtures small and focused so each test states one intent clearly.
 
@@ -238,7 +227,7 @@ Deterministic fixture harness lives under `internal/testing/e2e/embeddedfixture`
 - `Seed(tb, repoPath)`: test helper that invokes `setup.sh` against a caller-supplied directory.
 - `TempRepoPath(tb)`: returns a `tb.TempDir()`-backed path suitable for a fresh mutable fixture.
 - `SharedFixtureRepoPath(tb)`: seeds once per process, returns a per-test copy (read-only use).
-- `ReadSeedSpec(tb)`: loads `seed.json` as a typed `Spec` struct — used by `fake_contract_test.go` to prime the fake from the same source of truth.
+- `ReadSeedSpec(tb)`: loads `seed.json` as a typed `Spec` struct — used by the scale fixture smoke tests to locate edge-case issues.
 
 ## Official `bd` command-surface limitations (known)
 

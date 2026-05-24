@@ -44,10 +44,11 @@ Beads Workbench is composed of five main areas:
    - feature-local keyboard/state handling
    - shell contract messages (`SelectionChangedMsg`, `ActionRequestMsg`)
 
-3. **Gateway layer (`internal/gateway/beads`)**
-   - the single UI-facing interface for all beads reads and writes
+3. **Gateway layer (`internal/repository/beads`)**
+   - the single UI-facing interface for all beads reads and writes (`BeadsGateway` interface)
    - implemented through official `bd` commands / official API surfaces only
    - typed CLI payload decoding + explicit domain mapping
+   - subprocess runner and read cache live in `internal/gateway/beads` (runner/cache only)
 
 4. **Launcher layer (`internal/launcher`)**
    - editor handoff
@@ -156,7 +157,7 @@ Design constraints:
 
 - avoid generic `map[string]any` decoding in primary gateway reads
 - keep decode failures operation-scoped and actionable (`decode failed` + operation context)
-- keep command argument construction and payload mapping covered by unit fixtures in `internal/gateway/beads/testdata`
+- keep command argument construction and payload mapping covered by unit fixtures in `internal/repository/beads/testdata`
 
 ## Future Federated Mode
 

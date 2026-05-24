@@ -4,16 +4,18 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 func TestGatewayCreateIssueMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-123"}`)}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte(`{"id":"bd-123"}`)}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 	priority := 1
 
 	result, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -55,8 +57,8 @@ func TestGatewayCreateIssueMapsCommandArgs(t *testing.T) {
 func TestGatewayCreateIssueIncludesExplicitZeroPriority(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-999"}`)}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte(`{"id":"bd-999"}`)}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 	priority := 0
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -84,8 +86,8 @@ func TestGatewayCreateIssueRequiresNonEmptyIssueID(t *testing.T) {
 
 	// bd returns a valid JSON payload but with an empty id field; the gateway
 	// must reject this as a decode failure rather than returning an empty IssueID.
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":""}`)}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte(`{"id":""}`)}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -97,8 +99,8 @@ func TestGatewayCreateIssueRequiresNonEmptyIssueID(t *testing.T) {
 func TestGatewayCreateIssueRejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("not-json\n")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("not-json\n")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeDecodeFailed)
@@ -114,8 +116,8 @@ func TestGatewayUpdateIssueMapsCommandArgs(t *testing.T) {
 	priority := 0
 	assignee := "jane"
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("ok")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.UpdateIssue(context.Background(), "bd-42", domain.UpdateIssueInput{
 		Title:       &title,
@@ -157,11 +159,11 @@ func TestGatewayUpdateIssueClearLabelsEmitsRemoveLabel(t *testing.T) {
 
 	rec := newTestRecordingExecutor()
 	// ShowIssue call to fetch current labels.
-	rec.OnArgs([]string{"show", "bd-42", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bd-42", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 		{"id":"bd-42","title":"some issue","status":"open","issue_type":"task","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","labels":["alpha","beta"]}
 	]`)}, nil)
 	// UpdateIssue call that removes the labels using the correct singular flag.
-	rec.OnArgs([]string{"update", "bd-42", "--remove-label", "alpha,beta"}).Return(ExecResult{Stdout: []byte("ok")}, nil)
+	rec.OnArgs([]string{"update", "bd-42", "--remove-label", "alpha,beta"}).Return(bdrunner.ExecResult{Stdout: []byte("ok")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -193,7 +195,7 @@ func TestGatewayUpdateIssueClearLabelsNoOpWhenNoLabels(t *testing.T) {
 
 	rec := newTestRecordingExecutor()
 	// ShowIssue call returns issue with no labels.
-	rec.OnArgs([]string{"show", "bd-99", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bd-99", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 		{"id":"bd-99","title":"no labels issue","status":"open","issue_type":"task","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}
 	]`)}, nil)
 
@@ -218,8 +220,8 @@ func TestGatewayUpdateIssueClearLabelsNoOpWhenNoLabels(t *testing.T) {
 func TestGatewayCloseIssueMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("ok")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.CloseIssue(context.Background(), "bd-7", domain.CloseIssueInput{Reason: "completed"})
 	if err != nil {
@@ -238,20 +240,20 @@ func TestGatewayCloseIssueMapsCommandArgs(t *testing.T) {
 // CloseIssue → ShowIssue idempotency-recovery path.
 type verbDispatchExecutor struct {
 	byVerb map[string]struct {
-		result ExecResult
+		result bdrunner.ExecResult
 		err    error
 	}
 	calls [][]string // ordered argv per invocation, for assertions
 }
 
-func (e *verbDispatchExecutor) Run(_ context.Context, _ string, args []string, _ string, _ []string) (ExecResult, error) {
+func (e *verbDispatchExecutor) Run(_ context.Context, _ string, args []string, _ string, _ []string) (bdrunner.ExecResult, error) {
 	e.calls = append(e.calls, append([]string(nil), args...))
 	if len(args) == 0 {
-		return ExecResult{}, errors.New("verbDispatchExecutor: empty args")
+		return bdrunner.ExecResult{}, errors.New("verbDispatchExecutor: empty args")
 	}
 	got, ok := e.byVerb[args[0]]
 	if !ok {
-		return ExecResult{}, errors.New("verbDispatchExecutor: no response for verb " + args[0])
+		return bdrunner.ExecResult{}, errors.New("verbDispatchExecutor: no response for verb " + args[0])
 	}
 	return got.result, got.err
 }
@@ -287,14 +289,14 @@ func TestGatewayCloseIssueEmulatesIdempotencyOnBdNotFound(t *testing.T) {
 	}]`)
 
 	exec := &verbDispatchExecutor{byVerb: map[string]struct {
-		result ExecResult
+		result bdrunner.ExecResult
 		err    error
 	}{
-		"close": {result: ExecResult{Stderr: bdStderr, ExitCode: 1}},
-		"show":  {result: ExecResult{Stdout: showJSON}},
+		"close": {result: bdrunner.ExecResult{Stderr: bdStderr, ExitCode: 1}},
+		"show":  {result: bdrunner.ExecResult{Stdout: showJSON}},
 	}}
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: exec}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: exec}))
 
 	if err := gateway.CloseIssue(context.Background(), "bd-7", domain.CloseIssueInput{}); err != nil {
 		t.Fatalf("CloseIssue: expected nil (idempotency emulated), got %v", err)
@@ -321,14 +323,14 @@ func TestGatewayCloseIssuePropagatesNotFoundWhenIssueTrulyMissing(t *testing.T) 
 	showStderr := []byte(`Error: resolving ID bd-missing: no issue found matching "bd-missing"` + "\n")
 
 	exec := &verbDispatchExecutor{byVerb: map[string]struct {
-		result ExecResult
+		result bdrunner.ExecResult
 		err    error
 	}{
-		"close": {result: ExecResult{Stderr: bdStderr, ExitCode: 1}},
-		"show":  {result: ExecResult{Stderr: showStderr, ExitCode: 1}},
+		"close": {result: bdrunner.ExecResult{Stderr: bdStderr, ExitCode: 1}},
+		"show":  {result: bdrunner.ExecResult{Stderr: showStderr, ExitCode: 1}},
 	}}
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: exec}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: exec}))
 
 	err := gateway.CloseIssue(context.Background(), "bd-missing", domain.CloseIssueInput{})
 	if err == nil {
@@ -362,14 +364,14 @@ func TestGatewayCloseIssuePropagatesNotFoundWhenShowReturnsOpen(t *testing.T) {
 	}]`)
 
 	exec := &verbDispatchExecutor{byVerb: map[string]struct {
-		result ExecResult
+		result bdrunner.ExecResult
 		err    error
 	}{
-		"close": {result: ExecResult{Stderr: bdStderr, ExitCode: 1}},
-		"show":  {result: ExecResult{Stdout: showJSON}},
+		"close": {result: bdrunner.ExecResult{Stderr: bdStderr, ExitCode: 1}},
+		"show":  {result: bdrunner.ExecResult{Stdout: showJSON}},
 	}}
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: exec}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: exec}))
 
 	err := gateway.CloseIssue(context.Background(), "bd-7", domain.CloseIssueInput{})
 	if err == nil {
@@ -380,8 +382,8 @@ func TestGatewayCloseIssuePropagatesNotFoundWhenShowReturnsOpen(t *testing.T) {
 func TestGatewayAddCommentMapsCommandArgs(t *testing.T) {
 	t.Parallel()
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("ok")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.AddComment(context.Background(), "bd-55", domain.AddCommentInput{Body: "Looks good"})
 	if err != nil {
@@ -398,7 +400,7 @@ func TestGatewayWriteOperationsPropagateNormalizedRunnerErrors(t *testing.T) {
 	t.Parallel()
 
 	execStub := &stubExecutor{err: errors.New("fork/exec failed")}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	_, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "x"})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeCommandFailed)
@@ -423,8 +425,8 @@ func TestGatewayCreateIssueLabelsAbsentFromResponse(t *testing.T) {
 	t.Parallel()
 
 	// Response has only "id" — no "labels" field, matching real bd 1.0.4 behavior.
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte(`{"id":"bd-500"}`)}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte(`{"id":"bd-500"}`)}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	result, err := gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
 		Title:  "labelled issue",
@@ -454,7 +456,7 @@ func TestGatewayUpdateIssueAllNilFieldsNoOp(t *testing.T) {
 	wantArgs := []string{"update", "bd-77"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgs).Return(ExecResult{Stdout: []byte("No updates specified")}, nil)
+	rec.OnArgs(wantArgs).Return(bdrunner.ExecResult{Stdout: []byte("No updates specified")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -483,7 +485,7 @@ func TestGatewayUpdateIssueStartedAtOnInProgressTransition(t *testing.T) {
 	wantArgs := []string{"update", "bd-88", "--status", "in_progress"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgs).Return(ExecResult{Stdout: []byte("ok")}, nil)
+	rec.OnArgs(wantArgs).Return(bdrunner.ExecResult{Stdout: []byte("ok")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -510,8 +512,8 @@ func TestGatewayCloseIssueDefaultCloseReasonOmitsFlag(t *testing.T) {
 
 	wantArgs := []string{"close", "bd-99"}
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("ok")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("ok")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.CloseIssue(context.Background(), "bd-99", domain.CloseIssueInput{})
 	if err != nil {
@@ -534,8 +536,8 @@ func TestGatewayAddCommentArgvShapeEmptyBodyAllowed(t *testing.T) {
 
 	wantArgs := []string{"comments", "add", "bd-10", ""}
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("Comment added to bd-10")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("Comment added to bd-10")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.AddComment(context.Background(), "bd-10", domain.AddCommentInput{Body: ""})
 	if err != nil {
@@ -560,8 +562,8 @@ func TestGatewayAddCommentArgvShapeLongBody(t *testing.T) {
 	}
 	wantArgs := []string{"comments", "add", "bd-11", longBody}
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("Comment added to bd-11")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("Comment added to bd-11")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.AddComment(context.Background(), "bd-11", domain.AddCommentInput{Body: longBody})
 	if err != nil {
@@ -583,8 +585,8 @@ func TestGatewayAddCommentArgvShapeMarkdownBody(t *testing.T) {
 	markdownBody := "## heading\n\n- item 1\n- item 2\n\n```go\nfmt.Println(\"hello\")\n```"
 	wantArgs := []string{"comments", "add", "bd-12", markdownBody}
 
-	execStub := &stubExecutor{result: ExecResult{Stdout: []byte("Comment added to bd-12")}}
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: execStub}))
+	execStub := &stubExecutor{result: bdrunner.ExecResult{Stdout: []byte("Comment added to bd-12")}}
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: execStub}))
 
 	err := gateway.AddComment(context.Background(), "bd-12", domain.AddCommentInput{Body: markdownBody})
 	if err != nil {
@@ -594,4 +596,30 @@ func TestGatewayAddCommentArgvShapeMarkdownBody(t *testing.T) {
 	if !reflect.DeepEqual(execStub.args, wantArgs) {
 		t.Fatalf("unexpected args:\n got: %#v\nwant: %#v", execStub.args, wantArgs)
 	}
+}
+
+// stubExecutor is a minimal CommandExecutor that records the last Run call
+// and returns a configured result. Mirrored from runner_test.go (gateway/beads)
+// which stays in its original package after the gateway code moved here.
+type stubExecutor struct {
+	mu      sync.Mutex
+	command string
+	args    []string
+	workDir string
+	env     []string
+
+	result bdrunner.ExecResult
+	err    error
+}
+
+func (s *stubExecutor) Run(_ context.Context, command string, args []string, workDir string, env []string) (bdrunner.ExecResult, error) {
+	s.mu.Lock()
+	s.command = command
+	s.args = append([]string(nil), args...)
+	s.workDir = workDir
+	s.env = append([]string(nil), env...)
+	result, err := s.result, s.err
+	s.mu.Unlock()
+
+	return result, err
 }

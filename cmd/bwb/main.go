@@ -37,7 +37,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	if opts.logManager != nil {
 		runnerCfg.Logger = opts.logManager.Component("gateway")
 	}
-	gateway := beads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
+	gateway := repositorybeads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
 	repo := repositorybeads.New(gateway)
 
 	services, err := app.NewServices(repo, cfg, opts.projectRoot)

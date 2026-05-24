@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	beads "github.com/hk9890/beads-workbench/internal/repository/beads"
 )
 
 // ssomBrokenGateway is a minimal BeadsGateway implementation that

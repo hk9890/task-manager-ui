@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads/contractcheck"
+	"github.com/hk9890/beads-workbench/internal/repository/beads/contractcheck"
 )
 
 // capturingHandler is a slog.Handler that records all log records for inspection.

@@ -907,7 +907,7 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 		Command:  "bd",
 		Executor: rec,
 	})
-	gateway := beads.NewCLIGateway(runner)
+	gateway := repositorybeads.NewCLIGateway(runner)
 	repo := repositorybeads.New(gateway)
 
 	m := NewModel(repo, slog.Default(), resolvedBoardKeys(t))

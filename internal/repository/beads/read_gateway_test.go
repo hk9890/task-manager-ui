@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 func TestGatewayListIssuesBuildsCommandAndMapsSummaries(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json", "--status", "open,blocked", "--type", "task,bug", "--assignee", "alice", "--label", "ui", "--label", "backend", "--sort", "updated", "--limit", "2"}).Return(ExecResult{Stdout: readFixture(t, "list_issues.json")}, nil)
+	rec.OnArgs([]string{"list", "--json", "--status", "open,blocked", "--type", "task,bug", "--assignee", "alice", "--label", "ui", "--label", "backend", "--sort", "updated", "--limit", "2"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "list_issues.json")}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -53,7 +54,7 @@ func TestGatewayReadyIssuesPaginatesResults(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--json", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"ready", "--json", "--limit", "2"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":2,"owner":"a","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"bug","priority":1,"owner":"b","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
 			]`)}, nil)
@@ -74,7 +75,7 @@ func TestGatewayBlockedIssuesMapsBlockedBy(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"blocked", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"blocked", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"blocked","status":"blocked","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","blocked_by":["bw-0"]}
 			]`)}, nil)
 
@@ -94,7 +95,7 @@ func TestGatewayShowIssueMapsDetail(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-4", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_issue.json")}, nil)
+	rec.OnArgs([]string{"show", "bw-4", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "show_issue.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -161,10 +162,10 @@ func TestGatewayShowIssueMapsParentGroupBrowserContextFromParentChildRelationshi
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-42", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-42", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-42","title":"child issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"parent issue","issue_type":"epic","priority":1,"status":"open","dependency_type":"parent-child"},{"id":"bw-50","title":"blocker issue","issue_type":"bug","priority":1,"status":"open","dependency_type":"blocks"},{"id":"bw-90","title":"dependency-related issue","issue_type":"spike","priority":3,"status":"blocked","dependency_type":"related"}],"related":[{"id":"bw-91","title":"top-level related issue","issue_type":"task","priority":2,"status":"open"}]}
 			]`)}, nil)
-	rec.OnArgs([]string{"show", "bw-1", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-1", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"parent issue","description":"detail","status":"open","issue_type":"epic","priority":1,"created_at":"2026-04-04T09:00:00Z","updated_at":"2026-04-04T10:00:00Z","dependents":[{"id":"bw-42","title":"child issue","issue_type":"task","priority":2,"status":"open","dependency_type":"parent-child"},{"id":"bw-43","title":"sibling issue","issue_type":"task","priority":3,"status":"in_progress","dependency_type":"parent-child"},{"id":"bw-99","title":"non-child dependent","issue_type":"task","priority":3,"status":"open","dependency_type":"blocks"}]}
 			]`)}, nil)
 
@@ -204,7 +205,7 @@ func TestGatewayShowIssueReturnsEmptyParentGroupBrowserContextWhenNoParent(t *te
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-77", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-77", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-77","title":"no parent issue","description":"detail","status":"open","issue_type":"task","priority":2,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-50","title":"blocker issue","dependency_type":"blocks"}]}
 			]`)}, nil)
 
@@ -228,7 +229,7 @@ func TestGatewayShowIssuePrefersAssigneeOverOwner(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-7", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-7", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-7","title":"assignee precedence","description":"detail","status":"open","issue_type":"task","priority":1,"assignee":"bob","owner":"hans.kohlreiter@dynatrace.com","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -248,7 +249,7 @@ func TestGatewayShowIssueFallsBackToOwnerWhenAssigneeMissing(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-8", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-8", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-8","title":"assignee fallback","description":"detail","status":"open","issue_type":"task","priority":1,"owner":"legacy-owner","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -272,7 +273,7 @@ func TestGatewayShowIssueLeavesCreatorAndCloseMetadataEmptyWhenAbsent(t *testing
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-9", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-9", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-9","title":"metadata absent","description":"detail","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -303,7 +304,7 @@ func TestGatewaySearchIssuesBuildsCommandAndReturnsPage(t *testing.T) {
 	priorityMax := 2
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"search", "gateway", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"search", "gateway", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
 			]`)}, nil)
@@ -334,7 +335,7 @@ func TestGatewaySearchIssuesEmptyTextUsesListCommandFallback(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json", "--all", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"list", "--json", "--all", "--limit", "2"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
 			]`)}, nil)
@@ -357,7 +358,7 @@ func TestGatewaySearchIssuesEmptyTextWithFiltersUsesListCommandFallback(t *testi
 	priorityMin := 1
 	priorityMax := 2
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"list", "--json", "--status", "open", "--type", "task", "--priority-min", "1", "--priority-max", "2", "--assignee", "alice", "--label", "ui", "--limit", "2"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"two","status":"open","issue_type":"task","priority":2,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
 			]`)}, nil)
@@ -389,7 +390,7 @@ func TestGatewaySearchIssuesWorkStateReadyUsesReadyAndLocalFilters(t *testing.T)
 	priorityMin := 1
 	priorityMax := 1
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"ready", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"gateway parser","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"gateway parser docs","status":"open","issue_type":"task","priority":2,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-3","title":"other","status":"open","issue_type":"task","priority":1,"owner":"alice","labels":["ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
@@ -422,7 +423,7 @@ func TestGatewaySearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters(t *testin
 	priorityMin := 0
 	priorityMax := 1
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"blocked", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"blocked", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"gateway deadlock","status":"blocked","issue_type":"bug","priority":1,"owner":"alice","labels":["backend","ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"gateway deadlock","status":"blocked","issue_type":"bug","priority":2,"owner":"alice","labels":["backend","ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-3","title":"gateway deadlock","status":"blocked","issue_type":"task","priority":1,"owner":"alice","labels":["backend","ui"],"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
@@ -453,7 +454,7 @@ func TestGatewaySearchIssuesWithoutLimitMarksBackendResultsPartialNotExact(t *te
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"search", "gateway", "--json", "--status", "all"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"search", "gateway", "--json", "--status", "all"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -474,7 +475,7 @@ func TestGatewaySearchIssuesRejectsInvalidPriorityRange(t *testing.T) {
 
 	priorityMin := 3
 	priorityMax := 1
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.SearchIssues(context.Background(), domain.SearchIssuesQuery{PriorityMin: &priorityMin, PriorityMax: &priorityMax})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -484,9 +485,9 @@ func TestGatewayCatalogReads(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"statuses", "--json"}).Return(ExecResult{Stdout: readFixture(t, "statuses.json")}, nil)
-	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: readFixture(t, "types.json")}, nil)
-	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(ExecResult{Stdout: readFixture(t, "labels.json")}, nil)
+	rec.OnArgs([]string{"statuses", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "statuses.json")}, nil)
+	rec.OnArgs([]string{"types", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "types.json")}, nil)
+	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "labels.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -523,7 +524,7 @@ func TestGatewayReadMethodsReturnNormalizedFailures(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json"}).Return(ExecResult{ExitCode: 2, Stderr: []byte("bad args")}, nil)
+	rec.OnArgs([]string{"list", "--json"}).Return(bdrunner.ExecResult{ExitCode: 2, Stderr: []byte("bad args")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -535,7 +536,7 @@ func TestGatewayReadMethodsSurfaceExecutorStderr(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json"}).Return(ExecResult{Stderr: []byte("permission denied")}, fmt.Errorf("spawn failed"))
+	rec.OnArgs([]string{"list", "--json"}).Return(bdrunner.ExecResult{Stderr: []byte("permission denied")}, fmt.Errorf("spawn failed"))
 
 	gateway, _ := newTestGateway(rec)
 
@@ -548,7 +549,7 @@ func TestGatewayReadMappingReturnsDecodeError(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"list", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -561,7 +562,7 @@ func TestGatewayReadMappingReturnsDecodeError(t *testing.T) {
 func TestGatewayShowIssueRequiresID(t *testing.T) {
 	t.Parallel()
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -571,7 +572,7 @@ func TestGatewayShowIssueReturnsNotFoundOnEmptyResponse(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-404", "--json"}).Return(ExecResult{Stdout: []byte(`[]`)}, nil)
+	rec.OnArgs([]string{"show", "bw-404", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[]`)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -583,7 +584,7 @@ func TestGatewayShowIssueDecodeFailureWhenDependencyIsMissingTitle(t *testing.T)
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-9", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-9", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-9","title":"bad dependency","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1"}]}
 			]`)}, nil)
 
@@ -597,7 +598,7 @@ func TestGatewayShowIssueReferenceMetadataIsOptional(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-10", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-10", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-10","title":"optional refs","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"dep"}],"dependents":[{"id":"bw-2","title":"child"}],"related":[{"id":"bw-3","title":"rel"}]}
 			]`)}, nil)
 
@@ -638,7 +639,7 @@ func TestGatewayShowIssueMapsRelatedFromDependenciesWhenDependencyTypeIsRelatedO
 			t.Parallel()
 
 			rec := newTestRecordingExecutor()
-			rec.OnArgs([]string{"show", "bw-11", "--json"}).Return(ExecResult{Stdout: []byte(fmt.Sprintf(`[
+			rec.OnArgs([]string{"show", "bw-11", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(fmt.Sprintf(`[
 						{"id":"bw-11","title":"related in dependencies","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-1","title":"real blocker","dependency_type":"blocks"},{"id":"bw-3","title":"real related","dependency_type":"%s"}],"dependents":[{"id":"bw-2","title":"child"}]}
 					]`, tc.dependencyType))}, nil)
 
@@ -664,7 +665,7 @@ func TestGatewayShowIssueMapsRelatedFromDependentsWhenDependencyTypeIsRelatesTo(
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-13", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-13", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-13","title":"related in dependents","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependents":[{"id":"bw-21","title":"true dependent","dependency_type":"blocks"},{"id":"bw-22","title":"related dependent","dependency_type":"relates-to"}]}
 			]`)}, nil)
 
@@ -688,7 +689,7 @@ func TestGatewayShowIssueMergesTopLevelAndDependencyRelatedWithoutDuplicates(t *
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-12", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-12", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-12","title":"mixed related","description":"x","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z","dependencies":[{"id":"bw-4","title":"from deps related","dependency_type":"related"},{"id":"bw-5","title":"non related dep"}],"related":[{"id":"bw-4","title":"from top-level related"},{"id":"bw-6","title":"top-level only"}]}
 			]`)}, nil)
 
@@ -716,7 +717,7 @@ func TestGatewayCountIssuesDecodesMultiGroup(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"count", "--by-status", "--json"}).Return(ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"},{"count":353,"group":"closed"}],"schema_version":1,"total":358}`)}, nil)
+	rec.OnArgs([]string{"count", "--by-status", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"},{"count":353,"group":"closed"}],"schema_version":1,"total":358}`)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -748,7 +749,7 @@ func TestGatewayCountIssuesDecodesSingleGroup(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "open"}).Return(ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"}],"schema_version":1,"total":5}`)}, nil)
+	rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "open"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"groups":[{"count":5,"group":"open"}],"schema_version":1,"total":5}`)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -774,7 +775,7 @@ func TestGatewayCountIssuesDecodesEmptyGroups(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"count", "--by-status", "--json"}).Return(ExecResult{Stdout: []byte(`{"groups":[],"schema_version":1,"total":0}`)}, nil)
+	rec.OnArgs([]string{"count", "--by-status", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"groups":[],"schema_version":1,"total":0}`)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -796,7 +797,7 @@ func TestGatewayCountIssuesPassesFilters(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "closed", "--type", "bug", "--assignee", "alice", "--label", "backend"}).Return(ExecResult{Stdout: []byte(`{"groups":[{"count":10,"group":"closed"}],"schema_version":1,"total":10}`)}, nil)
+	rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "closed", "--type", "bug", "--assignee", "alice", "--label", "backend"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"groups":[{"count":10,"group":"closed"}],"schema_version":1,"total":10}`)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -828,7 +829,7 @@ func TestGatewayListIssuesUsesClosedSortFlagForClosedAtField(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--limit", "5"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"list", "--json", "--status", "closed", "--sort", "closed", "--limit", "5"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-B","title":"B closed recent","status":"closed","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","closed_at":"2026-04-01T00:00:00Z"},
 				{"id":"bw-A","title":"A closed earlier updated later","status":"closed","issue_type":"task","priority":1,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z","closed_at":"2026-01-01T00:00:00Z"}
 			]`)}, nil)
@@ -877,7 +878,7 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 		t.Parallel()
 
 		rec := newTestRecordingExecutor()
-		rec.OnArgs([]string{"list", "--json", "--sort", "updated"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		rec.OnArgs([]string{"list", "--json", "--sort", "updated"}).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
 		gw, _ := newTestGateway(rec)
 		_, err := gw.ListIssues(context.Background(), domain.IssueListQuery{
 			SortBy:    domain.SortFieldUpdatedAt,
@@ -893,7 +894,7 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 		t.Parallel()
 
 		rec := newTestRecordingExecutor()
-		rec.OnArgs([]string{"list", "--json", "--sort", "updated", "--reverse"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		rec.OnArgs([]string{"list", "--json", "--sort", "updated", "--reverse"}).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
 		gw, _ := newTestGateway(rec)
 		_, err := gw.ListIssues(context.Background(), domain.IssueListQuery{
 			SortBy:    domain.SortFieldUpdatedAt,
@@ -909,7 +910,7 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 		t.Parallel()
 
 		rec := newTestRecordingExecutor()
-		rec.OnArgs([]string{"query", "status=closed", "--json", "--sort", "closed"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		rec.OnArgs([]string{"query", "status=closed", "--json", "--sort", "closed"}).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
 		gw, _ := newTestGateway(rec)
 		_, err := gw.Query(context.Background(), "status=closed", domain.QueryOptions{
 			SortBy:    domain.SortFieldClosedAt,
@@ -925,7 +926,7 @@ func TestGatewaySortDirectionDescendingEmitsNoReverseFlag(t *testing.T) {
 		t.Parallel()
 
 		rec := newTestRecordingExecutor()
-		rec.OnArgs([]string{"query", "status=closed", "--json", "--sort", "closed", "--reverse"}).Return(ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
+		rec.OnArgs([]string{"query", "status=closed", "--json", "--sort", "closed", "--reverse"}).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
 		gw, _ := newTestGateway(rec)
 		_, err := gw.Query(context.Background(), "status=closed", domain.QueryOptions{
 			SortBy:    domain.SortFieldClosedAt,
@@ -941,7 +942,7 @@ func TestGatewayHealthCheckIssuesPingJSON(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{Stdout: []byte(`{"status":"ok","total_ms":42}`)}, nil)
+	rec.OnArgs([]string{"ping", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"status":"ok","total_ms":42}`)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -964,7 +965,7 @@ func TestGatewayHealthCheckNoDatabaseReturnsNoDatabaseFound(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{ExitCode: 1, Stderr: []byte("Error: no beads database found")}, nil)
+	rec.OnArgs([]string{"ping", "--json"}).Return(bdrunner.ExecResult{ExitCode: 1, Stderr: []byte("Error: no beads database found")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -976,7 +977,7 @@ func TestGatewayHealthCheckBdNotFoundReturnsCommandUnavailable(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{}, exec.ErrNotFound)
+	rec.OnArgs([]string{"ping", "--json"}).Return(bdrunner.ExecResult{}, exec.ErrNotFound)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -985,7 +986,7 @@ func TestGatewayHealthCheckBdNotFoundReturnsCommandUnavailable(t *testing.T) {
 }
 
 func newTestGateway(rec *testRecordingExecutor) (*Gateway, *testRecordingExecutor) {
-	runner := NewCommandRunner(RunnerConfig{Executor: rec})
+	runner := bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: rec})
 	return NewCLIGatewayRaw(runner), rec
 }
 
@@ -1005,7 +1006,7 @@ func TestGatewayQueryHappyPathReturnsIssueSummaries(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"query", "status=in_progress", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"query", "status=in_progress", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"in progress one","status":"in_progress","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"in progress two","status":"in_progress","issue_type":"bug","priority":1,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
 			]`)}, nil)
@@ -1031,7 +1032,7 @@ func TestGatewayQueryArgvAssemblyWithAllOptions(t *testing.T) {
 
 	// Limit=1, Offset=1 → withOffsetWindow(1,1)=2 → --limit 2; caller gets page [1:2]
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "2"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "2"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-A","title":"closed A","status":"closed","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"},
 				{"id":"bw-B","title":"closed B","status":"closed","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-02-01T00:00:00Z"}
 			]`)}, nil)
@@ -1059,7 +1060,7 @@ func TestGatewayQueryArgvAssemblyLimitWithoutOffset(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"query", "status=open", "--json", "--sort", "updated", "--limit", "5"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"query", "status=open", "--json", "--sort", "updated", "--limit", "5"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"open one","status":"open","issue_type":"task","priority":1,"owner":"a","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -1083,7 +1084,7 @@ func TestGatewayQueryArgvNoLimitProducesNoLimitFlag(t *testing.T) {
 
 	// When Limit=0 and Offset=0, no --limit flag should be appended.
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"query", "priority=1", "--json"}).Return(ExecResult{Stdout: []byte(`[]`)}, nil)
+	rec.OnArgs([]string{"query", "priority=1", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[]`)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -1107,7 +1108,7 @@ func TestGatewayQueryArgvNoLimitProducesNoLimitFlag(t *testing.T) {
 func TestGatewayQueryRejectsEmptyExpression(t *testing.T) {
 	t.Parallel()
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.Query(context.Background(), "", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -1116,7 +1117,7 @@ func TestGatewayQueryRejectsEmptyExpression(t *testing.T) {
 func TestGatewayQueryRejectsWhitespaceOnlyExpression(t *testing.T) {
 	t.Parallel()
 
-	gateway := NewCLIGateway(NewCommandRunner(RunnerConfig{Executor: newTestRecordingExecutor()}))
+	gateway := NewCLIGateway(bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Executor: newTestRecordingExecutor()}))
 
 	_, err := gateway.Query(context.Background(), "   ", domain.QueryOptions{})
 	assertGatewayErrorCode(t, err, domain.ErrorCodeValidationFailed)
@@ -1126,7 +1127,7 @@ func TestGatewayQueryReturnsCommandFailedOnNonZeroExit(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"query", "status=open", "--json"}).Return(ExecResult{ExitCode: 2, Stderr: []byte("bad expression")}, nil)
+	rec.OnArgs([]string{"query", "status=open", "--json"}).Return(bdrunner.ExecResult{ExitCode: 2, Stderr: []byte("bad expression")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1138,7 +1139,7 @@ func TestGatewayQueryReturnsDecodeErrorOnMissingID(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"query", "status=open", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"query", "status=open", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -1152,7 +1153,7 @@ func TestGatewayReadyExplainHappyPathDecodesSummaryAndQueues(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{
 				"ready": [
 					{"id":"bw-1","title":"ready one","status":"open","issue_type":"task","priority":2,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 					{"id":"bw-2","title":"ready two","status":"open","issue_type":"bug","priority":1,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
@@ -1208,7 +1209,7 @@ func TestGatewayReadyExplainWithLimitAppendsLimitFlag(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json", "--limit", "5"}).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs([]string{"ready", "--explain", "--json", "--limit", "5"}).Return(bdrunner.ExecResult{Stdout: []byte(`{
 				"ready": [],
 				"blocked": [],
 				"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0}
@@ -1247,7 +1248,7 @@ func TestGatewayReadyExplainNoLimitProducesNoLimitFlag(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)}, nil)
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -1268,7 +1269,7 @@ func TestGatewayReadyExplainEmptyArraysDecodeToNonNilSlices(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)}, nil)
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1290,7 +1291,7 @@ func TestGatewayReadyExplainReturnsCommandFailedOnNonZeroExit(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{ExitCode: 1, Stderr: []byte("no database")}, nil)
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{ExitCode: 1, Stderr: []byte("no database")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1302,7 +1303,7 @@ func TestGatewayReadyExplainReturnsDecodeErrorOnMissingID(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{
 				"ready": [{"title":"missing id","status":"open","issue_type":"task","priority":1,"created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}],
 				"blocked": [],
 				"summary": {"total_ready":1,"total_blocked":0,"cycle_count":0}
@@ -1318,7 +1319,7 @@ func TestGatewayReadyExplainBlockedItemMultipleBlockedByRefs(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{
 				"ready": [],
 				"blocked": [
 					{"id":"bw-5","title":"multi-blocked","status":"blocked","issue_type":"bug","priority":2,"owner":"dave","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z",
@@ -1356,7 +1357,7 @@ func TestGatewayCatalogAcceptsNullStatusDescription(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"statuses", "--json"}).Return(ExecResult{Stdout: readFixture(t, "statuses_null_description.json")}, nil)
+	rec.OnArgs([]string{"statuses", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "statuses_null_description.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1384,7 +1385,7 @@ func TestGatewayCatalogAcceptsNullTypeDescription(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: readFixture(t, "types_null_description.json")}, nil)
+	rec.OnArgs([]string{"types", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "types_null_description.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1422,7 +1423,7 @@ func TestGatewayCatalogAcceptsNullLabelsList(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(ExecResult{Stdout: readFixture(t, "labels_null_list.json")}, nil)
+	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "labels_null_list.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1440,7 +1441,7 @@ func TestGatewayShowIssueAcceptsNullCommentText(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-301", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_issue_null_comment_text.json")}, nil)
+	rec.OnArgs([]string{"show", "bw-301", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "show_issue_null_comment_text.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1463,7 +1464,7 @@ func TestGatewayShowIssueAcceptsNullLabelsAndUnknownFields(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-401", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_issue_production_noise.json")}, nil)
+	rec.OnArgs([]string{"show", "bw-401", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "show_issue_production_noise.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -1500,7 +1501,7 @@ func TestGatewayShowIssueHandlesMissingDescription(t *testing.T) {
 	// JSON deliberately omits the "description" key — exactly what bd show emits
 	// for an issue that was created without a description.
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-500", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"show", "bw-500", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-500","title":"no desc test","status":"open","issue_type":"task","priority":2,"created_at":"2026-05-16T10:00:00Z","updated_at":"2026-05-16T10:00:00Z"}
 			]`)}, nil)
 
@@ -1535,8 +1536,8 @@ func TestGatewayShowIssueChildIssueIssuesAtMostOneBdShowSynchronouslyOnCachedPar
 	]`)
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-42", "--json"}).Return(ExecResult{Stdout: childJSON}, nil)
-	rec.OnArgs([]string{"show", "bw-1", "--json"}).Return(ExecResult{Stdout: parentJSON}, nil)
+	rec.OnArgs([]string{"show", "bw-42", "--json"}).Return(bdrunner.ExecResult{Stdout: childJSON}, nil)
+	rec.OnArgs([]string{"show", "bw-1", "--json"}).Return(bdrunner.ExecResult{Stdout: parentJSON}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -1572,7 +1573,7 @@ func TestGatewaySearchIssuePageFromRecordsCappedReadyBackendIsNotExact(t *testin
 	// Simulate a capped backend: bd ready returns exactly 2 items and limit=2
 	// so completeness should be MaybeMore (can't know if backend had more).
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"ready", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"cap test one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"},
 				{"id":"bw-2","title":"cap test two","status":"open","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T11:00:00Z","updated_at":"2026-04-05T12:00:00Z"}
 			]`)}, nil)
@@ -1617,7 +1618,7 @@ func TestGatewaySearchIssuesEmptyTextWithWorkStateReadyAttachesNotice(t *testing
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"ready", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"some ready issue","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -1650,7 +1651,7 @@ func TestGatewaySearchIssuesEmptyTextWithWorkStateBlockedAttachesNotice(t *testi
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"blocked", "--json"}).Return(ExecResult{Stdout: []byte(`[
+	rec.OnArgs([]string{"blocked", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`[
 				{"id":"bw-1","title":"some blocked issue","status":"blocked","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
 			]`)}, nil)
 
@@ -1734,8 +1735,8 @@ func TestShowIssueParentSiblingArgvShape(t *testing.T) {
 	wantParentArgv := []string{"show", "bw-parent", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantChildArgv).Return(ExecResult{Stdout: []byte(childJSON)}, nil)
-	rec.OnArgs(wantParentArgv).Return(ExecResult{Stdout: []byte(parentJSON)}, nil)
+	rec.OnArgs(wantChildArgv).Return(bdrunner.ExecResult{Stdout: []byte(childJSON)}, nil)
+	rec.OnArgs(wantParentArgv).Return(bdrunner.ExecResult{Stdout: []byte(parentJSON)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -1787,7 +1788,7 @@ func TestReadyExplainArgvBoundaryLimits(t *testing.T) {
 			t.Parallel()
 
 			rec := newTestRecordingExecutor()
-			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(minimalReadyExplainJSON)}, nil)
+			rec.OnArgs(tc.want).Return(bdrunner.ExecResult{Stdout: []byte(minimalReadyExplainJSON)}, nil)
 
 			gateway, rec := newTestGateway(rec)
 
@@ -1844,7 +1845,7 @@ func TestQueryArgvBoundaryLimits(t *testing.T) {
 			t.Parallel()
 
 			rec := newTestRecordingExecutor()
-			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(`[]`)}, nil)
+			rec.OnArgs(tc.want).Return(bdrunner.ExecResult{Stdout: []byte(`[]`)}, nil)
 
 			gateway, rec := newTestGateway(rec)
 
@@ -1901,7 +1902,7 @@ func TestSearchIssuesEmptyTextNoWorkStateArgvShape(t *testing.T) {
 			t.Parallel()
 
 			rec := newTestRecordingExecutor()
-			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+			rec.OnArgs(tc.want).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
 
 			gateway, rec := newTestGateway(rec)
 
@@ -1932,7 +1933,7 @@ func TestSearchIssuesStatusFilteredListArgvShape(t *testing.T) {
 	wantArgv := []string{"list", "--json", "--status", "open,in_progress", "--limit", "20"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -1990,7 +1991,7 @@ func TestSearchIssuesTextSearchArgvShape(t *testing.T) {
 			t.Parallel()
 
 			rec := newTestRecordingExecutor()
-			rec.OnArgs(tc.want).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+			rec.OnArgs(tc.want).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
 
 			gateway, rec := newTestGateway(rec)
 
@@ -2020,7 +2021,7 @@ func TestSearchIssuesWorkStateReadyArgvShape(t *testing.T) {
 	wantArgv := []string{"ready", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2047,7 +2048,7 @@ func TestSearchIssuesWorkStateBlockedArgvShape(t *testing.T) {
 	wantArgv := []string{"blocked", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2073,7 +2074,7 @@ func TestStatusCatalogArgvShape(t *testing.T) {
 	wantArgv := []string{"statuses", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: readFixture(t, "statuses.json")}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: readFixture(t, "statuses.json")}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2096,7 +2097,7 @@ func TestTypeCatalogArgvShape(t *testing.T) {
 	wantArgv := []string{"types", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: readFixture(t, "types.json")}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: readFixture(t, "types.json")}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2119,7 +2120,7 @@ func TestLabelCatalogArgvShape(t *testing.T) {
 	wantArgv := []string{"label", "list-all", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: readFixture(t, "labels.json")}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: readFixture(t, "labels.json")}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2143,7 +2144,7 @@ func TestCountIssuesNoStatusFilterArgvShape(t *testing.T) {
 	wantArgv := []string{"count", "--by-status", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`{"groups":[],"total":0,"schema_version":1}`)}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(`{"groups":[],"total":0,"schema_version":1}`)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2166,7 +2167,7 @@ func TestGatewayReadyExplainDecodesNonZeroCycleCount(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{
 		"ready": [],
 		"blocked": [],
 		"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 3}
@@ -2191,7 +2192,7 @@ func TestGatewayReadyExplainToleratesSchemaVersionField(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(`{
 		"ready": [],
 		"blocked": [],
 		"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0},
@@ -2231,7 +2232,7 @@ func TestSearchIssuesInertMultiStatusTextArgvShape(t *testing.T) {
 	wantArgv := []string{"search", "foo", "--json", "--status", "open,closed"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(minimalIssueJSONArray)}, nil)
 
 	gateway, rec := newTestGateway(rec)
 
@@ -2259,7 +2260,7 @@ func TestGatewayHealthCheckCommandFailed(t *testing.T) {
 
 	rec := newTestRecordingExecutor()
 	// Exit code 1 with generic error message — NOT the NoDatabaseFound sentinel.
-	rec.OnArgs([]string{"ping", "--json"}).Return(ExecResult{ExitCode: 1, Stderr: []byte("internal error: unexpected state")}, nil)
+	rec.OnArgs([]string{"ping", "--json"}).Return(bdrunner.ExecResult{ExitCode: 1, Stderr: []byte("internal error: unexpected state")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -2280,7 +2281,7 @@ func TestGatewayShowIssueDecodesDefaultCloseReason(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"show", "bw-800", "--json"}).Return(ExecResult{Stdout: readFixture(t, "show_closed_default_reason.json")}, nil)
+	rec.OnArgs([]string{"show", "bw-800", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "show_closed_default_reason.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -2307,7 +2308,7 @@ func TestGatewayCatalogStripsWhitespaceLabels(t *testing.T) {
 	t.Parallel()
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(ExecResult{Stdout: readFixture(t, "labels_whitespace.json")}, nil)
+	rec.OnArgs([]string{"label", "list-all", "--json"}).Return(bdrunner.ExecResult{Stdout: readFixture(t, "labels_whitespace.json")}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -2372,7 +2373,7 @@ func TestGatewayTypeCatalogDecodesCustomTypesAsStrings(t *testing.T) {
 	}`
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: []byte(payload)}, nil)
+	rec.OnArgs([]string{"types", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(payload)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -2418,7 +2419,7 @@ func TestGatewayTypeCatalogHandlesAbsentCustomTypes(t *testing.T) {
 	}`
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs([]string{"types", "--json"}).Return(ExecResult{Stdout: []byte(payload)}, nil)
+	rec.OnArgs([]string{"types", "--json"}).Return(bdrunner.ExecResult{Stdout: []byte(payload)}, nil)
 
 	gateway, _ := newTestGateway(rec)
 
@@ -2447,7 +2448,7 @@ func TestCountIssuesMultiStatusArgvOmitsStatusFlag(t *testing.T) {
 	wantArgv := []string{"count", "--by-status", "--json"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(`{
 		"groups": [
 			{"group": "open", "count": 5},
 			{"group": "in_progress", "count": 3},
@@ -2502,7 +2503,7 @@ func TestCountIssuesSingleStatusArgvIncludesStatusFlag(t *testing.T) {
 	wantArgv := []string{"count", "--by-status", "--json", "--status", "closed"}
 
 	rec := newTestRecordingExecutor()
-	rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`{
+	rec.OnArgs(wantArgv).Return(bdrunner.ExecResult{Stdout: []byte(`{
 		"groups": [{"group": "closed", "count": 7}],
 		"total": 7,
 		"schema_version": 1

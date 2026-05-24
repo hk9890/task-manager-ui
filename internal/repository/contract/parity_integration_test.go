@@ -223,20 +223,20 @@ func beadsFactory(t *testing.T, seed scenarioSeed) repository.Repository {
 	}
 
 	runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
-	gw := gateway.NewCLIGateway(runner)
+	gw := repobeads.NewCLIGateway(runner)
 	return repobeads.New(gw)
 }
 
 // -- Stub gateway for scenario 10 --
 
-// stubBeadsGateway implements gateway/beads.BeadsGateway with configurable
+// stubBeadsGateway implements repository/beads.BeadsGateway with configurable
 // per-method errors. Used only by scenario 10 (partial failure of Dashboard).
 type stubBeadsGateway struct {
-	inner        gateway.BeadsGateway
+	inner        repobeads.BeadsGateway
 	methodErrors map[string]error
 }
 
-func newStubGateway(inner gateway.BeadsGateway) *stubBeadsGateway {
+func newStubGateway(inner repobeads.BeadsGateway) *stubBeadsGateway {
 	return &stubBeadsGateway{
 		inner:        inner,
 		methodErrors: make(map[string]error),
@@ -953,7 +953,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		initBDRepo(t, dir)
 
 		runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
-		realGW := gateway.NewCLIGateway(runner)
+		realGW := repobeads.NewCLIGateway(runner)
 
 		// Inject errors on ReadyExplain and CountIssues (2 of 5 Dashboard fan-out calls).
 		stub := newStubGateway(realGW)

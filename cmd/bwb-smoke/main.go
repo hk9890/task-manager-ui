@@ -31,6 +31,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode/board"
+	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
@@ -116,7 +117,7 @@ func run(args []string, stdout, stderr *os.File) int {
 		WorkDir:  absDir,
 		ReadOnly: readonly,
 	})
-	gw := beads.NewCLIGateway(runner)
+	gw := repobeads.NewCLIGateway(runner)
 
 	// Run selected checks
 	var results []CheckResult
@@ -212,7 +213,7 @@ func containsStr(slice []string, s string) bool {
 
 // ── count check ──────────────────────────────────────────────────────────────
 
-func runCountCheck(dir string, gw beads.BeadsGateway, readonly bool) CheckResult {
+func runCountCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -284,7 +285,7 @@ func runCountCheck(dir string, gw beads.BeadsGateway, readonly bool) CheckResult
 
 // ── sort check ───────────────────────────────────────────────────────────────
 
-func runSortCheck(dir string, gw beads.BeadsGateway, readonly bool) CheckResult {
+func runSortCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -374,7 +375,7 @@ var smokeSearchMatrix = []searchQueryCase{
 	{name: "text=render", query: domain.SearchIssuesQuery{Text: "render", Limit: paritySearchLimit}},
 }
 
-func runSearchCheck(dir string, gw beads.BeadsGateway, readonly bool) CheckResult {
+func runSearchCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -518,7 +519,7 @@ func feedRenderData(m *board.Model) {
 
 // ── dashboard fetch (shared by count + sort) ─────────────────────────────────
 
-func runDashboardFetch(ctx context.Context, gw beads.BeadsGateway) (dashboard.Columns, error) {
+func runDashboardFetch(ctx context.Context, gw repobeads.BeadsGateway) (dashboard.Columns, error) {
 	readyResult, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{Limit: 0})
 	if err != nil {
 		return dashboard.Columns{}, fmt.Errorf("ReadyExplain: %w", err)

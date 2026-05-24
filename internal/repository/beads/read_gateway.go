@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
+	bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 
 // Gateway is a beads gateway implementation backed by official bd commands.
 type Gateway struct {
-	runner *CommandRunner
+	runner *bdrunner.CommandRunner
 
 	// parentSiblingCacheMu guards parentSiblingCache.
 	parentSiblingCacheMu sync.RWMutex
@@ -45,9 +46,9 @@ type Gateway struct {
 // validation wrapper. Intended for tests that deliberately probe invariant-
 // violating responses (e.g. the contract test suite's negative tests).
 // Production code and integration tests should use NewCLIGateway instead.
-func NewCLIGatewayRaw(runner *CommandRunner) *Gateway {
+func NewCLIGatewayRaw(runner *bdrunner.CommandRunner) *Gateway {
 	if runner == nil {
-		runner = NewCommandRunner(RunnerConfig{})
+		runner = bdrunner.NewCommandRunner(bdrunner.RunnerConfig{})
 	}
 
 	return &Gateway{
@@ -61,7 +62,7 @@ func NewCLIGatewayRaw(runner *CommandRunner) *Gateway {
 // invariants; violations are logged at slog.Warn level to
 // ~/.local/state/bwb/bwb-<session_id>.log and never cause request failures.
 // Use NewCLIGatewayRaw to bypass validation (tests only).
-func NewCLIGateway(runner *CommandRunner) BeadsGateway {
+func NewCLIGateway(runner *bdrunner.CommandRunner) BeadsGateway {
 	return newValidatingGateway(NewCLIGatewayRaw(runner), nil)
 }
 
@@ -69,7 +70,7 @@ func NewCLIGateway(runner *CommandRunner) BeadsGateway {
 // working directory. Returns ErrorCodeCommandUnavailable if bd is not in PATH,
 // ErrorCodeNoDatabaseFound if no database is present, nil on success.
 func (g *Gateway) HealthCheck(ctx context.Context) error {
-	_, err := g.runner.Run(ctx, CommandRequest{Operation: operationHealthCheck, Args: []string{"ping", "--json"}})
+	_, err := g.runner.Run(ctx, bdrunner.CommandRequest{Operation: operationHealthCheck, Args: []string{"ping", "--json"}})
 	return err
 }
 
@@ -196,7 +197,7 @@ func (g *Gateway) ReadyExplain(ctx context.Context, opts domain.ReadyExplainOpti
 		args = append(args, "--limit", strconv.Itoa(opts.Limit))
 	}
 
-	payload, err := RunJSON[bdReadyExplainPayload](ctx, g.runner, CommandRequest{Operation: operationReadyExplain, Args: args})
+	payload, err := bdrunner.RunJSON[bdReadyExplainPayload](ctx, g.runner, bdrunner.CommandRequest{Operation: operationReadyExplain, Args: args})
 	if err != nil {
 		return domain.ReadyExplainResult{}, err
 	}
@@ -422,7 +423,7 @@ func (g *Gateway) CountIssues(ctx context.Context, query domain.IssueCountQuery)
 	}
 	args = append(args, buildFilterArgs(filterArgs)...)
 
-	payload, err := RunJSON[bdCountByStatusPayload](ctx, g.runner, CommandRequest{Operation: operationCountIssues, Args: args})
+	payload, err := bdrunner.RunJSON[bdCountByStatusPayload](ctx, g.runner, bdrunner.CommandRequest{Operation: operationCountIssues, Args: args})
 	if err != nil {
 		return domain.IssueCountResult{}, err
 	}
@@ -680,7 +681,7 @@ func toSearchResults(issues []domain.IssueSummary) []domain.SearchResult {
 
 // StatusCatalog returns available issue statuses using `bd statuses --json`.
 func (g *Gateway) StatusCatalog(ctx context.Context) ([]domain.StatusOption, error) {
-	payload, err := RunJSON[bdStatusCatalogPayload](ctx, g.runner, CommandRequest{Operation: operationStatuses, Args: []string{"statuses", "--json"}})
+	payload, err := bdrunner.RunJSON[bdStatusCatalogPayload](ctx, g.runner, bdrunner.CommandRequest{Operation: operationStatuses, Args: []string{"statuses", "--json"}})
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +702,7 @@ func (g *Gateway) StatusCatalog(ctx context.Context) ([]domain.StatusOption, err
 
 // TypeCatalog returns available issue types using `bd types --json`.
 func (g *Gateway) TypeCatalog(ctx context.Context) ([]domain.TypeOption, error) {
-	payload, err := RunJSON[bdTypeCatalogPayload](ctx, g.runner, CommandRequest{Operation: operationTypes, Args: []string{"types", "--json"}})
+	payload, err := bdrunner.RunJSON[bdTypeCatalogPayload](ctx, g.runner, bdrunner.CommandRequest{Operation: operationTypes, Args: []string{"types", "--json"}})
 	if err != nil {
 		return nil, err
 	}
@@ -726,7 +727,7 @@ func (g *Gateway) TypeCatalog(ctx context.Context) ([]domain.TypeOption, error) 
 
 // LabelCatalog returns available labels using `bd label list-all --json`.
 func (g *Gateway) LabelCatalog(ctx context.Context) ([]domain.LabelOption, error) {
-	labels, err := RunJSON[bdLabelListAllPayload](ctx, g.runner, CommandRequest{Operation: operationLabels, Args: []string{"label", "list-all", "--json"}})
+	labels, err := bdrunner.RunJSON[bdLabelListAllPayload](ctx, g.runner, bdrunner.CommandRequest{Operation: operationLabels, Args: []string{"label", "list-all", "--json"}})
 	if err != nil {
 		return nil, err
 	}
@@ -749,7 +750,7 @@ func (g *Gateway) LabelCatalog(ctx context.Context) ([]domain.LabelOption, error
 }
 
 func (g *Gateway) decodeIssueArray(ctx context.Context, operation string, args []string) ([]bdIssuePayload, error) {
-	return RunJSON[[]bdIssuePayload](ctx, g.runner, CommandRequest{Operation: operation, Args: args})
+	return bdrunner.RunJSON[[]bdIssuePayload](ctx, g.runner, bdrunner.CommandRequest{Operation: operation, Args: args})
 }
 
 func mapIssueSummaries(operation string, records []bdIssuePayload, offset int, limit int) ([]domain.IssueSummary, error) {

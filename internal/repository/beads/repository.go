@@ -26,7 +26,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	gateway "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
@@ -38,7 +37,7 @@ const defaultClosedLimit = 50
 // Repository wraps a BeadsGateway and implements repository.Repository.
 // Construct with [New]; do not create a zero value directly.
 type Repository struct {
-	gw gateway.BeadsGateway
+	gw BeadsGateway
 }
 
 // Compile-time interface assertion.
@@ -46,7 +45,7 @@ var _ repository.Repository = (*Repository)(nil)
 
 // New returns a Repository backed by the given gateway.
 // gw must be non-nil; passing nil will panic at the first method call.
-func New(gw gateway.BeadsGateway) *Repository {
+func New(gw BeadsGateway) *Repository {
 	return &Repository{gw: gw}
 }
 

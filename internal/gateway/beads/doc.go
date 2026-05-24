@@ -1,70 +1,61 @@
-// Package beads defines the beads gateway seam and adapters.
+// Package beads provides the subprocess runner and argv-level read cache for
+// the beads (bd) CLI.
 //
-// # Argv contract testing
+// After the 8pxi refactor, the BeadsGateway interface and all gateway method
+// implementations (read_gateway.go, writes.go, validating_gateway.go, etc.)
+// live in internal/repository/beads. This package retains:
 //
-// The gateway has two correctness surfaces that together define its full
-// contract:
+//   - CommandRunner / RunnerConfig / CommandRequest (runner.go)
+//   - RunJSON generic helper (runner.go)
+//   - DecodeJSONInto / ExecResult / CommandExecutor (runner.go)
+//   - The read cache (cache.go) — deferred to 8pxi.7
 //
-//  1. INCOMING — what bwb PARSES from bd output.
-//     Covered by RunReadContract and RunWriteContract in
-//     internal/gateway/beads/contract/ (shared with FakeBeadsGateway).
+// Consumers that need both runner and gateway types use the two-import pattern:
 //
-//  2. OUTGOING — what bwb SENDS to bd as subprocess argv.
-//     Covered by per-call argv-cardinality tests in this package and in
-//     internal/mode/board/model_test.go and internal/mode/search/.
+//	import (
+//	    bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
+//	    repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
+//	)
 //
-// Both surfaces must hold for the gateway to be correct. A passing
-// RunReadContract test proves nothing about whether the gateway issues the
-// right bd verb in the first place; a passing argv-cardinality test proves
-// nothing about whether the response is parsed correctly.
+// # Argv contract
 //
-// # Argv inventory
-//
-// internal/gateway/beads/ARGV_CONTRACT.md is the single source of truth for
-// every distinct bd argv shape bwb emits at runtime. When adding or modifying
-// a bd call site:
+// ARGV_CONTRACT.md is the single source of truth for every distinct bd argv
+// shape bwb emits at runtime. When adding or modifying a bd call site:
 //
 //  1. Add (or update) the row in ARGV_CONTRACT.md.
-//  2. Add a pinning test (see canonical pattern below).
+//  2. Add a pinning test in internal/repository/beads/ (see canonical pattern
+//     in recording_executor_test.go there) or in internal/mode/.
 //  3. For any dynamic flag (e.g. --limit driven by terminal height), pin
 //     default + max + min + 1 boundary value — not just the common case.
 //
-// # When to use RecordingExecutor (or testRecordingExecutor)
+// # When to use RecordingExecutor
 //
-// Use a RecordingExecutor (public: internal/testing/fakes.RecordingExecutor;
-// package-internal: testRecordingExecutor in recording_executor_test.go)
-// in every test that asserts a specific bd argv shape.
+// Use fakes.RecordingExecutor (internal/testing/fakes) in tests outside this
+// package that assert a specific bd argv shape.
 //
-// Tests within this package (package beads) must use the package-internal
-// testRecordingExecutor to avoid an import cycle: fakes imports beads, so
-// beads tests cannot import fakes.
+// Tests within this package (package beads) must use package-internal stubs
+// (stubExecutor, concurrencyGuardExecutor, etc. in runner_test.go) to avoid
+// an import cycle: fakes imports beads, so beads tests cannot import fakes.
 //
-// Tests outside this package (e.g. internal/mode/board) use the public
-// fakes.RecordingExecutor from internal/testing/fakes.
-//
-// Canonical pattern (package-internal, from TestStatusCatalogArgvShape):
+// Canonical pattern (from internal/repository/beads/ or internal/mode/):
 //
 //	func TestMyCallArgvShape(t *testing.T) {
 //	    t.Parallel()
 //
 //	    wantArgv := []string{"myverb", "--flag", "value"}
 //
-//	    rec := newTestRecordingExecutor()
-//	    rec.OnArgs(wantArgv).Return(ExecResult{Stdout: []byte(`...`)}, nil)
+//	    rec := fakes.NewRecordingExecutor()
+//	    rec.OnArgs(wantArgv).Return(beads.ExecResult{Stdout: []byte(`...`)}, nil)
 //
-//	    gateway, rec := newTestGateway(rec)
+//	    runner := beads.NewCommandRunner(beads.RunnerConfig{Command: "bd", Executor: rec})
+//	    gw := repobeads.NewCLIGateway(runner)
 //
-//	    _, err := gateway.MyMethod(context.Background())
+//	    _, err := gw.MyMethod(context.Background())
 //	    if err != nil {
 //	        t.Fatalf("MyMethod returned error: %v", err)
 //	    }
 //
-//	    assertExactArgv(t, rec, wantArgv)
+//	    calls := rec.Calls()
+//	    // assert calls[0].Args == wantArgv
 //	}
-//
-// For tests that drive a full model Init (multiple calls in a tea.Batch), use
-// the multi-call pattern from TestBoardInitRealGatewaySubprocessArgvCardinality
-// in internal/mode/board/model_test.go: register all expected argv shapes with
-// rec.OnArgs(...).Return(...), drive the batch, then assert each shape with
-// assertArgvPresent.
 package beads
