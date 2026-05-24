@@ -5,7 +5,7 @@
 - Module: `github.com/hk9890/beads-workbench`
 - Binary: `bwb`
 - Entrypoint: `cmd/bwb/main.go`
-- Primary runtime surfaces: Bubble Tea UI + `bd` CLI-backed gateway
+- Primary runtime surfaces: Bubble Tea UI + `bd` CLI-backed `repository.Repository`
 
 ## Upstream dependency
 
@@ -26,9 +26,9 @@ resolution behavior, see `docs/CODING.md`.
 1. `cmd/bwb/main.go` parses CLI flags and handles non-interactive exits first.
 2. It resolves startup cwd/config options and loads runtime config with
    `internal/config.LoadWithOptions(...)`.
-3. It initializes centralized runtime logging, then creates the source-specific
-   beads gateway with
-   `internal/repository/beads.NewCLIGateway(...)`.
+3. It initializes centralized runtime logging, then constructs the
+   `repository.Repository` stack (beads, validating, caching) via
+   `constructRepository` in `cmd/bwb/main.go`.
 4. It builds shell services with `internal/app.NewServices(...)`.
 5. It starts the TUI with
    `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
@@ -48,8 +48,8 @@ capture paths.
 | `internal/app` | Root shell, mode lifecycle, selection/detail coordination |
 | `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
 | `internal/domain` | Issue, query, mutation, catalog, and error models |
-| `internal/gateway/beads` | `bd` subprocess runner, read cache, and argv-level types (`RunnerConfig`, `ExecResult`) |
-| `internal/repository/beads` | `BeadsGateway` interface + CLI adapter with typed `bd` payload decoding |
+| `internal/gateway/beads` | `bd` subprocess runner and argv-level types (`CommandRunner`, `RunnerConfig`, `ExecResult`) |
+| `internal/repository/beads` | Lean `repository.Repository` implementation built directly on `CommandRunner`; typed `bd` payload decoding |
 | `internal/logging` | Central slog-based logging package used by startup and gateway code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
 | `internal/dashboard` | Built-in dashboard definitions and validation |
 | `internal/mode/*` | Board, search, and details feature-local state/controllers |
@@ -64,7 +64,7 @@ capture paths.
 
 ## Architectural boundaries
 
-- Official beads surfaces only: active product behavior goes through `internal/repository/beads` and the `BeadsGateway` interface in `internal/repository/beads/interface.go`.
+- Official beads surfaces only: active product behavior goes through `repository.Repository`. The `bd`-backed implementation is `internal/repository/beads.Repository`, composed via `constructRepository` with `repository.NewValidating` and `caching.Repository`.
 - No direct SQL, no `internal/bql`, and no orchestration/control-plane dependencies in the active `./cmd/bwb` path; see `cmd/bwb/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
