@@ -32,6 +32,10 @@ Supported flags:
 - `--no-auto-refresh`
 - `--print-config`
 - `--check-config`
+- `--repo <backend>` — repository backend: `beads` (default) or `memory`
+- `--repo-file <path>` — path to the JSONL repository file; required when
+  `--repo=memory`; informational (not read/written) when `--repo=beads`, with
+  default `~/.cache/bwb/<project-hash>/repo.jsonl`
 
 Non-interactive flags (`--help`, `--version`, `--print-config`,
 `--check-config`) return without booting the Bubble Tea program.

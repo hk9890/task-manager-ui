@@ -10,6 +10,8 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/logging"
+	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
+	"github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
 // --- resolveAndValidateCWD tests ---
@@ -318,5 +320,237 @@ func TestStartInteractiveNoLogManagerDoesNotPanic(t *testing.T) {
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
+	}
+}
+
+// --- --repo / --repo-file flag tests ---
+
+// TestParseCLIRepoFlags exercises flag parsing and validation for --repo and
+// --repo-file. parseCLI is the correct test seam: it takes []string and returns
+// (cliOptions, exitCode, ok), so table-driven tests can be written directly
+// without spawning a subprocess or wiring a full run().
+func TestParseCLIRepoFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		args           []string
+		wantOK         bool
+		wantCode       int
+		wantRepo       string
+		wantFile       string
+		stderrContains []string
+	}{
+		{
+			name:     "defaults: repo=beads, repoFile empty",
+			args:     []string{},
+			wantOK:   true,
+			wantRepo: "beads",
+			wantFile: "",
+		},
+		{
+			name:     "--repo beads alone is valid",
+			args:     []string{"--repo", "beads"},
+			wantOK:   true,
+			wantRepo: "beads",
+			wantFile: "",
+		},
+		{
+			name:     "--repo memory with --repo-file is valid",
+			args:     []string{"--repo", "memory", "--repo-file", "x.jsonl"},
+			wantOK:   true,
+			wantRepo: "memory",
+			wantFile: "x.jsonl",
+		},
+		{
+			name:           "--repo memory without --repo-file errors exit 2",
+			args:           []string{"--repo", "memory"},
+			wantOK:         false,
+			wantCode:       2,
+			stderrContains: []string{"memory", "--repo-file"},
+		},
+		{
+			name:           "--repo bogus errors exit 2",
+			args:           []string{"--repo", "bogus"},
+			wantOK:         false,
+			wantCode:       2,
+			stderrContains: []string{"beads or memory", "bogus"},
+		},
+		{
+			name:     "--repo-file alone (beads mode) is accepted",
+			args:     []string{"--repo-file", "data.jsonl"},
+			wantOK:   true,
+			wantRepo: "beads",
+			wantFile: "data.jsonl",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stderr bytes.Buffer
+			opts, code, ok := parseCLI(tc.args, &stderr)
+
+			if ok != tc.wantOK {
+				t.Fatalf("ok: got %v, want %v (stderr=%q)", ok, tc.wantOK, stderr.String())
+			}
+			if !tc.wantOK {
+				if code != tc.wantCode {
+					t.Fatalf("exit code: got %d, want %d", code, tc.wantCode)
+				}
+				for _, want := range tc.stderrContains {
+					if !strings.Contains(stderr.String(), want) {
+						t.Errorf("stderr: want %q in %q", want, stderr.String())
+					}
+				}
+				return
+			}
+
+			if opts.repo != tc.wantRepo {
+				t.Errorf("opts.repo: got %q, want %q", opts.repo, tc.wantRepo)
+			}
+			if opts.repoFile != tc.wantFile {
+				t.Errorf("opts.repoFile: got %q, want %q", opts.repoFile, tc.wantFile)
+			}
+		})
+	}
+}
+
+// TestDefaultRepoFilePath verifies the derived cache path is deterministic and
+// has the expected shape.
+func TestDefaultRepoFilePath(t *testing.T) {
+	t.Parallel()
+
+	path1 := defaultRepoFilePath("/home/user/projects/myproject")
+	path2 := defaultRepoFilePath("/home/user/projects/myproject")
+	if path1 != path2 {
+		t.Fatalf("defaultRepoFilePath not deterministic: %q != %q", path1, path2)
+	}
+
+	other := defaultRepoFilePath("/home/user/projects/other")
+	if path1 == other {
+		t.Fatalf("different roots produced the same hash path: %q", path1)
+	}
+
+	if !strings.HasSuffix(path1, "repo.jsonl") {
+		t.Errorf("expected path to end with repo.jsonl, got %q", path1)
+	}
+	if !strings.Contains(path1, "bwb") {
+		t.Errorf("expected path to contain 'bwb', got %q", path1)
+	}
+}
+
+// TestRunRepoMemoryLoadsFromFile exercises the full run() path with --repo=memory
+// and a valid fixture file produced by filestorage.Save, using a stub start that
+// asserts the startupOptions have the correct repoFlag and repoFile set.
+func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
+	t.Parallel()
+
+	// Build a tiny in-memory repo and save it to a temp file.
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:     "fixture-1",
+		Title:  "Fixture issue",
+		Status: "open",
+		Type:   "task",
+	})
+
+	dir := t.TempDir()
+	repoFile := filepath.Join(dir, "repo.jsonl")
+	if err := filestorage.Save(r, repoFile); err != nil {
+		t.Fatalf("filestorage.Save: %v", err)
+	}
+
+	var seenOpts startupOptions
+	started := false
+
+	var stderr bytes.Buffer
+	code := runWithLogger(
+		[]string{"--repo", "memory", "--repo-file", repoFile, "--cwd", t.TempDir()},
+		&bytes.Buffer{},
+		&stderr,
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			started = true
+			seenOpts = opts
+			return nil
+		},
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr=%q)", code, stderr.String())
+	}
+	if !started {
+		t.Fatal("expected start to be called")
+	}
+	if seenOpts.repoFlag != "memory" {
+		t.Errorf("repoFlag: got %q, want %q", seenOpts.repoFlag, "memory")
+	}
+	if seenOpts.repoFile != repoFile {
+		t.Errorf("repoFile: got %q, want %q", seenOpts.repoFile, repoFile)
+	}
+}
+
+// TestRunRepoMemoryWithoutFileExitsCode2 verifies that --repo=memory without
+// --repo-file exits with code 2 and a clear message.
+func TestRunRepoMemoryWithoutFileExitsCode2(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	code := run(
+		[]string{"--repo", "memory"},
+		&bytes.Buffer{},
+		&stderr,
+		func(config.LoadOptions) (config.Result, error) { panic("should not reach load") },
+		func(config.Model, startupOptions) error { panic("should not reach start") },
+	)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	msg := stderr.String()
+	if !strings.Contains(msg, "memory") || !strings.Contains(msg, "--repo-file") {
+		t.Fatalf("expected error message referencing 'memory' and '--repo-file', got: %q", msg)
+	}
+}
+
+// TestRunRepoBeadsPassesDefaultRepoFilePath verifies that --repo=beads derives
+// a non-empty default repo-file path and passes it into startupOptions.
+func TestRunRepoBeadsPassesDefaultRepoFilePath(t *testing.T) {
+	t.Parallel()
+
+	projectDir := t.TempDir()
+	var seenOpts startupOptions
+
+	code := runWithLogger(
+		[]string{"--cwd", projectDir},
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			seenOpts = opts
+			return nil
+		},
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if seenOpts.repoFlag != "beads" {
+		t.Errorf("repoFlag: got %q, want %q", seenOpts.repoFlag, "beads")
+	}
+	if seenOpts.repoFile == "" {
+		t.Error("expected non-empty default repoFile for beads mode")
+	}
+	if !strings.HasSuffix(seenOpts.repoFile, "repo.jsonl") {
+		t.Errorf("expected repoFile to end with repo.jsonl, got %q", seenOpts.repoFile)
 	}
 }

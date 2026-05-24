@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,7 +18,9 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/logging"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
+	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
 	bwbversion "github.com/hk9890/beads-workbench/internal/version"
 )
 
@@ -30,15 +33,28 @@ type startupOptions struct {
 	debug       bool
 	autoRefresh bool
 	logManager  *logging.Manager
+	repoFlag    string // "beads" or "memory"
+	repoFile    string // resolved path; informational for beads, source of truth for memory
 }
 
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
-	runnerCfg := beads.RunnerConfig{WorkDir: opts.projectRoot}
-	if opts.logManager != nil {
-		runnerCfg.Logger = opts.logManager.Component("gateway")
+	var repo repository.Repository
+
+	switch opts.repoFlag {
+	case "memory":
+		loaded, err := filestorage.Load(opts.repoFile)
+		if err != nil {
+			return fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
+		}
+		repo = loaded
+	default: // "beads" or unset (legacy path)
+		runnerCfg := beads.RunnerConfig{WorkDir: opts.projectRoot}
+		if opts.logManager != nil {
+			runnerCfg.Logger = opts.logManager.Component("gateway")
+		}
+		gateway := repositorybeads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
+		repo = repositorybeads.New(gateway)
 	}
-	gateway := repositorybeads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
-	repo := repositorybeads.New(gateway)
 
 	services, err := app.NewServices(repo, cfg, opts.projectRoot)
 	if err != nil {
@@ -70,6 +86,8 @@ type cliOptions struct {
 	checkConfig bool
 	debug       bool
 	noAuto      bool
+	repo        string // "beads" (default) or "memory"
+	repoFile    string // path to JSONL file; required for memory, informational for beads
 }
 
 func main() {
@@ -146,10 +164,23 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	autoRefresh := !opts.noAuto
+
+	// Resolve --repo-file: for beads mode, derive a default under the OS cache
+	// dir if not supplied. This path is INFORMATIONAL for 8pxi.4 (Epic 3 will
+	// use it as the actual persisted-cache path). For memory mode, the path was
+	// already validated non-empty in parseCLI and is resolved below against startCWD.
+	resolvedRepoFile := opts.repoFile
+	if opts.repo == "beads" && resolvedRepoFile == "" {
+		resolvedRepoFile = defaultRepoFilePath(resolvedCWD)
+	} else if opts.repo == "memory" {
+		resolvedRepoFile = resolveAgainstStartCWD(startCWD, resolvedRepoFile)
+	}
+
 	if startupLogger != nil {
 		startupLogger.Info("resolved config path", "path", configResult.Path)
 		startupLogger.Info("resolved cwd", "cwd", resolvedCWD)
 		startupLogger.Info("auto-refresh", "enabled", autoRefresh)
+		startupLogger.Info("repo backend", "repo", opts.repo, "repo_file", resolvedRepoFile)
 	}
 
 	if opts.printConfig {
@@ -188,6 +219,8 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		debug:       opts.debug,
 		autoRefresh: autoRefresh,
 		logManager:  logManager,
+		repoFlag:    opts.repo,
+		repoFile:    resolvedRepoFile,
 	})
 	if logManager != nil {
 		logManager.SetStderrSuppressed(false)
@@ -232,6 +265,8 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	fs.BoolVar(&opts.debug, "d", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.debug, "debug", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.noAuto, "no-auto-refresh", false, "disable periodic auto-refresh")
+	fs.StringVar(&opts.repo, "repo", "beads", "repository backend: beads or memory")
+	fs.StringVar(&opts.repoFile, "repo-file", "", "path to JSONL repository file (required for --repo=memory)")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -246,7 +281,49 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 		return cliOptions{}, 2, false
 	}
 
+	// Validate --repo value.
+	switch opts.repo {
+	case "beads", "memory":
+		// valid
+	default:
+		_, _ = fmt.Fprintf(stderr, "--repo must be beads or memory, got %q\n", opts.repo)
+		fs.Usage()
+		return cliOptions{}, 2, false
+	}
+
+	// --repo=memory requires --repo-file.
+	if opts.repo == "memory" && strings.TrimSpace(opts.repoFile) == "" {
+		_, _ = fmt.Fprintln(stderr, "--repo=memory requires --repo-file <path>")
+		fs.Usage()
+		return cliOptions{}, 2, false
+	}
+
 	return opts, 0, true
+}
+
+// defaultRepoFilePath derives the default JSONL cache path for beads mode.
+//
+// The project hash is sha256(absPath)[:12] — a deterministic 12-hex-character
+// identifier derived from the absolute project root. This is INFORMATIONAL in
+// 8pxi.4: the path is logged at startup but not actually read or written in
+// beads mode. Epic 3 will wire the actual read/write logic.
+//
+// Cache directory layout:
+//
+//	~/.cache/bwb/<project-hash>/repo.jsonl
+//
+// os.UserCacheDir() is used in preference to $HOME/.cache because it is
+// platform-aware (returns %AppData%\Local on Windows, ~/Library/Caches on
+// macOS, $XDG_CACHE_HOME or ~/.cache on Linux).
+func defaultRepoFilePath(projectRoot string) string {
+	sum := sha256.Sum256([]byte(projectRoot))
+	hash := fmt.Sprintf("%x", sum[:6]) // 6 bytes = 12 hex chars
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		// Fallback: use a fixed relative path so callers always get a non-empty string.
+		cacheDir = filepath.Join(os.TempDir(), ".cache")
+	}
+	return filepath.Join(cacheDir, "bwb", hash, "repo.jsonl")
 }
 
 func resolveAgainstStartCWD(startCWD, path string) string {
@@ -290,12 +367,16 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "Usage: bwb [options]")
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Options:")
-	_, _ = fmt.Fprintln(w, "  -h, --help            Show help")
-	_, _ = fmt.Fprintln(w, "  -v, --version         Show version")
-	_, _ = fmt.Fprintln(w, "  -c, --config <path>   Use explicit config file")
-	_, _ = fmt.Fprintln(w, "      --cwd <path>      Target project directory")
-	_, _ = fmt.Fprintln(w, "  -d, --debug           Enable debug diagnostics")
-	_, _ = fmt.Fprintln(w, "      --no-auto-refresh Disable automatic refresh triggers")
-	_, _ = fmt.Fprintln(w, "      --print-config    Print resolved config YAML")
-	_, _ = fmt.Fprintln(w, "      --check-config    Validate config and exit")
+	_, _ = fmt.Fprintln(w, "  -h, --help                 Show help")
+	_, _ = fmt.Fprintln(w, "  -v, --version              Show version")
+	_, _ = fmt.Fprintln(w, "  -c, --config <path>        Use explicit config file")
+	_, _ = fmt.Fprintln(w, "      --cwd <path>           Target project directory")
+	_, _ = fmt.Fprintln(w, "  -d, --debug                Enable debug diagnostics")
+	_, _ = fmt.Fprintln(w, "      --no-auto-refresh      Disable automatic refresh triggers")
+	_, _ = fmt.Fprintln(w, "      --print-config         Print resolved config YAML")
+	_, _ = fmt.Fprintln(w, "      --check-config         Validate config and exit")
+	_, _ = fmt.Fprintln(w, "      --repo <backend>       Repository backend: beads (default) or memory")
+	_, _ = fmt.Fprintln(w, "      --repo-file <path>     JSONL repository file")
+	_, _ = fmt.Fprintln(w, "                             Default (beads): ~/.cache/bwb/<project-hash>/repo.jsonl (informational)")
+	_, _ = fmt.Fprintln(w, "                             Required when --repo=memory (the file is the source of truth)")
 }
