@@ -689,6 +689,9 @@ type SnapshotIssue struct {
 	Description string
 	Notes       string
 	DependsOn   []string
+	Related     []string
+	ParentID    string
+	ChildrenIDs []string
 	Comments    []SnapshotComment
 	Created     time.Time
 	Updated     time.Time
@@ -720,6 +723,12 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 		deps := make([]string, len(si.dependsOn))
 		copy(deps, si.dependsOn)
 
+		related := make([]string, len(si.related))
+		copy(related, si.related)
+
+		childrenIDs := make([]string, len(si.childrenIDs))
+		copy(childrenIDs, si.childrenIDs)
+
 		comments := make([]SnapshotComment, len(si.comments))
 		for i, c := range si.comments {
 			comments[i] = SnapshotComment{
@@ -741,6 +750,9 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			Description: si.description,
 			Notes:       si.notes,
 			DependsOn:   deps,
+			Related:     related,
+			ParentID:    si.parentID,
+			ChildrenIDs: childrenIDs,
 			Comments:    comments,
 			Created:     si.created,
 			Updated:     si.updated,

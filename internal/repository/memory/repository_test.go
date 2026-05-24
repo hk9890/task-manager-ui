@@ -2,7 +2,9 @@ package memory_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -1099,6 +1101,139 @@ func TestForget_AbsentID_NoOp(t *testing.T) {
 	// Store is empty; verify HealthCheck still works.
 	if err := r.HealthCheck(context.Background()); err != nil {
 		t.Fatalf("HealthCheck after Forget of absent ID: %v", err)
+	}
+}
+
+// ---- Snapshot round-trip tests ----
+
+// TestSnapshot_LosslessRoundTrip_FullDetail verifies that Snapshot/Seed
+// preserves Related, ParentID, ChildrenIDs, and Blocks (via reverse lookup)
+// through a JSON encode/decode cycle, matching the SaveNow→Hydrate path.
+func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
+	base := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
+	src := memory.New(memory.WithClock(staticClock(base)))
+
+	// Seed parent epic.
+	src.Seed(memory.Issue{
+		ID:     "epic-1",
+		Title:  "Parent Epic",
+		Type:   "epic",
+		Status: "open",
+	})
+
+	// Seed a child issue that also blocks another issue and has a related ref.
+	src.Seed(memory.Issue{
+		ID:          "child-1",
+		Title:       "Child One",
+		Type:        "task",
+		Status:      "open",
+		ParentID:    "epic-1",
+		ChildrenIDs: []string{"grandchild-1"},
+		Related:     []string{"related-1"},
+	})
+
+	// Seed the related issue.
+	src.Seed(memory.Issue{
+		ID:     "related-1",
+		Title:  "Related Issue",
+		Type:   "task",
+		Status: "open",
+	})
+
+	// Seed a grandchild just so ChildrenIDs resolves to a full reference.
+	src.Seed(memory.Issue{
+		ID:     "grandchild-1",
+		Title:  "Grandchild",
+		Type:   "task",
+		Status: "in_progress",
+	})
+
+	// Seed an issue that depends on child-1, producing a Blocks entry via reverse lookup.
+	src.Seed(memory.Issue{
+		ID:        "blocker-dep-1",
+		Title:     "Blocked by child-1",
+		Type:      "task",
+		Status:    "open",
+		DependsOn: []string{"child-1"},
+	})
+
+	// Take a snapshot, JSON-encode each issue, JSON-decode back, then re-seed
+	// into a fresh repository. This mirrors the SaveNow→Hydrate code path in
+	// filestorage.LoadWithManifest.
+	snaps := src.Snapshot()
+
+	dst := memory.New(memory.WithClock(staticClock(base)))
+	for _, snap := range snaps {
+		raw, err := json.Marshal(snap)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		var decoded memory.SnapshotIssue
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal: %v", err)
+		}
+		dst.Seed(memory.Issue{
+			ID:          decoded.ID,
+			Title:       decoded.Title,
+			Status:      decoded.Status,
+			Priority:    decoded.Priority,
+			Type:        decoded.Type,
+			Assignee:    decoded.Assignee,
+			Labels:      decoded.Labels,
+			Description: decoded.Description,
+			Notes:       decoded.Notes,
+			DependsOn:   decoded.DependsOn,
+			Related:     decoded.Related,
+			ParentID:    decoded.ParentID,
+			ChildrenIDs: decoded.ChildrenIDs,
+			Created:     decoded.Created,
+			Updated:     decoded.Updated,
+		})
+		if decoded.Status == "closed" && !decoded.Closed.IsZero() {
+			dst.SeedClosed(decoded.ID, decoded.Closed, decoded.CloseReason)
+		}
+	}
+
+	ctx := context.Background()
+	got, err := dst.Issue(ctx, "child-1")
+	if err != nil {
+		t.Fatalf("Issue(child-1): %v", err)
+	}
+
+	// Related: should contain a resolved reference to related-1.
+	wantRelated := []domain.IssueReference{
+		{ID: "related-1", Title: "Related Issue", Type: "task", Priority: 0, Status: "open"},
+	}
+	if !reflect.DeepEqual(got.Related, wantRelated) {
+		t.Errorf("Related:\n  got  %+v\n  want %+v", got.Related, wantRelated)
+	}
+
+	// ParentGroupBrowser.Parent should point to epic-1.
+	wantParent := domain.IssueReference{
+		ID:     "epic-1",
+		Title:  "Parent Epic",
+		Type:   "epic",
+		Status: "open",
+	}
+	if !reflect.DeepEqual(got.ParentGroupBrowser.Parent, wantParent) {
+		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v", got.ParentGroupBrowser.Parent, wantParent)
+	}
+
+	// ParentGroupBrowser.Children should contain grandchild-1.
+	wantChildren := []domain.IssueReference{
+		{ID: "grandchild-1", Title: "Grandchild", Type: "task", Status: "in_progress"},
+	}
+	if !reflect.DeepEqual(got.ParentGroupBrowser.Children, wantChildren) {
+		t.Errorf("ParentGroupBrowser.Children:\n  got  %+v\n  want %+v", got.ParentGroupBrowser.Children, wantChildren)
+	}
+
+	// Blocks: reverse lookup finds blocker-dep-1 (whose DependsOn includes child-1).
+	// Since no explicit blocksIDs are stored, this comes from the reverse scan.
+	if len(got.Blocks) != 1 {
+		t.Fatalf("Blocks: got %d entries, want 1; entries: %v", len(got.Blocks), got.Blocks)
+	}
+	if got.Blocks[0].ID != "blocker-dep-1" {
+		t.Errorf("Blocks[0].ID: got %q, want blocker-dep-1", got.Blocks[0].ID)
 	}
 }
 

@@ -233,6 +233,9 @@ func LoadWithManifest(path string) (*memory.Repository, Manifest, error) {
 			Description: snap.Description,
 			Notes:       snap.Notes,
 			DependsOn:   snap.DependsOn,
+			Related:     snap.Related,
+			ParentID:    snap.ParentID,
+			ChildrenIDs: snap.ChildrenIDs,
 			Created:     snap.Created,
 			Updated:     snap.Updated,
 		})
