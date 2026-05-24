@@ -223,207 +223,7 @@ func beadsFactory(t *testing.T, seed scenarioSeed) repository.Repository {
 	}
 
 	runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
-	gw := repobeads.NewCLIGateway(runner)
-	return repobeads.NewFromGateway(gw)
-}
-
-// beadsLeanFactory constructs a lean beads.Repository backed by a real bd repo
-// seeded from seed. It uses the same seeding logic as beadsFactory but wires
-// the lean constructor (repobeads.New(runner)) instead of the legacy gateway
-// adapter.
-func beadsLeanFactory(t *testing.T, seed scenarioSeed) repository.Repository {
-	t.Helper()
-
-	dir := filepath.Join(t.TempDir(), "bd-lean-repo")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir %q: %v", dir, err)
-	}
-
-	runBD := initBDRepo(t, dir)
-
-	// Create issues in order (mirrors beadsFactory seeding logic).
-	for _, iss := range seed.issues {
-		args := []string{
-			"create",
-			"--id", iss.id,
-			"--title", iss.title,
-		}
-		if iss.description != "" {
-			args = append(args, "--description", iss.description)
-		}
-		if iss.notes != "" {
-			args = append(args, "--notes", iss.notes)
-		}
-		if iss.issueType != "" {
-			args = append(args, "--type", iss.issueType)
-		}
-		if iss.priority != 0 {
-			args = append(args, "--priority", fmt.Sprintf("%d", iss.priority))
-		}
-		if iss.assignee != "" {
-			args = append(args, "--assignee", iss.assignee)
-		}
-		if len(iss.labels) > 0 {
-			args = append(args, "--labels", strings.Join(iss.labels, ","))
-		}
-		runBD(args...)
-
-		switch iss.status {
-		case "closed":
-			runBD("close", iss.id, "--reason", "fixture seeded closed status")
-		case "in_progress", "blocked", "deferred", "pinned":
-			runBD("update", iss.id, "--status", iss.status)
-		}
-
-		for _, body := range iss.comments {
-			runBD("comments", "add", iss.id, body)
-		}
-	}
-
-	for _, d := range seed.deps {
-		cmd := exec.Command("bd", "dep", "add", d.blockedID, d.blockerID)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
-		out, err := cmd.CombinedOutput()
-		if err != nil && !strings.Contains(string(out), "already") {
-			t.Fatalf("bd dep add %s %s: %v\n%s", d.blockedID, d.blockerID, err, out)
-		}
-	}
-
-	runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
 	return repobeads.New(runner)
-}
-
-// -- Stub gateway for scenario 10 --
-
-// stubBeadsGateway implements repository/beads.BeadsGateway with configurable
-// per-method errors. Used only by scenario 10 (partial failure of Dashboard).
-type stubBeadsGateway struct {
-	inner        repobeads.BeadsGateway
-	methodErrors map[string]error
-}
-
-func newStubGateway(inner repobeads.BeadsGateway) *stubBeadsGateway {
-	return &stubBeadsGateway{
-		inner:        inner,
-		methodErrors: make(map[string]error),
-	}
-}
-
-func (s *stubBeadsGateway) setError(method string, err error) {
-	s.methodErrors[method] = err
-}
-
-func (s *stubBeadsGateway) HealthCheck(ctx context.Context) error {
-	if err := s.methodErrors["HealthCheck"]; err != nil {
-		return err
-	}
-	return s.inner.HealthCheck(ctx)
-}
-
-func (s *stubBeadsGateway) ListIssues(ctx context.Context, q domain.IssueListQuery) ([]domain.IssueSummary, error) {
-	if err := s.methodErrors["ListIssues"]; err != nil {
-		return nil, err
-	}
-	return s.inner.ListIssues(ctx, q)
-}
-
-func (s *stubBeadsGateway) ReadyIssues(ctx context.Context, q domain.ReadyIssuesQuery) ([]domain.IssueSummary, error) {
-	if err := s.methodErrors["ReadyIssues"]; err != nil {
-		return nil, err
-	}
-	return s.inner.ReadyIssues(ctx, q)
-}
-
-func (s *stubBeadsGateway) BlockedIssues(ctx context.Context, q domain.BlockedIssuesQuery) ([]domain.BlockedIssueView, error) {
-	if err := s.methodErrors["BlockedIssues"]; err != nil {
-		return nil, err
-	}
-	return s.inner.BlockedIssues(ctx, q)
-}
-
-func (s *stubBeadsGateway) ReadyExplain(ctx context.Context, opts domain.ReadyExplainOptions) (domain.ReadyExplainResult, error) {
-	if err := s.methodErrors["ReadyExplain"]; err != nil {
-		return domain.ReadyExplainResult{}, err
-	}
-	return s.inner.ReadyExplain(ctx, opts)
-}
-
-func (s *stubBeadsGateway) ShowIssue(ctx context.Context, q domain.ShowIssueQuery) (domain.IssueDetail, error) {
-	if err := s.methodErrors["ShowIssue"]; err != nil {
-		return domain.IssueDetail{}, err
-	}
-	return s.inner.ShowIssue(ctx, q)
-}
-
-func (s *stubBeadsGateway) SearchIssues(ctx context.Context, q domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	if err := s.methodErrors["SearchIssues"]; err != nil {
-		return domain.SearchResultPage{}, err
-	}
-	return s.inner.SearchIssues(ctx, q)
-}
-
-func (s *stubBeadsGateway) Query(ctx context.Context, expr string, opts domain.QueryOptions) ([]domain.IssueSummary, error) {
-	if err := s.methodErrors["Query"]; err != nil {
-		return nil, err
-	}
-	return s.inner.Query(ctx, expr, opts)
-}
-
-func (s *stubBeadsGateway) CountIssues(ctx context.Context, q domain.IssueCountQuery) (domain.IssueCountResult, error) {
-	if err := s.methodErrors["CountIssues"]; err != nil {
-		return domain.IssueCountResult{}, err
-	}
-	return s.inner.CountIssues(ctx, q)
-}
-
-func (s *stubBeadsGateway) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	if err := s.methodErrors["CreateIssue"]; err != nil {
-		return domain.CreateIssueResult{}, err
-	}
-	return s.inner.CreateIssue(ctx, input)
-}
-
-func (s *stubBeadsGateway) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
-	if err := s.methodErrors["UpdateIssue"]; err != nil {
-		return err
-	}
-	return s.inner.UpdateIssue(ctx, id, input)
-}
-
-func (s *stubBeadsGateway) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
-	if err := s.methodErrors["CloseIssue"]; err != nil {
-		return err
-	}
-	return s.inner.CloseIssue(ctx, id, input)
-}
-
-func (s *stubBeadsGateway) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
-	if err := s.methodErrors["AddComment"]; err != nil {
-		return err
-	}
-	return s.inner.AddComment(ctx, id, input)
-}
-
-func (s *stubBeadsGateway) StatusCatalog(ctx context.Context) ([]domain.StatusOption, error) {
-	if err := s.methodErrors["StatusCatalog"]; err != nil {
-		return nil, err
-	}
-	return s.inner.StatusCatalog(ctx)
-}
-
-func (s *stubBeadsGateway) TypeCatalog(ctx context.Context) ([]domain.TypeOption, error) {
-	if err := s.methodErrors["TypeCatalog"]; err != nil {
-		return nil, err
-	}
-	return s.inner.TypeCatalog(ctx)
-}
-
-func (s *stubBeadsGateway) LabelCatalog(ctx context.Context) ([]domain.LabelOption, error) {
-	if err := s.methodErrors["LabelCatalog"]; err != nil {
-		return nil, err
-	}
-	return s.inner.LabelCatalog(ctx)
 }
 
 // -- Main test entry point --
@@ -443,17 +243,12 @@ func TestRepositoryContract(t *testing.T) {
 			},
 		},
 		{
+			// beads exercises the lean Repository (repobeads.New(runner)) backed
+			// by a real bd binary. The legacy gateway-backed adapter has been
+			// removed; this is now the sole beads impl variant.
 			name: "beads",
 			build: func(t *testing.T, seed scenarioSeed) repository.Repository {
 				return beadsFactory(t, seed)
-			},
-		},
-		{
-			// beads_lean exercises the lean Repository (New(runner)) alongside
-			// the legacy gateway-backed adapter. Both must pass identical assertions.
-			name: "beads_lean",
-			build: func(t *testing.T, seed scenarioSeed) repository.Repository {
-				return beadsLeanFactory(t, seed)
 			},
 		},
 	}
@@ -1005,10 +800,10 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 	// When 2 of the 5 underlying calls fail, Dashboard must return an error (not
 	// a partial result). Contract: Dashboard is atomic.
 	//
-	// For the beads impl: use a stubBeadsGateway that fails ReadyExplain and
-	// CountIssues (2 of the 5 Dashboard fan-out calls).
-	// For the memory impl: this scenario is trivially N/A because memory has no
-	// external failure path. We document and skip.
+	// Both the memory and beads impls skip this scenario: memory has no external
+	// failure path, and the lean beads.Repository has no executor-level error
+	// injection seam yet. A CommandExecutor-level injection mechanism is tracked
+	// as k4g4.6; once that lands, this scenario can be enabled for beads.
 	t.Run("PartialDashboardFailure", func(t *testing.T) {
 		t.Parallel()
 
@@ -1016,37 +811,14 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		case "memory":
 			t.Skip("Scenario10/PartialDashboardFailure: N/A for memory impl — " +
 				"memory.Repository has no external failure path, all underlying " +
-				"computations are local and cannot fail independently. " +
-				"The atomicity contract is enforced by the beads impl test only.")
+				"computations are local and cannot fail independently.")
 			return
-		case "beads_lean":
-			t.Skip("Scenario10/PartialDashboardFailure: N/A for beads_lean impl — " +
-				"the lean Repository has no BeadsGateway seam for error injection; " +
-				"Dashboard atomicity is covered by the legacy beads impl. " +
-				"A CommandExecutor-level injection mechanism is tracked as a follow-up.")
+		case "beads":
+			t.Skip("Scenario10/PartialDashboardFailure: N/A for beads impl — " +
+				"the lean Repository has no executor-level error injection seam; " +
+				"Dashboard atomicity coverage is deferred to k4g4.6 which adds a " +
+				"CommandExecutor-level injection mechanism.")
 			return
-		}
-
-		// Build a minimal bd repo.
-		dir := filepath.Join(t.TempDir(), "bd-repo-s10")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatalf("mkdir %q: %v", dir, err)
-		}
-		initBDRepo(t, dir)
-
-		runner := gateway.NewCommandRunner(gateway.RunnerConfig{WorkDir: dir})
-		realGW := repobeads.NewCLIGateway(runner)
-
-		// Inject errors on ReadyExplain and CountIssues (2 of 5 Dashboard fan-out calls).
-		stub := newStubGateway(realGW)
-		injectedErr := fmt.Errorf("injected failure for parity test")
-		stub.setError("ReadyExplain", injectedErr)
-		stub.setError("CountIssues", injectedErr)
-
-		stubbedRepo := repobeads.NewFromGateway(stub)
-		_, err := stubbedRepo.Dashboard(ctx)
-		if err == nil {
-			t.Error("Scenario10/Dashboard: expected error when 2 of 5 underlying calls fail, got nil")
 		}
 	})
 

@@ -133,52 +133,30 @@ func bdQueryClosed(t *testing.T, ds datasets.Dataset, limit int) []byte {
 	return out
 }
 
-// fetchBWBColumns runs the 4 gateway calls in series and returns composed Columns.
-// Series execution keeps the test simple; parallelism is not required.
+// fetchBWBColumns fetches the dashboard data via repository.Repository and
+// returns composed Columns. StoredBlocked is intentionally omitted from the
+// Compose inputs so the NotReady column reflects only dependency-blocked issues
+// (matching bd blocked output) for the purposes of this sort-parity test.
 func fetchBWBColumns(t *testing.T, ds datasets.Dataset) dashboard.Columns {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	gw := datasets.NewGateway(t, ds)
+	repo := datasets.NewRepository(t, ds)
 
-	// ReadyExplain covers Ready + Blocked columns.
-	readyResult, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{Limit: 0})
+	data, err := repo.Dashboard(ctx)
 	if err != nil {
-		t.Fatalf("fetchBWBColumns[%s]: ReadyExplain: %v", ds.Name, err)
-	}
-
-	// InProgress via Query (no sort options; bwb applies issueSort in Compose).
-	inProgressIssues, err := gw.Query(ctx, "status=in_progress", domain.QueryOptions{Limit: 0})
-	if err != nil {
-		t.Fatalf("fetchBWBColumns[%s]: Query(in_progress): %v", ds.Name, err)
-	}
-
-	// Closed via Query with closed_at desc and cap — mirrors loadClosedCmd.
-	closedIssues, err := gw.Query(ctx, "status=closed", domain.QueryOptions{
-		IncludeClosed: true,
-		SortBy:        domain.SortFieldClosedAt,
-		SortOrder:     domain.SortDirectionDescending,
-		Limit:         closedCapForTest,
-	})
-	if err != nil {
-		t.Fatalf("fetchBWBColumns[%s]: Query(closed): %v", ds.Name, err)
-	}
-
-	// ClosedCount for Done total.
-	countResult, err := gw.CountIssues(ctx, domain.IssueCountQuery{Statuses: []string{"closed"}})
-	if err != nil {
-		t.Fatalf("fetchBWBColumns[%s]: CountIssues(closed): %v", ds.Name, err)
+		t.Fatalf("fetchBWBColumns[%s]: Dashboard: %v", ds.Name, err)
 	}
 
 	return dashboard.Compose(dashboard.Inputs{
-		Ready:       readyResult.Ready,
-		Blocked:     readyResult.Blocked,
-		InProgress:  inProgressIssues,
-		Closed:      closedIssues,
+		Ready:       data.ReadyExplain.Ready,
+		Blocked:     data.ReadyExplain.Blocked,
+		InProgress:  data.InProgress,
+		Closed:      data.Closed,
 		ClosedLimit: closedCapForTest,
-		ClosedTotal: countResult.Total,
+		ClosedTotal: data.ClosedTotal,
 	})
 }
 

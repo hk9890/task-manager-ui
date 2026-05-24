@@ -2,8 +2,8 @@ package search
 
 // argv_cardinality_test.go — ppja.3
 //
-// These tests wire the search model against a real *beads.Gateway backed by a
-// *fakes.RecordingExecutor (no FakeBeadsGateway). They assert that Init() and
+// These tests wire the search model against a lean beads.Repository backed by a
+// *fakes.RecordingExecutor (no fake gateway). They assert that Init() and
 // triggerSearch() emit exactly the expected bd argv shapes.
 //
 // Pattern mirrors TestBoardInitRealGatewaySubprocessArgvCardinality in
@@ -18,15 +18,14 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
-// newSearchRecordingModel wires the search model against a real beads.Gateway
+// newSearchRecordingModel wires the search model against a lean beads.Repository
 // backed by rec so subprocess calls flow through the real argv assembly logic.
 func newSearchRecordingModel(rec *fakes.RecordingExecutor) *Model {
 	runner := beads.NewCommandRunner(beads.RunnerConfig{
 		Command:  "bd",
 		Executor: rec,
 	})
-	gw := repositorybeads.NewCLIGateway(runner)
-	repo := repositorybeads.NewFromGateway(gw)
+	repo := repositorybeads.New(runner)
 	return NewModel(repo, nil)
 }
 

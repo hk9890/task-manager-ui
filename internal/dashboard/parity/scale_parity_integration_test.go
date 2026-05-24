@@ -36,8 +36,8 @@ func TestScaleParity_DoneColumnCapEngagement(t *testing.T) {
 	// datasets.ScaleFixture skips automatically when BWB_SCALE_FIXTURE != 1.
 	ds := datasets.ScaleFixture(t)
 
-	gw := datasets.NewGateway(t, ds)
-	cols := runDashboardFetch(t, gw, closedCapForTest)
+	repo := datasets.NewRepository(t, ds)
+	cols := runDashboardFetch(t, repo, closedCapForTest)
 
 	// Source-of-truth: bd count --by-status --json
 	countRaw, err := datasets.BdCount(t, ds, "--by-status")
@@ -104,8 +104,8 @@ func TestScaleParity_DoneColumnCapEngagement(t *testing.T) {
 func TestScaleParity_CapEngagement_VsBdCount(t *testing.T) {
 	ds := datasets.ScaleFixture(t) // skips if BWB_SCALE_FIXTURE != 1
 
-	gw := datasets.NewGateway(t, ds)
-	cols := runDashboardFetch(t, gw, closedCapForTest)
+	repo := datasets.NewRepository(t, ds)
+	cols := runDashboardFetch(t, repo, closedCapForTest)
 
 	countRaw, err := datasets.BdCount(t, ds, "--by-status")
 	if err != nil {

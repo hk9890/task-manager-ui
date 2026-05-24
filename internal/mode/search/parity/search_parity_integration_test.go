@@ -177,7 +177,7 @@ func TestSearchParityExternalMtimeUnchanged(t *testing.T) {
 func runSearchParityMatrix(t *testing.T, ds datasets.Dataset) {
 	t.Helper()
 
-	gw := datasets.NewGateway(t, ds)
+	repo := datasets.NewRepository(t, ds)
 	ctx := context.Background()
 
 	for _, qc := range queryMatrix {
@@ -185,9 +185,9 @@ func runSearchParityMatrix(t *testing.T, ds datasets.Dataset) {
 		t.Run(fmt.Sprintf("%s/%s", ds.Name, qc.name), func(t *testing.T) {
 			t.Parallel()
 
-			page, err := gw.SearchIssues(ctx, qc.query)
+			page, err := repo.Search(ctx, qc.query)
 			if err != nil {
-				t.Fatalf("SearchIssues failed: %v", err)
+				t.Fatalf("Search failed: %v", err)
 			}
 
 			// Sub-test: ReturnedCount == len(Results) (internal consistency).

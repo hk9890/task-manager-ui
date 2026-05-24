@@ -1,23 +1,5 @@
 # Change Workflow
 
-## Tracker-first rule
-
-This project uses **bd (beads)** for issue tracking. Use `bd` for ALL task
-tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists.
-
-- Run `bd prime` for the full tracker workflow, command reference, and session-close protocol.
-- Use `bd remember` for persistent repo knowledge; do NOT create markdown memory files.
-
-Quick reference:
-
-```bash
-bd ready               # find available work
-bd show <id>           # view issue details
-bd update <id> --claim # claim work
-bd list --status open  # inspect open work
-bd close <id>          # complete work
-```
-
 ## Optional local pre-commit hook (staged Go formatting)
 
 This repo includes a lightweight pre-commit hook at `scripts/git-hooks/pre-commit`.

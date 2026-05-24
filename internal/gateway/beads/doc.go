@@ -1,16 +1,15 @@
 // Package beads provides the subprocess runner for the beads (bd) CLI.
 //
-// After the 8pxi refactor, the BeadsGateway interface and all gateway method
-// implementations (read_gateway.go, writes.go, validating_gateway.go, etc.)
-// live in internal/repository/beads. The argv-level read cache was removed in
-// 8pxi.7; all reads now go through the subprocess. This package
-// retains:
+// After the 8pxi refactor, the gateway types (interface, implementations,
+// validating_gateway.go, etc.) live in internal/repository/beads. The
+// argv-level read cache was removed in 8pxi.7; all reads now go through the
+// subprocess. This package retains:
 //
 //   - CommandRunner / RunnerConfig / CommandRequest (runner.go)
 //   - RunJSON generic helper (runner.go)
 //   - DecodeJSONInto / ExecResult / CommandExecutor (runner.go)
 //
-// Consumers that need both runner and gateway types use the two-import pattern:
+// Consumers that need both runner and repository types use the two-import pattern:
 //
 //	import (
 //	    bdrunner "github.com/hk9890/beads-workbench/internal/gateway/beads"
@@ -48,9 +47,9 @@
 //	    rec.OnArgs(wantArgv).Return(beads.ExecResult{Stdout: []byte(`...`)}, nil)
 //
 //	    runner := beads.NewCommandRunner(beads.RunnerConfig{Command: "bd", Executor: rec})
-//	    gw := repobeads.NewCLIGateway(runner)
+//	    repo := repobeads.New(runner)
 //
-//	    _, err := gw.MyMethod(context.Background())
+//	    _, err := repo.MyMethod(context.Background())
 //	    if err != nil {
 //	        t.Fatalf("MyMethod returned error: %v", err)
 //	    }

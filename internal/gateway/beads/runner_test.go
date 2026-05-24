@@ -823,8 +823,8 @@ func TestFilterEnvToAllowlistStripsBeadsActor(t *testing.T) {
 // a parent process that has it set), the executor invocation for a write command
 // does NOT receive BEADS_ACTOR. This is the runner-level assertion described in
 // wgz0; filterEnvToAllowlist does the filtering. The test drives runner.Run
-// directly (IsWrite=true) to avoid a cross-package dependency on NewCLIGateway
-// (which lives in repository/beads after the 8pxi refactor).
+// directly (IsWrite=true) to avoid a cross-package dependency on the
+// CLI-backed gateway constructor (which lives in repository/beads).
 func TestCreateIssueDoesNotReceiveBeadsActorInEnv(t *testing.T) {
 	t.Parallel()
 

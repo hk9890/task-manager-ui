@@ -31,6 +31,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode/board"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
@@ -112,12 +113,12 @@ func run(args []string, stdout, stderr *os.File) int {
 		return 2
 	}
 
-	// Build gateway
+	// Build repository
 	runner := beads.NewCommandRunner(beads.RunnerConfig{
 		WorkDir:  absDir,
 		ReadOnly: readonly,
 	})
-	gw := repobeads.NewCLIGateway(runner)
+	repo := repobeads.New(runner)
 
 	// Run selected checks
 	var results []CheckResult
@@ -128,11 +129,11 @@ func run(args []string, stdout, stderr *os.File) int {
 		var r CheckResult
 		switch name {
 		case "count":
-			r = runCountCheck(absDir, gw, readonly)
+			r = runCountCheck(absDir, repo, readonly)
 		case "sort":
-			r = runSortCheck(absDir, gw, readonly)
+			r = runSortCheck(absDir, repo, readonly)
 		case "search":
-			r = runSearchCheck(absDir, gw, readonly)
+			r = runSearchCheck(absDir, repo, readonly)
 		case "render":
 			r = runRenderCheck()
 		}
@@ -213,14 +214,14 @@ func containsStr(slice []string, s string) bool {
 
 // ── count check ──────────────────────────────────────────────────────────────
 
-func runCountCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckResult {
+func runCountCheck(dir string, repo repository.Repository, readonly bool) CheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	// bwb side: run the same 4 gateway calls the board model fires on startup.
-	cols, err := runDashboardFetch(ctx, gw)
+	// bwb side: call repo.Dashboard which fans out 5 bd calls in parallel.
+	cols, err := runDashboardFetch(ctx, repo)
 	if err != nil {
-		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("gateway fetch: %v", err)}
+		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("repository fetch: %v", err)}
 	}
 
 	// bd side: count --by-status --json
@@ -245,20 +246,45 @@ func runCountCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckRe
 		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("parse bd ready: %v", err)}
 	}
 
+	// NotReady includes both dependency-blocked issues (from bd blocked — blocked
+	// by unresolved dependencies, regardless of stored status) and stored-blocked
+	// issues (status=blocked in bd with no dependency blocker). bwb deduplicates
+	// the union. To match, the bd-side count is the deduplicated union of:
+	//   - IDs from "bd blocked" (dep-blocked issues)
+	//   - IDs from "bd list --status blocked" (status=blocked issues)
 	blockedRaw, err := bdRun(dir, readonly, "blocked", "--json")
 	if err != nil {
 		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("bd blocked: %v", err)}
 	}
-	bdBlockedCount, err := parseBdIssueArrayLen(blockedRaw)
+	blockedItems, err := parseBdMinimalArray(blockedRaw)
 	if err != nil {
 		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("parse bd blocked: %v", err)}
 	}
 
+	storedBlockedRaw, err := bdRun(dir, readonly, "list", "--status", "blocked", "--json")
+	if err != nil {
+		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("bd list --status blocked: %v", err)}
+	}
+	storedBlockedItems, err := parseBdMinimalArray(storedBlockedRaw)
+	if err != nil {
+		return CheckResult{Name: "count", Status: "FAIL", Detail: fmt.Sprintf("parse bd list --status blocked: %v", err)}
+	}
+
+	// Deduplicate the union of dep-blocked and stored-blocked IDs.
+	notReadyIDs := make(map[string]struct{}, len(blockedItems)+len(storedBlockedItems))
+	for _, item := range blockedItems {
+		notReadyIDs[item.ID] = struct{}{}
+	}
+	for _, item := range storedBlockedItems {
+		notReadyIDs[item.ID] = struct{}{}
+	}
+	bdNotReadyCount := len(notReadyIDs)
+
 	var mismatches []string
 
-	if cols.NotReady.Total != bdBlockedCount {
+	if cols.NotReady.Total != bdNotReadyCount {
 		mismatches = append(mismatches, fmt.Sprintf("NotReady: bwb=%d bd=%d (delta=%d)",
-			cols.NotReady.Total, bdBlockedCount, cols.NotReady.Total-bdBlockedCount))
+			cols.NotReady.Total, bdNotReadyCount, cols.NotReady.Total-bdNotReadyCount))
 	}
 	if cols.Ready.Total != bdReadyCount {
 		mismatches = append(mismatches, fmt.Sprintf("Ready: bwb=%d bd=%d (delta=%d)",
@@ -285,13 +311,13 @@ func runCountCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckRe
 
 // ── sort check ───────────────────────────────────────────────────────────────
 
-func runSortCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckResult {
+func runSortCheck(dir string, repo repository.Repository, readonly bool) CheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	cols, err := runDashboardFetch(ctx, gw)
+	cols, err := runDashboardFetch(ctx, repo)
 	if err != nil {
-		return CheckResult{Name: "sort", Status: "FAIL", Detail: fmt.Sprintf("gateway fetch: %v", err)}
+		return CheckResult{Name: "sort", Status: "FAIL", Detail: fmt.Sprintf("repository fetch: %v", err)}
 	}
 
 	var mismatches []string
@@ -375,15 +401,15 @@ var smokeSearchMatrix = []searchQueryCase{
 	{name: "text=render", query: domain.SearchIssuesQuery{Text: "render", Limit: paritySearchLimit}},
 }
 
-func runSearchCheck(dir string, gw repobeads.BeadsGateway, readonly bool) CheckResult {
+func runSearchCheck(dir string, repo repository.Repository, readonly bool) CheckResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	var mismatches []string
 	for _, qc := range smokeSearchMatrix {
-		page, err := gw.SearchIssues(ctx, qc.query)
+		page, err := repo.Search(ctx, qc.query)
 		if err != nil {
-			mismatches = append(mismatches, fmt.Sprintf("[%s] gateway: %v", qc.name, err))
+			mismatches = append(mismatches, fmt.Sprintf("[%s] repository: %v", qc.name, err))
 			continue
 		}
 
@@ -519,39 +545,20 @@ func feedRenderData(m *board.Model) {
 
 // ── dashboard fetch (shared by count + sort) ─────────────────────────────────
 
-func runDashboardFetch(ctx context.Context, gw repobeads.BeadsGateway) (dashboard.Columns, error) {
-	readyResult, err := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{Limit: 0})
+func runDashboardFetch(ctx context.Context, repo repository.Repository) (dashboard.Columns, error) {
+	data, err := repo.Dashboard(ctx)
 	if err != nil {
-		return dashboard.Columns{}, fmt.Errorf("ReadyExplain: %w", err)
-	}
-
-	inProgress, err := gw.Query(ctx, "status=in_progress", domain.QueryOptions{Limit: 0})
-	if err != nil {
-		return dashboard.Columns{}, fmt.Errorf("Query(in_progress): %w", err)
-	}
-
-	closed, err := gw.Query(ctx, "status=closed", domain.QueryOptions{
-		IncludeClosed: true,
-		SortBy:        domain.SortFieldClosedAt,
-		SortOrder:     domain.SortDirectionDescending,
-		Limit:         closedCapForSmoke,
-	})
-	if err != nil {
-		return dashboard.Columns{}, fmt.Errorf("Query(closed): %w", err)
-	}
-
-	countResult, err := gw.CountIssues(ctx, domain.IssueCountQuery{Statuses: []string{"closed"}})
-	if err != nil {
-		return dashboard.Columns{}, fmt.Errorf("CountIssues(closed): %w", err)
+		return dashboard.Columns{}, fmt.Errorf("dashboard: %w", err)
 	}
 
 	return dashboard.Compose(dashboard.Inputs{
-		Ready:       readyResult.Ready,
-		Blocked:     readyResult.Blocked,
-		InProgress:  inProgress,
-		Closed:      closed,
-		ClosedLimit: closedCapForSmoke,
-		ClosedTotal: countResult.Total,
+		Ready:         data.ReadyExplain.Ready,
+		Blocked:       data.ReadyExplain.Blocked,
+		StoredBlocked: data.Blocked,
+		InProgress:    data.InProgress,
+		Closed:        data.Closed,
+		ClosedLimit:   closedCapForSmoke,
+		ClosedTotal:   data.ClosedTotal,
 	}), nil
 }
 

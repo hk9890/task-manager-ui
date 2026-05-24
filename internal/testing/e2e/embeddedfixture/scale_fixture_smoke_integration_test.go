@@ -25,6 +25,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	beadsgateway "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 )
 
@@ -36,12 +37,12 @@ func checkScaleGateEnabled(tb testing.TB) {
 	}
 }
 
-// newScaleGateway builds a CLI gateway pointing at repoPath.
-func newScaleGateway(repoPath string) repobeads.BeadsGateway {
+// newScaleRepository builds a lean Repository pointing at repoPath.
+func newScaleRepository(repoPath string) repository.Repository {
 	runner := beadsgateway.NewCommandRunner(beadsgateway.RunnerConfig{
 		WorkDir: repoPath,
 	})
-	return repobeads.NewCLIGateway(runner)
+	return repobeads.New(runner)
 }
 
 // TestScaleFixtureGateway_SearchKeywordReturnsGe20Results guards the search
@@ -56,20 +57,20 @@ func TestScaleFixtureGateway_SearchKeywordReturnsGe20Results(t *testing.T) {
 	// checked for backward compatibility, but the cache gate is BWB_SCALE_FIXTURE.
 	checkScaleGateEnabled(t)                  // checks BWB_SCALE_FIXTURE_SMOKE=1
 	repoPath := SharedScaleFixtureRepoPath(t) // seeds once, checks BWB_SCALE_FIXTURE=1
-	gw := newScaleGateway(repoPath)
+	repo := newScaleRepository(repoPath)
 	ctx := context.Background()
 
 	for _, kw := range []string{"workflow", "pipeline", "dashboard"} {
 		kw := kw
 		t.Run("keyword_"+kw, func(t *testing.T) {
-			page, err := gw.SearchIssues(ctx, domain.SearchIssuesQuery{
+			page, err := repo.Search(ctx, domain.SearchIssuesQuery{
 				Text: kw,
 			})
 			if err != nil {
-				t.Fatalf("SearchIssues(%q): %v", kw, err)
+				t.Fatalf("Search(%q): %v", kw, err)
 			}
 			if len(page.Results) < 20 {
-				t.Errorf("SearchIssues(%q): got %d results; want >=20", kw, len(page.Results))
+				t.Errorf("Search(%q): got %d results; want >=20", kw, len(page.Results))
 			}
 		})
 	}
@@ -86,7 +87,7 @@ func TestScaleFixtureGateway_ShowIssueEdgeCases(t *testing.T) {
 	checkScaleGateEnabled(t) // checks BWB_SCALE_FIXTURE_SMOKE=1
 	spec := loadScaleSeed(t)
 	repoPath := SharedScaleFixtureRepoPath(t) // seeds once, checks BWB_SCALE_FIXTURE=1
-	gw := newScaleGateway(repoPath)
+	repo := newScaleRepository(repoPath)
 	ctx := context.Background()
 
 	// Locate edge-case issue IDs from the spec.
@@ -126,7 +127,7 @@ func TestScaleFixtureGateway_ShowIssueEdgeCases(t *testing.T) {
 			if tc.id == "" {
 				t.Fatalf("ShowIssue %s: could not find matching issue in scale spec", tc.comment)
 			}
-			detail, err := gw.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: tc.id})
+			detail, err := repo.Issue(ctx, tc.id)
 			if err != nil {
 				t.Errorf("ShowIssue(%q) [%s]: unexpected error: %v", tc.id, tc.comment, err)
 				return

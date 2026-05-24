@@ -17,7 +17,7 @@
 // Usage:
 //
 //	ds := datasets.Fixture(t)
-//	gw := datasets.NewGateway(t, ds)
+//	repo := datasets.NewRepository(t, ds)
 //	out, err := datasets.BdList(t, ds, "--status", "open")
 package datasets
 
@@ -31,6 +31,7 @@ import (
 	"time"
 
 	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture"
 )
@@ -54,7 +55,7 @@ type Dataset struct {
 	// Path is the absolute path to the directory containing .beads/.
 	Path string
 	// ReadOnly indicates that no write operations are permitted on this dataset.
-	// When true, NewGateway prepends --readonly to every bd argv, and the Bd*
+	// When true, NewRepository prepends --readonly to every bd argv, and the Bd*
 	// helpers also pass --readonly.
 	ReadOnly bool
 }
@@ -174,12 +175,12 @@ func External(t *testing.T) Dataset {
 	}
 }
 
-// NewGateway constructs a BeadsGateway bound to ds.Path.
+// NewRepository constructs a repository.Repository bound to ds.Path.
 //
 // When ds.ReadOnly is true the runner is configured with ReadOnly: true, which
 // causes --readonly to be prepended to every bd argv. Any attempted write
-// through the returned gateway will fail with ErrorCodeCommandFailed.
-func NewGateway(t *testing.T, ds Dataset) repobeads.BeadsGateway {
+// through the returned repository will fail with ErrorCodeCommandFailed.
+func NewRepository(t *testing.T, ds Dataset) repository.Repository {
 	t.Helper()
 
 	runner := beads.NewCommandRunner(beads.RunnerConfig{
@@ -187,7 +188,7 @@ func NewGateway(t *testing.T, ds Dataset) repobeads.BeadsGateway {
 		ReadOnly: ds.ReadOnly,
 	})
 
-	return repobeads.NewCLIGateway(runner)
+	return repobeads.New(runner)
 }
 
 // BdCount runs "bd [--readonly] count <args> --json" from ds.Path and returns

@@ -61,8 +61,7 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 			runnerCfg.Logger = opts.logManager.Component("gateway")
 		}
 		runner := beads.NewCommandRunner(runnerCfg)
-		gateway := repositorybeads.NewCLIGateway(runner)
-		backing := repositorybeads.NewFromGateway(gateway)
+		backing := repository.NewValidating(repositorybeads.New(runner), logManagerComponent(opts.logManager, "validating"))
 
 		// Bind vcStatusFunc.
 		vcStatusFunc := func(c context.Context) (string, error) {
@@ -131,8 +130,8 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 		if opts.logManager != nil {
 			runnerCfg.Logger = opts.logManager.Component("gateway")
 		}
-		gateway := repositorybeads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
-		return repositorybeads.NewFromGateway(gateway), noop, nil
+		runner := beads.NewCommandRunner(runnerCfg)
+		return repository.NewValidating(repositorybeads.New(runner), logManagerComponent(opts.logManager, "validating")), noop, nil
 	}
 }
 

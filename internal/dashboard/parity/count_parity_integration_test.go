@@ -8,8 +8,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/dashboard"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	repobeads "github.com/hk9890/beads-workbench/internal/repository/beads"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	"github.com/hk9890/beads-workbench/internal/testing/datasets"
 )
 
@@ -32,14 +31,15 @@ type bdBlockedIssue struct {
 	ID string `json:"id"`
 }
 
-// runDashboardFetch exercises the same 4 parallel gateway calls that
-// internal/mode/board/model.go startReload dispatches, and runs
-// dashboard.Compose with the results. It is the core of the parity test:
-// if the production fetch path ever drifts, this helper captures it.
+// runDashboardFetch calls repo.Dashboard and composes the result into
+// dashboard.Columns. It is the core of the parity test: if the production
+// fetch path ever drifts, this helper captures it.
 //
-// closedLimit mirrors model.closedLimit(); 50 is the default safe floor used
-// by the board model before the first WindowSizeMsg.
-func runDashboardFetch(t *testing.T, gw repobeads.BeadsGateway, closedLimit int) dashboard.Columns {
+// closedLimit is passed to dashboard.Compose as the cap sent to bd; it is used
+// to determine whether the visible row list is truncated. The lean Repository
+// uses defaultLeanClosedLimit (50) internally, so closedLimit should be ≤50 to
+// match the actual data returned.
+func runDashboardFetch(t *testing.T, repo repository.Repository, closedLimit int) dashboard.Columns {
 	t.Helper()
 
 	if closedLimit <= 0 {
@@ -48,44 +48,19 @@ func runDashboardFetch(t *testing.T, gw repobeads.BeadsGateway, closedLimit int)
 
 	ctx := context.Background()
 
-	// Call 1: ReadyExplain (gives Ready + Blocked groups).
-	readyResult, readyErr := gw.ReadyExplain(ctx, domain.ReadyExplainOptions{Limit: 0})
-	if readyErr != nil {
-		t.Fatalf("runDashboardFetch: ReadyExplain failed: %v", readyErr)
-	}
-
-	// Call 2: Query in_progress.
-	inProgress, ipErr := gw.Query(ctx, "status=in_progress", domain.QueryOptions{Limit: 0})
-	if ipErr != nil {
-		t.Fatalf("runDashboardFetch: Query(in_progress) failed: %v", ipErr)
-	}
-
-	// Call 3: Query closed, sorted by closed_at desc, capped at closedLimit.
-	closed, clErr := gw.Query(ctx, "status=closed", domain.QueryOptions{
-		IncludeClosed: true,
-		SortBy:        domain.SortFieldClosedAt,
-		SortOrder:     domain.SortDirectionDescending,
-		Limit:         closedLimit,
-	})
-	if clErr != nil {
-		t.Fatalf("runDashboardFetch: Query(closed) failed: %v", clErr)
-	}
-
-	// Call 4: CountIssues(status=closed) — the real DB population count.
-	countResult, countErr := gw.CountIssues(ctx, domain.IssueCountQuery{
-		Statuses: []string{"closed"},
-	})
-	if countErr != nil {
-		t.Fatalf("runDashboardFetch: CountIssues(closed) failed: %v", countErr)
+	data, err := repo.Dashboard(ctx)
+	if err != nil {
+		t.Fatalf("runDashboardFetch: Dashboard failed: %v", err)
 	}
 
 	return dashboard.Compose(dashboard.Inputs{
-		Ready:       readyResult.Ready,
-		Blocked:     readyResult.Blocked,
-		InProgress:  inProgress,
-		Closed:      closed,
-		ClosedLimit: closedLimit,
-		ClosedTotal: countResult.Total,
+		Ready:         data.ReadyExplain.Ready,
+		Blocked:       data.ReadyExplain.Blocked,
+		StoredBlocked: data.Blocked,
+		InProgress:    data.InProgress,
+		Closed:        data.Closed,
+		ClosedLimit:   closedLimit,
+		ClosedTotal:   data.ClosedTotal,
 	})
 }
 
@@ -130,6 +105,34 @@ func parseBdBlockedCount(t *testing.T, raw []byte) int {
 	return len(issues)
 }
 
+// parseBdBlockedOverlap counts the IDs that appear in both rawA and rawB.
+// It parses both as bdBlockedIssue arrays and returns the size of the intersection.
+// Used to compute the union size = |A| + |B| - |A∩B|.
+func parseBdBlockedOverlap(t *testing.T, rawA, rawB []byte) int {
+	t.Helper()
+
+	var a []bdBlockedIssue
+	if err := json.Unmarshal(rawA, &a); err != nil {
+		t.Fatalf("parseBdBlockedOverlap: unmarshal rawA: %v", err)
+	}
+	var b []bdBlockedIssue
+	if err := json.Unmarshal(rawB, &b); err != nil {
+		t.Fatalf("parseBdBlockedOverlap: unmarshal rawB: %v", err)
+	}
+
+	setA := make(map[string]struct{}, len(a))
+	for _, item := range a {
+		setA[item.ID] = struct{}{}
+	}
+	count := 0
+	for _, item := range b {
+		if _, ok := setA[item.ID]; ok {
+			count++
+		}
+	}
+	return count
+}
+
 // TestCountParityDashboardVsBdCount is a permanent integration test that catches
 // any drift between the dashboard column totals reported by the bwb data path and
 // the source-of-truth counts from bd count --by-status.
@@ -157,8 +160,8 @@ func TestCountParityDashboardVsBdCount(t *testing.T) {
 			// This will skip if the env gate is off (ThisRepo, External).
 			ds := entry.get(t)
 
-			gw := datasets.NewGateway(t, ds)
-			cols := runDashboardFetch(t, gw, 50)
+			repo := datasets.NewRepository(t, ds)
+			cols := runDashboardFetch(t, repo, 50)
 
 			// Source-of-truth: bd count --by-status --json
 			countRaw, err := datasets.BdCount(t, ds, "--by-status")
@@ -180,26 +183,35 @@ func TestCountParityDashboardVsBdCount(t *testing.T) {
 			}
 			bdReadyCount := parseBdReadyCount(t, readyRaw)
 
-			// Source-of-truth for NotReady (blocked): bd blocked --json | len.
-			// "blocked" is a readiness state, not a bd status field, so it does
-			// not appear in bd count --by-status output. bd blocked --json is the
-			// authoritative count.
+			// Source-of-truth for NotReady: deduplicated union of dep-blocked
+			// (bd blocked) and stored-blocked (bd list --status blocked).
+			// bwb's NotReady column contains both populations; issues appearing
+			// in both are counted once. "bd blocked" returns dep-blocked issues
+			// regardless of stored status. "bd list --status blocked" returns issues
+			// whose stored status is blocked, regardless of dep graph.
 			blockedRaw, err := datasets.BdBlocked(t, ds)
 			if err != nil {
 				t.Fatalf("BdBlocked failed on dataset %q: %v", ds.Name, err)
 			}
-			bdBlockedCount := parseBdBlockedCount(t, blockedRaw)
+			bdDepBlockedCount := parseBdBlockedCount(t, blockedRaw)
+
+			storedBlockedRaw, err := datasets.BdList(t, ds, "--status", "blocked")
+			if err != nil {
+				t.Fatalf("BdList --status blocked failed on dataset %q: %v", ds.Name, err)
+			}
+			bdStoredBlockedCount := parseBdBlockedCount(t, storedBlockedRaw)
+			bdNotReadyCount := bdDepBlockedCount + bdStoredBlockedCount - parseBdBlockedOverlap(t, blockedRaw, storedBlockedRaw)
 
 			// --- NotReady (blocked) ---
 			t.Run("NotReadyTotalMatchesBdBlocked", func(t *testing.T) {
 				bwbTotal := cols.NotReady.Total
-				if bwbTotal != bdBlockedCount {
-					delta := bwbTotal - bdBlockedCount
-					t.Errorf("column=NotReady dataset=%s bwb_total=%d bd_count=%d delta=%d",
-						ds.Name, bwbTotal, bdBlockedCount, delta)
+				if bwbTotal != bdNotReadyCount {
+					delta := bwbTotal - bdNotReadyCount
+					t.Errorf("column=NotReady dataset=%s bwb_total=%d bd_notready=%d (dep=%d stored=%d) delta=%d",
+						ds.Name, bwbTotal, bdNotReadyCount, bdDepBlockedCount, bdStoredBlockedCount, delta)
 				} else {
-					t.Logf("column=NotReady dataset=%s bwb_total=%d bd_count=%d OK",
-						ds.Name, bwbTotal, bdBlockedCount)
+					t.Logf("column=NotReady dataset=%s bwb_total=%d bd_notready=%d (dep=%d stored=%d) OK",
+						ds.Name, bwbTotal, bdNotReadyCount, bdDepBlockedCount, bdStoredBlockedCount)
 				}
 			})
 

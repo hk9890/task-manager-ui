@@ -1,8 +1,8 @@
 // Package fakes provides contract-conforming fake implementations of
 // external dependencies used in tests across this module.
 //
-// After the 8pxi refactor, FakeBeadsGateway and its contract tests have been
-// removed. The real bd-backed gateway (internal/repository/beads) is now used
+// After the 8pxi refactor, the fake gateway and its contract tests were
+// removed. The lean beads.Repository (internal/repository/beads) is now used
 // directly in all integration-tier tests via the embedded fixture.
 //
 // # Remaining fakes

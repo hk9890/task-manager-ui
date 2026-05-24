@@ -16,7 +16,7 @@ import (
 )
 
 // TestFixtureDataset verifies that Fixture returns a usable Dataset and
-// NewGateway produces a gateway whose ListIssues succeeds.
+// NewRepository produces a repository whose Search succeeds.
 func TestFixtureDataset(t *testing.T) {
 	t.Parallel()
 
@@ -32,14 +32,14 @@ func TestFixtureDataset(t *testing.T) {
 		t.Fatal("Fixture dataset must be writable (ReadOnly == false)")
 	}
 
-	gw := datasets.NewGateway(t, ds)
+	repo := datasets.NewRepository(t, ds)
 
-	issues, err := gw.ListIssues(context.Background(), domain.IssueListQuery{})
+	page, err := repo.Search(context.Background(), domain.SearchIssuesQuery{})
 	if err != nil {
-		t.Fatalf("ListIssues against fixture failed: %v", err)
+		t.Fatalf("Search against fixture failed: %v", err)
 	}
-	if len(issues) == 0 {
-		t.Fatal("ListIssues returned no issues against fixture; expected seeded data")
+	if len(page.Results) == 0 {
+		t.Fatal("Search returned no issues against fixture; expected seeded data")
 	}
 }
 
@@ -81,12 +81,12 @@ func TestExternalSkipsWhenEnvNotSet(t *testing.T) {
 	}
 }
 
-// TestReadOnlyGatewayBlocksWrites verifies that a gateway built from a
+// TestReadOnlyRepositoryBlocksWrites verifies that a repository built from a
 // ReadOnly dataset rejects write operations. This is the negative test.
 //
 // We use a writable fixture copy and wrap it as ReadOnly to simulate the
 // external-dataset scenario. This protects the actual fixture from corruption.
-func TestReadOnlyGatewayBlocksWrites(t *testing.T) {
+func TestReadOnlyRepositoryBlocksWrites(t *testing.T) {
 	t.Parallel()
 
 	// Build a writable fixture, then declare it read-only for this test.
@@ -98,15 +98,15 @@ func TestReadOnlyGatewayBlocksWrites(t *testing.T) {
 		ReadOnly: true,
 	}
 
-	gw := datasets.NewGateway(t, readOnlyDS)
+	repo := datasets.NewRepository(t, readOnlyDS)
 
-	// Attempting to create an issue through the read-only gateway must fail.
-	_, err := gw.CreateIssue(context.Background(), domain.CreateIssueInput{
+	// Attempting to create an issue through the read-only repository must fail.
+	_, err := repo.CreateIssue(context.Background(), domain.CreateIssueInput{
 		Title: "readonly-test-must-not-persist",
 		Type:  "task",
 	})
 	if err == nil {
-		t.Fatal("CreateIssue through a read-only gateway must return an error; got nil")
+		t.Fatal("CreateIssue through a read-only repository must return an error; got nil")
 	}
 
 	// The error must indicate that bd rejected the operation with a read-only
@@ -167,10 +167,10 @@ func TestExternalMtimesUnchanged(t *testing.T) {
 	before := snapshotMtimes(t, beadsDir)
 
 	ds := datasets.External(t)
-	gw := datasets.NewGateway(t, ds)
+	repo := datasets.NewRepository(t, ds)
 
-	if _, err := gw.ListIssues(context.Background(), domain.IssueListQuery{}); err != nil {
-		t.Fatalf("ListIssues on External failed: %v", err)
+	if _, err := repo.Search(context.Background(), domain.SearchIssuesQuery{}); err != nil {
+		t.Fatalf("Search on External failed: %v", err)
 	}
 
 	if _, err := datasets.BdList(t, ds); err != nil {
