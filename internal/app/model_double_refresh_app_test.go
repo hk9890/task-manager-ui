@@ -25,19 +25,14 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
-// countBoardGatewayCalls counts calls to the 5 board gateway methods.
-func countBoardGatewayCalls(gateway *fakes.FakeBeadsGateway) int {
-	n := 0
-	for _, c := range gateway.Calls {
-		switch c.Method {
-		case fakes.MethodReadyExplain, fakes.MethodQuery, fakes.MethodCountIssues:
-			n++
-		}
-	}
-	return n
+// countBoardGatewayCalls counts calls to the board gateway method (Dashboard).
+// The memory repo records a single MethodDashboard call per board refresh, unlike
+// FakeRepo which fanned out into 5 sub-calls (ReadyExplain + 3×Query + CountIssues).
+func countBoardGatewayCalls(gw *appTestGateway, start int) int {
+	return gw.callCountSince(start, repository.MethodDashboard)
 }
 
 // expandCmds recursively expands a tea.Cmd (which may return a BatchMsg) into
@@ -77,21 +72,12 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{
-			{ID: "bw-10", Title: "Ready alpha", Status: "open", Priority: 1},
-		},
-		Blocked: []domain.BlockedIssueView{
-			{Issue: domain.IssueSummary{ID: "bw-11", Title: "Blocked beta", Status: "blocked", Priority: 2}},
-		},
-	}
-	gateway.QueryResponse = []domain.IssueSummary{
-		{ID: "bw-12", Title: "In Progress gamma", Status: "in_progress", Priority: 1},
-	}
-	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	gw := newTestGateway()
+	gw.seedReady("bw-10", "Ready alpha", "task", 1)
+	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-11", Title: "Blocked beta", Status: "blocked", Priority: 2})
+	gw.seedInProgress("bw-12", "In Progress gamma", "task", 1)
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
@@ -107,8 +93,8 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 		t.Fatalf("expected board to have settled after draining init messages")
 	}
 
-	// Reset gateway call counter after cold-start.
-	gateway.ResetCalls()
+	// Mark the call count after cold-start to measure only refresh-triggered calls.
+	markAfterInit := gw.resetMark()
 
 	// --- Phase 1: First refreshTickMsg — triggers an auto-refresh ---
 	// Mark board dirty so the surface refresh guard fires.
@@ -116,7 +102,7 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 
 	// Fire first refreshTickMsg. The model calls maybeAutoRefreshActiveSurfaceCmd,
 	// which calls board.AutoRefresh() (since board is NOT loading). This sets
-	// board loading=true and returns 4 gateway Cmds.
+	// board loading=true and returns a Dashboard gateway Cmd.
 	next, firstRefreshCmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 
@@ -124,15 +110,15 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 		t.Fatalf("expected board to be loading after first refreshTickMsg")
 	}
 
-	// The first refresh Cmd should contain 5 gateway calls.
+	// The first refresh Cmd should contain 1 board gateway call (Dashboard).
 	firstMsgs := runBatch(firstRefreshCmd)
-	callsFromFirst := countBoardGatewayCalls(gateway)
-	if callsFromFirst != 5 {
-		t.Fatalf("first refreshTickMsg: expected 5 gateway calls, got %d", callsFromFirst)
+	callsFromFirst := countBoardGatewayCalls(gw, markAfterInit)
+	if callsFromFirst != 1 {
+		t.Fatalf("first refreshTickMsg: expected 1 board gateway call, got %d", callsFromFirst)
 	}
 
-	// Reset call counter to measure second-tick calls.
-	gateway.ResetCalls()
+	// Mark call count to measure second-tick calls.
+	markAfterFirst := gw.resetMark()
 
 	// --- Phase 2: Second refreshTickMsg while board is STILL loading ---
 	// Mark dirty again (simulating another mutation arriving while in-flight).
@@ -152,7 +138,7 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 		// NO additional board gateway calls were recorded.
 		_ = secondMsgs
 	}
-	callsFromSecond := countBoardGatewayCalls(gateway)
+	callsFromSecond := countBoardGatewayCalls(gw, markAfterFirst)
 	if callsFromSecond != 0 {
 		t.Errorf("second refreshTickMsg: expected 0 board gateway calls (boardIsLoading() guard should fire), got %d; app/model.go:1076 guard is broken", callsFromSecond)
 	}
@@ -168,4 +154,5 @@ func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
 	if m.boardIsLoading() {
 		t.Errorf("expected board to have settled after draining first refresh messages")
 	}
+
 }

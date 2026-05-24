@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/logging"
+	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	bwbversion "github.com/hk9890/beads-workbench/internal/version"
 )
 
@@ -37,8 +38,9 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		runnerCfg.Logger = opts.logManager.Component("gateway")
 	}
 	gateway := beads.NewCLIGateway(beads.NewCommandRunner(runnerCfg))
+	repo := repositorybeads.New(gateway)
 
-	services, err := app.NewServices(gateway, cfg, opts.projectRoot)
+	services, err := app.NewServices(repo, cfg, opts.projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize services: %w", err)
 	}

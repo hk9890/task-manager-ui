@@ -31,6 +31,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode/board"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
 // allChecks is the canonical ordered list of check names.
@@ -450,9 +451,9 @@ func runRenderCheck() CheckResult {
 		return CheckResult{Name: "render", Status: "FAIL", Detail: fmt.Sprintf("keybindings: %v", err)}
 	}
 
-	// Build a board model with a minimal fake gateway.
+	// Build a board model with an empty memory repository.
 	// Data is fed directly via board.FeedTestData (bypasses async dispatch).
-	m := board.NewModel(newRenderFakeGateway(), slog.Default(), keys)
+	m := board.NewModel(memoryrepo.New(), slog.Default(), keys)
 
 	type step struct {
 		label string
@@ -500,70 +501,6 @@ func runRenderCheck() CheckResult {
 // enough terminal has exactly 4 occurrences — one per column header.
 func countColumnTopBorders(view string) int {
 	return strings.Count(view, "╭")
-}
-
-// ── render fake gateway (minimal headless data) ───────────────────────────────
-
-// renderFakeGateway implements beads.BeadsGateway with static responses
-// just rich enough to populate all 4 board columns for the render check.
-type renderFakeGateway struct{}
-
-func newRenderFakeGateway() beads.BeadsGateway { return &renderFakeGateway{} }
-
-func (g *renderFakeGateway) HealthCheck(_ context.Context) error { return nil }
-func (g *renderFakeGateway) ListIssues(_ context.Context, _ domain.IssueListQuery) ([]domain.IssueSummary, error) {
-	return nil, nil
-}
-func (g *renderFakeGateway) ReadyIssues(_ context.Context, _ domain.ReadyIssuesQuery) ([]domain.IssueSummary, error) {
-	return nil, nil
-}
-func (g *renderFakeGateway) BlockedIssues(_ context.Context, _ domain.BlockedIssuesQuery) ([]domain.BlockedIssueView, error) {
-	return nil, nil
-}
-func (g *renderFakeGateway) ShowIssue(_ context.Context, _ domain.ShowIssueQuery) (domain.IssueDetail, error) {
-	return domain.IssueDetail{}, nil
-}
-func (g *renderFakeGateway) SearchIssues(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	return domain.SearchResultPage{}, nil
-}
-func (g *renderFakeGateway) Query(_ context.Context, _ string, _ domain.QueryOptions) ([]domain.IssueSummary, error) {
-	return []domain.IssueSummary{
-		{ID: "smoke-3", Title: "In Progress", Status: "in_progress", Priority: 1},
-	}, nil
-}
-func (g *renderFakeGateway) ReadyExplain(_ context.Context, _ domain.ReadyExplainOptions) (domain.ReadyExplainResult, error) {
-	return domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{
-			{ID: "smoke-1", Title: "Ready issue", Status: "open", Priority: 1},
-		},
-		Blocked: []domain.BlockedIssueView{
-			{Issue: domain.IssueSummary{ID: "smoke-2", Title: "Blocked", Status: "blocked", Priority: 2}},
-		},
-	}, nil
-}
-func (g *renderFakeGateway) CountIssues(_ context.Context, _ domain.IssueCountQuery) (domain.IssueCountResult, error) {
-	return domain.IssueCountResult{Total: 1}, nil
-}
-func (g *renderFakeGateway) CreateIssue(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return domain.CreateIssueResult{}, nil
-}
-func (g *renderFakeGateway) UpdateIssue(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
-	return nil
-}
-func (g *renderFakeGateway) CloseIssue(_ context.Context, _ string, _ domain.CloseIssueInput) error {
-	return nil
-}
-func (g *renderFakeGateway) AddComment(_ context.Context, _ string, _ domain.AddCommentInput) error {
-	return nil
-}
-func (g *renderFakeGateway) StatusCatalog(_ context.Context) ([]domain.StatusOption, error) {
-	return nil, nil
-}
-func (g *renderFakeGateway) TypeCatalog(_ context.Context) ([]domain.TypeOption, error) {
-	return nil, nil
-}
-func (g *renderFakeGateway) LabelCatalog(_ context.Context) ([]domain.LabelOption, error) {
-	return nil, nil
 }
 
 // feedRenderData drives all four gateway result messages into the board model,

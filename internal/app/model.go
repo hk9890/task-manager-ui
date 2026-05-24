@@ -260,8 +260,8 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		board:          boardmode.NewModel(services.Gateway, modeLogger(services.Logger, "board"), keys),
-		search:         searchmode.NewModel(services.Gateway, modeLogger(services.Logger, "search"), keys),
+		board:          boardmode.NewModel(services.Repo, modeLogger(services.Logger, "board"), keys),
+		search:         searchmode.NewModel(services.Repo, modeLogger(services.Logger, "search"), keys),
 		detail:         detailsmode.Model{Keys: keys},
 		toast:          toaster.New(),
 		help:           help,
@@ -283,7 +283,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
 	healthCheckCmd := func() tea.Msg {
-		err := m.services.Gateway.HealthCheck(context.Background())
+		err := m.services.Repo.HealthCheck(context.Background())
 		return startupHealthCheckMsg{err: err}
 	}
 	if m.runtime.DisableAutoRefresh {
@@ -1269,7 +1269,7 @@ func prevMode(current mode.ID, _ mode.ID) mode.ID {
 
 func loadDetailCmd(services Services, issueID string) tea.Cmd {
 	return func() tea.Msg {
-		detail, err := services.Gateway.ShowIssue(context.Background(), domain.ShowIssueQuery{IssueID: issueID})
+		detail, err := services.Repo.Issue(context.Background(), issueID)
 		return detailLoadedMsg{issueID: issueID, detail: detail, err: err}
 	}
 }
@@ -1487,32 +1487,22 @@ func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
 
 func loadMutationCatalogsCmd(services Services, kind mutationKind, issue domain.IssueSummary) tea.Cmd {
 	return func() tea.Msg {
-		statuses, err := services.Gateway.StatusCatalog(context.Background())
+		catalogs, err := services.Repo.Catalogs(context.Background())
 		if err != nil {
-			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("status catalog: %w", err)}
+			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("catalogs: %w", err)}
 		}
 
-		types, err := services.Gateway.TypeCatalog(context.Background())
-		if err != nil {
-			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("type catalog: %w", err)}
-		}
-
-		labels, err := services.Gateway.LabelCatalog(context.Background())
-		if err != nil {
-			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("label catalog: %w", err)}
-		}
-
-		return mutationCatalogsLoadedMsg{kind: kind, issue: issue, statuses: statuses, types: types, labels: labels}
+		return mutationCatalogsLoadedMsg{kind: kind, issue: issue, statuses: catalogs.Statuses, types: catalogs.Types, labels: catalogs.Labels}
 	}
 }
 
 func loadStatusCatalogForIssueCmd(services Services, issue domain.IssueSummary) tea.Cmd {
 	return func() tea.Msg {
-		statuses, err := services.Gateway.StatusCatalog(context.Background())
+		catalogs, err := services.Repo.Catalogs(context.Background())
 		if err != nil {
 			return statusCatalogLoadedMsg{issue: issue, err: fmt.Errorf("status catalog: %w", err)}
 		}
-		return statusCatalogLoadedMsg{issue: issue, statuses: statuses}
+		return statusCatalogLoadedMsg{issue: issue, statuses: catalogs.Statuses}
 	}
 }
 
@@ -1665,7 +1655,7 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 			}
 
 			labels := parseCommaList(values["labels"])
-			result, err := services.Gateway.CreateIssue(context.Background(), domain.CreateIssueInput{
+			result, err := services.Repo.CreateIssue(context.Background(), domain.CreateIssueInput{
 				Title:       title,
 				Description: strings.TrimSpace(values["description"]),
 				Type:        strings.TrimSpace(values["type"]),
@@ -1729,14 +1719,14 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 				input.ClearLabels = true
 			}
 
-			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, input); err != nil {
+			if err := services.Repo.UpdateIssue(context.Background(), state.issue.ID, input); err != nil {
 				return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: %w", err)}
 			}
 
 			return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID}
 		case mutationClose:
 			reason := strings.TrimSpace(values["reason"])
-			if err := services.Gateway.CloseIssue(context.Background(), state.issue.ID, domain.CloseIssueInput{Reason: reason}); err != nil {
+			if err := services.Repo.CloseIssue(context.Background(), state.issue.ID, domain.CloseIssueInput{Reason: reason}); err != nil {
 				return mutationResultMsg{kind: mutationClose, issueID: state.issue.ID, err: fmt.Errorf("close issue failed: %w", err)}
 			}
 			return mutationResultMsg{kind: mutationClose, issueID: state.issue.ID}
@@ -1745,7 +1735,7 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 			if body == "" {
 				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: body is required")}
 			}
-			if err := services.Gateway.AddComment(context.Background(), state.issue.ID, domain.AddCommentInput{Body: body}); err != nil {
+			if err := services.Repo.AddComment(context.Background(), state.issue.ID, domain.AddCommentInput{Body: body}); err != nil {
 				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: %w", err)}
 			}
 			return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID}
@@ -1761,7 +1751,7 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, noChange: true}
 			}
 
-			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Status: &status}); err != nil {
+			if err := services.Repo.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Status: &status}); err != nil {
 				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: %w", err)}
 			}
 			return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID}
@@ -1780,7 +1770,7 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, noChange: true}
 			}
 
-			if err := services.Gateway.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Priority: priority}); err != nil {
+			if err := services.Repo.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Priority: priority}); err != nil {
 				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
 			}
 			return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID}

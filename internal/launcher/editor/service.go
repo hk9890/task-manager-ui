@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
 // Service defines the rich issue external-editor flow split into a prepare and
@@ -44,9 +44,9 @@ type Result struct {
 	Updated bool
 }
 
-// IssueEditor applies rich editor updates through the official gateway.
+// IssueEditor applies rich editor updates through the repository.
 type IssueEditor struct {
-	gateway       beads.BeadsGateway
+	repo          repository.Repository
 	editorCommand string
 	tempDir       string
 }
@@ -54,13 +54,13 @@ type IssueEditor struct {
 var _ Service = (*IssueEditor)(nil)
 
 // NewIssueEditor builds the default issue editor flow.
-func NewIssueEditor(gateway beads.BeadsGateway, editorCommand string) (*IssueEditor, error) {
-	if gateway == nil {
-		return nil, fmt.Errorf("gateway is required")
+func NewIssueEditor(repo repository.Repository, editorCommand string) (*IssueEditor, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("repo is required")
 	}
 
 	return &IssueEditor{
-		gateway:       gateway,
+		repo:          repo,
 		editorCommand: editorCommand,
 		tempDir:       os.TempDir(),
 	}, nil
@@ -70,7 +70,7 @@ func NewIssueEditor(gateway beads.BeadsGateway, editorCommand string) (*IssueEdi
 // temp file. The caller must eventually pass TempPath to ApplyEdits (which
 // removes the file).
 func (e *IssueEditor) PrepareDocument(ctx context.Context, issueID string) (Prepared, error) {
-	issue, err := e.gateway.ShowIssue(ctx, domain.ShowIssueQuery{IssueID: issueID})
+	issue, err := e.repo.Issue(ctx, issueID)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -111,7 +111,7 @@ func (e *IssueEditor) ApplyEdits(ctx context.Context, issueID string, issue doma
 		return Result{Updated: false}, nil
 	}
 
-	if err := e.gateway.UpdateIssue(ctx, issueID, input); err != nil {
+	if err := e.repo.UpdateIssue(ctx, issueID, input); err != nil {
 		return Result{}, err
 	}
 

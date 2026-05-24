@@ -13,7 +13,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
@@ -70,13 +70,10 @@ func TestSkeletonPhasePulse(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	// Gateway that never returns — board stays in loading=true, cold-start.
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{}
-	gateway.QueryResponse = nil
-	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	// Empty gateway — board stays in loading=true, cold-start.
+	gw := newTestGateway()
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}
@@ -139,26 +136,15 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	// Configure the fake gateway with known, distinguishable issue IDs.
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{
-			{ID: "bw-10", Title: "Ready issue alpha", Status: "open", Priority: 1},
-		},
-		Blocked: []domain.BlockedIssueView{
-			{Issue: domain.IssueSummary{ID: "bw-11", Title: "Blocked issue beta", Status: "blocked", Priority: 2}},
-		},
-	}
-	gateway.QueryResponse = []domain.IssueSummary{
-		{ID: "bw-12", Title: "In Progress gamma", Status: "in_progress", Priority: 1},
-	}
-	gateway.SearchIssuesResponse = domain.SearchResultPage{
-		Results: []domain.SearchResult{
-			{Issue: domain.IssueSummary{ID: "bw-20", Title: "Search result delta", Status: "open", Priority: 1}},
-		},
-	}
+	// Configure the gateway with known, distinguishable issue IDs.
+	gw := newTestGateway()
+	gw.seedReady("bw-10", "Ready issue alpha", "task", 1)
+	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-11", Title: "Blocked issue beta", Status: "blocked", Priority: 2})
+	gw.seedInProgress("bw-12", "In Progress gamma", "task", 1)
+	// Seed a search result so the search mode body renders something.
+	gw.seedSearchResult(memoryrepo.Issue{ID: "bw-20", Title: "Search result delta", Status: "open", Priority: 1})
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
@@ -198,7 +184,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// Send a refreshTickMsg. The model's Update immediately calls
 	// m.board.AutoRefresh() inside refreshActiveSurfaceCmd, which sets
 	// loading=true on each column but preserves existing issues. The returned
-	// cmd contains the 3 pending gateway fetch commands — we capture them
+	// cmd contains the pending gateway fetch commands — we capture them
 	// without running them yet, so the board is "in flight".
 	next, refreshCmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
@@ -302,13 +288,10 @@ func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	// Gateway that never returns — board stays in loading=true, cold-start.
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{}
-	gateway.QueryResponse = nil
-	gateway.SearchIssuesResponse = domain.SearchResultPage{}
+	// Empty gateway — board stays in loading=true, cold-start.
+	gw := newTestGateway()
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}

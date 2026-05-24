@@ -24,7 +24,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
 // countPaneTopBorders counts occurrences of the box-drawing top-left corner
@@ -67,22 +67,18 @@ func searchItoa(n int) string {
 	return string(buf)
 }
 
-// newRegressionSearch builds a search model with a fake gateway primed for
-// search results.
+// newRegressionSearch builds a search model with a memory repository seeded
+// for search results.
 func newRegressionSearch(t *testing.T) *Model {
 	t.Helper()
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{
-		Results: []domain.SearchResult{
-			{Issue: domain.IssueSummary{ID: "s-1", Title: "Match one", Status: "open", Priority: 1}},
-			{Issue: domain.IssueSummary{ID: "s-2", Title: "Match two", Status: "in_progress", Priority: 2}},
-		},
-	}
+	repo := memoryrepo.New()
+	repo.Seed(memoryrepo.Issue{ID: "s-1", Title: "Match one", Status: "open", Priority: 1})
+	repo.Seed(memoryrepo.Issue{ID: "s-2", Title: "Match two", Status: "in_progress", Priority: 2})
 	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings: %v", err)
 	}
-	return NewModel(gateway, nil, keys)
+	return NewModel(repo, nil, keys)
 }
 
 // feedSearchResults delivers a searchLoadedMsg to the model, simulating a

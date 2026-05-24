@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
@@ -25,7 +26,8 @@ func newSearchRecordingModel(rec *fakes.RecordingExecutor) *Model {
 		Executor: rec,
 	})
 	gw := beads.NewCLIGateway(runner)
-	return NewModel(gw, nil)
+	repo := repositorybeads.New(gw)
+	return NewModel(repo, nil)
 }
 
 // driveSearchInitCmd executes the tea.Cmd returned by m.Init() to drive the

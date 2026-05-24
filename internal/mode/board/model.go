@@ -2,7 +2,6 @@ package board
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -11,8 +10,8 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	uiboard "github.com/hk9890/beads-workbench/internal/ui/board"
 )
 
@@ -27,37 +26,10 @@ const (
 	dashboardTitle = "Default"
 )
 
-// readyExplainLoadedMsg carries the result of a ReadyExplain gateway call.
-type readyExplainLoadedMsg struct {
-	result domain.ReadyExplainResult
-	err    error
-}
-
-// inProgressLoadedMsg carries the result of a Query(in_progress) gateway call.
-type inProgressLoadedMsg struct {
-	issues []domain.IssueSummary
-	err    error
-}
-
-// closedLoadedMsg carries the result of a Query(closed) gateway call.
-type closedLoadedMsg struct {
-	issues []domain.IssueSummary
-	err    error
-}
-
-// closedCountLoadedMsg carries the result of a CountIssues(status=closed) gateway call.
-type closedCountLoadedMsg struct {
-	count int
-	err   error
-}
-
-// storedBlockedLoadedMsg carries the result of a Query(status=blocked) gateway call.
-// This fetches issues with stored status=blocked regardless of dependency state,
-// so that issues manually set to blocked (with no dependency blocker) are visible
-// in the Not Ready column alongside dependency-blocked issues from ReadyExplain.
-type storedBlockedLoadedMsg struct {
-	issues []domain.IssueSummary
-	err    error
+// dashboardLoadedMsg carries the result of a Dashboard repository call.
+type dashboardLoadedMsg struct {
+	data repository.DashboardData
+	err  error
 }
 
 // columnData holds the loaded data for one board column after composition.
@@ -83,39 +55,23 @@ type refreshAnchor struct {
 	selectedIssueID string
 }
 
-// Model is the standalone board mode controller backed by direct gateway calls.
+// Model is the standalone board mode controller backed by repository calls.
 type Model struct {
-	gateway beads.BeadsGateway
-	logger  *slog.Logger
-	keys    config.ResolvedKeyBindings
-	width   int
-	height  int
+	repo   repository.Repository
+	logger *slog.Logger
+	keys   config.ResolvedKeyBindings
+	width  int
+	height int
 
 	// columns holds the four fixed board columns after composition.
 	columns []columnData
 
 	// inflight is true while a startReload is in progress (set at startReload entry,
-	// cleared by maybeCompose when all 4 results land and composition runs).
+	// cleared by compose when the dashboard result lands and composition runs).
 	// It is distinct from IsLoading() (column loading state) to avoid Init/cold-start
 	// ambiguity: initialLoadingColumns() sets column loading=true at construction, but
 	// inflight is false until the first startReload call.
 	inflight bool
-
-	// pendingResults counts how many of the 5 parallel gateway calls are outstanding.
-	pendingResults int
-	// partialReady / partialInProgress / partialClosed / partialClosedCount /
-	// partialStoredBlocked hold in-flight results until all 5 arrive and
-	// composition can run.
-	partialReadyExplain     *domain.ReadyExplainResult
-	partialReadyExplainErr  error
-	partialInProgress       []domain.IssueSummary
-	partialInProgressErr    error
-	partialClosed           []domain.IssueSummary
-	partialClosedErr        error
-	partialClosedCount      int
-	partialClosedCountErr   error
-	partialStoredBlocked    []domain.IssueSummary
-	partialStoredBlockedErr error
 
 	focusedColumn int
 	selectedRow   map[int]int
@@ -126,7 +82,7 @@ type Model struct {
 
 // NewModel creates a board mode controller.
 // logger may be nil; a nil logger falls back to slog.Default().
-func NewModel(gateway beads.BeadsGateway, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
+func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -142,7 +98,7 @@ func NewModel(gateway beads.BeadsGateway, logger *slog.Logger, resolved ...confi
 	}
 
 	m := &Model{
-		gateway:     gateway,
+		repo:        repo,
 		logger:      logger,
 		keys:        keys,
 		selectedRow: map[int]int{},
@@ -175,45 +131,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetSize(msg.Width, msg.Height)
 		return nil
 
-	case readyExplainLoadedMsg:
-		m.partialReadyExplainErr = msg.err
-		if msg.err == nil {
-			m.partialReadyExplain = &msg.result
-		}
-		m.pendingResults--
-		return m.maybeCompose()
-
-	case inProgressLoadedMsg:
-		m.partialInProgressErr = msg.err
-		if msg.err == nil {
-			m.partialInProgress = msg.issues
-		}
-		m.pendingResults--
-		return m.maybeCompose()
-
-	case closedLoadedMsg:
-		m.partialClosedErr = msg.err
-		if msg.err == nil {
-			m.partialClosed = msg.issues
-		}
-		m.pendingResults--
-		return m.maybeCompose()
-
-	case closedCountLoadedMsg:
-		m.partialClosedCountErr = msg.err
-		if msg.err == nil {
-			m.partialClosedCount = msg.count
-		}
-		m.pendingResults--
-		return m.maybeCompose()
-
-	case storedBlockedLoadedMsg:
-		m.partialStoredBlockedErr = msg.err
-		if msg.err == nil {
-			m.partialStoredBlocked = msg.issues
-		}
-		m.pendingResults--
-		return m.maybeCompose()
+	case dashboardLoadedMsg:
+		return m.compose(msg.data, msg.err)
 
 	case tea.KeyMsg:
 		switch {
@@ -396,17 +315,6 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		m.columns[i].err = nil
 	}
 
-	m.pendingResults = 5
-	m.partialReadyExplain = nil
-	m.partialReadyExplainErr = nil
-	m.partialInProgress = nil
-	m.partialInProgressErr = nil
-	m.partialClosed = nil
-	m.partialClosedErr = nil
-	m.partialClosedCount = 0
-	m.partialClosedCountErr = nil
-	m.partialStoredBlocked = nil
-	m.partialStoredBlockedErr = nil
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
@@ -417,37 +325,21 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		m.columns = initialLoadingColumns()
 	}
 
-	cl := m.closedLimit()
-	return tea.Batch(
-		loadReadyExplainCmd(m.gateway),
-		loadInProgressCmd(m.gateway),
-		loadClosedCmd(m.gateway, cl),
-		loadClosedCountCmd(m.gateway),
-		loadStoredBlockedCmd(m.gateway),
-	)
+	return loadDashboardCmd(m.repo)
 }
 
-// maybeCompose checks whether all 3 results have arrived and, if so, runs
-// dashboard.Compose and settles the focus/selection.
-func (m *Model) maybeCompose() tea.Cmd {
-	if m.pendingResults > 0 {
-		return nil
-	}
-
-	// All 3 results landed — compose.
-	ready := m.partialReadyExplain
-	if ready == nil {
-		ready = &domain.ReadyExplainResult{}
-	}
-
+// compose runs dashboard.Compose from a single DashboardData result and
+// settles the focus/selection. It is the single composition entry point for
+// both successful and error dashboard loads.
+func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	cols := dashboard.Compose(dashboard.Inputs{
-		Ready:         ready.Ready,
-		Blocked:       ready.Blocked,
-		StoredBlocked: m.partialStoredBlocked,
-		InProgress:    m.partialInProgress,
-		Closed:        m.partialClosed,
+		Ready:         data.ReadyExplain.Ready,
+		Blocked:       data.ReadyExplain.Blocked,
+		StoredBlocked: data.Blocked,
+		InProgress:    data.InProgress,
+		Closed:        data.Closed,
 		ClosedLimit:   m.closedLimit(),
-		ClosedTotal:   m.partialClosedCount,
+		ClosedTotal:   data.ClosedTotal,
 	})
 
 	// Emit warnings to slog.
@@ -467,27 +359,13 @@ func (m *Model) maybeCompose() tea.Cmd {
 		}
 	}
 
-	// Determine per-region errors:
-	// Not Ready ← ReadyExplain error or storedBlocked query error (either or both)
-	// Ready     ← ReadyExplain error
-	// In Progress ← in_progress query error
-	// Done ← closed query error
-	readyExplainErr := m.partialReadyExplainErr
-	storedBlockedErr := m.partialStoredBlockedErr
-	inProgressErr := m.partialInProgressErr
-	closedErr := m.partialClosedErr
-
-	// notReadyErr joins both error sources so the Not Ready column surfaces
-	// failures from ReadyExplain and storedBlocked when both fail simultaneously.
-	// errors.Join returns nil when all inputs are nil, preserving the no-error path.
-	notReadyErr := errors.Join(readyExplainErr, storedBlockedErr)
-
 	// Build the four fixed columns, clearing loading flags atomically.
+	// On error the same error is shown on all columns; on success err is nil.
 	m.columns = []columnData{
-		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false, err: notReadyErr},
-		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact, loading: false, err: readyExplainErr},
-		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false, err: inProgressErr},
-		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false, err: closedErr},
+		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false, err: loadErr},
+		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact, loading: false, err: loadErr},
+		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false, err: loadErr},
+		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false, err: loadErr},
 	}
 
 	// Ensure selectedRow map has an entry for each column.
@@ -498,8 +376,8 @@ func (m *Model) maybeCompose() tea.Cmd {
 	}
 
 	m.settleAfterRefreshLoad()
-	// All results have landed and composition is complete — clear the in-flight flag
-	// so future reload requests (keyboard or auto-refresh) are permitted.
+	// Composition complete — clear the in-flight flag so future reload requests
+	// (keyboard or auto-refresh) are permitted.
 	m.inflight = false
 	return m.selectionChangedCmd()
 }
@@ -669,57 +547,11 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 	}
 }
 
-// loadReadyExplainCmd fires the ReadyExplain gateway call (uncapped).
-func loadReadyExplainCmd(gateway beads.BeadsGateway) tea.Cmd {
+// loadDashboardCmd fires the Dashboard repository call and wraps the result
+// in a dashboardLoadedMsg.
+func loadDashboardCmd(repo repository.Repository) tea.Cmd {
 	return func() tea.Msg {
-		result, err := gateway.ReadyExplain(context.Background(), domain.ReadyExplainOptions{Limit: 0})
-		return readyExplainLoadedMsg{result: result, err: err}
-	}
-}
-
-// loadInProgressCmd fires the Query(status=in_progress) gateway call (uncapped).
-func loadInProgressCmd(gateway beads.BeadsGateway) tea.Cmd {
-	return func() tea.Msg {
-		issues, err := gateway.Query(context.Background(), "status=in_progress", domain.QueryOptions{Limit: 0})
-		return inProgressLoadedMsg{issues: issues, err: err}
-	}
-}
-
-// loadClosedCmd fires the Query(status=closed) gateway call with the given limit.
-func loadClosedCmd(gateway beads.BeadsGateway, limit int) tea.Cmd {
-	return func() tea.Msg {
-		issues, err := gateway.Query(context.Background(), "status=closed", domain.QueryOptions{
-			IncludeClosed: true,
-			SortBy:        domain.SortFieldClosedAt,
-			SortOrder:     domain.SortDirectionDescending,
-			Limit:         limit,
-		})
-		return closedLoadedMsg{issues: issues, err: err}
-	}
-}
-
-// loadClosedCountCmd fires the CountIssues(status=closed) gateway call to get
-// the real DB population count of closed issues, independent of any display cap.
-func loadClosedCountCmd(gateway beads.BeadsGateway) tea.Cmd {
-	return func() tea.Msg {
-		result, err := gateway.CountIssues(context.Background(), domain.IssueCountQuery{
-			Statuses: []string{"closed"},
-		})
-		if err != nil {
-			return closedCountLoadedMsg{err: err}
-		}
-		return closedCountLoadedMsg{count: result.Total}
-	}
-}
-
-// loadStoredBlockedCmd fires the Query(status=blocked) gateway call (uncapped).
-// This fetches issues whose stored status is "blocked" regardless of whether
-// they have an unresolved dependency blocker. Issues with status=blocked but
-// no dependency blocker are excluded from ReadyExplain.Blocked; this call
-// ensures they still appear in the Not Ready column.
-func loadStoredBlockedCmd(gateway beads.BeadsGateway) tea.Cmd {
-	return func() tea.Msg {
-		issues, err := gateway.Query(context.Background(), "status=blocked", domain.QueryOptions{Limit: 0})
-		return storedBlockedLoadedMsg{issues: issues, err: err}
+		data, err := repo.Dashboard(context.Background())
+		return dashboardLoadedMsg{data: data, err: err}
 	}
 }

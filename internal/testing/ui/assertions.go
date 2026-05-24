@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/beads-workbench/internal/mode"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
 var startupBoardRequiredSnippets = []string{"Default", "Not Ready", "Ready", "In Progress"}
@@ -61,29 +60,6 @@ func AssertNoObviousRuntimeErrorPanels(tb testing.TB, output string) {
 	tb.Helper()
 
 	AssertNotContainsAny(tb, output, obviousRuntimeErrorSnippets...)
-}
-
-// AssertLatestSearchQueryText verifies the latest search query text sent to gateway.
-func AssertLatestSearchQueryText(tb testing.TB, calls []fakes.GatewayCall, want string) {
-	tb.Helper()
-
-	for i := len(calls) - 1; i >= 0; i-- {
-		call := calls[i]
-		if call.Method != fakes.MethodSearchIssues {
-			continue
-		}
-
-		input, ok := call.Input.(fakes.SearchIssuesCall)
-		if !ok {
-			tb.Fatalf("expected SearchIssuesCall payload, got %T", call.Input)
-		}
-		if input.Query.Text != want {
-			tb.Fatalf("expected latest search query %q, got %q", want, input.Query.Text)
-		}
-		return
-	}
-
-	tb.Fatalf("expected at least one search gateway call, got %#v", calls)
 }
 
 // AssertActionRequest checks action request messages for scenario navigation tests.

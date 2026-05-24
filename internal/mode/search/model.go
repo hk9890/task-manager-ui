@@ -9,8 +9,8 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
 )
@@ -38,9 +38,9 @@ type SessionState struct {
 
 // Model is the standalone search mode controller.
 type Model struct {
-	gateway beads.BeadsGateway
-	logger  *slog.Logger
-	keys    config.ResolvedKeyBindings
+	repo   repository.Repository
+	logger *slog.Logger
+	keys   config.ResolvedKeyBindings
 
 	width  int
 	height int
@@ -69,7 +69,7 @@ type Model struct {
 
 // NewModel creates a search mode controller.
 // logger may be nil; a nil logger falls back to slog.Default().
-func NewModel(gateway beads.BeadsGateway, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
+func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -84,7 +84,7 @@ func NewModel(gateway beads.BeadsGateway, logger *slog.Logger, resolved ...confi
 		}
 	}
 	return &Model{
-		gateway:               gateway,
+		repo:                  repo,
 		logger:                logger,
 		keys:                  keys,
 		focus:                 uisearch.FocusQuery,
@@ -98,7 +98,7 @@ func (m *Model) Init() tea.Cmd {
 	m.reloading = false
 	m.errText = ""
 	m.typing = false
-	return loadSearchCmd(m.gateway, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
+	return loadSearchCmd(m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
 }
 
 // Update processes search-specific messages and keybindings.
@@ -329,7 +329,7 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 	m.reloading = m.hasLoadedPage
 	m.errText = ""
 	m.pendingSelectionAnchor = anchor
-	return loadSearchCmd(m.gateway, query)
+	return loadSearchCmd(m.repo, query)
 }
 
 // View renders the standalone search surface.
@@ -534,10 +534,10 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 	}
 }
 
-func loadSearchCmd(gateway beads.BeadsGateway, query domain.SearchIssuesQuery) tea.Cmd {
+func loadSearchCmd(repo repository.Repository, query domain.SearchIssuesQuery) tea.Cmd {
 	return func() tea.Msg {
 		appliedQuery := strings.TrimSpace(query.Text)
-		page, err := gateway.SearchIssues(context.Background(), query)
+		page, err := repo.Search(context.Background(), query)
 		if err != nil {
 			return searchLoadedMsg{appliedQuery: appliedQuery, err: err}
 		}

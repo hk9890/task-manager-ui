@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
 // countColumnTopLines returns the number of lines in the rendered view that
@@ -37,33 +37,26 @@ func assertExactlyOneColumnTopLine(t *testing.T, label, view string) {
 	}
 }
 
-// newRegressionServices creates services with a gateway that has all 4 board
+// newRegressionServices creates services with a repository that has all 4 board
 // columns populated and a non-zero closed count.
 func newRegressionServices(t *testing.T) Services {
 	t.Helper()
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{
-			{ID: "reg-1", Title: "Ready issue", Status: "open", Priority: 1},
-		},
-		Blocked: []domain.BlockedIssueView{
-			{Issue: domain.IssueSummary{ID: "reg-2", Title: "Blocked issue", Status: "blocked", Priority: 2}},
-		},
-	}
-	// QueryResponse is used for both in-progress AND closed (FakeBeadsGateway
-	// doesn't distinguish by query string). The test only cares about the count
-	// of column-top borders, not column content.
-	gateway.QueryResponse = []domain.IssueSummary{
-		{ID: "reg-3", Title: "In Progress", Status: "in_progress", Priority: 1},
-	}
-	gateway.CountIssuesResponse = domain.IssueCountResult{
-		Total: 56,
-		Groups: []domain.IssueStatusCount{
-			{Status: "closed", Count: 56},
-		},
+	repo := memoryrepo.New()
+	// Ready issue: open with no deps → shows in Ready column.
+	repo.Seed(memoryrepo.Issue{ID: "reg-1", Title: "Ready issue", Status: "open", Priority: 1})
+	// Blocked issue (stored): status=blocked → shows in Not Ready column.
+	repo.Seed(memoryrepo.Issue{ID: "reg-2", Title: "Blocked issue", Status: "blocked", Priority: 2})
+	// In-progress issue.
+	repo.Seed(memoryrepo.Issue{ID: "reg-3", Title: "In Progress", Status: "in_progress", Priority: 1})
+	// Closed issues — seed several so ClosedTotal is non-zero.
+	closedAt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 56; i++ {
+		id := fmt.Sprintf("reg-closed-%d", i)
+		repo.Seed(memoryrepo.Issue{ID: id, Title: "Closed issue", Status: "closed"})
+		repo.SeedClosed(id, closedAt, "done")
 	}
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(repo, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}

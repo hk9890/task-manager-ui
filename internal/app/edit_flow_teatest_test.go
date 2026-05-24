@@ -14,7 +14,7 @@ package app
 //	  → toast + optional detail reload
 //
 // FakeExecCommand intercepts only the subprocess launch; PrepareDocument and
-// ApplyEdits use the real IssueEditor wired to the FakeBeadsGateway so the
+// ApplyEdits use the real IssueEditor wired to the memory repository so the
 // full filesystem and gateway round-trip is exercised.
 
 import (
@@ -45,12 +45,12 @@ const editFlowTimeout = 5 * time.Second
 // RunErr and inspect RunCalled after the program settles.
 func buildEditFlowServices(
 	t *testing.T,
-	gateway *fakes.FakeBeadsGateway,
+	gw *appTestGateway,
 	fakeCmd *fakes.FakeExecCommand,
 ) Services {
 	t.Helper()
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}
@@ -58,17 +58,12 @@ func buildEditFlowServices(
 	return services
 }
 
-// seedEditIssue seeds an issue into the fake gateway and returns it. It also
-// pre-sets ShowIssueResponse so the initial board load does not fail.
-func seedEditIssue(t *testing.T, gateway *fakes.FakeBeadsGateway, issue domain.IssueDetail) {
+// seedEditIssue seeds an issue into the gateway and returns it. It also
+// pre-seeds the board state so the initial board load succeeds.
+func seedEditIssue(t *testing.T, gw *appTestGateway, issue domain.IssueDetail) {
 	t.Helper()
-	gateway.SeedIssue(issue)
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{issue.Summary},
-	}
-	gateway.QueryResponse = []domain.IssueSummary{issue.Summary}
-	gateway.SearchIssuesResponse = domain.SearchResultPage{}
-	gateway.ShowIssueResponse = issue
+	gw.seedIssueDetail(issue)
+	gw.seedReady(issue.Summary.ID, issue.Summary.Title, issue.Summary.Type, issue.Summary.Priority)
 }
 
 // editableDocWithTitle builds a minimal but syntactically valid edit document
@@ -121,15 +116,15 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gateway := fakes.NewFakeBeadsGateway()
-	seedEditIssue(t, gateway, issue)
+	gw := newTestGateway()
+	seedEditIssue(t, gw, issue)
 
 	// Pre-configure the fake ExecCommand with content that changes the title.
 	fakeCmd := &fakes.FakeExecCommand{
 		EditedContent: editableDocWithTitle(issue, editedTitle),
 	}
 
-	services := buildEditFlowServices(t, gateway, fakeCmd)
+	services := buildEditFlowServices(t, gw, fakeCmd)
 
 	model, err := NewModel(services)
 	if err != nil {
@@ -158,7 +153,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	// the last observable side-effect before editIssueResultMsg is returned
 	// from the closure to the BubbleTea msg loop.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
-		return gateway.HasCall(string(fakes.MethodUpdateIssue))
+		return gw.hasUpdateIssueCall()
 	})
 	// Settle: give the runtime time to dequeue editIssueResultMsg and run the
 	// Update handler that sets the toast before we send tea.Quit. Matches the
@@ -186,8 +181,8 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
-	if !gateway.HasCall(string(fakes.MethodUpdateIssue)) {
-		t.Errorf("expected UpdateIssue call on gateway after successful edit, calls=%#v", gateway.Calls)
+	if !gw.hasUpdateIssueCall() {
+		t.Errorf("expected UpdateIssue call on gateway after successful edit, calls=%#v", gw.Calls())
 	}
 }
 
@@ -219,15 +214,15 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gateway := fakes.NewFakeBeadsGateway()
-	seedEditIssue(t, gateway, issue)
+	gw := newTestGateway()
+	seedEditIssue(t, gw, issue)
 
 	// EditedContent is the exact same rendered document — no changes.
 	fakeCmd := &fakes.FakeExecCommand{
 		EditedContent: domain.RenderIssueEditDocument(issue),
 	}
 
-	services := buildEditFlowServices(t, gateway, fakeCmd)
+	services := buildEditFlowServices(t, gw, fakeCmd)
 
 	model, err := NewModel(services)
 	if err != nil {
@@ -271,8 +266,8 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
-	if gateway.HasCall(string(fakes.MethodUpdateIssue)) {
-		t.Errorf("expected no UpdateIssue call when document is unchanged, calls=%#v", gateway.Calls)
+	if gw.hasUpdateIssueCall() {
+		t.Errorf("expected no UpdateIssue call when document is unchanged, calls=%#v", gw.Calls())
 	}
 }
 
@@ -306,15 +301,15 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gateway := fakes.NewFakeBeadsGateway()
-	seedEditIssue(t, gateway, issue)
+	gw := newTestGateway()
+	seedEditIssue(t, gw, issue)
 
 	// RunErr simulates the editor exiting with a non-zero status.
 	fakeCmd := &fakes.FakeExecCommand{
 		RunErr: errFakeEditorFailed,
 	}
 
-	services := buildEditFlowServices(t, gateway, fakeCmd)
+	services := buildEditFlowServices(t, gw, fakeCmd)
 
 	model, err := NewModel(services)
 	if err != nil {
@@ -357,8 +352,8 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
-	if gateway.HasCall(string(fakes.MethodUpdateIssue)) {
-		t.Errorf("expected no UpdateIssue call when editor returns error, calls=%#v", gateway.Calls)
+	if gw.hasUpdateIssueCall() {
+		t.Errorf("expected no UpdateIssue call when editor returns error, calls=%#v", gw.Calls())
 	}
 }
 

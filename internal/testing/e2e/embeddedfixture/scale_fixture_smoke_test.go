@@ -26,7 +26,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode/board"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
 // scaleSeedPath returns the absolute path to scale-seed.json.
@@ -312,13 +312,13 @@ func TestScaleFixtureInvariant_NoDuplicatedBoardHeaders(t *testing.T) {
 		t.Fatalf("o7tk: scale fixture must have >=510 active issues; got %d", nActive)
 	}
 
-	gw := fakes.NewFakeBeadsGateway()
+	repo := memoryrepo.New()
 
 	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
 	if err != nil {
 		t.Fatalf("o7tk: ResolveKeyBindings: %v", err)
 	}
-	m := board.NewModel(gw, slog.Default(), keys)
+	m := board.NewModel(repo, slog.Default(), keys)
 	// Width=180 ensures all 4 columns are visible.
 	m.SetSize(180, 40)
 

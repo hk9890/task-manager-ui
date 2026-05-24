@@ -14,8 +14,11 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/gateway/beads"
+	beads "github.com/hk9890/beads-workbench/internal/gateway/beads"
 	"github.com/hk9890/beads-workbench/internal/mode"
+	"github.com/hk9890/beads-workbench/internal/repository"
+	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
@@ -31,121 +34,63 @@ func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 }
 
 // newBoardModel builds a test board model with a no-op logger.
-func newBoardModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBindings) *Model {
-	return NewModel(gateway, slog.Default(), keys)
+func newBoardModel(repo repository.Repository, keys config.ResolvedKeyBindings) *Model {
+	return NewModel(repo, slog.Default(), keys)
 }
 
-// --- call-recording helpers ---
-
-func countCalls(gateway *fakes.FakeBeadsGateway, method fakes.GatewayMethod) int {
-	n := 0
-	for _, c := range gateway.Calls {
-		if c.Method == method {
-			n++
-		}
-	}
-	return n
+// feedDashboardData injects a dashboardLoadedMsg with the given data into the model.
+func feedDashboardData(m *Model, data repository.DashboardData) {
+	_ = m.Update(dashboardLoadedMsg{data: data, err: nil})
 }
 
-func firstQueryCall(gateway *fakes.FakeBeadsGateway) (fakes.QueryCall, bool) {
-	for _, c := range gateway.Calls {
-		if c.Method == fakes.MethodQuery {
-			qc, ok := c.Input.(fakes.QueryCall)
-			return qc, ok
-		}
-	}
-	return fakes.QueryCall{}, false
+// feedDashboardErr injects a dashboardLoadedMsg with an error into the model.
+func feedDashboardErr(m *Model, err error) {
+	_ = m.Update(dashboardLoadedMsg{err: err})
 }
 
-func queryCallsFor(gateway *fakes.FakeBeadsGateway, expr string) []fakes.QueryCall {
-	var out []fakes.QueryCall
-	for _, c := range gateway.Calls {
-		if c.Method == fakes.MethodQuery {
-			qc, ok := c.Input.(fakes.QueryCall)
-			if ok && qc.Expr == expr {
-				out = append(out, qc)
-			}
-		}
-	}
-	return out
-}
+// --- AC: exactly 1 repository call dispatched on Init ---
 
-// --- AC: exactly 4 gateway calls dispatched in a single batch ---
-
-func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
+func TestBoardModeInitDispatchesSingleDashboardCall(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	repo := repository.NewErrorInjecting(memoryrepo.New())
+	m := newBoardModel(repo, resolvedBoardKeys(t))
 
-	cmds := m.Init()
-	if cmds == nil {
+	cmd := m.Init()
+	if cmd == nil {
 		t.Fatalf("Init() must return a non-nil command")
 	}
-	// Run the batch command: it returns a tea.BatchMsg which is a []tea.Cmd slice.
-	// In teatest the batch is run by the runtime; here we inspect it by
-	// executing the command and checking what messages come back.
-	// Run the returned command to get the BatchMsg.
-	msg := cmds()
-	batch, ok := msg.(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("Init() must return a tea.Batch; got %T", msg)
-	}
-	if len(batch) != 5 {
-		t.Fatalf("expected exactly 5 commands in the batch, got %d", len(batch))
-	}
+	// Execute the command — it calls repo.Dashboard().
+	_ = cmd()
 
-	// Execute each command in the batch to drive the gateway calls.
-	for _, cmd := range batch {
-		if cmd != nil {
-			_ = cmd()
-		}
+	calls := repo.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 repository call on Init, got %d: %v", len(calls), calls)
 	}
+	if calls[0].Method != repository.MethodDashboard {
+		t.Errorf("expected Dashboard call, got %v", calls[0].Method)
+	}
+}
 
-	if n := countCalls(gateway, fakes.MethodReadyExplain); n != 1 {
-		t.Errorf("expected 1 ReadyExplain call, got %d", n)
+// --- AC: Init produces a single non-batch command (not a tea.Batch) ---
+
+func TestBoardModeInitProducesNonBatchCmd(t *testing.T) {
+	t.Parallel()
+
+	repo := memoryrepo.New()
+	m := newBoardModel(repo, resolvedBoardKeys(t))
+
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatalf("Init() must return a non-nil command")
 	}
-	if n := countCalls(gateway, fakes.MethodQuery); n != 3 {
-		t.Errorf("expected 3 Query calls (in_progress + closed + status=blocked), got %d", n)
+	// The command must NOT be a batch; it is a single loadDashboardCmd.
+	msg := cmd()
+	if _, ok := msg.(tea.BatchMsg); ok {
+		t.Fatalf("Init() must not return a tea.Batch after the repo migration; got tea.BatchMsg")
 	}
-	if n := countCalls(gateway, fakes.MethodCountIssues); n != 1 {
-		t.Errorf("expected 1 CountIssues call (closed count), got %d", n)
-	}
-	inProgressCalls := queryCallsFor(gateway, "status=in_progress")
-	if len(inProgressCalls) != 1 {
-		t.Errorf("expected 1 Query(status=in_progress) call, got %d", len(inProgressCalls))
-	}
-	closedCalls := queryCallsFor(gateway, "status=closed")
-	if len(closedCalls) != 1 {
-		t.Errorf("expected 1 Query(status=closed) call, got %d", len(closedCalls))
-	}
-	if len(closedCalls) == 1 {
-		if !closedCalls[0].Opts.IncludeClosed {
-			t.Errorf("Query(status=closed) must set IncludeClosed=true")
-		}
-		if closedCalls[0].Opts.SortBy != domain.SortFieldClosedAt {
-			t.Errorf("Query(status=closed) must sort by closed_at, got %q", closedCalls[0].Opts.SortBy)
-		}
-		if closedCalls[0].Opts.SortOrder != domain.SortDirectionDescending {
-			t.Errorf("Query(status=closed) must sort descending, got %q", closedCalls[0].Opts.SortOrder)
-		}
-	}
-	storedBlockedCalls := queryCallsFor(gateway, "status=blocked")
-	if len(storedBlockedCalls) != 1 {
-		t.Errorf("expected 1 Query(status=blocked) call, got %d", len(storedBlockedCalls))
-	}
-	// Verify the CountIssues call uses status=closed.
-	for _, c := range gateway.Calls {
-		if c.Method == fakes.MethodCountIssues {
-			cc, ok := c.Input.(fakes.CountIssuesCall)
-			if !ok {
-				t.Errorf("CountIssues call input is not CountIssuesCall: %T", c.Input)
-				continue
-			}
-			if len(cc.Query.Statuses) != 1 || cc.Query.Statuses[0] != "closed" {
-				t.Errorf("CountIssues must filter status=closed, got statuses=%v", cc.Query.Statuses)
-			}
-		}
+	if _, ok := msg.(dashboardLoadedMsg); !ok {
+		t.Fatalf("Init() command must produce a dashboardLoadedMsg; got %T", msg)
 	}
 }
 
@@ -154,23 +99,15 @@ func TestBoardModeInitDispatchesExact3GatewayCalls(t *testing.T) {
 func TestBoardModeAllEmptyLoad(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	// No responses set: all return empty slices.
-
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 5
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 	// Use a wide enough terminal so all 4 columns are visible.
 	m.SetSize(200, 30)
 
-	// Feed all 5 results.
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	// Feed empty dashboard result.
+	feedDashboardData(m, repository.DashboardData{})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 4 results arrived")
+		t.Fatal("expected IsLoading()=false after dashboard result arrived")
 	}
 	for _, col := range m.columns {
 		if col.err != nil {
@@ -195,25 +132,13 @@ func TestBoardModeAllEmptyLoad(t *testing.T) {
 func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{
-			{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"},
-			{ID: "bw-2", Title: "Ready second", Priority: 2, Status: "open", Type: "task"},
-		},
-		Blocked: []domain.BlockedIssueView{
-			{Issue: domain.IssueSummary{ID: "bw-4", Title: "Blocked now", Priority: 1, Status: "blocked", Type: "bug"}},
-		},
-	}
-	// Use per-expression routing so the status=blocked query returns empty
-	// (no stored-blocked issues without dependencies), keeping the golden stable.
-	gateway.QueryResponsesByExpr = map[string][]domain.IssueSummary{
-		"status=in_progress": {{ID: "bw-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"}},
-		"status=closed":      nil,
-		"status=blocked":     nil,
-	}
+	repo := memoryrepo.New()
+	repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"})
+	repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Ready second", Priority: 2, Status: "open", Type: "task"})
+	repo.Seed(memoryrepo.Issue{ID: "bw-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"})
+	repo.Seed(memoryrepo.Issue{ID: "bw-4", Title: "Blocked now", Priority: 1, Status: "blocked", Type: "bug"})
 
-	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: newBoardModel(gateway, resolvedBoardKeys(t))})
+	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: newBoardModel(repo, resolvedBoardKeys(t))})
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	// At width=120, 3 of 4 columns are visible (Not Ready, Ready, In Progress).
@@ -243,41 +168,27 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View(0)), "model_loaded.golden")
 }
 
-// --- AC: ReadyExplain error path (per-column, non-aborting) ---
+// --- AC: load error path (single error on all columns) ---
 
-func TestBoardModeReadyExplainErrorPath(t *testing.T) {
+func TestBoardModeLoadErrorAffectsAllColumns(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
-	m.pendingResults = 5
 
 	loadErr := errors.New("network timeout")
-	// Only the ReadyExplain result arrives with an error; feed the other four as
-	// success so maybeCompose runs and routes the error to the correct columns.
-	_ = m.Update(readyExplainLoadedMsg{err: loadErr})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	feedDashboardErr(m, loadErr)
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 4 results arrived")
+		t.Fatal("expected IsLoading()=false after dashboard result arrived")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
-	// Not Ready (col 0) and Ready (col 1) are affected by the ReadyExplain error.
-	for _, col := range m.columns[:2] {
+	// All 4 columns must carry the error.
+	for _, col := range m.columns {
 		if col.err == nil || !strings.Contains(col.err.Error(), "network timeout") {
-			t.Errorf("expected ReadyExplain error on column %q, got: %v", col.title, col.err)
-		}
-	}
-	// In Progress (col 2) and Done (col 3) must be unaffected.
-	for _, col := range m.columns[2:] {
-		if col.err != nil {
-			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+			t.Errorf("expected load error on column %q, got: %v", col.title, col.err)
 		}
 	}
 
@@ -290,143 +201,27 @@ func TestBoardModeReadyExplainErrorPath(t *testing.T) {
 	}
 }
 
-// --- AC: Query in_progress error path (per-column, non-aborting) ---
-
-func TestBoardModeQueryInProgressErrorPath(t *testing.T) {
+// TestBoardModeLoadErrorSingleErrorOnAllColumns verifies that a single load
+// error applies to all 4 columns (consistent with repository.Dashboard atomicity).
+func TestBoardModeLoadErrorSingleErrorOnAllColumns(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 5
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(200, 30)
 
 	loadErr := errors.New("bd unavailable")
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
-	_ = m.Update(inProgressLoadedMsg{err: loadErr})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	feedDashboardErr(m, loadErr)
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 4 results arrived")
+		t.Fatal("expected IsLoading()=false after dashboard result arrived")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
 	}
-	// In Progress (col 2) must carry the error.
-	if m.columns[2].err == nil || !strings.Contains(m.columns[2].err.Error(), "bd unavailable") {
-		t.Errorf("expected in_progress error on In Progress column, got: %v", m.columns[2].err)
-	}
-	// Not Ready (col 0), Ready (col 1), Done (col 3) must be unaffected.
-	for _, col := range []columnData{m.columns[0], m.columns[1], m.columns[3]} {
-		if col.err != nil {
-			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
-		}
-	}
-}
-
-// --- AC: Query closed error path (per-column, non-aborting) ---
-
-func TestBoardModeQueryClosedErrorPath(t *testing.T) {
-	t.Parallel()
-
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 5
-
-	loadErr := errors.New("bd query failed")
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{err: loadErr})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
-
-	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 5 results arrived")
-	}
-	if len(m.columns) != 4 {
-		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
-	}
-	// Done (col 3) must carry the error.
-	if m.columns[3].err == nil || !strings.Contains(m.columns[3].err.Error(), "bd query failed") {
-		t.Errorf("expected closed error on Done column, got: %v", m.columns[3].err)
-	}
-	// Not Ready, Ready, In Progress must be unaffected.
-	for _, col := range m.columns[:3] {
-		if col.err != nil {
-			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
-		}
-	}
-}
-
-// --- AC: both ReadyExplain and storedBlocked errors surface on Not Ready ---
-
-// TestBoardModeNotReadyBothErrorSourcesSurface asserts that when both readyExplainErr
-// and storedBlockedErr are non-nil, the Not Ready column's err contains substrings
-// from BOTH sources and errors.Is returns true for each sentinel.
-//
-// This verifies the errors.Join(readyExplainErr, storedBlockedErr) replacement of the
-// former first-non-nil pattern, which would silently discard storedBlockedErr when
-// readyExplainErr was also set.
-func TestBoardModeNotReadyBothErrorSourcesSurface(t *testing.T) {
-	t.Parallel()
-
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.SetSize(200, 30)
-	m.pendingResults = 5
-
-	errReady := errors.New("readyexplain sentinel failure")
-	errStored := errors.New("storedblocked sentinel failure")
-
-	// Inject both errors via direct message injection — the same pattern used by
-	// TestBoardModeReadyExplainErrorPath and TestBoardModeQueryClosedErrorPath.
-	_ = m.Update(readyExplainLoadedMsg{err: errReady})
-	_ = m.Update(storedBlockedLoadedMsg{err: errStored})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-
-	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 5 results arrived")
-	}
-	if len(m.columns) != 4 {
-		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
-	}
-
-	notReadyErr := m.columns[0].err
-	if notReadyErr == nil {
-		t.Fatal("expected non-nil err on Not Ready column when both error sources fail")
-	}
-
-	// Both substrings must appear in the joined error message.
-	if !strings.Contains(notReadyErr.Error(), "readyexplain sentinel failure") {
-		t.Errorf("Not Ready err missing readyExplain substring; got: %v", notReadyErr)
-	}
-	if !strings.Contains(notReadyErr.Error(), "storedblocked sentinel failure") {
-		t.Errorf("Not Ready err missing storedBlocked substring; got: %v", notReadyErr)
-	}
-
-	// errors.Is must unwrap both sentinels (errors.Join preserves the full chain).
-	if !errors.Is(notReadyErr, errReady) {
-		t.Errorf("errors.Is(notReadyErr, errReady) must be true; got false")
-	}
-	if !errors.Is(notReadyErr, errStored) {
-		t.Errorf("errors.Is(notReadyErr, errStored) must be true; got false")
-	}
-
-	// Ready column (col 1) carries only readyExplainErr — not the joined error.
-	readyErr := m.columns[1].err
-	if readyErr == nil || !strings.Contains(readyErr.Error(), "readyexplain sentinel failure") {
-		t.Errorf("Ready column must carry readyExplain error, got: %v", readyErr)
-	}
-	if errors.Is(readyErr, errStored) {
-		t.Errorf("Ready column must NOT wrap errStored; readyExplainErr only")
-	}
-
-	// In Progress (col 2) and Done (col 3) must be unaffected.
-	for _, col := range m.columns[2:] {
-		if col.err != nil {
-			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
+	// All 4 columns carry the same error.
+	for _, col := range m.columns {
+		if col.err == nil || !strings.Contains(col.err.Error(), "bd unavailable") {
+			t.Errorf("expected load error on all columns, column %q got: %v", col.title, col.err)
 		}
 	}
 }
@@ -436,8 +231,7 @@ func TestBoardModeNotReadyBothErrorSourcesSurface(t *testing.T) {
 func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
@@ -506,8 +300,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, keys)
+	m := newBoardModel(memoryrepo.New(), keys)
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "bw-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
@@ -548,8 +341,8 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 
 // --- Auto-refresh anchor tests ---
 
-func populatedModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBindings) *Model {
-	m := newBoardModel(gateway, keys)
+func populatedModel(repo repository.Repository, keys config.ResolvedKeyBindings) *Model {
+	m := newBoardModel(repo, keys)
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "bw-2", Title: "Progress one"}, {ID: "bw-3", Title: "Progress two"}}, total: 2, exact: true},
@@ -561,19 +354,18 @@ func populatedModel(gateway *fakes.FakeBeadsGateway, keys config.ResolvedKeyBind
 }
 
 func feedAllResults(m *Model, readyExplain domain.ReadyExplainResult, inProgress []domain.IssueSummary, closed []domain.IssueSummary) {
-	m.pendingResults = 5
-	_ = m.Update(readyExplainLoadedMsg{result: readyExplain})
-	_ = m.Update(inProgressLoadedMsg{issues: inProgress})
-	_ = m.Update(closedLoadedMsg{issues: closed})
-	_ = m.Update(closedCountLoadedMsg{count: len(closed)})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	feedDashboardData(m, repository.DashboardData{
+		ReadyExplain: readyExplain,
+		InProgress:   inProgress,
+		Closed:       closed,
+		ClosedTotal:  len(closed),
+	})
 }
 
 func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := populatedModel(gateway, resolvedBoardKeys(t))
+	m := populatedModel(memoryrepo.New(), resolvedBoardKeys(t))
 
 	cmd := m.AutoRefresh()
 	if cmd == nil {
@@ -597,6 +389,7 @@ func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testin
 	if m.focusedColumn != 2 {
 		t.Fatalf("expected focused column 2 (InProgress) to be restored via anchor, got %d", m.focusedColumn)
 	}
+
 	sel := m.CurrentSelection()
 	if sel == nil || sel.Issue.ID != "bw-3" {
 		t.Fatalf("expected preserved selected issue bw-3, got %#v", sel)
@@ -606,8 +399,7 @@ func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testin
 func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := populatedModel(gateway, resolvedBoardKeys(t))
+	m := populatedModel(memoryrepo.New(), resolvedBoardKeys(t))
 
 	cmd := m.AutoRefresh()
 	if cmd == nil {
@@ -640,8 +432,7 @@ func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t 
 func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := populatedModel(gateway, resolvedBoardKeys(t))
+	m := populatedModel(memoryrepo.New(), resolvedBoardKeys(t))
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	if cmd == nil {
@@ -670,13 +461,12 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 	}
 }
 
-// --- Per-column loading state (replaces old single loading indicator) ---
+// --- Per-column loading state ---
 
 func TestBoardModePerColumnLoadingState(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	// Phase 1: initial loading state — all 4 columns are loading.
@@ -688,8 +478,7 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 			t.Errorf("expected column %d (%q) loading=true in cold start", i, col.title)
 		}
 	}
-	// View must render 4-column layout with skeleton rows (▓ chars), not a
-	// full-screen loading message.
+	// View must render 4-column layout with skeleton rows, not a full-screen loading message.
 	view := m.View(0)
 	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
 		if !strings.Contains(view, title) {
@@ -700,24 +489,11 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 		t.Fatalf("expected skeleton glyph %q during cold-start loading, got: %s", issuerow.SkeletonGlyph, view)
 	}
 
-	// Phase 2: only 1 result arrives — still loading (all columns).
-	m.pendingResults = 5
-	m.partialReadyExplain = &domain.ReadyExplainResult{}
-	m.pendingResults = 4
-
-	if !m.IsLoading() {
-		t.Fatal("expected IsLoading()=true while 4 results still pending")
-	}
-
-	// Phase 3: all results arrive via maybeCompose.
-	m.pendingResults = 0
-	m.partialInProgress = nil
-	m.partialClosed = nil
-	m.partialStoredBlocked = nil
-	_ = m.maybeCompose()
+	// Phase 2: dashboard result arrives — loading clears.
+	feedDashboardData(m, repository.DashboardData{})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all results arrived")
+		t.Fatal("expected IsLoading()=false after dashboard result arrived")
 	}
 	for i, col := range m.columns {
 		if col.loading {
@@ -726,15 +502,14 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 	}
 }
 
-// --- New ticket-required tests (0x36.2) ---
+// --- New tests ---
 
 // TestBoardModeColdStartAllColumnsLoading verifies that after NewModel,
 // all 4 columns have loading=true and IsLoading() returns true.
 func TestBoardModeColdStartAllColumnsLoading(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 
 	if !m.IsLoading() {
 		t.Fatal("expected IsLoading()=true immediately after NewModel")
@@ -755,25 +530,22 @@ func TestBoardModeColdStartAllColumnsLoading(t *testing.T) {
 	}
 }
 
-// TestBoardModeAtomicSwapAllColumnsAfterAllResults verifies that after all 5
-// gateway responses arrive, all 4 columns have loading=false.
-func TestBoardModeAtomicSwapAllColumnsAfterAllResults(t *testing.T) {
+// TestBoardModeAtomicSwapAllColumnsAfterDashboard verifies that after the
+// dashboard result arrives, all 4 columns have loading=false.
+func TestBoardModeAtomicSwapAllColumnsAfterDashboard(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 5
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one", Status: "open", Type: "task", Priority: 1}},
-	}})
-	_ = m.Update(inProgressLoadedMsg{issues: []domain.IssueSummary{{ID: "bw-2", Title: "IP one", Status: "in_progress", Type: "task", Priority: 1}}})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	feedDashboardData(m, repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready one", Status: "open", Type: "task", Priority: 1}},
+		},
+		InProgress: []domain.IssueSummary{{ID: "bw-2", Title: "IP one", Status: "in_progress", Type: "task", Priority: 1}},
+	})
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 5 results arrived")
+		t.Fatal("expected IsLoading()=false after dashboard result arrived")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns after composition, got %d", len(m.columns))
@@ -785,49 +557,13 @@ func TestBoardModeAtomicSwapAllColumnsAfterAllResults(t *testing.T) {
 	}
 }
 
-// TestBoardModePartialErrorOnlyAffectsCorrectColumns verifies that when one
-// gateway call fails, only the affected column(s) carry an error.
-func TestBoardModePartialErrorOnlyAffectsCorrectColumns(t *testing.T) {
-	t.Parallel()
-
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
-	m.pendingResults = 5
-
-	// in_progress call fails; the other four succeed.
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
-	_ = m.Update(inProgressLoadedMsg{err: errors.New("in_progress error")})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
-
-	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 5 results")
-	}
-	// Not Ready (0), Ready (1) — unaffected.
-	for _, col := range m.columns[:2] {
-		if col.err != nil {
-			t.Errorf("expected no error on column %q, got: %v", col.title, col.err)
-		}
-	}
-	// In Progress (2) — must have error.
-	if m.columns[2].err == nil {
-		t.Errorf("expected error on In Progress column, got nil")
-	}
-	// Done (3) — unaffected.
-	if m.columns[3].err != nil {
-		t.Errorf("expected no error on Done column, got: %v", m.columns[3].err)
-	}
-}
-
 // TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty verifies that
 // keyboard navigation during full cold-start (all columns empty) is a no-op
 // and does not panic.
 func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	// All columns are in cold-start loading state with no issues.
@@ -861,8 +597,7 @@ func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
 func TestBoardModeRefreshKeepsStaleIssuesVisible(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 
 	// Seed the model with loaded data as if a prior load already completed.
 	m.columns = []columnData{
@@ -916,7 +651,7 @@ func TestClosedLimit(t *testing.T) {
 	}
 }
 
-// --- sectionItemCapacity (retained from old suite) ---
+// --- sectionItemCapacity ---
 
 func TestSectionItemCapacity(t *testing.T) {
 	t.Parallel()
@@ -953,16 +688,10 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 	handler := &captureHandler{capture: &capturedMessages}
 	logger := slog.New(handler)
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, logger, resolvedBoardKeys(t))
-	m.pendingResults = 5
+	m := NewModel(memoryrepo.New(), logger, resolvedBoardKeys(t))
 
-	// Feed all 5 results. No warnings expected from empty inputs.
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{}})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	// Feed empty dashboard result. No warnings expected from empty inputs.
+	feedDashboardData(m, repository.DashboardData{})
 
 	// With empty inputs no cardinality warning is expected.
 	if len(capturedMessages) != 0 {
@@ -971,10 +700,7 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 }
 
 // TestBoardModeWarningLogNoDuplicateComponentKey asserts that warning records
-// emitted via maybeCompose contain exactly one "component" JSON key.
-// Regression test for beads-workbench-xm6u: the logger handed to the board model
-// already carries component=dashboard; adding a second .With("component", ...) call
-// caused slog's JSON handler to emit the key twice.
+// emitted via compose contain exactly one "component" JSON key.
 func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
 	t.Parallel()
 
@@ -984,9 +710,7 @@ func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
 	// Simulate what main.go does: attach component=dashboard to the parent logger.
 	logger := slog.New(jsonHandler).With("component", "dashboard")
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, logger, resolvedBoardKeys(t))
-	m.pendingResults = 5
+	m := NewModel(memoryrepo.New(), logger, resolvedBoardKeys(t))
 
 	// Build 501 ready issues — enough to exceed the 500-item cardinality threshold
 	// and trigger a "cardinality threshold exceeded" warning from dashboard.Compose.
@@ -995,11 +719,9 @@ func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
 		ready[i] = domain.IssueSummary{ID: fmt.Sprintf("bw-%d", i+1), Title: fmt.Sprintf("Issue %d", i+1)}
 	}
 
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{Ready: ready}})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	feedDashboardData(m, repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{Ready: ready},
+	})
 
 	output := buf.String()
 	if output == "" {
@@ -1019,36 +741,26 @@ func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
 }
 
 // TestBoardModeLogCarriesComponentBoard asserts that warning records emitted by
-// the board model carry component=board (not component=dashboard or any other
-// inherited value).
-// Regression test for beads-workbench-okmo.
+// the board model carry component=board.
 func TestBoardModeLogCarriesComponentBoard(t *testing.T) {
 	t.Parallel()
 
-	// Use a root logger (no component attached) — matching what main.go now
-	// passes via services.Logger after the okmo fix.
 	var buf bytes.Buffer
 	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
 	rootLogger := slog.New(jsonHandler)
-	// Derive the board logger exactly as NewModelWithOptions does via modeLogger.
 	boardLogger := rootLogger.With("component", "board")
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, boardLogger, resolvedBoardKeys(t))
-	m.pendingResults = 5
+	m := NewModel(memoryrepo.New(), boardLogger, resolvedBoardKeys(t))
 
-	// 501 ready issues exceeds the 500-item cardinality threshold and triggers a
-	// "cardinality threshold exceeded" Warn record.
+	// 501 ready issues exceeds the 500-item cardinality threshold.
 	ready := make([]domain.IssueSummary, 501)
 	for i := range ready {
 		ready[i] = domain.IssueSummary{ID: fmt.Sprintf("bw-%d", i+1), Title: fmt.Sprintf("Issue %d", i+1)}
 	}
 
-	_ = m.Update(readyExplainLoadedMsg{result: domain.ReadyExplainResult{Ready: ready}})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: nil})
+	feedDashboardData(m, repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{Ready: ready},
+	})
 
 	output := buf.String()
 	if output == "" {
@@ -1088,7 +800,7 @@ func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
 func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	t.Parallel()
 
-	readyExplainResp := domain.ReadyExplainResult{
+	readyExplain := domain.ReadyExplainResult{
 		Ready: []domain.IssueSummary{
 			{ID: "bw-1", Title: "Ready fix login prompt", Priority: 1, Status: "open", Type: "task"},
 			{ID: "bw-5", Title: "Ready improve docs outline", Priority: 2, Status: "open", Type: "task"},
@@ -1099,7 +811,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 			{Issue: domain.IssueSummary{ID: "bw-9", Title: "Blocked: migration sequencing", Priority: 1, Status: "blocked", Type: "task"}},
 		},
 	}
-	inProgressIssues := []domain.IssueSummary{
+	inProgress := []domain.IssueSummary{
 		{ID: "bw-2", Title: "Implement board keyboard shortcuts", Priority: 1, Status: "in_progress", Type: "feature"},
 		{ID: "bw-7", Title: "Wire detail reload behavior", Priority: 1, Status: "in_progress", Type: "task"},
 		{ID: "bw-8", Title: "Polish header help copy", Priority: 2, Status: "in_progress", Type: "docs"},
@@ -1118,54 +830,27 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 		{name: "w180", width: 180, height: 34, golden: "model_layout_w180.golden", mustShow: []string{sectionTitleNotReady, sectionTitleDone, "bw-1", "bw-2", "bw-3"}, minMeta: 8},
 	}
 
+	data := repository.DashboardData{
+		ReadyExplain: readyExplain,
+		InProgress:   inProgress,
+		Closed:       inProgress, // use same slice to match original golden
+	}
+
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			subGateway := fakes.NewFakeBeadsGateway()
-			subGateway.ReadyExplainResponse = readyExplainResp
-			// Use per-expression routing so the status=blocked query returns empty
-			// (no stored-blocked issues without dependencies), keeping the golden stable.
-			// status=closed returns inProgressIssues to match the existing golden
-			// (the original test used QueryResponse for all queries).
-			subGateway.QueryResponsesByExpr = map[string][]domain.IssueSummary{
-				"status=in_progress": inProgressIssues,
-				"status=closed":      inProgressIssues,
-				"status=blocked":     nil,
-			}
+			t.Parallel()
 
-			tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: newBoardModel(subGateway, resolvedBoardKeys(t))}, tc.width, tc.height)
-			t.Cleanup(func() {
-				_ = tm.Quit()
-			})
+			m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+			m.SetSize(tc.width, tc.height)
+			_ = m.Update(dashboardLoadedMsg{data: data})
 
-			tm.Send(tea.WindowSizeMsg{Width: tc.width, Height: tc.height})
-			_ = testui.WaitForOutputContainsAll(t, tm.Output(), tc.mustShow...)
-
-			if err := tm.Quit(); err != nil {
-				t.Fatalf("failed to quit teatest model: %v", err)
+			view := m.View(0)
+			for _, snippet := range tc.mustShow {
+				if !strings.Contains(view, snippet) {
+					t.Fatalf("expected view to contain %q\nview:\n%s", snippet, view)
+				}
 			}
-
-			final, ok := tm.FinalModel(t).(testui.ControllerAdapter)
-			if !ok {
-				t.Fatalf("expected final model adapter")
-			}
-			finalModel, ok := final.Controller.(*Model)
-			if !ok {
-				t.Fatalf("expected wrapped board model, got %T", final.Controller)
-			}
-
-			// AC: exactly 1 ReadyExplain, 3 Query calls (in_progress + closed + status=blocked), and 1 CountIssues call.
-			if n := countCalls(subGateway, fakes.MethodReadyExplain); n != 1 {
-				t.Errorf("expected 1 ReadyExplain call, got %d", n)
-			}
-			if n := countCalls(subGateway, fakes.MethodQuery); n != 3 {
-				t.Errorf("expected 3 Query calls, got %d", n)
-			}
-			if n := countCalls(subGateway, fakes.MethodCountIssues); n != 1 {
-				t.Errorf("expected 1 CountIssues call, got %d", n)
-			}
-
-			view := finalModel.View(0)
 			testui.AssertMatchesGoldenNormalized(t, []byte(view), tc.golden)
 			assertCompactIssueRows(t, view, tc.minMeta)
 		})
@@ -1175,22 +860,14 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 // --- Real Gateway + RecordingExecutor subprocess-argv scenario ---
 
 // TestBoardInitRealGatewaySubprocessArgvCardinality wires the board model against
-// a real *beads.Gateway + *beads.CommandRunner backed by a *fakes.RecordingExecutor
-// (no FakeBeadsGateway). It asserts:
-//   - Exactly 5 subprocess invocations occur on Init (ReadyExplain + 3 Query + 1 Count).
-//   - Each invocation's argv matches the expected shape.
-//   - No "list --status" argv ever appears (regression guard against the pre-lgln
-//     per-section data layer).
-//
-// NOTE: The board model does NOT call bd ping --json during its own Init; that
-// health-check subprocess is dispatched at the app.Model layer. The board's Init
-// produces exactly 5 subprocess calls. See internal/app/model.go for the
-// HealthCheck dispatch context.
+// a real *beads.Gateway + *beads.CommandRunner backed by a *fakes.RecordingExecutor.
+// It asserts that exactly 5 subprocess invocations occur when the single Init cmd
+// is executed (Dashboard fans out ReadyExplain + 3 Query + 1 Count inside repo.Dashboard).
 func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 	t.Parallel()
 
 	// Expected argv shapes for the 5 subprocess invocations the board fires.
-	// Closed query uses the default height=0 closedLimit() = 50.
+	// Closed query uses the fixed defaultClosedLimit=50 from repository/beads.
 	argvReadyExplain := []string{"ready", "--explain", "--json"}
 	argvQueryInProgress := []string{"query", "status=in_progress", "--json"}
 	argvQueryClosed := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"}
@@ -1231,31 +908,18 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 		Executor: rec,
 	})
 	gateway := beads.NewCLIGateway(runner)
+	repo := repositorybeads.New(gateway)
 
-	m := NewModel(gateway, slog.Default(), resolvedBoardKeys(t))
+	m := NewModel(repo, slog.Default(), resolvedBoardKeys(t))
 
-	// Drive Init: board.Init() returns a tea.Batch wrapping 5 commands.
+	// Drive Init: board.Init() now returns a single loadDashboardCmd (not a tea.Batch).
 	initCmd := m.Init()
 	if initCmd == nil {
 		t.Fatalf("Init() must return a non-nil command")
 	}
 
-	// Execute the outer command to unwrap the tea.BatchMsg.
-	batchMsg := initCmd()
-	batch, ok := batchMsg.(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("Init() must produce a tea.BatchMsg; got %T", batchMsg)
-	}
-	if len(batch) != 5 {
-		t.Fatalf("expected exactly 5 commands in Init batch, got %d", len(batch))
-	}
-
-	// Run each command to drive the subprocess calls through the real gateway.
-	for _, cmd := range batch {
-		if cmd != nil {
-			_ = cmd()
-		}
-	}
+	// Execute the command — this calls repo.Dashboard() which fans out 5 subprocess calls.
+	_ = initCmd()
 
 	calls := rec.Calls()
 
@@ -1265,8 +929,7 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 			len(calls), formatArgvList(calls))
 	}
 
-	// AC: argv for each matches the expected shape. The 5 calls run in a tea.Batch
-	// so order is not guaranteed; match by content.
+	// AC: argv for each matches the expected shape.
 	assertArgvPresent(t, calls, argvReadyExplain)
 	assertArgvPresent(t, calls, argvQueryInProgress)
 	assertArgvPresent(t, calls, argvQueryClosed)
@@ -1275,7 +938,6 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 
 	// AC: regression guard — no "list --status" argv (old data layer).
 	for _, c := range calls {
-		// Detect "list" followed by a "--status" flag anywhere in the same call.
 		if hasArg(c.Args, "list") && hasArg(c.Args, "--status") {
 			t.Errorf("forbidden 'list --status' pattern observed in call %v (old data layer regression)", c.Args)
 		}
@@ -1284,55 +946,34 @@ func TestBoardInitRealGatewaySubprocessArgvCardinality(t *testing.T) {
 
 // TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn is the regression
 // test for beads-workbench-2ev4.2: an issue with status=blocked and no dependency
-// blocker was silently dropped by the board because ReadyExplain.Blocked only
-// includes dependency-blocked issues, and the issue does not appear in
-// in_progress or closed columns either.
-//
-// The fix adds a Query(status=blocked) call whose results are merged into the
-// Not Ready column by dashboard.Compose. This test asserts:
-//  1. A stored-blocked issue with no dependency appears in columns[0] (Not Ready).
-//  2. A stored-blocked issue that is ALSO dependency-blocked appears exactly once
-//     in Not Ready (dedup by ID).
-//  3. The dep-blocked issue (via ReadyExplain.Blocked) is unaffected and still
-//     appears in Not Ready.
+// blocker must appear in the Not Ready column.
 func TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.QueryResponsesByExpr = map[string][]domain.IssueSummary{
-		// bwf-5 analogue: status=blocked, no dependency blocker (not in ReadyExplain.Blocked)
-		"status=blocked": {
-			{ID: "bwf-5", Title: "Stored-blocked task with no dependency", Status: "blocked", Type: "task", Priority: 2},
-			// bwf-2 analogue: also in ReadyExplain.Blocked below — must appear only once after dedup
-			{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0},
-		},
-		"status=in_progress": nil,
-		"status=closed":      nil,
-	}
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{
-		Ready: []domain.IssueSummary{
-			{ID: "bwf-1", Title: "Seed fixture root task", Status: "open", Type: "task", Priority: 1},
-		},
-		Blocked: []domain.BlockedIssueView{
-			// bwf-2 is dep-blocked (bwf-1 blocks bwf-2) — it should appear in Not Ready exactly once.
-			{Issue: domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0}},
-		},
-	}
-
-	m := newBoardModel(gateway, resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
-	// Manually drive composition (bypassing Init/tea.Batch) by setting
-	// pendingResults and feeding messages directly.
-	m.pendingResults = 5
-	_ = m.Update(readyExplainLoadedMsg{result: gateway.ReadyExplainResponse})
-	_ = m.Update(inProgressLoadedMsg{issues: nil})
-	_ = m.Update(closedLoadedMsg{issues: nil})
-	_ = m.Update(closedCountLoadedMsg{count: 0})
-	_ = m.Update(storedBlockedLoadedMsg{issues: gateway.QueryResponsesByExpr["status=blocked"]})
+	data := repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{
+				{ID: "bwf-1", Title: "Seed fixture root task", Status: "open", Type: "task", Priority: 1},
+			},
+			Blocked: []domain.BlockedIssueView{
+				// bwf-2 is dep-blocked (bwf-1 blocks bwf-2) — it should appear in Not Ready exactly once.
+				{Issue: domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0}},
+			},
+		},
+		Blocked: []domain.IssueSummary{
+			// bwf-5: stored-blocked with no dependency — must appear in Not Ready.
+			{ID: "bwf-5", Title: "Stored-blocked task with no dependency", Status: "blocked", Type: "task", Priority: 2},
+			// bwf-2: also in ReadyExplain.Blocked above — must appear only once after dedup.
+			{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0},
+		},
+	}
+	feedDashboardData(m, data)
 
 	if m.IsLoading() {
-		t.Fatal("expected IsLoading()=false after all 5 results")
+		t.Fatal("expected IsLoading()=false after dashboard result")
 	}
 	if len(m.columns) != 4 {
 		t.Fatalf("expected 4 columns, got %d", len(m.columns))
@@ -1447,142 +1088,5 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 		if strings.Contains(view, forbidden) {
 			t.Fatalf("expected board layout to keep compact one-line issue rows without detail-field chrome %q\nview:\n%s", forbidden, view)
 		}
-	}
-}
-
-// =============================================================================
-// ppja.3 — dynamic-limit argv boundary tests
-//
-// The board model's closedLimit() is driven by terminal height. These tests
-// wire a real *beads.Gateway + RecordingExecutor at specific heights and assert
-// the exact --limit value in the argv for the Query(status=closed) call.
-//
-// Boundary cases covered per the epic-review tightening:
-//   - height=0  (default before first WindowSizeMsg) → closedLimit=50
-//   - height=53 (sectionItemCapacity=50 = floor)     → closedLimit=50
-//   - height=54 (sectionItemCapacity=51 > floor)     → closedLimit=51
-//   - height=60 (sectionItemCapacity=57)             → closedLimit=57
-// =============================================================================
-
-// newRecordingBoardModel is a helper that wires a real beads.Gateway against
-// rec, creates a board.Model at the given height, and returns the model and runner.
-func newRecordingBoardModel(t *testing.T, rec *fakes.RecordingExecutor, height int) *Model {
-	t.Helper()
-
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
-		Command:  "bd",
-		Executor: rec,
-	})
-	gateway := beads.NewCLIGateway(runner)
-	m := NewModel(gateway, slog.Default(), resolvedBoardKeys(t))
-	m.SetSize(80, height)
-	return m
-}
-
-// driveAllBoardInitCmds executes the tea.Batch returned by m.Init(), running
-// every command in the batch to drive subprocess calls through the gateway.
-func driveAllBoardInitCmds(t *testing.T, m *Model) {
-	t.Helper()
-
-	initCmd := m.Init()
-	if initCmd == nil {
-		t.Fatalf("Init() must return a non-nil command")
-	}
-
-	batchMsg := initCmd()
-	batch, ok := batchMsg.(tea.BatchMsg)
-	if !ok {
-		t.Fatalf("Init() must produce a tea.BatchMsg; got %T", batchMsg)
-	}
-
-	for _, cmd := range batch {
-		if cmd != nil {
-			_ = cmd()
-		}
-	}
-}
-
-// TestBoardClosedQueryArgvLimitDynamicBoundaries pins the exact --limit value
-// in the bd query status=closed argv for four representative terminal heights.
-// Each height exercises a distinct region of closedLimit():
-//
-//   - height=0:  default (no WindowSizeMsg yet) → sectionItemCapacity=20,
-//     max(50,20)=50 → argv must contain --limit 50
-//   - height=53: sectionItemCapacity=50 = floor → max(50,50)=50 → --limit 50
-//   - height=54: sectionItemCapacity=51 > floor → max(50,51)=51 → --limit 51
-//   - height=60: sectionItemCapacity=57         → max(50,57)=57 → --limit 57
-//
-// This is ppja.3 backlog item 3 (board-level closed query limit boundary).
-func TestBoardClosedQueryArgvLimitDynamicBoundaries(t *testing.T) {
-	t.Parallel()
-
-	// Canned JSON for the four argv shapes that change per height.
-	minimalIssueJSON := `[{"id":"bw-c1","title":"Closed one","status":"closed","issue_type":"task","priority":1,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}]`
-	argvReadyExplain := []string{"ready", "--explain", "--json"}
-	argvQueryInProgress := []string{"query", "status=in_progress", "--json"}
-	argvCountClosed := []string{"count", "--by-status", "--json", "--status", "closed"}
-	readyExplainJSON := `{"ready":[],"blocked":[],"summary":{"total_ready":0,"total_blocked":0,"cycle_count":0}}`
-	countJSON := `{"groups":[{"group":"closed","count":1}],"total":1,"schema_version":1}`
-
-	cases := []struct {
-		name       string
-		height     int
-		wantLimit  string
-		closedArgv []string
-	}{
-		{
-			name:       "height=0 (default cap → limit=50)",
-			height:     0,
-			wantLimit:  "50",
-			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
-		},
-		{
-			name:       "height=53 (sectionItemCapacity=50 = floor → limit=50)",
-			height:     53,
-			wantLimit:  "50",
-			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
-		},
-		{
-			name:       "height=54 (sectionItemCapacity=51 > floor → limit=51)",
-			height:     54,
-			wantLimit:  "51",
-			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "51"},
-		},
-		{
-			name:       "height=60 (sectionItemCapacity=57 → limit=57)",
-			height:     60,
-			wantLimit:  "57",
-			closedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "57"},
-		},
-	}
-
-	argvQueryStoredBlocked := []string{"query", "status=blocked", "--json"}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			rec := fakes.NewRecordingExecutor()
-			rec.OnArgs(argvReadyExplain).Return(beads.ExecResult{Stdout: []byte(readyExplainJSON)}, nil)
-			rec.OnArgs(argvQueryInProgress).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
-			rec.OnArgs(tc.closedArgv).Return(beads.ExecResult{Stdout: []byte(minimalIssueJSON)}, nil)
-			rec.OnArgs(argvCountClosed).Return(beads.ExecResult{Stdout: []byte(countJSON)}, nil)
-			rec.OnArgs(argvQueryStoredBlocked).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
-
-			m := newRecordingBoardModel(t, rec, tc.height)
-			driveAllBoardInitCmds(t, m)
-
-			calls := rec.Calls()
-			assertArgvPresent(t, calls, tc.closedArgv)
-			assertArgvPresent(t, calls, argvQueryStoredBlocked)
-
-			// Guard: no unexpected "list --status" regressions.
-			for _, c := range calls {
-				if hasArg(c.Args, "list") && hasArg(c.Args, "--status") {
-					t.Errorf("forbidden 'list --status' argv in call %v", c.Args)
-				}
-			}
-		})
 	}
 }

@@ -13,19 +13,42 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/beads-workbench/internal/repository"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
 )
 
+// searchGateway bundles the memory repo (for seeding) and the error-injecting
+// wrapper (for call tracking and error injection). It satisfies
+// repository.Repository via the embedded ErrorInjectingRepository.
+type searchGateway struct {
+	repo *memoryrepo.Repository
+	*repository.ErrorInjectingRepository
+}
+
+// newSearchGateway creates a searchGateway with an empty memory repository.
+func newSearchGateway() *searchGateway {
+	repo := memoryrepo.New()
+	return &searchGateway{
+		repo:                     repo,
+		ErrorInjectingRepository: repository.NewErrorInjecting(repo),
+	}
+}
+
+// hasSearchCall reports whether any Search call appears in calls.
+func hasSearchCall(calls []repository.Call) bool {
+	return countSearchCalls(calls) > 0
+}
+
 func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1}}}, Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact}}
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gateway search", Status: "open", Type: "task", Priority: 1})
 
-	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gateway, nil)}, 120, 30)
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gw, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
@@ -43,12 +66,12 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1}}}, Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Default one", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
-	if !gateway.HasCall(string(fakes.MethodSearchIssues)) {
-		t.Fatalf("expected empty init query to load default search results, calls=%#v", gateway.Calls)
+	if !hasSearchCall(gw.Calls()) {
+		t.Fatalf("expected empty init query to load default search results, calls=%#v", gw.Calls())
 	}
 
 	if !strings.Contains(m.View(0), "Default one") {
@@ -59,28 +82,31 @@ func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 func TestSearchModeTextQuerySendsGatewaySearch(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "gw test issue", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
-	gateway.ResetCalls()
+	callsBefore := len(gw.Calls())
 	pressAndResolve(m, testui.SearchTypeTextKeys("gw")...)
-	if len(gateway.Calls) != 0 {
-		t.Fatalf("expected no search call before explicit enter, got %#v", gateway.Calls)
+	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
+		t.Fatalf("expected no search call before explicit enter, got %#v", gw.Calls()[callsBefore:])
 	}
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "gw")
+	// Verify the applied query was set to "gw" (observable state instead of arg capture).
+	if m.appliedQuery != "gw" {
+		t.Fatalf("expected appliedQuery=%q after enter, got %q", "gw", m.appliedQuery)
+	}
 }
 
 func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Titles contain "g" so the query "g" matches both.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -118,12 +144,11 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Titles contain "g" so the query "g" matches both.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -147,40 +172,40 @@ func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected first result selection to stay on bw-1, got %#v", got)
 	}
-	if len(gateway.Calls) != 2 {
-		t.Fatalf("expected only init + explicit enter search calls, got %#v", gateway.Calls)
+	// Expect exactly 2 Search calls: init empty-query load + explicit enter search.
+	if n := countSearchCalls(gw.Calls()); n != 2 {
+		t.Fatalf("expected only init + explicit enter search calls (2), got %d", n)
 	}
 }
 
 func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Seed issues: bw-1 and bw-2 match any query (no filter text), bw-9 matches "x".
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-9", Title: "Filtered x only", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected initial selection on default results, got %#v", got)
 	}
 
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-9", Title: "Filtered only", Status: "open", Type: "task", Priority: 1}}}}
+	// Search for "x" — only bw-9 matches.
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-9" {
 		t.Fatalf("expected filtered selection bw-9, got %#v", got)
 	}
 
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
+	// Clear query with backspace and re-submit — default results restore.
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyBackspace})
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
+	if m.appliedQuery != "" {
+		t.Fatalf("expected appliedQuery empty after clear+enter, got %q", m.appliedQuery)
+	}
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected selection reset to first default result, got %#v", got)
 	}
@@ -193,7 +218,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error state", func(t *testing.T) {
-		m := NewModel(newSearchFakeGateway(), nil)
+		m := NewModel(newSearchGateway(), nil)
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View(0)
@@ -203,7 +228,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("no results state", func(t *testing.T) {
-		m := NewModel(newSearchFakeGateway(), nil)
+		m := NewModel(newSearchGateway(), nil)
 		m.draftQuery = "xyz"
 		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
 		if cmd != nil {
@@ -216,9 +241,10 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("open detail action from results", func(t *testing.T) {
-		gateway := newSearchFakeGateway()
-		gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-7", Title: "Result", Status: "open", Type: "task", Priority: 1}}}}
-		m := initModel(gateway)
+		gw := newSearchGateway()
+		// Title contains "g" so the query "g" returns this result.
+		gw.repo.Seed(memoryrepo.Issue{ID: "bw-7", Title: "Gateway result", Status: "open", Type: "task", Priority: 1})
+		m := initModel(gw)
 		pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 		pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -235,9 +261,10 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-7", Title: "Result", Status: "open", Type: "task", Priority: 1}}}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Title contains "g" so query "g" matches.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-7", Title: "Gateway result", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	if m.focus != uisearch.FocusQuery {
@@ -262,27 +289,30 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "jkhlr test issue", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
-	gateway.ResetCalls()
+	callsBefore := len(gw.Calls())
 	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
-	if len(gateway.Calls) != 0 {
-		t.Fatalf("expected no search before enter, got %#v", gateway.Calls)
+	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
+		t.Fatalf("expected no search before enter, got %#v", gw.Calls()[callsBefore:])
 	}
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "jkhlr")
+
+	if m.appliedQuery != "jkhlr" {
+		t.Fatalf("expected appliedQuery=%q after enter, got %q", "jkhlr", m.appliedQuery)
+	}
 }
 
 func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Titles contain "x" so the query "x" matches both.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -296,13 +326,19 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 		t.Fatalf("expected focus-query binding before reload, got %v", m.focus)
 	}
 
-	gateway.ResetCalls()
+	callsBefore := len(gw.Calls())
 	cmd := m.Reload()
 	m = applyMessages(m, drainCmd(cmd))
 
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+	newCalls := gw.Calls()[callsBefore:]
+	if !hasSearchCall(newCalls) {
+		t.Fatalf("expected at least one Search call after Reload, got %#v", newCalls)
+	}
+	if m.appliedQuery != "x" {
+		t.Fatalf("expected reload to preserve query %q, got %q", "x", m.appliedQuery)
+	}
 	if m.draftQuery != "x" {
-		t.Fatalf("expected reload to preserve query, got %q", m.draftQuery)
+		t.Fatalf("expected reload to preserve draft query, got %q", m.draftQuery)
 	}
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-2" {
 		t.Fatalf("expected reload to preserve selected result, got %#v", got)
@@ -312,10 +348,10 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	m := initModel(gw)
 
-	gateway.ResetCalls()
+	callsBefore := len(gw.Calls())
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	if cmd != nil {
 		t.Fatalf("expected typing not to trigger search until enter")
@@ -329,14 +365,15 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 		t.Fatalf("expected auto refresh suppression while actively typing")
 	}
 
-	if len(gateway.Calls) != 0 {
-		t.Fatalf("expected no gateway calls while editing query, got %#v", gateway.Calls)
+	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
+		t.Fatalf("expected no gateway calls while editing query, got %#v", gw.Calls()[callsBefore:])
 	}
 
 	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = applyMessages(m, drainCmd(cmd))
-	if len(gateway.Calls) != 1 || gateway.Calls[0].Method != fakes.MethodSearchIssues {
-		t.Fatalf("expected exactly one enter-triggered search call, got %#v", gateway.Calls)
+	newCalls := gw.Calls()[callsBefore:]
+	if countSearchCalls(newCalls) != 1 {
+		t.Fatalf("expected exactly one enter-triggered search call, got %d (%#v)", countSearchCalls(newCalls), newCalls)
 	}
 	if m.typing {
 		t.Fatalf("expected typing false after search resolves")
@@ -346,12 +383,11 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Titles contain "x" so the query "x" matches both.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -365,11 +401,17 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 		t.Fatalf("expected focus-query binding before auto refresh, got %v", m.focus)
 	}
 
-	gateway.ResetCalls()
+	callsBefore := len(gw.Calls())
 	cmd := m.AutoRefresh()
 	m = applyMessages(m, drainCmd(cmd))
 
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "x")
+	newCalls := gw.Calls()[callsBefore:]
+	if !hasSearchCall(newCalls) {
+		t.Fatalf("expected at least one Search call after AutoRefresh, got %#v", newCalls)
+	}
+	if m.appliedQuery != "x" {
+		t.Fatalf("expected auto refresh to preserve applied query, got %q", m.appliedQuery)
+	}
 	if m.draftQuery != "x" {
 		t.Fatalf("expected auto refresh to preserve query, got %q", m.draftQuery)
 	}
@@ -384,12 +426,10 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{
-		Results:  []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}}},
-		Metadata: domain.SearchResultMetadata{ReturnedCount: 1, RequestedLimit: 40, Completeness: domain.SearchResultCompletenessMaybeMore, Notice: "first page"},
-	}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First abc", Status: "open", Type: "task", Priority: 1,
+		Description: "abc tag"})
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("abc")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -398,8 +438,8 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 	if session.DraftQuery != "abc" || session.AppliedQuery != "abc" {
 		t.Fatalf("expected synced draft/applied query after search, got %#v", session)
 	}
-	if len(session.Page.Results) != 1 || session.Page.Metadata.Notice != "first page" {
-		t.Fatalf("expected page metadata/results captured in session, got %#v", session.Page)
+	if len(session.Page.Results) != 1 {
+		t.Fatalf("expected 1 result after abc search, got %d", len(session.Page.Results))
 	}
 
 	cmd := m.Reload()
@@ -425,7 +465,7 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "bw-1" {
 		t.Fatalf("expected selection retained on reload error, got %#v", got)
 	}
-	if !strings.Contains(m.View(0), "reload failed") || !strings.Contains(m.View(0), "First") || !strings.Contains(m.View(0), "failed") || !strings.Contains(m.View(0), "abc") {
+	if !strings.Contains(m.View(0), "reload failed") || !strings.Contains(m.View(0), "First abc") || !strings.Contains(m.View(0), "failed") || !strings.Contains(m.View(0), "abc") {
 		t.Fatalf("expected view to preserve rows and show refresh error, got:\n%s", m.View(0))
 	}
 }
@@ -433,8 +473,8 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("foo")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -452,21 +492,25 @@ func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
 func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1}}}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
-	gateway.ResetCalls()
+	callsBefore := len(gw.Calls())
 	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
-	if len(gateway.Calls) != 0 {
-		t.Fatalf("expected no search before enter, got %#v", gateway.Calls)
+	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
+		t.Fatalf("expected no search before enter, got %#v", gw.Calls()[callsBefore:])
 	}
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, testui.SearchFragileQueryRunes())
+	if m.appliedQuery != testui.SearchFragileQueryRunes() {
+		t.Fatalf("expected appliedQuery=%q after fragile rune enter, got %q", testui.SearchFragileQueryRunes(), m.appliedQuery)
+	}
 
 	pressAndResolve(m, testui.SearchClearQueryKeys()...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
+	if m.appliedQuery != "" {
+		t.Fatalf("expected appliedQuery empty after clear+enter, got %q", m.appliedQuery)
+	}
 }
 
 func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T) {
@@ -492,12 +536,11 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-		{Issue: domain.IssueSummary{ID: "bw-2", Title: "Second", Status: "in_progress", Type: "bug", Priority: 2}},
-	}}
-	m := testui.InitializeController(NewModel(gateway, nil, keys)).(*Model)
+	gw := newSearchGateway()
+	// Titles contain "g" so the query "g" matches both.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
+	m := testui.InitializeController(NewModel(gw, nil, keys)).(*Model)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -548,13 +591,11 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	}
 }
 
-func newSearchFakeGateway() *fakes.FakeBeadsGateway {
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{}
-	return gateway
+func newSearchFakeGateway() *searchGateway {
+	return newSearchGateway()
 }
 
-func initModel(gateway *fakes.FakeBeadsGateway) *Model {
+func initModel(gateway repository.Repository) *Model {
 	return testui.InitializeController(NewModel(gateway, nil)).(*Model)
 }
 
@@ -622,14 +663,12 @@ func TestSearchItemCapacity(t *testing.T) {
 func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
 	// Record call count after init.
-	callsBefore := len(gateway.Calls)
+	callsBefore := len(gw.Calls())
 
 	// Send a resize; must not issue a new search.
 	cmd := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
@@ -637,8 +676,8 @@ func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 		t.Fatalf("expected WindowSizeMsg handler to return nil cmd, got %T", cmd)
 	}
 
-	if len(gateway.Calls) != callsBefore {
-		t.Fatalf("expected no new gateway calls on resize, got %d new call(s)", len(gateway.Calls)-callsBefore)
+	if len(gw.Calls()) != callsBefore {
+		t.Fatalf("expected no new gateway calls on resize, got %d new call(s)", len(gw.Calls())-callsBefore)
 	}
 }
 
@@ -648,11 +687,9 @@ func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
 	// After init+resolve, loading should be false.
 	if m.loading {
@@ -678,8 +715,8 @@ func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
 func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	m := NewModel(gateway, nil)
+	gw := newSearchGateway()
+	m := NewModel(gw, nil)
 
 	// Manually set loading=true (simulating an in-flight request).
 	m.loading = true
@@ -711,11 +748,9 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{
-		{Issue: domain.IssueSummary{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1}},
-	}}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "First", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 
 	// Navigate: Query -> Results -> Content -> Metadata.
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -781,14 +816,10 @@ func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
 	t.Parallel()
 
-	gateway := newSearchFakeGateway()
-	gateway.SearchIssuesResponse = domain.SearchResultPage{
-		Results: []domain.SearchResult{
-			{Issue: domain.IssueSummary{ID: "bw-1", Title: "Prior result", Status: "open", Type: "task", Priority: 1}},
-		},
-		Metadata: domain.SearchResultMetadata{ReturnedCount: 1, Completeness: domain.SearchResultCompletenessExact},
-	}
-	m := initModel(gateway)
+	gw := newSearchGateway()
+	// Seed an issue matching "gateway" so the first search returns a result.
+	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Prior gateway result", Status: "open", Type: "task", Priority: 1})
+	m := initModel(gw)
 	m.SetSize(120, 28)
 
 	// Apply an initial search so we have prior results.
@@ -814,11 +845,7 @@ func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
 		t.Fatalf("expected stale banner in view while draft != applied, got:\n%s", plain)
 	}
 
-	// Press Enter to apply the draft search.
-	gateway.SearchIssuesResponse = domain.SearchResultPage{
-		Results:  []domain.SearchResult{},
-		Metadata: domain.SearchResultMetadata{ReturnedCount: 0, Completeness: domain.SearchResultCompletenessExact},
-	}
+	// Press Enter to apply the draft search (gatewayzqx — no issues match).
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
 
 	// After search applied, stale indicator must be gone.
@@ -847,8 +874,9 @@ func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
 	// Derive the search logger exactly as NewModelWithOptions does via modeLogger.
 	searchLogger := rootLogger.With("component", "search")
 
-	gateway := fakes.NewFakeBeadsGateway()
-	m := NewModel(gateway, searchLogger)
+	repo := memoryrepo.New()
+	gw := repository.NewErrorInjecting(repo)
+	m := NewModel(gw, searchLogger)
 
 	// Put the model into a loading state and call Reload(). The guard path in
 	// Reload (and triggerSearchWithAnchor) emits a Debug log when loading is

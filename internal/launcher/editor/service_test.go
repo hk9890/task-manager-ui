@@ -9,23 +9,25 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 )
 
 func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	issue := domain.IssueDetail{Summary: domain.IssueSummary{
-		ID: "bw-7", Title: "Old", Status: "open", Type: "task", Priority: 2, Assignee: "hans", Labels: []string{"one"},
-	}, Description: "old desc"}
-	// Seed into both the legacy verbatim field (for ShowIssueResponse fallback callers
-	// that may still read it directly in test helpers) and the write-state store so that
-	// UpdateIssue can find and mutate the issue.
-	gateway.ShowIssueResponse = issue
-	gateway.SeedIssue(issue)
+	repo := memoryrepo.New()
+	repo.Seed(memoryrepo.Issue{
+		ID:          "bw-7",
+		Title:       "Old",
+		Status:      "open",
+		Type:        "task",
+		Priority:    2,
+		Assignee:    "hans",
+		Labels:      []string{"one"},
+		Description: "old desc",
+	})
 
-	service, err := launchereditor.NewIssueEditor(gateway, "")
+	service, err := launchereditor.NewIssueEditor(repo, "")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -38,7 +40,7 @@ func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
 	defer func() { _ = os.Remove(prepared.TempPath) }()
 
 	// Simulate editor: write an edited document to the temp file.
-	rendered := domain.RenderIssueEditDocument(issue)
+	rendered := domain.RenderIssueEditDocument(prepared.Issue)
 	edited := strings.Replace(rendered, "Old", "Updated title", 1)
 	if err := os.WriteFile(prepared.TempPath, []byte(edited), 0o600); err != nil {
 		t.Fatalf("WriteFile (simulate editor): %v", err)
@@ -54,19 +56,30 @@ func TestIssueEditorAppliesGatewayUpdateFromEditedDocument(t *testing.T) {
 		t.Fatalf("expected updated=true")
 	}
 
-	if !gateway.HasCall(string(fakes.MethodUpdateIssue)) {
-		t.Fatalf("expected UpdateIssue call, calls=%#v", gateway.Calls)
+	// Verify the update was applied to the repository.
+	updated, err := repo.Issue(context.Background(), "bw-7")
+	if err != nil {
+		t.Fatalf("repo.Issue after ApplyEdits: %v", err)
+	}
+	if updated.Summary.Title != "Updated title" {
+		t.Fatalf("expected title %q, got %q", "Updated title", updated.Summary.Title)
 	}
 }
 
 func TestIssueEditorNoChangesSkipsGatewayUpdate(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	issue := domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-8", Title: "Same", Status: "open", Type: "task", Priority: 2}, Description: "same"}
-	gateway.ShowIssueResponse = issue
+	repo := memoryrepo.New()
+	repo.Seed(memoryrepo.Issue{
+		ID:          "bw-8",
+		Title:       "Same",
+		Status:      "open",
+		Type:        "task",
+		Priority:    2,
+		Description: "same",
+	})
 
-	service, err := launchereditor.NewIssueEditor(gateway, "")
+	service, err := launchereditor.NewIssueEditor(repo, "")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -79,7 +92,7 @@ func TestIssueEditorNoChangesSkipsGatewayUpdate(t *testing.T) {
 	defer func() { _ = os.Remove(prepared.TempPath) }()
 
 	// Simulate editor: write back the document unchanged.
-	rendered := domain.RenderIssueEditDocument(issue)
+	rendered := domain.RenderIssueEditDocument(prepared.Issue)
 	if err := os.WriteFile(prepared.TempPath, []byte(rendered), 0o600); err != nil {
 		t.Fatalf("WriteFile (simulate no-change): %v", err)
 	}
@@ -94,19 +107,28 @@ func TestIssueEditorNoChangesSkipsGatewayUpdate(t *testing.T) {
 		t.Fatalf("expected updated=false")
 	}
 
-	if gateway.HasCall(string(fakes.MethodUpdateIssue)) {
-		t.Fatalf("did not expect UpdateIssue call, calls=%#v", gateway.Calls)
+	// Verify title did not change.
+	unchanged, err := repo.Issue(context.Background(), "bw-8")
+	if err != nil {
+		t.Fatalf("repo.Issue after no-change ApplyEdits: %v", err)
+	}
+	if unchanged.Summary.Title != "Same" {
+		t.Fatalf("expected title unchanged %q, got %q", "Same", unchanged.Summary.Title)
 	}
 }
 
 func TestIssueEditorApplyEditsReturnsParseError(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	issue := domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-9", Title: "Issue", Status: "open", Type: "task", Priority: 2}}
-	gateway.ShowIssueResponse = issue
+	repo := memoryrepo.New()
+	repo.Seed(memoryrepo.Issue{
+		ID:     "bw-9",
+		Title:  "Issue",
+		Status: "open",
+		Type:   "task",
+	})
 
-	service, err := launchereditor.NewIssueEditor(gateway, "")
+	service, err := launchereditor.NewIssueEditor(repo, "")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -133,11 +155,16 @@ func TestIssueEditorApplyEditsReturnsParseError(t *testing.T) {
 func TestIssueEditorTempFileRemovedAfterApplyEdits(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	issue := domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-10", Title: "File", Status: "open", Type: "task", Priority: 2}, Description: "desc"}
-	gateway.ShowIssueResponse = issue
+	repo := memoryrepo.New()
+	repo.Seed(memoryrepo.Issue{
+		ID:          "bw-10",
+		Title:       "File",
+		Status:      "open",
+		Type:        "task",
+		Description: "desc",
+	})
 
-	service, err := launchereditor.NewIssueEditor(gateway, "")
+	service, err := launchereditor.NewIssueEditor(repo, "")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -153,7 +180,7 @@ func TestIssueEditorTempFileRemovedAfterApplyEdits(t *testing.T) {
 	}
 
 	// Write back unchanged content so ApplyEdits doesn't need UpdateIssue.
-	rendered := domain.RenderIssueEditDocument(issue)
+	rendered := domain.RenderIssueEditDocument(prepared.Issue)
 	if err := os.WriteFile(prepared.TempPath, []byte(rendered), 0o600); err != nil {
 		t.Fatalf("WriteFile (simulate no-change): %v", err)
 	}
@@ -169,8 +196,8 @@ func TestIssueEditorTempFileRemovedAfterApplyEdits(t *testing.T) {
 func TestIssueEditorBuildEditorCmdReturnsCmd(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	service, err := launchereditor.NewIssueEditor(gateway, "nano -w")
+	repo := memoryrepo.New()
+	service, err := launchereditor.NewIssueEditor(repo, "nano -w")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}

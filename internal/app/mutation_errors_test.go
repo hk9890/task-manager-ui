@@ -7,7 +7,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
 // errInjected is the sentinel used by all mutation error-injection tests.
@@ -19,9 +19,9 @@ var errInjected = errors.New("injected mutation failure")
 // newMutationErrorServices returns a minimal Services container backed by the
 // supplied gateway. It uses config.Default() and a temp dir so no external
 // editor or launcher process is ever spawned.
-func newMutationErrorServices(t *testing.T, gateway *fakes.FakeBeadsGateway) Services {
+func newMutationErrorServices(t *testing.T, gw *appTestGateway) Services {
 	t.Helper()
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}
@@ -34,11 +34,11 @@ func newMutationErrorServices(t *testing.T, gateway *fakes.FakeBeadsGateway) Ser
 func TestMutationUpdateGatewayError(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SeedIssue(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
-	gateway.SetError(fakes.MethodUpdateIssue, errInjected)
+	gw := newTestGateway()
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
+	gw.SetError(repository.MethodUpdateIssue, errInjected)
 
-	services := newMutationErrorServices(t, gateway)
+	services := newMutationErrorServices(t, gw)
 
 	state := mutationDialogState{
 		kind:  mutationUpdate,
@@ -76,11 +76,11 @@ func TestMutationUpdateGatewayError(t *testing.T) {
 func TestMutationCloseGatewayError(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SeedIssue(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
-	gateway.SetError(fakes.MethodCloseIssue, errInjected)
+	gw := newTestGateway()
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
+	gw.SetError(repository.MethodCloseIssue, errInjected)
 
-	services := newMutationErrorServices(t, gateway)
+	services := newMutationErrorServices(t, gw)
 
 	state := mutationDialogState{
 		kind:  mutationClose,
@@ -111,11 +111,11 @@ func TestMutationCloseGatewayError(t *testing.T) {
 func TestMutationCommentGatewayError(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SeedIssue(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
-	gateway.SetError(fakes.MethodAddComment, errInjected)
+	gw := newTestGateway()
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
+	gw.SetError(repository.MethodAddComment, errInjected)
 
-	services := newMutationErrorServices(t, gateway)
+	services := newMutationErrorServices(t, gw)
 
 	state := mutationDialogState{
 		kind:  mutationComment,
@@ -147,11 +147,11 @@ func TestMutationCommentGatewayError(t *testing.T) {
 func TestMutationStatusGatewayError(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SeedIssue(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
-	gateway.SetError(fakes.MethodUpdateIssue, errInjected)
+	gw := newTestGateway()
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
+	gw.SetError(repository.MethodUpdateIssue, errInjected)
 
-	services := newMutationErrorServices(t, gateway)
+	services := newMutationErrorServices(t, gw)
 
 	state := mutationDialogState{
 		kind: mutationStatus,
@@ -185,11 +185,11 @@ func TestMutationStatusGatewayError(t *testing.T) {
 func TestMutationPriorityGatewayError(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.SeedIssue(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
-	gateway.SetError(fakes.MethodUpdateIssue, errInjected)
+	gw := newTestGateway()
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1"}})
+	gw.SetError(repository.MethodUpdateIssue, errInjected)
 
-	services := newMutationErrorServices(t, gateway)
+	services := newMutationErrorServices(t, gw)
 
 	state := mutationDialogState{
 		kind: mutationPriority,

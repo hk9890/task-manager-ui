@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hk9890/beads-workbench/internal/config"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
@@ -18,7 +19,7 @@ func TestNewServicesWithLauncherRequiresDependencies(t *testing.T) {
 		t.Fatal("expected error when gateway is nil")
 	}
 
-	_, err = NewServicesWithLauncher(fakes.NewFakeBeadsGateway(), config.Default(), nil)
+	_, err = NewServicesWithLauncher(memoryrepo.New(), config.Default(), nil)
 	if err == nil {
 		t.Fatal("expected error when launcher service is nil")
 	}
@@ -27,7 +28,7 @@ func TestNewServicesWithLauncherRequiresDependencies(t *testing.T) {
 func TestNewServicesBuildsLauncherFromConfigDefinitions(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
+	gateway := memoryrepo.New()
 	cfg := config.Default()
 	cfg.Launcher.Definitions = []config.LauncherDefinition{
 		{

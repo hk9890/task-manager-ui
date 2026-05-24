@@ -10,6 +10,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
+	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 )
@@ -17,16 +18,27 @@ import (
 func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t *testing.T) {
 	t.Parallel()
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
-	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
-	gateway.SearchIssuesResponse = domain.SearchResultPage{Results: []domain.SearchResult{{Issue: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}}
-	gateway.ShowIssueResponse = domain.IssueDetail{
+	gw := newTestGateway()
+	gw.seedReady("bw-1", "Ready first", "task", 1)
+	gw.seedInProgress("bw-2", "In progress", "task", 2)
+	// Seed the search result so typing "jkhlr" still matches via text search.
+	// Memory repo Search() matches on Title, Description, Notes.
+	// We include the fragile query runes in Description so memory repo's
+	// text search returns bw-1 for that query.
+	gw.seedSearchResult(memoryrepo.Issue{
+		ID:          "bw-1",
+		Title:       "Ready first",
+		Status:      "open",
+		Type:        "task",
+		Priority:    1,
+		Description: testui.SearchFragileQueryRunes(),
+	})
+	gw.seedIssueDetail(domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
 		Description: longScenarioDetail(90),
-	}
+	})
 
-	services, err := NewServices(gateway, config.Default(), t.TempDir())
+	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices returned error: %v", err)
 	}
@@ -39,14 +51,19 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 		t.Fatalf("expected board->search scenario to land in search mode, got %s", m.active)
 	}
 
-	gateway.ResetCalls()
 	m = testui.ApplyKeySequence(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...).(Model)
 	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, testui.SearchFragileQueryRunes())
+	// Verify the applied query directly from search state instead of gateway call inspection.
+	if got := m.search.SessionState().AppliedQuery; got != testui.SearchFragileQueryRunes() {
+		t.Fatalf("expected applied query %q after typing, got %q", testui.SearchFragileQueryRunes(), got)
+	}
 
 	m = testui.ApplyKeySequence(m, testui.SearchClearQueryKeys()...).(Model)
 	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
-	testui.AssertLatestSearchQueryText(t, gateway.Calls, "")
+	// After clearing, the applied query should be empty.
+	if got := m.search.SessionState().AppliedQuery; got != "" {
+		t.Fatalf("expected empty applied query after clear, got %q", got)
+	}
 
 	m = testui.ApplyKeySequence(m, testui.SearchFocusResultsKeys()...).(Model)
 	m = testui.ApplyKeySequence(m, testui.OpenDetailKeys()...).(Model)
@@ -69,15 +86,17 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 	t.Parallel()
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
-	gateway := fakes.NewFakeBeadsGateway()
-	gateway.ReadyExplainResponse = domain.ReadyExplainResult{Ready: []domain.IssueSummary{{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}}}
-	gateway.QueryResponse = []domain.IssueSummary{{ID: "bw-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}}
-	gateway.SearchIssuesResponse = domain.SearchResultPage{}
-	gateway.ShowIssueResponse = domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}, Description: "detail"}
+	gw := newTestGateway()
+	gw.seedReady("bw-1", "Ready first", "task", 1)
+	gw.seedInProgress("bw-2", "In progress", "task", 2)
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "bw-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
+		Description: "detail",
+	})
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	fakeEditor := &fakes.FakeEditor{}
-	services, err := NewServicesWithLauncher(gateway, config.Default(), fakeLauncher)
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
 	if err != nil {
 		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
 	}

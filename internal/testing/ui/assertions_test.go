@@ -5,9 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 )
 
 func TestAssertionHelpersCoverStartupErrorsSearchAndActions(t *testing.T) {
@@ -17,14 +15,6 @@ func TestAssertionHelpersCoverStartupErrorsSearchAndActions(t *testing.T) {
 		output := "Default\nNot Ready\nReady\nIn Progress\n│││││"
 		AssertStartupBoardLayoutSanity(t, output)
 		AssertNoObviousRuntimeErrorPanels(t, output)
-	})
-
-	t.Run("latest search query text", func(t *testing.T) {
-		calls := []fakes.GatewayCall{{
-			Method: fakes.MethodSearchIssues,
-			Input:  fakes.SearchIssuesCall{Query: domain.SearchIssuesQuery{Text: "jkhlr"}},
-		}}
-		AssertLatestSearchQueryText(t, calls, "jkhlr")
 	})
 
 	t.Run("action request", func(t *testing.T) {

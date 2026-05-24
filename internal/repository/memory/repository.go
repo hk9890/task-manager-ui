@@ -52,7 +52,11 @@ type storedIssue struct {
 	labels      []string
 	description string
 	notes       string
-	dependsOn   []string
+	dependsOn   []string // IDs of issues this one is blocked by (BlockedBy)
+	blocksIDs   []string // IDs of issues this one blocks (explicit override; empty = use reverse lookup)
+	related     []string // IDs of related issues
+	parentID    string   // parent group issue ID (empty if no parent)
+	childrenIDs []string // sibling/children IDs in the parent group
 	comments    []storedComment
 	created     time.Time
 	updated     time.Time
@@ -80,7 +84,11 @@ type Issue struct {
 	Labels      []string
 	Description string
 	Notes       string
-	DependsOn   []string
+	DependsOn   []string // IDs of issues this one is blocked by (BlockedBy)
+	BlocksIDs   []string // IDs of issues this one blocks (explicit; empty = use reverse lookup)
+	Related     []string // IDs of related issues
+	ParentID    string   // parent group issue ID (empty if no parent)
+	ChildrenIDs []string // sibling/children IDs in the parent group
 	Created     time.Time
 	Updated     time.Time
 }
@@ -152,6 +160,15 @@ func (r *Repository) Seed(iss Issue) {
 	deps := make([]string, len(iss.DependsOn))
 	copy(deps, iss.DependsOn)
 
+	related := make([]string, len(iss.Related))
+	copy(related, iss.Related)
+
+	blocksIDs := make([]string, len(iss.BlocksIDs))
+	copy(blocksIDs, iss.BlocksIDs)
+
+	childrenIDs := make([]string, len(iss.ChildrenIDs))
+	copy(childrenIDs, iss.ChildrenIDs)
+
 	si := &storedIssue{
 		id:          iss.ID,
 		title:       iss.Title,
@@ -163,6 +180,10 @@ func (r *Repository) Seed(iss Issue) {
 		description: iss.Description,
 		notes:       iss.Notes,
 		dependsOn:   deps,
+		blocksIDs:   blocksIDs,
+		related:     related,
+		parentID:    iss.ParentID,
+		childrenIDs: childrenIDs,
 		created:     created,
 		updated:     updated,
 	}
@@ -772,22 +793,40 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 		})
 	}
 
-	// Reverse: find issues that depend on si.id.
+	// Resolve Blocks: if blocksIDs is explicitly set, use it; otherwise fall
+	// back to reverse-lookup (find issues whose dependsOn contains si.id).
 	blocks := make([]domain.IssueReference, 0)
-	for _, other := range r.issues {
-		if other.id == si.id {
-			continue
+	if len(si.blocksIDs) > 0 {
+		for _, blockedID := range si.blocksIDs {
+			other, ok := r.issues[blockedID]
+			if !ok {
+				blocks = append(blocks, domain.IssueReference{ID: blockedID})
+				continue
+			}
+			blocks = append(blocks, domain.IssueReference{
+				ID:       other.id,
+				Title:    other.title,
+				Type:     other.issueType,
+				Priority: other.priority,
+				Status:   other.status,
+			})
 		}
-		for _, depID := range other.dependsOn {
-			if depID == si.id {
-				blocks = append(blocks, domain.IssueReference{
-					ID:       other.id,
-					Title:    other.title,
-					Type:     other.issueType,
-					Priority: other.priority,
-					Status:   other.status,
-				})
-				break
+	} else {
+		for _, other := range r.issues {
+			if other.id == si.id {
+				continue
+			}
+			for _, depID := range other.dependsOn {
+				if depID == si.id {
+					blocks = append(blocks, domain.IssueReference{
+						ID:       other.id,
+						Title:    other.title,
+						Type:     other.issueType,
+						Priority: other.priority,
+						Status:   other.status,
+					})
+					break
+				}
 			}
 		}
 	}
@@ -803,20 +842,67 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 		}
 	}
 
+	// Resolve Related references.
+	related := make([]domain.IssueReference, 0, len(si.related))
+	for _, relID := range si.related {
+		rel, ok := r.issues[relID]
+		if !ok {
+			related = append(related, domain.IssueReference{ID: relID})
+			continue
+		}
+		related = append(related, domain.IssueReference{
+			ID:       rel.id,
+			Title:    rel.title,
+			Type:     rel.issueType,
+			Priority: rel.priority,
+			Status:   rel.status,
+		})
+	}
+
+	// Resolve ParentGroupBrowserContext.
+	var parentGroupBrowser domain.ParentGroupBrowserContext
+	if si.parentID != "" {
+		parent, ok := r.issues[si.parentID]
+		if ok {
+			parentGroupBrowser.Parent = domain.IssueReference{
+				ID:       parent.id,
+				Title:    parent.title,
+				Type:     parent.issueType,
+				Priority: parent.priority,
+				Status:   parent.status,
+			}
+		} else {
+			parentGroupBrowser.Parent = domain.IssueReference{ID: si.parentID}
+		}
+	}
+	children := make([]domain.IssueReference, 0, len(si.childrenIDs))
+	for _, childID := range si.childrenIDs {
+		child, ok := r.issues[childID]
+		if !ok {
+			children = append(children, domain.IssueReference{ID: childID})
+			continue
+		}
+		children = append(children, domain.IssueReference{
+			ID:       child.id,
+			Title:    child.title,
+			Type:     child.issueType,
+			Priority: child.priority,
+			Status:   child.status,
+		})
+	}
+	parentGroupBrowser.Children = children
+
 	return domain.IssueDetail{
-		Summary:     sum,
-		Description: si.description,
-		Notes:       si.notes,
-		ClosedAt:    si.closed,
-		CloseReason: si.closeReason,
-		BlockedBy:   blockedBy,
-		Blocks:      blocks,
-		Comments:    comments,
-		// ParentGroupBrowser and Related are not modeled in memory — empty.
-		ParentGroupBrowser: domain.ParentGroupBrowserContext{
-			Children: []domain.IssueReference{},
-		},
-		Related: []domain.IssueReference{},
+		Summary:            sum,
+		Description:        si.description,
+		Notes:              si.notes,
+		ClosedAt:           si.closed,
+		CloseReason:        si.closeReason,
+		BlockedBy:          blockedBy,
+		Blocks:             blocks,
+		Comments:           comments,
+		Related:            related,
+		ParentGroupBrowser: parentGroupBrowser,
 	}
 }
 
