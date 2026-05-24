@@ -116,6 +116,15 @@ func (m *Manager) LogPath() string {
 	return m.logPath
 }
 
+// SessionID returns the session identifier used for log file naming and
+// correlation. Returns an empty string when m is nil.
+func (m *Manager) SessionID() string {
+	if m == nil {
+		return ""
+	}
+	return m.sessionID
+}
+
 // SetStderrSuppressed controls whether the stderr handler emits log records.
 //
 // Call with true immediately before tea.Program.Run() to prevent slog writes

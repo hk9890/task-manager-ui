@@ -238,3 +238,109 @@ func TestSaveEmptyRepository(t *testing.T) {
 		t.Errorf("Load empty repo: expected 0 issues, got %d", len(snap))
 	}
 }
+
+// ---- SaveWithHash / LoadWithManifest tests ----
+
+func TestSaveWithHashRoundTrip(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:     "hash-1",
+		Title:  "test issue",
+		Status: "open",
+		Type:   "task",
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	const wantHash = "abc123def456"
+	if err := filestorage.SaveWithHash(r, path, wantHash); err != nil {
+		t.Fatalf("SaveWithHash: unexpected error: %v", err)
+	}
+
+	loaded, manifest, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
+	}
+	if manifest.BDCommitHash != wantHash {
+		t.Errorf("BDCommitHash: got %q, want %q", manifest.BDCommitHash, wantHash)
+	}
+	if manifest.SchemaVersion != filestorage.SchemaVersion {
+		t.Errorf("SchemaVersion: got %d, want %d", manifest.SchemaVersion, filestorage.SchemaVersion)
+	}
+	if manifest.SyncedAt.IsZero() {
+		t.Error("SyncedAt should not be zero")
+	}
+	snap := loaded.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 issue, got %d", len(snap))
+	}
+	if snap[0].ID != "hash-1" {
+		t.Errorf("issue ID: got %q, want hash-1", snap[0].ID)
+	}
+}
+
+func TestLoadWithManifestNoHash(t *testing.T) {
+	// Save via old API (no hash) → LoadWithManifest returns BDCommitHash == "".
+	r := memory.New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: unexpected error: %v", err)
+	}
+
+	_, manifest, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
+	}
+	if manifest.BDCommitHash != "" {
+		t.Errorf("BDCommitHash: got %q, want empty string", manifest.BDCommitHash)
+	}
+}
+
+func TestSaveWithHashEmptyHash(t *testing.T) {
+	// SaveWithHash with empty hash behaves like Save.
+	r := memory.New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	if err := filestorage.SaveWithHash(r, path, ""); err != nil {
+		t.Fatalf("SaveWithHash(\"\", \"\"): unexpected error: %v", err)
+	}
+
+	_, manifest, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
+	}
+	if manifest.BDCommitHash != "" {
+		t.Errorf("BDCommitHash: got %q, want empty string", manifest.BDCommitHash)
+	}
+}
+
+func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
+	// Verify existing Save/Load signatures are preserved and still work.
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:     "legacy-1",
+		Title:  "legacy test",
+		Status: "open",
+		Type:   "task",
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy.jsonl")
+
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: unexpected error: %v", err)
+	}
+
+	loaded, err := filestorage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+	snap := loaded.Snapshot()
+	if len(snap) != 1 || snap[0].ID != "legacy-1" {
+		t.Fatalf("round-trip: expected issue legacy-1, got %v", snap)
+	}
+}

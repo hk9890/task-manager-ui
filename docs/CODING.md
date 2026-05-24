@@ -32,10 +32,22 @@ Supported flags:
 - `--no-auto-refresh`
 - `--print-config`
 - `--check-config`
-- `--repo <backend>` — repository backend: `beads` (default) or `memory`
-- `--repo-file <path>` — path to the JSONL repository file; required when
-  `--repo=memory`; informational (not read/written) when `--repo=beads`, with
-  default `~/.cache/bwb/<project-hash>/repo.jsonl`
+- `--repo <backend>` — repository backend: `beads | memory | caching` (default: `caching`)
+  - `caching` (default): wraps the beads backend with an in-memory read cache,
+    per-session JSONL persistence, and background VCS-hash polling for
+    invalidation. Startup prints `"Using caching repository backend; --repo beads disables"`.
+  - `beads`: live `bd` subprocess calls on every read; no caching or persistence.
+  - `memory`: loads the full repository from a JSONL file on startup; all reads
+    are served from memory; requires `--repo-file`.
+- `--repo-file <path>` — path to the JSONL repository file:
+  - `caching` mode: session cache file; default
+    `~/.cache/bwb/<project-hash>-<session-id>/repo.jsonl` (written on shutdown
+    and periodically; hydrated at startup from a previous session file if it
+    exists). Each session has its own file — multi-session cache consolidation
+    is out of scope.
+  - `beads` mode: informational only (not read or written); default
+    `~/.cache/bwb/<project-hash>/repo.jsonl`.
+  - `memory` mode: required; the file is the sole source of truth.
 
 Non-interactive flags (`--help`, `--version`, `--print-config`,
 `--check-config`) return without booting the Bubble Tea program.

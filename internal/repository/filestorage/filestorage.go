@@ -13,9 +13,11 @@
 //
 // Load reads the manifest first. If schema_version does not match
 // [SchemaVersion] it returns [repository.ErrSchemaMismatch] without attempting
-// to parse the JSONL. bd_commit_hash is left as empty string because Save
-// operates on a memory.Repository and has no access to bd project context;
-// Epic 2 will plumb commit info when it owns cache-dir derivation.
+// to parse the JSONL.
+//
+// [SaveWithHash] persists the supplied bd commit hash in the manifest so that
+// [LoadWithManifest] callers can compare it against the current hash for
+// staleness detection. [Save] is a thin wrapper that passes an empty hash.
 //
 // # Signature constraints
 //
@@ -50,11 +52,13 @@ import (
 // differs from this constant.
 const SchemaVersion = 1
 
-// manifest is the structure written alongside the JSONL file.
-type manifest struct {
-	SchemaVersion int    `json:"schema_version"`
-	SyncedAt      string `json:"synced_at"`
-	BDCommitHash  string `json:"bd_commit_hash"`
+// Manifest mirrors the on-disk manifest shape. It is returned by
+// [LoadWithManifest] so callers can inspect persisted metadata such as
+// BDCommitHash for staleness checks.
+type Manifest struct {
+	SchemaVersion int       `json:"schema_version"`
+	SyncedAt      time.Time `json:"synced_at"`
+	BDCommitHash  string    `json:"bd_commit_hash"`
 }
 
 // Save writes r's contents to path (JSONL) and path+".manifest.json".
@@ -63,8 +67,16 @@ type manifest struct {
 // path+".manifest.json". Both files are written atomically (write to temp,
 // then rename) so a concurrent Load does not read a partial write.
 //
-// bd_commit_hash is always empty string; see package doc.
+// bd_commit_hash in the manifest is written as empty string. Use [SaveWithHash]
+// to persist a non-empty hash.
 func Save(r *memory.Repository, path string) error {
+	return SaveWithHash(r, path, "")
+}
+
+// SaveWithHash is like [Save] but persists the supplied bdCommitHash in the
+// manifest. bdCommitHash may be empty (e.g. when vcStatusFunc is unavailable);
+// in that case the manifest is written with an empty bd_commit_hash field.
+func SaveWithHash(r *memory.Repository, path string, bdCommitHash string) error {
 	issues := r.Snapshot()
 
 	// Write JSONL to a temp file, then rename.
@@ -95,10 +107,10 @@ func Save(r *memory.Repository, path string) error {
 	}
 
 	// Write manifest.
-	m := manifest{
+	m := Manifest{
 		SchemaVersion: SchemaVersion,
-		SyncedAt:      time.Now().UTC().Format(time.RFC3339),
-		BDCommitHash:  "",
+		SyncedAt:      time.Now().UTC(),
+		BDCommitHash:  bdCommitHash,
 	}
 	mBytes, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -137,28 +149,38 @@ func Save(r *memory.Repository, path string) error {
 // The returned repository uses the default real-time clock and default ID
 // generator; timestamps from the JSONL file are preserved in the seeded
 // issues.
+//
+// Use [LoadWithManifest] when the caller needs the persisted [Manifest]
+// (e.g. to read BDCommitHash for staleness detection).
 func Load(path string) (*memory.Repository, error) {
+	r, _, err := LoadWithManifest(path)
+	return r, err
+}
+
+// LoadWithManifest is like [Load] but also returns the parsed [Manifest] so
+// callers can use the persisted BDCommitHash for staleness checks.
+func LoadWithManifest(path string) (*memory.Repository, Manifest, error) {
 	// Read and check manifest.
 	manifestPath := path + ".manifest.json"
 	mBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("filestorage.Load: read manifest %q: %w", manifestPath, err)
+		return nil, Manifest{}, fmt.Errorf("filestorage.Load: read manifest %q: %w", manifestPath, err)
 	}
 
-	var m manifest
+	var m Manifest
 	if err := json.Unmarshal(mBytes, &m); err != nil {
-		return nil, fmt.Errorf("filestorage.Load: decode manifest %q: %w", manifestPath, err)
+		return nil, Manifest{}, fmt.Errorf("filestorage.Load: decode manifest %q: %w", manifestPath, err)
 	}
 
 	if m.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("%w: file has schema_version=%d, expected %d",
+		return nil, Manifest{}, fmt.Errorf("%w: file has schema_version=%d, expected %d",
 			repository.ErrSchemaMismatch, m.SchemaVersion, SchemaVersion)
 	}
 
 	// Read JSONL.
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("filestorage.Load: open %q: %w", path, err)
+		return nil, Manifest{}, fmt.Errorf("filestorage.Load: open %q: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -171,7 +193,7 @@ func Load(path string) (*memory.Repository, error) {
 		}
 		var snap memory.SnapshotIssue
 		if err := json.Unmarshal(line, &snap); err != nil {
-			return nil, fmt.Errorf("filestorage.Load: decode issue line: %w", err)
+			return nil, Manifest{}, fmt.Errorf("filestorage.Load: decode issue line: %w", err)
 		}
 
 		r.Seed(memory.Issue{
@@ -204,8 +226,8 @@ func Load(path string) (*memory.Repository, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("filestorage.Load: scan jsonl: %w", err)
+		return nil, Manifest{}, fmt.Errorf("filestorage.Load: scan jsonl: %w", err)
 	}
 
-	return r, nil
+	return r, m, nil
 }

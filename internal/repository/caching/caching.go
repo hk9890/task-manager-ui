@@ -1,0 +1,567 @@
+// Package caching provides a CachingRepository decorator that wraps any
+// repository.Repository with a fast in-memory read path. Reads are served
+// from the in-memory cache on hit; misses are fetched from the backing store
+// and stored in the cache. Writes are applied to the backing store first; on
+// success, the cache is updated or invalidated synchronously.
+//
+// # Cache semantics
+//
+// Issue: per-ID cache backed by memory.Repository. Cache miss fetches from
+// backing and seeds the result via SeedDetail.
+//
+// Dashboard: single cached DashboardData value protected by a dirty flag.
+// The flag is set on any write; cleared on the next successful Dashboard fetch.
+//
+// Catalogs: TTL-cached. Default TTL is 5 minutes; configurable via
+// WithCatalogsTTL.
+//
+// Search: always passes through to backing (not cached).
+//
+// HealthCheck: always passes through to backing.
+//
+// # Concurrency
+//
+// All methods are safe for concurrent use. The internal RWMutex is held only
+// around cache-state reads and writes; the backing store is never called while
+// the lock is held.
+package caching
+
+import (
+	"context"
+	"errors"
+	"io/fs"
+	"sync"
+	"time"
+
+	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
+	"github.com/hk9890/beads-workbench/internal/repository/memory"
+)
+
+// CachingRepository decorates a backing Repository with an in-memory cache.
+// Zero value is not usable; construct with New.
+type CachingRepository struct {
+	mu      sync.RWMutex
+	backing repository.Repository
+	memory  *memory.Repository
+
+	dashboardCache repository.DashboardData
+	dashboardDirty bool
+
+	catalogsCache   *repository.Catalogs
+	catalogsFetched time.Time
+	catalogsTTL     time.Duration
+
+	clock func() time.Time
+
+	// Background refresh state.
+	refreshInterval time.Duration                         // default 60s; used by tickLoop
+	vcStatusFunc    func(context.Context) (string, error) // nil = no polling
+	lastHash        string                                // last observed VCS hash ("" = uninitialized)
+
+	cancel  context.CancelFunc // set by Start; nil until Start is called
+	done    chan struct{}      // closed when tickLoop goroutine exits
+	started bool               // guards against double-start
+
+	// Persistence state.
+	cacheFilePath string        // set by Hydrate(); empty = no persistence
+	saveInterval  time.Duration // default 30s; used by tickLoop save ticker
+}
+
+// Compile-time assertion: CachingRepository must implement repository.Repository.
+var _ repository.Repository = (*CachingRepository)(nil)
+
+// New constructs a CachingRepository wrapping backing. A fresh memory.Repository
+// is created internally and is not shared with any other caller.
+func New(backing repository.Repository, opts ...Option) *CachingRepository {
+	c := &CachingRepository{
+		backing:         backing,
+		memory:          memory.New(),
+		dashboardDirty:  true, // first read always hits backing
+		catalogsTTL:     5 * time.Minute,
+		clock:           time.Now,
+		refreshInterval: 60 * time.Second,
+		saveInterval:    30 * time.Second,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// Start launches the background refresh goroutine. Idempotent: a second call
+// while the goroutine is already running is a no-op. If vcStatusFunc is nil,
+// Start does nothing (no goroutine is spawned). The goroutine exits when ctx
+// is cancelled OR Stop is called.
+func (c *CachingRepository) Start(ctx context.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || c.vcStatusFunc == nil {
+		return
+	}
+	c.started = true
+	childCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+	c.done = make(chan struct{})
+	go c.tickLoop(childCtx)
+}
+
+// Stop signals the background refresh goroutine to exit and waits for it to
+// finish. Safe to call multiple times; subsequent calls after the first are
+// no-ops. If Start was never called (or vcStatusFunc was nil), Stop is a
+// no-op.
+func (c *CachingRepository) Stop() {
+	c.mu.Lock()
+	if !c.started {
+		c.mu.Unlock()
+		return
+	}
+	c.cancel()
+	done := c.done
+	c.mu.Unlock()
+
+	<-done
+
+	c.mu.Lock()
+	c.started = false
+	c.cancel = nil
+	c.done = nil
+	c.mu.Unlock()
+}
+
+// RefreshIfChanged polls vcStatusFunc and, if the returned hash differs from
+// the last observed hash, marks the Dashboard dirty and resets the per-ID
+// Issue cache. On the first call (lastHash == ""), the hash is recorded as
+// baseline without invalidating anything.
+//
+// This method is exported so tests can drive invalidation deterministically
+// without relying on real timers. The background tickLoop also calls it on
+// each tick.
+func (c *CachingRepository) RefreshIfChanged(ctx context.Context) {
+	if err := ctx.Err(); err != nil {
+		return
+	}
+	// Call vcStatusFunc without holding the lock — same pattern as backing
+	// calls in Dashboard/Issue/etc.
+	h, err := c.vcStatusFunc(ctx)
+	if err != nil {
+		// Silently skip — a failed tick must not corrupt cache state.
+		// kxci.5 will wire a logger here.
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lastHash == "" {
+		// First observation: record as baseline, do not invalidate.
+		c.lastHash = h
+		return
+	}
+	if h == c.lastHash {
+		return
+	}
+	// Hash changed: invalidate Dashboard and all per-ID Issue cache entries.
+	c.lastHash = h
+	c.dashboardDirty = true
+	c.memory.Reset()
+}
+
+// tickLoop is the body of the background refresh goroutine. It runs two
+// independent tickers:
+//   - refreshT: fires every refreshInterval, calling RefreshIfChanged.
+//   - saveT: fires every saveInterval, calling SaveNow.
+//
+// Both tickers exit when ctx is cancelled. If cacheFilePath is empty the save
+// tick is a cheap no-op (SaveNow returns immediately).
+//
+// NOTE: periodic save only fires when the goroutine is running, which requires
+// vcStatusFunc != nil (Start guard). If vcStatusFunc is nil but cacheFilePath
+// is set, periodic save does not run; use SaveNow at shutdown. App wiring
+// (kxci.5) is responsible for ensuring both are set together.
+func (c *CachingRepository) tickLoop(ctx context.Context) {
+	defer close(c.done)
+	refreshT := time.NewTicker(c.refreshInterval)
+	defer refreshT.Stop()
+	saveT := time.NewTicker(c.saveInterval)
+	defer saveT.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-refreshT.C:
+			c.RefreshIfChanged(ctx)
+		case <-saveT.C:
+			_ = c.SaveNow() // errors are best-effort; kxci.5 will wire a logger
+		}
+	}
+}
+
+// ---- persistence methods ----
+
+// Hydrate loads the in-memory cache from a JSONL file written by a previous
+// session. Sets the cache file path so subsequent SaveNow / periodic save
+// calls write to the same location.
+//
+// Behavior matrix:
+//   - path == "": no-op; remains in cold-start mode (no persistence either)
+//   - file does not exist: starts empty; subsequent saves create the file
+//   - filestorage.ErrSchemaMismatch: starts empty; subsequent saves create a
+//     new file (the old file is overwritten on first save — this is intentional:
+//     the schema has moved forward)
+//   - other read error: returns the error; cacheFilePath is NOT set so
+//     subsequent saves do NOT overwrite a possibly-corrupt file
+//   - success: replaces memory with loaded data; if the persisted
+//     BDCommitHash matches the current hash returned by vcStatusFunc,
+//     dashboardDirty is set to false (warm-cache fast path), dashboardCache is
+//     pre-computed from the loaded memory store so the first Dashboard() call
+//     is served entirely from memory, and lastHash is seeded with the current
+//     hash so the first tick baseline is already set;
+//     otherwise dashboardDirty remains true (safe default)
+//
+// Hash comparison: if the persisted hash is empty, or vcStatusFunc is nil, or
+// vcStatusFunc returns an error, Hydrate always sets dashboardDirty=true.
+//
+// Hydrate is intended to be called before Start. If called after Start, the
+// file IO and bd call happen outside c.mu (safe), then c.mu.Lock() is held
+// only briefly to swap state.
+func (c *CachingRepository) Hydrate(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	// Load outside the lock — file IO must not hold c.mu.
+	loaded, manifest, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		if errors.Is(err, repository.ErrSchemaMismatch) {
+			// Schema moved forward: degrade to cold start, but allow future saves
+			// to overwrite with the new format.
+			c.mu.Lock()
+			c.cacheFilePath = path
+			c.mu.Unlock()
+			return nil
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			// No prior session: cold start, allow future saves to create the file.
+			c.mu.Lock()
+			c.cacheFilePath = path
+			c.mu.Unlock()
+			return nil
+		}
+		// Unknown error: do NOT set cacheFilePath so we never overwrite a
+		// possibly-corrupt file.
+		return err
+	}
+
+	// Compute staleness BEFORE taking the write lock. The bd call must not
+	// hold c.mu — it calls a subprocess and can take ~700ms.
+	dirty := true
+	var seedHash string
+	c.mu.RLock()
+	vcFn := c.vcStatusFunc
+	c.mu.RUnlock()
+	if manifest.BDCommitHash != "" && vcFn != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		currentHash, vcErr := vcFn(ctx)
+		cancel()
+		if vcErr == nil && currentHash == manifest.BDCommitHash {
+			dirty = false
+			seedHash = currentHash
+		}
+	}
+
+	// When the repo is confirmed fresh (dirty=false), pre-compute the dashboard
+	// from the loaded in-memory store so the first Dashboard() call is served
+	// entirely from memory without touching the backing store. This happens
+	// outside the lock because loaded.Dashboard() takes its own internal lock.
+	var precomputedDashboard repository.DashboardData
+	if !dirty {
+		precomputedDashboard, _ = loaded.Dashboard(context.Background())
+	}
+
+	// Apply state under lock — brief swap only, no IO.
+	c.mu.Lock()
+	c.cacheFilePath = path
+	c.memory = loaded
+	c.dashboardDirty = dirty
+	if !dirty {
+		c.dashboardCache = precomputedDashboard
+	}
+	if seedHash != "" {
+		c.lastHash = seedHash
+	}
+	c.mu.Unlock()
+	return nil
+}
+
+// SaveNow writes the current in-memory cache state to the configured file path
+// synchronously. No-op if cacheFilePath is empty. Returns any error from
+// filestorage.SaveWithHash; the caller decides whether to propagate or log.
+//
+// SaveNow reads vcStatusFunc (if set) to obtain the current bd commit hash,
+// which is persisted in the manifest so a subsequent Hydrate can skip the
+// backing Dashboard fan-out when the repo is unchanged. If vcStatusFunc is nil
+// or returns an error, the hash is written as empty string; the save still
+// proceeds.
+//
+// Locking: path, memory pointer, and vcStatusFunc are read under c.mu.RLock,
+// then released before calling vcStatusFunc and filestorage.SaveWithHash.
+// filestorage.SaveWithHash calls memory.Snapshot() which takes memory's own
+// internal read lock — there is no lock nesting between c.mu and memory.mu,
+// so no deadlock is possible.
+func (c *CachingRepository) SaveNow() error {
+	c.mu.RLock()
+	path := c.cacheFilePath
+	mem := c.memory
+	vcFn := c.vcStatusFunc
+	c.mu.RUnlock()
+
+	if path == "" {
+		return nil
+	}
+
+	var hash string
+	if vcFn != nil {
+		// Use a background ctx with a short timeout — SaveNow must not hang on
+		// a stuck bd subprocess.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		h, err := vcFn(ctx)
+		if err == nil {
+			hash = h
+		}
+		// On error, hash stays "". Save still proceeds.
+	}
+	return filestorage.SaveWithHash(mem, path, hash)
+}
+
+// ---- read methods ----
+
+// Dashboard implements repository.Repository.
+//
+// Returns the cached DashboardData when not dirty. On a cache miss (dirty flag
+// set), fetches from backing, stores the result, and clears the dirty flag.
+// The dirty flag is NOT cleared on backing error.
+func (c *CachingRepository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+	if err := ctx.Err(); err != nil {
+		return repository.DashboardData{}, err
+	}
+
+	// Fast path: serve from cache when not dirty.
+	c.mu.RLock()
+	dirty := c.dashboardDirty
+	if !dirty {
+		data := c.dashboardCache
+		c.mu.RUnlock()
+		return data, nil
+	}
+	c.mu.RUnlock()
+
+	// Cache miss: fetch from backing (no lock held).
+	data, err := c.backing.Dashboard(ctx)
+	if err != nil {
+		return repository.DashboardData{}, err
+	}
+
+	// Populate cache.
+	c.mu.Lock()
+	c.dashboardCache = data
+	c.dashboardDirty = false
+	c.mu.Unlock()
+
+	return data, nil
+}
+
+// Issue implements repository.Repository.
+//
+// Returns the cached IssueDetail when available. On a cache miss, fetches from
+// backing, seeds the result into the in-memory store, and returns the backing's
+// value directly. Cache misses on backing errors are NOT stored.
+//
+// Note: on a cache hit the returned value is projected from the in-memory store
+// via memory.Repository.Issue, which re-resolves cross-issue references (Related,
+// Blocks, ParentGroupBrowser) against whatever is currently in the memory store.
+// This is safe in practice because those reference fields carry only IDs and
+// lightweight metadata, but callers should be aware the hit-path projection may
+// differ slightly from the backing's original value when the memory store has
+// been partially hydrated.
+func (c *CachingRepository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.IssueDetail{}, err
+	}
+
+	// Fast path: check in-memory cache.
+	c.mu.RLock()
+	detail, err := c.memory.Issue(ctx, id)
+	c.mu.RUnlock()
+
+	if err == nil {
+		// Cache hit.
+		return detail, nil
+	}
+	if !errors.Is(err, repository.ErrIssueNotFound) {
+		// Unexpected error from in-memory store; propagate.
+		return domain.IssueDetail{}, err
+	}
+
+	// Cache miss: fetch from backing (no lock held).
+	detail, err = c.backing.Issue(ctx, id)
+	if err != nil {
+		return domain.IssueDetail{}, err
+	}
+
+	// Seed into memory cache.
+	c.mu.Lock()
+	c.memory.SeedDetail(detail)
+	c.mu.Unlock()
+
+	return detail, nil
+}
+
+// Search implements repository.Repository.
+//
+// Always passes through to backing. Search results are not cached because
+// queries are too varied to key effectively.
+func (c *CachingRepository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	return c.backing.Search(ctx, query)
+}
+
+// Catalogs implements repository.Repository.
+//
+// Returns cached catalogs when within TTL. On a cache miss (or first call),
+// fetches from backing, stores the result with the current timestamp, and
+// returns the value.
+func (c *CachingRepository) Catalogs(ctx context.Context) (repository.Catalogs, error) {
+	if err := ctx.Err(); err != nil {
+		return repository.Catalogs{}, err
+	}
+
+	// Fast path: serve from cache when within TTL.
+	c.mu.RLock()
+	if c.catalogsCache != nil && c.clock().Sub(c.catalogsFetched) < c.catalogsTTL {
+		cats := *c.catalogsCache
+		c.mu.RUnlock()
+		return cats, nil
+	}
+	c.mu.RUnlock()
+
+	// Cache miss: fetch from backing (no lock held).
+	cats, err := c.backing.Catalogs(ctx)
+	if err != nil {
+		return repository.Catalogs{}, err
+	}
+
+	// Populate cache.
+	c.mu.Lock()
+	c.catalogsCache = &cats
+	c.catalogsFetched = c.clock()
+	c.mu.Unlock()
+
+	return cats, nil
+}
+
+// HealthCheck implements repository.Repository.
+//
+// Always passes through to backing. Cancellation is handled by the backing
+// implementation; no additional check is needed here since no cache path is
+// taken.
+func (c *CachingRepository) HealthCheck(ctx context.Context) error {
+	return c.backing.HealthCheck(ctx)
+}
+
+// ---- write methods ----
+
+// CreateIssue implements repository.Repository.
+//
+// Calls backing first. On success, marks dashboardDirty and seeds the new
+// issue into the in-memory cache (best-effort; dashboardDirty ensures
+// correctness even if the seed produces a stale entry).
+func (c *CachingRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+	result, err := c.backing.CreateIssue(ctx, input)
+	if err != nil {
+		return domain.CreateIssueResult{}, err
+	}
+
+	c.mu.Lock()
+	c.dashboardDirty = true
+	// Seed a minimal entry for the new issue so Issue(result.IssueID) hits
+	// cache on subsequent calls. The backing ID is used explicitly; memory's
+	// own CreateIssue would assign a different ID via its own ID generator.
+	c.memory.SeedDetail(domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:     result.IssueID,
+			Title:  input.Title,
+			Status: "open",
+			Type: func() string {
+				if input.Type != "" {
+					return input.Type
+				}
+				return "task"
+			}(),
+			Priority: func() int {
+				if input.Priority != nil {
+					return *input.Priority
+				}
+				return 0
+			}(),
+			Assignee: input.Assignee,
+			Labels:   input.Labels,
+		},
+		Description: input.Description,
+	})
+	c.mu.Unlock()
+
+	return result, nil
+}
+
+// UpdateIssue implements repository.Repository.
+//
+// Calls backing first. On success, marks dashboardDirty and forgets the cached
+// Issue(id) so the next Issue(id) call re-fetches the updated state from backing.
+func (c *CachingRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
+	if err := c.backing.UpdateIssue(ctx, id, input); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.dashboardDirty = true
+	c.memory.Forget(id)
+	c.mu.Unlock()
+
+	return nil
+}
+
+// CloseIssue implements repository.Repository.
+//
+// Calls backing first. On success, marks dashboardDirty and forgets the cached
+// Issue(id).
+func (c *CachingRepository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
+	if err := c.backing.CloseIssue(ctx, id, input); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.dashboardDirty = true
+	c.memory.Forget(id)
+	c.mu.Unlock()
+
+	return nil
+}
+
+// AddComment implements repository.Repository.
+//
+// Calls backing first. On success, forgets the cached Issue(id) so the next
+// Issue(id) call includes the new comment. Dashboard is NOT marked dirty
+// because comments do not affect the Dashboard projection.
+func (c *CachingRepository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
+	if err := c.backing.AddComment(ctx, id, input); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.memory.Forget(id)
+	c.mu.Unlock()
+
+	return nil
+}

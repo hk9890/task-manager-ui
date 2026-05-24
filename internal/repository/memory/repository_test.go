@@ -1069,3 +1069,74 @@ func containsID(ids []string, id string) bool {
 	}
 	return false
 }
+
+// ---- Forget tests ----
+
+func TestForget_ExistingID_DropsIssue(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "x-1", Title: "to forget"})
+
+	// Confirm it exists.
+	if _, err := r.Issue(context.Background(), "x-1"); err != nil {
+		t.Fatalf("before Forget: unexpected error %v", err)
+	}
+
+	r.Forget("x-1")
+
+	// Should be gone.
+	_, err := r.Issue(context.Background(), "x-1")
+	if !errors.Is(err, repository.ErrIssueNotFound) {
+		t.Fatalf("after Forget: expected ErrIssueNotFound, got %v", err)
+	}
+}
+
+func TestForget_AbsentID_NoOp(t *testing.T) {
+	r := memory.New()
+
+	// Should not panic or return an error.
+	r.Forget("does-not-exist")
+
+	// Store is empty; verify HealthCheck still works.
+	if err := r.HealthCheck(context.Background()); err != nil {
+		t.Fatalf("HealthCheck after Forget of absent ID: %v", err)
+	}
+}
+
+// ---- SeedDetail tests ----
+
+func TestSeedDetail_RoundTrip(t *testing.T) {
+	r := memory.New()
+
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:       "sd-1",
+			Title:    "seeded via detail",
+			Status:   "in_progress",
+			Type:     "bug",
+			Priority: 2,
+			Assignee: "alice",
+			Labels:   []string{"backend"},
+		},
+		Description: "a description",
+		Notes:       "some notes",
+	}
+
+	r.SeedDetail(detail)
+
+	got, err := r.Issue(context.Background(), "sd-1")
+	if err != nil {
+		t.Fatalf("Issue after SeedDetail: %v", err)
+	}
+	if got.Summary.ID != "sd-1" {
+		t.Errorf("ID: got %q, want sd-1", got.Summary.ID)
+	}
+	if got.Summary.Title != detail.Summary.Title {
+		t.Errorf("Title: got %q, want %q", got.Summary.Title, detail.Summary.Title)
+	}
+	if got.Summary.Status != detail.Summary.Status {
+		t.Errorf("Status: got %q, want %q", got.Summary.Status, detail.Summary.Status)
+	}
+	if got.Description != detail.Description {
+		t.Errorf("Description: got %q, want %q", got.Description, detail.Description)
+	}
+}
