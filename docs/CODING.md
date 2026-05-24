@@ -181,6 +181,15 @@ project-plan/        # product, architecture, and execution planning docs
 
 11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns repository query routing and validates query types internally.
 
+## UI Rendering Conventions
+
+**Comment ordering:** The detail view renders comments newest-first (sorted by
+`CreatedAt` descending; ties broken by `ID` descending). This diverges from
+`bd comments` default order (oldest-first) and is intentional — surfacing the
+most recent activity at the top makes triage faster when an issue has many
+comments. The section header reads "Comments (N · newest first)" to make the
+ordering obvious to the reader.
+
 ## Runtime Configuration
 
 Runtime config loading, the config model, keybindings, and the launcher

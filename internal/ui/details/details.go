@@ -582,7 +582,7 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	commentsSection := make([]string, 0, 16)
 	if len(detail.Comments) > 0 {
 		commentsSection = append(commentsSection, "")
-		commentsSection = append(commentsSection, fmt.Sprintf("Comments (%d)", len(detail.Comments)))
+		commentsSection = append(commentsSection, fmt.Sprintf("Comments (%d · newest first)", len(detail.Comments)))
 		commentsSection = append(commentsSection, renderComments(detail.Comments, width)...)
 	}
 

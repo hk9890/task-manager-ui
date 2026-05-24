@@ -655,7 +655,7 @@ func TestRenderCommentHeavyMarkdownStaysPaneBounded(t *testing.T) {
 	}
 
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "Comments (1)") {
+	if !strings.Contains(plain, "Comments (1 · newest first)") {
 		t.Fatalf("expected comments section to render, got:\n%s", plain)
 	}
 }
