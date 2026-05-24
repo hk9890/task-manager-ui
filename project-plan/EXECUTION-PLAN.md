@@ -12,6 +12,8 @@
 
 This document translates the product and architecture direction into a concrete beads planning shape for the new repository.
 
+> **Historical Phase 1 planning doc.** The vocabulary below reflects the original design intent and no longer matches the implementation. Current state is described in `docs/OVERVIEW.md` — the runtime stack now uses `repository.Repository` backed by the lean `beads.Repository` built directly on `CommandRunner`.
+
 Use this file when creating the initial beads epic and tasks in `/home/hans/dev/github/beads-workbench`.
 
 Source documents for this plan:
@@ -36,7 +38,7 @@ Create a proper beads plan in the new repository that starts execution without p
 The first implementation wave should establish:
 
 - repo bootstrap in the new codebase
-- the Beads Gateway seam
+- the repository seam
 - the CLI-backed beads adapter
 - core domain and error models
 - enough foundation to begin the minimal app shell afterward
@@ -45,7 +47,7 @@ The first implementation wave should establish:
 
 ### Epic Title
 
-**Bootstrap Beads Workbench foundation and official beads gateway**
+**Bootstrap Beads Workbench foundation and official bd repository seam**
 
 ### Epic Description
 
@@ -54,9 +56,9 @@ Create the new repository foundation for Beads Workbench and implement the first
 ### Epic Success Criteria
 
 - the new repository has the baseline module, binary entrypoint, and copied design docs
-- a source-specific Beads Gateway interface exists in the new repo
-- a CLI-backed gateway implementation can perform core reads and writes through `bd`
-- gateway errors are normalized into UI-usable categories
+- a source-specific `repository.Repository` implementation exists in the new repo
+- a CLI-backed implementation can perform core reads and writes through `bd`
+- repository errors are normalized into UI-usable categories
 - tests cover command construction, output decoding, and failure behavior
 - no direct SQL/BQL dependency exists in the active foundation path
 
@@ -93,12 +95,12 @@ Create the code contracts that everything else will build on.
 - define issue summary/detail models appropriate for Beads Workbench
 - define query input models for list/ready/blocked/show flows
 - define mutation input models for create/update/close/comment flows
-- define normalized gateway error types
-- define the source-specific `BeadsGateway` interface
+- define normalized repository error types
+- define the source-specific `repository.Repository` interface
 
 #### Acceptance Criteria
 
-- gateway interface is source-specific, not global/federated
+- repository interface is source-specific, not global/federated
 - core read/write models are defined without SQL-specific leakage
 - error model is suitable for future TUI use
 

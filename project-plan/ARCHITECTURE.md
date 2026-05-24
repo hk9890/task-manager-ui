@@ -18,7 +18,7 @@ For product intent, see [PRODUCT.md](./PRODUCT.md). For implementation sequencin
 
 Beads Workbench is a smaller beads TUI built around one core technical idea:
 
-> the UI talks to a **single official-beads gateway**, and everything else is layered on top of that
+> the UI talks to a **single `repository.Repository` interface**, and everything else is layered on top of that
 
 This architecture deliberately avoids the current Perles design assumptions around:
 
@@ -44,11 +44,11 @@ Beads Workbench is composed of five main areas:
    - feature-local keyboard/state handling
    - shell contract messages (`SelectionChangedMsg`, `ActionRequestMsg`)
 
-3. **Gateway layer (`internal/repository/beads`)**
-   - the single UI-facing interface for all beads reads and writes (`BeadsGateway` interface)
+3. **Repository layer (`internal/repository/beads`)**
+   - lean `repository.Repository` implementation built directly on `CommandRunner`
    - implemented through official `bd` commands / official API surfaces only
    - typed CLI payload decoding + explicit domain mapping
-   - subprocess runner and read cache live in `internal/gateway/beads` (runner/cache only)
+   - subprocess runner lives in `internal/gateway/beads` (runner plumbing only)
 
 4. **Launcher layer (`internal/launcher`)**
    - editor handoff
@@ -84,11 +84,11 @@ Consequences:
 
 This rule exists to keep Beads Workbench aligned with official beads behavior and with embedded-mode compatibility.
 
-## Core Interface: Beads Gateway
+## Core Interface: Repository
 
-The UI should depend on a single interface, referred to here as the **Beads Gateway**.
+The UI depends on `repository.Repository` — a single 9-method interface defined in `internal/repository/repository.go`.
 
-Example responsibilities:
+Responsibilities:
 
 - list issues with supported filters
 - load ready work
@@ -100,37 +100,24 @@ Example responsibilities:
 - add comment
 - load statuses / types / labels as needed for UI controls
 
-Representative shape:
+The architectural rule: **the UI never shells out directly and never talks to SQL directly; it calls `repository.Repository`.**
 
-```go
-type BeadsGateway interface {
-    ListIssues(ctx context.Context, q ListIssuesQuery) ([]IssueSummary, error)
-    ReadyIssues(ctx context.Context, q ReadyQuery) ([]IssueSummary, error)
-    BlockedIssues(ctx context.Context, q BlockedQuery) ([]BlockedIssue, error)
-    ShowIssue(ctx context.Context, id string) (IssueDetail, error)
+The runtime stack is:
 
-    // Query runs a structured issue search (text + filters).
-    Query(ctx context.Context, q IssueQuery) ([]IssueSummary, error)
-    // ReadyExplain returns the ready-work explanation for a given issue.
-    ReadyExplain(ctx context.Context, id string) (ReadyExplanation, error)
-
-    CreateIssue(ctx context.Context, input CreateIssueInput) (CreateResult, error)
-    UpdateIssue(ctx context.Context, id string, input UpdateIssueInput) error
-    CloseIssue(ctx context.Context, id string, reason string) error
-    AddComment(ctx context.Context, id string, input AddCommentInput) error
-
-    StatusCatalog(ctx context.Context) ([]StatusOption, error)
-    TypeCatalog(ctx context.Context) ([]TypeOption, error)
-}
+```
+App / cmd → repository.Repository
+              │
+              ├──> caching.Repository       (internal/repository/caching)
+              ├──> repository.NewValidating  (internal/repository/validating.go — decorator, warn-logs contract violations)
+              └──> beads.Repository         (internal/repository/beads — lean, on *CommandRunner)
+                      └──> CommandRunner    (internal/gateway/beads — bd subprocess plumbing)
 ```
 
-The exact method names can differ, but the architectural rule should remain: **the UI never shells out directly and never talks to SQL directly; it talks to the gateway.**
+## Repository Implementation Strategy
 
-## Gateway Implementation Strategy
+`beads.Repository` is a lean implementation built directly on `*CommandRunner`.
 
-The initial implementation should be a `bd` CLI adapter.
-
-It should translate gateway operations into official commands such as:
+It translates `repository.Repository` calls into official `bd` commands:
 
 - `bd list --json`
 - `bd ready --json`
@@ -141,7 +128,7 @@ It should translate gateway operations into official commands such as:
 - `bd close`
 - `bd comments add`
 
-The adapter is responsible for:
+The implementation is responsible for:
 
 - command construction
 - environment propagation (`BEADS_DIR`, actor, etc.)
@@ -155,7 +142,7 @@ Read flows decode into command-specific payload structs (for example, issue arra
 
 Design constraints:
 
-- avoid generic `map[string]any` decoding in primary gateway reads
+- avoid generic `map[string]any` decoding in primary reads
 - keep decode failures operation-scoped and actionable (`decode failed` + operation context)
 - keep command argument construction and payload mapping covered by unit fixtures in `internal/repository/beads/testdata`
 
@@ -239,8 +226,8 @@ That means:
 
 - the renderer knows how to display columns / sections / queues
 - the provider decides which sections exist and what to call them
-- the board model issues three parallel gateway calls (one per active section type: `ListIssues`, `ReadyIssues`, `BlockedIssues`) and fans out results
-- `internal/dashboard/composer.go` buckets and sorts the parallel gateway results into the final board state
+- the board model issues three parallel repository calls (one per active section type: `ListIssues`, `ReadyIssues`, `BlockedIssues`) and fans out results
+- `internal/dashboard/composer.go` buckets and sorts the parallel repository results into the final board state
 
 Representative provider model:
 
@@ -346,7 +333,7 @@ The initial implementation can wrap existing external editor helpers from the cu
 
 Launchers are a first-class part of Beads Workbench.
 
-They should be separate from the beads gateway because they operate on issue context, not on beads persistence.
+They should be separate from the repository layer because they operate on issue context, not on beads persistence.
 
 Representative abstraction:
 

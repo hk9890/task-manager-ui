@@ -10,6 +10,8 @@
 >
 > Current donor/reference repo: **`/home/hans/dev/github/perles`**
 
+> **Historical Phase 1 planning doc.** The vocabulary below reflects the original design intent and no longer matches the implementation. Current state is described in `docs/OVERVIEW.md` — the runtime stack now uses `repository.Repository` backed by the lean `beads.Repository` built directly on `CommandRunner`.
+
 This document explains how to implement the standalone Beads Workbench direction defined in:
 
 - [PRODUCT.md](./PRODUCT.md)
@@ -146,12 +148,12 @@ Important note:
 
 Goal:
 
-- create the standalone app’s central `BeadsGateway` interface
+- create the standalone app’s central `repository.Repository` interface
 - provide a first `bd` CLI implementation
 
 Deliverables:
 
-- gateway interface package
+- repository interface package
 - command runner / CLI adapter
 - JSON decoding and error normalization
 - tests around official command parsing and failure behavior

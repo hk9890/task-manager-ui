@@ -111,8 +111,8 @@ internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
-  gateway/beads/     # bd subprocess runner, read cache, and argv-level types (RunnerConfig, ExecResult)
-  repository/beads/  # BeadsGateway interface + CLI adapter with typed bd payload decoding
+  gateway/beads/     # bd subprocess runner and argv-level types (CommandRunner, RunnerConfig, ExecResult)
+  repository/beads/  # lean repository.Repository built directly on CommandRunner; typed bd payload decoding
   logging/           # central slog logging package used by runtime startup and gateway tracing
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
@@ -125,18 +125,18 @@ project-plan/        # product, architecture, and execution planning docs
 
 ## Core Architectural Rules
 
-1. **No direct SQL.** All issue reads and writes go through the `BeadsGateway` interface. No `database/sql`, no Dolt server client, no BQL executor in the primary product path.
+1. **No direct SQL.** All issue reads and writes go through `repository.Repository`. No `database/sql`, no Dolt server client, no BQL executor in the primary product path.
 
-2. **Official beads surfaces only.** The gateway implementation talks to `bd` CLI commands. Do not read beads internals directly.
+2. **Official beads surfaces only.** The `beads.Repository` implementation talks to `bd` CLI commands. Do not read beads internals directly.
 
-3. **Gateway is source-specific.** A gateway instance is bound to one beads project. Federation is a future layer above gateways, not a change to the core interface.
+3. **Repository is source-specific.** A `beads.Repository` instance is bound to one beads project. Federation is a future layer above repositories, not a change to the core interface.
 
-4. **Dashboard renderer and dashboard provider are separate.** The provider (`internal/dashboard`) is a metadata-only catalog: it returns section IDs and titles only. The board model owns gateway query routing for each section (three parallel `Query` / `ReadyExplain` gateway calls, fanned out after the provider responds). A file-backed provider can be added later by supplying section IDs and titles without touching the renderer or the board model's query logic.
+4. **Dashboard renderer and dashboard provider are separate.** The provider (`internal/dashboard`) is a metadata-only catalog: it returns section IDs and titles only. The board model owns repository query routing for each section (three parallel `Query` / `ReadyExplain` calls, fanned out after the provider responds). A file-backed provider can be added later by supplying section IDs and titles without touching the renderer or the board model's query logic.
 
 5. **Editor handoff is a first-class flow.** Rich issue editing opens `$EDITOR` rather than building complex inline forms.
 
    **Issue edit document contract (v1):**
-   - Editable fields map directly to gateway update capabilities: `title`, `description`, `status`, `type`, `priority`, `assignee`, and `labels`.
+   - Editable fields map directly to repository update capabilities: `title`, `description`, `status`, `type`, `priority`, `assignee`, and `labels`.
    - Read-only context (issue id, timestamps, notes, dependencies, related items, comments) is rendered for operator context and ignored by parser/diff logic.
    - Round-trip behavior is marker-based (`BWB:EDITABLE` / `BWB:FIELD:*`) so parser changes are deterministic and testable.
    - The external editor launch is behind a replaceable seam (`internal/launcher/editor.Opener`) so tests never spawn a real interactive editor.

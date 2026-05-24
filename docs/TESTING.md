@@ -11,25 +11,25 @@ The repository uses a three-tier model.
 ### Tier 1 — Unit (`mise run test`, fast, no external processes)
 
 - Fast, deterministic. No external processes. No `bd`, `git`, or `jq`.
-- Uses stub gateways or a `fakes.RecordingExecutor`-backed real `BeadsGateway` for argv-level assertions.
+- Uses a stub `repository.Repository` or a `fakes.RecordingExecutor`-backed real `beads.Repository` for argv-level assertions.
 - Asserts app behavior: model logic, view rendering, key handling.
 - Live in `*_test.go` files alongside the package under test (no build tag required).
 - Examples: `internal/mode/*/model_test.go`, `internal/ui/*/*_test.go`, `internal/app/model_test.go`.
 
-### Tier 2a — Gateway-integration READ contract (`mise run test:integration`, `//go:build integration`)
+### Tier 2a — Repository-integration READ contract (`mise run test:integration`, `//go:build integration`)
 
 - Package: `internal/repository/beads/contract/`.
-- Single parameterized function `RunReadContract(t, factory GatewayFactory)` wired against a real CLI factory.
+- Single parameterized function `RunReadContract(t, factory RepositoryFactory)` wired against a real CLI-backed `beads.Repository`.
 - Uses `embeddedfixture.SharedFixtureRepoPath(t)` for the real factory: seeds once per process, copies the pre-seeded cache directory per test (~100ms after the first call).
 - **Read-only.** Never mutate the shared fixture inside `RunReadContract`.
-- Covers every read method on `BeadsGateway` — `internal/repository/beads/interface.go` is the source of truth for the method set.
+- Covers every read method on `repository.Repository` — `internal/repository/repository.go` is the source of truth for the method set.
 
-### Tier 2b — Gateway-integration MUTATING scenarios (`mise run test:integration`, `//go:build integration`)
+### Tier 2b — Repository-integration MUTATING scenarios (`mise run test:integration`, `//go:build integration`)
 
 - Same `contract` package, separate `*_scenario_integration_test.go` files.
 - Two scenarios today:
-  - `TestRealGatewayIssueLifecycleScenario` — create → update → comment → close (all 4 write methods).
-  - `TestRealGatewayLinksAndDepsScenario` — `bd link`, `bd dep relate`, `bd dep add` with gateway read verification.
+  - `TestRealRepositoryIssueLifecycleScenario` — create → update → comment → close (all 4 write methods).
+  - `TestRealRepositoryLinksAndDepsScenario` — `bd link`, `bd dep relate`, `bd dep add` with repository read verification.
 - Use `embeddedfixture.TempRepoPath(t)` + `embeddedfixture.Seed(t, repoPath)` for a fresh per-test fixture (mutations OK).
 - Sized to be debuggable: ~5–10 steps per scenario. Cap at ~3 scenarios total.
 
@@ -37,9 +37,9 @@ The repository uses a three-tier model.
 
 | What the test asserts | Where it goes | Tool |
 |---|---|---|
-| App behavior given any gateway state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub gateway or `fakes.RecordingExecutor` |
-| The bd CLI adapter's contract (a read method produces correct output) | Tier 2a — add a `t.Run` block to `RunReadContract` | real CLI gateway via `SharedFixtureRepoPath` |
-| A multi-step bd write workflow (mutations + read verification) | Tier 2b — add to an existing scenario or create a new one | real CLI gateway via `TempRepoPath` + `Seed` |
+| App behavior given any repository state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub `repository.Repository` or `fakes.RecordingExecutor`-backed `beads.Repository` |
+| The bd CLI adapter's contract (a read method produces correct output) | Tier 2a — add a `t.Run` block to `RunReadContract` | real `beads.Repository` via `SharedFixtureRepoPath` |
+| A multi-step bd write workflow (mutations + read verification) | Tier 2b — add to an existing scenario or create a new one | real `beads.Repository` via `TempRepoPath` + `Seed` |
 
 Decision rule: if the test does not fork a real subprocess and costs <100ms, it is a unit test. If it forks `bd`, it is integration.
 
@@ -66,7 +66,7 @@ Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
 
 `RunReadContract` is the single function that bridges Tier 1 and Tier 2a.
 
-- `TestRealGatewayReadContract` wires it against the real `bd` CLI gateway (integration, `//go:build integration`).
+- `TestRealRepositoryReadContract` wires it against the real `bd`-backed `beads.Repository` (integration, `//go:build integration`).
 
 **Why it exists:** The contract pins the exact behavior of every read method against real `bd` output, so regressions in parsing are caught automatically.
 
@@ -212,9 +212,9 @@ The shared deterministic seams live in `internal/testing/fakes`:
 
 These seams are required for tests that must not launch real editors or subprocesses.
 
-## Gateway Fixture Conventions (unit)
+## Repository Fixture Conventions (unit)
 
-- Store gateway JSON payload fixtures in `internal/repository/beads/testdata/`.
+- Store JSON payload fixtures in `internal/repository/beads/testdata/`.
 - Prefer realistic JSON copied from official command output shape (with sensitive data removed).
 - Keep fixtures small and focused so each test states one intent clearly.
 
@@ -231,9 +231,9 @@ Deterministic fixture harness lives under `internal/testing/e2e/embeddedfixture`
 
 ## Official `bd` command-surface limitations (known)
 
-The current gateway design intentionally compensates for limitations in official command flags:
+The `beads.Repository` implementation intentionally compensates for limitations in official command flags:
 
 1. `bd search` does not expose ready-state semantics directly. Ready filtering is implemented by loading `bd ready --json` and applying additional structured filters in-memory.
 2. `bd search` does not expose dependency-blocked semantics directly; `bd blocked` has a narrow filter surface. Blocked-state search is implemented by loading `bd blocked --json` and applying richer filtering in-memory.
 
-These limitations are expected and tested. If `bd` adds first-class flags later, gateway behavior should be simplified to prefer direct command filtering.
+These limitations are expected and tested. If `bd` adds first-class flags later, the `beads.Repository` implementation should be simplified to prefer direct command filtering.
