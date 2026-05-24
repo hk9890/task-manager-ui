@@ -498,7 +498,8 @@ func TestCreateIssue_Success_DashboardDirty(t *testing.T) {
 		t.Fatalf("expected Dashboard re-fetch after CreateIssue, backing calls: %d", stub.dashboardCalls)
 	}
 
-	// Issue should be reachable via cache (no backing call for the created ID).
+	// Issue must NOT be served from cache — no seed was planted.
+	// The first Issue(id) call must hit backing to fetch the real record.
 	issueCallsBefore := stub.issueCalls
 	got, err := c.Issue(ctx, "new-1")
 	if err != nil {
@@ -507,9 +508,12 @@ func TestCreateIssue_Success_DashboardDirty(t *testing.T) {
 	if got.Summary.ID != "new-1" {
 		t.Fatalf("Issue after CreateIssue: got ID=%q, want new-1", got.Summary.ID)
 	}
-	// The issue should have been seeded and not require a backing call.
-	if stub.issueCalls != issueCallsBefore {
-		t.Fatalf("expected Issue to be served from cache after CreateIssue, got %d backing calls", stub.issueCalls-issueCallsBefore)
+	if got.Summary.Title != "fetched" {
+		t.Fatalf("Issue after CreateIssue: got Title=%q, want fetched (backing value)", got.Summary.Title)
+	}
+	// Exactly one backing call must have been made — cache miss, not cache hit.
+	if stub.issueCalls != issueCallsBefore+1 {
+		t.Fatalf("expected 1 backing call for Issue after CreateIssue (no seed), got %d", stub.issueCalls-issueCallsBefore)
 	}
 }
 
@@ -542,6 +546,60 @@ func TestCreateIssue_BackingError_NoMutation(t *testing.T) {
 	}
 	if stub.dashboardCalls != dashboardCallsBefore {
 		t.Fatalf("expected Dashboard still from cache after failed CreateIssue, got %d extra backing calls", stub.dashboardCalls-dashboardCallsBefore)
+	}
+}
+
+func TestCreateIssue_DoesNotFabricateSeedValues(t *testing.T) {
+	// Arrange: backing returns a real record with server-side values that differ
+	// from any input-derived defaults (Status, Priority, Type, CreatedAt).
+	wantCreatedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	stub := &stubRepository{
+		createIssueFn: func(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+			return domain.CreateIssueResult{IssueID: "wb-42"}, nil
+		},
+		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+			return domain.IssueDetail{
+				Summary: domain.IssueSummary{
+					ID:        id,
+					Title:     "foo",
+					Status:    "todo",
+					Priority:  2,
+					Type:      "bug",
+					CreatedAt: wantCreatedAt,
+				},
+			}, nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// Act: create with bare input (no Status/Priority/Type/CreatedAt).
+	_, err := c.CreateIssue(ctx, domain.CreateIssueInput{Title: "foo"})
+	if err != nil {
+		t.Fatalf("CreateIssue: unexpected error %v", err)
+	}
+
+	got, err := c.Issue(ctx, "wb-42")
+	if err != nil {
+		t.Fatalf("Issue: unexpected error %v", err)
+	}
+
+	// Assert: returned values are backing's true record, not input defaults.
+	if got.Summary.Status != "todo" {
+		t.Errorf("Status: got %q, want %q", got.Summary.Status, "todo")
+	}
+	if got.Summary.Priority != 2 {
+		t.Errorf("Priority: got %d, want 2", got.Summary.Priority)
+	}
+	if got.Summary.Type != "bug" {
+		t.Errorf("Type: got %q, want %q", got.Summary.Type, "bug")
+	}
+	if !got.Summary.CreatedAt.Equal(wantCreatedAt) {
+		t.Errorf("CreatedAt: got %v, want %v", got.Summary.CreatedAt, wantCreatedAt)
+	}
+	// Confirm backing was actually consulted (no fabricated cache hit).
+	if stub.issueCalls != 1 {
+		t.Errorf("expected 1 backing Issue call (cache miss, no seed), got %d", stub.issueCalls)
 	}
 }
 

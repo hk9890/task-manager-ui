@@ -538,9 +538,14 @@ func (c *CachingRepository) HealthCheck(ctx context.Context) error {
 
 // CreateIssue implements repository.Repository.
 //
-// Calls backing first. On success, marks dashboardDirty and seeds the new
-// issue into the in-memory cache (best-effort; dashboardDirty ensures
-// correctness even if the seed produces a stale entry).
+// Calls backing first. On success, marks dashboardDirty so the next
+// Dashboard() call re-fetches from backing and sees the new issue.
+//
+// We do not seed memory from the input — the backing's true record is
+// fetched on the next Issue(id) call. This avoids fabricating
+// Status/Type/Priority/CreatedAt defaults: the backing may assign
+// different values (project-policy priority, server-stamped CreatedAt,
+// normalized title) than any input-derived guess would produce.
 func (c *CachingRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	result, err := c.backing.CreateIssue(ctx, input)
 	if err != nil {
@@ -549,31 +554,6 @@ func (c *CachingRepository) CreateIssue(ctx context.Context, input domain.Create
 
 	c.mu.Lock()
 	c.dashboardDirty = true
-	// Seed a minimal entry for the new issue so Issue(result.IssueID) hits
-	// cache on subsequent calls. The backing ID is used explicitly; memory's
-	// own CreateIssue would assign a different ID via its own ID generator.
-	c.memory.SeedDetail(domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:     result.IssueID,
-			Title:  input.Title,
-			Status: "open",
-			Type: func() string {
-				if input.Type != "" {
-					return input.Type
-				}
-				return "task"
-			}(),
-			Priority: func() int {
-				if input.Priority != nil {
-					return *input.Priority
-				}
-				return 0
-			}(),
-			Assignee: input.Assignee,
-			Labels:   input.Labels,
-		},
-		Description: input.Description,
-	})
 	c.mu.Unlock()
 
 	return result, nil
