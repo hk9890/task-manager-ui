@@ -69,6 +69,15 @@ type storedIssue struct {
 	// SeedDetail); toDetailLocked falls back to re-resolution in that case.
 	// The nil-vs-non-nil distinction is the sentinel: non-nil (even empty slice)
 	// means "use verbatim"; nil means "re-resolve from memory map".
+	//
+	// NOTE: these fields are NOT persisted by Snapshot/Load. SnapshotIssue only
+	// carries ID-only fields (DependsOn, Related, ParentID, ChildrenIDs). After a
+	// Snapshot→Load round-trip, Load calls Seed (not SeedDetail), so these fields
+	// are nil and toDetailLocked falls back to re-resolution. If a cross-ref was
+	// never separately seeded (e.g. B referenced by A but B was never fetched), the
+	// bare-ID bug re-surfaces after restart until B is fetched from backing.
+	// A follow-up ticket should extend SnapshotIssue + filestorage.Load to persist
+	// and restore these refs.
 	blockedByRefs []domain.IssueReference // corresponds to dependsOn
 	relatedRefs   []domain.IssueReference // corresponds to related
 	parentRef     *domain.IssueReference  // corresponds to parentID (nil = re-resolve)
