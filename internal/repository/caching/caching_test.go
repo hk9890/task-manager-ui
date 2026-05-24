@@ -1738,6 +1738,61 @@ func TestHydrateMismatchedHashKeepsDirty(t *testing.T) {
 	}
 }
 
+// TestHydrate_HashMismatch_NoStalePerID verifies that when Hydrate detects a
+// confirmed hash mismatch (persisted hash != current hash), the stale loaded
+// per-ID data is NOT swapped into the in-memory cache. Issue calls must
+// fall through to the backing store and return current data, not the
+// session-A stale values that were saved to disk.
+func TestHydrate_HashMismatch_NoStalePerID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	// Pre-populate disk with issue I having Title="old" and manifest hash="X".
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:     "hash-issue-1",
+		Title:  "old",
+		Status: "open",
+		Type:   "task",
+	})
+	if err := filestorage.SaveWithHash(r, path, "HASH-X"); err != nil {
+		t.Fatalf("SaveWithHash: %v", err)
+	}
+
+	// Backing returns the current (new) data for issue I.
+	stub := &stubRepository{
+		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+			return domain.IssueDetail{
+				Summary: domain.IssueSummary{
+					ID:    id,
+					Title: "new from backing",
+				},
+			}, nil
+		},
+	}
+	// vcStatusFunc returns "HASH-Y" — a mismatch with the persisted "HASH-X".
+	vcFn, _ := vcStatusFuncFromSlice([]string{"HASH-Y"})
+	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
+
+	if err := c.Hydrate(path, path); err != nil {
+		t.Fatalf("Hydrate: %v", err)
+	}
+
+	// Issue("hash-issue-1") must NOT serve the stale Title="old" from disk.
+	// It must fall through to backing and return Title="new from backing".
+	got, err := c.Issue(context.Background(), "hash-issue-1")
+	if err != nil {
+		t.Fatalf("Issue after hash-mismatch Hydrate: %v", err)
+	}
+	if got.Summary.Title == "old" {
+		t.Fatalf("stale per-ID data served after hash mismatch: got Title=%q, want %q",
+			got.Summary.Title, "new from backing")
+	}
+	if got.Summary.Title != "new from backing" {
+		t.Fatalf("Issue: got Title=%q, want %q", got.Summary.Title, "new from backing")
+	}
+}
+
 func TestHydrateEmptyPersistedHash(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "repo.jsonl")

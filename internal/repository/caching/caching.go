@@ -212,13 +212,20 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 //   - loadPath file does not exist: cold start; set cacheFilePath = writePath
 //   - filestorage.ErrSchemaMismatch on load: cold start; set cacheFilePath = writePath
 //   - other read error on load: return error; still set cacheFilePath = writePath
-//   - load success: replace memory with loaded data; if the persisted
-//     BDCommitHash matches the current hash returned by vcStatusFunc,
-//     dashboardDirty is set to false (warm-cache fast path), dashboardCache is
-//     pre-computed from the loaded memory store so the first Dashboard() call
-//     is served entirely from memory, and lastHash is seeded with the current
-//     hash so the first tick baseline is already set;
-//     otherwise dashboardDirty remains true (safe default)
+//   - load success, hash matches: replace memory with loaded data, set
+//     dashboardDirty=false (warm-cache fast path), pre-compute dashboardCache
+//     from the loaded memory store so the first Dashboard() call is served
+//     entirely from memory, and seed lastHash so future ticks detect changes
+//     rather than treating the first tick as a fresh baseline.
+//   - load success, hash mismatch (confirmed stale): leave c.memory as the
+//     fresh empty memory created by New — do NOT swap in the loaded stale data,
+//     which would cause per-ID Issue cache hits to serve session-A values.
+//     dashboardDirty stays true (safe default). lastHash is seeded with the
+//     current hash so future ticks can detect subsequent external changes.
+//   - load success, hash unknown (empty persisted hash, nil vcStatusFunc, or
+//     vcStatusFunc error): swap loaded into memory (best-effort warm start),
+//     dashboardDirty stays true; lastHash stays "" (RefreshIfChanged will
+//     record the first tick as baseline).
 //
 // Hash comparison: if the persisted hash is empty, or vcStatusFunc is nil, or
 // vcStatusFunc returns an error, Hydrate always sets dashboardDirty=true.
@@ -259,6 +266,7 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 	// Compute staleness BEFORE taking the write lock. The bd call must not
 	// hold c.mu — it calls a subprocess and can take ~700ms.
 	dirty := true
+	confirmedMismatch := false
 	var seedHash string
 	c.mu.RLock()
 	vcFn := c.vcStatusFunc
@@ -267,9 +275,18 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		currentHash, vcErr := vcFn(ctx)
 		cancel()
-		if vcErr == nil && currentHash == manifest.BDCommitHash {
-			dirty = false
+		if vcErr == nil {
+			// Anchor lastHash baseline in both match and mismatch cases so
+			// the first RefreshIfChanged tick can detect FUTURE changes.
 			seedHash = currentHash
+			if currentHash == manifest.BDCommitHash {
+				dirty = false
+			} else {
+				// Confirmed mismatch: persisted data is stale. Do NOT load
+				// it into memory — start cold so stale per-ID entries are
+				// never served. dashboardDirty stays true (safe default).
+				confirmedMismatch = true
+			}
 		}
 	}
 
@@ -283,9 +300,18 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 	}
 
 	// Apply state under lock — brief swap only, no IO.
+	//
+	// On confirmed mismatch, c.memory is intentionally left as the fresh empty
+	// memory.Repository created by New. Swapping in stale loaded data would
+	// cause per-ID Issue cache hits to return session-A values for the remainder
+	// of session B. The dashboardDirty flag already forces a Dashboard re-fetch;
+	// setting lastHash=currentHash here ensures future ticks detect subsequent
+	// external changes rather than treating the first tick as a baseline from "".
 	c.mu.Lock()
 	c.cacheFilePath = writePath
-	c.memory = loaded
+	if !confirmedMismatch {
+		c.memory = loaded
+	}
 	c.dashboardDirty = dirty
 	if !dirty {
 		c.dashboardCache = precomputedDashboard
