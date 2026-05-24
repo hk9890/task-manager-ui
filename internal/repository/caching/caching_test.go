@@ -2266,3 +2266,140 @@ func TestHydrateSeparateLoadAndWritePaths(t *testing.T) {
 		t.Fatalf("expected prior-1 in writePath snapshot, got: %v", snap)
 	}
 }
+
+// TestSaveNow_AtomicWithRespectToReset verifies that SaveNow captures the
+// memory snapshot atomically under c.mu.RLock, so that a concurrent
+// RefreshIfChanged (which calls memory.Reset under c.mu.Lock) cannot race
+// between pointer capture and snapshot. Without the fix, SaveNow released
+// c.mu before calling Snapshot(), allowing Reset to zero the map first and
+// producing a 0-issue JSONL that overwrites a valid prior-session cache.
+//
+// Two sub-tests are run:
+//
+//  1. Sequential correctness: SaveNow is called first (while memory has N issues),
+//     then RefreshIfChanged triggers Reset. The persisted JSONL must still contain
+//     N issues — SaveNow's snapshot was taken before Reset ran.
+//
+//  2. Concurrent race detection: SaveNow and RefreshIfChanged are called from
+//     separate goroutines. The JSONL must be a well-formed cache file (Load must
+//     succeed) and no data race must be reported by the -race detector.
+//     Repeated 20 times with alternating hashes to stress the scheduler.
+//
+// Run with: go test -race -count=10 ./internal/repository/caching/...
+func TestSaveNow_AtomicWithRespectToReset(t *testing.T) {
+	const issuesPerRun = 3
+	ctx := context.Background()
+
+	// seedIssues populates c with N issues via cache-miss path.
+	seedIssues := func(t *testing.T, c *caching.CachingRepository, n int, prefix string) {
+		t.Helper()
+		for i := range n {
+			id := prefix + string(rune('0'+i))
+			if _, err := c.Issue(ctx, id); err != nil {
+				t.Fatalf("seedIssues: Issue(%s): %v", id, err)
+			}
+		}
+	}
+
+	t.Run("sequential_correctness", func(t *testing.T) {
+		// Strategy:
+		//   1. Seed N issues.
+		//   2. SaveNow → persists the snapshot. Must contain N issues.
+		//   3. RefreshIfChanged(hash-change) → Reset. Memory is now empty.
+		//   4. Load the JSONL written in step 2. Must still contain N issues.
+		//
+		// This directly verifies that SaveNow's snapshot is the pre-Reset state.
+		dir := t.TempDir()
+		path := filepath.Join(dir, "repo.jsonl")
+
+		stub := &stubRepository{
+			issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+				return domain.IssueDetail{Summary: domain.IssueSummary{ID: id, Title: "t-" + id}}, nil
+			},
+		}
+
+		// Provide two distinct hashes: first call primes baseline, second triggers Reset.
+		vcFn, _ := vcStatusFuncFromSlice([]string{"hash-seq-a", "hash-seq-b"})
+		c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
+		if err := c.Hydrate(path, path); err != nil {
+			t.Fatalf("Hydrate: %v", err)
+		}
+
+		seedIssues(t, c, issuesPerRun, "seq-")
+
+		// Prime baseline (records hash-seq-a, no invalidation).
+		c.RefreshIfChanged(ctx)
+
+		// SaveNow while memory has issuesPerRun issues.
+		if err := c.SaveNow(); err != nil {
+			t.Fatalf("SaveNow: %v", err)
+		}
+
+		// Now trigger Reset via hash change (uses hash-seq-b).
+		c.RefreshIfChanged(ctx)
+
+		// Reload and verify: SaveNow persisted the pre-Reset snapshot.
+		loaded, err := filestorage.Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		snap := loaded.Snapshot()
+		if len(snap) != issuesPerRun {
+			t.Fatalf("sequential: JSONL has %d issues, want %d; SaveNow snapshot was not atomic with Reset",
+				len(snap), issuesPerRun)
+		}
+	})
+
+	t.Run("concurrent_race_detector", func(t *testing.T) {
+		// Strategy: run SaveNow and RefreshIfChanged(hash-change) concurrently in
+		// 20 iterations. After each pair completes, Load must succeed (no corrupt
+		// JSONL). The -race detector will catch any unsynchronised access.
+		//
+		// Whether SaveNow wins or RefreshIfChanged wins the race, the file must be
+		// a valid (non-corrupt) JSONL. The fix ensures that whichever order they
+		// interleave, Snapshot is always called while c.mu is held.
+		const iterations = 20
+		for iter := range iterations {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "repo.jsonl")
+
+			stub := &stubRepository{
+				issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+					return domain.IssueDetail{Summary: domain.IssueSummary{ID: id, Title: "c-" + id}}, nil
+				},
+			}
+
+			// Alternate hash letters per iteration to avoid vcFn exhaustion effects.
+			hashA := "hash-a-" + string(rune('A'+iter%26))
+			hashB := "hash-b-" + string(rune('A'+iter%26))
+			vcFn, _ := vcStatusFuncFromSlice([]string{hashA, hashB})
+			c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
+
+			if err := c.Hydrate(path, path); err != nil {
+				t.Fatalf("iter %d: Hydrate: %v", iter, err)
+			}
+
+			seedIssues(t, c, issuesPerRun, "conc-")
+
+			// Prime baseline (hash-a → records, no Reset).
+			c.RefreshIfChanged(ctx)
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				_ = c.SaveNow()
+			}()
+			go func() {
+				defer wg.Done()
+				c.RefreshIfChanged(ctx) // uses hash-b → triggers Reset
+			}()
+			wg.Wait()
+
+			// File must be well-formed regardless of which goroutine won.
+			if _, err := filestorage.Load(path); err != nil {
+				t.Fatalf("iter %d: Load after concurrent SaveNow+Reset: %v", iter, err)
+			}
+		}
+	})
+}

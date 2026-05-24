@@ -77,9 +77,24 @@ func Save(r *memory.Repository, path string) error {
 // SaveWithHash is like [Save] but persists the supplied bdCommitHash in the
 // manifest. bdCommitHash may be empty (e.g. when vcStatusFunc is unavailable);
 // in that case the manifest is written with an empty bd_commit_hash field.
+//
+// SaveWithHash calls r.Snapshot() to obtain the issue data. Callers that have
+// already captured a snapshot (e.g. under a lock to prevent races) should use
+// [SaveSnapshotWithHash] directly with the pre-captured slice.
 func SaveWithHash(r *memory.Repository, path string, bdCommitHash string) error {
-	issues := r.Snapshot()
+	return SaveSnapshotWithHash(r.Snapshot(), path, bdCommitHash)
+}
 
+// SaveSnapshotWithHash writes a pre-captured snapshot slice to path (JSONL) and
+// path+".manifest.json", persisting bdCommitHash in the manifest.
+//
+// This is the primary write primitive. [SaveWithHash] is a thin wrapper that
+// calls r.Snapshot() and delegates here. Callers that need to snapshot under a
+// lock to avoid a race between snapshot capture and concurrent Reset should
+// call r.Snapshot() while holding their lock, then call SaveSnapshotWithHash
+// after releasing it — the snapshot slice is value-typed and safe to use
+// without any lock.
+func SaveSnapshotWithHash(issues []memory.SnapshotIssue, path string, bdCommitHash string) error {
 	// Write JSONL to a temp file in the same directory as the destination so
 	// that os.Rename never crosses a filesystem boundary (avoids EXDEV on
 	// Linux systems where /tmp is tmpfs and ~/.cache is on the root FS).

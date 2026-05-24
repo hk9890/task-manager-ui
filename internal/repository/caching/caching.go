@@ -21,9 +21,11 @@
 //
 // # Concurrency
 //
-// All methods are safe for concurrent use. The internal RWMutex is held only
-// around cache-state reads and writes; the backing store is never called while
-// the lock is held.
+// All methods are safe for concurrent use. The backing store is never called
+// while c.mu is held. memory.Repository methods (SeedDetail, Forget, Reset,
+// Snapshot) are called while c.mu is held; they take their own internal lock
+// (memory.mu). Lock order is always c.mu → memory.mu; memory never acquires
+// c.mu, so no deadlock cycle is possible.
 package caching
 
 import (
@@ -325,7 +327,8 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 
 // SaveNow writes the current in-memory cache state to the configured file path
 // synchronously. No-op if cacheFilePath is empty. Returns any error from
-// filestorage.SaveWithHash; the caller decides whether to propagate or log.
+// filestorage.SaveSnapshotWithHash; the caller decides whether to propagate or
+// log.
 //
 // SaveNow reads vcStatusFunc (if set) to obtain the current bd commit hash,
 // which is persisted in the manifest so a subsequent Hydrate can skip the
@@ -333,16 +336,27 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 // or returns an error, the hash is written as empty string; the save still
 // proceeds.
 //
-// Locking: path, memory pointer, and vcStatusFunc are read under c.mu.RLock,
-// then released before calling vcStatusFunc and filestorage.SaveWithHash.
-// filestorage.SaveWithHash calls memory.Snapshot() which takes memory's own
-// internal read lock — there is no lock nesting between c.mu and memory.mu,
-// so no deadlock is possible.
+// Locking: path, vcStatusFunc, and the memory snapshot are all captured under
+// c.mu.RLock. The snapshot is taken while the lock is held so that a
+// concurrent RefreshIfChanged — which holds c.mu.Lock before calling
+// memory.Reset — cannot race between pointer capture and snapshot. The lock is
+// released before calling vcStatusFunc and filestorage.SaveSnapshotWithHash;
+// file IO must never hold c.mu.
+//
+// Lock order: c.mu → memory.mu (Snapshot acquires memory.mu.RLock internally).
+// memory never acquires c.mu, so no deadlock cycle is possible.
 func (c *CachingRepository) SaveNow() error {
 	c.mu.RLock()
 	path := c.cacheFilePath
-	mem := c.memory
 	vcFn := c.vcStatusFunc
+	// Snapshot is taken under c.mu.RLock so that any concurrent
+	// RefreshIfChanged (which holds c.mu.Lock around memory.Reset) cannot
+	// interleave between pointer capture and snapshot. The returned slice is
+	// value-typed and safe to use after the lock is released.
+	var snapshot []memory.SnapshotIssue
+	if path != "" {
+		snapshot = c.memory.Snapshot()
+	}
 	c.mu.RUnlock()
 
 	if path == "" {
@@ -361,7 +375,7 @@ func (c *CachingRepository) SaveNow() error {
 		}
 		// On error, hash stays "". Save still proceeds.
 	}
-	return filestorage.SaveWithHash(mem, path, hash)
+	return filestorage.SaveSnapshotWithHash(snapshot, path, hash)
 }
 
 // ---- read methods ----
