@@ -83,7 +83,7 @@ func (v *validatingRepository) HealthCheck(ctx context.Context) error {
 
 // Dashboard delegates to inner and validates the composite return value.
 //
-// Rules migrated from validatingGateway:
+// Rules migrated from the legacy gateway-shape validator:
 //
 //   - ValidateIssueSummaries applied to all summary slices (InProgress, Closed,
 //     Blocked, ReadyExplain.Ready, ReadyExplain.Blocked[].Issue).
@@ -250,7 +250,7 @@ func (v *validatingRepository) Search(ctx context.Context, query domain.SearchIs
 }
 
 // CreateIssue delegates directly — no validation on write responses.
-// Matches today's validatingGateway behaviour (write-side contract tracked separately).
+// Matches today's behaviour (write-side contract tracked separately).
 func (v *validatingRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	return v.inner.CreateIssue(ctx, input)
 }
