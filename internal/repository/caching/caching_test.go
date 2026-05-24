@@ -1254,7 +1254,7 @@ func seedFileWithIssue(t *testing.T, path string) string {
 
 func TestHydrateEmptyPath(t *testing.T) {
 	c := caching.New(&stubRepository{})
-	if err := c.Hydrate(""); err != nil {
+	if err := c.Hydrate("", ""); err != nil {
 		t.Fatalf("Hydrate(\"\") returned error: %v", err)
 	}
 	// SaveNow should be a no-op (path still empty).
@@ -1268,7 +1268,7 @@ func TestHydrateMissingFile(t *testing.T) {
 	path := filepath.Join(dir, "repo.jsonl")
 
 	c := caching.New(&stubRepository{})
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate with missing file returned error: %v", err)
 	}
 	// After hydrating a missing file, future saves should be allowed (path is set).
@@ -1313,7 +1313,7 @@ func TestHydrateSchemaMismatch(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate with schema mismatch returned error: %v", err)
 	}
 
@@ -1352,7 +1352,7 @@ func TestHydrateSuccess(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate returned unexpected error: %v", err)
 	}
 
@@ -1387,9 +1387,16 @@ func TestHydrateSuccess(t *testing.T) {
 
 func TestHydrateOtherError(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "repo.jsonl")
+	loadPath := filepath.Join(dir, "prior-session", "repo.jsonl")
+	if err := os.MkdirAll(filepath.Dir(loadPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writePath := filepath.Join(dir, "own-session", "repo.jsonl")
+	if err := os.MkdirAll(filepath.Dir(writePath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 
-	// Write a valid manifest but an unreadable JSONL file.
+	// Write a valid manifest but a corrupt JSONL file at loadPath.
 	type goodManifest struct {
 		SchemaVersion int    `json:"schema_version"`
 		SyncedAt      string `json:"synced_at"`
@@ -1397,30 +1404,32 @@ func TestHydrateOtherError(t *testing.T) {
 	}
 	gm := goodManifest{SchemaVersion: filestorage.SchemaVersion, SyncedAt: "2026-01-01T00:00:00Z"}
 	mBytes, _ := json.MarshalIndent(gm, "", "  ")
-	if err := os.WriteFile(path+".manifest.json", mBytes, 0o600); err != nil {
+	if err := os.WriteFile(loadPath+".manifest.json", mBytes, 0o600); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
-	// Write jsonl as a directory — os.Open will succeed but scanning will fail
-	// when the file is actually a directory content. A simpler approach: write a
-	// malformed line.
-	if err := os.WriteFile(path, []byte("not-valid-json\n"), 0o600); err != nil {
+	if err := os.WriteFile(loadPath, []byte("not-valid-json\n"), 0o600); err != nil {
 		t.Fatalf("write bad jsonl: %v", err)
 	}
 
 	c := caching.New(&stubRepository{})
-	err := c.Hydrate(path)
+	err := c.Hydrate(loadPath, writePath)
 	if err == nil {
 		t.Fatal("Hydrate with corrupt JSONL: expected error, got nil")
 	}
 
-	// cacheFilePath must NOT be set: SaveNow should be a no-op.
+	// writePath IS set even on load error (own session path is safe to write to).
+	// SaveNow should write to writePath, not to the corrupt loadPath.
 	if saveErr := c.SaveNow(); saveErr != nil {
 		t.Fatalf("SaveNow after failed Hydrate returned error: %v", saveErr)
 	}
-	// The corrupt file should not have been overwritten.
-	contents, _ := os.ReadFile(path)
+	// The corrupt load file must NOT have been overwritten.
+	contents, _ := os.ReadFile(loadPath)
 	if string(contents) != "not-valid-json\n" {
-		t.Fatalf("corrupt file was overwritten after failed Hydrate")
+		t.Fatalf("corrupt load file was overwritten after failed Hydrate")
+	}
+	// writePath should have been written by SaveNow.
+	if _, statErr := os.Stat(writePath); statErr != nil {
+		t.Fatalf("expected writePath to be written after SaveNow, got: %v", statErr)
 	}
 }
 
@@ -1445,7 +1454,7 @@ func TestSaveNowSuccess(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1466,7 +1475,7 @@ func TestSaveNowSuccess(t *testing.T) {
 
 	// Reload via a fresh caching repo and verify the issue is present.
 	c2 := caching.New(&stubRepository{})
-	if err := c2.Hydrate(path); err != nil {
+	if err := c2.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate c2: %v", err)
 	}
 	got, err := c2.Issue(context.Background(), "saved-1")
@@ -1491,7 +1500,7 @@ func TestSaveNowConcurrentMutation(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// Seed an issue.
@@ -1539,7 +1548,7 @@ func TestSaveNowError(t *testing.T) {
 	// Simplest: use a path whose parent doesn't exist — both manifest and JSONL
 	// reads will fail with ErrNotExist, triggering cold-start (cacheFilePath set),
 	// then Save fails because rename can't create the missing parent dirs.
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	if err := c.SaveNow(); err == nil {
@@ -1564,7 +1573,7 @@ func TestPeriodicSaveTickFires(t *testing.T) {
 		caching.WithRefreshInterval(10*time.Second),  // slow refresh
 		caching.WithSaveInterval(5*time.Millisecond), // fast save
 	)
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1638,7 +1647,7 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{matchHash})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1676,7 +1685,7 @@ func TestHydrateMatchingHashSeedsLastHash(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{matchHash, matchHash})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// Confirm we're not dirty yet.
@@ -1716,7 +1725,7 @@ func TestHydrateMismatchedHashKeepsDirty(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{"HASH-Y"})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1746,7 +1755,7 @@ func TestHydrateEmptyPersistedHash(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{"HASH-Z"})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1779,7 +1788,7 @@ func TestHydrateVCStatusFuncError(t *testing.T) {
 	}
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1809,7 +1818,7 @@ func TestHydrateNoVCStatusFunc(t *testing.T) {
 	// No WithVCStatusFunc → vcStatusFunc is nil.
 	c := caching.New(stub)
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1831,7 +1840,7 @@ func TestSaveNowWritesCurrentHash(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{wantHash})
 	c := caching.New(&stubRepository{}, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	if err := c.SaveNow(); err != nil {
@@ -1853,7 +1862,7 @@ func TestSaveNowWithoutVCStatusFunc(t *testing.T) {
 
 	// No vcStatusFunc.
 	c := caching.New(&stubRepository{})
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	if err := c.SaveNow(); err != nil {
@@ -1878,7 +1887,7 @@ func TestSaveNowVCStatusErrorStillSaves(t *testing.T) {
 		return "", errVC
 	}
 	c := caching.New(&stubRepository{}, caching.WithVCStatusFunc(vcFn))
-	if err := c.Hydrate(path); err != nil {
+	if err := c.Hydrate(path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// SaveNow must not return error when vcStatusFunc fails.
@@ -1916,7 +1925,7 @@ func TestRoundTripHydrateThenSave(t *testing.T) {
 		},
 	}
 	c1 := caching.New(stub1)
-	if err := c1.Hydrate(path); err != nil {
+	if err := c1.Hydrate(path, path); err != nil {
 		t.Fatalf("session1 Hydrate: %v", err)
 	}
 	if _, err := c1.Issue(context.Background(), "rt-1"); err != nil {
@@ -1932,7 +1941,7 @@ func TestRoundTripHydrateThenSave(t *testing.T) {
 			return domain.IssueDetail{}, errors.New("backing should not be called")
 		},
 	})
-	if err := c2.Hydrate(path); err != nil {
+	if err := c2.Hydrate(path, path); err != nil {
 		t.Fatalf("session2 Hydrate: %v", err)
 	}
 	got, err := c2.Issue(context.Background(), "rt-1")
@@ -1953,5 +1962,252 @@ func TestRoundTripHydrateThenSave(t *testing.T) {
 	}
 	if got.Description != "round-trip description" {
 		t.Fatalf("round-trip: got Description=%q, want %q", got.Description, "round-trip description")
+	}
+}
+
+// ---- Per-ID isolation tests ----
+
+// TestUpdateIssue_DoesNotBustUnrelatedIssue verifies that UpdateIssue(X) drops
+// only Issue(X) from the cache, leaving Issue(Y) cached.
+func TestUpdateIssue_DoesNotBustUnrelatedIssue(t *testing.T) {
+	stub := &stubRepository{
+		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
+		},
+		updateIssueFn: func(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
+			return nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// Prime both X and Y into the cache.
+	if _, err := c.Issue(ctx, "X"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Issue(ctx, "Y"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 2 {
+		t.Fatalf("expected 2 backing calls after priming X and Y, got %d", stub.issueCalls)
+	}
+
+	// Update X.
+	newTitle := "updated"
+	if err := c.UpdateIssue(ctx, "X", domain.UpdateIssueInput{Title: &newTitle}); err != nil {
+		t.Fatalf("UpdateIssue(X): unexpected error %v", err)
+	}
+	if stub.updateIssueCalls != 1 {
+		t.Fatalf("expected 1 UpdateIssue backing call, got %d", stub.updateIssueCalls)
+	}
+
+	// Re-read X: cache was busted, must hit backing.
+	if _, err := c.Issue(ctx, "X"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 3 {
+		t.Fatalf("Issue(X) should refetch after UpdateIssue(X): expected 3 backing calls, got %d", stub.issueCalls)
+	}
+
+	// Re-read Y: must still be served from cache (count unchanged).
+	if _, err := c.Issue(ctx, "Y"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 3 {
+		t.Fatalf("Issue(Y) should still be cached after UpdateIssue(X): expected 3 backing calls, got %d", stub.issueCalls)
+	}
+}
+
+// TestCloseIssue_DoesNotBustUnrelatedIssue verifies that CloseIssue(X) drops
+// only Issue(X) from the cache, leaving Issue(Y) cached.
+func TestCloseIssue_DoesNotBustUnrelatedIssue(t *testing.T) {
+	stub := &stubRepository{
+		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
+		},
+		closeIssueFn: func(_ context.Context, _ string, _ domain.CloseIssueInput) error {
+			return nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// Prime both X and Y into the cache.
+	if _, err := c.Issue(ctx, "X"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Issue(ctx, "Y"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 2 {
+		t.Fatalf("expected 2 backing calls after priming X and Y, got %d", stub.issueCalls)
+	}
+
+	// Close X.
+	if err := c.CloseIssue(ctx, "X", domain.CloseIssueInput{Reason: "done"}); err != nil {
+		t.Fatalf("CloseIssue(X): unexpected error %v", err)
+	}
+	if stub.closeIssueCalls != 1 {
+		t.Fatalf("expected 1 CloseIssue backing call, got %d", stub.closeIssueCalls)
+	}
+
+	// Re-read X: cache was busted, must hit backing.
+	if _, err := c.Issue(ctx, "X"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 3 {
+		t.Fatalf("Issue(X) should refetch after CloseIssue(X): expected 3 backing calls, got %d", stub.issueCalls)
+	}
+
+	// Re-read Y: must still be served from cache (count unchanged).
+	if _, err := c.Issue(ctx, "Y"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 3 {
+		t.Fatalf("Issue(Y) should still be cached after CloseIssue(X): expected 3 backing calls, got %d", stub.issueCalls)
+	}
+}
+
+// TestAddComment_DoesNotBustUnrelatedIssue verifies that AddComment(X) drops
+// only Issue(X) from the cache, leaving Issue(Y) cached.
+func TestAddComment_DoesNotBustUnrelatedIssue(t *testing.T) {
+	stub := &stubRepository{
+		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
+		},
+		addCommentFn: func(_ context.Context, _ string, _ domain.AddCommentInput) error {
+			return nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// Prime both X and Y into the cache.
+	if _, err := c.Issue(ctx, "X"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Issue(ctx, "Y"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 2 {
+		t.Fatalf("expected 2 backing calls after priming X and Y, got %d", stub.issueCalls)
+	}
+
+	// Add comment to X.
+	if err := c.AddComment(ctx, "X", domain.AddCommentInput{Body: "a comment"}); err != nil {
+		t.Fatalf("AddComment(X): unexpected error %v", err)
+	}
+	if stub.addCommentCalls != 1 {
+		t.Fatalf("expected 1 AddComment backing call, got %d", stub.addCommentCalls)
+	}
+
+	// Re-read X: cache was busted, must hit backing.
+	if _, err := c.Issue(ctx, "X"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 3 {
+		t.Fatalf("Issue(X) should refetch after AddComment(X): expected 3 backing calls, got %d", stub.issueCalls)
+	}
+
+	// Re-read Y: must still be served from cache (count unchanged).
+	if _, err := c.Issue(ctx, "Y"); err != nil {
+		t.Fatal(err)
+	}
+	if stub.issueCalls != 3 {
+		t.Fatalf("Issue(Y) should still be cached after AddComment(X): expected 3 backing calls, got %d", stub.issueCalls)
+	}
+}
+
+// TestHydrateSeparateLoadAndWritePaths verifies that Hydrate(loadPath, writePath)
+// loads issue data from loadPath but writes subsequent saves to writePath —
+// the two paths are independent. After Hydrate, SaveNow writes to writePath
+// and the loadPath file is not modified.
+func TestHydrateSeparateLoadAndWritePaths(t *testing.T) {
+	dir := t.TempDir()
+	loadPath := filepath.Join(dir, "prior-session", "repo.jsonl")
+	writePath := filepath.Join(dir, "own-session", "repo.jsonl")
+
+	if err := os.MkdirAll(filepath.Dir(loadPath), 0o755); err != nil {
+		t.Fatalf("mkdir loadPath dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(writePath), 0o755); err != nil {
+		t.Fatalf("mkdir writePath dir: %v", err)
+	}
+
+	// Seed the prior session file with a known issue.
+	priorMem := memory.New()
+	priorMem.Seed(memory.Issue{
+		ID:     "prior-1",
+		Title:  "prior session issue",
+		Status: "open",
+		Type:   "task",
+	})
+	if err := filestorage.Save(priorMem, loadPath); err != nil {
+		t.Fatalf("Save to loadPath: %v", err)
+	}
+
+	// Record the original content of loadPath so we can verify it's not modified.
+	loadPathOriginalContent, err := os.ReadFile(loadPath)
+	if err != nil {
+		t.Fatalf("ReadFile loadPath: %v", err)
+	}
+
+	// Hydrate a new CachingRepository with separate load and write paths.
+	stub := &stubRepository{
+		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
+			return domain.IssueDetail{}, errors.New("backing should not be called")
+		},
+	}
+	c := caching.New(stub)
+	if err := c.Hydrate(loadPath, writePath); err != nil {
+		t.Fatalf("Hydrate: %v", err)
+	}
+
+	// The prior session's issue must be accessible from the hydrated cache.
+	got, err := c.Issue(context.Background(), "prior-1")
+	if err != nil {
+		t.Fatalf("Issue after Hydrate: %v", err)
+	}
+	if got.Summary.ID != "prior-1" {
+		t.Fatalf("Issue: got ID=%q, want prior-1", got.Summary.ID)
+	}
+	if got.Summary.Title != "prior session issue" {
+		t.Fatalf("Issue: got Title=%q, want %q", got.Summary.Title, "prior session issue")
+	}
+
+	// SaveNow must write to writePath, not loadPath.
+	if err := c.SaveNow(); err != nil {
+		t.Fatalf("SaveNow: %v", err)
+	}
+
+	// writePath must exist after SaveNow.
+	if _, statErr := os.Stat(writePath); statErr != nil {
+		t.Fatalf("expected writePath to exist after SaveNow, got: %v", statErr)
+	}
+
+	// loadPath must not have been modified.
+	loadPathCurrentContent, err := os.ReadFile(loadPath)
+	if err != nil {
+		t.Fatalf("ReadFile loadPath after SaveNow: %v", err)
+	}
+	if string(loadPathCurrentContent) != string(loadPathOriginalContent) {
+		t.Fatal("loadPath was modified by SaveNow; it must be read-only")
+	}
+
+	// The written writePath must be a valid cache file containing prior-1.
+	loaded, err := filestorage.Load(writePath)
+	if err != nil {
+		t.Fatalf("Load writePath: %v", err)
+	}
+	snap := loaded.Snapshot()
+	found := false
+	for _, s := range snap {
+		if s.ID == "prior-1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected prior-1 in writePath snapshot, got: %v", snap)
 	}
 }

@@ -200,19 +200,19 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 
 // ---- persistence methods ----
 
-// Hydrate loads the in-memory cache from a JSONL file written by a previous
-// session. Sets the cache file path so subsequent SaveNow / periodic save
-// calls write to the same location.
+// Hydrate loads the in-memory cache from loadPath (read source) and sets
+// writePath as the destination for subsequent SaveNow / periodic save calls.
+//
+// loadPath and writePath may differ — this is the primary use case: load from
+// the most-recent prior session's file while writing to the current session's
+// own file.  Both may be empty.
 //
 // Behavior matrix:
-//   - path == "": no-op; remains in cold-start mode (no persistence either)
-//   - file does not exist: starts empty; subsequent saves create the file
-//   - filestorage.ErrSchemaMismatch: starts empty; subsequent saves create a
-//     new file (the old file is overwritten on first save — this is intentional:
-//     the schema has moved forward)
-//   - other read error: returns the error; cacheFilePath is NOT set so
-//     subsequent saves do NOT overwrite a possibly-corrupt file
-//   - success: replaces memory with loaded data; if the persisted
+//   - loadPath == "": skip load; just set cacheFilePath = writePath
+//   - loadPath file does not exist: cold start; set cacheFilePath = writePath
+//   - filestorage.ErrSchemaMismatch on load: cold start; set cacheFilePath = writePath
+//   - other read error on load: return error; still set cacheFilePath = writePath
+//   - load success: replace memory with loaded data; if the persisted
 //     BDCommitHash matches the current hash returned by vcStatusFunc,
 //     dashboardDirty is set to false (warm-cache fast path), dashboardCache is
 //     pre-computed from the loaded memory store so the first Dashboard() call
@@ -226,31 +226,33 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 // Hydrate is intended to be called before Start. If called after Start, the
 // file IO and bd call happen outside c.mu (safe), then c.mu.Lock() is held
 // only briefly to swap state.
-func (c *CachingRepository) Hydrate(path string) error {
-	if path == "" {
+func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
+	// Always set the write path regardless of load outcome.
+	setWritePath := func() {
+		c.mu.Lock()
+		c.cacheFilePath = writePath
+		c.mu.Unlock()
+	}
+
+	if loadPath == "" {
+		setWritePath()
 		return nil
 	}
 
 	// Load outside the lock — file IO must not hold c.mu.
-	loaded, manifest, err := filestorage.LoadWithManifest(path)
+	loaded, manifest, err := filestorage.LoadWithManifest(loadPath)
 	if err != nil {
+		// Always set writePath even on load failure so future saves work.
+		setWritePath()
 		if errors.Is(err, repository.ErrSchemaMismatch) {
-			// Schema moved forward: degrade to cold start, but allow future saves
-			// to overwrite with the new format.
-			c.mu.Lock()
-			c.cacheFilePath = path
-			c.mu.Unlock()
+			// Schema moved forward: degrade to cold start; future saves use writePath.
 			return nil
 		}
 		if errors.Is(err, fs.ErrNotExist) {
-			// No prior session: cold start, allow future saves to create the file.
-			c.mu.Lock()
-			c.cacheFilePath = path
-			c.mu.Unlock()
+			// No prior session: cold start; future saves use writePath.
 			return nil
 		}
-		// Unknown error: do NOT set cacheFilePath so we never overwrite a
-		// possibly-corrupt file.
+		// Unknown error: return it, but writePath is still set.
 		return err
 	}
 
@@ -282,7 +284,7 @@ func (c *CachingRepository) Hydrate(path string) error {
 
 	// Apply state under lock — brief swap only, no IO.
 	c.mu.Lock()
-	c.cacheFilePath = path
+	c.cacheFilePath = writePath
 	c.memory = loaded
 	c.dashboardDirty = dirty
 	if !dirty {

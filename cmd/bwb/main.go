@@ -84,10 +84,27 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 			}
 		}
 
-		// Hydrate from prior session file — warn on error, continue cold.
-		if err := cache.Hydrate(opts.repoFile); err != nil {
+		// Determine the load path: scan sibling dirs for the most-recent prior
+		// session's cache file (same project hash, different session ID).
+		// writePath is always the own-session file.
+		writePath := opts.repoFile
+		var loadPath string
+		if opts.repoFile != "" {
+			cacheBaseDir := filepath.Dir(filepath.Dir(opts.repoFile))
+			// projectHash is the part of the directory name before the "-<sessionID>" suffix.
+			ownDir := filepath.Base(filepath.Dir(opts.repoFile))
+			projectHash := ownDir
+			if idx := strings.LastIndexByte(ownDir, '-'); idx >= 0 {
+				projectHash = ownDir[:idx]
+			}
+			loadPath = findLatestProjectCacheFile(cacheBaseDir, projectHash, cacheLogger)
+		}
+
+		// Hydrate from prior session file (loadPath) and write to own session
+		// file (writePath). Warn on error, continue cold.
+		if err := cache.Hydrate(loadPath, writePath); err != nil {
 			if cacheLogger != nil {
-				cacheLogger.Warn("cache hydrate failed; starting cold", "err", err, "path", opts.repoFile)
+				cacheLogger.Warn("cache hydrate failed; starting cold", "err", err, "load_path", loadPath, "write_path", writePath)
 			}
 		}
 

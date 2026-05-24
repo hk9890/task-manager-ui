@@ -139,6 +139,24 @@ func SaveWithHash(r *memory.Repository, path string, bdCommitHash string) error 
 	return nil
 }
 
+// LoadManifest reads just the manifest file at manifestPath and returns the
+// parsed Manifest. Used by callers that need to compare manifests without
+// loading the full JSONL.
+//
+// manifestPath must be the path to the manifest file itself (i.e.
+// "repo.jsonl.manifest.json"), not the JSONL path.
+func LoadManifest(manifestPath string) (Manifest, error) {
+	mBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("filestorage.LoadManifest: read %q: %w", manifestPath, err)
+	}
+	var m Manifest
+	if err := json.Unmarshal(mBytes, &m); err != nil {
+		return Manifest{}, fmt.Errorf("filestorage.LoadManifest: decode %q: %w", manifestPath, err)
+	}
+	return m, nil
+}
+
 // Load reads a JSONL file from path and returns a populated *memory.Repository.
 //
 // Load reads the manifest from path+".manifest.json" first. If schema_version

@@ -127,6 +127,56 @@ correlate stderr output with structured log records. This applies equally to
 interactive startup and startup-only commands such as `--check-config` and
 `--print-config`.
 
+## Caching backend diagnostics
+
+The caching repository backend (default `--repo caching`) emits structured log
+messages via the centralized `internal/logging` sink at the `caching` component.
+Operators can grep these messages in the persistent JSON Lines log to diagnose
+startup, hydration, and persistence issues.
+
+Startup and shutdown log lines (emitted by `constructRepository` in `cmd/bwb/main.go`):
+
+- INFO `"Using caching repository backend; --repo beads disables"` — emitted on
+  every caching-mode start after `Hydrate` and `Start` succeed; confirms backend
+  selection. Carries the `cache_file` field with the resolved path.
+- WARN `"cache dir creation failed; session will run without persistence"` —
+  `os.MkdirAll` on the cache file's parent directory failed. The session continues
+  but cache data will not be persisted. Check `--repo-file` parent directory
+  permissions; the `path` field in the log record shows the attempted path.
+- WARN `"cache hydrate failed; starting cold"` — `Hydrate` returned a non-nil
+  error other than missing-file or schema-mismatch (both of which are silent
+  expected conditions; see below). The session continues from a cold start.
+  The `load_path` and `write_path` fields identify the files involved.
+- WARN `"cache save on shutdown failed"` — the final `SaveNow` defer in the
+  cleanup function returned an error. Check disk space and write permissions on
+  the cache path. The `err` field carries the underlying error.
+
+Cache resolver log lines (emitted by `findLatestProjectCacheFile` in
+`cmd/bwb/cache_resolver.go` while scanning prior-session manifests):
+
+- WARN `"cache resolver: skipping unreadable manifest"` — a manifest file was
+  found during the prior-session scan but could not be loaded (corrupt or
+  permission error). The resolver skips it and continues to the next candidate.
+  The `path` and `err` fields identify the file and the error.
+- WARN `"cache resolver: skipping manifest with wrong schema version"` — a manifest
+  was readable but carries a schema version that does not match the current
+  binary. The resolver skips it. The `path` and `schema_version` fields are
+  present in the log record.
+
+Silent-by-design conditions:
+
+- Schema-mismatch (`repository.ErrSchemaMismatch`) and missing-file
+  (`fs.ErrNotExist`) errors during `Hydrate` degrade silently to a cold start.
+  No log line is emitted because both are expected on first-ever use or after a
+  schema version bump.
+- `vcStatusFunc` errors in `RefreshIfChanged` (background tick) are silently
+  discarded. A failed tick does not corrupt cache state; the next tick may
+  succeed. No log line is emitted today; in-code TODO notes logging is planned
+  for a future ticket.
+- Periodic `SaveNow` errors in the background `tickLoop` are silently discarded
+  (`_ = c.SaveNow()`); in-code TODO notes logging is planned for a future
+  ticket. The final shutdown save (above) does log on failure.
+
 ## Capture commands
 
 Use stderr capture when you need reproducible operator-facing evidence:
@@ -173,7 +223,9 @@ Effective capture destinations therefore include:
 
 ## Relevant code paths
 
-- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, and non-interactive startup command handling
+- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and caching backend construction (`constructRepository`)
+- `cmd/bwb/cache_resolver.go` — prior-session cache file discovery; emits WARN records for unreadable or schema-mismatched manifests
+- `internal/repository/caching/caching.go` — `CachingRepository` decorator; background tick loop and persistence methods (`Hydrate`, `SaveNow`)
 - `internal/gateway/beads/runner.go` — structured per-command `bd` execution traces
 - `internal/gateway/beads/runner_test.go` — execution trace coverage for argv/exit code/duration logging
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning

@@ -650,7 +650,7 @@ func TestCachingModeStartupWiring(t *testing.T) {
 	)
 
 	// Hydrate from non-existent path — cold start; sets cacheFilePath.
-	if err := cache.Hydrate(cacheFile); err != nil {
+	if err := cache.Hydrate(cacheFile, cacheFile); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -771,7 +771,7 @@ func TestConstructRepositoryCachingWritesCacheFile(t *testing.T) {
 		}),
 	)
 
-	if err := cache.Hydrate(cacheFile); err != nil {
+	if err := cache.Hydrate(cacheFile, cacheFile); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -804,6 +804,98 @@ func TestConstructRepositoryCachingWritesCacheFile(t *testing.T) {
 	}
 	if info.Size() == 0 {
 		t.Error("expected non-empty cache file after SaveNow")
+	}
+}
+
+// TestConstructRepositoryCachingFindsPriorSession verifies that constructRepository
+// in caching mode scans for a prior session file and hydrates from it.
+//
+// Setup:
+//   - Derive the project hash for a temp projectRoot using defaultRepoFilePath.
+//   - Create a "prior session" dir at <cacheBaseDir>/<hash>-prev/ with a seeded
+//     repo.jsonl.
+//   - Call constructRepository with a "new session" repoFile pointing to
+//     <cacheBaseDir>/<hash>-newsess/repo.jsonl (same hash, different session ID).
+//
+// The backing beads gateway will fail on Issue() (no real bd binary / project),
+// so if the prior session's issue is returned without error it must have come
+// from the hydrated in-memory cache. If Hydrate failed to find the prior file
+// the backing call would fail and the test would surface that as an error.
+func TestConstructRepositoryCachingFindsPriorSession(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+
+	// Derive the project hash prefix from defaultRepoFilePath.
+	// defaultRepoFilePath returns something like:
+	//   /home/user/.cache/bwb/<hash>-<session>/repo.jsonl
+	// We extract just the hash from the directory name.
+	refPath := defaultRepoFilePath(projectRoot, "refsession")
+	// refPath dir: <...>/bwb/<hash>-refsession
+	hashDashSession := filepath.Base(filepath.Dir(refPath))
+	// Strip "-refsession" suffix to get the pure hash.
+	hash := strings.TrimSuffix(hashDashSession, "-refsession")
+	if hash == hashDashSession {
+		t.Fatalf("could not extract hash from path %q", refPath)
+	}
+
+	// Use a controlled cacheBaseDir (same level as the real ~/.cache/bwb).
+	cacheBaseDir := t.TempDir()
+
+	// Write a prior session file.
+	priorSessionDir := filepath.Join(cacheBaseDir, hash+"-prev")
+	if err := os.MkdirAll(priorSessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir prior session dir: %v", err)
+	}
+	priorJSONL := filepath.Join(priorSessionDir, "repo.jsonl")
+	priorMem := memory.New()
+	priorMem.Seed(memory.Issue{
+		ID:     "prior-seeded",
+		Title:  "seeded from prior session",
+		Status: "open",
+		Type:   "task",
+	})
+	if err := filestorage.Save(priorMem, priorJSONL); err != nil {
+		t.Fatalf("filestorage.Save prior session: %v", err)
+	}
+
+	// Set up opts for the "new session" pointing to our controlled cacheBaseDir.
+	ownSessionDir := filepath.Join(cacheBaseDir, hash+"-newsess")
+	if err := os.MkdirAll(ownSessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir own session dir: %v", err)
+	}
+	ownSessionRepoFile := filepath.Join(ownSessionDir, "repo.jsonl")
+
+	opts := startupOptions{
+		projectRoot: projectRoot,
+		repoFlag:    "caching",
+		repoFile:    ownSessionRepoFile,
+		logManager:  nil,
+		autoRefresh: false,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	repo, cleanup, err := constructRepository(ctx, opts)
+	if err != nil {
+		t.Fatalf("constructRepository: %v", err)
+	}
+	defer cleanup()
+
+	// The prior session's issue should be available from the hydrated cache
+	// without any backing bd calls. If Hydrate succeeded, memory.Issue("prior-seeded")
+	// returns the seeded data. If it didn't hydrate, the backing bd call will
+	// fail (no real bd at projectRoot), producing an error.
+	got, issueErr := repo.Issue(ctx, "prior-seeded")
+	if issueErr != nil {
+		t.Fatalf("Issue(prior-seeded): expected cache hit from prior session, got error: %v\n(if this is a 'bd not found' error, Hydrate did not find the prior session file)", issueErr)
+	}
+	if got.Summary.ID != "prior-seeded" {
+		t.Fatalf("Issue: got ID=%q, want prior-seeded", got.Summary.ID)
+	}
+	if got.Summary.Title != "seeded from prior session" {
+		t.Fatalf("Issue: got Title=%q, want %q", got.Summary.Title, "seeded from prior session")
 	}
 }
 

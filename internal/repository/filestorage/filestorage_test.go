@@ -318,6 +318,57 @@ func TestSaveWithHashEmptyHash(t *testing.T) {
 	}
 }
 
+// ---- LoadManifest tests ----
+
+func TestLoadManifestSuccess(t *testing.T) {
+	r := memory.New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+	const wantHash = "abc123"
+
+	if err := filestorage.SaveWithHash(r, path, wantHash); err != nil {
+		t.Fatalf("SaveWithHash: %v", err)
+	}
+
+	manifestPath := path + ".manifest.json"
+	m, err := filestorage.LoadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("LoadManifest: unexpected error: %v", err)
+	}
+	if m.BDCommitHash != wantHash {
+		t.Errorf("BDCommitHash: got %q, want %q", m.BDCommitHash, wantHash)
+	}
+	if m.SchemaVersion != filestorage.SchemaVersion {
+		t.Errorf("SchemaVersion: got %d, want %d", m.SchemaVersion, filestorage.SchemaVersion)
+	}
+	if m.SyncedAt.IsZero() {
+		t.Error("SyncedAt should not be zero")
+	}
+}
+
+func TestLoadManifestMissing(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "does-not-exist.manifest.json")
+
+	_, err := filestorage.LoadManifest(manifestPath)
+	if err == nil {
+		t.Fatal("LoadManifest with missing file: expected error, got nil")
+	}
+}
+
+func TestLoadManifestCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "bad.manifest.json")
+	if err := os.WriteFile(manifestPath, []byte("not-valid-json"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := filestorage.LoadManifest(manifestPath)
+	if err == nil {
+		t.Fatal("LoadManifest with corrupt file: expected error, got nil")
+	}
+}
+
 func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 	// Verify existing Save/Load signatures are preserved and still work.
 	r := memory.New()
