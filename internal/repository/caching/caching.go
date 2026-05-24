@@ -210,6 +210,10 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 // concurrently could cause in-flight mutations to be overwritten by the state
 // swap that Hydrate performs at the end of its execution.
 //
+// ctx is propagated to the vcStatusFunc call (with a 2-second sub-timeout) and
+// to the Dashboard precompute call on the match path. Callers that have no
+// meaningful context may pass context.Background().
+//
 // loadPath and writePath may differ — this is the primary use case: load from
 // the most-recent prior session's file while writing to the current session's
 // own file.  Both may be empty.
@@ -219,11 +223,14 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 //   - loadPath file does not exist: cold start; set cacheFilePath = writePath
 //   - filestorage.ErrSchemaMismatch on load: cold start; set cacheFilePath = writePath
 //   - other read error on load: return error; still set cacheFilePath = writePath
-//   - load success, hash matches: replace memory with loaded data, set
-//     dashboardDirty=false (warm-cache fast path), pre-compute dashboardCache
-//     from the loaded memory store so the first Dashboard() call is served
-//     entirely from memory, and seed lastHash so future ticks detect changes
-//     rather than treating the first tick as a fresh baseline.
+//   - load success, hash matches: replace memory with loaded data, attempt to
+//     pre-compute dashboardCache from the loaded memory store. On success, set
+//     dashboardDirty=false so the first Dashboard() call is served entirely from
+//     memory. On Dashboard precompute error (e.g. ctx cancellation, future
+//     invariant check), skip dashboardCache assignment and set dashboardDirty=true
+//     so the next Dashboard() call falls back to backing — Hydrate still returns
+//     nil (non-fatal). Also seed lastHash so future ticks detect changes rather
+//     than treating the first tick as a fresh baseline.
 //   - load success, hash mismatch (confirmed stale): leave c.memory as the
 //     fresh empty memory created by New — do NOT swap in the loaded stale data,
 //     which would cause per-ID Issue cache hits to serve session-A values.
@@ -236,7 +243,7 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 //
 // Hash comparison: if the persisted hash is empty, or vcStatusFunc is nil, or
 // vcStatusFunc returns an error, Hydrate always sets dashboardDirty=true.
-func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
+func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath string) error {
 	// Enforce the precondition: Hydrate must be called before Start.
 	c.mu.RLock()
 	alreadyStarted := c.started
@@ -283,8 +290,8 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 	vcFn := c.vcStatusFunc
 	c.mu.RUnlock()
 	if manifest.BDCommitHash != "" && vcFn != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		currentHash, vcErr := vcFn(ctx)
+		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		currentHash, vcErr := vcFn(timeoutCtx)
 		cancel()
 		if vcErr == nil {
 			// Anchor lastHash baseline in both match and mismatch cases so
@@ -305,9 +312,13 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 	// from the loaded in-memory store so the first Dashboard() call is served
 	// entirely from memory without touching the backing store. This happens
 	// outside the lock because loaded.Dashboard() takes its own internal lock.
+	// If precompute fails (e.g. ctx cancellation), dashboardDirty is left true
+	// so the next Dashboard() call falls back to backing. Hydrate still returns
+	// nil — a Dashboard fallback round-trip is acceptable.
 	var precomputedDashboard repository.DashboardData
+	var precomputeErr error
 	if !dirty {
-		precomputedDashboard, _ = loaded.Dashboard(context.Background())
+		precomputedDashboard, precomputeErr = loaded.Dashboard(ctx)
 	}
 
 	// Apply state under lock — brief swap only, no IO.
@@ -323,9 +334,11 @@ func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
 	if !confirmedMismatch {
 		c.memory = loaded
 	}
-	c.dashboardDirty = dirty
-	if !dirty {
+	if !dirty && precomputeErr == nil {
 		c.dashboardCache = precomputedDashboard
+		c.dashboardDirty = false
+	} else {
+		c.dashboardDirty = true
 	}
 	if seedHash != "" {
 		c.lastHash = seedHash

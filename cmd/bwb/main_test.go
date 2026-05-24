@@ -650,7 +650,7 @@ func TestCachingModeStartupWiring(t *testing.T) {
 	)
 
 	// Hydrate from non-existent path — cold start; sets cacheFilePath.
-	if err := cache.Hydrate(cacheFile, cacheFile); err != nil {
+	if err := cache.Hydrate(context.Background(), cacheFile, cacheFile); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -771,7 +771,7 @@ func TestConstructRepositoryCachingWritesCacheFile(t *testing.T) {
 		}),
 	)
 
-	if err := cache.Hydrate(cacheFile, cacheFile); err != nil {
+	if err := cache.Hydrate(context.Background(), cacheFile, cacheFile); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 

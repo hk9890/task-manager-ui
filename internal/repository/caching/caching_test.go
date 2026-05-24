@@ -1254,7 +1254,7 @@ func seedFileWithIssue(t *testing.T, path string) string {
 
 func TestHydrateEmptyPath(t *testing.T) {
 	c := caching.New(&stubRepository{})
-	if err := c.Hydrate("", ""); err != nil {
+	if err := c.Hydrate(context.Background(), "", ""); err != nil {
 		t.Fatalf("Hydrate(\"\") returned error: %v", err)
 	}
 	// SaveNow should be a no-op (path still empty).
@@ -1268,7 +1268,7 @@ func TestHydrateMissingFile(t *testing.T) {
 	path := filepath.Join(dir, "repo.jsonl")
 
 	c := caching.New(&stubRepository{})
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate with missing file returned error: %v", err)
 	}
 	// After hydrating a missing file, future saves should be allowed (path is set).
@@ -1313,7 +1313,7 @@ func TestHydrateSchemaMismatch(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate with schema mismatch returned error: %v", err)
 	}
 
@@ -1352,7 +1352,7 @@ func TestHydrateSuccess(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate returned unexpected error: %v", err)
 	}
 
@@ -1412,7 +1412,7 @@ func TestHydrateOtherError(t *testing.T) {
 	}
 
 	c := caching.New(&stubRepository{})
-	err := c.Hydrate(loadPath, writePath)
+	err := c.Hydrate(context.Background(), loadPath, writePath)
 	if err == nil {
 		t.Fatal("Hydrate with corrupt JSONL: expected error, got nil")
 	}
@@ -1448,12 +1448,83 @@ func TestHydrate_AfterStart_ReturnsError(t *testing.T) {
 	c.Start(ctx)
 	defer c.Stop()
 
-	err := c.Hydrate("/some/path", "/some/path")
+	err := c.Hydrate(context.Background(), "/some/path", "/some/path")
 	if err == nil {
 		t.Fatal("Hydrate after Start: expected error, got nil")
 	}
 	if !containsAny(err.Error(), "Start", "before") {
 		t.Fatalf("Hydrate after Start: error %q does not mention 'Start' or 'before'", err.Error())
+	}
+}
+
+// TestHydrate_DashboardError_FallsBackToBackingFetch verifies that when
+// loaded.Dashboard returns an error during Hydrate's match-path precompute,
+// the dashboardCache is NOT stored and dashboardDirty stays true. The next
+// Dashboard() call must then fall back to the backing store instead of
+// returning the empty precomputed value.
+//
+// Mechanism: a cancellable ctx is passed into Hydrate. The injected vcStatusFunc
+// returns a matching hash, then cancels the outer ctx. When Hydrate calls
+// loaded.Dashboard(ctx) on the now-cancelled ctx, it gets ctx.Canceled.
+// Hydrate must still return nil (non-fatal), and the backing must be called
+// on the first subsequent Dashboard() call.
+func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	const matchHash = "HASH-CANCEL"
+
+	// Seed a file with a matching hash so Hydrate enters the match path.
+	seedFileWithHash(t, path, matchHash)
+
+	// backingDashCalls counts how many times the backing Dashboard is called.
+	backingDashCalls := 0
+	const backingMarker = 7331 // sentinel value to distinguish backing result
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+			backingDashCalls++
+			return repository.DashboardData{ClosedTotal: backingMarker}, nil
+		},
+	}
+
+	// Construct a cancellable ctx. The vcStatusFunc will cancel it after
+	// returning the matching hash so that the subsequent loaded.Dashboard(ctx)
+	// call sees ctx.Canceled.
+	outerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel() // safety net
+
+	vcFn := func(c context.Context) (string, error) {
+		cancel() // cancel outerCtx after hash is returned
+		return matchHash, nil
+	}
+	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
+
+	// Hydrate must return nil even though Dashboard precompute fails.
+	if err := c.Hydrate(outerCtx, path, path); err != nil {
+		t.Fatalf("Hydrate returned unexpected error: %v", err)
+	}
+
+	// The first Dashboard call must route to backing (dashboardDirty=true).
+	got, err := c.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	if backingDashCalls != 1 {
+		t.Fatalf("expected 1 backing Dashboard call after precompute error; got %d", backingDashCalls)
+	}
+	if got.ClosedTotal != backingMarker {
+		t.Fatalf("Dashboard result: got ClosedTotal=%d, want %d (backing marker)", got.ClosedTotal, backingMarker)
+	}
+
+	// Second call must be served from the now-warm cache (no extra backing call).
+	_, err = c.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("second Dashboard: %v", err)
+	}
+	if backingDashCalls != 1 {
+		t.Fatalf("expected second Dashboard call to be served from cache; got %d total backing calls", backingDashCalls)
 	}
 }
 
@@ -1492,7 +1563,7 @@ func TestSaveNowSuccess(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1513,7 +1584,7 @@ func TestSaveNowSuccess(t *testing.T) {
 
 	// Reload via a fresh caching repo and verify the issue is present.
 	c2 := caching.New(&stubRepository{})
-	if err := c2.Hydrate(path, path); err != nil {
+	if err := c2.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate c2: %v", err)
 	}
 	got, err := c2.Issue(context.Background(), "saved-1")
@@ -1538,7 +1609,7 @@ func TestSaveNowConcurrentMutation(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// Seed an issue.
@@ -1586,7 +1657,7 @@ func TestSaveNowError(t *testing.T) {
 	// Simplest: use a path whose parent doesn't exist — both manifest and JSONL
 	// reads will fail with ErrNotExist, triggering cold-start (cacheFilePath set),
 	// then Save fails because rename can't create the missing parent dirs.
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	if err := c.SaveNow(); err == nil {
@@ -1611,7 +1682,7 @@ func TestPeriodicSaveTickFires(t *testing.T) {
 		caching.WithRefreshInterval(10*time.Second),  // slow refresh
 		caching.WithSaveInterval(5*time.Millisecond), // fast save
 	)
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1685,7 +1756,7 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{matchHash})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1723,7 +1794,7 @@ func TestHydrateMatchingHashSeedsLastHash(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{matchHash, matchHash})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// Confirm we're not dirty yet.
@@ -1763,7 +1834,7 @@ func TestHydrateMismatchedHashKeepsDirty(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{"HASH-Y"})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1812,7 +1883,7 @@ func TestHydrate_HashMismatch_NoStalePerID(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{"HASH-Y"})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1848,7 +1919,7 @@ func TestHydrateEmptyPersistedHash(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{"HASH-Z"})
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1881,7 +1952,7 @@ func TestHydrateVCStatusFuncError(t *testing.T) {
 	}
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1911,7 +1982,7 @@ func TestHydrateNoVCStatusFunc(t *testing.T) {
 	// No WithVCStatusFunc → vcStatusFunc is nil.
 	c := caching.New(stub)
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -1933,7 +2004,7 @@ func TestSaveNowWritesCurrentHash(t *testing.T) {
 	vcFn, _ := vcStatusFuncFromSlice([]string{wantHash})
 	c := caching.New(&stubRepository{}, caching.WithVCStatusFunc(vcFn))
 
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	if err := c.SaveNow(); err != nil {
@@ -1955,7 +2026,7 @@ func TestSaveNowWithoutVCStatusFunc(t *testing.T) {
 
 	// No vcStatusFunc.
 	c := caching.New(&stubRepository{})
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	if err := c.SaveNow(); err != nil {
@@ -1980,7 +2051,7 @@ func TestSaveNowVCStatusErrorStillSaves(t *testing.T) {
 		return "", errVC
 	}
 	c := caching.New(&stubRepository{}, caching.WithVCStatusFunc(vcFn))
-	if err := c.Hydrate(path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// SaveNow must not return error when vcStatusFunc fails.
@@ -2018,7 +2089,7 @@ func TestRoundTripHydrateThenSave(t *testing.T) {
 		},
 	}
 	c1 := caching.New(stub1)
-	if err := c1.Hydrate(path, path); err != nil {
+	if err := c1.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("session1 Hydrate: %v", err)
 	}
 	if _, err := c1.Issue(context.Background(), "rt-1"); err != nil {
@@ -2034,7 +2105,7 @@ func TestRoundTripHydrateThenSave(t *testing.T) {
 			return domain.IssueDetail{}, errors.New("backing should not be called")
 		},
 	})
-	if err := c2.Hydrate(path, path); err != nil {
+	if err := c2.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("session2 Hydrate: %v", err)
 	}
 	got, err := c2.Issue(context.Background(), "rt-1")
@@ -2252,7 +2323,7 @@ func TestHydrateSeparateLoadAndWritePaths(t *testing.T) {
 		},
 	}
 	c := caching.New(stub)
-	if err := c.Hydrate(loadPath, writePath); err != nil {
+	if err := c.Hydrate(context.Background(), loadPath, writePath); err != nil {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
@@ -2359,7 +2430,7 @@ func TestSaveNow_AtomicWithRespectToReset(t *testing.T) {
 		// Provide two distinct hashes: first call primes baseline, second triggers Reset.
 		vcFn, _ := vcStatusFuncFromSlice([]string{"hash-seq-a", "hash-seq-b"})
 		c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
-		if err := c.Hydrate(path, path); err != nil {
+		if err := c.Hydrate(context.Background(), path, path); err != nil {
 			t.Fatalf("Hydrate: %v", err)
 		}
 
@@ -2413,7 +2484,7 @@ func TestSaveNow_AtomicWithRespectToReset(t *testing.T) {
 			vcFn, _ := vcStatusFuncFromSlice([]string{hashA, hashB})
 			c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-			if err := c.Hydrate(path, path); err != nil {
+			if err := c.Hydrate(context.Background(), path, path); err != nil {
 				t.Fatalf("iter %d: Hydrate: %v", iter, err)
 			}
 

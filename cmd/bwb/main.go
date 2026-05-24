@@ -101,7 +101,7 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 
 		// Hydrate from prior session file (loadPath) and write to own session
 		// file (writePath). Warn on error, continue cold.
-		if err := cache.Hydrate(loadPath, writePath); err != nil {
+		if err := cache.Hydrate(ctx, loadPath, writePath); err != nil {
 			if cacheLogger != nil {
 				cacheLogger.Warn("cache hydrate failed; starting cold", "err", err, "load_path", loadPath, "write_path", writePath)
 			}
