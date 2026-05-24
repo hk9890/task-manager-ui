@@ -857,7 +857,7 @@ func TestCloseIssue_BackingError_NoMutation(t *testing.T) {
 
 // ---- AddComment tests ----
 
-func TestAddComment_Success_IssueDropped_DashboardUntouched(t *testing.T) {
+func TestAddComment_Success_IssueDropped_DashboardDirty(t *testing.T) {
 	stub := &stubRepository{
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
 			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
@@ -894,12 +894,12 @@ func TestAddComment_Success_IssueDropped_DashboardUntouched(t *testing.T) {
 		t.Fatalf("expected Issue re-fetch after AddComment")
 	}
 
-	// Dashboard should NOT be dirty; cache still valid.
+	// Dashboard should be dirty; next call must hit backing.
 	if _, err := c.Dashboard(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if stub.dashboardCalls != dashCalls {
-		t.Fatalf("expected Dashboard still cached after AddComment, got %d extra backing calls", stub.dashboardCalls-dashCalls)
+	if stub.dashboardCalls != dashCalls+1 {
+		t.Fatalf("expected Dashboard re-fetch after AddComment, got %d extra backing calls", stub.dashboardCalls-dashCalls)
 	}
 }
 
@@ -931,6 +931,64 @@ func TestAddComment_BackingError_NoMutation(t *testing.T) {
 	}
 	if stub.issueCalls != issueCalls {
 		t.Fatalf("expected Issue still from cache after failed AddComment")
+	}
+}
+
+// TestAddComment_MarksDashboardDirty verifies that AddComment sets
+// dashboardDirty so that the next Dashboard() call re-fetches from backing.
+// bd advances UpdatedAt on AddComment; Dashboard slot summaries carry and sort
+// by UpdatedAt, so the cache must be invalidated.
+func TestAddComment_MarksDashboardDirty(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	t1 := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	const issueID = "issue-1"
+
+	dashCallCount := 0
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+			dashCallCount++
+			updatedAt := t0
+			if dashCallCount > 1 {
+				updatedAt = t1
+			}
+			return repository.DashboardData{
+				InProgress: []domain.IssueSummary{
+					{ID: issueID, Status: "in_progress", Type: "task", UpdatedAt: updatedAt},
+				},
+			}, nil
+		},
+		addCommentFn: func(_ context.Context, _ string, _ domain.AddCommentInput) error {
+			return nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// First Dashboard call: cache is cold → backing is hit, result cached.
+	d0, err := c.Dashboard(ctx)
+	if err != nil {
+		t.Fatalf("first Dashboard: unexpected error %v", err)
+	}
+	if len(d0.InProgress) == 0 || !d0.InProgress[0].UpdatedAt.Equal(t0) {
+		t.Fatalf("first Dashboard: got UpdatedAt=%v, want %v", d0.InProgress[0].UpdatedAt, t0)
+	}
+
+	// AddComment should mark dashboardDirty.
+	if err := c.AddComment(ctx, issueID, domain.AddCommentInput{Body: "test comment body"}); err != nil {
+		t.Fatalf("AddComment: unexpected error %v", err)
+	}
+
+	// Second Dashboard call: dirty flag must cause a re-fetch, returning T1.
+	d1, err := c.Dashboard(ctx)
+	if err != nil {
+		t.Fatalf("second Dashboard: unexpected error %v", err)
+	}
+	if len(d1.InProgress) == 0 || !d1.InProgress[0].UpdatedAt.Equal(t1) {
+		t.Fatalf("second Dashboard: got UpdatedAt=%v, want %v (cache should have been invalidated)", d1.InProgress[0].UpdatedAt, t1)
+	}
+	if dashCallCount != 2 {
+		t.Fatalf("expected 2 backing Dashboard calls (before and after AddComment), got %d", dashCallCount)
 	}
 }
 

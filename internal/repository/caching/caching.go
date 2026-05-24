@@ -615,8 +615,9 @@ func (c *CachingRepository) CloseIssue(ctx context.Context, id string, input dom
 // AddComment implements repository.Repository.
 //
 // Calls backing first. On success, forgets the cached Issue(id) so the next
-// Issue(id) call includes the new comment. Dashboard is NOT marked dirty
-// because comments do not affect the Dashboard projection.
+// Issue(id) call includes the new comment. Dashboard IS marked dirty because
+// bd advances UpdatedAt on AddComment, and Dashboard slot summaries carry
+// UpdatedAt and sort by it.
 func (c *CachingRepository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
 	if err := c.backing.AddComment(ctx, id, input); err != nil {
 		return err
@@ -624,6 +625,7 @@ func (c *CachingRepository) AddComment(ctx context.Context, id string, input dom
 
 	c.mu.Lock()
 	c.memory.Forget(id)
+	c.dashboardDirty = true
 	c.invalidateCatalogsLocked()
 	c.mu.Unlock()
 
