@@ -436,6 +436,70 @@ func TestCatalogs_BackingError_NotCached(t *testing.T) {
 	}
 }
 
+func TestCreateIssue_InvalidatesCatalogs(t *testing.T) {
+	// catalogsFn returns different data before and after a write so we can
+	// observe that the cache is truly invalidated (not just TTL-expired).
+	callCount := 0
+	stub := &stubRepository{
+		catalogsFn: func(_ context.Context) (repository.Catalogs, error) {
+			callCount++
+			if callCount == 1 {
+				return repository.Catalogs{
+					Labels: []domain.LabelOption{{Name: "a"}, {Name: "b"}},
+				}, nil
+			}
+			return repository.Catalogs{
+				Labels: []domain.LabelOption{{Name: "a"}, {Name: "b"}, {Name: "new"}},
+			}, nil
+		},
+		createIssueFn: func(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+			return domain.CreateIssueResult{IssueID: "x-1"}, nil
+		},
+	}
+
+	// Use a frozen clock and a long TTL so the cache never expires on its own
+	// during the test. This ensures any refetch is driven purely by invalidation.
+	frozen := time.Unix(2000, 0)
+	c := caching.New(stub,
+		caching.WithCatalogsTTL(10*time.Minute),
+		caching.WithClock(func() time.Time { return frozen }),
+	)
+	ctx := context.Background()
+
+	// First Catalogs call: cache miss, backing called once.
+	got, err := c.Catalogs(ctx)
+	if err != nil {
+		t.Fatalf("first Catalogs: unexpected error %v", err)
+	}
+	if len(got.Labels) != 2 {
+		t.Fatalf("first Catalogs: got %d labels, want 2", len(got.Labels))
+	}
+	if stub.catalogsCalls != 1 {
+		t.Fatalf("first Catalogs: expected 1 backing call, got %d", stub.catalogsCalls)
+	}
+
+	// CreateIssue: should invalidate catalogsCache on success.
+	if _, err := c.CreateIssue(ctx, domain.CreateIssueInput{Title: "x", Labels: []string{"new"}}); err != nil {
+		t.Fatalf("CreateIssue: unexpected error %v", err)
+	}
+
+	// Second Catalogs call: cache was invalidated → backing called again.
+	got2, err := c.Catalogs(ctx)
+	if err != nil {
+		t.Fatalf("second Catalogs after CreateIssue: unexpected error %v", err)
+	}
+	if stub.catalogsCalls != 2 {
+		t.Fatalf("second Catalogs: expected 2 backing calls (cache was invalidated), got %d", stub.catalogsCalls)
+	}
+	// Confirm the fresh value was returned (not the stale cached value).
+	if len(got2.Labels) != 3 {
+		t.Fatalf("second Catalogs: got %d labels, want 3 (cache was not invalidated)", len(got2.Labels))
+	}
+	if got2.Labels[2].Name != "new" {
+		t.Fatalf("second Catalogs: got Labels[2]=%q, want %q", got2.Labels[2].Name, "new")
+	}
+}
+
 // ---- HealthCheck tests ----
 
 func TestHealthCheck_AlwaysPassesThrough(t *testing.T) {

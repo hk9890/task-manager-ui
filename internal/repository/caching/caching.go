@@ -13,7 +13,10 @@
 // The flag is set on any write; cleared on the next successful Dashboard fetch.
 //
 // Catalogs: TTL-cached. Default TTL is 5 minutes; configurable via
-// WithCatalogsTTL.
+// WithCatalogsTTL. Any successful write (CreateIssue, UpdateIssue, CloseIssue,
+// AddComment) also invalidates the catalogs cache so newly introduced labels or
+// types are visible immediately on the next Catalogs() call. The TTL remains as
+// a safety net for external catalog changes that occur outside this process.
 //
 // Search: always passes through to backing (not cached).
 //
@@ -534,6 +537,19 @@ func (c *CachingRepository) HealthCheck(ctx context.Context) error {
 	return c.backing.HealthCheck(ctx)
 }
 
+// ---- helpers ----
+
+// invalidateCatalogsLocked clears the catalogsCache. Must be called with c.mu
+// held for writing. Setting catalogsCache to nil is sufficient: the Catalogs()
+// fast path checks `catalogsCache != nil` before reading catalogsFetched, so a
+// nil pointer causes an unconditional cache miss on the next call.
+//
+// Called from every write method so that newly introduced labels or types are
+// visible immediately without waiting for the TTL to expire.
+func (c *CachingRepository) invalidateCatalogsLocked() {
+	c.catalogsCache = nil
+}
+
 // ---- write methods ----
 
 // CreateIssue implements repository.Repository.
@@ -554,6 +570,7 @@ func (c *CachingRepository) CreateIssue(ctx context.Context, input domain.Create
 
 	c.mu.Lock()
 	c.dashboardDirty = true
+	c.invalidateCatalogsLocked()
 	c.mu.Unlock()
 
 	return result, nil
@@ -571,6 +588,7 @@ func (c *CachingRepository) UpdateIssue(ctx context.Context, id string, input do
 	c.mu.Lock()
 	c.dashboardDirty = true
 	c.memory.Forget(id)
+	c.invalidateCatalogsLocked()
 	c.mu.Unlock()
 
 	return nil
@@ -588,6 +606,7 @@ func (c *CachingRepository) CloseIssue(ctx context.Context, id string, input dom
 	c.mu.Lock()
 	c.dashboardDirty = true
 	c.memory.Forget(id)
+	c.invalidateCatalogsLocked()
 	c.mu.Unlock()
 
 	return nil
@@ -605,6 +624,7 @@ func (c *CachingRepository) AddComment(ctx context.Context, id string, input dom
 
 	c.mu.Lock()
 	c.memory.Forget(id)
+	c.invalidateCatalogsLocked()
 	c.mu.Unlock()
 
 	return nil
