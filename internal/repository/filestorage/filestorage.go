@@ -222,37 +222,11 @@ func LoadWithManifest(path string) (*memory.Repository, Manifest, error) {
 			return nil, Manifest{}, fmt.Errorf("filestorage.Load: decode issue line: %w", err)
 		}
 
-		r.Seed(memory.Issue{
-			ID:          snap.ID,
-			Title:       snap.Title,
-			Status:      snap.Status,
-			Priority:    snap.Priority,
-			Type:        snap.Type,
-			Assignee:    snap.Assignee,
-			Labels:      snap.Labels,
-			Description: snap.Description,
-			Notes:       snap.Notes,
-			DependsOn:   snap.DependsOn,
-			Related:     snap.Related,
-			ParentID:    snap.ParentID,
-			ChildrenIDs: snap.ChildrenIDs,
-			Created:     snap.Created,
-			Updated:     snap.Updated,
-		})
-
-		if len(snap.Comments) > 0 {
-			memComments := make([]memory.Comment, len(snap.Comments))
-			for i, c := range snap.Comments {
-				memComments[i] = memory.Comment(c)
-			}
-			r.SeedComments(snap.ID, memComments...)
-		}
-
-		// Restore closed state: Seed does not accept a closed timestamp,
-		// so we call SeedClosed for any issue that was closed.
-		if snap.Status == "closed" && !snap.Closed.IsZero() {
-			r.SeedClosed(snap.ID, snap.Closed, snap.CloseReason)
-		}
+		// SeedFromSnapshot restores all fields — base issue, cross-reference
+		// metadata (when present), comments, and closed state — in one call.
+		// For old on-disk JSONLs that predate the ref fields, SeedFromSnapshot
+		// falls back to the same re-resolution path as Seed.
+		r.SeedFromSnapshot(snap)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, Manifest{}, fmt.Errorf("filestorage.Load: scan jsonl: %w", err)

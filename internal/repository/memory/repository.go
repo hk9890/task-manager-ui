@@ -70,14 +70,10 @@ type storedIssue struct {
 	// The nil-vs-non-nil distinction is the sentinel: non-nil (even empty slice)
 	// means "use verbatim"; nil means "re-resolve from memory map".
 	//
-	// NOTE: these fields are NOT persisted by Snapshot/Load. SnapshotIssue only
-	// carries ID-only fields (DependsOn, Related, ParentID, ChildrenIDs). After a
-	// Snapshot→Load round-trip, Load calls Seed (not SeedDetail), so these fields
-	// are nil and toDetailLocked falls back to re-resolution. If a cross-ref was
-	// never separately seeded (e.g. B referenced by A but B was never fetched), the
-	// bare-ID bug re-surfaces after restart until B is fetched from backing.
-	// A follow-up ticket should extend SnapshotIssue + filestorage.Load to persist
-	// and restore these refs.
+	// Persistence: these fields are serialized into SnapshotIssue by Snapshot()
+	// and restored by SeedFromSnapshot(), so they survive a Save+Load cycle.
+	// Old on-disk JSONLs without these fields decode them as nil, which correctly
+	// falls back to re-resolution (backward-compatible).
 	blockedByRefs []domain.IssueReference // corresponds to dependsOn
 	relatedRefs   []domain.IssueReference // corresponds to related
 	parentRef     *domain.IssueReference  // corresponds to parentID (nil = re-resolve)
@@ -698,6 +694,23 @@ func (r *Repository) Catalogs(ctx context.Context) (repository.Catalogs, error) 
 // SnapshotIssue is a read-only exported view of a storedIssue for use by
 // file persistence (Save). It preserves all fields, including timestamps and
 // comments, so a round-trip through Save/Load is lossless.
+//
+// # Cross-reference metadata
+//
+// BlockedByRefs, RelatedRefs, ParentRef, and ChildrenRefs carry the full
+// IssueReference metadata (Title, Status, Type, Priority) that was stored at
+// SeedDetail time. These fields follow the same nil-vs-non-nil sentinel as
+// storedIssue:
+//
+//   - nil → refs were not populated at SeedDetail time; Load should call Seed
+//     (re-resolution path) so that toDetailLocked falls back to the memory map.
+//   - non-nil (even empty slice) → refs are authoritative; Load should call
+//     SeedFromSnapshot so toDetailLocked returns them verbatim.
+//
+// JSON encoding: nil slice → null (or absent) → decodes back to nil.
+// Non-nil empty slice → [] → decodes back to non-nil empty slice.
+// Do NOT add omitempty to the slice fields; that would silently flip
+// authoritative-empty into re-resolution.
 type SnapshotIssue struct {
 	ID          string
 	Title       string
@@ -717,6 +730,13 @@ type SnapshotIssue struct {
 	Updated     time.Time
 	Closed      time.Time
 	CloseReason string
+
+	// Cross-reference metadata. Nil means "use re-resolution path on Load".
+	// See type-level doc for the nil-vs-non-nil sentinel semantics.
+	BlockedByRefs []domain.IssueReference // corresponds to DependsOn
+	RelatedRefs   []domain.IssueReference // corresponds to Related
+	ParentRef     *domain.IssueReference  // corresponds to ParentID (nil = re-resolve)
+	ChildrenRefs  []domain.IssueReference // corresponds to ChildrenIDs
 }
 
 // SnapshotComment is the exported view of a storedComment used by Snapshot.
@@ -759,25 +779,57 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			}
 		}
 
+		// Copy the cross-reference metadata preserving the nil sentinel.
+		// nil means "re-resolve on Load"; non-nil (even empty) means "verbatim".
+		// We must NOT use make(..., 0) for a nil source — that would flip nil
+		// into non-nil and incorrectly activate the verbatim path on Load.
+		var blockedByRefs []domain.IssueReference
+		if si.blockedByRefs != nil {
+			blockedByRefs = make([]domain.IssueReference, len(si.blockedByRefs))
+			copy(blockedByRefs, si.blockedByRefs)
+		}
+
+		var relatedRefs []domain.IssueReference
+		if si.relatedRefs != nil {
+			relatedRefs = make([]domain.IssueReference, len(si.relatedRefs))
+			copy(relatedRefs, si.relatedRefs)
+		}
+
+		var parentRef *domain.IssueReference
+		if si.parentRef != nil {
+			ref := *si.parentRef
+			parentRef = &ref
+		}
+
+		var childrenRefs []domain.IssueReference
+		if si.childrenRefs != nil {
+			childrenRefs = make([]domain.IssueReference, len(si.childrenRefs))
+			copy(childrenRefs, si.childrenRefs)
+		}
+
 		out = append(out, SnapshotIssue{
-			ID:          si.id,
-			Title:       si.title,
-			Status:      si.status,
-			Priority:    si.priority,
-			Type:        si.issueType,
-			Assignee:    si.assignee,
-			Labels:      labels,
-			Description: si.description,
-			Notes:       si.notes,
-			DependsOn:   deps,
-			Related:     related,
-			ParentID:    si.parentID,
-			ChildrenIDs: childrenIDs,
-			Comments:    comments,
-			Created:     si.created,
-			Updated:     si.updated,
-			Closed:      si.closed,
-			CloseReason: si.closeReason,
+			ID:            si.id,
+			Title:         si.title,
+			Status:        si.status,
+			Priority:      si.priority,
+			Type:          si.issueType,
+			Assignee:      si.assignee,
+			Labels:        labels,
+			Description:   si.description,
+			Notes:         si.notes,
+			DependsOn:     deps,
+			Related:       related,
+			ParentID:      si.parentID,
+			ChildrenIDs:   childrenIDs,
+			Comments:      comments,
+			Created:       si.created,
+			Updated:       si.updated,
+			Closed:        si.closed,
+			CloseReason:   si.closeReason,
+			BlockedByRefs: blockedByRefs,
+			RelatedRefs:   relatedRefs,
+			ParentRef:     parentRef,
+			ChildrenRefs:  childrenRefs,
 		})
 	}
 	return out

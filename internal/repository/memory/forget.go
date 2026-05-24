@@ -21,6 +21,90 @@ func (r *Repository) Reset() {
 	r.issues = make(map[string]*storedIssue)
 }
 
+// SeedFromSnapshot inserts or replaces an issue in the store from a
+// SnapshotIssue value produced by [Repository.Snapshot]. It is used by
+// [filestorage.LoadWithManifest] to restore persisted issues.
+//
+// When any of snap.BlockedByRefs, snap.RelatedRefs, snap.ParentRef, or
+// snap.ChildrenRefs is non-nil, SeedFromSnapshot stores them verbatim on the
+// storedIssue so that a subsequent Issue call returns the full cross-reference
+// metadata without re-resolving against the memory map. This preserves the
+// Title/Status/Type/Priority of cross-referenced issues across a Save+Load cycle.
+//
+// When all four fields are nil (e.g. an old on-disk JSONL written before these
+// fields existed), SeedFromSnapshot falls back to the same re-resolution path
+// as Seed — a subsequent Issue call re-resolves references from the memory map.
+//
+// Comments and closed state are also restored from the snapshot.
+func (r *Repository) SeedFromSnapshot(snap SnapshotIssue) {
+	// Base fields — same as Seed.
+	r.Seed(Issue{
+		ID:          snap.ID,
+		Title:       snap.Title,
+		Status:      snap.Status,
+		Priority:    snap.Priority,
+		Type:        snap.Type,
+		Assignee:    snap.Assignee,
+		Labels:      snap.Labels,
+		Description: snap.Description,
+		Notes:       snap.Notes,
+		DependsOn:   snap.DependsOn,
+		Related:     snap.Related,
+		ParentID:    snap.ParentID,
+		ChildrenIDs: snap.ChildrenIDs,
+		Created:     snap.Created,
+		Updated:     snap.Updated,
+	})
+
+	// Restore cross-reference metadata when present.
+	// The nil check is the sentinel: nil → leave storedIssue field nil (re-resolve).
+	hasRefs := snap.BlockedByRefs != nil ||
+		snap.RelatedRefs != nil ||
+		snap.ParentRef != nil ||
+		snap.ChildrenRefs != nil
+
+	if hasRefs {
+		r.mu.Lock()
+		si := r.issues[snap.ID]
+
+		if snap.BlockedByRefs != nil {
+			refs := make([]domain.IssueReference, len(snap.BlockedByRefs))
+			copy(refs, snap.BlockedByRefs)
+			si.blockedByRefs = refs
+		}
+		if snap.RelatedRefs != nil {
+			refs := make([]domain.IssueReference, len(snap.RelatedRefs))
+			copy(refs, snap.RelatedRefs)
+			si.relatedRefs = refs
+		}
+		if snap.ParentRef != nil {
+			ref := *snap.ParentRef
+			si.parentRef = &ref
+		}
+		if snap.ChildrenRefs != nil {
+			refs := make([]domain.IssueReference, len(snap.ChildrenRefs))
+			copy(refs, snap.ChildrenRefs)
+			si.childrenRefs = refs
+		}
+
+		r.mu.Unlock()
+	}
+
+	// Restore comments.
+	if len(snap.Comments) > 0 {
+		memComments := make([]Comment, len(snap.Comments))
+		for i, c := range snap.Comments {
+			memComments[i] = Comment(c)
+		}
+		r.SeedComments(snap.ID, memComments...)
+	}
+
+	// Restore closed state.
+	if snap.Status == "closed" && !snap.Closed.IsZero() {
+		r.SeedClosed(snap.ID, snap.Closed, snap.CloseReason)
+	}
+}
+
 // SeedDetail inserts a domain.IssueDetail into the store as a first-class
 // cached entry. It maps all domain fields back to storedIssue so that
 // subsequent Issue(id) calls return an equivalent value.

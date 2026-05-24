@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
 	"github.com/hk9890/beads-workbench/internal/repository/memory"
@@ -450,6 +452,160 @@ func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 // TestLoad_LargeIssueLine verifies that Load succeeds when a SnapshotIssue JSON
 // line exceeds the bufio.Scanner default 64 KiB token limit. Before the fix,
 // scanner.Scan returned false with bufio.ErrTooLong and Load failed wholesale.
+// TestSnapshotRoundTrip_PreservesCrossRefMetadata verifies that cross-reference
+// metadata (Title, Status, Type, Priority on BlockedBy, Related, and
+// ParentGroupBrowser) survives a full Save→Load cycle. Before the fix, Load
+// called Seed (not SeedFromSnapshot), so the storedIssue ref fields were nil
+// and toDetailLocked re-resolved against the memory map — yielding bare-ID
+// references for any cross-ref that was never separately seeded (the original
+// cache-hit bare-ID bug resurfacing after restart).
+func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
+	r := memory.New()
+
+	// Seed ONLY issue A via SeedDetail — do NOT seed B, R, P, or C1.
+	// This reproduces the real cache path where only the looked-up issue is in
+	// memory; its cross-refs were fetched from the backing store and stored as
+	// full IssueReferences but never independently seeded.
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			ID:       "A",
+			Title:    "Issue A",
+			Status:   "open",
+			Type:     "task",
+			Priority: 0,
+		},
+		BlockedBy: []domain.IssueReference{
+			{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1},
+		},
+		Related: []domain.IssueReference{
+			{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0},
+		},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{
+			Parent: domain.IssueReference{
+				ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2,
+			},
+			Children: []domain.IssueReference{
+				{ID: "C1", Title: "Child One", Status: "open", Type: "task", Priority: 0},
+			},
+		},
+	}
+	r.SeedDetail(detail)
+
+	// Save to disk.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "crossref.jsonl")
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Load into a fresh repository.
+	loaded, err := filestorage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	got, err := loaded.Issue(context.Background(), "A")
+	if err != nil {
+		t.Fatalf("Issue(A) after Load: %v", err)
+	}
+
+	// BlockedBy[0] must preserve the full metadata, not just the bare ID "B".
+	if len(got.BlockedBy) != 1 {
+		t.Fatalf("BlockedBy: got %d entries, want 1", len(got.BlockedBy))
+	}
+	wantBlockedBy := domain.IssueReference{
+		ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1,
+	}
+	if !reflect.DeepEqual(got.BlockedBy[0], wantBlockedBy) {
+		t.Errorf("BlockedBy[0]:\n  got  %+v\n  want %+v", got.BlockedBy[0], wantBlockedBy)
+	}
+
+	// Related[0] must preserve full metadata.
+	if len(got.Related) != 1 {
+		t.Fatalf("Related: got %d entries, want 1", len(got.Related))
+	}
+	wantRelated := domain.IssueReference{
+		ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0,
+	}
+	if !reflect.DeepEqual(got.Related[0], wantRelated) {
+		t.Errorf("Related[0]:\n  got  %+v\n  want %+v", got.Related[0], wantRelated)
+	}
+
+	// ParentGroupBrowser.Parent must preserve full metadata.
+	wantParent := domain.IssueReference{
+		ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2,
+	}
+	if !reflect.DeepEqual(got.ParentGroupBrowser.Parent, wantParent) {
+		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v",
+			got.ParentGroupBrowser.Parent, wantParent)
+	}
+
+	// ParentGroupBrowser.Children[0] must preserve full metadata.
+	if len(got.ParentGroupBrowser.Children) != 1 {
+		t.Fatalf("ParentGroupBrowser.Children: got %d entries, want 1",
+			len(got.ParentGroupBrowser.Children))
+	}
+	wantChild := domain.IssueReference{
+		ID: "C1", Title: "Child One", Status: "open", Type: "task", Priority: 0,
+	}
+	if !reflect.DeepEqual(got.ParentGroupBrowser.Children[0], wantChild) {
+		t.Errorf("ParentGroupBrowser.Children[0]:\n  got  %+v\n  want %+v",
+			got.ParentGroupBrowser.Children[0], wantChild)
+	}
+}
+
+// TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution verifies backward
+// compatibility: an issue seeded via Seed (not SeedDetail) has nil ref fields,
+// those nil fields survive Snapshot→JSON→Snapshot→Load, and Load produces a
+// repository where toDetailLocked re-resolves references from the memory map
+// (the original behavior — no regression).
+func TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution(t *testing.T) {
+	r := memory.New()
+
+	// Seed two issues the old-fashioned way (Seed, not SeedDetail).
+	// B is a dependency; A references B via DependsOn.
+	r.Seed(memory.Issue{
+		ID:        "A",
+		Title:     "Issue A",
+		Status:    "open",
+		Type:      "task",
+		DependsOn: []string{"B"},
+	})
+	r.Seed(memory.Issue{
+		ID:     "B",
+		Title:  "Issue B",
+		Status: "open",
+		Type:   "task",
+	})
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reresolution.jsonl")
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := filestorage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	got, err := loaded.Issue(context.Background(), "A")
+	if err != nil {
+		t.Fatalf("Issue(A): %v", err)
+	}
+
+	// Re-resolution finds B in the loaded store — Title must come from there.
+	if len(got.BlockedBy) != 1 {
+		t.Fatalf("BlockedBy: got %d entries, want 1", len(got.BlockedBy))
+	}
+	if got.BlockedBy[0].ID != "B" {
+		t.Errorf("BlockedBy[0].ID: got %q, want B", got.BlockedBy[0].ID)
+	}
+	if got.BlockedBy[0].Title != "Issue B" {
+		t.Errorf("BlockedBy[0].Title: got %q, want Issue B (re-resolved from memory)", got.BlockedBy[0].Title)
+	}
+}
+
 func TestLoad_LargeIssueLine(t *testing.T) {
 	const descLen = 200_000 // well above the 64 KiB default limit
 	longDesc := strings.Repeat("a", descLen)
