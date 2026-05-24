@@ -1433,6 +1433,44 @@ func TestHydrateOtherError(t *testing.T) {
 	}
 }
 
+// TestHydrate_AfterStart_ReturnsError verifies that Hydrate returns an error
+// when called after Start has launched the background goroutine. The background
+// goroutine's concurrent write activity could otherwise cause mutations to be
+// overwritten by Hydrate's deferred state swap.
+func TestHydrate_AfterStart_ReturnsError(t *testing.T) {
+	fn, _ := vcStatusFuncFromSlice([]string{"hash-a"})
+	c := caching.New(&stubRepository{},
+		caching.WithVCStatusFunc(fn),
+		caching.WithRefreshInterval(10*time.Second),
+	)
+	ctx := context.Background()
+
+	c.Start(ctx)
+	defer c.Stop()
+
+	err := c.Hydrate("/some/path", "/some/path")
+	if err == nil {
+		t.Fatal("Hydrate after Start: expected error, got nil")
+	}
+	if !containsAny(err.Error(), "Start", "before") {
+		t.Fatalf("Hydrate after Start: error %q does not mention 'Start' or 'before'", err.Error())
+	}
+}
+
+// containsAny reports whether s contains any of the given substrings.
+func containsAny(s string, substrings ...string) bool {
+	for _, sub := range substrings {
+		if len(sub) > 0 && len(s) >= len(sub) {
+			for i := 0; i <= len(s)-len(sub); i++ {
+				if s[i:i+len(sub)] == sub {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // ---- SaveNow tests ----
 
 func TestSaveNowEmptyPath(t *testing.T) {

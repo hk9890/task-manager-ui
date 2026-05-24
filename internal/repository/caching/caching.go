@@ -205,6 +205,11 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 // Hydrate loads the in-memory cache from loadPath (read source) and sets
 // writePath as the destination for subsequent SaveNow / periodic save calls.
 //
+// Hydrate MUST be called before Start. Calling Hydrate after Start returns
+// an error immediately, because the background refresh goroutine running
+// concurrently could cause in-flight mutations to be overwritten by the state
+// swap that Hydrate performs at the end of its execution.
+//
 // loadPath and writePath may differ — this is the primary use case: load from
 // the most-recent prior session's file while writing to the current session's
 // own file.  Both may be empty.
@@ -231,11 +236,15 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 //
 // Hash comparison: if the persisted hash is empty, or vcStatusFunc is nil, or
 // vcStatusFunc returns an error, Hydrate always sets dashboardDirty=true.
-//
-// Hydrate is intended to be called before Start. If called after Start, the
-// file IO and bd call happen outside c.mu (safe), then c.mu.Lock() is held
-// only briefly to swap state.
 func (c *CachingRepository) Hydrate(loadPath, writePath string) error {
+	// Enforce the precondition: Hydrate must be called before Start.
+	c.mu.RLock()
+	alreadyStarted := c.started
+	c.mu.RUnlock()
+	if alreadyStarted {
+		return errors.New("caching: Hydrate must be called before Start")
+	}
+
 	// Always set the write path regardless of load outcome.
 	setWritePath := func() {
 		c.mu.Lock()
