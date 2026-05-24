@@ -53,7 +53,11 @@ def feed_keys(fd: int, keys: str) -> None:
         "ENTER": "\r",
         "ESC": ESC,
         "TAB": "\t",
+        "SPACE": " ",
+        "BACKSPACE": "\x7f",
+        "CTRL+C": "\x03",
         "CTRL+Q": "\x11",
+        "CTRL+SPACE": "\x00",
         "PGDOWN": ESC + "[6~",
         "PGUP": ESC + "[5~",
         "HOME": ESC + "[H",
@@ -63,6 +67,10 @@ def feed_keys(fd: int, keys: str) -> None:
         "UP": ESC + "[A",
         "DOWN": ESC + "[B",
     }
+    if keys not in keymap and len(keys) != 1:
+        raise ValueError(
+            f"unknown send-key name {keys!r}; pass a single character or one of {sorted(keymap)}"
+        )
     data = keymap.get(keys, keys).encode()
     os.write(fd, data)
 
