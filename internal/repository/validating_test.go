@@ -701,6 +701,338 @@ func TestValidatingRepository_Dashboard_HighCardinalitySpotCheck(t *testing.T) {
 }
 
 // ============================================================
+// Dashboard — NonEmptyTitle / NonEmptyStatus / NonEmptyType violations
+// ============================================================
+
+type emptyTitleDashboardRepo struct{ stubRepository }
+
+func (emptyTitleDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		InProgress: []domain.IssueSummary{
+			{ID: "x-1", Title: "", Status: "in_progress", Type: "task"}, // VIOLATION
+		},
+		Closed:      []domain.IssueSummary{},
+		ClosedTotal: 0,
+		Blocked:     []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_NonEmptyTitleViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyTitleDashboardRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("NonEmptyTitle") {
+		t.Errorf("expected warn with rule=NonEmptyTitle; records=%v", h.records)
+	}
+}
+
+type emptyStatusDashboardRepo struct{ stubRepository }
+
+func (emptyStatusDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		// Use Closed slot so we avoid triggering DashboardClosedStatusMatches on top.
+		InProgress:  []domain.IssueSummary{},
+		Closed:      []domain.IssueSummary{{ID: "x-1", Title: "No status", Status: "", Type: "task"}}, // VIOLATION
+		ClosedTotal: 1,
+		Blocked:     []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_NonEmptyStatusViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyStatusDashboardRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("NonEmptyStatus") {
+		t.Errorf("expected warn with rule=NonEmptyStatus; records=%v", h.records)
+	}
+}
+
+type emptyTypeDashboardRepo struct{ stubRepository }
+
+func (emptyTypeDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		InProgress:   []domain.IssueSummary{},
+		Closed:       []domain.IssueSummary{{ID: "x-1", Title: "No type", Status: "closed", Type: ""}}, // VIOLATION
+		ClosedTotal:  1,
+		Blocked:      []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_NonEmptyTypeViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyTypeDashboardRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("NonEmptyType") {
+		t.Errorf("expected warn with rule=NonEmptyType; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Dashboard — DashboardClosedStatusMatches violation
+// ============================================================
+
+type wrongClosedSlotStatusRepo struct{ stubRepository }
+
+func (wrongClosedSlotStatusRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		InProgress:   []domain.IssueSummary{},
+		Closed: []domain.IssueSummary{
+			{ID: "x-1", Title: "Not closed", Status: "in_progress", Type: "task"}, // VIOLATION: wrong slot
+		},
+		ClosedTotal: 1,
+		Blocked:     []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_ClosedSlotStatusMismatch(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(wrongClosedSlotStatusRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("DashboardClosedStatusMatches") {
+		t.Errorf("expected warn with rule=DashboardClosedStatusMatches; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Dashboard — DashboardBlockedStatusMatches violation
+// ============================================================
+
+type wrongBlockedSlotStatusRepo struct{ stubRepository }
+
+func (wrongBlockedSlotStatusRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		InProgress:   []domain.IssueSummary{},
+		Closed:       []domain.IssueSummary{},
+		ClosedTotal:  0,
+		Blocked: []domain.IssueSummary{
+			{ID: "x-1", Title: "Not blocked", Status: "open", Type: "task"}, // VIOLATION: wrong slot
+		},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_BlockedSlotStatusMismatch(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(wrongBlockedSlotStatusRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("DashboardBlockedStatusMatches") {
+		t.Errorf("expected warn with rule=DashboardBlockedStatusMatches; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Dashboard / ReadyExplain — NonEmptyReadyIDs violation
+// ============================================================
+
+type emptyReadyIDRepo struct{ stubRepository }
+
+func (emptyReadyIDRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready:        []domain.IssueSummary{{ID: "", Title: "No ID", Status: "open", Type: "task"}}, // VIOLATION
+			Blocked:      []domain.BlockedIssueView{},
+			TotalReady:   1,
+			TotalBlocked: 0,
+		},
+		InProgress:  []domain.IssueSummary{},
+		Closed:      []domain.IssueSummary{},
+		ClosedTotal: 0,
+		Blocked:     []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_NonEmptyReadyIDsViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyReadyIDRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("NonEmptyReadyIDs") {
+		t.Errorf("expected warn with rule=NonEmptyReadyIDs; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Dashboard / ReadyExplain — NonEmptyBlockedIDs violation
+// ============================================================
+
+type emptyBlockedIDRepo struct{ stubRepository }
+
+func (emptyBlockedIDRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{},
+			Blocked: []domain.BlockedIssueView{
+				{
+					Issue: domain.IssueSummary{ID: "", Title: "No ID", Status: "open", Type: "task"}, // VIOLATION
+					BlockedBy: []domain.IssueReference{
+						{ID: "x-0", Title: "Blocker", Status: "open"},
+					},
+				},
+			},
+			TotalReady:   0,
+			TotalBlocked: 1,
+		},
+		InProgress:  []domain.IssueSummary{},
+		Closed:      []domain.IssueSummary{},
+		ClosedTotal: 0,
+		Blocked:     []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_NonEmptyBlockedIDsViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyBlockedIDRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("NonEmptyBlockedIDs") {
+		t.Errorf("expected warn with rule=NonEmptyBlockedIDs; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Dashboard / ReadyExplain — TotalBlockedMatchesLenBlocked violation
+// ============================================================
+
+type blockedTotalMismatchRepo struct{ stubRepository }
+
+func (blockedTotalMismatchRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{},
+			Blocked: []domain.BlockedIssueView{
+				{
+					Issue: domain.IssueSummary{ID: "b-1", Title: "Blocked", Status: "open", Type: "task"},
+					BlockedBy: []domain.IssueReference{
+						{ID: "x-0", Title: "Blocker", Status: "open"},
+					},
+				},
+			},
+			TotalReady:   0,
+			TotalBlocked: 99, // VIOLATION: should be 1
+		},
+		InProgress:  []domain.IssueSummary{},
+		Closed:      []domain.IssueSummary{},
+		ClosedTotal: 0,
+		Blocked:     []domain.IssueSummary{},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_TotalBlockedMismatch(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(blockedTotalMismatchRepo{})
+	_, err := repo.Dashboard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("TotalBlockedMatchesLenBlocked") {
+		t.Errorf("expected warn with rule=TotalBlockedMatchesLenBlocked; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Search — NonEmptyIDs violation
+// ============================================================
+
+type emptyIDSearchRepo struct{ stubRepository }
+
+func (emptyIDSearchRepo) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	results := []domain.SearchResult{
+		{Issue: domain.IssueSummary{ID: "", Title: "No ID", Status: "open", Type: "task"}}, // VIOLATION
+	}
+	return domain.SearchResultPage{
+		Results:  results,
+		Metadata: domain.SearchResultMetadata{ReturnedCount: len(results)},
+	}, nil
+}
+
+func TestValidatingRepository_Search_NonEmptyIDsViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyIDSearchRepo{})
+	_, err := repo.Search(context.Background(), domain.SearchIssuesQuery{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("NonEmptyIDs") {
+		t.Errorf("expected warn with rule=NonEmptyIDs; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Catalogs — CatalogsStatusAllNamesNonEmpty violation
+// ============================================================
+
+type emptyStatusNameCatalogRepo struct{ stubRepository }
+
+func (emptyStatusNameCatalogRepo) Catalogs(_ context.Context) (repository.Catalogs, error) {
+	return repository.Catalogs{
+		Statuses: []domain.StatusOption{{Name: "open"}, {Name: ""}}, // VIOLATION: second entry has empty name
+		Types:    []domain.TypeOption{{Name: "task"}},
+		Labels:   nil,
+	}, nil
+}
+
+func TestValidatingRepository_Catalogs_EmptyStatusNameViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyStatusNameCatalogRepo{})
+	_, err := repo.Catalogs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("CatalogsStatusAllNamesNonEmpty") {
+		t.Errorf("expected warn with rule=CatalogsStatusAllNamesNonEmpty; records=%v", h.records)
+	}
+}
+
+// ============================================================
+// Catalogs — CatalogsTypeAllNamesNonEmpty violation
+// ============================================================
+
+type emptyTypeNameCatalogRepo struct{ stubRepository }
+
+func (emptyTypeNameCatalogRepo) Catalogs(_ context.Context) (repository.Catalogs, error) {
+	return repository.Catalogs{
+		Statuses: []domain.StatusOption{{Name: "open"}},
+		Types:    []domain.TypeOption{{Name: "task"}, {Name: ""}}, // VIOLATION: second entry has empty name
+		Labels:   nil,
+	}, nil
+}
+
+func TestValidatingRepository_Catalogs_EmptyTypeNameViolation(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(emptyTypeNameCatalogRepo{})
+	_, err := repo.Catalogs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("CatalogsTypeAllNamesNonEmpty") {
+		t.Errorf("expected warn with rule=CatalogsTypeAllNamesNonEmpty; records=%v", h.records)
+	}
+}
+
+// ============================================================
 // Write methods — pure delegation, no validation
 // ============================================================
 
