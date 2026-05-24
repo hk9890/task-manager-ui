@@ -51,7 +51,10 @@ type IssueDetail struct {
 	BlockedBy          []IssueReference
 	Blocks             []IssueReference
 	Related            []IssueReference
-	Comments           []IssueComment
+	// Children holds issues for which this issue is the parent
+	// (dependency_type=parent-child in the dependents direction).
+	Children []IssueReference
+	Comments []IssueComment
 }
 
 // BlockedIssueView is the blocked-work projection used by blocked dashboards.

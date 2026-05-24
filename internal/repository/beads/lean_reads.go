@@ -127,7 +127,7 @@ func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, 
 		return domain.IssueDetail{}, err
 	}
 
-	blocks, relatedFromDependents, err := leanDependentsFromPayload(primary.Dependents, leanOpShowIssue)
+	blocks, relatedFromDependents, children, err := leanDependentsFromPayload(primary.Dependents, leanOpShowIssue)
 	if err != nil {
 		return domain.IssueDetail{}, err
 	}
@@ -167,6 +167,7 @@ func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, 
 		BlockedBy:          blockedBy,
 		Blocks:             blocks,
 		Related:            related,
+		Children:           children,
 		Comments:           comments,
 	}, nil
 }

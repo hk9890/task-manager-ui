@@ -434,17 +434,24 @@ func leanDepsFromPayload(records []leanIssueRefPayload, op string) (blockedBy []
 	return
 }
 
-// leanDependentsFromPayload splits a dependents slice into blocks and related.
-func leanDependentsFromPayload(records []leanIssueRefPayload, op string) (blocks []domain.IssueReference, related []domain.IssueReference, err error) {
+// leanDependentsFromPayload splits a dependents slice into blocks, related, and
+// children. Entries with dependency_type="parent-child" are children of the
+// current issue (i.e. the current issue is their parent); they must not appear
+// in the Blocks bucket. Matches the pattern used by leanDepsFromPayload for the
+// forward/depends-on direction.
+func leanDependentsFromPayload(records []leanIssueRefPayload, op string) (blocks []domain.IssueReference, related []domain.IssueReference, children []domain.IssueReference, err error) {
 	for _, r := range records {
 		ref, refErr := leanToIssueRef(r, op)
 		if refErr != nil {
-			return nil, nil, refErr
+			return nil, nil, nil, refErr
 		}
 		depType := leanOptStr(r.DependencyType)
-		if depType == "related" || depType == "relates-to" {
+		switch depType {
+		case "related", "relates-to":
 			related = append(related, ref)
-		} else {
+		case "parent-child":
+			children = append(children, ref)
+		default:
 			blocks = append(blocks, ref)
 		}
 	}
