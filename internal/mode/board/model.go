@@ -45,7 +45,14 @@ type columnData struct {
 type refreshMode int
 
 const (
-	refreshModeManual refreshMode = iota
+	// refreshModeInit is used for the cold-start load (Init). It performs the
+	// same full-reset as refreshModeManual but does NOT set ForceFresh so that
+	// the caching layer can serve a hydrated Dashboard on cold start.
+	refreshModeInit refreshMode = iota
+	// refreshModeManual is used when the user presses the reload key (r). It
+	// sets ForceFresh: true so the caching layer skips its fast-path and fans
+	// out to backing, replacing any stale cached Dashboard.
+	refreshModeManual
 	refreshModeAuto
 )
 
@@ -121,7 +128,7 @@ func initialLoadingColumns() []columnData {
 
 // Init loads board data from the repository via 3 parallel calls.
 func (m *Model) Init() tea.Cmd {
-	return m.startReload(refreshModeManual)
+	return m.startReload(refreshModeInit)
 }
 
 // Update processes board-specific messages and keybindings.
@@ -289,7 +296,7 @@ func (m *Model) AutoRefresh() tea.Cmd {
 
 // startReload captures the selection anchor (if auto), marks all columns
 // loading, and dispatches all 3 repository calls in a single tea.Batch. It is
-// the single entry point for both manual reload and auto-refresh.
+// the single entry point for initial load, manual reload, and auto-refresh.
 func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that
 	// may not check IsLoading() at the call site. The call-site guards in the
@@ -318,14 +325,21 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
-	if rm == refreshModeManual {
+	if rm == refreshModeInit || rm == refreshModeManual {
 		// Full reset: move focus to col 0, clear selection map, reset columns.
 		m.focusedColumn = 0
 		m.selectedRow = map[int]int{}
 		m.columns = initialLoadingColumns()
 	}
 
-	return loadDashboardCmd(m.repo, repository.DashboardOptions{ClosedLimit: m.closedLimit()})
+	// Build opts before entering the Cmd closure so no model state is read
+	// inside the closure (Bubble Tea runs Cmds outside the Update loop — per
+	// grill Q4, reading model state there is a race smell).
+	opts := repository.DashboardOptions{ClosedLimit: m.closedLimit()}
+	if rm == refreshModeManual {
+		opts.ForceFresh = true
+	}
+	return loadDashboardCmd(m.repo, opts)
 }
 
 // compose runs dashboard.Compose from a single DashboardData result and

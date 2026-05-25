@@ -34,6 +34,53 @@ func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 	return keys
 }
 
+// optsCaptureRepo is a minimal recording stub that captures the DashboardOptions
+// passed to each Dashboard call. Used by ForceFresh wiring tests where
+// ErrorInjectingRepository (which records only Method, not args) is insufficient.
+type optsCaptureRepo struct {
+	mu            sync.Mutex
+	dashboardOpts []repository.DashboardOptions
+}
+
+func (r *optsCaptureRepo) Dashboard(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+	r.mu.Lock()
+	r.dashboardOpts = append(r.dashboardOpts, opts)
+	r.mu.Unlock()
+	return repository.DashboardData{}, nil
+}
+
+func (r *optsCaptureRepo) capturedOpts() []repository.DashboardOptions {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]repository.DashboardOptions, len(r.dashboardOpts))
+	copy(out, r.dashboardOpts)
+	return out
+}
+
+// Remaining Repository methods are no-ops.
+func (r *optsCaptureRepo) Issue(_ context.Context, _ string) (domain.IssueDetail, error) {
+	return domain.IssueDetail{}, nil
+}
+func (r *optsCaptureRepo) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	return domain.SearchResultPage{}, nil
+}
+func (r *optsCaptureRepo) CreateIssue(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+	return domain.CreateIssueResult{}, nil
+}
+func (r *optsCaptureRepo) UpdateIssue(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
+	return nil
+}
+func (r *optsCaptureRepo) CloseIssue(_ context.Context, _ string, _ domain.CloseIssueInput) error {
+	return nil
+}
+func (r *optsCaptureRepo) AddComment(_ context.Context, _ string, _ domain.AddCommentInput) error {
+	return nil
+}
+func (r *optsCaptureRepo) HealthCheck(_ context.Context) error { return nil }
+func (r *optsCaptureRepo) Catalogs(_ context.Context) (repository.Catalogs, error) {
+	return repository.Catalogs{}, nil
+}
+
 // newBoardModel builds a test board model with a no-op logger.
 func newBoardModel(repo repository.Repository, keys config.ResolvedKeyBindings) *Model {
 	return NewModel(repo, slog.Default(), keys)
@@ -1253,5 +1300,80 @@ func TestBoardClosedQueryArgvLimitVariants(t *testing.T) {
 			// Assert the exact closed-query argv is present.
 			assertArgvPresent(t, calls, tc.wantClosedArgv)
 		})
+	}
+}
+
+// --- AC: manual reload (r) passes ForceFresh:true; Init and AutoRefresh do not ---
+
+// TestStartReloadManual_ForceFreshTrue verifies that startReload(refreshModeManual)
+// passes DashboardOptions{ForceFresh:true} to the repository. This is the
+// direct unit test for the r-key wiring (fbea.4 Defect #2).
+func TestStartReloadManual_ForceFreshTrue(t *testing.T) {
+	t.Parallel()
+
+	stub := &optsCaptureRepo{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+
+	// Simulate manual reload as triggered by the r key.
+	cmd := m.startReload(refreshModeManual)
+	if cmd == nil {
+		t.Fatal("startReload(refreshModeManual) must return a non-nil command")
+	}
+	// Execute the command so it calls stub.Dashboard.
+	_ = cmd()
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from manual reload, got %d", len(opts))
+	}
+	if !opts[0].ForceFresh {
+		t.Errorf("manual reload: expected DashboardOptions.ForceFresh=true, got false")
+	}
+}
+
+// TestStartReloadInit_ForceFreshFalse verifies that startReload(refreshModeInit)
+// (used by Init) does NOT set ForceFresh, so the caching layer can serve a
+// hydrated Dashboard on cold start.
+func TestStartReloadInit_ForceFreshFalse(t *testing.T) {
+	t.Parallel()
+
+	stub := &optsCaptureRepo{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+
+	cmd := m.startReload(refreshModeInit)
+	if cmd == nil {
+		t.Fatal("startReload(refreshModeInit) must return a non-nil command")
+	}
+	_ = cmd()
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from init reload, got %d", len(opts))
+	}
+	if opts[0].ForceFresh {
+		t.Errorf("init reload: expected DashboardOptions.ForceFresh=false, got true")
+	}
+}
+
+// TestStartReloadAuto_ForceFreshFalse verifies that AutoRefresh does NOT set
+// ForceFresh so the caching layer can serve cached data on background refresh.
+func TestStartReloadAuto_ForceFreshFalse(t *testing.T) {
+	t.Parallel()
+
+	stub := &optsCaptureRepo{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+
+	cmd := m.startReload(refreshModeAuto)
+	if cmd == nil {
+		t.Fatal("startReload(refreshModeAuto) must return a non-nil command")
+	}
+	_ = cmd()
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from auto reload, got %d", len(opts))
+	}
+	if opts[0].ForceFresh {
+		t.Errorf("auto reload: expected DashboardOptions.ForceFresh=false, got true")
 	}
 }

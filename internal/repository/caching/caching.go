@@ -491,31 +491,41 @@ func (c *CachingRepository) SaveNow() error {
 // flag set, or a different ClosedLimit is requested), fetches from backing,
 // stores the result, and clears the dirty flag.
 //
+// When opts.ForceFresh is true the cache fast-path is skipped entirely and
+// backing is called unconditionally. The result is stored in the cache and
+// replaces any previously cached Dashboard. ForceFresh is a request modifier,
+// not a cache key — it does not change the keying logic.
+//
+// Two concurrent ForceFresh reloads each fan out to backing; acceptable because
+// manual reload is keystroke-driven and idempotent (per grill Q2).
+//
 // Caching strategy for variable ClosedLimit (option a — re-fetch on change):
 // A different requested ClosedLimit is treated as a cache miss, distinct from
-// the dashboardDirty flag. This keeps ForceFresh (tracked separately in fbea)
-// orthogonal: we never silently slice a high-water cache to satisfy a smaller
-// request, which would hide partial data and complicate the force-fresh
-// interaction. The cost is one extra backing round-trip on a resize event, which
-// is acceptable because resize events are rare compared to steady-state reads.
+// the dashboardDirty flag. This keeps ForceFresh orthogonal: we never silently
+// slice a high-water cache to satisfy a smaller request, which would hide
+// partial data and complicate the force-fresh interaction. The cost is one extra
+// backing round-trip on a resize event, which is acceptable because resize
+// events are rare compared to steady-state reads.
 // See internal/repository/caching/doc.go for the full rationale.
 func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
 	}
 
-	// Fast path: serve from cache when not dirty and ClosedLimit is unchanged.
-	c.mu.RLock()
-	dirty := c.dashboardDirty
-	limitChanged := opts.ClosedLimit != c.lastDashboardClosedLimit
-	if !dirty && !limitChanged {
-		data := c.dashboardCache
+	if !opts.ForceFresh {
+		// Fast path: serve from cache when not dirty and ClosedLimit is unchanged.
+		c.mu.RLock()
+		dirty := c.dashboardDirty
+		limitChanged := opts.ClosedLimit != c.lastDashboardClosedLimit
+		if !dirty && !limitChanged {
+			data := c.dashboardCache
+			c.mu.RUnlock()
+			return data, nil
+		}
 		c.mu.RUnlock()
-		return data, nil
 	}
-	c.mu.RUnlock()
 
-	// Cache miss: fetch from backing (no lock held).
+	// Cache miss or ForceFresh: fetch from backing (no lock held).
 	data, err := c.backing.Dashboard(ctx, opts)
 	if err != nil {
 		return repository.DashboardData{}, err

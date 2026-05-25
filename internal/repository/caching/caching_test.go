@@ -232,6 +232,130 @@ func TestDashboard_BackingError_DirtyFlagPreserved(t *testing.T) {
 	}
 }
 
+// TestDashboard_ForceFresh_BypassesCacheAndRepopulates verifies the ForceFresh
+// fast-path bypass: pre-seeding the cache with a stale value and then calling
+// Dashboard with ForceFresh:true must fan out to backing, return the fresh
+// result (not the stale cached value), and overwrite the cache.
+func TestDashboard_ForceFresh_BypassesCacheAndRepopulates(t *testing.T) {
+	t.Parallel()
+
+	staleData := repository.DashboardData{ClosedTotal: 1}
+	freshData := repository.DashboardData{ClosedTotal: 99}
+
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+			return freshData, nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// Seed the cache with stale data by calling Dashboard once (cache miss →
+	// backing called, result stored).
+	got, err := c.Dashboard(ctx, repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("seed call: unexpected error %v", err)
+	}
+	if got.ClosedTotal != freshData.ClosedTotal {
+		t.Fatalf("seed call: got ClosedTotal=%d, want %d", got.ClosedTotal, freshData.ClosedTotal)
+	}
+	if stub.dashboardCalls != 1 {
+		t.Fatalf("seed call: expected 1 backing call, got %d", stub.dashboardCalls)
+	}
+
+	// Overwrite backing to return stale data so we can distinguish cache-hit
+	// from ForceFresh re-fetch.
+	stub.mu.Lock()
+	stub.dashboardFn = func(_ context.Context) (repository.DashboardData, error) {
+		return staleData, nil
+	}
+	stub.mu.Unlock()
+
+	// Verify cache hit works (sanity check before ForceFresh).
+	got2, err := c.Dashboard(ctx, repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("cache-hit sanity: unexpected error %v", err)
+	}
+	if got2.ClosedTotal != freshData.ClosedTotal {
+		t.Fatalf("cache-hit sanity: expected cached value %d, got %d", freshData.ClosedTotal, got2.ClosedTotal)
+	}
+	if stub.dashboardCalls != 1 {
+		t.Fatalf("cache-hit sanity: expected still 1 backing call, got %d", stub.dashboardCalls)
+	}
+
+	// Now update backing to return a new fresh value to confirm ForceFresh uses it.
+	newFreshData := repository.DashboardData{ClosedTotal: 42}
+	stub.mu.Lock()
+	stub.dashboardFn = func(_ context.Context) (repository.DashboardData, error) {
+		return newFreshData, nil
+	}
+	stub.mu.Unlock()
+
+	// ForceFresh: must bypass cache, call backing, return fresh result, overwrite cache.
+	got3, err := c.Dashboard(ctx, repository.DashboardOptions{ForceFresh: true})
+	if err != nil {
+		t.Fatalf("ForceFresh call: unexpected error %v", err)
+	}
+	if got3.ClosedTotal != newFreshData.ClosedTotal {
+		t.Fatalf("ForceFresh call: expected fresh value %d, got %d (stale cache served instead of bypassed)",
+			newFreshData.ClosedTotal, got3.ClosedTotal)
+	}
+	if stub.dashboardCalls != 2 {
+		t.Fatalf("ForceFresh call: expected 2 total backing calls (1 seed + 1 force), got %d", stub.dashboardCalls)
+	}
+
+	// After ForceFresh, a subsequent plain call must return the newly cached fresh value
+	// without another backing call.
+	got4, err := c.Dashboard(ctx, repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("post-ForceFresh cache hit: unexpected error %v", err)
+	}
+	if got4.ClosedTotal != newFreshData.ClosedTotal {
+		t.Fatalf("post-ForceFresh cache hit: expected repopulated value %d, got %d",
+			newFreshData.ClosedTotal, got4.ClosedTotal)
+	}
+	if stub.dashboardCalls != 2 {
+		t.Fatalf("post-ForceFresh cache hit: expected still 2 backing calls, got %d", stub.dashboardCalls)
+	}
+}
+
+// TestDashboard_NonForceFresh_DoesNotBypassCache verifies that a plain call
+// (ForceFresh:false) with an already-populated, non-dirty cache does NOT fan
+// out to backing.
+func TestDashboard_NonForceFresh_DoesNotBypassCache(t *testing.T) {
+	t.Parallel()
+
+	cachedData := repository.DashboardData{ClosedTotal: 7}
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+			return cachedData, nil
+		},
+	}
+	c := caching.New(stub)
+	ctx := context.Background()
+
+	// Seed cache.
+	_, err := c.Dashboard(ctx, repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("seed call: unexpected error %v", err)
+	}
+	if stub.dashboardCalls != 1 {
+		t.Fatalf("seed call: expected 1 backing call, got %d", stub.dashboardCalls)
+	}
+
+	// Plain call (ForceFresh:false) must hit the cache, not backing.
+	got, err := c.Dashboard(ctx, repository.DashboardOptions{ForceFresh: false})
+	if err != nil {
+		t.Fatalf("non-ForceFresh call: unexpected error %v", err)
+	}
+	if got.ClosedTotal != cachedData.ClosedTotal {
+		t.Fatalf("non-ForceFresh call: got ClosedTotal=%d, want %d", got.ClosedTotal, cachedData.ClosedTotal)
+	}
+	if stub.dashboardCalls != 1 {
+		t.Fatalf("non-ForceFresh call: expected still 1 backing call (cache hit), got %d", stub.dashboardCalls)
+	}
+}
+
 // ---- Issue tests ----
 
 func TestIssue_CacheMiss_ThenHit(t *testing.T) {
