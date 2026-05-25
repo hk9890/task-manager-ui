@@ -2,6 +2,7 @@
 package modal
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/hk9890/beads-workbench/internal/config"
@@ -311,6 +312,9 @@ func (m Model) prevField() Model {
 }
 
 // View renders the modal content without a background overlay.
+// When the viewport height is known and the modal's natural height exceeds it,
+// the content is clipped to fit, preserving both the top and bottom borders.
+// The row immediately above the bottom border shows an overflow indicator.
 func (m Model) View() string {
 	minWidth := max(40, m.config.MinWidth)
 	contentWidth := max(minWidth, lipgloss.Width(m.config.Title))
@@ -345,11 +349,75 @@ func (m Model) View() string {
 	}
 
 	body := titleStyle.Render(m.config.Title) + "\n" + divider + "\n" + lipgloss.NewStyle().Padding(1, 1).Render(content.String())
-	return lipgloss.NewStyle().
+	rendered := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.OverlayBorderColor).
 		Width(boxWidth).
 		Render(body)
+
+	// Clip with border preserved when the modal overflows the viewport.
+	if m.height > 0 {
+		rendered = clipModalToViewport(rendered, m.height, contentWidth)
+	}
+
+	return rendered
+}
+
+// clipModalToViewport clips a rendered modal to fit within viewportHeight rows,
+// preserving the top and bottom border lines. When lines are clipped, an
+// overflow indicator is inserted on the row immediately above the bottom border.
+// A margin of 2 rows is reserved so the modal does not touch the viewport edges.
+func clipModalToViewport(rendered string, viewportHeight, contentWidth int) string {
+	const verticalMargin = 2
+	maxHeight := viewportHeight - verticalMargin
+	if maxHeight < 4 {
+		// Too small to show anything useful; return as-is.
+		return rendered
+	}
+
+	lines := strings.Split(rendered, "\n")
+	if len(lines) <= maxHeight {
+		return rendered
+	}
+
+	// lines[0] is the top border, lines[len-1] is the bottom border.
+	topBorder := lines[0]
+	bottomBorder := lines[len(lines)-1]
+
+	// We need maxHeight lines total: topBorder + (maxHeight-2) content + bottomBorder.
+	// The last content slot becomes the overflow indicator.
+	contentSlots := maxHeight - 2 // rows between top and bottom borders
+	if contentSlots < 1 {
+		return rendered
+	}
+
+	clipped := make([]string, 0, maxHeight)
+	clipped = append(clipped, topBorder)
+
+	// Fill content slots, replacing the last slot with the overflow indicator.
+	for i := 1; i <= contentSlots; i++ {
+		srcLine := lines[i] // lines[1] .. lines[contentSlots]
+		if i == contentSlots {
+			// Overflow indicator: show how many hidden lines remain.
+			// contentSlots includes the indicator row itself, so (contentSlots-1)
+			// real content lines are shown; hidden = total_content - shown.
+			hidden := len(lines) - 1 - contentSlots // total content lines minus shown
+			indicatorText := fmt.Sprintf("… %d more lines", hidden)
+			indicatorStyled := lipgloss.NewStyle().
+				Foreground(styles.TextSecondaryColor).
+				Width(contentWidth).
+				Render(indicatorText)
+			// Wrap in side-border characters matching the modal frame.
+			borderColor := lipgloss.NewStyle().Foreground(styles.OverlayBorderColor)
+			left := borderColor.Render("│") + " "
+			right := " " + borderColor.Render("│")
+			srcLine = left + indicatorStyled + right
+		}
+		clipped = append(clipped, srcLine)
+	}
+
+	clipped = append(clipped, bottomBorder)
+	return strings.Join(clipped, "\n")
 }
 
 func (m Model) renderInputSection(index int, label string, width int) string {
