@@ -92,6 +92,11 @@ mise run test -- ./internal/testing/...
 mise run test -- ./internal/repository/beads/contract/... -v
 ```
 
+## When to Run Which Gate
+
+- **Per-commit / pre-push (local dev):** `mise run quality:fast` is sufficient.
+- **End-of-change validation (closing an epic, acceptance review, before declaring "done"):** `mise run quality` is required — it adds integration tests, which routinely catch parity regressions invisible to the unit suite. `quality:fast` is not a substitute.
+
 ## Runtime UI Verification Workflow (operator runbook)
 
 Use `docs/RUNTIME_UI_VERIFICATION.md` for the concrete, command-oriented workflow.
