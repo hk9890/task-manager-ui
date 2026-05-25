@@ -424,8 +424,10 @@ func runSearchCheck(dir string, repo repository.Repository, readonly bool) Check
 			}
 			bdRaw, bdErr = bdRun(dir, readonly, "list", args...)
 		} else {
-			// Text query: bd search <text> --json --status all [--limit N]
-			args := []string{strings.TrimSpace(qc.query.Text), "--status", "all"}
+			// Text query: bd search <text> --json [--limit N]
+			// No --status flag so bd's default (exclude closed) applies, matching
+			// repository.Search behavior when query.Statuses is empty (czkq.4).
+			args := []string{strings.TrimSpace(qc.query.Text)}
 			if qc.query.Limit > 0 {
 				args = append(args, "--limit", strconv.Itoa(qc.query.Limit))
 			}
