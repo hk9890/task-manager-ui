@@ -82,7 +82,8 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 		args = append(args, "--set-labels", strings.Join(input.Labels, ","))
 	} else if input.ClearLabels {
 		// bd 1.0.4 workaround: `--set-labels ""` is silently ignored.
-		// Fetch current labels and enumerate each with --remove-label.
+		// Fetch current labels via Issue (bd show) then emit a single
+		// `--remove-label <csv>` flag with all labels joined by comma.
 		detail, err := r.Issue(ctx, id)
 		if err != nil {
 			return err
