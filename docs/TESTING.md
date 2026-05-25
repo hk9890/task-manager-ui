@@ -79,7 +79,12 @@ mise run test:all            # unit + integration tests
 mise run test:verbose        # unit tests with -v
 mise run quality             # full pre-handoff gate: vet, lint, guardrails, unit + integration tests
 mise run quality:fast        # fast pre-commit gate: vet, lint, guardrails, unit tests (skips integration only)
+mise run test:load           # load-test suite: generate workload, measure, emit ./load-test-report.json
 ```
+
+### Load testing
+
+`mise run test:load` generates a seeded workload, measures data-layer operation latencies (Dashboard cold/warm, cache, search, detail), and writes a JSON report plus a human summary table. Requires `bd` on PATH. Workload shape is configurable via `LOAD_*` env vars (see `.mise.toml` task description). Full agent-runnable recipe in `docs/LOAD_TESTING.md` (added by bjyt.4).
 
 Run `mise tasks` to see the full list. CI additionally runs `fmt:check`,
 `scripts:check`, and a `test:coverage` threshold gate — see
