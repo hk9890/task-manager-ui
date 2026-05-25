@@ -166,3 +166,41 @@ Add process-level automation only when a concrete bug class cannot be proven in-
 3. guaranteed cleanup behavior.
 
 Raw stdout transcript capture alone is not enough proof for alt-screen rendering.
+
+## 5) Done-column closed-limit: resize-then-refresh (iwvm)
+
+**What this verifies:** after the iwvm change, `closedLimit()` scales with terminal height. A small terminal floors at 50 closed rows; resizing taller and pressing `r` fetches more rows up to the new height-derived cap.
+
+**Pre-conditions:**
+
+- Repository has more than 50 closed issues. Both `--repo beads` (against this project) and `--repo caching` satisfy this; the `beads` repo has >600 closed issues.
+- `bwb` is built and on `$PATH` or run via `mise run bwb`.
+
+**Procedure:**
+
+1. Open a terminal and resize it so the height is **less than 70 rows** (e.g. 40 rows). Verify with `echo $LINES` or your terminal's title bar.
+2. Launch `bwb` against a qualifying repo:
+   ```
+   mise run bwb -- --repo beads
+   ```
+3. On the board, locate the **Done** column header. It shows `N of M` where `N` is the number of rows loaded and `M` is the true closed total in the database.
+4. Confirm `N` is **50** (the floor). `M` should be the real closed total, e.g. `50 of 679`. If `N` is not 50, the floor is broken.
+5. Keep `bwb` running. Resize the terminal **taller** — at least **200 rows** (e.g. drag the window to maximum height or `printf '\e[8;200;220t'` in a supporting terminal emulator).
+6. Press **`r`** to refresh.
+7. Wait for the board to reload (the Done column header will update).
+8. Confirm `N` is now **larger than 50** — for a 200-row terminal, `closedLimit()` returns `sectionItemCapacity()` which exceeds 50 by a significant margin (roughly `height - 10` divided across columns). The exact value is not critical; what matters is `N > 50`.
+9. Confirm `M` is unchanged — it must still equal the real closed total, not the cap value. `M` must not equal `N` unless the repo genuinely has that few closed issues.
+
+**Expected outcome (falsifiable):**
+
+| Step | Pass condition | Fail signal |
+|------|---------------|-------------|
+| 4 (small terminal) | Done header shows `50 of M` where M > 50 | N ≠ 50, or M = N despite large DB |
+| 8 (after resize + r) | Done header shows `N of M` where N > 50 | N is still 50 after resize + refresh |
+| 9 (M unchanged) | M equals the same total as in step 4 | M changed or equals N |
+
+**Failure modes and diagnostics:**
+
+- `N` stays at 50 after resize: `loadDashboardCmd` is not passing `closedLimit()` into `DashboardOptions.ClosedLimit`, or the repository impl is ignoring it. Check `internal/mode/board/model.go` and the relevant repository impl.
+- `M` equals `N` after resize: `ClosedTotal` is being computed after the limit slice instead of before. Check `internal/repository/memory/repository.go` and `internal/repository/beads/lean_reads.go`.
+- `N` does not increase proportionally to height: `sectionItemCapacity()` may not be receiving the updated window size — check the `WindowSizeMsg` handler in `internal/mode/board/model.go`.
