@@ -20,6 +20,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -89,10 +90,11 @@ func editableDocWithTitle(issue domain.IssueDetail, newTitle string) string {
 //   - UpdateIssue is recorded on the repository
 //   - the "Updated issue <id>" success toast is set on the settled model
 //
-// Assertion strategy: see the package note on TestEditFlowEditorErrorTeatest.
-// We synchronise on mutex-guarded fake counters (RunCount, repository HasCall)
-// to confirm the async chain ran, then assert on m.toast.View() via
-// FinalModel rather than scanning the teatest output buffer — post-tea.Exec
+// Assertion strategy: we gate on three observable signals: FakeExecCommand.RunCount
+// (subprocess invoked), repository HasCall (ApplyEdits produced a write), and the
+// Services.OnEditIssueResult hook (editIssueResultMsg processed, toast set). The
+// hook fires synchronously from the BubbleTea Update handler after showToast, so
+// it is a precise zero-sleep signal. Final assertion uses FinalModel — post-tea.Exec
 // View() frames do not reliably reach the output pipe under CI load.
 func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	// Not parallel — modifies global scheduler vars via TestMain.
@@ -126,6 +128,11 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 
 	services := buildEditFlowServices(t, gw, fakeCmd)
 
+	// Wire the test-only hook so we get a precise signal when editIssueResultMsg
+	// has been fully processed and the toast set — eliminating the time.Sleep.
+	var editResultCount atomic.Int32
+	services.OnEditIssueResult = func() { editResultCount.Add(1) }
+
 	model, err := NewModel(services)
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
@@ -155,10 +162,12 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
 		return gw.hasUpdateIssueCall()
 	})
-	// Settle: give the runtime time to dequeue editIssueResultMsg and run the
-	// Update handler that sets the toast before we send tea.Quit. Matches the
-	// 200 ms used by TestEditFlowEditorErrorTeatest.
-	time.Sleep(200 * time.Millisecond)
+	// Gate 3: editIssueResultMsg was processed by Update and the toast set.
+	// The OnEditIssueResult hook fires synchronously after showToast, so this
+	// is a precise signal — no sleep needed.
+	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
+		return editResultCount.Load() >= 1
+	})
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("teatest Quit: %v", err)
@@ -190,11 +199,11 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 // writes back an identical document, no UpdateIssue is called and the
 // "No changes saved" toast is set on the settled model.
 //
-// Assertion strategy: see the package note on TestEditFlowEditorErrorTeatest.
-// Same FinalModel approach as the success-path test — output-buffer scanning
-// is not reliable for post-tea.Exec frames under CI load. Gating on
-// repository.HasCall(UpdateIssue) is not available here (we are asserting the
-// opposite), so we use the same RunCount + settle pattern as test 3.
+// Assertion strategy: we gate on FakeExecCommand.RunCount (subprocess invoked)
+// and the Services.OnEditIssueResult hook (editIssueResultMsg processed, toast
+// set). Gating on repository.HasCall(UpdateIssue) is not available here (we are
+// asserting the opposite). Final assertion uses FinalModel — output-buffer scanning
+// is not reliable for post-tea.Exec frames under CI load.
 func TestEditFlowNoChangeTeatest(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
@@ -224,6 +233,11 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 
 	services := buildEditFlowServices(t, gw, fakeCmd)
 
+	// Wire the test-only hook so we get a precise signal when editIssueResultMsg
+	// has been fully processed and the toast set — eliminating the time.Sleep.
+	var editResultCount atomic.Int32
+	services.OnEditIssueResult = func() { editResultCount.Add(1) }
+
 	model, err := NewModel(services)
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
@@ -238,13 +252,16 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 
-	// Gate: tea.Exec dispatched and FakeExecCommand.Run ran. No further
-	// observable side-effect exists for the no-change path (the test asserts
-	// that UpdateIssue is NOT called), so settle on time alone afterwards.
+	// Gate 1: tea.Exec dispatched and FakeExecCommand.Run ran.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
 		return fakeCmd.RunCount() >= 1
 	})
-	time.Sleep(200 * time.Millisecond)
+	// Gate 2: editIssueResultMsg was processed by Update and the toast set.
+	// No further observable side-effect exists for the no-change path (the
+	// test asserts UpdateIssue is NOT called); the hook is the precise signal.
+	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
+		return editResultCount.Load() >= 1
+	})
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("teatest Quit: %v", err)
@@ -275,13 +292,11 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 // FakeExecCommand.Run returns an error, the "Failed to edit issue" toast is
 // shown and UpdateIssue is NOT called.
 //
-// Note on assertion strategy: the tea.Exec error path produces only a single
-// View() frame with the error toast (no follow-on async cmd), so the renderer
-// may not have flushed the toast frame to the output buffer before WaitFor
-// polls. Instead of asserting on output-buffer content, we:
-//  1. Poll fakeCmd.RunCalled to confirm the subprocess was invoked.
-//  2. Sleep 200 ms to let the closure + p.Send hops complete under -race.
-//  3. Quit and use FinalModel to read the settled model state directly.
+// Assertion strategy: we gate on FakeExecCommand.RunCount (subprocess invoked)
+// and the Services.OnEditIssueResult hook (editIssueResultMsg processed, toast
+// set). The hook fires synchronously from Update after showToast — no sleep
+// needed. Final assertion uses FinalModel — post-tea.Exec View() frames do not
+// reliably reach the output pipe under CI load.
 func TestEditFlowEditorErrorTeatest(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
@@ -311,6 +326,11 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 
 	services := buildEditFlowServices(t, gw, fakeCmd)
 
+	// Wire the test-only hook so we get a precise signal when editIssueResultMsg
+	// has been fully processed and the toast set — eliminating the time.Sleep.
+	var editResultCount atomic.Int32
+	services.OnEditIssueResult = func() { editResultCount.Add(1) }
+
 	model, err := NewModel(services)
 	if err != nil {
 		t.Fatalf("NewModel: %v", err)
@@ -324,12 +344,16 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 
-	// Wait until the fake subprocess Run() is called, then give the BubbleTea
-	// runtime 200 ms to complete the closure + p.Send hops before quitting.
+	// Gate 1: tea.Exec dispatched and FakeExecCommand.Run ran.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
 		return fakeCmd.RunCount() >= 1
 	})
-	time.Sleep(200 * time.Millisecond)
+	// Gate 2: editIssueResultMsg was processed by Update and the toast set.
+	// The OnEditIssueResult hook fires synchronously after showToast, giving a
+	// precise signal without sleeping.
+	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
+		return editResultCount.Load() >= 1
+	})
 
 	if err := tm.Quit(); err != nil {
 		t.Fatalf("teatest Quit: %v", err)

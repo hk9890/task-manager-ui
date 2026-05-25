@@ -496,19 +496,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, applyEditsCmd(m.services, msg.prepared))
 	case editIssueResultMsg:
+		// notifyEditResult fires the test-only hook (if set) after the toast has
+		// been set by showToast. Callers must call this before every return.
+		notifyEditResult := func() {
+			if h := m.services.OnEditIssueResult; h != nil {
+				h()
+			}
+		}
+
 		if msg.err != nil {
-			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError))
+			toastCmd := m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError)
+			notifyEditResult()
+			return m, batchCmds(modeCmd, toastCmd)
 		}
 
 		if !msg.updated {
-			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo))
+			toastCmd := m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo)
+			notifyEditResult()
+			return m, batchCmds(modeCmd, toastCmd)
 		}
 
 		m.markBrowseSurfacesDirty()
 
 		selection := m.currentSelection()
 		if selection == nil || selection.Issue.ID == "" {
-			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess))
+			toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
+			notifyEditResult()
+			return m, batchCmds(modeCmd, toastCmd)
 		}
 
 		m.detail.SelectionID = selection.Issue.ID
@@ -516,8 +530,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.Loading = true
 		m.detail.Error = ""
 		m.detail.TargetID = selection.Issue.ID
+		toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
+		notifyEditResult()
 		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
+			toastCmd,
 			loadDetailCmd(m.services, selection.Issue.ID),
 		)
 	case launchActionResultMsg:

@@ -68,6 +68,11 @@ type Services struct {
 	// (component=board, component=search, …) via modeLogger. When nil, each
 	// mode falls back to slog.Default().
 	Logger *slog.Logger
+	// OnEditIssueResult is a test-only hook called after editIssueResultMsg is
+	// fully processed and the toast has been set. It is nil in production and
+	// must not be set in non-test code. Tests can use it to replace the
+	// time.Sleep settle budget with a precise synchronisation point.
+	OnEditIssueResult func()
 }
 
 // NewServices constructs the minimal app services container.
