@@ -188,6 +188,10 @@ go test ./internal/mode/board -run TestBoardModeDashboardLayoutGoldensAcrossWidt
 go test ./internal/app -run 'TestModelFixtureShapedBoardCaptureGolden|TestModelStartupBoardLayoutSanityAndNoRuntimeErrors' -v
 ```
 
+### Controller-async contract tests
+
+A fourth pattern, *controller-async contract*, drives the search controller against a `DelayedFakeRepository` (defined in `internal/mode/search/model_async_test.go`) to exercise overlapping-Cmd cadence that the synchronous-drain harness (`pressAndResolve` → `ApplyControllerKeySequence`) cannot reach. The gap exists because `ApplyControllerKeySequence` drains every Cmd to completion before the next key arrives, so `m.loading` is always `false` when the next message is processed — making async race windows (keys arriving before a prior search Cmd returns its Msg) completely invisible to those tests. Add controller-async contract tests in `TestSearchControllerAsyncContracts` whenever a bug's root cause involves a user event arriving while a prior async Cmd is still in flight (the czkq.4 / znri.6 / czkq.2 shape). The `DelayedFakeRepository` wraps any `repository.Repository`, so the same pattern applies to detail-mode follow-ups.
+
 ### Exceptions
 
 If a surface is not practical for teatest+golden (for example, highly volatile ANSI animation timing), document the exception in the package test file and use the narrowest deterministic alternative (typically message/state assertions).
