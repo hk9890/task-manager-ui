@@ -61,7 +61,7 @@ the only current dynamic cross-check (see Pinning Test Coverage below).
 
 Several argv shapes include dynamic/conditional flags:
 
-- `--limit <N>`: driven by `sectionItemCapacity()` (board) or `searchItemCapacity()` (search); both default to 20 before the first `tea.WindowSizeMsg`. `closedLimit()` enforces a floor of 50 for the Done column.
+- `--limit <N>`: driven by `closedLimit()` for the Done column (wired through `DashboardOptions.ClosedLimit` since iwvm.4); `sectionItemCapacity()` for other board columns; `searchItemCapacity()` for search. `closedLimit()` enforces a floor of 50 regardless of terminal height. The limit is variable: resizing the terminal triggers a new Dashboard call with an updated limit.
 - `--sort closed`: always present for the Done column (hardcoded `SortFieldClosedAt`).
 - `-a` (IncludeClosed): always present for the Done column (hardcoded `IncludeClosed: true`).
 - `--status <csv>`: present only when `query.Statuses` has exactly one entry (list/search) or hardcoded to `closed` (CountIssues for board). See per-subcommand semantics below.
@@ -112,13 +112,13 @@ Collapsed to unique bd verb invocations:
 |---|---|---|
 | `bd ready --explain --json` | YES | `TestBoardInitRealRepositorySubprocessArgvCardinality` in `internal/mode/board/model_test.go` |
 | `bd query status=in_progress --json` | YES | same |
-| `bd query status=closed --json -a --sort closed --limit 50` | YES | same + `TestBoardClosedQueryArgvLimitDynamicBoundaries` (height boundaries) |
+| `bd query status=closed --json -a --sort closed --limit <N>` | YES | same + `TestBoardClosedQueryArgvLimitVariants` (ClosedLimit=0/default-50, =50, =200) (iwvm.7) |
 | `bd count --by-status --json --status closed` | YES | same |
 | `bd ping --json` | YES — `TestRepositoryHealthCheckIssuesPingJSON` in `read_repository_test.go` (package-internal `testRecordingExecutor`) | `internal/repository/beads/read_repository_test.go` |
 | `bd show <id> --json` | YES — argv asserted via `testRecordingExecutor` in multiple ShowIssue tests | `internal/repository/beads/read_repository_test.go` |
 | `bd show <parentID> --json` (parent sibling lookup) | YES — `TestShowIssueParentSiblingArgvShape` (ppja.3) | `internal/repository/beads/read_repository_test.go` |
 | `bd ready --explain --json --limit N` (non-zero limit, boundaries) | YES — `TestReadyExplainArgvBoundaryLimits` (limit=1, 20, 21) (ppja.3) | `internal/repository/beads/read_repository_test.go` |
-| `bd query <expr> --json --limit N` (dynamic limits) | YES — `TestQueryArgvBoundaryLimits` (limit=1, 50, 51) + `TestBoardClosedQueryArgvLimitDynamicBoundaries` (height-driven) (ppja.3) | `read_repository_test.go` + `internal/mode/board/model_test.go` |
+| `bd query <expr> --json --limit N` (dynamic limits) | YES — `TestQueryArgvBoundaryLimits` (limit=1, 50, 51) + `TestBoardClosedQueryArgvLimitVariants` (ClosedLimit=0/50/200, height-driven) (ppja.3, iwvm.7) | `read_repository_test.go` + `internal/mode/board/model_test.go` |
 | `bd list --json --all [--limit N]` (SearchIssues empty-text path) | YES — `TestSearchIssuesEmptyTextNoWorkStateArgvShape` (limit=0,1,20,21) + `TestSearchModeInitArgvShape*` (ppja.3) | `read_repository_test.go` + `internal/mode/search/argv_cardinality_test.go` |
 | `bd list --json --status <csv> [filters]` (SearchIssues with status filter) | YES — `TestSearchIssuesStatusFilteredListArgvShape` (ppja.3) | `internal/repository/beads/read_repository_test.go` |
 | `bd search <text> --json [--limit N]` (no status filter — bd default excludes closed) | YES — `TestSearchModeTextSearchArgvShape` (czkq.4) | `internal/mode/search/argv_cardinality_test.go` |

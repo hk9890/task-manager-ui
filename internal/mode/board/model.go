@@ -325,7 +325,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		m.columns = initialLoadingColumns()
 	}
 
-	return loadDashboardCmd(m.repo)
+	return loadDashboardCmd(m.repo, repository.DashboardOptions{ClosedLimit: m.closedLimit()})
 }
 
 // compose runs dashboard.Compose from a single DashboardData result and
@@ -548,10 +548,11 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 }
 
 // loadDashboardCmd fires the Dashboard repository call and wraps the result
-// in a dashboardLoadedMsg.
-func loadDashboardCmd(repo repository.Repository) tea.Cmd {
+// in a dashboardLoadedMsg. opts is passed verbatim to repo.Dashboard, allowing
+// the caller to supply a terminal-derived ClosedLimit.
+func loadDashboardCmd(repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
 	return func() tea.Msg {
-		data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
+		data, err := repo.Dashboard(context.Background(), opts)
 		return dashboardLoadedMsg{data: data, err: err}
 	}
 }

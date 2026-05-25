@@ -934,6 +934,88 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 	})
 
+	// ---- Scenario 14: ClosedLimit respected ----
+	//
+	// Dashboard must honour opts.ClosedLimit:
+	//   - len(data.Closed) <= ClosedLimit when ClosedLimit > 0.
+	//   - data.ClosedTotal == total DB closed count (independent of limit).
+	//   - TotalIsExact is false when the limit caps the result.
+	// For ClosedLimit=0:
+	//   - beads.Repository falls back to defaultLeanClosedLimit (50).
+	//   - memory.Repository returns ALL closed issues.
+	//
+	// Seeded with 20 closed issues so a limit of 5 exercises the cap path.
+	t.Run("ClosedLimitRespected", func(t *testing.T) {
+		const totalClosed = 20
+		const capLimit = 5
+
+		issues := make([]seedIssue, totalClosed)
+		for i := range issues {
+			issues[i] = seedIssue{
+				id:        fmt.Sprintf("pbt-%02d", i+1),
+				title:     fmt.Sprintf("Closed issue %02d", i+1),
+				issueType: "task",
+				status:    "closed",
+			}
+		}
+		r := impl.build(t, scenarioSeed{issues: issues})
+
+		ctx2 := context.Background()
+
+		// Sub-scenario A: ClosedLimit = capLimit (5), totalClosed = 20
+		t.Run("CapLimitRespected", func(t *testing.T) {
+			t.Parallel()
+			data, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: capLimit})
+			if err != nil {
+				t.Fatalf("Scenario14/CapLimit/Dashboard: %v", err)
+			}
+			if len(data.Closed) > capLimit {
+				t.Errorf("Scenario14/CapLimit: len(Closed)=%d; want <=%d", len(data.Closed), capLimit)
+			}
+			if data.ClosedTotal != totalClosed {
+				t.Errorf("Scenario14/CapLimit: ClosedTotal=%d; want %d (full DB count, not capped)",
+					data.ClosedTotal, totalClosed)
+			}
+			// TotalIsExact is only computed by dashboard.Compose, not the Repository.
+			// Here we just verify the raw data fields are correct.
+		})
+
+		// Sub-scenario B: ClosedLimit = 0 (use implementation default).
+		// memory: returns all 20; beads: falls back to defaultLeanClosedLimit (50).
+		// For both impls the total closed count is 20 (< 50) so all items fit.
+		t.Run("ZeroLimitUsesDefault", func(t *testing.T) {
+			t.Parallel()
+			data, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: 0})
+			if err != nil {
+				t.Fatalf("Scenario14/ZeroLimit/Dashboard: %v", err)
+			}
+			// For ClosedLimit=0 both impls must return all 20 (20 < default floor 50).
+			if len(data.Closed) != totalClosed {
+				t.Errorf("Scenario14/ZeroLimit: len(Closed)=%d; want %d (all, since total < default floor)",
+					len(data.Closed), totalClosed)
+			}
+			if data.ClosedTotal != totalClosed {
+				t.Errorf("Scenario14/ZeroLimit: ClosedTotal=%d; want %d", data.ClosedTotal, totalClosed)
+			}
+		})
+
+		// Sub-scenario C: ClosedLimit = 10000 (overshoot — returns all available).
+		t.Run("OvershootReturnsAll", func(t *testing.T) {
+			t.Parallel()
+			data, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: 10000})
+			if err != nil {
+				t.Fatalf("Scenario14/Overshoot/Dashboard: %v", err)
+			}
+			if len(data.Closed) != totalClosed {
+				t.Errorf("Scenario14/Overshoot: len(Closed)=%d; want %d (overshoot limit returns all)",
+					len(data.Closed), totalClosed)
+			}
+			if data.ClosedTotal != totalClosed {
+				t.Errorf("Scenario14/Overshoot: ClosedTotal=%d; want %d", data.ClosedTotal, totalClosed)
+			}
+		})
+	})
+
 	// ---- Scenario 13: Catalogs shape ----
 	t.Run("CatalogsShape", func(t *testing.T) {
 		t.Parallel()

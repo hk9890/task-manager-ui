@@ -51,8 +51,9 @@ type CachingRepository struct {
 	backing repository.Repository
 	memory  *memory.Repository
 
-	dashboardCache repository.DashboardData
-	dashboardDirty bool
+	dashboardCache           repository.DashboardData
+	dashboardDirty           bool
+	lastDashboardClosedLimit int // last ClosedLimit used for a successful Dashboard fetch
 
 	catalogsCache   *repository.Catalogs
 	catalogsFetched time.Time
@@ -413,18 +414,29 @@ func (c *CachingRepository) SaveNow() error {
 
 // Dashboard implements repository.Repository.
 //
-// Returns the cached DashboardData when not dirty. On a cache miss (dirty flag
-// set), fetches from backing, stores the result, and clears the dirty flag.
-// The dirty flag is NOT cleared on backing error.
+// Returns the cached DashboardData when not dirty AND the requested ClosedLimit
+// matches the limit used for the last successful fetch. On a cache miss (dirty
+// flag set, or a different ClosedLimit is requested), fetches from backing,
+// stores the result, and clears the dirty flag.
+//
+// Caching strategy for variable ClosedLimit (option a — re-fetch on change):
+// A different requested ClosedLimit is treated as a cache miss, distinct from
+// the dashboardDirty flag. This keeps ForceFresh (tracked separately in fbea)
+// orthogonal: we never silently slice a high-water cache to satisfy a smaller
+// request, which would hide partial data and complicate the force-fresh
+// interaction. The cost is one extra backing round-trip on a resize event, which
+// is acceptable because resize events are rare compared to steady-state reads.
+// See internal/repository/caching/doc.go for the full rationale.
 func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
 	}
 
-	// Fast path: serve from cache when not dirty.
+	// Fast path: serve from cache when not dirty and ClosedLimit is unchanged.
 	c.mu.RLock()
 	dirty := c.dashboardDirty
-	if !dirty {
+	limitChanged := opts.ClosedLimit != c.lastDashboardClosedLimit
+	if !dirty && !limitChanged {
 		data := c.dashboardCache
 		c.mu.RUnlock()
 		return data, nil
@@ -441,6 +453,7 @@ func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.Dashb
 	c.mu.Lock()
 	c.dashboardCache = data
 	c.dashboardDirty = false
+	c.lastDashboardClosedLimit = opts.ClosedLimit
 	c.mu.Unlock()
 
 	return data, nil

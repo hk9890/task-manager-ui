@@ -39,8 +39,15 @@ func (r *Repository) HealthCheck(ctx context.Context) error {
 
 // Dashboard fans out five bd calls in parallel and assembles repository.DashboardData.
 // Any single failure cancels remaining in-flight calls; no partial result is returned.
-func (r *Repository) Dashboard(ctx context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	g, gCtx := errgroup.WithContext(ctx)
+
+	// Resolve the effective closed limit: honour opts.ClosedLimit when positive,
+	// otherwise fall back to the implementation default.
+	closedLimit := opts.ClosedLimit
+	if closedLimit <= 0 {
+		closedLimit = defaultLeanClosedLimit
+	}
 
 	var readyExplain domain.ReadyExplainResult
 	var inProgress []domain.IssueSummary
@@ -66,7 +73,7 @@ func (r *Repository) Dashboard(ctx context.Context, _ repository.DashboardOption
 			IncludeClosed: true,
 			SortBy:        domain.SortFieldClosedAt,
 			SortOrder:     domain.SortDirectionDescending,
-			Limit:         defaultLeanClosedLimit,
+			Limit:         closedLimit,
 		})
 		return err
 	})

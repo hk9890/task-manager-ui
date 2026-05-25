@@ -35,10 +35,10 @@ type bdBlockedIssue struct {
 // dashboard.Columns. It is the core of the parity test: if the production
 // fetch path ever drifts, this helper captures it.
 //
-// closedLimit is passed to dashboard.Compose as the cap sent to bd; it is used
-// to determine whether the visible row list is truncated. The lean Repository
-// uses defaultLeanClosedLimit (50) internally, so closedLimit should be ≤50 to
-// match the actual data returned.
+// closedLimit is forwarded to both DashboardOptions.ClosedLimit (so the
+// Repository fetches at most that many closed issues) and to dashboard.Compose
+// (so the capping logic matches the data returned). When closedLimit <= 0, the
+// Repository uses its implementation default (50 for beads; all for memory).
 func runDashboardFetch(t *testing.T, repo repository.Repository, closedLimit int) dashboard.Columns {
 	t.Helper()
 
@@ -48,7 +48,7 @@ func runDashboardFetch(t *testing.T, repo repository.Repository, closedLimit int
 
 	ctx := context.Background()
 
-	data, err := repo.Dashboard(ctx, repository.DashboardOptions{})
+	data, err := repo.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: closedLimit})
 	if err != nil {
 		t.Fatalf("runDashboardFetch: Dashboard failed: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -651,6 +652,96 @@ func TestClosedLimit(t *testing.T) {
 	}
 }
 
+// TestClosedLimitWiredThroughDashboardOpts asserts that loadDashboardCmd passes
+// m.closedLimit() as DashboardOptions.ClosedLimit to the Repository. This is
+// iwvm Success Criterion #1: the wiring is verified in CI without terminal resize.
+func TestClosedLimitWiredThroughDashboardOpts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		height      int
+		wantedLimit int
+	}{
+		{name: "default (height=0)", height: 0, wantedLimit: 50},   // max(50, 20) = 50
+		{name: "small terminal", height: 10, wantedLimit: 50},      // max(50, 7) = 50
+		{name: "medium terminal", height: 53, wantedLimit: 50},     // max(50, 50) = 50
+		{name: "tall terminal", height: 60, wantedLimit: 57},       // max(50, 57) = 57
+		{name: "very tall terminal", height: 100, wantedLimit: 97}, // max(50, 97) = 97
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := &optRecordingRepo{inner: memoryrepo.New()}
+			m := newBoardModel(rec, resolvedBoardKeys(t))
+			m.SetSize(200, tc.height)
+
+			cmd := m.Init()
+			if cmd == nil {
+				t.Fatalf("Init() must return a non-nil command")
+			}
+			_ = cmd()
+
+			opts := rec.lastOpts()
+			if opts.ClosedLimit != tc.wantedLimit {
+				t.Errorf("height=%d: DashboardOptions.ClosedLimit=%d; want %d (closedLimit())",
+					tc.height, opts.ClosedLimit, tc.wantedLimit)
+			}
+		})
+	}
+}
+
+// optRecordingRepo records the DashboardOptions passed on each Dashboard call.
+// It delegates to inner for the actual result.
+type optRecordingRepo struct {
+	mu    sync.Mutex
+	inner repository.Repository
+	opts  []repository.DashboardOptions
+}
+
+func (r *optRecordingRepo) lastOpts() repository.DashboardOptions {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.opts) == 0 {
+		return repository.DashboardOptions{}
+	}
+	return r.opts[len(r.opts)-1]
+}
+
+func (r *optRecordingRepo) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+	r.mu.Lock()
+	r.opts = append(r.opts, opts)
+	r.mu.Unlock()
+	return r.inner.Dashboard(ctx, opts)
+}
+func (r *optRecordingRepo) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
+	return r.inner.Issue(ctx, id)
+}
+func (r *optRecordingRepo) Search(ctx context.Context, q domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	return r.inner.Search(ctx, q)
+}
+func (r *optRecordingRepo) CreateIssue(ctx context.Context, inp domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+	return r.inner.CreateIssue(ctx, inp)
+}
+func (r *optRecordingRepo) UpdateIssue(ctx context.Context, id string, inp domain.UpdateIssueInput) error {
+	return r.inner.UpdateIssue(ctx, id, inp)
+}
+func (r *optRecordingRepo) CloseIssue(ctx context.Context, id string, inp domain.CloseIssueInput) error {
+	return r.inner.CloseIssue(ctx, id, inp)
+}
+func (r *optRecordingRepo) AddComment(ctx context.Context, id string, inp domain.AddCommentInput) error {
+	return r.inner.AddComment(ctx, id, inp)
+}
+func (r *optRecordingRepo) HealthCheck(ctx context.Context) error {
+	return r.inner.HealthCheck(ctx)
+}
+func (r *optRecordingRepo) Catalogs(ctx context.Context) (repository.Catalogs, error) {
+	return r.inner.Catalogs(ctx)
+}
+
 // --- sectionItemCapacity ---
 
 func TestSectionItemCapacity(t *testing.T) {
@@ -1087,5 +1178,80 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 		if strings.Contains(view, forbidden) {
 			t.Fatalf("expected board layout to keep compact one-line issue rows without detail-field chrome %q\nview:\n%s", forbidden, view)
 		}
+	}
+}
+
+// --- bd argv pinning for variable --limit (iwvm.7) ---
+
+// TestBoardClosedQueryArgvLimitVariants pins the exact bd query argv that the
+// board model emits for a range of ClosedLimit values: ClosedLimit=0 (falls back
+// to default 50 in beads.Repository), ClosedLimit=50, and ClosedLimit=200.
+//
+// Each case wires the board model against a real *beads.Repository backed by a
+// *fakes.RecordingExecutor so the exact subprocess argv is observable.
+func TestBoardClosedQueryArgvLimitVariants(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		height         int // controls m.closedLimit(); 0 = default (floor 50)
+		wantClosedArgv []string
+	}{
+		{
+			name:           "ClosedLimit_0_default_floor_50",
+			height:         0, // closedLimit() returns 50 (floor)
+			wantClosedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
+		},
+		{
+			name:           "ClosedLimit_50_exact",
+			height:         53, // closedLimit() returns 50 (53-3=50, max(50,50)=50)
+			wantClosedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
+		},
+		{
+			name:           "ClosedLimit_200",
+			height:         203, // closedLimit() returns 200 (203-3=200, max(50,200)=200)
+			wantClosedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "200"},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := fakes.NewRecordingExecutor()
+
+			// Pre-register canned responses for all five Dashboard fan-out calls.
+			rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(beads.ExecResult{Stdout: []byte(`{
+				"ready": [], "blocked": [],
+				"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0}
+			}`)}, nil)
+			rec.OnArgs([]string{"query", "status=in_progress", "--json"}).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+			rec.OnArgs(tc.wantClosedArgv).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+			rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "closed"}).Return(beads.ExecResult{Stdout: []byte(`{
+				"groups": [{"group": "closed", "count": 0}], "total": 0, "schema_version": 1
+			}`)}, nil)
+			rec.OnArgs([]string{"query", "status=blocked", "--json"}).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
+
+			runner := beads.NewCommandRunner(beads.RunnerConfig{
+				Command:  "bd",
+				Executor: rec,
+			})
+			repo := repositorybeads.New(runner)
+
+			m := NewModel(repo, slog.Default(), resolvedBoardKeys(t))
+			m.SetSize(200, tc.height)
+
+			initCmd := m.Init()
+			if initCmd == nil {
+				t.Fatalf("Init() must return a non-nil command")
+			}
+			_ = initCmd()
+
+			calls := rec.Calls()
+
+			// Assert the exact closed-query argv is present.
+			assertArgvPresent(t, calls, tc.wantClosedArgv)
+		})
 	}
 }

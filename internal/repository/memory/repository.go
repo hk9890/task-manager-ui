@@ -304,8 +304,11 @@ func DefaultCatalogs() repository.Catalogs {
 // DependsOn ID points to a non-closed issue.
 // DashboardData.Blocked: issues where status == "blocked" (stored status).
 // DashboardData.InProgress: issues where status == "in_progress".
-// DashboardData.Closed: all closed issues, sorted by ClosedAt DESC.
-func (r *Repository) Dashboard(ctx context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+// DashboardData.Closed: closed issues sorted by ClosedAt DESC, capped to
+// opts.ClosedLimit. When opts.ClosedLimit <= 0, all closed issues are returned.
+// DashboardData.ClosedTotal: always the full count of closed issues, independent
+// of opts.ClosedLimit.
+func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
 	}
@@ -401,11 +404,19 @@ func (r *Repository) Dashboard(ctx context.Context, _ repository.DashboardOption
 		blocked = []domain.IssueSummary{}
 	}
 
+	// ClosedTotal must be computed from the full slice BEFORE any limit is applied.
+	closedTotal := len(closed)
+
+	// Apply opts.ClosedLimit when positive. When <= 0, all closed issues are returned.
+	if opts.ClosedLimit > 0 && len(closed) > opts.ClosedLimit {
+		closed = closed[:opts.ClosedLimit]
+	}
+
 	return repository.DashboardData{
 		ReadyExplain: re,
 		InProgress:   inProgress,
 		Closed:       closed,
-		ClosedTotal:  len(closed),
+		ClosedTotal:  closedTotal,
 		Blocked:      blocked,
 	}, nil
 }

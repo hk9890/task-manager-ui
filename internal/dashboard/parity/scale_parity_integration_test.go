@@ -2,114 +2,89 @@
 
 package parity_test
 
-// scale_parity_integration_test.go — parity assertions that require the scale
-// fixture's edge-case properties and cannot pass on the minimal anchor (3 issues).
+// scale_parity_integration_test.go — cap-engagement parity assertions for the
+// Done column.
 //
-// All tests in this file are gated behind BWB_SCALE_FIXTURE=1 via
-// datasets.ScaleFixture, which skips automatically when the env var is unset.
+// After iwvm, opts.ClosedLimit is a caller-controlled parameter so ANY fixture
+// can exercise the cap path by passing a limit smaller than its closed count.
+// The tests below use a small seeded fixture (~3 closed issues) with ClosedLimit=2,
+// making them runnable on every mise run test:integration without BWB_SCALE_FIXTURE.
 //
-// Edge cases exercised:
-//   - Done column cap engagement: >50 closed issues forces ClosedTotal > ClosedLimit,
-//     which must produce TotalIsExact=false and the "N of M" badge signal. The 3-issue
-//     minimal anchor has only 1 closed issue, so it cannot trigger this path.
-//   - Done.Total vs bd count parity under cap: when Done is capped at 50 rows,
-//     Done.Total must still match bd count --by-status closed (not 50).
+// Tests that genuinely require scale-fixture properties (cardinality warnings,
+// sort tie-breaks across hundreds of issues) remain gated behind
+// datasets.ScaleFixture / BWB_SCALE_FIXTURE=1.
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/hk9890/beads-workbench/internal/repository"
 	"github.com/hk9890/beads-workbench/internal/testing/datasets"
 )
 
-// TestScaleParity_DoneColumnCapEngagement exercises the ssom regression class:
-// when >50 issues are closed, the Done column must report TotalIsExact=false
-// (the signal bwb uses to render the "N of M" badge) and Done.Total must equal
-// the real DB count, not the capped row count.
-//
-// This test requires the scale fixture (>50 closed issues). The 3-issue minimal
-// anchor cannot trigger the cap path, so this test is scale-only.
-//
-// regression class: ssom (Done-column cap badge; bwb reported rows ≤ 50 but
-// the real closed count is 75).
-func TestScaleParity_DoneColumnCapEngagement(t *testing.T) {
-	// datasets.ScaleFixture skips automatically when BWB_SCALE_FIXTURE != 1.
-	ds := datasets.ScaleFixture(t)
+// seedCapTestRepo creates an isolated bd repo in dir with nClosed closed issues
+// and returns a beads.Repository for it.
+func seedCapTestRepo(t *testing.T, nClosed int) (repository.Repository, int) {
+	t.Helper()
 
-	repo := datasets.NewRepository(t, ds)
-	cols := runDashboardFetch(t, repo, closedCapForTest)
-
-	// Source-of-truth: bd count --by-status --json
-	countRaw, err := datasets.BdCount(t, ds, "--by-status")
-	if err != nil {
-		t.Fatalf("BdCount --by-status failed on %q: %v", ds.Name, err)
-	}
-	statusCounts := parseBdCountByStatus(t, countRaw)
-	bdClosed := statusCounts["closed"]
-
-	// Precondition: the scale fixture must have >50 closed issues to trigger
-	// the cap path. Without this the test is vacuous.
-	if bdClosed <= closedCapForTest {
-		t.Skipf("scale fixture has only %d closed issues (need >%d to exercise cap path)", bdClosed, closedCapForTest)
+	if _, err := exec.LookPath("bd"); err != nil {
+		t.Skip("bd not found on PATH; skipping cap-engagement test")
 	}
 
-	// Done.Total must equal the real DB count (not the cap).
-	t.Run("DoneTotalEqualsRealClosedCount", func(t *testing.T) {
-		if cols.Done.Total != bdClosed {
-			t.Errorf(
-				"ssom: Done.Total=%d; want %d (real bd count); delta=%d — cap may be leaking into Total",
-				cols.Done.Total, bdClosed, cols.Done.Total-bdClosed,
-			)
-		} else {
-			t.Logf("ssom cap parity OK: Done.Total=%d == bdClosed=%d", cols.Done.Total, bdClosed)
-		}
-	})
+	dir := filepath.Join(t.TempDir(), "cap-test-repo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("seedCapTestRepo: mkdir %q: %v", dir, err)
+	}
 
-	// Done.TotalIsExact must be false when capped ("N of M" badge signal).
-	t.Run("DoneTotalIsExactFalseWhenCapped", func(t *testing.T) {
-		if cols.Done.TotalIsExact {
-			t.Errorf(
-				"ssom: Done.TotalIsExact=true when %d closed > cap %d; expected false (N of M badge should show)",
-				bdClosed, closedCapForTest,
-			)
-		} else {
-			t.Logf("ssom badge signal OK: TotalIsExact=false for %d closed > cap %d", bdClosed, closedCapForTest)
+	runBD := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("bd", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("bd %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
-	})
+	}
 
-	// Done.Issues row count must not exceed the cap.
-	t.Run("DoneRowsRespectCap", func(t *testing.T) {
-		if len(cols.Done.Issues) > closedCapForTest {
-			t.Errorf(
-				"ssom: Done.Issues len=%d; want <=%d (cap must be respected)",
-				len(cols.Done.Issues), closedCapForTest,
-			)
-		}
-	})
+	gitCmd := exec.Command("git", "init")
+	gitCmd.Dir = dir
+	gitCmd.Env = os.Environ()
+	if out, err := gitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init in %q: %v\n%s", dir, err, out)
+	}
 
-	t.Logf("dataset=%s bdClosed=%d Done.Total=%d Done.TotalIsExact=%v Done.Issues=%d",
-		ds.Name, bdClosed, cols.Done.Total, cols.Done.TotalIsExact, len(cols.Done.Issues))
+	runBD("init", "--non-interactive", "--skip-hooks", "--skip-agents", "--prefix", "cap")
+
+	for i := 0; i < nClosed; i++ {
+		id := fmt.Sprintf("cap-%02d", i+1)
+		runBD("create", "--id", id, "--title", fmt.Sprintf("Closed issue %02d", i+1))
+		runBD("close", id, "--reason", "cap test fixture")
+	}
+
+	ds := datasets.Dataset{Name: "cap-test", Path: dir, ReadOnly: false}
+	return datasets.NewRepository(t, ds), nClosed
 }
 
-// TestScaleParity_CapEngagement_VsBdCount verifies that the Done.Total count
-// reported by the bwb data path under cap is identical to the source-of-truth
-// count from `bd count --by-status` for the scale fixture.
-//
-// This is a strict count parity assertion scoped to the scale fixture because:
-//   - The minimal anchor never exceeds the cap (only 1 closed issue), so the
-//     cap path cannot be exercised.
-//   - The scale fixture has 75+ closed issues, ensuring the cap fires on every run.
-//
-// regression class: ssom
-func TestScaleParity_CapEngagement_VsBdCount(t *testing.T) {
-	ds := datasets.ScaleFixture(t) // skips if BWB_SCALE_FIXTURE != 1
+// bdCountClosed runs bd count --by-status --json in dir and returns the closed count.
+func bdCountClosed(t *testing.T, dir string) int {
+	t.Helper()
 
-	repo := datasets.NewRepository(t, ds)
-	cols := runDashboardFetch(t, repo, closedCapForTest)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	countRaw, err := datasets.BdCount(t, ds, "--by-status")
+	cmd := exec.CommandContext(ctx, "bd", "count", "--by-status", "--json")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("BdCount failed: %v", err)
+		t.Fatalf("bdCountClosed: %v", err)
 	}
 
 	var result struct {
@@ -118,26 +93,128 @@ func TestScaleParity_CapEngagement_VsBdCount(t *testing.T) {
 			Group string `json:"group"`
 		} `json:"groups"`
 	}
-	if err := json.Unmarshal(countRaw, &result); err != nil {
-		t.Fatalf("unmarshal bd count: %v", err)
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("bdCountClosed: unmarshal: %v", err)
 	}
 
-	var bdClosed int
 	for _, g := range result.Groups {
 		if g.Group == "closed" {
-			bdClosed = g.Count
-			break
+			return g.Count
+		}
+	}
+	return 0
+}
+
+// TestScaleParity_DoneColumnCapEngagement exercises the ssom regression class:
+// when closed issues exceed ClosedLimit, the Done column must report
+// TotalIsExact=false and Done.Total must equal the real DB count (not the cap).
+//
+// This test uses a small seeded fixture (3 closed issues, ClosedLimit=2) so it
+// runs on every mise run test:integration without BWB_SCALE_FIXTURE.
+//
+// regression class: ssom (Done-column cap badge)
+func TestScaleParity_DoneColumnCapEngagement(t *testing.T) {
+	const nClosed = 3
+	const capLimit = 2
+
+	repo, _ := seedCapTestRepo(t, nClosed)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	data, err := repo.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: capLimit})
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+
+	cols := runDashboardFetch(t, repo, capLimit)
+
+	// Done.Total must equal the real DB count (not the cap).
+	t.Run("DoneTotalEqualsRealClosedCount", func(t *testing.T) {
+		if data.ClosedTotal != nClosed {
+			t.Errorf("ssom: ClosedTotal=%d; want %d (real count); cap must not leak into Total",
+				data.ClosedTotal, nClosed)
+		}
+		if cols.Done.Total != nClosed {
+			t.Errorf("ssom: Done.Total=%d; want %d (real count)", cols.Done.Total, nClosed)
+		}
+	})
+
+	// Done.TotalIsExact must be false when capped ("N of M" badge signal).
+	t.Run("DoneTotalIsExactFalseWhenCapped", func(t *testing.T) {
+		if cols.Done.TotalIsExact {
+			t.Errorf("ssom: Done.TotalIsExact=true when %d closed > cap %d; expected false",
+				nClosed, capLimit)
+		}
+	})
+
+	// Done.Issues row count must not exceed the cap.
+	t.Run("DoneRowsRespectCap", func(t *testing.T) {
+		if len(data.Closed) > capLimit {
+			t.Errorf("ssom: len(Closed)=%d; want <=%d (cap must be respected)",
+				len(data.Closed), capLimit)
+		}
+		if len(cols.Done.Issues) > capLimit {
+			t.Errorf("ssom: Done.Issues len=%d; want <=%d", len(cols.Done.Issues), capLimit)
+		}
+	})
+
+	t.Logf("cap engagement OK: nClosed=%d cap=%d Closed=%d ClosedTotal=%d TotalIsExact=%v",
+		nClosed, capLimit, len(data.Closed), data.ClosedTotal, cols.Done.TotalIsExact)
+}
+
+// TestScaleParity_CapEngagement_VsBdCount verifies that the Done.Total count
+// reported by the bwb data path under cap is identical to the source-of-truth
+// count from `bd count --by-status` for the seeded fixture.
+//
+// regression class: ssom
+func TestScaleParity_CapEngagement_VsBdCount(t *testing.T) {
+	const nClosed = 3
+	const capLimit = 2
+
+	if _, err := exec.LookPath("bd"); err != nil {
+		t.Skip("bd not found on PATH; skipping cap-engagement test")
+	}
+
+	dir := filepath.Join(t.TempDir(), "cap-vsbdcount-repo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	runBD := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("bd", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("bd %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
 
-	if bdClosed <= closedCapForTest {
-		t.Skipf("scale fixture has %d closed (need >%d); cannot exercise cap path", bdClosed, closedCapForTest)
+	gitCmd := exec.Command("git", "init")
+	gitCmd.Dir = dir
+	gitCmd.Env = os.Environ()
+	if out, err := gitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	runBD("init", "--non-interactive", "--skip-hooks", "--skip-agents", "--prefix", "vbc")
+
+	for i := 0; i < nClosed; i++ {
+		id := fmt.Sprintf("vbc-%02d", i+1)
+		runBD("create", "--id", id, "--title", fmt.Sprintf("Closed %02d", i+1))
+		runBD("close", id, "--reason", "vbc fixture")
 	}
 
+	ds := datasets.Dataset{Name: "vbc-test", Path: dir, ReadOnly: false}
+	repo := datasets.NewRepository(t, ds)
+
+	cols := runDashboardFetch(t, repo, capLimit)
+	bdClosed := bdCountClosed(t, dir)
+
 	if cols.Done.Total != bdClosed {
-		t.Errorf(
-			"ssom cap parity: Done.Total=%d; bd count=%d; delta=%d",
-			cols.Done.Total, bdClosed, cols.Done.Total-bdClosed,
-		)
+		t.Errorf("ssom cap parity: Done.Total=%d; bd count=%d; delta=%d",
+			cols.Done.Total, bdClosed, cols.Done.Total-bdClosed)
 	}
+
+	t.Logf("cap vs bd count OK: Done.Total=%d bdClosed=%d", cols.Done.Total, bdClosed)
 }

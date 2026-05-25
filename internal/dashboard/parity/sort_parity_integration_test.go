@@ -45,10 +45,12 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/datasets"
 )
 
-// closedCapForTest is the fixed cap used for the Done column in parity tests.
-// This matches the minimum cap enforced by board.Model.closedLimit() (max(50,
-// sectionItemCapacity)); 50 is the guaranteed floor regardless of terminal height.
-const closedCapForTest = 50
+// testDoneColumnLimit is the test-local cap fed into DashboardOptions.ClosedLimit
+// and passed to dashboard.Compose for the Done column in sort-parity tests. The
+// value 50 matches the floor enforced by board.Model.closedLimit() (max(50,
+// sectionItemCapacity)), ensuring sort-parity assertions remain comparable to
+// production board behaviour at typical terminal heights.
+const testDoneColumnLimit = 50
 
 // bdIssueSortable is decoded from bd JSON output for sort-parity comparisons.
 // We decode more fields than just ID so we can apply the same issueSort logic
@@ -146,7 +148,7 @@ func fetchBWBColumns(t *testing.T, ds datasets.Dataset) dashboard.Columns {
 
 	repo := datasets.NewRepository(t, ds)
 
-	data, err := repo.Dashboard(ctx, repository.DashboardOptions{})
+	data, err := repo.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: testDoneColumnLimit})
 	if err != nil {
 		t.Fatalf("fetchBWBColumns[%s]: Dashboard: %v", ds.Name, err)
 	}
@@ -156,7 +158,7 @@ func fetchBWBColumns(t *testing.T, ds datasets.Dataset) dashboard.Columns {
 		Blocked:     data.ReadyExplain.Blocked,
 		InProgress:  data.InProgress,
 		Closed:      data.Closed,
-		ClosedLimit: closedCapForTest,
+		ClosedLimit: testDoneColumnLimit,
 		ClosedTotal: data.ClosedTotal,
 	})
 }
@@ -280,7 +282,7 @@ func runSortParityForDataset(t *testing.T, ds datasets.Dataset) {
 	// The repository uses "bd query" (not "bd list") so we call bdQueryClosed
 	// directly to get the same source-of-truth ordering.
 	t.Run("Done", func(t *testing.T) {
-		bdRaw := bdQueryClosed(t, ds, closedCapForTest)
+		bdRaw := bdQueryClosed(t, ds, testDoneColumnLimit)
 		bdItems := sortableFromJSON(t, bdRaw)
 		bdIDs := idsInOrder(bdItems)
 		bwbIDs := issueIDs(cols.Done.Issues)
@@ -307,7 +309,7 @@ func runClosedAtDiagnostic(t *testing.T, ds datasets.Dataset) {
 		"--status", "closed",
 		"--sort", "closed",
 		"--reverse",
-		"--limit", strconv.Itoa(closedCapForTest),
+		"--limit", strconv.Itoa(testDoneColumnLimit),
 	)
 	if err != nil {
 		t.Logf("ClosedAtDescPreservedOnRealData[%s]: BdList(closed, closed_at asc) failed: %v — skipping diagnostic", ds.Name, err)
@@ -320,7 +322,7 @@ func runClosedAtDiagnostic(t *testing.T, ds datasets.Dataset) {
 		"--status", "closed",
 		"--sort", "updated",
 		"--reverse",
-		"--limit", strconv.Itoa(closedCapForTest),
+		"--limit", strconv.Itoa(testDoneColumnLimit),
 	)
 	if err != nil {
 		t.Logf("ClosedAtDescPreservedOnRealData[%s]: BdList(closed, updated_at asc) failed: %v — skipping diagnostic", ds.Name, err)
