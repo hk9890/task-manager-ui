@@ -64,6 +64,7 @@ type refreshAnchor struct {
 
 // Model is the standalone board mode controller backed by repository calls.
 type Model struct {
+	ctx    context.Context
 	repo   repository.Repository
 	logger *slog.Logger
 	keys   config.ResolvedKeyBindings
@@ -88,8 +89,11 @@ type Model struct {
 }
 
 // NewModel creates a board mode controller.
+// ctx is stored on the model and used for repository calls; callers should
+// pass the application lifecycle context so repository operations can be
+// cancelled when the app exits.
 // logger may be nil; a nil logger falls back to slog.Default().
-func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
+func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -105,6 +109,7 @@ func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...confi
 	}
 
 	m := &Model{
+		ctx:         ctx,
 		repo:        repo,
 		logger:      logger,
 		keys:        keys,
@@ -253,17 +258,6 @@ func (m *Model) sectionItemCapacity() int {
 	return rows
 }
 
-// closedLimit is the single source of truth for the Done column cap.
-// It is max(50, sectionItemCapacity()) so the Done column always loads at
-// least 50 items regardless of terminal height.
-func (m *Model) closedLimit() int {
-	cap := m.sectionItemCapacity()
-	if cap < 50 {
-		return 50
-	}
-	return cap
-}
-
 // CurrentSelection returns the active issue selection for tests. Production
 // code uses the unexported currentSelection helper directly; this exported
 // wrapper exists as a test seam so model_test.go can assert on selection
@@ -335,11 +329,11 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Build opts before entering the Cmd closure so no model state is read
 	// inside the closure (Bubble Tea runs Cmds outside the Update loop — per
 	// grill Q4, reading model state there is a race smell).
-	opts := repository.DashboardOptions{ClosedLimit: m.closedLimit()}
+	opts := repository.DashboardOptions{ClosedLimit: m.sectionItemCapacity()}
 	if rm == refreshModeManual {
 		opts.ForceFresh = true
 	}
-	return loadDashboardCmd(m.repo, opts)
+	return loadDashboardCmd(m.ctx, m.repo, opts)
 }
 
 // compose runs dashboard.Compose from a single DashboardData result and
@@ -352,7 +346,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 		StoredBlocked: data.Blocked,
 		InProgress:    data.InProgress,
 		Closed:        data.Closed,
-		ClosedLimit:   m.closedLimit(),
+		ClosedLimit:   m.sectionItemCapacity(),
 		ClosedTotal:   data.ClosedTotal,
 	})
 
@@ -562,11 +556,13 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 }
 
 // loadDashboardCmd fires the Dashboard repository call and wraps the result
-// in a dashboardLoadedMsg. opts is passed verbatim to repo.Dashboard, allowing
-// the caller to supply a terminal-derived ClosedLimit.
-func loadDashboardCmd(repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
+// in a dashboardLoadedMsg. ctx is the model lifetime context (set at
+// NewModel) and opts is the per-call options struct; both are captured at
+// closure-construction time and read inside the closure when BubbleTea
+// later runs the Cmd.
+func loadDashboardCmd(ctx context.Context, repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
 	return func() tea.Msg {
-		data, err := repo.Dashboard(context.Background(), opts)
+		data, err := repo.Dashboard(ctx, opts)
 		return dashboardLoadedMsg{data: data, err: err}
 	}
 }

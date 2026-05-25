@@ -11,6 +11,7 @@ package embeddedfixture
 // in scale_fixture_smoke_integration_test.go.
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -318,7 +319,7 @@ func TestScaleFixtureInvariant_NoDuplicatedBoardHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("o7tk: ResolveKeyBindings: %v", err)
 	}
-	m := board.NewModel(repo, slog.Default(), keys)
+	m := board.NewModel(context.Background(), repo, slog.Default(), keys)
 	// Width=180 ensures all 4 columns are visible.
 	m.SetSize(180, 40)
 

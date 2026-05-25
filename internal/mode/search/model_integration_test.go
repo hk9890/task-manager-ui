@@ -3,6 +3,7 @@
 package search
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
@@ -32,7 +33,7 @@ func TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback(t *testing.T) {
 	})
 	repo := repositorybeads.New(runner)
 
-	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(repo, nil)}, 120, 30)
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(context.Background(), repo, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	// Real bd subprocess can take ~8s in isolation and much longer under

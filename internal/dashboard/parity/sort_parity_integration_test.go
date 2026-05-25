@@ -46,10 +46,10 @@ import (
 )
 
 // testDoneColumnLimit is the test-local cap fed into DashboardOptions.ClosedLimit
-// and passed to dashboard.Compose for the Done column in sort-parity tests. The
-// value 50 matches the floor enforced by board.Model.closedLimit() (max(50,
-// sectionItemCapacity)), ensuring sort-parity assertions remain comparable to
-// production board behaviour at typical terminal heights.
+// and passed to dashboard.Compose for the Done column in sort-parity tests.
+// 50 is large enough to engage the cap on the parity fixtures while keeping
+// fetch volume modest. The production board no longer enforces a floor; this
+// constant is local to parity tests only.
 const testDoneColumnLimit = 50
 
 // bdIssueSortable is decoded from bd JSON output for sort-parity comparisons.

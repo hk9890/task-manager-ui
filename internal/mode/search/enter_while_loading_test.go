@@ -78,7 +78,7 @@ func TestEnterWhileInitInFlight_PendingDraftQueued(t *testing.T) {
 
 	// Build and Init the model WITHOUT draining the init Cmd — model is in
 	// loading state, simulating the race window.
-	m := NewModel(gw, nil)
+	m := NewModel(context.Background(), gw, nil)
 	m.SetSize(120, 30)
 	initCmd := m.Init()
 
@@ -127,7 +127,7 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 
 	// Build and Init WITHOUT draining — model is loading.
-	m := NewModel(gw, nil)
+	m := NewModel(context.Background(), gw, nil)
 	m.SetSize(120, 30)
 	initCmd := m.Init()
 
@@ -213,7 +213,7 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	rec := &recordingSearchRepo{repo: innerRepo}
 
 	// Build and Init WITHOUT draining.
-	m := NewModel(rec, nil)
+	m := NewModel(context.Background(), rec, nil)
 	m.SetSize(120, 30)
 	initCmd := m.Init()
 
@@ -263,7 +263,7 @@ func TestEnterWhileInitInFlight_PendingDraftNotFiredIfMatchesApplied(t *testing.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "everything", Status: "open", Type: "task", Priority: 1})
 
 	// Build and Init WITHOUT draining.
-	m := NewModel(gw, nil)
+	m := NewModel(context.Background(), gw, nil)
 	m.SetSize(120, 30)
 	initCmd := m.Init()
 

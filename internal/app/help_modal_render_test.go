@@ -21,7 +21,6 @@ import (
 // SKIPPED: pins beads-workbench-znri.5. Remove the t.Skip below when the
 // help-modal rendering is fixed so the test activates as a regression guard.
 func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
-	t.Skip("pins beads-workbench-znri.5 (help modal missing bottom border); remove skip when fixed")
 	for _, size := range []struct {
 		name          string
 		width, height int
@@ -62,6 +61,61 @@ func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
 					topLine, topCol, view)
 			}
 		})
+	}
+}
+
+// TestHelpModal_OverflowIndicatorAppearsInsideFrame asserts that when the
+// terminal is too short to show the full help content, an overflow indicator
+// (starting with "…") appears inside the modal frame — between the top border
+// and the closing bottom border — and not outside it.
+//
+// Uses a viewport height small enough to guarantee overflow regardless of
+// how many keybinding lines are in the help text.
+func TestHelpModal_OverflowIndicatorAppearsInsideFrame(t *testing.T) {
+	gw := newTestRepository()
+	gw.seedReady("bw-1", "Ready", "task", 1)
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+	// height=20: far smaller than the natural help-modal height (~35 lines),
+	// so the content is guaranteed to overflow and the indicator must appear.
+	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 120, Height: 20}})
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}})
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Locate the top and bottom border lines of the modal.
+	topLine, topCol := findRunePosition(lines, '╭', "Keyboard Help")
+	if topLine < 0 {
+		t.Fatalf("expected modal top border; view:\n%s", view)
+	}
+	bottomLine := -1
+	for i := topLine + 1; i < len(lines); i++ {
+		if runeAtColumn(lines[i], topCol) == '╰' {
+			bottomLine = i
+			break
+		}
+	}
+	if bottomLine < 0 {
+		t.Fatalf("no closing ╰ found after top border at line %d; view:\n%s", topLine, view)
+	}
+
+	// The overflow indicator must appear on one of the lines strictly between
+	// the top border and the bottom border.
+	found := false
+	for i := topLine + 1; i < bottomLine; i++ {
+		if strings.Contains(lines[i], "…") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected overflow indicator (containing '…') on a line between modal borders (lines %d..%d); view:\n%s",
+			topLine, bottomLine, view)
 	}
 }
 

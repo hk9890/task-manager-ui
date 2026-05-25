@@ -38,6 +38,7 @@ type SessionState struct {
 
 // Model is the standalone search mode controller.
 type Model struct {
+	ctx    context.Context
 	repo   repository.Repository
 	logger *slog.Logger
 	keys   config.ResolvedKeyBindings
@@ -74,8 +75,11 @@ type Model struct {
 }
 
 // NewModel creates a search mode controller.
+// ctx is stored on the model and used for repository calls; callers should
+// pass the application lifecycle context so repository operations can be
+// cancelled when the app exits.
 // logger may be nil; a nil logger falls back to slog.Default().
-func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
+func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -90,6 +94,7 @@ func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...confi
 		}
 	}
 	return &Model{
+		ctx:                   ctx,
 		repo:                  repo,
 		logger:                logger,
 		keys:                  keys,
@@ -104,7 +109,7 @@ func (m *Model) Init() tea.Cmd {
 	m.reloading = false
 	m.errText = ""
 	m.typing = false
-	return loadSearchCmd(m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
+	return loadSearchCmd(m.ctx, m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
 }
 
 // Update processes search-specific messages and keybindings.
@@ -356,7 +361,7 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 	m.reloading = m.hasLoadedPage
 	m.errText = ""
 	m.pendingSelectionAnchor = anchor
-	return loadSearchCmd(m.repo, query)
+	return loadSearchCmd(m.ctx, m.repo, query)
 }
 
 // View renders the standalone search surface.
@@ -561,10 +566,14 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 	}
 }
 
-func loadSearchCmd(repo repository.Repository, query domain.SearchIssuesQuery) tea.Cmd {
+// loadSearchCmd fires the Search repository call and wraps the result in a
+// searchLoadedMsg. ctx is the model's lifetime context set at construction;
+// it does not change after NewModel returns, so reading it inside the closure
+// at BubbleTea-execute time is safe.
+func loadSearchCmd(ctx context.Context, repo repository.Repository, query domain.SearchIssuesQuery) tea.Cmd {
 	return func() tea.Msg {
 		appliedQuery := strings.TrimSpace(query.Text)
-		page, err := repo.Search(context.Background(), query)
+		page, err := repo.Search(ctx, query)
 		if err != nil {
 			return searchLoadedMsg{appliedQuery: appliedQuery, err: err}
 		}

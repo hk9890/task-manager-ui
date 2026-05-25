@@ -89,6 +89,7 @@ description = "Validate script syntax (shell + python)"
 dir = "{{config_root}}"
 run = '''
 bash -n internal/testing/e2e/embeddedfixture/setup.sh
+find scripts -maxdepth 1 -name '*.sh' -print0 | xargs -0 --no-run-if-empty bash -n
 find scripts -maxdepth 1 -name '*.py' -print0 | xargs -0 python3 -m py_compile
 '''
 
@@ -148,6 +149,11 @@ run = """
 go build -o /tmp/bwb-smoke ./cmd/bwb-smoke
 BD_NON_INTERACTIVE=1 /tmp/bwb-smoke --dir "${BWB_SMOKE_DIR:-.}" --readonly
 """
+
+[tasks."test:load"]
+description = "Run the load-test suite end-to-end (generate workload, measure, emit report). Override defaults via LOAD_* env vars. See docs/LOAD_TESTING.md."
+dir = "{{config_root}}"
+run = "bash scripts/load-test.sh"
 
 [tasks."verify:refresh"]
 description = "Runtime verification of refresh-concurrency fix (5q6t.5)"

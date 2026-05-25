@@ -10,6 +10,7 @@ package search
 // internal/mode/board/model_test.go.
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -29,7 +30,7 @@ func newSearchRecordingModel(rec *fakes.RecordingExecutor) *Model {
 		Executor: rec,
 	})
 	repo := repositorybeads.New(runner)
-	return NewModel(repo, nil)
+	return NewModel(context.Background(), repo, nil)
 }
 
 // driveSearchInitCmd executes the tea.Cmd returned by m.Init() to drive the
@@ -148,7 +149,7 @@ func TestSearchModeTextSearchArgvShape_WithExplicitStatus(t *testing.T) {
 	runner := bd.NewCommandRunner(bd.RunnerConfig{Command: "bd", Executor: rec})
 	repo := repositorybeads.New(runner)
 	// Use the repository directly since the model doesn't expose status-filter selection yet.
-	cmd := loadSearchCmd(repo, domain.SearchIssuesQuery{
+	cmd := loadSearchCmd(context.Background(), repo, domain.SearchIssuesQuery{
 		Text:     "task",
 		Statuses: []string{"closed"},
 		Limit:    20,

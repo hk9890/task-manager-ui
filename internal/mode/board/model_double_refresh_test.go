@@ -12,6 +12,7 @@ package board
 //   - The inflight flag clears after composition completes.
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -88,7 +89,7 @@ func newSettledBoardModel(t *testing.T, repo repository.Repository) *Model {
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings: %v", err)
 	}
-	m := NewModel(repo, slog.Default(), keys)
+	m := NewModel(context.Background(), repo, slog.Default(), keys)
 	initCmd := m.Init()
 	boardApplyMessages(t, m, boardDrainCmd(initCmd))
 	if m.inflight {
@@ -324,7 +325,7 @@ func TestBoardDashboardMsgProcessed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings: %v", err)
 	}
-	m := NewModel(repo, slog.Default(), keys)
+	m := NewModel(context.Background(), repo, slog.Default(), keys)
 
 	initCmd := m.Init()
 	if initCmd == nil {

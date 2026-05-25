@@ -260,13 +260,16 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		board:          boardmode.NewModel(services.Repo, modeLogger(services.Logger, "board"), keys),
-		search:         searchmode.NewModel(services.Repo, modeLogger(services.Logger, "search"), keys),
-		detail:         detailsmode.Model{Keys: keys},
-		toast:          toaster.New(),
-		help:           help,
-		width:          defaultViewportWidth,
-		height:         defaultViewportHeight,
+		// context.Background() is used here because the app model has no parent
+		// context today. This preserves prior behaviour while making future
+		// cancellation threading possible without touching the mode packages.
+		board:  boardmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "board"), keys),
+		search: searchmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "search"), keys),
+		detail: detailsmode.Model{Keys: keys},
+		toast:  toaster.New(),
+		help:   help,
+		width:  defaultViewportWidth,
+		height: defaultViewportHeight,
 		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
 			mode.Board:  {lastRefresh: now},
 			mode.Search: {lastRefresh: now},
@@ -351,7 +354,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width
 			m.height = msg.Height
 		case tea.KeyMsg:
-			if msg.String() == "q" || msg.String() == "ctrl+c" {
+			if m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) ||
+				msg.String() == "q" || msg.String() == "ctrl+c" {
 				return m, tea.Quit
 			}
 		}
