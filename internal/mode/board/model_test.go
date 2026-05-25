@@ -626,31 +626,6 @@ func TestBoardModeRefreshKeepsStaleIssuesVisible(t *testing.T) {
 	}
 }
 
-// --- closedLimit ---
-
-func TestClosedLimit(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		height int
-		want   int
-	}{
-		{height: 0, want: 50},   // default: max(50, 20)
-		{height: 10, want: 50},  // 10-3=7; max(50,7)=50
-		{height: 53, want: 50},  // 53-3=50; max(50,50)=50
-		{height: 60, want: 57},  // 60-3=57; max(50,57)=57
-		{height: 100, want: 97}, // 100-3=97; max(50,97)=97
-	}
-
-	for _, tc := range tests {
-		m := &Model{height: tc.height}
-		got := m.closedLimit()
-		if got != tc.want {
-			t.Errorf("closedLimit() with height=%d: got %d, want %d", tc.height, got, tc.want)
-		}
-	}
-}
-
 // --- sectionItemCapacity ---
 
 func TestSectionItemCapacity(t *testing.T) {

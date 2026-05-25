@@ -44,9 +44,10 @@ import (
 	"github.com/hk9890/beads-workbench/internal/testing/datasets"
 )
 
-// closedCapForTest is the fixed cap used for the Done column in parity tests.
-// This matches the minimum cap enforced by board.Model.closedLimit() (max(50,
-// sectionItemCapacity)); 50 is the guaranteed floor regardless of terminal height.
+// closedCapForTest is a fixed cap used for the Done column in parity tests.
+// 50 is chosen large enough to engage the cap on the parity fixtures while
+// keeping fetch volume modest. The production board no longer enforces a
+// floor; this constant is local to parity tests only.
 const closedCapForTest = 50
 
 // bdIssueSortable is decoded from bd JSON output for sort-parity comparisons.

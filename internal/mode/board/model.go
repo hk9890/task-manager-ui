@@ -251,17 +251,6 @@ func (m *Model) sectionItemCapacity() int {
 	return rows
 }
 
-// closedLimit is the single source of truth for the Done column cap.
-// It is max(50, sectionItemCapacity()) so the Done column always loads at
-// least 50 items regardless of terminal height.
-func (m *Model) closedLimit() int {
-	cap := m.sectionItemCapacity()
-	if cap < 50 {
-		return 50
-	}
-	return cap
-}
-
 // CurrentSelection returns the active issue selection for tests. Production
 // code uses the unexported currentSelection helper directly; this exported
 // wrapper exists as a test seam so model_test.go can assert on selection
@@ -343,7 +332,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 		StoredBlocked: data.Blocked,
 		InProgress:    data.InProgress,
 		Closed:        data.Closed,
-		ClosedLimit:   m.closedLimit(),
+		ClosedLimit:   m.sectionItemCapacity(),
 		ClosedTotal:   data.ClosedTotal,
 	})
 
