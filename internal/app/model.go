@@ -265,11 +265,11 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		// cancellation threading possible without touching the mode packages.
 		board:  boardmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "board"), keys),
 		search: searchmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "search"), keys),
-		detail:         detailsmode.Model{Keys: keys},
-		toast:          toaster.New(),
-		help:           help,
-		width:          defaultViewportWidth,
-		height:         defaultViewportHeight,
+		detail: detailsmode.Model{Keys: keys},
+		toast:  toaster.New(),
+		help:   help,
+		width:  defaultViewportWidth,
+		height: defaultViewportHeight,
 		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
 			mode.Board:  {lastRefresh: now},
 			mode.Search: {lastRefresh: now},
