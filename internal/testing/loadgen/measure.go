@@ -179,9 +179,6 @@ func newCachingRepo(backing repository.Repository) *caching.CachingRepository {
 // The returned Report contains per-operation statistics and is safe to
 // JSON-marshal to a stable schema.
 func Measure(repoDir string, manifest *Manifest, opts MeasureOpts) (*Report, error) {
-	opts = opts.withDefaults()
-	ctx := context.Background()
-
 	// Capture bd version for the report header.
 	bdVersion, err := bdVersionString()
 	if err != nil {
@@ -189,6 +186,15 @@ func Measure(repoDir string, manifest *Manifest, opts MeasureOpts) (*Report, err
 	}
 
 	backing := newBackingRepo(repoDir)
+	return measureWith(context.Background(), backing, bdVersion, manifest, opts)
+}
+
+// measureWith runs the measurement harness against the supplied repository and
+// bd version string. It is the injectable core used by unit tests (which supply
+// a fake backing repository and a static version string) and by the public
+// Measure entry point (which supplies the real bd-backed repository).
+func measureWith(ctx context.Context, backing repository.Repository, bdVersion string, manifest *Manifest, opts MeasureOpts) (*Report, error) {
+	opts = opts.withDefaults()
 
 	// ── Collect issue IDs for detail measurements ──────────────────────────
 	// One setup call (not measured) to collect issue IDs from the repo.
@@ -301,6 +307,7 @@ func Measure(repoDir string, manifest *Manifest, opts MeasureOpts) (*Report, err
 		}
 
 		// Measure warm Issue reads (served from in-memory cache).
+		// SampleCount = SamplesWarm * len(detailIDs)
 		warmDetailSamples := make([]time.Duration, 0, opts.SamplesWarm*len(detailIDs))
 		for i := 0; i < opts.SamplesWarm; i++ {
 			for _, id := range detailIDs {
@@ -314,6 +321,7 @@ func Measure(repoDir string, manifest *Manifest, opts MeasureOpts) (*Report, err
 		ops = append(ops, computeStats("issue.detail.warm", warmDetailSamples))
 
 		// Measure cold Issue reads (fresh backing store call per ID per sample).
+		// SampleCount = SamplesCold * len(detailIDs)
 		coldDetailSamples := make([]time.Duration, 0, opts.SamplesCold*len(detailIDs))
 		for i := 0; i < opts.SamplesCold; i++ {
 			freshCache := newCachingRepo(backing)

@@ -2,11 +2,36 @@ package loadgen
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"testing"
 )
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+// fakeBdCommander is a deterministic bdCommander for unit tests.
+// It returns sequential IDs and records no real state without forking
+// any subprocess, so tests run in <<1ms.
+type fakeBdCommander struct {
+	nextID     int
+	bdVersion  string
+}
+
+// Compile-time check: fakeBdCommander satisfies bdCommander.
+var _ bdCommander = (*fakeBdCommander)(nil)
+
+func newFakeCommander() *fakeBdCommander {
+	return &fakeBdCommander{nextID: 1, bdVersion: "bd fake-1.0.0 (test)"}
+}
+
+func (f *fakeBdCommander) version() (string, error) { return f.bdVersion, nil }
+func (f *fakeBdCommander) init(_ string) error       { return nil }
+func (f *fakeBdCommander) create(_ string, _ string, _ int) (string, error) {
+	id := fmt.Sprintf("lt-%04d", f.nextID)
+	f.nextID++
+	return id, nil
+}
+func (f *fakeBdCommander) run(_ string, _ ...string) error { return nil }
 
 func makeSpec(open, inProgress, blocked, closed int, density float64, seed int64) Spec {
 	return Spec{
@@ -321,4 +346,119 @@ func TestBuildPlan_ZeroSpec(t *testing.T) {
 	if len(p.edges) != 0 {
 		t.Errorf("expected 0 edges, got %d", len(p.edges))
 	}
+}
+
+// ── fake-runner unit tests (converted from integration E2E tests) ─────────────
+
+// TestGenerate_EndToEnd_Unit is the unit-test equivalent of the integration
+// TestGenerate_EndToEnd. It calls generateWith with a fake bdCommander so no
+// real bd subprocess is forked. This verifies the manifest shape, counts, and
+// bd-version capture through the generateWith pipeline.
+func TestGenerate_EndToEnd_Unit(t *testing.T) {
+	t.Parallel()
+
+	spec := makeSpec(20, 5, 3, 0, 0.5, 42)
+	dir := t.TempDir()
+
+	m, err := generateWith(spec, dir, newFakeCommander())
+	if err != nil {
+		t.Fatalf("generateWith: %v", err)
+	}
+
+	// Counts must match the spec.
+	for status, want := range spec.Counts {
+		got := m.ActualCounts[status]
+		if got != want {
+			t.Errorf("status %q: got %d want %d", status, got, want)
+		}
+	}
+
+	// IssuesPath must be a non-empty string (the fake still sets it from the dir).
+	if m.IssuesPath == "" {
+		t.Error("IssuesPath is empty")
+	}
+
+	// BdVersion must be captured from the fake commander.
+	if m.BdVersion != "bd fake-1.0.0 (test)" {
+		t.Errorf("BdVersion: got %q, want %q", m.BdVersion, "bd fake-1.0.0 (test)")
+	}
+
+	// ActualEdges must be non-negative and match plan output.
+	if m.ActualEdges < 0 {
+		// This cannot happen in practice (len is always ≥ 0) but the assertion
+		// below is the substantive check.
+		t.Errorf("ActualEdges is negative: %d", m.ActualEdges)
+	}
+	// Substantive: edge count must equal what buildPlan would produce.
+	expectedEdges := len(buildPlan(spec).edges)
+	if m.ActualEdges != expectedEdges {
+		t.Errorf("ActualEdges: got %d, want %d (from buildPlan)", m.ActualEdges, expectedEdges)
+	}
+
+	// IssuesPath must point to the .beads subdir of dir.
+	if !containsSuffix(m.IssuesPath, ".beads") {
+		t.Errorf("IssuesPath %q does not end with .beads", m.IssuesPath)
+	}
+}
+
+// TestGenerate_Determinism_Unit is the unit-test equivalent of the integration
+// TestGenerate_Determinism. Two generateWith calls with the same spec and seed
+// must produce manifests with identical structural shape.
+func TestGenerate_Determinism_Unit(t *testing.T) {
+	t.Parallel()
+
+	spec := makeSpec(10, 2, 2, 1, 0.5, 999)
+
+	dir1 := t.TempDir()
+	m1, err := generateWith(spec, dir1, newFakeCommander())
+	if err != nil {
+		t.Fatalf("generateWith run1: %v", err)
+	}
+
+	dir2 := t.TempDir()
+	m2, err := generateWith(spec, dir2, newFakeCommander())
+	if err != nil {
+		t.Fatalf("generateWith run2: %v", err)
+	}
+
+	// Counts must be identical across runs.
+	for status := range spec.Counts {
+		if m1.ActualCounts[status] != m2.ActualCounts[status] {
+			t.Errorf("status %q count differs: run1=%d run2=%d",
+				status, m1.ActualCounts[status], m2.ActualCounts[status])
+		}
+	}
+
+	// Edge count must be identical across runs.
+	if m1.ActualEdges != m2.ActualEdges {
+		t.Errorf("ActualEdges differs: run1=%d run2=%d", m1.ActualEdges, m2.ActualEdges)
+	}
+
+	// BdVersion must be identical across runs (both use the same fake).
+	if m1.BdVersion != m2.BdVersion {
+		t.Errorf("BdVersion differs: run1=%q run2=%q", m1.BdVersion, m2.BdVersion)
+	}
+
+	// Substantive: edge count must equal what buildPlan produces for this spec.
+	expectedEdges := len(buildPlan(spec).edges)
+	if m1.ActualEdges != expectedEdges {
+		t.Errorf("ActualEdges: got %d, want %d (from buildPlan)", m1.ActualEdges, expectedEdges)
+	}
+}
+
+// containsSuffix reports whether path ends with the given component name.
+// Used to assert IssuesPath ends with ".beads".
+func containsSuffix(path, suffix string) bool {
+	if len(path) < len(suffix) {
+		return false
+	}
+	// Accept either the path ending in suffix or suffix/ or /suffix.
+	base := path
+	for len(base) > 0 && (base[len(base)-1] == '/' || base[len(base)-1] == os.PathSeparator) {
+		base = base[:len(base)-1]
+	}
+	if len(base) < len(suffix) {
+		return false
+	}
+	return base[len(base)-len(suffix):] == suffix
 }

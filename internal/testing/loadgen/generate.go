@@ -187,6 +187,32 @@ func planWarnings(spec Spec, p plan) []string {
 	return warnings
 }
 
+// bdCommander is the seam for all bd subprocess calls made by Generate.
+// Tests inject a fake to avoid real subprocess forks.
+type bdCommander interface {
+	// version returns the bd version string (output of `bd --version`).
+	version() (string, error)
+	// init initialises a new beads repository in dir.
+	init(dir string) error
+	// create creates a new issue and returns its assigned ID.
+	create(dir, title string, priority int) (string, error)
+	// run executes an arbitrary bd subcommand in dir.
+	run(dir string, args ...string) error
+}
+
+// realBdCommander implements bdCommander using exec.Command and the package-level
+// subprocess helpers (bdVersionString, bdRun, bdCreate).
+type realBdCommander struct{}
+
+func (realBdCommander) version() (string, error) { return bdVersionString() }
+func (realBdCommander) init(dir string) error {
+	return bdRun(dir, "init", "--prefix", "lt", "--non-interactive")
+}
+func (realBdCommander) create(dir, title string, priority int) (string, error) {
+	return bdCreate(dir, title, priority)
+}
+func (realBdCommander) run(dir string, args ...string) error { return bdRun(dir, args...) }
+
 // Generate creates a seeded beads repository in outDir from the given spec.
 // outDir must exist. bd must be on PATH.
 //
@@ -194,6 +220,19 @@ func planWarnings(spec Spec, p plan) []string {
 // spec produce the same structural shape; each call runs bd subprocess chains
 // that take real time proportional to TotalIssues × CommentsPer.
 func Generate(spec Spec, outDir string) (*Manifest, error) {
+	// Verify bd is available.
+	bdPath, err := exec.LookPath("bd")
+	if err != nil {
+		return nil, fmt.Errorf("loadgen: bd not found on PATH — install beads and ensure bd is executable: %w", err)
+	}
+	_ = bdPath
+
+	return generateWith(spec, outDir, realBdCommander{})
+}
+
+// generateWith is the injectable core of Generate. It accepts a bdCommander
+// seam so unit tests can substitute a fake without forking real bd subprocesses.
+func generateWith(spec Spec, outDir string, cmdr bdCommander) (*Manifest, error) {
 	absOut, err := filepath.Abs(outDir)
 	if err != nil {
 		return nil, fmt.Errorf("loadgen: resolve outDir: %w", err)
@@ -202,15 +241,8 @@ func Generate(spec Spec, outDir string) (*Manifest, error) {
 		return nil, fmt.Errorf("loadgen: outDir %q must be an existing directory: %w", absOut, err)
 	}
 
-	// Verify bd is available.
-	bdPath, err := exec.LookPath("bd")
-	if err != nil {
-		return nil, fmt.Errorf("loadgen: bd not found on PATH — install beads and ensure bd is executable: %w", err)
-	}
-	_ = bdPath
-
 	// Capture bd version.
-	bdVersion, err := bdVersionString()
+	bdVersion, err := cmdr.version()
 	if err != nil {
 		return nil, fmt.Errorf("loadgen: bd --version: %w", err)
 	}
@@ -220,7 +252,7 @@ func Generate(spec Spec, outDir string) (*Manifest, error) {
 	warnings := planWarnings(spec, p)
 
 	// Initialize the beads repo.
-	if err := bdRun(absOut, "init", "--prefix", "lt", "--non-interactive"); err != nil {
+	if err := cmdr.init(absOut); err != nil {
 		return nil, fmt.Errorf("loadgen: bd init: %w", err)
 	}
 
@@ -228,7 +260,7 @@ func Generate(spec Spec, outDir string) (*Manifest, error) {
 	ids := make([]string, len(p.issues))
 	actualCounts := make(map[string]int)
 	for i, iss := range p.issues {
-		id, err := bdCreate(absOut, iss.title, iss.priority)
+		id, err := cmdr.create(absOut, iss.title, iss.priority)
 		if err != nil {
 			return nil, fmt.Errorf("loadgen: bd create issue %d: %w", i, err)
 		}
@@ -236,7 +268,7 @@ func Generate(spec Spec, outDir string) (*Manifest, error) {
 
 		// Set non-open status.
 		if iss.status != "open" {
-			if err := bdRun(absOut, "update", id, "--status", iss.status); err != nil {
+			if err := cmdr.run(absOut, "update", id, "--status", iss.status); err != nil {
 				return nil, fmt.Errorf("loadgen: bd update status for %s: %w", id, err)
 			}
 		}
@@ -245,7 +277,7 @@ func Generate(spec Spec, outDir string) (*Manifest, error) {
 		// Add comments if requested.
 		for c := 0; c < spec.CommentsPer; c++ {
 			comment := fmt.Sprintf("load-test comment %d", c+1)
-			if err := bdRun(absOut, "comment", id, comment); err != nil {
+			if err := cmdr.run(absOut, "comment", id, comment); err != nil {
 				return nil, fmt.Errorf("loadgen: bd comment %s: %w", id, err)
 			}
 		}
@@ -256,7 +288,7 @@ func Generate(spec Spec, outDir string) (*Manifest, error) {
 		blockerID := ids[edge.blockerIdx]
 		blockedID := ids[edge.blockedIdx]
 		// bd dep add <blocked> <blocker> (blocked depends on blocker)
-		if err := bdRun(absOut, "dep", "add", blockedID, blockerID); err != nil {
+		if err := cmdr.run(absOut, "dep", "add", blockedID, blockerID); err != nil {
 			return nil, fmt.Errorf("loadgen: bd dep add %s → %s: %w", blockerID, blockedID, err)
 		}
 	}

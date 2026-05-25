@@ -3,82 +3,19 @@
 package loadgen
 
 import (
-	"os"
 	"sort"
 	"testing"
 )
 
-// TestGenerate_EndToEnd calls Generate with a small spec and verifies the
-// manifest matches expected counts. This test forks real bd subprocesses.
-func TestGenerate_EndToEnd(t *testing.T) {
-	spec := makeSpec(20, 5, 3, 0, 0.5, 42)
-
-	dir := t.TempDir()
-	m, err := Generate(spec, dir)
-	if err != nil {
-		t.Fatalf("Generate: %v", err)
-	}
-
-	// Verify counts.
-	for status, want := range spec.Counts {
-		got := m.ActualCounts[status]
-		if got != want {
-			t.Errorf("status %q: got %d want %d", status, got, want)
-		}
-	}
-
-	// Verify IssuesPath exists.
-	if _, err := os.Stat(m.IssuesPath); err != nil {
-		t.Errorf("IssuesPath %q not accessible: %v", m.IssuesPath, err)
-	}
-
-	// Verify bd version is captured.
-	if m.BdVersion == "" {
-		t.Error("BdVersion is empty")
-	}
-
-	// Verify actual edges are non-negative.
-	if m.ActualEdges < 0 {
-		t.Errorf("ActualEdges is negative: %d", m.ActualEdges)
-	}
-}
-
-// TestGenerate_Determinism calls Generate twice with the same spec and seed,
-// and verifies the resulting manifests have identical shape (counts + edge count).
-// Note: bd uses hash-based IDs, so actual ID strings will differ between runs.
-// Determinism covers structural shape, not byte-level identity.
-func TestGenerate_Determinism(t *testing.T) {
-	spec := makeSpec(10, 2, 2, 1, 0.5, 999)
-
-	dir1 := t.TempDir()
-	m1, err := Generate(spec, dir1)
-	if err != nil {
-		t.Fatalf("Generate run1: %v", err)
-	}
-
-	dir2 := t.TempDir()
-	m2, err := Generate(spec, dir2)
-	if err != nil {
-		t.Fatalf("Generate run2: %v", err)
-	}
-
-	// Counts must be identical.
-	for status := range spec.Counts {
-		if m1.ActualCounts[status] != m2.ActualCounts[status] {
-			t.Errorf("status %q count differs: run1=%d run2=%d",
-				status, m1.ActualCounts[status], m2.ActualCounts[status])
-		}
-	}
-
-	// Edge count must be identical.
-	if m1.ActualEdges != m2.ActualEdges {
-		t.Errorf("ActualEdges differs: run1=%d run2=%d", m1.ActualEdges, m2.ActualEdges)
-	}
-}
+// Note: TestGenerate_EndToEnd and TestGenerate_Determinism have been converted
+// to fake-runner unit tests in generate_test.go (TestGenerate_EndToEnd_Unit,
+// TestGenerate_Determinism_Unit). The single real-bd E2E smoke test covering
+// bd-version capture lives in measure_integration_test.go (TestMeasure_EndToEnd).
 
 // TestGenerate_BlockerInvariant verifies that every blocked issue in a
 // Generated repo has at least one incoming dep via the plan (checked against
 // the plan, since inspecting bd's dep state requires bd dep list per issue).
+// This test uses buildPlan only and forks no real bd subprocesses.
 func TestGenerate_BlockerInvariant(t *testing.T) {
 	spec := makeSpec(10, 0, 4, 0, 1.0, 17)
 	p := buildPlan(spec)
@@ -100,6 +37,7 @@ func TestGenerate_BlockerInvariant(t *testing.T) {
 
 // TestGenerate_EdgeSortStability verifies that two plan runs with the same
 // seed produce sorted-identical edge key sets (structural edge determinism).
+// This test uses buildPlan only and forks no real bd subprocesses.
 func TestGenerate_EdgeSortStability(t *testing.T) {
 	spec := makeSpec(15, 3, 4, 3, 1.5, 55)
 
