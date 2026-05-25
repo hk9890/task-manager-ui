@@ -22,6 +22,8 @@ Read `docs/TESTING.md` for test policy, verification depth, fixtures, and focuse
 
 Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
 
+Read `docs/LOAD_TESTING.md` for the agent-runnable load-test recipe: how to configure workload shape, run `mise run test:load`, and read the timing report.
+
 When fixing a bug whose root cause involves fake-vs-real divergence in the beads `Repository` implementation, follow the discipline in `internal/testing/fakes/doc.go`.
 
 When adding or modifying a bd subprocess call, follow the argv contract pattern in `internal/bd/doc.go` (Argv contract testing section).

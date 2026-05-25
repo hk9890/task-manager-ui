@@ -151,7 +151,7 @@ BD_NON_INTERACTIVE=1 /tmp/bwb-smoke --dir "${BWB_SMOKE_DIR:-.}" --readonly
 """
 
 [tasks."test:load"]
-description = "Run the load-test suite end-to-end (generate workload, measure, emit report). Override defaults via LOAD_* env vars. See docs/LOAD_TESTING.md once bjyt.4 lands."
+description = "Run the load-test suite end-to-end (generate workload, measure, emit report). Override defaults via LOAD_* env vars. See docs/LOAD_TESTING.md."
 dir = "{{config_root}}"
 run = "bash scripts/load-test.sh"
 
