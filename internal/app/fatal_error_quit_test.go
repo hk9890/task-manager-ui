@@ -76,7 +76,6 @@ func TestFatalErrorScreen_QKeyQuits(t *testing.T) {
 // fatal-screen key handler honors ctrl+q so the test activates as a
 // regression guard.
 func TestFatalErrorScreen_CtrlQQuits(t *testing.T) {
-	t.Skip("pins beads-workbench-znri.7 (fatal screen ignores ctrl+q); remove skip when fixed")
 	m := enterFatalErrorState(t)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
 	if !isQuitCmd(cmd) {
