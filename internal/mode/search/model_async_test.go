@@ -125,8 +125,8 @@ func (d *DelayedFakeRepository) Search(ctx context.Context, query domain.SearchI
 
 // Delegate all non-Search methods to the inner repository.
 
-func (d *DelayedFakeRepository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
-	return d.inner.Dashboard(ctx)
+func (d *DelayedFakeRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+	return d.inner.Dashboard(ctx, opts)
 }
 
 func (d *DelayedFakeRepository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {

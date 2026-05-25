@@ -39,7 +39,7 @@ func (r *Repository) HealthCheck(ctx context.Context) error {
 
 // Dashboard fans out five bd calls in parallel and assembles repository.DashboardData.
 // Any single failure cancels remaining in-flight calls; no partial result is returned.
-func (r *Repository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (r *Repository) Dashboard(ctx context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	var readyExplain domain.ReadyExplainResult

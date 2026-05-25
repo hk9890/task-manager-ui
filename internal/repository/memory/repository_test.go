@@ -116,7 +116,7 @@ func TestCatalogs_Seeded(t *testing.T) {
 
 func TestEmptyStore_Dashboard(t *testing.T) {
 	r := memory.New()
-	d, err := r.Dashboard(context.Background())
+	d, err := r.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: unexpected error %v", err)
 	}
@@ -563,7 +563,7 @@ func TestDashboard_ReadyVsBlocked(t *testing.T) {
 	// the ready set (per bd 1.0.4 "bd ready --help" and contract test bwf-5).
 	r.Seed(memory.Issue{ID: "bd-status-blocked", Status: "blocked"})
 
-	d, err := r.Dashboard(context.Background())
+	d, err := r.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestDashboard_ClosedSortedDesc(t *testing.T) {
 
 	_ = rFinal
 
-	d, err := rSort.Dashboard(context.Background())
+	d, err := rSort.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -676,7 +676,7 @@ func TestDashboard_InProgress(t *testing.T) {
 	r.Seed(memory.Issue{ID: "ip-1", Status: "in_progress"})
 	r.Seed(memory.Issue{ID: "open-1", Status: "open"})
 
-	d, err := r.Dashboard(context.Background())
+	d, err := r.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -698,7 +698,7 @@ func TestDashboard_ClosedTotal(t *testing.T) {
 	}
 	r.Seed(memory.Issue{ID: "open-x", Status: "open"})
 
-	d, err := r.Dashboard(context.Background())
+	d, err := r.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -1009,7 +1009,7 @@ func TestConcurrency_RaceSafety(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			_, _ = r.Dashboard(ctx)
+			_, _ = r.Dashboard(ctx, repository.DashboardOptions{})
 		}()
 		go func() {
 			defer wg.Done()

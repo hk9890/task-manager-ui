@@ -327,7 +327,7 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 	var precomputedDashboard repository.DashboardData
 	var precomputeErr error
 	if !dirty {
-		precomputedDashboard, precomputeErr = loaded.Dashboard(ctx)
+		precomputedDashboard, precomputeErr = loaded.Dashboard(ctx, repository.DashboardOptions{})
 	}
 
 	// Apply state under lock — brief swap only, no IO.
@@ -416,7 +416,7 @@ func (c *CachingRepository) SaveNow() error {
 // Returns the cached DashboardData when not dirty. On a cache miss (dirty flag
 // set), fetches from backing, stores the result, and clears the dirty flag.
 // The dirty flag is NOT cleared on backing error.
-func (c *CachingRepository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
 	}
@@ -432,7 +432,7 @@ func (c *CachingRepository) Dashboard(ctx context.Context) (repository.Dashboard
 	c.mu.RUnlock()
 
 	// Cache miss: fetch from backing (no lock held).
-	data, err := c.backing.Dashboard(ctx)
+	data, err := c.backing.Dashboard(ctx, opts)
 	if err != nil {
 		return repository.DashboardData{}, err
 	}

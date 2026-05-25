@@ -17,7 +17,7 @@ type fakeInner struct {
 
 var _ repository.Repository = (*fakeInner)(nil)
 
-func (f *fakeInner) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (f *fakeInner) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	f.lastCall = "Dashboard"
 	return repository.DashboardData{}, nil
 }
@@ -73,7 +73,7 @@ func TestErrorInjecting_Delegation(t *testing.T) {
 		call func(r repository.Repository) error
 	}{
 		{"Dashboard", func(r repository.Repository) error {
-			_, err := r.Dashboard(ctx)
+			_, err := r.Dashboard(ctx, repository.DashboardOptions{})
 			return err
 		}},
 		{"Issue", func(r repository.Repository) error {
@@ -140,7 +140,7 @@ func TestErrorInjecting_InjectionPerMethod(t *testing.T) {
 		call   func(r repository.Repository) error
 	}{
 		{repository.MethodDashboard, func(r repository.Repository) error {
-			_, err := r.Dashboard(ctx)
+			_, err := r.Dashboard(ctx, repository.DashboardOptions{})
 			return err
 		}},
 		{repository.MethodIssue, func(r repository.Repository) error {
@@ -224,7 +224,7 @@ func TestErrorInjecting_CallTracking(t *testing.T) {
 	ei := repository.NewErrorInjecting(inner)
 
 	_ = ei.HealthCheck(ctx)
-	_, _ = ei.Dashboard(ctx)
+	_, _ = ei.Dashboard(ctx, repository.DashboardOptions{})
 	_, _ = ei.Catalogs(ctx)
 
 	calls := ei.Calls()

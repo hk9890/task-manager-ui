@@ -548,7 +548,7 @@ func feedRenderData(m *board.Model) {
 // ── dashboard fetch (shared by count + sort) ─────────────────────────────────
 
 func runDashboardFetch(ctx context.Context, repo repository.Repository) (dashboard.Columns, error) {
-	data, err := repo.Dashboard(ctx)
+	data, err := repo.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		return dashboard.Columns{}, fmt.Errorf("dashboard: %w", err)
 	}

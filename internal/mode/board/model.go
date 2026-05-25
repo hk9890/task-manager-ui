@@ -551,7 +551,7 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 // in a dashboardLoadedMsg.
 func loadDashboardCmd(repo repository.Repository) tea.Cmd {
 	return func() tea.Msg {
-		data, err := repo.Dashboard(context.Background())
+		data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 		return dashboardLoadedMsg{data: data, err: err}
 	}
 }

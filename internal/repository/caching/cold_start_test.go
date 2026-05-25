@@ -45,7 +45,7 @@ func TestColdStart_DashboardFiresBackingReadWhenCacheFileMissing(t *testing.T) {
 		t.Fatalf("Hydrate with missing load path returned error: %v", err)
 	}
 
-	data, err := c.Dashboard(context.Background())
+	data, err := c.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard returned error: %v", err)
 	}

@@ -518,7 +518,7 @@ func TestKB8EVerification(t *testing.T) {
 		}
 
 		// First Dashboard call must hit backing (dashboardDirty=true).
-		if _, err := c.Dashboard(context.Background()); err != nil {
+		if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 			record("F7 Hydrate Dashboard error", fail,
 				fmt.Sprintf("Dashboard after Hydrate: %v", err))
 			return
@@ -709,7 +709,7 @@ func TestKB8EVerification(t *testing.T) {
 		)
 
 		// First Dashboard call: cache miss (dashboardDirty=true by default).
-		if _, err := c.Dashboard(ctx); err != nil {
+		if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 			record("F11 dashboard refresh after comment", fail,
 				fmt.Sprintf("Dashboard #1: %v", err))
 			return
@@ -717,7 +717,7 @@ func TestKB8EVerification(t *testing.T) {
 		afterFirst := dashCalls.Load()
 
 		// Second Dashboard call: must be a cache hit.
-		if _, err := c.Dashboard(ctx); err != nil {
+		if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 			record("F11 dashboard refresh after comment", fail,
 				fmt.Sprintf("Dashboard #2: %v", err))
 			return
@@ -738,7 +738,7 @@ func TestKB8EVerification(t *testing.T) {
 		}
 
 		// Third Dashboard call: must hit backing (dirty after comment).
-		if _, err := c.Dashboard(ctx); err != nil {
+		if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 			record("F11 dashboard refresh after comment", fail,
 				fmt.Sprintf("Dashboard #3 post-comment: %v", err))
 			return
@@ -1097,7 +1097,7 @@ type countingDashboardRepo struct {
 	count *atomic.Int32
 }
 
-func (c *countingDashboardRepo) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (c *countingDashboardRepo) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	c.count.Add(1)
-	return c.Repository.Dashboard(ctx)
+	return c.Repository.Dashboard(ctx, opts)
 }

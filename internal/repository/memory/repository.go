@@ -305,7 +305,7 @@ func DefaultCatalogs() repository.Catalogs {
 // DashboardData.Blocked: issues where status == "blocked" (stored status).
 // DashboardData.InProgress: issues where status == "in_progress".
 // DashboardData.Closed: all closed issues, sorted by ClosedAt DESC.
-func (r *Repository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (r *Repository) Dashboard(ctx context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
 	}

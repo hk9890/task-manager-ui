@@ -55,7 +55,7 @@ type stubRepository struct {
 	catalogsFn    func(ctx context.Context) (repository.Catalogs, error)
 }
 
-func (s *stubRepository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (s *stubRepository) Dashboard(ctx context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	s.mu.Lock()
 	s.dashboardCalls++
 	fn := s.dashboardFn
@@ -175,7 +175,7 @@ func TestDashboard_CacheMiss_ThenHit(t *testing.T) {
 	ctx := context.Background()
 
 	// First call: cache miss → backing called.
-	got, err := c.Dashboard(ctx)
+	got, err := c.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("first Dashboard: unexpected error %v", err)
 	}
@@ -187,7 +187,7 @@ func TestDashboard_CacheMiss_ThenHit(t *testing.T) {
 	}
 
 	// Second call: cache hit → no additional backing call.
-	got2, err := c.Dashboard(ctx)
+	got2, err := c.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("second Dashboard: unexpected error %v", err)
 	}
@@ -214,13 +214,13 @@ func TestDashboard_BackingError_DirtyFlagPreserved(t *testing.T) {
 	ctx := context.Background()
 
 	// First call: error → dirty flag NOT cleared.
-	_, err := c.Dashboard(ctx)
+	_, err := c.Dashboard(ctx, repository.DashboardOptions{})
 	if !errors.Is(err, errBacking) {
 		t.Fatalf("expected errBacking, got %v", err)
 	}
 
 	// Second call: dirty flag still set → backing called again.
-	got, err := c.Dashboard(ctx)
+	got, err := c.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("second Dashboard: unexpected error %v", err)
 	}
@@ -540,7 +540,7 @@ func TestCreateIssue_Success_DashboardDirty(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm dashboard cache.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	dashboardCallsBefore := stub.dashboardCalls
@@ -555,7 +555,7 @@ func TestCreateIssue_Success_DashboardDirty(t *testing.T) {
 	}
 
 	// Dashboard cache should now be dirty → next Dashboard() hits backing.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashboardCallsBefore+1 {
@@ -594,7 +594,7 @@ func TestCreateIssue_BackingError_NoMutation(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm dashboard cache.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	dashboardCallsBefore := stub.dashboardCalls
@@ -605,7 +605,7 @@ func TestCreateIssue_BackingError_NoMutation(t *testing.T) {
 	}
 
 	// Cache should be untouched; dashboard should still be served from cache.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashboardCallsBefore {
@@ -692,7 +692,7 @@ func TestUpdateIssue_Success_InvalidatesCache(t *testing.T) {
 	issueCalls1 := stub.issueCalls
 
 	// Warm dashboard cache.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	dashCalls1 := stub.dashboardCalls
@@ -712,7 +712,7 @@ func TestUpdateIssue_Success_InvalidatesCache(t *testing.T) {
 	}
 
 	// Dashboard should be dirty; next Dashboard call hits backing.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCalls1+1 {
@@ -739,7 +739,7 @@ func TestUpdateIssue_BackingError_NoMutation(t *testing.T) {
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	issueCalls := stub.issueCalls
@@ -758,7 +758,7 @@ func TestUpdateIssue_BackingError_NoMutation(t *testing.T) {
 	if stub.issueCalls != issueCalls {
 		t.Fatalf("expected Issue still from cache after failed UpdateIssue")
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCalls {
@@ -787,7 +787,7 @@ func TestCloseIssue_Success_InvalidatesCache(t *testing.T) {
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	issueCalls := stub.issueCalls
@@ -804,7 +804,7 @@ func TestCloseIssue_Success_InvalidatesCache(t *testing.T) {
 	if stub.issueCalls != issueCalls+1 {
 		t.Fatalf("expected Issue re-fetch after CloseIssue")
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCalls+1 {
@@ -830,7 +830,7 @@ func TestCloseIssue_BackingError_NoMutation(t *testing.T) {
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	issueCalls := stub.issueCalls
@@ -847,7 +847,7 @@ func TestCloseIssue_BackingError_NoMutation(t *testing.T) {
 	if stub.issueCalls != issueCalls {
 		t.Fatalf("expected Issue still from cache after failed CloseIssue")
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCalls {
@@ -876,7 +876,7 @@ func TestAddComment_Success_IssueDropped_DashboardDirty(t *testing.T) {
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	issueCalls := stub.issueCalls
@@ -895,7 +895,7 @@ func TestAddComment_Success_IssueDropped_DashboardDirty(t *testing.T) {
 	}
 
 	// Dashboard should be dirty; next call must hit backing.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCalls+1 {
@@ -966,7 +966,7 @@ func TestAddComment_MarksDashboardDirty(t *testing.T) {
 	ctx := context.Background()
 
 	// First Dashboard call: cache is cold → backing is hit, result cached.
-	d0, err := c.Dashboard(ctx)
+	d0, err := c.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("first Dashboard: unexpected error %v", err)
 	}
@@ -980,7 +980,7 @@ func TestAddComment_MarksDashboardDirty(t *testing.T) {
 	}
 
 	// Second Dashboard call: dirty flag must cause a re-fetch, returning T1.
-	d1, err := c.Dashboard(ctx)
+	d1, err := c.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("second Dashboard: unexpected error %v", err)
 	}
@@ -1052,7 +1052,7 @@ func TestTickFirstHashIsBaseline(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm dashboard cache.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	dashCallsBefore := stub.dashboardCalls
@@ -1061,7 +1061,7 @@ func TestTickFirstHashIsBaseline(t *testing.T) {
 	c.RefreshIfChanged(ctx)
 
 	// Dashboard should still be served from cache (not dirty).
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCallsBefore {
@@ -1085,7 +1085,7 @@ func TestTickUnchangedHashDoesNotInvalidate(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm caches.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
@@ -1099,7 +1099,7 @@ func TestTickUnchangedHashDoesNotInvalidate(t *testing.T) {
 	// Tick 2: same hash → no invalidation.
 	c.RefreshIfChanged(ctx)
 
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCallsBefore {
@@ -1131,7 +1131,7 @@ func TestTickChangedHashInvalidatesDashboardAndIssues(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm caches.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
@@ -1147,7 +1147,7 @@ func TestTickChangedHashInvalidatesDashboardAndIssues(t *testing.T) {
 	c.RefreshIfChanged(ctx)
 
 	// Dashboard must be re-fetched on next call.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCallsBefore+1 {
@@ -1189,7 +1189,7 @@ func TestVCStatusFuncErrorDoesNotCorruptState(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm caches.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Issue(ctx, "issue-1"); err != nil {
@@ -1204,7 +1204,7 @@ func TestVCStatusFuncErrorDoesNotCorruptState(t *testing.T) {
 	c.RefreshIfChanged(ctx)
 
 	// Cache should still be intact.
-	if _, err := c.Dashboard(ctx); err != nil {
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if stub.dashboardCalls != dashCallsBefore {
@@ -1336,7 +1336,7 @@ func TestConcurrentReadsDuringTick(t *testing.T) {
 			defer wg.Done()
 			switch i % 3 {
 			case 0:
-				_, _ = c.Dashboard(ctx)
+				_, _ = c.Dashboard(ctx, repository.DashboardOptions{})
 			case 1:
 				_, _ = c.Issue(ctx, "issue-1")
 			case 2:
@@ -1394,7 +1394,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 			defer wg.Done()
 			switch i % 5 {
 			case 0:
-				_, _ = c.Dashboard(ctx)
+				_, _ = c.Dashboard(ctx, repository.DashboardOptions{})
 			case 1:
 				_, _ = c.Issue(ctx, "issue-1")
 			case 2:
@@ -1511,7 +1511,7 @@ func TestHydrateSchemaMismatch(t *testing.T) {
 		dashCalls++
 		return repository.DashboardData{}, nil
 	}
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard after schema-mismatch Hydrate: %v", err)
 	}
 	if dashCalls != 1 {
@@ -1557,7 +1557,7 @@ func TestHydrateSuccess(t *testing.T) {
 	}
 
 	// dashboardDirty must be true: next Dashboard call must hit backing.
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard after Hydrate returned error: %v", err)
 	}
 	if dashCalls != 1 {
@@ -1645,7 +1645,7 @@ func TestHydrate_AfterStart_ReturnsError(t *testing.T) {
 //
 // Mechanism: a cancellable ctx is passed into Hydrate. The injected vcStatusFunc
 // returns a matching hash, then cancels the outer ctx. When Hydrate calls
-// loaded.Dashboard(ctx) on the now-cancelled ctx, it gets ctx.Canceled.
+// loaded.Dashboard(ctx, repository.DashboardOptions{}) on the now-cancelled ctx, it gets ctx.Canceled.
 // Hydrate must still return nil (non-fatal), and the backing must be called
 // on the first subsequent Dashboard() call.
 func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
@@ -1670,7 +1670,7 @@ func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
 	}
 
 	// Construct a cancellable ctx. The vcStatusFunc will cancel it after
-	// returning the matching hash so that the subsequent loaded.Dashboard(ctx)
+	// returning the matching hash so that the subsequent loaded.Dashboard(ctx, repository.DashboardOptions{})
 	// call sees ctx.Canceled.
 	outerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel() // safety net
@@ -1687,7 +1687,7 @@ func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
 	}
 
 	// The first Dashboard call must route to backing (dashboardDirty=true).
-	got, err := c.Dashboard(context.Background())
+	got, err := c.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -1699,7 +1699,7 @@ func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
 	}
 
 	// Second call must be served from the now-warm cache (no extra backing call).
-	_, err = c.Dashboard(context.Background())
+	_, err = c.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("second Dashboard: %v", err)
 	}
@@ -1941,7 +1941,7 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 	}
 
 	// dashboardDirty should be false: Dashboard must NOT hit backing.
-	got, err := c.Dashboard(context.Background())
+	got, err := c.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -1978,7 +1978,7 @@ func TestHydrateMatchingHashSeedsLastHash(t *testing.T) {
 		t.Fatalf("Hydrate: %v", err)
 	}
 	// Confirm we're not dirty yet.
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard after Hydrate: %v", err)
 	}
 	if dashCalls != 0 {
@@ -1989,7 +1989,7 @@ func TestHydrateMatchingHashSeedsLastHash(t *testing.T) {
 	// NOT mark the cache dirty.
 	c.RefreshIfChanged(context.Background())
 
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard after RefreshIfChanged: %v", err)
 	}
 	if dashCalls != 0 {
@@ -2019,7 +2019,7 @@ func TestHydrateMismatchedHashKeepsDirty(t *testing.T) {
 	}
 
 	// dashboardDirty must be true: first Dashboard call hits backing.
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	if dashCalls != 1 {
@@ -2104,7 +2104,7 @@ func TestHydrateEmptyPersistedHash(t *testing.T) {
 	}
 
 	// Empty persisted hash → safe default → dashboardDirty=true.
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	if dashCalls != 1 {
@@ -2137,7 +2137,7 @@ func TestHydrateVCStatusFuncError(t *testing.T) {
 	}
 
 	// vcStatusFunc error → safe default → dashboardDirty=true.
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	if dashCalls != 1 {
@@ -2166,7 +2166,7 @@ func TestHydrateNoVCStatusFunc(t *testing.T) {
 		t.Fatalf("Hydrate: %v", err)
 	}
 
-	if _, err := c.Dashboard(context.Background()); err != nil {
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	if dashCalls != 1 {

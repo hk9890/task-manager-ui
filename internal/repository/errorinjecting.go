@@ -86,7 +86,7 @@ func (e *ErrorInjectingRepository) injected(m Method) error {
 }
 
 // Dashboard implements Repository.
-func (e *ErrorInjectingRepository) Dashboard(ctx context.Context) (DashboardData, error) {
+func (e *ErrorInjectingRepository) Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error) {
 	e.mu.Lock()
 	e.record(MethodDashboard)
 	err := e.injected(MethodDashboard)
@@ -94,7 +94,7 @@ func (e *ErrorInjectingRepository) Dashboard(ctx context.Context) (DashboardData
 	if err != nil {
 		return DashboardData{}, err
 	}
-	return e.inner.Dashboard(ctx)
+	return e.inner.Dashboard(ctx, opts)
 }
 
 // Issue implements Repository.

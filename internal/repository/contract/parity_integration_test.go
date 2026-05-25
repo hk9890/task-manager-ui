@@ -272,7 +272,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		r := impl.build(t, scenarioSeed{})
 
 		// Dashboard returns empty slices, not errors.
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario1/Dashboard: unexpected error: %v", err)
 		}
@@ -315,7 +315,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 		r := impl.build(t, seed)
 
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario2/Dashboard: unexpected error: %v", err)
 		}
@@ -360,7 +360,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 		r := impl.build(t, seed)
 
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario3/Dashboard: unexpected error: %v", err)
 		}
@@ -391,7 +391,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 		r := impl.build(t, seed)
 
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario4/Dashboard: unexpected error: %v", err)
 		}
@@ -420,7 +420,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 		r := impl.build(t, seed)
 
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario5/Dashboard: unexpected error: %v", err)
 		}
@@ -494,7 +494,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 				}
 			}
 
-			dash, err := r.Dashboard(ctx2)
+			dash, err := r.Dashboard(ctx2, repository.DashboardOptions{})
 			if err != nil {
 				t.Fatalf("Scenario6/Dashboard: %v", err)
 			}
@@ -526,7 +526,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		}
 		r := impl.build(t, seed2)
 
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario6/beads/Dashboard: %v", err)
 		}
@@ -683,7 +683,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 
 		// Verify via Dashboard — the updated priority must be visible in the
 		// ReadyExplain.Ready list (pbt-1 is open with no deps).
-		dashAfterUpdate, err := r.Dashboard(ctx)
+		dashAfterUpdate, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario8/Dashboard after update: unexpected error: %v", err)
 		}
@@ -701,7 +701,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 			t.Fatalf("Scenario8/CloseIssue: unexpected error: %v", err)
 		}
 
-		dash, err := r.Dashboard(ctx)
+		dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 		if err != nil {
 			t.Fatalf("Scenario8/Dashboard after close: unexpected error: %v", err)
 		}
@@ -836,7 +836,7 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 				},
 			))
 
-			_, err := r.Dashboard(ctx)
+			_, err := r.Dashboard(ctx, repository.DashboardOptions{})
 			if err == nil {
 				t.Fatal("Scenario10/Dashboard: expected error when one fan-out branch fails, got nil")
 			}

@@ -38,6 +38,21 @@ import (
 // match bd's behavior. Missing database conditions return
 // domain.ErrorCodeNoDatabaseFound. Sentinel errors ErrIssueNotFound and
 // ErrSchemaMismatch are returned for the pure local-state cases they document.
+// DashboardOptions controls optional behaviour for a Dashboard call.
+// Zero value (DashboardOptions{}) is always safe: every field falls back to
+// the implementation's default.
+type DashboardOptions struct {
+	// ClosedLimit is the maximum number of recently-closed issues to include
+	// in DashboardData.Closed. ClosedLimit <= 0 means use the implementation
+	// default. Honored by the iwvm epic; ignored by all current impls.
+	ClosedLimit int
+
+	// ForceFresh, when true, bypasses any cache fast-path and forces a
+	// full backing call. Honored by the caching layer (fbea epic); ignored
+	// by all current impls.
+	ForceFresh bool
+}
+
 type Repository interface {
 	// Dashboard returns a composite snapshot of the board state: ready-explain
 	// data, in-progress issues, recently closed issues, a closed-total count,
@@ -50,7 +65,12 @@ type Repository interface {
 	//
 	// On context cancellation the fan-out is abandoned and ctx.Err() is
 	// returned promptly.
-	Dashboard(ctx context.Context) (DashboardData, error)
+	//
+	// opts.ClosedLimit <= 0 means use the implementation default.
+	// opts.ForceFresh = true bypasses any cache fast-path and forces a
+	// backing call. Note: this epic's impls ignore both fields. iwvm honors
+	// ClosedLimit; fbea honors ForceFresh.
+	Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error)
 
 	// Issue returns the full detail model for the issue identified by id.
 	//

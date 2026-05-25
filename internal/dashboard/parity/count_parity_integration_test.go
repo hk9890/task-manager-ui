@@ -48,7 +48,7 @@ func runDashboardFetch(t *testing.T, repo repository.Repository, closedLimit int
 
 	ctx := context.Background()
 
-	data, err := repo.Dashboard(ctx)
+	data, err := repo.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("runDashboardFetch: Dashboard failed: %v", err)
 	}

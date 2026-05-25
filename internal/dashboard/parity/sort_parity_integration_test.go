@@ -41,6 +41,7 @@ import (
 
 	"github.com/hk9890/beads-workbench/internal/dashboard"
 	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/beads-workbench/internal/repository"
 	"github.com/hk9890/beads-workbench/internal/testing/datasets"
 )
 
@@ -145,7 +146,7 @@ func fetchBWBColumns(t *testing.T, ds datasets.Dataset) dashboard.Columns {
 
 	repo := datasets.NewRepository(t, ds)
 
-	data, err := repo.Dashboard(ctx)
+	data, err := repo.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("fetchBWBColumns[%s]: Dashboard: %v", ds.Name, err)
 	}

@@ -40,8 +40,8 @@ func (r *recordingSearchRepo) Search(ctx context.Context, query domain.SearchIss
 	return r.repo.Search(ctx, query)
 }
 
-func (r *recordingSearchRepo) Dashboard(ctx context.Context) (repository.DashboardData, error) {
-	return r.repo.Dashboard(ctx)
+func (r *recordingSearchRepo) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+	return r.repo.Dashboard(ctx, opts)
 }
 func (r *recordingSearchRepo) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
 	return r.repo.Issue(ctx, id)

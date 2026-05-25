@@ -104,8 +104,8 @@ func (v *validatingRepository) HealthCheck(ctx context.Context) error {
 //     is a scalar int with no Groups; sum-of-groups check has no mapping here.
 //   - ValidateSsomInvariant (cross-method state): replaced by ClosedTotal >= len(Closed)
 //     checked in the same call, no mutex or per-instance state needed.
-func (v *validatingRepository) Dashboard(ctx context.Context) (DashboardData, error) {
-	data, err := v.inner.Dashboard(ctx)
+func (v *validatingRepository) Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error) {
+	data, err := v.inner.Dashboard(ctx, opts)
 	if err != nil {
 		return data, err
 	}

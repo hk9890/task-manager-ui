@@ -614,9 +614,9 @@ type countingRepository struct {
 	dashboardCalls atomic.Int64
 }
 
-func (r *countingRepository) Dashboard(ctx context.Context) (repository.DashboardData, error) {
+func (r *countingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	r.dashboardCalls.Add(1)
-	return r.Repository.Dashboard(ctx)
+	return r.Repository.Dashboard(ctx, opts)
 }
 
 // TestCachingModeStartupWiring tests constructRepository in caching mode using a
@@ -665,7 +665,7 @@ func TestCachingModeStartupWiring(t *testing.T) {
 
 	// First Dashboard call — dirty flag is set after Hydrate, so it MUST hit backing.
 	beforeCount := stub.dashboardCalls.Load()
-	_, err := cache.Dashboard(context.Background())
+	_, err := cache.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("first Dashboard: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestCachingModeStartupWiring(t *testing.T) {
 	}
 
 	// Second Dashboard call — clean flag now set, MUST be served from cache.
-	_, err = cache.Dashboard(context.Background())
+	_, err = cache.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("second Dashboard: %v", err)
 	}
@@ -780,7 +780,7 @@ func TestConstructRepositoryCachingWritesCacheFile(t *testing.T) {
 	cache.Start(ctx)
 
 	// Trigger a Dashboard read to hit backing (dirty after Hydrate).
-	if _, err := cache.Dashboard(context.Background()); err != nil {
+	if _, err := cache.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 

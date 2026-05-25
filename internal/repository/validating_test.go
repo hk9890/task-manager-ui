@@ -92,7 +92,7 @@ var _ repository.Repository = stubRepository{}
 
 func (stubRepository) HealthCheck(_ context.Context) error { return nil }
 
-func (stubRepository) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (stubRepository) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
 			Ready:        []domain.IssueSummary{{ID: "s-1", Title: "Ready", Status: "open", Type: "task"}},
@@ -155,7 +155,7 @@ func TestValidatingRepository_NoViolationsOnCleanData(t *testing.T) {
 	if err := repo.HealthCheck(ctx); err != nil {
 		t.Fatalf("HealthCheck: %v", err)
 	}
-	if _, err := repo.Dashboard(ctx); err != nil {
+	if _, err := repo.Dashboard(ctx, repository.DashboardOptions{}); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	if _, err := repo.Issue(ctx, "s-1"); err != nil {
@@ -191,7 +191,7 @@ func TestValidatingRepository_NoViolationsOnCleanData(t *testing.T) {
 
 type emptyIDDashboardRepo struct{ stubRepository }
 
-func (emptyIDDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (emptyIDDashboardRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress: []domain.IssueSummary{
@@ -206,7 +206,7 @@ func (emptyIDDashboardRepo) Dashboard(_ context.Context) (repository.DashboardDa
 func TestValidatingRepository_Dashboard_NonEmptyIDViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(emptyIDDashboardRepo{})
-	data, err := repo.Dashboard(context.Background())
+	data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestValidatingRepository_Dashboard_NonEmptyIDViolation(t *testing.T) {
 
 type wrongSlotStatusRepo struct{ stubRepository }
 
-func (wrongSlotStatusRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (wrongSlotStatusRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress: []domain.IssueSummary{
@@ -243,7 +243,7 @@ func (wrongSlotStatusRepo) Dashboard(_ context.Context) (repository.DashboardDat
 func TestValidatingRepository_Dashboard_SlotStatusMismatch(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(wrongSlotStatusRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestValidatingRepository_Dashboard_SlotStatusMismatch(t *testing.T) {
 
 type overlapReadyBlockedRepo struct{ stubRepository }
 
-func (overlapReadyBlockedRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (overlapReadyBlockedRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	sharedIssue := domain.IssueSummary{ID: "overlap-1", Title: "Overlap", Status: "open", Type: "task"}
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
@@ -282,7 +282,7 @@ func (overlapReadyBlockedRepo) Dashboard(_ context.Context) (repository.Dashboar
 func TestValidatingRepository_Dashboard_ReadyAndBlockedDisjointViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(overlapReadyBlockedRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestValidatingRepository_Dashboard_ReadyAndBlockedDisjointViolation(t *test
 
 type readyTotalMismatchRepo struct{ stubRepository }
 
-func (readyTotalMismatchRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (readyTotalMismatchRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
 			Ready:        []domain.IssueSummary{{ID: "r-1", Title: "Ready", Status: "open", Type: "task"}},
@@ -315,7 +315,7 @@ func (readyTotalMismatchRepo) Dashboard(_ context.Context) (repository.Dashboard
 func TestValidatingRepository_Dashboard_TotalReadyMismatch(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(readyTotalMismatchRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestValidatingRepository_Dashboard_TotalReadyMismatch(t *testing.T) {
 
 type unenrichedBlockedByRepo struct{ stubRepository }
 
-func (unenrichedBlockedByRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (unenrichedBlockedByRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
 			Ready: []domain.IssueSummary{},
@@ -355,7 +355,7 @@ func (unenrichedBlockedByRepo) Dashboard(_ context.Context) (repository.Dashboar
 func TestValidatingRepository_Dashboard_BlockedByEnrichedViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(unenrichedBlockedByRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -370,7 +370,7 @@ func TestValidatingRepository_Dashboard_BlockedByEnrichedViolation(t *testing.T)
 
 type ssomViolationRepo struct{ stubRepository }
 
-func (ssomViolationRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (ssomViolationRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress:   []domain.IssueSummary{},
@@ -386,7 +386,7 @@ func (ssomViolationRepo) Dashboard(_ context.Context) (repository.DashboardData,
 func TestValidatingRepository_Dashboard_SsomViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(ssomViolationRepo{})
-	data, err := repo.Dashboard(context.Background())
+	data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -662,7 +662,7 @@ func TestValidatingRepository_Catalogs_EmptyLabelNameViolation(t *testing.T) {
 
 type highCardDashboardRepo struct{ stubRepository }
 
-func (highCardDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (highCardDashboardRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	// Build 5001 InProgress items; item[1] has empty ID — in the first-10 spot.
 	items := make([]domain.IssueSummary, 5001)
 	for i := range items {
@@ -687,7 +687,7 @@ func (highCardDashboardRepo) Dashboard(_ context.Context) (repository.DashboardD
 func TestValidatingRepository_Dashboard_HighCardinalitySpotCheck(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(highCardDashboardRepo{})
-	data, err := repo.Dashboard(context.Background())
+	data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -706,7 +706,7 @@ func TestValidatingRepository_Dashboard_HighCardinalitySpotCheck(t *testing.T) {
 
 type emptyTitleDashboardRepo struct{ stubRepository }
 
-func (emptyTitleDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (emptyTitleDashboardRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress: []domain.IssueSummary{
@@ -721,7 +721,7 @@ func (emptyTitleDashboardRepo) Dashboard(_ context.Context) (repository.Dashboar
 func TestValidatingRepository_Dashboard_NonEmptyTitleViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(emptyTitleDashboardRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -732,7 +732,7 @@ func TestValidatingRepository_Dashboard_NonEmptyTitleViolation(t *testing.T) {
 
 type emptyStatusDashboardRepo struct{ stubRepository }
 
-func (emptyStatusDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (emptyStatusDashboardRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		// Use Closed slot so we avoid triggering DashboardClosedStatusMatches on top.
@@ -746,7 +746,7 @@ func (emptyStatusDashboardRepo) Dashboard(_ context.Context) (repository.Dashboa
 func TestValidatingRepository_Dashboard_NonEmptyStatusViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(emptyStatusDashboardRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -757,7 +757,7 @@ func TestValidatingRepository_Dashboard_NonEmptyStatusViolation(t *testing.T) {
 
 type emptyTypeDashboardRepo struct{ stubRepository }
 
-func (emptyTypeDashboardRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (emptyTypeDashboardRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress:   []domain.IssueSummary{},
@@ -770,7 +770,7 @@ func (emptyTypeDashboardRepo) Dashboard(_ context.Context) (repository.Dashboard
 func TestValidatingRepository_Dashboard_NonEmptyTypeViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(emptyTypeDashboardRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -785,7 +785,7 @@ func TestValidatingRepository_Dashboard_NonEmptyTypeViolation(t *testing.T) {
 
 type wrongClosedSlotStatusRepo struct{ stubRepository }
 
-func (wrongClosedSlotStatusRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (wrongClosedSlotStatusRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress:   []domain.IssueSummary{},
@@ -800,7 +800,7 @@ func (wrongClosedSlotStatusRepo) Dashboard(_ context.Context) (repository.Dashbo
 func TestValidatingRepository_Dashboard_ClosedSlotStatusMismatch(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(wrongClosedSlotStatusRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -815,7 +815,7 @@ func TestValidatingRepository_Dashboard_ClosedSlotStatusMismatch(t *testing.T) {
 
 type wrongBlockedSlotStatusRepo struct{ stubRepository }
 
-func (wrongBlockedSlotStatusRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (wrongBlockedSlotStatusRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
 		InProgress:   []domain.IssueSummary{},
@@ -830,7 +830,7 @@ func (wrongBlockedSlotStatusRepo) Dashboard(_ context.Context) (repository.Dashb
 func TestValidatingRepository_Dashboard_BlockedSlotStatusMismatch(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(wrongBlockedSlotStatusRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -845,7 +845,7 @@ func TestValidatingRepository_Dashboard_BlockedSlotStatusMismatch(t *testing.T) 
 
 type emptyReadyIDRepo struct{ stubRepository }
 
-func (emptyReadyIDRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (emptyReadyIDRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
 			Ready:        []domain.IssueSummary{{ID: "", Title: "No ID", Status: "open", Type: "task"}}, // VIOLATION
@@ -863,7 +863,7 @@ func (emptyReadyIDRepo) Dashboard(_ context.Context) (repository.DashboardData, 
 func TestValidatingRepository_Dashboard_NonEmptyReadyIDsViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(emptyReadyIDRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -878,7 +878,7 @@ func TestValidatingRepository_Dashboard_NonEmptyReadyIDsViolation(t *testing.T) 
 
 type emptyBlockedIDRepo struct{ stubRepository }
 
-func (emptyBlockedIDRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (emptyBlockedIDRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
 			Ready: []domain.IssueSummary{},
@@ -903,7 +903,7 @@ func (emptyBlockedIDRepo) Dashboard(_ context.Context) (repository.DashboardData
 func TestValidatingRepository_Dashboard_NonEmptyBlockedIDsViolation(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(emptyBlockedIDRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -918,7 +918,7 @@ func TestValidatingRepository_Dashboard_NonEmptyBlockedIDsViolation(t *testing.T
 
 type blockedTotalMismatchRepo struct{ stubRepository }
 
-func (blockedTotalMismatchRepo) Dashboard(_ context.Context) (repository.DashboardData, error) {
+func (blockedTotalMismatchRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 	return repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
 			Ready: []domain.IssueSummary{},
@@ -943,7 +943,7 @@ func (blockedTotalMismatchRepo) Dashboard(_ context.Context) (repository.Dashboa
 func TestValidatingRepository_Dashboard_TotalBlockedMismatch(t *testing.T) {
 	t.Parallel()
 	repo, h := newCapturingRepo(blockedTotalMismatchRepo{})
-	_, err := repo.Dashboard(context.Background())
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
