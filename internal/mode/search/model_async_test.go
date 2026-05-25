@@ -262,7 +262,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		delayed := NewDelayedRepository(inner)
 
-		m := NewModel(delayed, nil)
+		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
 
 		// Start Init — the Cmd will block in delayed.Search.
@@ -343,7 +343,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		delayed := NewDelayedRepository(inner)
 
-		m := NewModel(delayed, nil)
+		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
 
 		// Step 1: Init fires — let it complete immediately.
@@ -430,7 +430,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		delayed := NewDelayedRepository(inner)
 
-		m := NewModel(delayed, nil)
+		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
 
 		initCmd := m.Init()
@@ -478,7 +478,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		delayed := NewDelayedRepository(inner)
 
-		m := NewModel(delayed, nil)
+		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
 
 		initCmd := m.Init()
@@ -542,7 +542,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		recording := &queryRecordingRepo{Repository: filtered}
 		delayed := NewDelayedRepository(recording)
 
-		m := NewModel(delayed, nil)
+		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
 
 		initCmd := m.Init()

@@ -35,7 +35,7 @@ func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 
 // newBoardModel builds a test board model with a no-op logger.
 func newBoardModel(repo repository.Repository, keys config.ResolvedKeyBindings) *Model {
-	return NewModel(repo, slog.Default(), keys)
+	return NewModel(context.Background(), repo, slog.Default(), keys)
 }
 
 // feedDashboardData injects a dashboardLoadedMsg with the given data into the model.
@@ -688,7 +688,7 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 	handler := &captureHandler{capture: &capturedMessages}
 	logger := slog.New(handler)
 
-	m := NewModel(memoryrepo.New(), logger, resolvedBoardKeys(t))
+	m := NewModel(context.Background(), memoryrepo.New(), logger, resolvedBoardKeys(t))
 
 	// Feed empty dashboard result. No warnings expected from empty inputs.
 	feedDashboardData(m, repository.DashboardData{})
@@ -710,7 +710,7 @@ func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
 	// Simulate what main.go does: attach component=dashboard to the parent logger.
 	logger := slog.New(jsonHandler).With("component", "dashboard")
 
-	m := NewModel(memoryrepo.New(), logger, resolvedBoardKeys(t))
+	m := NewModel(context.Background(), memoryrepo.New(), logger, resolvedBoardKeys(t))
 
 	// Build 501 ready issues — enough to exceed the 500-item cardinality threshold
 	// and trigger a "cardinality threshold exceeded" warning from dashboard.Compose.
@@ -750,7 +750,7 @@ func TestBoardModeLogCarriesComponentBoard(t *testing.T) {
 	rootLogger := slog.New(jsonHandler)
 	boardLogger := rootLogger.With("component", "board")
 
-	m := NewModel(memoryrepo.New(), boardLogger, resolvedBoardKeys(t))
+	m := NewModel(context.Background(), memoryrepo.New(), boardLogger, resolvedBoardKeys(t))
 
 	// 501 ready issues exceeds the 500-item cardinality threshold.
 	ready := make([]domain.IssueSummary, 501)
@@ -909,7 +909,7 @@ func TestBoardInitRealRepositorySubprocessArgvCardinality(t *testing.T) {
 	})
 	repo := repositorybeads.New(runner)
 
-	m := NewModel(repo, slog.Default(), resolvedBoardKeys(t))
+	m := NewModel(context.Background(), repo, slog.Default(), resolvedBoardKeys(t))
 
 	// Drive Init: board.Init() now returns a single loadDashboardCmd (not a tea.Batch).
 	initCmd := m.Init()

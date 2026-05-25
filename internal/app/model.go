@@ -260,8 +260,11 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		board:          boardmode.NewModel(services.Repo, modeLogger(services.Logger, "board"), keys),
-		search:         searchmode.NewModel(services.Repo, modeLogger(services.Logger, "search"), keys),
+		// context.Background() is used here because the app model has no parent
+		// context today. This preserves prior behaviour while making future
+		// cancellation threading possible without touching the mode packages.
+		board:  boardmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "board"), keys),
+		search: searchmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "search"), keys),
 		detail:         detailsmode.Model{Keys: keys},
 		toast:          toaster.New(),
 		help:           help,

@@ -57,6 +57,7 @@ type refreshAnchor struct {
 
 // Model is the standalone board mode controller backed by repository calls.
 type Model struct {
+	ctx    context.Context
 	repo   repository.Repository
 	logger *slog.Logger
 	keys   config.ResolvedKeyBindings
@@ -81,8 +82,11 @@ type Model struct {
 }
 
 // NewModel creates a board mode controller.
+// ctx is stored on the model and used for repository calls; callers should
+// pass the application lifecycle context so repository operations can be
+// cancelled when the app exits.
 // logger may be nil; a nil logger falls back to slog.Default().
-func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
+func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -98,6 +102,7 @@ func NewModel(repo repository.Repository, logger *slog.Logger, resolved ...confi
 	}
 
 	m := &Model{
+		ctx:         ctx,
 		repo:        repo,
 		logger:      logger,
 		keys:        keys,
@@ -325,7 +330,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 		m.columns = initialLoadingColumns()
 	}
 
-	return loadDashboardCmd(m.repo)
+	return loadDashboardCmd(m.ctx, m.repo)
 }
 
 // compose runs dashboard.Compose from a single DashboardData result and
@@ -548,10 +553,12 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 }
 
 // loadDashboardCmd fires the Dashboard repository call and wraps the result
-// in a dashboardLoadedMsg.
-func loadDashboardCmd(repo repository.Repository) tea.Cmd {
+// in a dashboardLoadedMsg. ctx is the model's lifetime context set at
+// construction; it does not change after NewModel returns, so reading it
+// inside the closure at BubbleTea-execute time is safe.
+func loadDashboardCmd(ctx context.Context, repo repository.Repository) tea.Cmd {
 	return func() tea.Msg {
-		data, err := repo.Dashboard(context.Background())
+		data, err := repo.Dashboard(ctx)
 		return dashboardLoadedMsg{data: data, err: err}
 	}
 }

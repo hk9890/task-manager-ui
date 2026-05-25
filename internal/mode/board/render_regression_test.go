@@ -13,6 +13,7 @@ package board
 // countColumnTopBorders helper would catch it immediately.
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"testing"
@@ -87,7 +88,7 @@ func newRegressionBoard(t *testing.T) *Model {
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings: %v", err)
 	}
-	return NewModel(repo, slog.Default(), keys)
+	return NewModel(context.Background(), repo, slog.Default(), keys)
 }
 
 // feedDashboard feeds a dashboardLoadedMsg to the model, simulating a

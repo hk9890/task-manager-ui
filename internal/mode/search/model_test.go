@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -48,7 +49,7 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	gw := newSearchRepo()
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Backend search", Status: "open", Type: "task", Priority: 1})
 
-	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(gw, nil)}, 120, 30)
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(context.Background(), gw, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
@@ -218,7 +219,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error state", func(t *testing.T) {
-		m := NewModel(newSearchRepo(), nil)
+		m := NewModel(context.Background(), newSearchRepo(), nil)
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View(0)
@@ -228,7 +229,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("no results state", func(t *testing.T) {
-		m := NewModel(newSearchRepo(), nil)
+		m := NewModel(context.Background(), newSearchRepo(), nil)
 		m.draftQuery = "xyz"
 		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
 		if cmd != nil {
@@ -540,7 +541,7 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	// Titles contain "g" so the query "g" matches both.
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
 	gw.repo.Seed(memoryrepo.Issue{ID: "bw-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
-	m := testui.InitializeController(NewModel(gw, nil, keys)).(*Model)
+	m := testui.InitializeController(NewModel(context.Background(), gw, nil, keys)).(*Model)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
 	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -596,7 +597,7 @@ func newSearchFakeRepository() *searchRepo {
 }
 
 func initModel(repository repository.Repository) *Model {
-	return testui.InitializeController(NewModel(repository, nil)).(*Model)
+	return testui.InitializeController(NewModel(context.Background(), repository, nil)).(*Model)
 }
 
 func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
@@ -716,7 +717,7 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	t.Parallel()
 
 	gw := newSearchRepo()
-	m := NewModel(gw, nil)
+	m := NewModel(context.Background(), gw, nil)
 
 	// Manually set loading=true (simulating an in-flight request).
 	m.loading = true
@@ -876,7 +877,7 @@ func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
 
 	repo := memoryrepo.New()
 	gw := repository.NewErrorInjecting(repo)
-	m := NewModel(gw, searchLogger)
+	m := NewModel(context.Background(), gw, searchLogger)
 
 	// Put the model into a loading state and call Reload(). The guard path in
 	// Reload (and triggerSearchWithAnchor) emits a Debug log when loading is

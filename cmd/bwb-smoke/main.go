@@ -482,7 +482,9 @@ func runRenderCheck() CheckResult {
 
 	// Build a board model with an empty memory repository.
 	// Data is fed directly via board.FeedTestData (bypasses async dispatch).
-	m := board.NewModel(memoryrepo.New(), slog.Default(), keys)
+	// context.Background() is used here because runRenderCheck has no
+	// lifecycle context; the model never issues live repository calls.
+	m := board.NewModel(context.Background(), memoryrepo.New(), slog.Default(), keys)
 
 	type step struct {
 		label string

@@ -19,6 +19,7 @@ package search
 // circular).
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -78,7 +79,7 @@ func newRegressionSearch(t *testing.T) *Model {
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings: %v", err)
 	}
-	return NewModel(repo, nil, keys)
+	return NewModel(context.Background(), repo, nil, keys)
 }
 
 // feedSearchResults delivers a searchLoadedMsg to the model, simulating a
