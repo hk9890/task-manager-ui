@@ -202,6 +202,38 @@ func runCmdAsync(cmd tea.Cmd) <-chan tea.Msg {
 	return ch
 }
 
+// ---- bdDefaultFilterRepo ----
+
+// bdDefaultFilterRepo mirrors the real bd search backend's default behaviour:
+// when SearchIssuesQuery.Statuses is empty, closed issues are excluded from
+// results. This lets async contract tests assert on result set content rather
+// than relying only on the query-shape proxy.
+//
+// In the memory repository, an empty Statuses field returns every seeded issue
+// (open and closed alike). Stacking bdDefaultFilterRepo between the inner repo
+// and the test doubles restores the bd-default contract so tests can call
+//
+//	if result.Issue.Status == "closed" { t.Errorf(...) }
+//
+// without their assertions becoming vacuously true on the memory backend.
+type bdDefaultFilterRepo struct{ repository.Repository }
+
+func (r *bdDefaultFilterRepo) Search(ctx context.Context, q domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	page, err := r.Repository.Search(ctx, q)
+	if err != nil || len(q.Statuses) > 0 {
+		return page, err
+	}
+	// No explicit Statuses filter → apply bd default: exclude closed.
+	filtered := page.Results[:0]
+	for _, res := range page.Results {
+		if res.Issue.Status != "closed" {
+			filtered = append(filtered, res)
+		}
+	}
+	page.Results = filtered
+	return page, nil
+}
+
 // ---- controller-async contract tests ----
 
 // TestSearchControllerAsyncContracts is the parent test for the five
@@ -503,7 +535,11 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task open", Status: "open", Type: "task", Priority: 1})
 		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "task closed", Status: "closed", Type: "task", Priority: 2})
 
-		recording := &queryRecordingRepo{Repository: inner}
+		// Stack: inner → bdDefaultFilterRepo (bd-default closed exclusion) → queryRecordingRepo → delayed.
+		// This lets assertions check both query-shape (no forced Statuses) and
+		// result-set content (no closed issues in the final page).
+		filtered := &bdDefaultFilterRepo{Repository: inner}
+		recording := &queryRecordingRepo{Repository: filtered}
 		delayed := NewDelayedRepository(recording)
 
 		m := NewModel(delayed, nil)
@@ -558,6 +594,24 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 		if !foundTypedQuery {
 			t.Errorf("no Search call with Text=%q found; queries seen: %v", "task", queries)
+		}
+
+		// Assert result-set content: the final page must not contain any closed
+		// issues. This is the direct symptom from czkq.4: when Enter was dropped
+		// and lean_reads forced --status all, the Init result (which included the
+		// closed issue) remained visible.
+		//
+		// With bdDefaultFilterRepo in the stack, the memory repo behaves like the
+		// real bd backend: closed issues are excluded when Statuses is empty. If
+		// the model were to inject Statuses:[]string{"all"} (reverting lean_reads),
+		// bdDefaultFilterRepo passes through all issues and this assertion fails.
+		if len(m.page.Results) == 0 {
+			t.Error("expected non-empty Results after 'task' search resolves")
+		}
+		for _, result := range m.page.Results {
+			if result.Issue.Status == "closed" {
+				t.Errorf("closed issue %q leaked into result set; model or repo injected --status all", result.Issue.ID)
+			}
 		}
 	})
 }
