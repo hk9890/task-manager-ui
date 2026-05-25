@@ -148,6 +148,11 @@ func TestCloseIssue_AlreadyClosedThisSecond(t *testing.T) {
 //
 // Expected behaviour: CloseIssue returns the *original close error* (not the
 // show error). This is the non-idempotent path; the caller should surface the error.
+//
+// The show error uses a distinct stderr string ("not found in database") so the
+// test can verify the returned error traces back to the close call, not the show
+// call. If lean_writes.go:143 were to return showErr instead of err, this test
+// would catch the regression via the message assertion.
 func TestCloseIssue_GenuineNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -155,15 +160,22 @@ func TestCloseIssue_GenuineNotFound(t *testing.T) {
 	closeArgv := []string{"close", issueID}
 	showArgv := []string{"show", issueID, "--json"}
 
+	// Distinct stderr strings so the returned error is unambiguously traceable
+	// to the close call. The production code at lean_writes.go:143 does:
+	//   if showErr != nil { return err }  // err = original close error
+	// If it were changed to return showErr, the message assertion below fails.
+	const closeStderr = "issue not found"
+	const showStderr = "not found in database" // intentionally different
+
 	rec := fakes.NewRecordingExecutor()
-	// Close fails with "issue not found".
+	// Close fails with "issue not found" (triggers leanIsCloseNotFound).
 	rec.OnArgs(closeArgv).Return(bd.ExecResult{
-		Stderr:   []byte("issue not found"),
+		Stderr:   []byte(closeStderr),
 		ExitCode: 1,
 	}, nil)
-	// Show also fails: issue is genuinely absent.
+	// Show also fails: issue is genuinely absent (distinct stderr).
 	rec.OnArgs(showArgv).Return(bd.ExecResult{
-		Stderr:   []byte("issue not found"),
+		Stderr:   []byte(showStderr),
 		ExitCode: 1,
 	}, nil)
 
@@ -175,9 +187,8 @@ func TestCloseIssue_GenuineNotFound(t *testing.T) {
 		t.Fatal("CloseIssue genuine-not-found: expected error, got nil")
 	}
 
-	// The original close error (operation="close issue") must be returned, not
-	// the show error. This distinguishes "returned original" from "returned show
-	// error" — both are RepositoryErrors but the Operation field differs.
+	// The original close error must be returned (not the show error).
+	// Verify this by checking the message contains the CLOSE stderr, not the show stderr.
 	var repoErr domain.RepositoryError
 	if !errors.As(err, &repoErr) {
 		t.Fatalf("expected domain.RepositoryError, got %T: %v", err, err)
@@ -185,8 +196,13 @@ func TestCloseIssue_GenuineNotFound(t *testing.T) {
 	if repoErr.Code != domain.ErrorCodeCommandFailed {
 		t.Errorf("error code = %q, want %q", repoErr.Code, domain.ErrorCodeCommandFailed)
 	}
-	if !strings.Contains(repoErr.Message, "issue not found") {
-		t.Errorf("error message = %q, want it to contain %q", repoErr.Message, "issue not found")
+	if !strings.Contains(repoErr.Message, closeStderr) {
+		t.Errorf("error message = %q should contain close stderr %q (not show stderr %q); "+
+			"got show error instead of original close error", repoErr.Message, closeStderr, showStderr)
+	}
+	if strings.Contains(repoErr.Message, showStderr) {
+		t.Errorf("error message = %q must NOT contain show stderr %q; "+
+			"returned the show error instead of the original close error", repoErr.Message, showStderr)
 	}
 
 	// Verify argv sequence: close first, then show.
