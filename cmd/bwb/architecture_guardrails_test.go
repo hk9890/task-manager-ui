@@ -2,10 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -13,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/tools/go/packages"
 	"gopkg.in/yaml.v3"
 
 	"github.com/hk9890/beads-workbench/internal/config"
@@ -60,17 +59,21 @@ func currentModulePath(t *testing.T) string {
 
 	moduleRoot := moduleRootDir(t)
 
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Path}}")
-	cmd.Dir = moduleRoot
-
-	output, err := cmd.CombinedOutput()
+	cfg := &packages.Config{
+		Mode: packages.NeedModule | packages.NeedName,
+		Dir:  moduleRoot,
+	}
+	pkgs, err := packages.Load(cfg, "./cmd/bwb")
 	if err != nil {
-		t.Fatalf("resolving module path failed: %v\n%s", err, output)
+		t.Fatalf("resolving module path failed: %v", err)
+	}
+	if len(pkgs) == 0 || pkgs[0].Module == nil {
+		t.Fatal("packages.Load returned no module information")
 	}
 
-	modulePath := strings.TrimSpace(string(output))
+	modulePath := pkgs[0].Module.Path
 	if modulePath == "" {
-		t.Fatal("go list -m returned empty module path")
+		t.Fatal("packages.Load returned empty module path")
 	}
 
 	return modulePath
@@ -81,29 +84,50 @@ func listCmdBwbPackages(t *testing.T) []listedPackage {
 
 	moduleRoot := moduleRootDir(t)
 
-	cmd := exec.Command("go", "list", "-deps", "-json", "./cmd/bwb")
-	cmd.Dir = moduleRoot
-
-	output, err := cmd.CombinedOutput()
+	cfg := &packages.Config{
+		Mode: packages.NeedDeps | packages.NeedImports | packages.NeedName,
+		Dir:  moduleRoot,
+	}
+	roots, err := packages.Load(cfg, "./cmd/bwb")
 	if err != nil {
-		t.Fatalf("listing package metadata for ./cmd/bwb failed: %v\n%s", err, output)
+		t.Fatalf("listing package metadata for ./cmd/bwb failed: %v", err)
+	}
+	if len(roots) == 0 {
+		t.Fatal("packages.Load returned no packages for ./cmd/bwb")
 	}
 
-	decoder := json.NewDecoder(strings.NewReader(string(output)))
-	pkgs := make([]listedPackage, 0)
-	for decoder.More() {
-		var pkg listedPackage
-		if err := decoder.Decode(&pkg); err != nil {
-			t.Fatalf("decoding go list package metadata failed: %v", err)
+	// Walk the full transitive dependency graph.
+	seen := make(map[string]bool)
+	result := make([]listedPackage, 0)
+	var walk func(pkg *packages.Package)
+	walk = func(pkg *packages.Package) {
+		if seen[pkg.PkgPath] {
+			return
 		}
-		pkgs = append(pkgs, pkg)
+		seen[pkg.PkgPath] = true
+
+		imports := make([]string, 0, len(pkg.Imports))
+		for importPath := range pkg.Imports {
+			imports = append(imports, importPath)
+		}
+		result = append(result, listedPackage{
+			ImportPath: pkg.PkgPath,
+			Imports:    imports,
+		})
+
+		for _, dep := range pkg.Imports {
+			walk(dep)
+		}
+	}
+	for _, root := range roots {
+		walk(root)
 	}
 
-	if len(pkgs) == 0 {
-		t.Fatal("go list returned no package metadata for ./cmd/bwb")
+	if len(result) == 0 {
+		t.Fatal("packages.Load returned no package metadata for ./cmd/bwb")
 	}
 
-	return pkgs
+	return result
 }
 
 func moduleRootDir(t *testing.T) string {
