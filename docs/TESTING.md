@@ -16,30 +16,51 @@ The repository uses a three-tier model.
 - Live in `*_test.go` files alongside the package under test (no build tag required).
 - Examples: `internal/mode/*/model_test.go`, `internal/ui/*/*_test.go`, `internal/app/model_test.go`.
 
-### Tier 2a — Repository-integration READ contract (`mise run test:integration`, `//go:build integration`)
+### Tier 2 — Repository parity contract (`mise run test:integration`, `//go:build integration`)
 
-- Package: `internal/repository/beads/contract/`.
-- Single parameterized function `RunReadContract(t, factory RepositoryFactory)` wired against a real CLI-backed `beads.Repository`.
-- Uses `embeddedfixture.SharedFixtureRepoPath(t)` for the real factory: seeds once per process, copies the pre-seeded cache directory per test (~100ms after the first call).
-- **Read-only.** Never mutate the shared fixture inside `RunReadContract`.
-- Covers every read method on `repository.Repository` — `internal/repository/repository.go` is the source of truth for the method set.
+- Package: `internal/repository/contract/`.
+- File: `internal/repository/contract/parity_integration_test.go`.
+- Entry point: `TestRepositoryContract` runs all 13 scenarios against each factory in parallel sub-tests.
+- Requires a real `bd` binary on PATH; the test self-skips when `bd` is not found.
 
-### Tier 2b — Repository-integration MUTATING scenarios (`mise run test:integration`, `//go:build integration`)
+**Factories wired in** (two today; the legacy repository-backed adapter was removed):
 
-- Same `contract` package, separate `*_scenario_integration_test.go` files.
-- Two scenarios today:
-  - `TestRealRepositoryIssueLifecycleScenario` — create → update → comment → close (all 4 write methods).
-  - `TestRealRepositoryLinksAndDepsScenario` — `bd link`, `bd dep relate`, `bd dep add` with repository read verification.
-- Use `embeddedfixture.TempRepoPath(t)` + `embeddedfixture.Seed(t, repoPath)` for a fresh per-test fixture (mutations OK).
-- Sized to be debuggable: ~5–10 steps per scenario. Cap at ~3 scenarios total.
+| Factory name | Backing implementation |
+|---|---|
+| `memory` | `memory.Repository` seeded via `memory.Seed` / `memory.SeedComments` / `memory.SeedCatalogs` |
+| `beads` | `repobeads.New(runner)` backed by a real `bd` subprocess; each test case gets a fresh temp dir with `bd init` |
+
+**Scenarios** (13 total, each is a `t.Run` sub-test inside `runAllScenarios`):
+
+| # | Sub-test name | What it covers |
+|---|---|---|
+| 1 | `EmptyStore` | Dashboard / Issue / Search all behave correctly on an empty store |
+| 2 | `SingleOpenIssue` | Open issue appears in `Dashboard.ReadyExplain.Ready`; `Issue(id)` returns fields |
+| 3 | `DepChainClosedToOpen` | Issue with a closed blocker appears in Ready |
+| 4 | `DepChainOpenToOpen` | Issue with an open blocker appears in `ReadyExplain.Blocked` |
+| 5 | `StoredStatusBlocked` | Issue with `status=blocked` appears in `Dashboard.Blocked` |
+| 6 | `SortDirection` | `Dashboard.Closed` is sorted DESC by `ClosedAt` (most-recently-closed first) |
+| 7 | `SearchHitShape` | Title match returns issue; impl divergence for description/notes matching is carve-outed to `impl.name == "memory"` |
+| 8 | `MutationEffects` | `CreateIssue` / `UpdateIssue` / `CloseIssue` / `AddComment` mutations are visible in subsequent reads |
+| 9 | `UnknownIDErrorCodes` | `UpdateIssue`, `CloseIssue`, `AddComment` on a missing ID return `domain.RepositoryError{Code: ErrorCodeCommandFailed}` |
+| 10 | `PartialDashboardFailure` | When one fan-out branch fails, `Dashboard` returns an error (skipped for `memory` impl) |
+| 11 | `TimeFieldSemantics` | `CreatedAt` is non-zero; `UpdatedAt` does not regress after mutation; `ClosedAt` is set after `CloseIssue` |
+| 12 | `HealthCheckEmptyStore` | `HealthCheck` returns nil for a healthy empty store |
+| 13 | `CatalogsShape` | `Catalogs` returns non-nil, non-empty `Statuses` and `Types` including core values |
+
+**Adding a new scenario:**
+
+1. Open `internal/repository/contract/parity_integration_test.go`.
+2. Add a new `t.Run("YourScenarioName", func(t *testing.T) { ... })` block inside `runAllScenarios`.
+3. Build the repository under test with `impl.build(t, seed)` where `seed` is a `scenarioSeed` (fields: `issues []seedIssue`, `deps []seedDep`).
+4. Use `impl.name == "memory"` guards for assertions that cannot hold for both implementations (documented divergences). For scenarios that are entirely inapplicable to one impl, use `t.Skip(...)` — see `PartialDashboardFailure` (Scenario 10) as a template.
 
 ## Where Does My New Test Go?
 
 | What the test asserts | Where it goes | Tool |
 |---|---|---|
 | App behavior given any repository state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub `repository.Repository` or `fakes.RecordingExecutor`-backed `beads.Repository` |
-| The bd CLI adapter's contract (a read method produces correct output) | Tier 2a — add a `t.Run` block to `RunReadContract` | real `beads.Repository` via `SharedFixtureRepoPath` |
-| A multi-step bd write workflow (mutations + read verification) | Tier 2b — add to an existing scenario or create a new one | real `beads.Repository` via `TempRepoPath` + `Seed` |
+| Repository parity (read or mutating): both impls must agree | Tier 2 — add a `t.Run` block inside `runAllScenarios` in `internal/repository/contract/parity_integration_test.go` | `impl.build(t, seed)` — runs against both `memory` and `beads` factories |
 
 Decision rule: if the test does not fork a real subprocess and costs <100ms, it is a unit test. If it forks `bd`, it is integration.
 
@@ -64,11 +85,12 @@ Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
 
 ## The Fake/Real Contract
 
-`RunReadContract` is the single function that bridges Tier 1 and Tier 2a.
+`TestRepositoryContract` in `internal/repository/contract/parity_integration_test.go` is the structural answer to the fake/real divergence discipline described in `internal/testing/fakes/doc.go`.
 
-- `TestRealRepositoryReadContract` wires it against the real `bd`-backed `beads.Repository` (integration, `//go:build integration`).
+- It runs the same 13 scenarios against both the `memory.Repository` (used as the in-process fake for unit tests) and the `beads.Repository` backed by a real `bd` subprocess.
+- Any divergence between the two that is not explicitly carved out in the test source is a parity bug.
 
-**Why it exists:** The contract pins the exact behavior of every read method against real `bd` output, so regressions in parsing are caught automatically.
+**Why it exists:** The suite pins the exact behavior of every `repository.Repository` method against real `bd` output, so regressions in parsing are caught automatically and the unit-test fake stays honest.
 
 ## Commands
 
@@ -94,7 +116,7 @@ Harness-focused runs (package-scoped):
 
 ```bash
 mise run test -- ./internal/testing/...
-mise run test -- ./internal/repository/beads/contract/... -v
+go test -tags integration ./internal/repository/contract/... -v -run TestRepositoryContract
 ```
 
 ## When to Run Which Gate
