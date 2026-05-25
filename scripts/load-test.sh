@@ -5,10 +5,10 @@
 # Requires: bd on PATH, go toolchain
 #
 # Workload shape (override via LOAD_* env vars):
-#   LOAD_OPEN            open issues          (default: 100)
-#   LOAD_CLOSED          closed issues        (default: 25)
-#   LOAD_IN_PROGRESS     in_progress issues   (default: 10)
-#   LOAD_BLOCKED         blocked issues       (default: 5)
+#   LOAD_OPEN            open issues          (default: 20)
+#   LOAD_CLOSED          closed issues        (default: 5)
+#   LOAD_IN_PROGRESS     in_progress issues   (default: 3)
+#   LOAD_BLOCKED         blocked issues       (default: 2)
 #   LOAD_DEP_DENSITY     avg dep edges/issue  (default: 0.5)
 #   LOAD_COMMENTS_PER    avg comments/issue   (default: 0; each comment is a bd subprocess — slow at scale)
 #   LOAD_SEED            random seed          (default: 42)
@@ -16,10 +16,14 @@
 #   LOAD_SAMPLES_WARM    warm-path samples    (default: 20)
 #   LOAD_OUT             report path          (default: ./load-test-report.json)
 #
-# Larger profiles: increase LOAD_OPEN/LOAD_CLOSED/etc. The default 140-issue
-# workload completes in <60s. For a 1000-issue profile set
-# LOAD_OPEN=700 LOAD_CLOSED=200 LOAD_IN_PROGRESS=70 LOAD_BLOCKED=30
-# (expect ~5-10 min due to sequential bd subprocess calls).
+# Timing note: each issue requires ≥1 `bd create` subprocess call (~0.7–1s each).
+# Generation dominates wall-clock time regardless of corpus size. Default 30-issue
+# workload takes ~90s on typical hardware. This is a bd-subprocess floor, not a
+# bwb performance issue.
+#
+# Larger profiles (set via LOAD_* env vars):
+#   medium:  LOAD_OPEN=100 LOAD_CLOSED=25 LOAD_IN_PROGRESS=10 LOAD_BLOCKED=5   (~4 min)
+#   large:   LOAD_OPEN=500 LOAD_CLOSED=100 LOAD_IN_PROGRESS=50 LOAD_BLOCKED=20 (~30+ min)
 set -euo pipefail
 
 # ---------- preconditions ----------
@@ -31,10 +35,10 @@ fi
 
 # ---------- workload defaults ----------
 
-OPEN="${LOAD_OPEN:-100}"
-CLOSED="${LOAD_CLOSED:-25}"
-IN_PROGRESS="${LOAD_IN_PROGRESS:-10}"
-BLOCKED="${LOAD_BLOCKED:-5}"
+OPEN="${LOAD_OPEN:-20}"
+CLOSED="${LOAD_CLOSED:-5}"
+IN_PROGRESS="${LOAD_IN_PROGRESS:-3}"
+BLOCKED="${LOAD_BLOCKED:-2}"
 DEP_DENSITY="${LOAD_DEP_DENSITY:-0.5}"
 COMMENTS_PER="${LOAD_COMMENTS_PER:-0}"
 SEED="${LOAD_SEED:-42}"

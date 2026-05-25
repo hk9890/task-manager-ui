@@ -84,7 +84,7 @@ mise run test:load           # load-test suite: generate workload, measure, emit
 
 ### Load testing
 
-`mise run test:load` generates a seeded workload, measures data-layer operation latencies (Dashboard cold/warm, cache, search, detail), and writes a JSON report plus a human summary table. Requires `bd` on PATH. Workload shape is configurable via `LOAD_*` env vars (see `.mise.toml` task description). Full agent-runnable recipe in `docs/LOAD_TESTING.md` (added by bjyt.4).
+`mise run test:load` generates a seeded workload, measures data-layer operation latencies (Dashboard cold/warm, cache, search, detail), and writes a JSON report plus a human summary table. Requires `bd` on PATH. Workload shape is configurable via `LOAD_*` env vars (see `scripts/load-test.sh` header). Default workload is 30 issues and takes ~90s due to sequential `bd create` subprocess calls; use larger profiles via env vars for stress testing. Full agent-runnable recipe in `docs/LOAD_TESTING.md` (added by bjyt.4).
 
 Run `mise tasks` to see the full list. CI additionally runs `fmt:check`,
 `scripts:check`, and a `test:coverage` threshold gate — see

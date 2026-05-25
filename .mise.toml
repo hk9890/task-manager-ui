@@ -89,7 +89,7 @@ description = "Validate script syntax (shell + python)"
 dir = "{{config_root}}"
 run = '''
 bash -n internal/testing/e2e/embeddedfixture/setup.sh
-find scripts -maxdepth 1 -name '*.sh' -print0 | xargs -0 -I{} bash -n {}
+find scripts -maxdepth 1 -name '*.sh' -print0 | xargs -0 --no-run-if-empty bash -n
 find scripts -maxdepth 1 -name '*.py' -print0 | xargs -0 python3 -m py_compile
 '''
 
