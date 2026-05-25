@@ -49,12 +49,33 @@ import (
 type CachingRepository struct {
 	mu      sync.RWMutex
 	backing repository.Repository
-	memory  *memory.Repository
 
+	// audit: memory — per-issue cache. Populated by Issue() cache misses via
+	// SeedDetail. Also seeded from the v2 JSONL memory snapshot by Hydrate.
+	// Snapshotted by SaveNow via memory.Snapshot() and persisted in the v2
+	// JSONL issue lines. Reset by RefreshIfChanged on hash change.
+	// Per-issue cache IS c.memory (via SeedDetail); there is no separate
+	// per-issue map. Dashboard() does NOT seed memory — that path was removed
+	// to prevent blank-detail regressions when the user opens an issue whose
+	// full IssueDetail was never fetched (fbea).
+	memory *memory.Repository
+
+	// audit: dashboardCache — single-entry Dashboard result cache. Populated by
+	// Dashboard() on a cache miss (backing call), and by Hydrate on a clean v2
+	// load with matching hash (restored directly from v2 header). Persisted by
+	// SaveNow via SaveSnapshotV2WithHash. Protected by dashboardDirty flag;
+	// invalidated (dirty=true) by any write mutation or RefreshIfChanged hash
+	// change.
 	dashboardCache           repository.DashboardData
 	dashboardDirty           bool
 	lastDashboardClosedLimit int // last ClosedLimit used for a successful Dashboard fetch
 
+	// audit: catalogsCache — TTL-cached Catalogs result. Populated by Catalogs()
+	// on a cache miss (backing call). Persisted by SaveNow via
+	// SaveSnapshotV2WithHash. Restored by Hydrate from v2 header. Invalidated
+	// (nil) by any write mutation (CreateIssue, UpdateIssue, CloseIssue,
+	// AddComment) so new labels/types are visible immediately. TTL is the
+	// remaining safety net for external catalog changes outside this process.
 	catalogsCache   *repository.Catalogs
 	catalogsFetched time.Time
 	catalogsTTL     time.Duration
@@ -220,9 +241,8 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 // concurrently could cause in-flight mutations to be overwritten by the state
 // swap that Hydrate performs at the end of its execution.
 //
-// ctx is propagated to the vcStatusFunc call (with a 2-second sub-timeout) and
-// to the Dashboard precompute call on the match path. Callers that have no
-// meaningful context may pass context.Background().
+// ctx is propagated to the vcStatusFunc call (with a 2-second sub-timeout).
+// Callers that have no meaningful context may pass context.Background().
 //
 // loadPath and writePath may differ — this is the primary use case: load from
 // the most-recent prior session's file while writing to the current session's
@@ -231,16 +251,23 @@ func (c *CachingRepository) tickLoop(ctx context.Context) {
 // Behavior matrix:
 //   - loadPath == "": skip load; just set cacheFilePath = writePath
 //   - loadPath file does not exist: cold start; set cacheFilePath = writePath
-//   - filestorage.ErrSchemaMismatch on load: cold start; set cacheFilePath = writePath
+//   - filestorage.ErrSchemaMismatch on load (v1 files): cold start; discard any
+//     memory snapshot from the file. dashboardDirty stays true so the next
+//     Dashboard() call fans out to backing. v1 files are click-trail-tainted
+//     (the fbea bug) and must never populate c.memory.
 //   - other read error on load: return error; still set cacheFilePath = writePath
-//   - load success, hash matches: replace memory with loaded data, attempt to
-//     pre-compute dashboardCache from the loaded memory store. On success, set
-//     dashboardDirty=false so the first Dashboard() call is served entirely from
-//     memory. On Dashboard precompute error (e.g. ctx cancellation, future
-//     invariant check), skip dashboardCache assignment and set dashboardDirty=true
-//     so the next Dashboard() call falls back to backing — Hydrate still returns
-//     nil (non-fatal). Also seed lastHash so future ticks detect changes rather
-//     than treating the first tick as a fresh baseline.
+//   - load success, hash matches, v2 header has non-empty dashboardCache: replace
+//     memory with loaded data, restore dashboardCache and catalogsCache directly
+//     from the v2 header. dashboardDirty=false so the first Dashboard() call is
+//     served from the persisted dashboardCache (fast-paint). Also seed lastHash
+//     so future ticks detect changes rather than treating the first tick as a
+//     fresh baseline.
+//   - load success, hash matches, v2 header is absent or has empty dashboardCache:
+//     replace memory with loaded data; dashboardDirty stays true (degenerate file
+//     — the loaded memory may be a click-trail or the file was saved before any
+//     Dashboard call). The next Dashboard() call fans out to backing. Note: the
+//     old behaviour was to pre-compute dashboardCache from the loaded memory; this
+//     is now intentionally removed because it was the root cause of Defect #1.
 //   - load success, hash mismatch (confirmed stale): leave c.memory as the
 //     fresh empty memory created by New — do NOT swap in the loaded stale data,
 //     which would cause per-ID Issue cache hits to serve session-A values.
@@ -275,12 +302,15 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 	}
 
 	// Load outside the lock — file IO must not hold c.mu.
-	loaded, manifest, err := filestorage.LoadWithManifest(loadPath)
+	loaded, manifest, v2Header, err := filestorage.LoadWithManifest(loadPath)
 	if err != nil {
 		// Always set writePath even on load failure so future saves work.
 		setWritePath()
 		if errors.Is(err, repository.ErrSchemaMismatch) {
-			// Schema moved forward: degrade to cold start; future saves use writePath.
+			// Schema mismatch: v1 files are click-trail-tainted (the fbea bug).
+			// Treat as cold start — discard any memory snapshot. dashboardDirty
+			// stays true so next Dashboard() fans out to backing regardless of
+			// hash match. Do NOT load v1 memory into c.memory.
 			return nil
 		}
 		if errors.Is(err, fs.ErrNotExist) {
@@ -318,18 +348,33 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 		}
 	}
 
-	// When the repo is confirmed fresh (dirty=false), pre-compute the dashboard
-	// from the loaded in-memory store so the first Dashboard() call is served
-	// entirely from memory without touching the backing store. This happens
-	// outside the lock because loaded.Dashboard() takes its own internal lock.
-	// If precompute fails (e.g. ctx cancellation), dashboardDirty is left true
-	// so the next Dashboard() call falls back to backing. Hydrate still returns
-	// nil — a Dashboard fallback round-trip is acceptable.
-	var precomputedDashboard repository.DashboardData
-	var precomputeErr error
-	if !dirty {
-		precomputedDashboard, precomputeErr = loaded.Dashboard(ctx, repository.DashboardOptions{})
+	// When the repo is confirmed fresh (dirty=false) and the v2 header carries
+	// a non-empty dashboardCache, restore dashboardCache directly from the header.
+	// This is the candidate (b) fix: dashboardCache is served from the persisted
+	// value without recomputing from the (potentially partial) memory snapshot.
+	//
+	// IMPORTANT: We deliberately do NOT fall back to pre-computing dashboardCache
+	// from the loaded memory store. The old fallback (precompute from memory) was
+	// the root cause of Defect #1 (fbea): a partial memory snapshot (click-trail)
+	// produced a falsely "complete" small dashboard, and dashboardDirty=false
+	// prevented the next Dashboard() call from fetching the real data from backing.
+	//
+	// When the v2Header is nil or its DashboardCache is empty (zero-value), we
+	// leave dashboardDirty=true. The first Dashboard() call will fan out to
+	// backing and populate the full dashboardCache. This is the correct behaviour
+	// for a degenerate or newly-written file that has not yet performed a Dashboard
+	// fetch.
+	var hydratedDashboard repository.DashboardData
+	var dashboardHydrated bool
+	if !dirty && v2Header != nil && isDashboardDataNonEmpty(v2Header.DashboardCache) {
+		// Restore directly from v2 header — this is the fast-paint path.
+		// Only taken when the persisted dashboardCache is provably non-empty,
+		// guaranteeing that the served dashboard is the real backing data.
+		hydratedDashboard = v2Header.DashboardCache
+		dashboardHydrated = true
 	}
+	// If !dashboardHydrated: dashboardDirty stays true (default from New),
+	// and the next Dashboard() call fans out to backing.
 
 	// Apply state under lock — brief swap only, no IO.
 	//
@@ -344,9 +389,17 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 	if !confirmedMismatch {
 		c.memory = loaded
 	}
-	if !dirty && precomputeErr == nil {
-		c.dashboardCache = precomputedDashboard
+	if !dirty && dashboardHydrated {
+		c.dashboardCache = hydratedDashboard
 		c.dashboardDirty = false
+		// Restore catalogsCache from v2 header if present. A nil CatalogsCache
+		// in the header means no catalogs were persisted; leave c.catalogsCache
+		// nil so the next Catalogs() call fetches from backing.
+		if v2Header != nil && v2Header.CatalogsCache != nil {
+			cats := *v2Header.CatalogsCache
+			c.catalogsCache = &cats
+			c.catalogsFetched = c.clock()
+		}
 	} else {
 		c.dashboardDirty = true
 	}
@@ -355,6 +408,18 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 	}
 	c.mu.Unlock()
 	return nil
+}
+
+// isDashboardDataNonEmpty reports whether d contains any non-zero content.
+// A zero-value DashboardData (all nil slices and zero ints) is treated as
+// "no cached dashboard" — Hydrate falls back to the precompute path.
+func isDashboardDataNonEmpty(d repository.DashboardData) bool {
+	return d.ClosedTotal > 0 ||
+		len(d.ReadyExplain.Ready) > 0 ||
+		len(d.ReadyExplain.Blocked) > 0 ||
+		len(d.InProgress) > 0 ||
+		len(d.Closed) > 0 ||
+		len(d.Blocked) > 0
 }
 
 // SaveNow writes the current in-memory cache state to the configured file path
@@ -381,13 +446,20 @@ func (c *CachingRepository) SaveNow() error {
 	c.mu.RLock()
 	path := c.cacheFilePath
 	vcFn := c.vcStatusFunc
-	// Snapshot is taken under c.mu.RLock so that any concurrent
-	// RefreshIfChanged (which holds c.mu.Lock around memory.Reset) cannot
-	// interleave between pointer capture and snapshot. The returned slice is
-	// value-typed and safe to use after the lock is released.
+	// Snapshot and cache copies are taken under c.mu.RLock so that any
+	// concurrent RefreshIfChanged (which holds c.mu.Lock around memory.Reset)
+	// cannot interleave between pointer capture and snapshot. All returned
+	// values are value-typed and safe to use after the lock is released.
 	var snapshot []memory.SnapshotIssue
+	var dashboardCache repository.DashboardData
+	var catalogsCache *repository.Catalogs
 	if path != "" {
 		snapshot = c.memory.Snapshot()
+		dashboardCache = c.dashboardCache
+		if c.catalogsCache != nil {
+			cats := *c.catalogsCache
+			catalogsCache = &cats
+		}
 	}
 	c.mu.RUnlock()
 
@@ -407,7 +479,7 @@ func (c *CachingRepository) SaveNow() error {
 		}
 		// On error, hash stays "". Save still proceeds.
 	}
-	return filestorage.SaveSnapshotWithHash(snapshot, path, hash)
+	return filestorage.SaveSnapshotV2WithHash(snapshot, dashboardCache, catalogsCache, path, hash)
 }
 
 // ---- read methods ----

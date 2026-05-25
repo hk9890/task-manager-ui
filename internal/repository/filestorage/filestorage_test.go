@@ -262,7 +262,7 @@ func TestSaveWithHashRoundTrip(t *testing.T) {
 		t.Fatalf("SaveWithHash: unexpected error: %v", err)
 	}
 
-	loaded, manifest, err := filestorage.LoadWithManifest(path)
+	loaded, manifest, _, err := filestorage.LoadWithManifest(path)
 	if err != nil {
 		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestLoadWithManifestNoHash(t *testing.T) {
 		t.Fatalf("Save: unexpected error: %v", err)
 	}
 
-	_, manifest, err := filestorage.LoadWithManifest(path)
+	_, manifest, _, err := filestorage.LoadWithManifest(path)
 	if err != nil {
 		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestSaveWithHashEmptyHash(t *testing.T) {
 		t.Fatalf("SaveWithHash(\"\", \"\"): unexpected error: %v", err)
 	}
 
-	_, manifest, err := filestorage.LoadWithManifest(path)
+	_, manifest, _, err := filestorage.LoadWithManifest(path)
 	if err != nil {
 		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
 	}

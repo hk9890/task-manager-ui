@@ -1637,27 +1637,39 @@ func TestHydrate_AfterStart_ReturnsError(t *testing.T) {
 	}
 }
 
-// TestHydrate_DashboardError_FallsBackToBackingFetch verifies that when
-// loaded.Dashboard returns an error during Hydrate's match-path precompute,
-// the dashboardCache is NOT stored and dashboardDirty stays true. The next
-// Dashboard() call must then fall back to the backing store instead of
-// returning the empty precomputed value.
+// TestHydrate_EmptyDashboardCache_FallsBackToBackingFetch verifies that when a
+// v2 file is loaded with an empty dashboardCache in the header, dashboardDirty
+// stays true and the first Dashboard() call fans out to the backing store.
 //
-// Mechanism: a cancellable ctx is passed into Hydrate. The injected vcStatusFunc
-// returns a matching hash, then cancels the outer ctx. When Hydrate calls
-// loaded.Dashboard(ctx, repository.DashboardOptions{}) on the now-cancelled ctx, it gets ctx.Canceled.
-// Hydrate must still return nil (non-fatal), and the backing must be called
-// on the first subsequent Dashboard() call.
-func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
+// This is the canonical "degenerate file" case: the file was written but the
+// prior session had not yet performed a Dashboard call (so no dashboardCache
+// was persisted). The next session must fetch from backing.
+//
+// Context cancellation is NOT used in this test (the old precompute path no
+// longer exists). The test is simple: write a file with empty dashboardCache,
+// hydrate with matching hash, and verify Dashboard hits backing.
+func TestHydrate_EmptyDashboardCache_FallsBackToBackingFetch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "repo.jsonl")
 
-	const matchHash = "HASH-CANCEL"
+	const matchHash = "HASH-EMPTY-DASH"
 
-	// Seed a file with a matching hash so Hydrate enters the match path.
-	seedFileWithHash(t, path, matchHash)
+	// Write a file with a non-empty memory snapshot but EMPTY dashboardCache.
+	// This simulates a session that was saved before any Dashboard call ran.
+	r := memory.New()
+	r.Seed(memory.Issue{
+		ID:     "empty-dash-1",
+		Title:  "issue without dashboardCache",
+		Status: "open",
+		Type:   "task",
+	})
+	snapshot := r.Snapshot()
+	// SaveSnapshotV2WithHash with zero-value DashboardData = empty dashboardCache.
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, nil, path, matchHash); err != nil {
+		t.Fatalf("SaveSnapshotV2WithHash: %v", err)
+	}
 
 	// backingDashCalls counts how many times the backing Dashboard is called.
 	backingDashCalls := 0
@@ -1669,30 +1681,23 @@ func TestHydrate_DashboardError_FallsBackToBackingFetch(t *testing.T) {
 		},
 	}
 
-	// Construct a cancellable ctx. The vcStatusFunc will cancel it after
-	// returning the matching hash so that the subsequent loaded.Dashboard(ctx, repository.DashboardOptions{})
-	// call sees ctx.Canceled.
-	outerCtx, cancel := context.WithCancel(context.Background())
-	defer cancel() // safety net
-
-	vcFn := func(c context.Context) (string, error) {
-		cancel() // cancel outerCtx after hash is returned
+	vcFn := func(_ context.Context) (string, error) {
 		return matchHash, nil
 	}
 	c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
 
-	// Hydrate must return nil even though Dashboard precompute fails.
-	if err := c.Hydrate(outerCtx, path, path); err != nil {
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
 		t.Fatalf("Hydrate returned unexpected error: %v", err)
 	}
 
-	// The first Dashboard call must route to backing (dashboardDirty=true).
+	// The first Dashboard call must route to backing (dashboardDirty=true because
+	// the file's dashboardCache was empty).
 	got, err := c.Dashboard(context.Background(), repository.DashboardOptions{})
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	if backingDashCalls != 1 {
-		t.Fatalf("expected 1 backing Dashboard call after precompute error; got %d", backingDashCalls)
+		t.Fatalf("expected 1 backing Dashboard call after empty dashboardCache; got %d", backingDashCalls)
 	}
 	if got.ClosedTotal != backingMarker {
 		t.Fatalf("Dashboard result: got ClosedTotal=%d, want %d (backing marker)", got.ClosedTotal, backingMarker)
@@ -1891,7 +1896,13 @@ func TestPeriodicSaveTickFires(t *testing.T) {
 // ---- Hash-based hydrate tests ----
 
 // seedFileWithHash saves a memory.Repository to path with an explicit bd commit
-// hash, returning the seeded issue ID.
+// hash AND a non-empty v2 dashboardCache, returning the seeded issue ID.
+//
+// The v2 dashboardCache must be non-empty for Hydrate to serve the dashboard
+// from the persisted file (the fast-paint path). Without a non-empty
+// dashboardCache, Hydrate leaves dashboardDirty=true so the next Dashboard()
+// call fans out to backing. This helper reflects the post-fbea.3 behaviour
+// where SaveNow persists dashboardCache alongside the memory snapshot.
 func seedFileWithHash(t *testing.T, path string, hash string) string {
 	t.Helper()
 	r := memory.New()
@@ -1903,8 +1914,25 @@ func seedFileWithHash(t *testing.T, path string, hash string) string {
 		Type:        "task",
 		Description: "seeded for hash test",
 	})
-	if err := filestorage.SaveWithHash(r, path, hash); err != nil {
-		t.Fatalf("seedFileWithHash: filestorage.SaveWithHash: %v", err)
+	// Include a non-empty dashboardCache so Hydrate can serve it directly.
+	// This is what a correctly-working SaveNow produces after a Dashboard call.
+	dashCache := repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready: []domain.IssueSummary{
+				{ID: "hash-issue-1", Title: "hash-seeded issue", Status: "open", Type: "task", Priority: 1},
+			},
+			Blocked:      []domain.BlockedIssueView{},
+			TotalReady:   1,
+			TotalBlocked: 0,
+		},
+		InProgress:  []domain.IssueSummary{},
+		Closed:      []domain.IssueSummary{},
+		ClosedTotal: 0,
+		Blocked:     []domain.IssueSummary{},
+	}
+	snapshot := r.Snapshot()
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, dashCache, nil, path, hash); err != nil {
+		t.Fatalf("seedFileWithHash: filestorage.SaveSnapshotV2WithHash: %v", err)
 	}
 	return "hash-issue-1"
 }
@@ -1914,7 +1942,9 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 	path := filepath.Join(dir, "repo.jsonl")
 	const matchHash = "HASH-X"
 
-	// Seed the file with a known issue so Dashboard() returns non-empty data.
+	// Seed the file with a known issue AND a non-empty v2 dashboardCache so
+	// Hydrate can serve the dashboard directly from the file (fast-paint path).
+	// This reflects the post-fbea.3 SaveNow behaviour.
 	r := memory.New()
 	r.Seed(memory.Issue{
 		ID:     "dash-issue-1",
@@ -1922,8 +1952,18 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 		Status: "open",
 		Type:   "task",
 	})
-	if err := filestorage.SaveWithHash(r, path, matchHash); err != nil {
-		t.Fatalf("SaveWithHash: %v", err)
+	dashCache := repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{
+			Ready:   []domain.IssueSummary{{ID: "dash-issue-1", Title: "dashboard test issue", Status: "open", Type: "task"}},
+			Blocked: []domain.BlockedIssueView{},
+		},
+		InProgress:  []domain.IssueSummary{},
+		Closed:      []domain.IssueSummary{},
+		ClosedTotal: 0,
+		Blocked:     []domain.IssueSummary{},
+	}
+	if err := filestorage.SaveSnapshotV2WithHash(r.Snapshot(), dashCache, nil, path, matchHash); err != nil {
+		t.Fatalf("SaveSnapshotV2WithHash: %v", err)
 	}
 
 	dashCalls := 0
@@ -2191,7 +2231,7 @@ func TestSaveNowWritesCurrentHash(t *testing.T) {
 		t.Fatalf("SaveNow: %v", err)
 	}
 
-	_, manifest, err := filestorage.LoadWithManifest(path)
+	_, manifest, _, err := filestorage.LoadWithManifest(path)
 	if err != nil {
 		t.Fatalf("LoadWithManifest: %v", err)
 	}
@@ -2213,7 +2253,7 @@ func TestSaveNowWithoutVCStatusFunc(t *testing.T) {
 		t.Fatalf("SaveNow: unexpected error: %v", err)
 	}
 
-	_, manifest, err := filestorage.LoadWithManifest(path)
+	_, manifest, _, err := filestorage.LoadWithManifest(path)
 	if err != nil {
 		t.Fatalf("LoadWithManifest: %v", err)
 	}
@@ -2239,7 +2279,7 @@ func TestSaveNowVCStatusErrorStillSaves(t *testing.T) {
 		t.Fatalf("SaveNow with vcStatusFunc error: unexpected error: %v", err)
 	}
 
-	_, manifest, err := filestorage.LoadWithManifest(path)
+	_, manifest, _, err := filestorage.LoadWithManifest(path)
 	if err != nil {
 		t.Fatalf("LoadWithManifest: %v", err)
 	}
