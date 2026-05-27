@@ -15,20 +15,29 @@
 //
 // # RecordingExecutor
 //
-// RecordingExecutor implements repository/beads.CommandExecutor and records each
-// Run invocation (argv, workDir, envLen) so tests can assert exact bd argv
-// shapes. Use it in tests outside internal/repository/beads/ that need to verify
-// the exact bd verb and flags bwb emits.
+// RecordingExecutor implements bd.CommandExecutor and records each Run
+// invocation (argv, workDir, envLen) so tests can assert exact bd argv shapes.
+// Use it in any test — including tests within internal/repository/beads/ — that
+// needs to verify the exact bd verb and flags bwb emits.
 //
-// Tests within internal/repository/beads/ use package-internal stubs to avoid
-// the import cycle: this package imports beads, so beads tests cannot import
-// fakes.
+// There is no import cycle between this package and internal/repository/beads:
+// fakes imports internal/bd (the runner primitive), not internal/repository/beads
+// itself, so both package-internal (package beads) and external (package
+// beads_test) test files in internal/repository/beads/ may freely import fakes.
+// Choose the style based on access needs: use package beads when you need
+// unexported symbols; use package beads_test (the default) for pure black-box
+// coverage.
 //
 // Canonical pattern:
 //
+//	import (
+//	    bdrunner "github.com/hk9890/beads-workbench/internal/bd"
+//	    "github.com/hk9890/beads-workbench/internal/testing/fakes"
+//	)
+//
 //	rec := fakes.NewRecordingExecutor()
-//	rec.OnArgs([]string{"list", "--json", "--all"}).Return(beads.ExecResult{...}, nil)
-//	runner := beads.NewCommandRunner(beads.RunnerConfig{Command: "bd", Executor: rec})
+//	rec.OnArgs([]string{"list", "--json", "--all"}).Return(bdrunner.ExecResult{...}, nil)
+//	runner := bdrunner.NewCommandRunner(bdrunner.RunnerConfig{Command: "bd", Executor: rec})
 //	// drive code under test ...
 //	calls := rec.Calls()
 //	// assert calls[0].Args == expected
