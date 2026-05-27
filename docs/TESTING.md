@@ -64,25 +64,6 @@ The repository uses a three-tier model.
 
 Decision rule: if the test does not fork a real subprocess and costs <100ms, it is a unit test. If it forks `bd`, it is integration.
 
-## Fixture Rules
-
-**Read operations** — use the shared pre-seeded snapshot:
-
-```go
-repoPath := embeddedfixture.SharedFixtureRepoPath(t)
-```
-
-Seeds the fixture once per process (slow, ~10s on first call); subsequent calls copy the pre-seeded directory (~100ms). Never write to this repo.
-
-**Mutating operations** — use a fresh per-test fixture:
-
-```go
-repoPath := embeddedfixture.TempRepoPath(t)
-embeddedfixture.Seed(t, repoPath)
-```
-
-Creates and seeds a clean directory. Cleanup is automatic via `t.TempDir()`.
-
 ## The Fake/Real Contract
 
 `TestRepositoryContract` in `internal/repository/contract/parity_integration_test.go` is the structural answer to the fake/real divergence discipline described in `internal/testing/fakes/doc.go`.
