@@ -383,6 +383,126 @@ func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
 	assertGoldenNormalized(t, []byte(rendered), "large_column_window.golden")
 }
 
+// TestRenderDoneLoadingMore verifies the "load more in flight" affordance: when
+// col.Loading=true, ScrollOffset>0, and rows are present (60 of 736 loaded),
+// the renderer shows real rows plus a skeleton row at the bottom of the visible
+// window and the header reads "60 of 736".
+func TestRenderDoneLoadingMore(t *testing.T) {
+	t.Parallel()
+
+	const rowCount = 60
+	issues := make([]domain.IssueSummary, rowCount)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:     fmt.Sprintf("bw-done-%d", i),
+			Title:  fmt.Sprintf("Closed issue %d", i),
+			Type:   "task",
+			Status: "closed",
+		}
+	}
+
+	state := State{
+		DashboardTitle: "Default",
+		FocusedColumn:  0,
+		Width:          80,
+		Height:         24,
+		Columns: []Column{{
+			Title:        "Done",
+			Rows:         issues,
+			SelectedRow:  58,
+			ScrollOffset: 42,
+			Total:        736,
+			TotalIsExact: false,
+			Loading:      true,
+		}},
+	}
+
+	rendered := Render(state)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(rendered, "")
+
+	// Header must show loaded count of total.
+	if !strings.Contains(plain, "60 of 736") {
+		t.Errorf("expected '60 of 736' header badge, got:\n%s", plain)
+	}
+
+	// Selected row 58 must be visible with the cursor indicator.
+	if !strings.Contains(plain, "›") {
+		t.Errorf("expected cursor indicator '›' in visible window, got:\n%s", plain)
+	}
+
+	// Skeleton row affordance must appear at the bottom of the visible window.
+	if !strings.Contains(plain, issuerow.SkeletonMetaGlyph) {
+		t.Errorf("expected skeleton row affordance in load-more state, got:\n%s", plain)
+	}
+
+	// Rows before the scroll window must NOT be visible.
+	if strings.Contains(plain, "Closed issue 0") {
+		t.Errorf("expected row 0 to be hidden by scroll window, got:\n%s", plain)
+	}
+
+	assertGoldenNormalized(t, []byte(rendered), "done_loading_more.golden")
+}
+
+// TestRenderDoneDeepNavigation verifies the last-page loaded state: Done column
+// with 60 of 60 issues loaded (TotalIsExact=true), Selected at the very end
+// (row 58). The cursor must be visible and the header must read "60" — no "of M"
+// suffix because TotalIsExact=true and all rows fit in the terminal.
+func TestRenderDoneDeepNavigation(t *testing.T) {
+	t.Parallel()
+
+	const rowCount = 60
+	issues := make([]domain.IssueSummary, rowCount)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:     fmt.Sprintf("bw-done-%d", i),
+			Title:  fmt.Sprintf("Closed issue %d", i),
+			Type:   "task",
+			Status: "closed",
+		}
+	}
+
+	// Use a tall terminal (height=66 → innerHeight=63) so all 60 rows fit in
+	// the window without clipping; this lets the header show the exact count.
+	state := State{
+		DashboardTitle: "Default",
+		FocusedColumn:  0,
+		Width:          80,
+		Height:         66,
+		Columns: []Column{{
+			Title:        "Done",
+			Rows:         issues,
+			SelectedRow:  58,
+			ScrollOffset: 0,
+			Total:        60,
+			TotalIsExact: true,
+			Loading:      false,
+		}},
+	}
+
+	rendered := Render(state)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(rendered, "")
+
+	// Header must show exact count only — no "of M" suffix.
+	if !strings.Contains(plain, "60") {
+		t.Errorf("expected exact count '60' in header, got:\n%s", plain)
+	}
+	if strings.Contains(plain, "of 60") {
+		t.Errorf("expected no 'of M' suffix when TotalIsExact and all rows visible, got:\n%s", plain)
+	}
+
+	// Cursor must be visible at the selected row.
+	if !strings.Contains(plain, "›") {
+		t.Errorf("expected cursor indicator '›' visible, got:\n%s", plain)
+	}
+
+	// Row 58 (second from last) must be visible.
+	if !strings.Contains(plain, "bw-done-58") {
+		t.Errorf("expected issue bw-done-58 visible at selected row, got:\n%s", plain)
+	}
+
+	assertGoldenNormalized(t, []byte(rendered), "done_deep_navigation.golden")
+}
+
 func assertEqualColumnHeights(t *testing.T, view string) {
 	t.Helper()
 

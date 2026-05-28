@@ -96,14 +96,20 @@ func Render(state State) string {
 		// borders. FormSection reserves 2 lines for top and bottom borders.
 		innerHeight := max(1, columnHeight-2)
 
+		// isLoadMore is true when a background page fetch is in flight for an
+		// already-populated column that the user has scrolled into (offset > 0).
+		// This is distinct from a full refresh (col.Loading=true, offset=0).
+		isLoadMore := col.Loading && len(col.Rows) > 0 && col.ScrollOffset > 0
+
 		// Build all rendered rows for this column.
 		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx)
 
 		// Apply scroll window: slice to [offset : offset+innerHeight] so that
 		// the selected row is always visible. Only slice when not loading (skeleton
-		// / stale-refresh paths manage their own row counts).
+		// / stale-refresh paths manage their own row counts), or when a load-more
+		// is in flight (offset > 0 indicates deep navigation with a pending page fetch).
 		displayRows := rows
-		if !col.Loading && len(rows) > 0 {
+		if (!col.Loading || isLoadMore) && len(rows) > 0 {
 			offset := col.ScrollOffset
 			if offset < 0 {
 				offset = 0
@@ -126,6 +132,10 @@ func Render(state State) string {
 		var topRight string
 		visibleCount := len(displayRows)
 		switch {
+		case isLoadMore:
+			// Load-more in flight: show total loaded count against the known total
+			// so the header reflects real progress rather than the window slice size.
+			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
 		case !col.Loading && visibleCount < len(rows):
 			topRight = fmt.Sprintf("%d of %d", visibleCount, col.Total)
 		case col.TotalIsExact:
@@ -267,6 +277,26 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int) []strin
 		if len(col.Rows) == 0 {
 			// Cold-start: no data yet — show skeleton rows.
 			rows = append(rows, skeletonRows(maxWidth, skeletonPhase, colIndex)...)
+			return rows
+		}
+		if col.ScrollOffset > 0 {
+			// Load-more in flight: the user has scrolled deep and a background page
+			// fetch is in progress. Render rows normally (not dimmed) and append a
+			// single skeleton row at the end as a load-in-flight affordance.
+			for idx, issue := range col.Rows {
+				rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
+					Issue:    issue,
+					Selected: idx == col.SelectedRow,
+					Width:    maxWidth,
+					Styled:   true,
+				}))
+			}
+			rows = append(rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+				Width:  maxWidth,
+				Seed:   0,
+				Phase:  skeletonPhase,
+				Styled: true,
+			}))
 			return rows
 		}
 		// Refresh: stale rows on screen while new data is in flight.
