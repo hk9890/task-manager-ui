@@ -42,6 +42,7 @@ const (
 	BoardActionMoveDown   = "move_down"
 	BoardActionOpenDetail = "open_detail"
 	BoardActionReload     = "reload"
+	BoardActionLoadMore   = "load_more"
 
 	SearchActionMoveUp         = "move_up"
 	SearchActionMoveDown       = "move_down"
@@ -128,6 +129,7 @@ func DefaultKeyBindings() KeyBindings {
 			BoardActionMoveDown:   {"j", "down"},
 			BoardActionOpenDetail: {"enter", "o"},
 			BoardActionReload:     {"r"},
+			BoardActionLoadMore:   {">"},
 		},
 		Search: map[string][]string{
 			SearchActionMoveUp:         {"k", "up"},
@@ -400,6 +402,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			BoardActionMoveDown,
 			BoardActionOpenDetail,
 			BoardActionReload,
+			BoardActionLoadMore,
 		} {
 			allowed[action] = struct{}{}
 		}

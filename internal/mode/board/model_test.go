@@ -1438,3 +1438,292 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 		t.Errorf("expected selection chevron '›' in rendered view after 30 j presses, got:\n%s", plain)
 	}
 }
+
+// --- Done column load-more tests (vtvb.6) ---
+
+// loadMoreCapture is a minimal stub repository that records all Dashboard opts
+// and returns a configurable canned response for each call.
+type loadMoreCapture struct {
+	mu   sync.Mutex
+	opts []repository.DashboardOptions
+	resp repository.DashboardData // returned for every Dashboard call
+}
+
+func (r *loadMoreCapture) Dashboard(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+	r.mu.Lock()
+	r.opts = append(r.opts, opts)
+	r.mu.Unlock()
+	return r.resp, nil
+}
+
+func (r *loadMoreCapture) capturedOpts() []repository.DashboardOptions {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]repository.DashboardOptions, len(r.opts))
+	copy(out, r.opts)
+	return out
+}
+
+// Remaining Repository methods are no-ops.
+func (r *loadMoreCapture) Issue(_ context.Context, _ string) (domain.IssueDetail, error) {
+	return domain.IssueDetail{}, nil
+}
+func (r *loadMoreCapture) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	return domain.SearchResultPage{}, nil
+}
+func (r *loadMoreCapture) CreateIssue(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
+	return domain.CreateIssueResult{}, nil
+}
+func (r *loadMoreCapture) UpdateIssue(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
+	return nil
+}
+func (r *loadMoreCapture) CloseIssue(_ context.Context, _ string, _ domain.CloseIssueInput) error {
+	return nil
+}
+func (r *loadMoreCapture) AddComment(_ context.Context, _ string, _ domain.AddCommentInput) error {
+	return nil
+}
+func (r *loadMoreCapture) HealthCheck(_ context.Context) error { return nil }
+func (r *loadMoreCapture) Catalogs(_ context.Context) (repository.Catalogs, error) {
+	return repository.Catalogs{}, nil
+}
+
+// makeClosedIssues returns n synthesised closed IssueSummary values.
+func makeClosedIssues(n int) []domain.IssueSummary {
+	issues := make([]domain.IssueSummary, n)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("closed-%d", i),
+			Title: fmt.Sprintf("Closed issue %d", i),
+		}
+	}
+	return issues
+}
+
+// TestDoneLoadMore_DispatchesOnThreshold verifies that pressing j while the
+// cursor in the Done column is within loadMoreThreshold rows of the loaded
+// end dispatches exactly one loadMoreClosedCmd with the correct ClosedOffset
+// and ClosedLimit.
+//
+// Setup: doneClosedTotal=736, 35 issues loaded, cursor at row 31 → remaining=4 < 5.
+func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
+	t.Parallel()
+
+	stub := &loadMoreCapture{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	m.SetSize(120, 25) // sectionItemCapacity = 22; closedPageSize = max(44,50) = 50
+
+	// Pre-populate the 4 fixed columns; Done has 35 loaded issues.
+	const loaded = 35
+	closedIssues := makeClosedIssues(loaded)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: closedIssues, total: 736, exact: false},
+	}
+
+	// Initialise load-more state as if compose() already ran.
+	m.doneLoadedCount = loaded
+	m.doneClosedTotal = 736
+
+	// Focus Done column; place cursor at row 31 (remaining = 35-31 = 4 < 5).
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 31
+
+	// Press j: cursor moves to row 32 (remaining = 35-32 = 3 < 5 → still triggers).
+	// The threshold check fires because remaining < loadMoreThreshold.
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if cmd == nil {
+		t.Fatal("expected non-nil Cmd after j press near Done column end")
+	}
+
+	// Execute the cmd batch; exactly one Dashboard call must have been issued
+	// (the load-more dispatch). The selectionChangedCmd returns a tea.Msg in
+	// the same batch; only the Dashboard call touches the stub.
+	//
+	// Drain the cmd: if it is a BatchMsg, execute each sub-cmd.
+	switch c := cmd().(type) {
+	case tea.BatchMsg:
+		for _, sub := range c {
+			if sub != nil {
+				_ = sub()
+			}
+		}
+	default:
+		// Single cmd already executed by cmd() above.
+	}
+
+	// After execution the in-flight guard must be set.
+	if !m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=true after dispatching load-more")
+	}
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from load-more dispatch, got %d: %v", len(opts), opts)
+	}
+	if opts[0].ClosedOffset != loaded {
+		t.Errorf("expected ClosedOffset=%d, got %d", loaded, opts[0].ClosedOffset)
+	}
+	wantLimit := m.closedPageSize()
+	if opts[0].ClosedLimit != wantLimit {
+		t.Errorf("expected ClosedLimit=%d, got %d", wantLimit, opts[0].ClosedLimit)
+	}
+}
+
+// TestDoneLoadMore_NoDispatchAtSliceEnd verifies that no load-more is dispatched
+// when doneLoadedCount==doneClosedTotal (all pages already loaded).
+func TestDoneLoadMore_NoDispatchAtSliceEnd(t *testing.T) {
+	t.Parallel()
+
+	stub := &loadMoreCapture{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	m.SetSize(120, 25)
+
+	const total = 35
+	closedIssues := makeClosedIssues(total)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: closedIssues, total: total, exact: true},
+	}
+
+	// All issues loaded: doneLoadedCount == doneClosedTotal.
+	m.doneLoadedCount = total
+	m.doneClosedTotal = total
+
+	// Place cursor near the very end.
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = total - 2
+
+	// Press j: cursor advances to total-1. No load-more should fire.
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+
+	// Execute any cmd to drain sub-commands.
+	if cmd != nil {
+		switch c := cmd().(type) {
+		case tea.BatchMsg:
+			for _, sub := range c {
+				if sub != nil {
+					_ = sub()
+				}
+			}
+		}
+	}
+
+	opts := stub.capturedOpts()
+	if len(opts) != 0 {
+		t.Fatalf("expected 0 Dashboard calls when all issues loaded, got %d: %v", len(opts), opts)
+	}
+	if m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=false when all issues are loaded")
+	}
+}
+
+// TestDoneLoadMore_MergesIncomingPage verifies that feeding a
+// loadMoreClosedDoneMsg with 50 new issues into a model that already has 35
+// Done issues produces a merged Done column with 85 issues, doneLoadedCount=85,
+// and doneLoadInFlight=false.
+func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(120, 25)
+
+	const priorCount = 35
+	const incomingCount = 50
+
+	priorIssues := makeClosedIssues(priorCount)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: priorIssues, total: 736, exact: false},
+	}
+	m.doneLoadedCount = priorCount
+	m.doneClosedTotal = 736
+	m.doneLoadInFlight = true // simulates the in-flight state before response arrives
+
+	// Build the incoming page with IDs that don't overlap the prior slice.
+	incomingIssues := make([]domain.IssueSummary, incomingCount)
+	for i := range incomingIssues {
+		incomingIssues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("incoming-%d", i),
+			Title: fmt.Sprintf("Incoming closed %d", i),
+		}
+	}
+
+	// Feed the load-more response.
+	_ = m.Update(loadMoreClosedDoneMsg{
+		data: repository.DashboardData{
+			Closed:      incomingIssues,
+			ClosedTotal: 736,
+		},
+		opts: repository.DashboardOptions{ClosedOffset: priorCount, ClosedLimit: 50},
+	})
+
+	// AC 1: Done column must have prior+incoming (no ID overlap → 35+50=85).
+	wantCount := priorCount + incomingCount
+	gotCount := len(m.columns[doneColumnIndex].issues)
+	if gotCount != wantCount {
+		t.Errorf("expected Done.Issues count=%d after merge, got %d", wantCount, gotCount)
+	}
+
+	// AC 2: doneLoadedCount must match the merged slice length.
+	if m.doneLoadedCount != wantCount {
+		t.Errorf("expected doneLoadedCount=%d, got %d", wantCount, m.doneLoadedCount)
+	}
+
+	// AC 3: in-flight guard must be cleared.
+	if m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=false after load-more response processed")
+	}
+}
+
+// TestDoneLoadMore_ExplicitKey verifies that pressing the > key while focused
+// on the Done column dispatches a load-more even when the cursor is not near
+// the end of the loaded slice.
+func TestDoneLoadMore_ExplicitKey(t *testing.T) {
+	t.Parallel()
+
+	stub := &loadMoreCapture{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	m.SetSize(120, 25)
+
+	const loaded = 35
+	closedIssues := makeClosedIssues(loaded)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: closedIssues, total: 736, exact: false},
+	}
+	m.doneLoadedCount = loaded
+	m.doneClosedTotal = 736
+
+	// Focus Done at row 0 — cursor is far from the end (remaining=35 >> threshold=5).
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 0
+
+	// Press >: explicit load-more key.
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	if cmd == nil {
+		t.Fatal("expected non-nil Cmd after > press on Done column")
+	}
+
+	// Execute the cmd.
+	_ = cmd()
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from explicit > key, got %d: %v", len(opts), opts)
+	}
+	if opts[0].ClosedOffset != loaded {
+		t.Errorf("expected ClosedOffset=%d, got %d", loaded, opts[0].ClosedOffset)
+	}
+	if !m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=true after explicit load-more dispatch")
+	}
+}

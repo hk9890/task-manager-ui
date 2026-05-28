@@ -25,11 +25,31 @@ const (
 
 	// dashboardTitle is the title shown in the board header.
 	dashboardTitle = "Default"
+
+	// doneColumnIndex is the fixed index of the Done column in m.columns.
+	doneColumnIndex = 3
+
+	// loadMoreThreshold is the number of remaining loaded items below which
+	// the model dispatches a background load-more when the cursor approaches
+	// the end of the Done column.
+	loadMoreThreshold = 5
 )
 
 // dashboardLoadedMsg carries the result of a Dashboard repository call.
 type dashboardLoadedMsg struct {
 	data repository.DashboardData
+	err  error
+}
+
+// loadMoreClosedDoneMsg carries the result of a load-more Dashboard call for
+// the Done column. opts is echoed back from the originating loadMoreClosedCmd
+// so the handler can verify it is processing the expected page (offset / limit).
+// On err != nil the handler clears doneLoadInFlight and surfaces the error on
+// the Done column; on success it merges via dashboard.Compose with PriorClosed
+// set to the current Done issues.
+type loadMoreClosedDoneMsg struct {
+	data repository.DashboardData
+	opts repository.DashboardOptions
 	err  error
 }
 
@@ -90,6 +110,22 @@ type Model struct {
 
 	refreshMode   refreshMode
 	refreshAnchor *refreshAnchor
+
+	// --- Done column load-more state ---
+
+	// doneLoadedCount is the number of closed issues currently in
+	// Done.Issues after the last successful page (initial or load-more).
+	// It is set to len(merged) after each composition that touches the Done
+	// column, so it stays in sync even when the composer dedups on ID conflict.
+	doneLoadedCount int
+
+	// doneLoadInFlight is true while a loadMoreClosedCmd is outstanding.
+	// It prevents parallel load-more dispatches (ule7 pattern).
+	doneLoadInFlight bool
+
+	// doneClosedTotal is the authoritative DB total from the last Dashboard
+	// response. Used to decide whether there are more pages to fetch.
+	doneClosedTotal int
 }
 
 // NewModel creates a board mode controller.
@@ -151,6 +187,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case dashboardLoadedMsg:
 		return m.compose(msg.data, msg.err)
 
+	case loadMoreClosedDoneMsg:
+		return m.applyLoadMoreClosed(msg)
+
 	case tea.KeyMsg:
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveLeft, msg):
@@ -177,14 +216,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			previous := m.selectedRow[m.focusedColumn]
 			m.moveRow(-1)
 			if m.selectedRow[m.focusedColumn] != previous {
-				return m.selectionChangedCmd()
+				return tea.Batch(m.selectionChangedCmd(), m.maybeLoadMoreClosed())
 			}
 			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
 			previous := m.selectedRow[m.focusedColumn]
 			m.moveRow(1)
 			if m.selectedRow[m.focusedColumn] != previous {
-				return m.selectionChangedCmd()
+				return tea.Batch(m.selectionChangedCmd(), m.maybeLoadMoreClosed())
 			}
 			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
@@ -201,6 +240,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			return m.startReload(refreshModeManual)
+		case m.keys.Match(config.BoardContext, config.BoardActionLoadMore, msg):
+			// Explicit load-more: dispatch regardless of cursor proximity,
+			// but still respect the in-flight guard and "nothing more" check.
+			if m.focusedColumn != doneColumnIndex {
+				return nil
+			}
+			return m.dispatchLoadMoreClosed()
 		}
 	}
 
@@ -331,6 +377,12 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
+	// Reset load-more state before any new full reload so the next compose
+	// sets doneLoadedCount from scratch. vtvb.7 owns the "r resets page 1"
+	// test; this reset is the safety net for all reload modes.
+	m.doneLoadedCount = 0
+	m.doneLoadInFlight = false
+
 	if rm == refreshModeInit || rm == refreshModeManual {
 		// Full reset: move focus to col 0, clear selection and scroll maps, reset columns.
 		m.focusedColumn = 0
@@ -398,6 +450,12 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 			m.scrollOffset[i] = 0
 		}
 	}
+
+	// Initialize load-more counters from the initial Dashboard result.
+	// doneLoadedCount = len of the Done issues slice produced by Compose
+	// (authoritative after dedup); doneClosedTotal = DB count from response.
+	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
+	m.doneClosedTotal = data.ClosedTotal
 
 	m.settleAfterRefreshLoad()
 	// Composition complete — clear the in-flight flag so future reload requests
@@ -576,6 +634,119 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 	}
 }
 
+// maybeLoadMoreClosed checks whether the cursor in the Done column is within
+// loadMoreThreshold rows of the end of the loaded slice and, if so, dispatches
+// a background load-more (see dispatchLoadMoreClosed). It is called after every
+// move-row event when the focused column is Done.
+//
+// Returns nil (no cmd) when:
+//   - focused column is not Done,
+//   - a load is already in flight,
+//   - all available closed issues are already loaded, or
+//   - the cursor is not yet within the threshold window.
+func (m *Model) maybeLoadMoreClosed() tea.Cmd {
+	if m.focusedColumn != doneColumnIndex {
+		return nil
+	}
+	selectedRow := m.selectedRow[m.focusedColumn]
+	remaining := m.doneLoadedCount - selectedRow
+	if remaining >= loadMoreThreshold {
+		return nil
+	}
+	return m.dispatchLoadMoreClosed()
+}
+
+// dispatchLoadMoreClosed sets doneLoadInFlight and returns a loadMoreClosedCmd
+// if there are more pages to fetch. Returns nil if already in flight or all
+// pages are loaded.
+func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
+	if m.doneLoadInFlight {
+		m.logger.Debug("load-more suppressed; already in flight")
+		return nil
+	}
+	if m.doneLoadedCount >= m.doneClosedTotal && m.doneClosedTotal > 0 {
+		m.logger.Debug("load-more suppressed; all closed issues loaded",
+			"loaded", m.doneLoadedCount,
+			"total", m.doneClosedTotal,
+		)
+		return nil
+	}
+	pageSize := m.closedPageSize()
+	opts := repository.DashboardOptions{
+		ClosedLimit:  pageSize,
+		ClosedOffset: m.doneLoadedCount,
+	}
+	m.doneLoadInFlight = true
+	m.logger.Debug("dispatching load-more for Done column",
+		"offset", opts.ClosedOffset,
+		"limit", opts.ClosedLimit,
+	)
+	return loadMoreClosedCmd(m.ctx, m.repo, opts)
+}
+
+// applyLoadMoreClosed processes an incoming loadMoreClosedDoneMsg: clears the
+// in-flight flag, surfaces errors on the Done column, and on success merges
+// the new page into Done.Issues via dashboard.Compose with PriorClosed set.
+func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
+	m.doneLoadInFlight = false
+
+	if msg.err != nil {
+		m.logger.Warn("load-more for Done column failed", "err", msg.err)
+		// Surface the error on the Done column so the user gets feedback.
+		if len(m.columns) > doneColumnIndex {
+			m.columns[doneColumnIndex].err = msg.err
+		}
+		return nil
+	}
+
+	// Capture current Done issues as PriorClosed so Compose can merge.
+	var priorClosed []domain.IssueSummary
+	if len(m.columns) > doneColumnIndex {
+		priorClosed = m.columns[doneColumnIndex].issues
+	}
+
+	cols := dashboard.Compose(dashboard.Inputs{
+		Closed:      msg.data.Closed,
+		ClosedTotal: msg.data.ClosedTotal,
+		PriorClosed: priorClosed,
+	})
+
+	// Update doneClosedTotal in case it changed (e.g. issues added/closed mid-session).
+	m.doneClosedTotal = msg.data.ClosedTotal
+
+	// doneLoadedCount is derived from the merged slice length (after dedup),
+	// not blindly from len(msg.data.Closed), to stay in sync after ID conflicts.
+	m.doneLoadedCount = len(cols.Done.Issues)
+
+	// Replace the Done column in-place; all other columns are unchanged.
+	if len(m.columns) > doneColumnIndex {
+		m.columns[doneColumnIndex] = columnData{
+			title:  sectionTitleDone,
+			issues: cols.Done.Issues,
+			total:  cols.Done.Total,
+			exact:  cols.Done.TotalIsExact,
+		}
+	}
+
+	return nil
+}
+
+// closedPageSize returns the number of closed issues to request per load-more
+// page. It is 2× sectionItemCapacity (so the visible window is always full
+// after a single page), with a floor of 50 to avoid excessive round-trips on
+// large terminals.
+func (m *Model) closedPageSize() int {
+	cap := m.sectionItemCapacity()
+	if cap < 1 {
+		cap = 1
+	}
+	size := 2 * cap
+	if size < 50 {
+		size = 50
+	}
+	return size
+}
+
 // loadDashboardCmd fires the Dashboard repository call and wraps the result
 // in a dashboardLoadedMsg. ctx is the model lifetime context (set at
 // NewModel) and opts is the per-call options struct; both are captured at
@@ -585,5 +756,17 @@ func loadDashboardCmd(ctx context.Context, repo repository.Repository, opts repo
 	return func() tea.Msg {
 		data, err := repo.Dashboard(ctx, opts)
 		return dashboardLoadedMsg{data: data, err: err}
+	}
+}
+
+// loadMoreClosedCmd fires a Dashboard call scoped to the next closed page
+// (offset=doneLoadedCount, limit=pageSize) and wraps the result in a
+// loadMoreClosedDoneMsg. opts is captured at construction time and echoed
+// back in the message so the handler can assert it is receiving the expected
+// page.
+func loadMoreClosedCmd(ctx context.Context, repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
+	return func() tea.Msg {
+		data, err := repo.Dashboard(ctx, opts)
+		return loadMoreClosedDoneMsg{data: data, opts: opts, err: err}
 	}
 }
