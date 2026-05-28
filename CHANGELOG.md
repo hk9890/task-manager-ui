@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.6.0]
+
+### Added
+
+- Done column pagination: the board's Done column now supports load-more navigation. Press `>` for explicit, or scroll past the loaded edge with `j`/`down` for implicit threshold-triggered load-more. Pages of `max(2 * sectionItemCapacity, 50)` closed issues append to the existing slice; the composer dedups by ID and recomputes `TotalIsExact`. Manual reload (`r`), focus-regain auto-refresh, and the periodic background tick all reset the loaded count to page 1.
+- Selection-following scroll window in the board (Ready/Not Ready/In Progress/Done) and details panes (Dependencies, Metadata). On a column or pane with more rows than fit in the viewport, `j`/`k` keeps the selection chevron inside the visible window — no more "selection moves invisibly past the viewport" when destructive actions (`x`/`e`/`u`) might act on an off-screen row.
+- New `internal/ui/scroll.EnsureVisible(offset, sel, window)` helper, shared by board and details models.
+
+### Changed
+
+- Board column headers now show `"N of M"` whenever the rendered window is smaller than the loaded slice — applies to Ready/Not Ready/In Progress when overflowing, and to Done with load-more. Previously these columns showed only `N`, hiding the truncation from the operator.
+- `repository.DashboardOptions` gained `ClosedOffset int`; all three impls (memory, beads, caching) honour it. The beads impl emulates `--offset` via over-fetch + composer-side dedup (race-safe under concurrent closes; required because `bd` 1.0.4 lacks `--offset`).
+- `caching.Repository` Dashboard passes ClosedOffset > 0 calls through to the backing repo unconditionally, then merges the returned closed page into the persisted snapshot under lock (ID dedup, incoming wins).
+- Details Dependencies and Metadata panes now expose `"N of M"` in their headers when the visible window is smaller than the rendered list.
+- Done column "load-more in flight" affordance: while a page fetch is pending, the renderer appends a single skeleton row at the bottom of the visible window (`Loading=true && ScrollOffset>0`).
+
+### Fixed
+
+- Race condition where load-more's `[offset:offset+limit]` slice over the over-fetched `bd query --sort closed --limit N` result silently overlapped with the prior page (after concurrent closes), causing the composer's ID dedup to keep the Done column at its initial size. The beads impl now returns the full over-fetched list and lets the composer perform the merge.
+- `mise run quality` / `quality:fast` gates re-aligned: the parity contract scenario `PaginatedClosedFetch` now documents the per-impl divergence (exact slice for memory/caching; over-fetch superset for beads) with a single composer-merged union as the parity guarantee.
+
 ## [v0.5.2]
 
 ### Changed
