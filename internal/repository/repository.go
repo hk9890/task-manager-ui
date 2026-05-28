@@ -47,6 +47,12 @@ type DashboardOptions struct {
 	// default. Honored by the iwvm epic; ignored by all current impls.
 	ClosedLimit int
 
+	// ClosedOffset is the page start index into the closed-issue list sorted
+	// ClosedAt DESC; combined with ClosedLimit forms a half-open window
+	// [offset, offset+limit). Default 0 = first page (existing behavior).
+	// All current implementations ignore this field; vtvb.2/.3/.4 add support.
+	ClosedOffset int
+
 	// ForceFresh, when true, bypasses any cache fast-path and forces a
 	// full backing call. Honored by the caching layer (fbea epic); ignored
 	// by all current impls.
@@ -67,9 +73,10 @@ type Repository interface {
 	// returned promptly.
 	//
 	// opts.ClosedLimit <= 0 means use the implementation default.
+	// opts.ClosedOffset is the page start index (0 = first page).
 	// opts.ForceFresh = true bypasses any cache fast-path and forces a
-	// backing call. Note: this epic's impls ignore both fields. iwvm honors
-	// ClosedLimit; fbea honors ForceFresh.
+	// backing call. Note: current impls ignore all three fields. iwvm honors
+	// ClosedLimit; vtvb honors ClosedOffset; fbea honors ForceFresh.
 	Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error)
 
 	// Issue returns the full detail model for the issue identified by id.
