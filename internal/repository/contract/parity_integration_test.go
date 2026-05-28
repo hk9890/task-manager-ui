@@ -1351,9 +1351,23 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 
 			runner := bd.NewCommandRunner(bd.RunnerConfig{WorkDir: dir})
 
-			// bd 1.0.4 does not support --offset on bd query. When
-			// queryClosedPage(offset>0) fires, intercept the call and emulate
-			// server-side pagination via over-fetch + in-memory slice.
+			// NOTE (vtvb.13): The prod impl (queryClosedPage) now performs the
+			// over-fetch + in-memory slice itself when offset > 0, so it never
+			// emits --offset to bd. The hook below is therefore effectively
+			// redundant — it guards against a regression where --offset is
+			// re-introduced before bd upstream ships support, but will not fire
+			// in practice as long as the prod workaround is in place.
+			//
+			// It is kept here rather than removed because:
+			//   1. It documents the intent: the test was originally written to
+			//      exercise the pagination plumbing against real bd responses.
+			//   2. It acts as a safety net: if the TODO(bd-upstream) revert is
+			//      applied prematurely (before bd ships --offset), the hook
+			//      will fire and keep the test passing rather than letting bd
+			//      reject the --offset flag and produce an opaque error.
+			//
+			// When bd ships --offset and the TODO(bd-upstream) revert is applied,
+			// this hook and its surrounding case block can be simplified or removed.
 			r = repobeads.New(runner, repobeads.WithCommandHook(
 				func(ctx context.Context, req bd.CommandRequest) ([]byte, error) {
 					// Detect the closed-page call with --offset.

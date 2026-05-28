@@ -375,12 +375,20 @@ func (r *Repository) query(ctx context.Context, expr string, opts domain.QueryOp
 // When offset == 0: emits `bd query status=closed --json -a --sort closed --limit N`
 // (no --offset flag, preserving the pre-vtvb argv shape).
 //
-// When offset > 0: emits `bd query status=closed --json -a --sort closed --limit N --offset M`
-// and relies on bd to apply server-side pagination; no in-memory slicing is applied.
+// When offset > 0: bd 1.0.4 does not support the --offset flag, so we
+// over-fetch `--limit (offset+limit)` issues and slice [offset:offset+limit]
+// in Go. This is structurally identical to the bd 1.0.4 CloseIssue idempotency
+// workaround (CHANGELOG v0.5.1).
+//
+// TODO(bd-upstream): when bd ships --offset support, replace the over-fetch
+// path with `bd query status=closed --json -a --sort closed --limit N --offset M`
+// and remove the in-memory slice. The argv-pinning test
+// TestDashboardClosedOffsetArgv will tripwire that change.
 func (r *Repository) queryClosedPage(ctx context.Context, limit, offset int) ([]domain.IssueSummary, error) {
 	args := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", strconv.Itoa(limit)}
 	if offset > 0 {
-		args = append(args, "--offset", strconv.Itoa(offset))
+		// Over-fetch: request offset+limit items from bd (no --offset flag).
+		args[len(args)-1] = strconv.Itoa(offset + limit)
 	}
 
 	items, err := leanDecodeIssueArray(ctx, r.run, leanOpQuery, args)
@@ -388,8 +396,20 @@ func (r *Repository) queryClosedPage(ctx context.Context, limit, offset int) ([]
 		return nil, err
 	}
 
-	// bd handles server-side pagination when offset > 0, so no in-memory
-	// slicing is needed here (pass offset=0, limit=0 to leanMapIssueSummaries).
+	if offset > 0 {
+		// In-memory slice: discard the first `offset` items.
+		if offset >= len(items) {
+			return []domain.IssueSummary{}, nil
+		}
+		items = items[offset:]
+		// Cap to the requested limit.
+		if limit > 0 && len(items) > limit {
+			items = items[:limit]
+		}
+		return leanMapIssueSummaries(leanOpQuery, items, 0, 0)
+	}
+
+	// offset == 0: bd already returned exactly what we need.
 	return leanMapIssueSummaries(leanOpQuery, items, 0, 0)
 }
 

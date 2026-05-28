@@ -30,7 +30,7 @@ the only current dynamic cross-check (see Pinning Test Coverage below).
 | `board.loadReadyExplainCmd` (with limit) | `ReadyExplain` | `bd ready --explain --json --limit <N>` | `internal/repository/beads/read_repository.go:195–198` |
 | `board.loadInProgressCmd` | `Query` | `bd query status=in_progress --json` | `internal/repository/beads/read_repository.go:117–143`, triggered in `internal/mode/board/model.go:616` |
 | `board.loadClosedCmd` (ClosedOffset=0) | `Dashboard → queryClosedPage` | `bd query status=closed --json -a --sort closed --limit <N>` | `internal/repository/beads/lean_reads.go`, `queryClosedPage` |
-| `board.loadClosedCmd` (ClosedOffset>0) | `Dashboard → queryClosedPage` | `bd query status=closed --json -a --sort closed --limit <N> --offset <M>` | `internal/repository/beads/lean_reads.go`, `queryClosedPage` |
+| `board.loadClosedCmd` (ClosedOffset>0) | `Dashboard → queryClosedPage` | `bd query status=closed --json -a --sort closed --limit <N+M>` (over-fetch; no --offset) | `internal/repository/beads/lean_reads.go`, `queryClosedPage` — bd 1.0.4 workaround (vtvb.13): bd 1.0.4 rejects `--offset`; the prod impl emits `--limit (offset+limit)` and slices `[offset:offset+limit]` in Go. TODO(bd-upstream): revert when bd ships --offset. |
 | `board.loadClosedCountCmd` | `CountIssues` | `bd count --by-status --json --status closed` | `internal/repository/beads/read_repository.go:402–411`, triggered in `internal/mode/board/model.go:638–641` |
 | `app.loadDetailCmd` (board/search detail) | `ShowIssue` | `bd show <issueID> --json` | `internal/repository/beads/read_repository.go:247`, triggered in `internal/app/model.go:1227` |
 | `ShowIssue` (internal — parent sibling lookup) | `ShowIssue` (via `parentChildSiblings`) | `bd show <parentID> --json` | `internal/repository/beads/read_repository.go:829`, called from `internal/repository/beads/read_repository.go:295` |
@@ -62,9 +62,10 @@ the only current dynamic cross-check (see Pinning Test Coverage below).
 
 Several argv shapes include dynamic/conditional flags:
 
-- `--limit <N>`: driven by `closedLimit()` for the Done column (wired through `DashboardOptions.ClosedLimit` since iwvm.4); `sectionItemCapacity()` for other board columns; `searchItemCapacity()` for search. `closedLimit()` enforces a floor of 50 regardless of terminal height. The limit is variable: resizing the terminal triggers a new Dashboard call with an updated limit.
+- `--limit <N>`: driven by `closedLimit()` for the Done column (wired through `DashboardOptions.ClosedLimit` since iwvm.4); `sectionItemCapacity()` for other board columns; `searchItemCapacity()` for search. `closedLimit()` enforces a floor of 50 regardless of terminal height. The limit is variable: resizing the terminal triggers a new Dashboard call with an updated limit. When `ClosedOffset > 0` the emitted limit is `offset+limit` (over-fetch; see bd 1.0.4 workaround below).
 - `--sort closed`: always present for the Done column (hardcoded `SortFieldClosedAt`).
 - `-a` (IncludeClosed): always present for the Done column (hardcoded `IncludeClosed: true`).
+- **bd 1.0.4 `--offset` workaround (vtvb.13):** bd 1.0.4 rejects `--offset`. When `queryClosedPage(offset>0)` fires, the impl emits `--limit (offset+limit)` (no `--offset`) and slices `[offset:offset+limit]` in Go. This is the same pattern as the CloseIssue idempotency workaround (CHANGELOG v0.5.1). A `TODO(bd-upstream)` comment in `lean_reads.go::queryClosedPage` marks the revert point; the argv-pinning test `TestDashboardClosedOffsetArgv/offset_35_overfetch_no_offset_flag` will tripwire when bd ships `--offset`.
 - `--status <csv>`: present only when `query.Statuses` has exactly one entry (list/search) or hardcoded to `closed` (CountIssues for board). See per-subcommand semantics below.
 - `--all`: present for `searchIssuesFromList` only when `query.Statuses` is empty.
 - Write flags (`--title`, `--description`, etc.): each present only when the corresponding `UpdateIssueInput` field is non-nil.
@@ -114,7 +115,7 @@ Collapsed to unique bd verb invocations:
 | `bd ready --explain --json` | YES | `TestBoardInitRealRepositorySubprocessArgvCardinality` in `internal/mode/board/model_test.go` |
 | `bd query status=in_progress --json` | YES | same |
 | `bd query status=closed --json -a --sort closed --limit <N>` | YES | same + `TestBoardClosedQueryArgvLimitVariants` (ClosedLimit=0/default-50, =50, =200) (iwvm.7) + `TestDashboardClosedOffsetArgv/offset_zero_no_offset_flag` (vtvb.2) |
-| `bd query status=closed --json -a --sort closed --limit <N> --offset <M>` | YES | `TestDashboardClosedOffsetArgv/offset_35_emits_offset_flag` (vtvb.2) in `internal/repository/beads/lean_reads_argv_test.go` |
+| `bd query status=closed --json -a --sort closed --limit <N+M>` (over-fetch, offset>0) | YES | `TestDashboardClosedOffsetArgv/offset_35_overfetch_no_offset_flag` (vtvb.13); slice-math asserted by `TestDashboardClosedOffsetSliceMath` (vtvb.13) in `internal/repository/beads/lean_reads_argv_test.go` |
 | `bd count --by-status --json --status closed` | YES | same |
 | `bd ping --json` | YES — `TestRepositoryHealthCheckIssuesPingJSON` in `read_repository_test.go` (package-internal `testRecordingExecutor`) | `internal/repository/beads/read_repository_test.go` |
 | `bd show <id> --json` | YES — argv asserted via `testRecordingExecutor` in multiple ShowIssue tests | `internal/repository/beads/read_repository_test.go` |

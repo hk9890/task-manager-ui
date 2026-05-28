@@ -1,10 +1,18 @@
 package beads_test
 
-// lean_reads_argv_test.go — beads-workbench-vtvb.2
+// lean_reads_argv_test.go — beads-workbench-vtvb.2, updated vtvb.13
 //
 // Argv-pinning tests for Dashboard's closed-page fetch path. Asserts the exact
 // bd argv slice for ClosedOffset=0 (no --offset flag) and ClosedOffset=35
-// (--offset 35 appended). Uses fakes.RecordingExecutor — no real subprocess.
+// (over-fetch --limit 85, no --offset, bd 1.0.4 workaround). Uses
+// fakes.RecordingExecutor — no real subprocess.
+//
+// # bd 1.0.4 workaround (vtvb.13)
+//
+// bd 1.0.4 does not support --offset. When offset>0, queryClosedPage emits
+// --limit (offset+limit) instead and slices [offset:offset+limit] in Go.
+// See TODO(bd-upstream) in lean_reads.go for the revert path when bd ships
+// --offset support.
 //
 // # Why package beads_test (external test package)
 //
@@ -13,6 +21,8 @@ package beads_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -47,13 +57,16 @@ func TestDashboardClosedOffsetArgv(t *testing.T) {
 	baseArgv := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"}
 
 	// offsetArgv is the argv when ClosedOffset == 35.
-	offsetArgv := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50", "--offset", "35"}
+	// bd 1.0.4 workaround (vtvb.13): over-fetch --limit (35+50=85); no --offset.
+	// TODO(bd-upstream): when bd ships --offset, this becomes
+	//   ["query","status=closed","--json","-a","--sort","closed","--limit","50","--offset","35"]
+	offsetArgv := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "85"}
 
 	tests := []struct {
 		name      string
 		opts      repository.DashboardOptions
 		wantArgv  []string
-		wantNoArg string // flag that must NOT appear for offset=0 case
+		wantNoArg string // flag that must NOT appear
 	}{
 		{
 			name:      "offset_zero_no_offset_flag",
@@ -62,9 +75,10 @@ func TestDashboardClosedOffsetArgv(t *testing.T) {
 			wantNoArg: "--offset",
 		},
 		{
-			name:     "offset_35_emits_offset_flag",
-			opts:     repository.DashboardOptions{ClosedLimit: 50, ClosedOffset: 35},
-			wantArgv: offsetArgv,
+			name:      "offset_35_overfetch_no_offset_flag",
+			opts:      repository.DashboardOptions{ClosedLimit: 50, ClosedOffset: 35},
+			wantArgv:  offsetArgv,
+			wantNoArg: "--offset",
 		},
 	}
 
@@ -103,15 +117,98 @@ func TestDashboardClosedOffsetArgv(t *testing.T) {
 				t.Errorf("closed query argv mismatch:\n  got:  %v\n  want: %v", closedCall.Args, tc.wantArgv)
 			}
 
-			// For offset=0, additionally assert --offset does not appear anywhere in argv.
+			// Assert --offset does not appear anywhere in argv.
 			if tc.wantNoArg != "" {
 				for _, arg := range closedCall.Args {
 					if arg == tc.wantNoArg {
-						t.Errorf("argv must not contain %q for ClosedOffset=0, but got: %v", tc.wantNoArg, closedCall.Args)
+						t.Errorf("argv must not contain %q, but got: %v", tc.wantNoArg, closedCall.Args)
 						break
 					}
 				}
 			}
 		})
+	}
+}
+
+// TestDashboardClosedOffsetSliceMath asserts the in-memory slice behaviour when
+// offset > 0: Dashboard must return exactly `limit` items starting at position
+// `offset` in the over-fetched list.
+//
+// Drives this via RecordingExecutor + a fake JSON response containing 85 issues
+// (simulating the over-fetch response for offset=35, limit=50). The returned
+// slice must have len==50 and the first item must be the 36th issue in the fake
+// list (fake-036), the last must be fake-085.
+func TestDashboardClosedOffsetSliceMath(t *testing.T) {
+	t.Parallel()
+
+	const offset = 35
+	const limit = 50
+	const totalFetched = offset + limit // 85
+
+	// Build a fake JSON array of 85 issues: fake-001 … fake-085.
+	// All required fields must be non-nil for leanToIssueSummary to decode
+	// without error: id, title, status, issue_type, priority, created_at, updated_at.
+	type issueStub struct {
+		ID        string `json:"id"`
+		Title     string `json:"title"`
+		Status    string `json:"status"`
+		IssueType string `json:"issue_type"`
+		Priority  int    `json:"priority"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+	}
+	fakeItems := make([]issueStub, totalFetched)
+	for i := range fakeItems {
+		fakeItems[i] = issueStub{
+			ID:        fmt.Sprintf("fake-%03d", i+1),
+			Title:     fmt.Sprintf("Issue %03d", i+1),
+			Status:    "closed",
+			IssueType: "task",
+			Priority:  1,
+			CreatedAt: "2026-01-01T00:00:00Z",
+			UpdatedAt: "2026-01-01T00:00:00Z",
+		}
+	}
+	fakeJSON, err := json.Marshal(fakeItems)
+	if err != nil {
+		t.Fatalf("marshal fake JSON: %v", err)
+	}
+
+	overfetchArgv := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "85"}
+
+	rec := fakes.NewRecordingExecutor()
+	cannedDashboardOtherArgvs(rec)
+	rec.OnArgs(overfetchArgv).Return(bd.ExecResult{Stdout: fakeJSON}, nil)
+
+	runner := bd.NewCommandRunner(bd.RunnerConfig{Command: "bd", Executor: rec})
+	repo := repobeads.New(runner)
+
+	data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{
+		ClosedLimit:  limit,
+		ClosedOffset: offset,
+	})
+	if err != nil {
+		t.Fatalf("Dashboard returned error: %v", err)
+	}
+
+	// Must return exactly `limit` items.
+	if len(data.Closed) != limit {
+		t.Errorf("slice math: len(Closed)=%d; want %d", len(data.Closed), limit)
+	}
+
+	// First item must be the 36th issue in the fake list (fake-036).
+	if len(data.Closed) > 0 {
+		wantFirstID := fmt.Sprintf("fake-%03d", offset+1) // "fake-036"
+		if data.Closed[0].ID != wantFirstID {
+			t.Errorf("slice math: first item ID=%q; want %q (36th-newest)", data.Closed[0].ID, wantFirstID)
+		}
+	}
+
+	// Last item must be fake-085.
+	if len(data.Closed) == limit {
+		wantLastID := fmt.Sprintf("fake-%03d", totalFetched) // "fake-085"
+		if data.Closed[limit-1].ID != wantLastID {
+			t.Errorf("slice math: last item ID=%q; want %q", data.Closed[limit-1].ID, wantLastID)
+		}
 	}
 }
