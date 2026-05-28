@@ -34,9 +34,10 @@
 // Use fakes.RecordingExecutor (internal/testing/fakes) in tests outside this
 // package that assert a specific bd argv shape.
 //
-// Tests within this package (package beads) must use package-internal stubs
+// Tests within this package (package bd) must use package-internal stubs
 // (stubExecutor, concurrencyGuardExecutor, etc. in runner_test.go) to avoid
-// an import cycle: fakes imports beads, so beads tests cannot import fakes.
+// an import cycle: fakes imports internal/bd, so package-bd test files cannot
+// import fakes. External test files (package bd_test) may import fakes freely.
 //
 // Canonical pattern (from internal/repository/beads/ or internal/mode/):
 //
