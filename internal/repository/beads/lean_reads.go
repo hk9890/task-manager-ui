@@ -69,12 +69,7 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 
 	g.Go(func() error {
 		var err error
-		closed, err = r.query(gCtx, "status=closed", domain.QueryOptions{
-			IncludeClosed: true,
-			SortBy:        domain.SortFieldClosedAt,
-			SortOrder:     domain.SortDirectionDescending,
-			Limit:         closedLimit,
-		})
+		closed, err = r.queryClosedPage(gCtx, closedLimit, opts.ClosedOffset)
 		return err
 	})
 
@@ -373,6 +368,29 @@ func (r *Repository) query(ctx context.Context, expr string, opts domain.QueryOp
 	}
 
 	return leanMapIssueSummaries(leanOpQuery, items, opts.Offset, opts.Limit)
+}
+
+// queryClosedPage fetches the closed-issue page for Dashboard.
+//
+// When offset == 0: emits `bd query status=closed --json -a --sort closed --limit N`
+// (no --offset flag, preserving the pre-vtvb argv shape).
+//
+// When offset > 0: emits `bd query status=closed --json -a --sort closed --limit N --offset M`
+// and relies on bd to apply server-side pagination; no in-memory slicing is applied.
+func (r *Repository) queryClosedPage(ctx context.Context, limit, offset int) ([]domain.IssueSummary, error) {
+	args := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", strconv.Itoa(limit)}
+	if offset > 0 {
+		args = append(args, "--offset", strconv.Itoa(offset))
+	}
+
+	items, err := leanDecodeIssueArray(ctx, r.run, leanOpQuery, args)
+	if err != nil {
+		return nil, err
+	}
+
+	// bd handles server-side pagination when offset > 0, so no in-memory
+	// slicing is needed here (pass offset=0, limit=0 to leanMapIssueSummaries).
+	return leanMapIssueSummaries(leanOpQuery, items, 0, 0)
 }
 
 // countIssues fetches `bd count --by-status --json`.

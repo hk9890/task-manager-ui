@@ -29,7 +29,8 @@ the only current dynamic cross-check (see Pinning Test Coverage below).
 | `board.loadReadyExplainCmd` | `ReadyExplain` | `bd ready --explain --json` | `internal/repository/beads/read_repository.go:194–199` |
 | `board.loadReadyExplainCmd` (with limit) | `ReadyExplain` | `bd ready --explain --json --limit <N>` | `internal/repository/beads/read_repository.go:195–198` |
 | `board.loadInProgressCmd` | `Query` | `bd query status=in_progress --json` | `internal/repository/beads/read_repository.go:117–143`, triggered in `internal/mode/board/model.go:616` |
-| `board.loadClosedCmd` | `Query` | `bd query status=closed --json -a --sort closed --limit <N>` | `internal/repository/beads/read_repository.go:117–143`, triggered in `internal/mode/board/model.go:625–630` |
+| `board.loadClosedCmd` (ClosedOffset=0) | `Dashboard → queryClosedPage` | `bd query status=closed --json -a --sort closed --limit <N>` | `internal/repository/beads/lean_reads.go`, `queryClosedPage` |
+| `board.loadClosedCmd` (ClosedOffset>0) | `Dashboard → queryClosedPage` | `bd query status=closed --json -a --sort closed --limit <N> --offset <M>` | `internal/repository/beads/lean_reads.go`, `queryClosedPage` |
 | `board.loadClosedCountCmd` | `CountIssues` | `bd count --by-status --json --status closed` | `internal/repository/beads/read_repository.go:402–411`, triggered in `internal/mode/board/model.go:638–641` |
 | `app.loadDetailCmd` (board/search detail) | `ShowIssue` | `bd show <issueID> --json` | `internal/repository/beads/read_repository.go:247`, triggered in `internal/app/model.go:1227` |
 | `ShowIssue` (internal — parent sibling lookup) | `ShowIssue` (via `parentChildSiblings`) | `bd show <parentID> --json` | `internal/repository/beads/read_repository.go:829`, called from `internal/repository/beads/read_repository.go:295` |
@@ -112,7 +113,8 @@ Collapsed to unique bd verb invocations:
 |---|---|---|
 | `bd ready --explain --json` | YES | `TestBoardInitRealRepositorySubprocessArgvCardinality` in `internal/mode/board/model_test.go` |
 | `bd query status=in_progress --json` | YES | same |
-| `bd query status=closed --json -a --sort closed --limit <N>` | YES | same + `TestBoardClosedQueryArgvLimitVariants` (ClosedLimit=0/default-50, =50, =200) (iwvm.7) |
+| `bd query status=closed --json -a --sort closed --limit <N>` | YES | same + `TestBoardClosedQueryArgvLimitVariants` (ClosedLimit=0/default-50, =50, =200) (iwvm.7) + `TestDashboardClosedOffsetArgv/offset_zero_no_offset_flag` (vtvb.2) |
+| `bd query status=closed --json -a --sort closed --limit <N> --offset <M>` | YES | `TestDashboardClosedOffsetArgv/offset_35_emits_offset_flag` (vtvb.2) in `internal/repository/beads/lean_reads_argv_test.go` |
 | `bd count --by-status --json --status closed` | YES | same |
 | `bd ping --json` | YES — `TestRepositoryHealthCheckIssuesPingJSON` in `read_repository_test.go` (package-internal `testRecordingExecutor`) | `internal/repository/beads/read_repository_test.go` |
 | `bd show <id> --json` | YES — argv asserted via `testRecordingExecutor` in multiple ShowIssue tests | `internal/repository/beads/read_repository_test.go` |
