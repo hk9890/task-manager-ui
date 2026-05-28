@@ -707,6 +707,115 @@ func TestDashboard_ClosedTotal(t *testing.T) {
 	}
 }
 
+// ---- Dashboard ClosedOffset pagination ----
+
+// TestDashboard_ClosedOffset_Pages seeds 100 closed issues with distinct
+// ClosedAt timestamps (newest first when sorted DESC), then asserts:
+//   - Page 0 (offset=0, limit=40) returns the 40 newest issues.
+//   - Page 1 (offset=40, limit=40) returns the next 40 issues.
+//   - The two pages have no overlap and together form a contiguous ClosedAt DESC
+//     sequence.
+//   - ClosedTotal reflects the full 100, independent of the page window.
+func TestDashboard_ClosedOffset_Pages(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	r := memory.New()
+	const total = 100
+	// Seed 100 closed issues. Issue i gets ClosedAt = base + i*hour so that
+	// issue 99 is newest (highest ClosedAt) and issue 0 is oldest.
+	for i := 0; i < total; i++ {
+		id := "cl-" + itoa(i)
+		r.Seed(memory.Issue{ID: id, Status: "closed"})
+		r.SeedClosed(id, base.Add(time.Duration(i)*time.Hour), "done")
+	}
+
+	// Page 0: offset=0, limit=40 → newest 40 issues (indices 99..60 by ClosedAt DESC).
+	page0, err := r.Dashboard(context.Background(), repository.DashboardOptions{
+		ClosedOffset: 0,
+		ClosedLimit:  40,
+	})
+	if err != nil {
+		t.Fatalf("Dashboard page0: %v", err)
+	}
+	if page0.ClosedTotal != total {
+		t.Errorf("page0 ClosedTotal: want %d, got %d", total, page0.ClosedTotal)
+	}
+	if len(page0.Closed) != 40 {
+		t.Fatalf("page0 Closed len: want 40, got %d", len(page0.Closed))
+	}
+
+	// Page 1: offset=40, limit=40 → next 40 issues (indices 59..20 by ClosedAt DESC).
+	page1, err := r.Dashboard(context.Background(), repository.DashboardOptions{
+		ClosedOffset: 40,
+		ClosedLimit:  40,
+	})
+	if err != nil {
+		t.Fatalf("Dashboard page1: %v", err)
+	}
+	if page1.ClosedTotal != total {
+		t.Errorf("page1 ClosedTotal: want %d, got %d", total, page1.ClosedTotal)
+	}
+	if len(page1.Closed) != 40 {
+		t.Fatalf("page1 Closed len: want 40, got %d", len(page1.Closed))
+	}
+
+	// No overlap between the two pages.
+	page0IDs := make(map[string]struct{}, 40)
+	for _, s := range page0.Closed {
+		page0IDs[s.ID] = struct{}{}
+	}
+	for _, s := range page1.Closed {
+		if _, dup := page0IDs[s.ID]; dup {
+			t.Errorf("overlap: issue %q appears in both page0 and page1", s.ID)
+		}
+	}
+
+	// Verify ClosedAt DESC ordering within and across pages.
+	// Because issue "cl-i" was closed at base+i*hour, the DESC order is
+	// cl-99, cl-98, ..., cl-0. We recover the numeric suffix and verify it
+	// is strictly decreasing across the combined slice.
+	combined := append(page0.Closed, page1.Closed...)
+	for i := 1; i < len(combined); i++ {
+		prevN := closedOffsetIssueIndex(combined[i-1].ID)
+		currN := closedOffsetIssueIndex(combined[i].ID)
+		if prevN <= currN {
+			t.Errorf("ClosedAt not DESC at combined[%d]→[%d]: index %d <= %d (IDs: %s, %s)",
+				i-1, i, prevN, currN, combined[i-1].ID, combined[i].ID)
+		}
+	}
+}
+
+// TestDashboard_ClosedOffset_BeyondEnd asserts that an offset beyond the last
+// closed issue returns an empty slice (not an error) and that ClosedTotal still
+// reflects the full count.
+func TestDashboard_ClosedOffset_BeyondEnd(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	r := memory.New()
+	const total = 100
+	for i := 0; i < total; i++ {
+		id := "cl-" + itoa(i)
+		r.Seed(memory.Issue{ID: id, Status: "closed"})
+		r.SeedClosed(id, base.Add(time.Duration(i)*time.Hour), "done")
+	}
+
+	data, err := r.Dashboard(context.Background(), repository.DashboardOptions{
+		ClosedOffset: 200,
+		ClosedLimit:  40,
+	})
+	if err != nil {
+		t.Fatalf("Dashboard offset=200: unexpected error %v", err)
+	}
+	if len(data.Closed) != 0 {
+		t.Errorf("Closed len: want 0, got %d", len(data.Closed))
+	}
+	if data.Closed == nil {
+		t.Error("Closed must not be nil (empty slice required)")
+	}
+	if data.ClosedTotal != total {
+		t.Errorf("ClosedTotal: want %d, got %d", total, data.ClosedTotal)
+	}
+}
+
 // ---- Search ----
 
 func TestSearch_TextFilter(t *testing.T) {
@@ -1070,6 +1179,23 @@ func containsID(ids []string, id string) bool {
 		}
 	}
 	return false
+}
+
+// closedOffsetIssueIndex extracts the numeric index from an ID of the form
+// "cl-<n>" used by the ClosedOffset pagination tests.
+func closedOffsetIssueIndex(id string) int {
+	const prefix = "cl-"
+	if len(id) <= len(prefix) {
+		return -1
+	}
+	n := 0
+	for _, ch := range id[len(prefix):] {
+		if ch < '0' || ch > '9' {
+			return -1
+		}
+		n = n*10 + int(ch-'0')
+	}
+	return n
 }
 
 // ---- Forget tests ----

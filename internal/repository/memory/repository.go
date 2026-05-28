@@ -304,10 +304,12 @@ func DefaultCatalogs() repository.Catalogs {
 // DependsOn ID points to a non-closed issue.
 // DashboardData.Blocked: issues where status == "blocked" (stored status).
 // DashboardData.InProgress: issues where status == "in_progress".
-// DashboardData.Closed: closed issues sorted by ClosedAt DESC, capped to
-// opts.ClosedLimit. When opts.ClosedLimit <= 0, all closed issues are returned.
+// DashboardData.Closed: closed issues sorted by ClosedAt DESC, windowed by
+// opts.ClosedOffset (skip) then opts.ClosedLimit (cap). When opts.ClosedOffset
+// >= total closed count, an empty slice is returned (no error). When
+// opts.ClosedLimit <= 0, all remaining issues after the offset are returned.
 // DashboardData.ClosedTotal: always the full count of closed issues, independent
-// of opts.ClosedLimit.
+// of opts.ClosedOffset and opts.ClosedLimit.
 func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
@@ -404,11 +406,18 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 		blocked = []domain.IssueSummary{}
 	}
 
-	// ClosedTotal must be computed from the full slice BEFORE any limit is applied.
+	// ClosedTotal must be computed from the full slice BEFORE any windowing is applied.
 	closedTotal := len(closed)
 
+	// Apply opts.ClosedOffset: slice from offset before applying limit.
+	if opts.ClosedOffset >= len(closed) {
+		closed = closed[:0] // beyond end → empty page, no error
+	} else {
+		closed = closed[opts.ClosedOffset:]
+	}
+
 	// Apply opts.ClosedLimit when positive. When <= 0, all closed issues are returned.
-	if opts.ClosedLimit > 0 && len(closed) > opts.ClosedLimit {
+	if opts.ClosedLimit > 0 && opts.ClosedLimit < len(closed) {
 		closed = closed[:opts.ClosedLimit]
 	}
 
