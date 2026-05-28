@@ -24,6 +24,15 @@ const cardinalityThreshold = 500
 // they would fall through all four board columns and become invisible.
 // Compose deduplicates the union of Blocked and StoredBlocked into the
 // NotReady column so both populations are visible.
+//
+// PriorClosed, when non-nil, enables the load-more merge path in Compose:
+// the board model passes the issues already displayed in the Done column
+// (PriorClosed) together with a freshly fetched offset page (Closed).
+// Compose concatenates prior+incoming, deduplicates by ID (incoming wins on
+// conflict — matches caching layer semantics), and sorts the merged result
+// by UpdatedAt DESC to recover ClosedAt DESC ordering. ClosedTotal must be
+// set when using PriorClosed; TotalIsExact is recomputed as
+// len(merged) >= ClosedTotal. ClosedLimit is ignored when PriorClosed is set.
 type Inputs struct {
 	Ready         []domain.IssueSummary
 	Blocked       []domain.BlockedIssueView
@@ -32,6 +41,11 @@ type Inputs struct {
 	Closed        []domain.IssueSummary
 	ClosedLimit   int // the cap that was sent to bd; used to determine row-list truncation
 	ClosedTotal   int // real DB count of closed issues; 0 means unset (falls back to len(Closed))
+
+	// PriorClosed, when non-nil, triggers the load-more merge path. See the
+	// Inputs doc comment for full semantics. Nil (default) means first-load
+	// path; the Closed field is used directly, as before.
+	PriorClosed []domain.IssueSummary
 }
 
 // Columns is the typed column data the board renderer consumes.
@@ -90,6 +104,53 @@ func mapBlockedToSummaries(blocked []domain.BlockedIssueView) []domain.IssueSumm
 		out[i] = b.Issue
 	}
 	return out
+}
+
+// mergeClosedAppend merges prior (already-on-screen) with incoming (freshly
+// fetched offset page) for the Done column load-more path.
+//
+// Dedup: incoming wins on ID conflict (latest version from the backing store
+// replaces the stale copy already on screen — matches caching layer semantics).
+// Order: after dedup the merged slice is sorted UpdatedAt DESC as the best
+// available proxy for ClosedAt DESC ordering; incoming pages arrive pre-sorted
+// by the repository, but the sort-merge here is the defensive recovery path for
+// out-of-order boundaries (e.g. equal UpdatedAt at a page seam).
+func mergeClosedAppend(prior, incoming []domain.IssueSummary) []domain.IssueSummary {
+	if len(incoming) == 0 {
+		out := make([]domain.IssueSummary, len(prior))
+		copy(out, prior)
+		return out
+	}
+	if len(prior) == 0 {
+		out := make([]domain.IssueSummary, len(incoming))
+		copy(out, incoming)
+		return out
+	}
+
+	// Build a set of IDs from the incoming page so we can discard the stale
+	// copies from prior (incoming version is authoritative on conflict).
+	incomingIDs := make(map[string]struct{}, len(incoming))
+	for _, iss := range incoming {
+		incomingIDs[iss.ID] = struct{}{}
+	}
+
+	// Start with prior entries not overridden by incoming.
+	merged := make([]domain.IssueSummary, 0, len(prior)+len(incoming))
+	for _, iss := range prior {
+		if _, replaced := incomingIDs[iss.ID]; !replaced {
+			merged = append(merged, iss)
+		}
+	}
+	// Append all incoming entries (new + replacements).
+	merged = append(merged, incoming...)
+
+	// Sort UpdatedAt DESC as the best available proxy for ClosedAt DESC.
+	// A stable sort preserves the original relative order within equal timestamps.
+	sort.SliceStable(merged, func(i, j int) bool {
+		return merged[i].UpdatedAt.After(merged[j].UpdatedAt)
+	})
+
+	return merged
 }
 
 // mergeNotReadyIssues returns the union of dep-blocked issues (from ReadyExplain)
@@ -191,25 +252,40 @@ func Compose(in Inputs) Columns {
 	}
 
 	// --- build Done column ---
-	// Preserve backend order; do not re-sort.
-	closedIssues := make([]domain.IssueSummary, len(in.Closed))
-	copy(closedIssues, in.Closed)
-
-	// Use the real DB population count when available; fall back to len(closedIssues).
-	doneTotal := len(closedIssues)
-	if in.ClosedTotal > doneTotal {
-		doneTotal = in.ClosedTotal
-	}
-
-	// TotalIsExact is true when the visible list covers the entire population
-	// (i.e. no items are hidden beyond the rendered cap). When ClosedTotal is
-	// set, exact = visible list reaches or matches the real count.
-	// When ClosedTotal is unset (0), fall back to the old ClosedLimit heuristic.
+	var closedIssues []domain.IssueSummary
 	var totalIsExact bool
-	if in.ClosedTotal > 0 {
+	var doneTotal int
+
+	if in.PriorClosed != nil {
+		// Load-more merge path: concatenate prior+incoming, dedup by ID
+		// (incoming wins), sort UpdatedAt DESC to recover ClosedAt DESC order.
+		// ClosedTotal is authoritative; ClosedLimit is ignored on this path.
+		closedIssues = mergeClosedAppend(in.PriorClosed, in.Closed)
+		doneTotal = in.ClosedTotal
+		if doneTotal < len(closedIssues) {
+			doneTotal = len(closedIssues)
+		}
 		totalIsExact = len(closedIssues) >= in.ClosedTotal
 	} else {
-		totalIsExact = in.ClosedLimit <= 0 || len(closedIssues) < in.ClosedLimit
+		// First-load path: preserve backend order; do not re-sort.
+		closedIssues = make([]domain.IssueSummary, len(in.Closed))
+		copy(closedIssues, in.Closed)
+
+		// Use the real DB population count when available; fall back to len(closedIssues).
+		doneTotal = len(closedIssues)
+		if in.ClosedTotal > doneTotal {
+			doneTotal = in.ClosedTotal
+		}
+
+		// TotalIsExact is true when the visible list covers the entire population
+		// (i.e. no items are hidden beyond the rendered cap). When ClosedTotal is
+		// set, exact = visible list reaches or matches the real count.
+		// When ClosedTotal is unset (0), fall back to the old ClosedLimit heuristic.
+		if in.ClosedTotal > 0 {
+			totalIsExact = len(closedIssues) >= in.ClosedTotal
+		} else {
+			totalIsExact = in.ClosedLimit <= 0 || len(closedIssues) < in.ClosedLimit
+		}
 	}
 
 	done := ColumnData{
