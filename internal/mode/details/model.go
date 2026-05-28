@@ -9,6 +9,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
+	"github.com/hk9890/beads-workbench/internal/ui/scroll"
 )
 
 // Model is the shell-owned standalone detail presentation state.
@@ -230,7 +231,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	switch m.focusPane() {
 	case uidetails.FocusPaneDependencies:
 		if action == config.DetailActionScrollUp {
-			if m.moveRelatedSelection(-1) {
+			if m.moveRelatedSelection(-1, maxWidth, viewportHeight) {
 				if ref, ok := m.selectedRelatedIssue(); ok {
 					return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
 				}
@@ -238,7 +239,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
-			if m.moveRelatedSelection(1) {
+			if m.moveRelatedSelection(1, maxWidth, viewportHeight) {
 				if ref, ok := m.selectedRelatedIssue(); ok {
 					return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
 				}
@@ -249,11 +250,11 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		return true, nil
 	case uidetails.FocusPaneMetadata:
 		if action == config.DetailActionScrollUp {
-			m.moveMetadataSelection(-1)
+			m.moveMetadataSelection(-1, maxWidth, viewportHeight)
 			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
-			m.moveMetadataSelection(1)
+			m.moveMetadataSelection(1, maxWidth, viewportHeight)
 			return true, nil
 		}
 		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, action, move)
@@ -306,7 +307,7 @@ func (m *Model) ensureMetadataSelection() {
 	}
 }
 
-func (m *Model) moveMetadataSelection(delta int) {
+func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	fields := editableMetadataFields()
 	if len(fields) == 0 {
 		m.MetadataSelectedField = uidetails.MetadataFieldNone
@@ -330,6 +331,14 @@ func (m *Model) moveMetadataSelection(delta int) {
 		next = len(fields) - 1
 	}
 	m.MetadataSelectedField = fields[next]
+
+	// Compute the line index of the selected field within the metadata pane so
+	// we can call EnsureVisible to keep the field in the visible window.
+	lineIdx := metadataFieldLineIndex(m.MetadataSelectedField, m.Detail, maxWidth)
+	if lineIdx >= 0 && viewportHeight > 0 {
+		paneInner := paneInnerHeight(maxWidth, viewportHeight, paneMetadata)
+		m.MetadataScrollOffset = scroll.EnsureVisible(m.MetadataScrollOffset, lineIdx, paneInner)
+	}
 }
 
 func editableMetadataFields() []uidetails.MetadataFieldKey {
@@ -363,7 +372,7 @@ func (m *Model) ConsumeOpenPriorityDialogIntent() bool {
 	return true
 }
 
-func (m *Model) moveRelatedSelection(delta int) bool {
+func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 	refs := m.browserIssues()
 	if len(refs) == 0 {
 		m.BrowserSelectedIndex = -1
@@ -379,6 +388,16 @@ func (m *Model) moveRelatedSelection(delta int) bool {
 		next = len(refs) - 1
 	}
 	m.BrowserSelectedIndex = next
+
+	// Keep the selected ref's rendered line inside the visible window.
+	if viewportHeight > 0 {
+		lineIdx := dependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
+		if lineIdx >= 0 {
+			paneInner := paneInnerHeight(maxWidth, viewportHeight, paneDependencies)
+			m.DependenciesScrollOffset = scroll.EnsureVisible(m.DependenciesScrollOffset, lineIdx, paneInner)
+		}
+	}
+
 	return m.BrowserSelectedIndex != previous
 }
 
@@ -579,6 +598,41 @@ func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueRefer
 	}
 
 	return out
+}
+
+// paneKind identifies which pane height is being requested.
+type paneKind int
+
+const (
+	paneDependencies paneKind = iota
+	paneMetadata
+)
+
+// paneInnerHeight returns the number of content rows visible in a pane (i.e.,
+// total height minus 2 border rows). For the responsive layout (narrow widths),
+// the Dependencies and Metadata panes share the bottom section whose height is
+// computed by splitResponsiveLayoutHeights.
+func paneInnerHeight(maxWidth, viewportHeight int, _ paneKind) int {
+	if viewportHeight <= 0 {
+		return 1
+	}
+	if uidetails.UsesResponsiveDetailLayout(maxWidth) {
+		_, bottomHeight := uidetails.SplitResponsiveLayoutHeights(viewportHeight)
+		return max(1, bottomHeight-2)
+	}
+	return max(1, viewportHeight-2)
+}
+
+// dependencyRefLineIndex returns the line index of browserItems[refIndex] in
+// the rendered dependency pane line list by delegating to the ui/details helper.
+func dependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, detail domain.IssueDetail) int {
+	return uidetails.DependencyRefLineIndex(refIndex, browserItems, detail)
+}
+
+// metadataFieldLineIndex returns the line index of the given metadata field in
+// the rendered metadata pane by delegating to the ui/details helper.
+func metadataFieldLineIndex(field uidetails.MetadataFieldKey, detail domain.IssueDetail, _ int) int {
+	return uidetails.MetadataFieldLineIndex(field, detail)
 }
 
 func applyScrollAction(current, maxOffset int, action string, move int) int {

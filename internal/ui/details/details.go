@@ -209,6 +209,20 @@ func usesResponsiveDetailLayout(width int) bool {
 	return width < InspectorTwoColumnMinWidth
 }
 
+// UsesResponsiveDetailLayout reports whether the given width triggers the
+// responsive (stacked) layout. Exported for layout-height arithmetic in the
+// mode model.
+func UsesResponsiveDetailLayout(width int) bool {
+	return usesResponsiveDetailLayout(width)
+}
+
+// SplitResponsiveLayoutHeights returns the (content, bottom) heights for the
+// responsive stacked layout at the given total height. Exported for layout-
+// height arithmetic in the mode model.
+func SplitResponsiveLayoutHeights(total int) (content, bottom int) {
+	return splitResponsiveLayoutHeights(total)
+}
+
 func renderResponsiveLayout(detail domain.IssueDetail, state State, width, height int) string {
 	contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
 	dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
@@ -243,9 +257,15 @@ func renderDependenciesPane(detail domain.IssueDetail, state State, width, heigh
 	innerHeight := max(1, height-2)
 	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2, state.Skeleton, state.SkeletonPhase)
 	dependenciesView, _ := sliceWithOffset(dependencies, state.DependenciesScrollOffset, innerHeight, width-2)
-	topRight := fmt.Sprintf("%d", countDependencyReferences(detail))
-	if state.Skeleton {
+	totalRefs := countDependencyReferences(detail)
+	var topRight string
+	switch {
+	case state.Skeleton:
 		topRight = issuerow.SkeletonGlyph
+	case len(dependenciesView) < len(dependencies):
+		topRight = fmt.Sprintf("%d of %d", len(dependenciesView), len(dependencies))
+	default:
+		topRight = fmt.Sprintf("%d", totalRefs)
 	}
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
@@ -307,9 +327,15 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	innerHeight := max(1, height-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
-	depTopRight := fmt.Sprintf("%d", countDependencyReferences(detail))
-	if state.Skeleton {
+	totalDepRefs := countDependencyReferences(detail)
+	var depTopRight string
+	switch {
+	case state.Skeleton:
 		depTopRight = issuerow.SkeletonGlyph
+	case len(depView) < len(deps):
+		depTopRight = fmt.Sprintf("%d of %d", len(depView), len(deps))
+	default:
+		depTopRight = fmt.Sprintf("%d", totalDepRefs)
 	}
 	leftBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              leftWidth,
@@ -544,6 +570,90 @@ func renderRelationshipGroups(groups []relationshipGroup, selectedIssueID string
 
 func countDependencyReferences(detail domain.IssueDetail) int {
 	return len(detail.BlockedBy) + len(detail.Blocks) + len(detail.Related)
+}
+
+// DependencyRefLineIndex returns the zero-based line index of the
+// browserItems[refIndex] entry within the rendered dependency pane line list
+// (as produced by renderDependenciesPaneLines). Returns -1 if refIndex is out
+// of range or if browserItems is empty.
+//
+// The dependency pane renders groups separated by empty lines and headed by a
+// label line. This function mirrors that structure to compute the line position
+// without allocating rendered strings.
+func DependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, detail domain.IssueDetail) int {
+	if refIndex < 0 || len(browserItems) == 0 || refIndex >= len(browserItems) {
+		return -1
+	}
+	targetID := strings.TrimSpace(browserItems[refIndex].ID)
+	if targetID == "" {
+		return -1
+	}
+
+	groups := dependencyGroups(detail, browserItems)
+	linePos := 0
+	firstGroup := true
+	for _, group := range groups {
+		ordered := orderedReferences(group.Refs)
+		if !firstGroup {
+			linePos++ // empty separator line
+		}
+		linePos++ // group label line
+		if len(ordered) == 0 {
+			linePos++ // "(none)" line
+			firstGroup = false
+			continue
+		}
+		for _, ref := range ordered {
+			if strings.TrimSpace(ref.ID) == targetID {
+				return linePos
+			}
+			linePos++
+		}
+		firstGroup = false
+	}
+	return -1
+}
+
+// MetadataFieldLineIndex returns the zero-based line index of the given
+// MetadataFieldKey within the rendered metadata pane line list (as produced
+// by renderMetadataPaneLines). Returns -1 if the field is not found or is
+// MetadataFieldNone.
+func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) int {
+	if field == MetadataFieldNone {
+		return -1
+	}
+	// renderMetadataRail produces the lines that renderMetadataPaneLines
+	// starts with (before the Quick actions block). We scan renderMetadataRail
+	// output with an arbitrary width of 80 (width does not affect line count).
+	lines := renderMetadataRail(detail, 80, field, false)
+	for i, line := range lines {
+		// The selected field line is prefixed with the selection indicator.
+		// We detect it by checking for the "› " prefix after ANSI stripping.
+		stripped := stripANSI(line)
+		if strings.HasPrefix(stripped, "› ") || strings.HasPrefix(stripped, "›") {
+			return i
+		}
+	}
+	return -1
+}
+
+// stripANSI removes ANSI escape sequences for line-content comparison.
+func stripANSI(s string) string {
+	var out strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			i++ // skip 'm'
+			continue
+		}
+		out.WriteByte(s[i])
+		i++
+	}
+	return out.String()
 }
 
 func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int, skeleton bool, skeletonPhase int) []string {

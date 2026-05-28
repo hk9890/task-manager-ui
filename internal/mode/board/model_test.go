@@ -1262,3 +1262,179 @@ func TestStartReloadAuto_ForceFreshFalse(t *testing.T) {
 		t.Errorf("auto reload: expected DashboardOptions.ForceFresh=false, got true")
 	}
 }
+
+// --- Scroll-window tests (b38b.4) ---
+
+// TestBoardModeScrollWindowAdvancesWithSelection verifies that pressing j×30
+// on a column with 80 rows (height=25, sectionItemCapacity=22) advances
+// the selection to row 30 and moves ScrollOffset so the selection stays
+// within the visible window.
+func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
+	t.Parallel()
+
+	keys := resolvedBoardKeys(t)
+	m := newBoardModel(memoryrepo.New(), keys)
+
+	// Synthesize 80 Ready issues.
+	const rowCount = 80
+	issues := make([]domain.IssueSummary, rowCount)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("bw-r%d", i),
+			Title: fmt.Sprintf("Ready issue %d", i),
+		}
+	}
+	m.columns = []columnData{
+		{title: sectionTitleReady, issues: issues, total: rowCount, exact: true},
+	}
+	m.focusedColumn = 0
+	m.selectedRow[0] = 0
+	m.scrollOffset[0] = 0
+	m.SetSize(120, 25) // sectionItemCapacity = 25-3 = 22
+
+	capacity := m.sectionItemCapacity() // 22
+
+	// Press j 30 times.
+	const steps = 30
+	for i := 0; i < steps; i++ {
+		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+
+	sel := m.selectedRow[0]
+	if sel != steps {
+		t.Errorf("expected selected row %d after %d j presses, got %d", steps, steps, sel)
+	}
+
+	offset := m.scrollOffset[0]
+	// Selection must be within the visible window.
+	if sel < offset || sel >= offset+capacity {
+		t.Errorf("selection %d not in window [%d, %d)", sel, offset, offset+capacity)
+	}
+
+	// Offset must have advanced (it can't stay at 0 when sel=30 and window=22).
+	if offset == 0 {
+		t.Errorf("expected scroll offset to advance from 0, got 0 with sel=%d window=%d", sel, capacity)
+	}
+}
+
+// TestBoardModeScrollWindowRendererSlicesRows verifies that the board renderer
+// slices the row list to the scroll window and shows "N of M" in the header
+// when the window is smaller than the total row count.
+func TestBoardModeScrollWindowRendererSlicesRows(t *testing.T) {
+	t.Parallel()
+
+	keys := resolvedBoardKeys(t)
+	m := newBoardModel(memoryrepo.New(), keys)
+
+	const rowCount = 80
+	issues := make([]domain.IssueSummary, rowCount)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("bw-r%d", i),
+			Title: fmt.Sprintf("Ready issue %d", i),
+		}
+	}
+	m.columns = []columnData{
+		{title: sectionTitleReady, issues: issues, total: rowCount, exact: true},
+	}
+	m.focusedColumn = 0
+	m.selectedRow[0] = 30
+	m.scrollOffset[0] = 20 // window shows rows 20..41
+
+	m.SetSize(120, 25) // capacity = 22
+
+	view := m.View(0)
+
+	// Header must show "N of 80" since window clips.
+	if !strings.Contains(view, "of 80") {
+		t.Errorf("expected 'of 80' in header when window clips, got:\n%s", view)
+	}
+
+	// Row bw-r20 should be visible (start of window).
+	if !strings.Contains(view, "r20") {
+		t.Errorf("expected bw-r20 to be visible at scroll offset 20, got:\n%s", view)
+	}
+
+	// Row bw-r0 should NOT be visible (before window).
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if strings.Contains(plain, "Ready issue 0") {
+		t.Errorf("expected row 0 to be hidden at scroll offset 20, got:\n%s", plain)
+	}
+}
+
+// TestBoardModeScrollTeatestChevronVisible exercises the full EnsureVisible +
+// renderer path end-to-end: Init triggers a real Dashboard load from an
+// in-memory repo, then 30 j keypresses are applied synchronously via
+// ApplyControllerKeySequence, and the final View output is asserted to contain
+// the selection chevron (›) — proving the selected row is in the visible window.
+func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
+	t.Parallel()
+
+	// Seed the memory repo with 80 ready issues so Init loads them.
+	repo := memoryrepo.New()
+	const rowCount = 80
+	for i := 0; i < rowCount; i++ {
+		repo.Seed(memoryrepo.Issue{
+			ID:     fmt.Sprintf("bw-ready%02d", i),
+			Title:  fmt.Sprintf("Ready issue %02d", i),
+			Status: "open",
+			Type:   "task",
+		})
+	}
+
+	m := newBoardModel(repo, resolvedBoardKeys(t))
+	m.SetSize(120, 25)
+
+	// InitializeController runs Init and drains all resulting commands
+	// synchronously. For the memory repo this resolves the Dashboard load
+	// entirely before any keypress is applied.
+	ctrl := testui.InitializeController(m)
+
+	// Board must have loaded all 80 issues: IsLoading() must be false and at
+	// least one Ready row visible.
+	bm, ok := ctrl.(*Model)
+	if !ok {
+		t.Fatalf("expected *Model after InitializeController, got %T", ctrl)
+	}
+	if bm.IsLoading() {
+		t.Fatal("board is still loading after InitializeController — memory repo must resolve synchronously")
+	}
+
+	// Apply a WindowSizeMsg so sectionItemCapacity is set.
+	_ = bm.Update(tea.WindowSizeMsg{Width: 120, Height: 25})
+
+	// Apply 30 j (down) keypresses synchronously.
+	const steps = 30
+	keys := make([]tea.KeyMsg, steps)
+	for i := range keys {
+		keys[i] = tea.KeyMsg{Type: tea.KeyDown}
+	}
+	final := testui.ApplyControllerKeySequence(bm, keys...)
+	finalBoard, ok := final.(*Model)
+	if !ok {
+		t.Fatalf("expected *Model after ApplyControllerKeySequence, got %T", final)
+	}
+
+	// Selection index must equal exactly steps (board clamps at len-1, 30 < 80).
+	sel := finalBoard.selectedRow[finalBoard.focusedColumn]
+	if sel != steps {
+		t.Errorf("expected selected row index %d after %d j presses, got %d", steps, steps, sel)
+	}
+
+	// Scroll offset must have advanced so the selection stays in the window.
+	offset := finalBoard.ScrollOffsetForColumn(finalBoard.focusedColumn)
+	capacity := finalBoard.sectionItemCapacity()
+	if sel < offset || sel >= offset+capacity {
+		t.Errorf("selection %d not in visible window [%d, %d)", sel, offset, offset+capacity)
+	}
+	if offset == 0 {
+		t.Errorf("expected scroll offset > 0 after selection moved past viewport, got 0")
+	}
+
+	// The rendered view must contain the chevron character (›).
+	view := finalBoard.View(0)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "›") {
+		t.Errorf("expected selection chevron '›' in rendered view after 30 j presses, got:\n%s", plain)
+	}
+}

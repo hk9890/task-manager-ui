@@ -27,6 +27,11 @@ type Column struct {
 	Title       string
 	Rows        []domain.IssueSummary
 	SelectedRow int
+	// ScrollOffset is the index of the first row that should appear at the top
+	// of the visible window. The renderer slices Rows[ScrollOffset:] before
+	// passing to FormSection so the selection is always in view. When zero the
+	// behaviour is identical to the pre-scroll implementation.
+	ScrollOffset int
 	// Error is a non-empty string when a repository call for this column failed.
 	// The renderer shows an inline error row at the top of the column content.
 	Error string
@@ -87,19 +92,54 @@ func Render(state State) string {
 			innerWidth = 1
 		}
 
+		// innerHeight is the number of content rows that fit inside the section
+		// borders. FormSection reserves 2 lines for top and bottom borders.
+		innerHeight := max(1, columnHeight-2)
+
+		// Build all rendered rows for this column.
 		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx)
+
+		// Apply scroll window: slice to [offset : offset+innerHeight] so that
+		// the selected row is always visible. Only slice when not loading (skeleton
+		// / stale-refresh paths manage their own row counts).
+		displayRows := rows
+		if !col.Loading && len(rows) > 0 {
+			offset := col.ScrollOffset
+			if offset < 0 {
+				offset = 0
+			}
+			if offset > len(rows) {
+				offset = len(rows)
+			}
+			end := offset + innerHeight
+			if end > len(rows) {
+				end = len(rows)
+			}
+			displayRows = rows[offset:end]
+		}
+
+		// Compute header badge.
+		// Show "N of M" whenever the rendered window is strictly smaller than
+		// len(rows) — i.e. the scroll window clips the row list — regardless
+		// of TotalIsExact so the user always knows when rows are hidden.
+		// Fall back to the existing logic when all rows fit in the window.
 		var topRight string
-		if col.TotalIsExact {
+		visibleCount := len(displayRows)
+		switch {
+		case !col.Loading && visibleCount < len(rows):
+			topRight = fmt.Sprintf("%d of %d", visibleCount, col.Total)
+		case col.TotalIsExact:
 			topRight = fmt.Sprintf("%d", col.Total)
-		} else {
+		default:
 			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
 		}
+
 		renderedCols = append(renderedCols, styles.FormSection(styles.FormSectionConfig{
 			Width:              columnWidths[idx],
 			Height:             columnHeight,
 			TopLeft:            col.Title,
 			TopRight:           topRight,
-			Content:            rows,
+			Content:            displayRows,
 			Focused:            (start + idx) == state.FocusedColumn,
 			FocusedBorderColor: styles.BorderHighlightFocusColor,
 		}))

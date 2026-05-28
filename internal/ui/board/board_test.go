@@ -248,15 +248,19 @@ func TestSkeletonRows(t *testing.T) {
 // TestDoneColumnHeaderBadge verifies that the Done column renders the correct
 // header badge depending on whether the row list is truncated.
 //
-//   - TotalIsExact=true  → exact count, no lower-bound "+" or "N of M"
-//   - TotalIsExact=false → "N of M" affordance (e.g. "50 of 75"), never "75+"
+// After the scroll-window fix (b38b.4), the renderer shows "N of M" whenever
+// the scroll window is smaller than the full row list — regardless of
+// TotalIsExact. The invariants are:
+//
+//   - When all rows fit in the window: show exact count, no "+" or "N of M".
+//   - When the window clips rows: show "N of M", never "75+".
 //
 // This covers the fix for bug beads-workbench-2ev4.3: an exact closed-count
 // was rendered as "75+" (lower-bound notation) because the row list was capped.
 func TestDoneColumnHeaderBadge(t *testing.T) {
 	t.Parallel()
 
-	makeState := func(rows int, total int, exact bool) State {
+	makeState := func(rows int, total int, exact bool, height int) State {
 		issues := make([]domain.IssueSummary, rows)
 		for i := range issues {
 			issues[i] = domain.IssueSummary{
@@ -270,7 +274,7 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 			DashboardTitle: "Test",
 			FocusedColumn:  0,
 			Width:          100,
-			Height:         24,
+			Height:         height,
 			Columns: []Column{{
 				Title:        "Done",
 				Rows:         issues,
@@ -280,24 +284,41 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 		}
 	}
 
-	t.Run("exact count shows plain number without plus", func(t *testing.T) {
-		state := makeState(75, 75, true)
+	t.Run("small exact column fits in window — plain number no plus no N of M", func(t *testing.T) {
+		// 5 rows, total=5, exact=true, height=24 → window=21 — all 5 rows fit.
+		state := makeState(5, 5, true, 24)
 		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
 
-		if !strings.Contains(plain, "75") {
-			t.Fatalf("expected total count 75 in header, got:\n%s", plain)
+		if !strings.Contains(plain, "5") {
+			t.Fatalf("expected total count 5 in header, got:\n%s", plain)
 		}
-		if strings.Contains(plain, "75+") {
+		if strings.Contains(plain, "5+") {
 			t.Fatalf("exact count must not render with lower-bound '+', got:\n%s", plain)
 		}
 		if strings.Contains(plain, "of") {
-			t.Fatalf("exact count must not render 'N of M', got:\n%s", plain)
+			t.Fatalf("exact count must not render 'N of M' when all rows fit, got:\n%s", plain)
+		}
+	})
+
+	t.Run("window clips rows — shows N of M not N+", func(t *testing.T) {
+		// 75 rows, total=75, height=24 → window ~21 → clips → shows "N of 75".
+		// The exact N depends on window arithmetic; verify "of 75" and no "75+".
+		state := makeState(75, 75, true, 24)
+		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
+
+		if !strings.Contains(plain, "of 75") {
+			t.Fatalf("expected 'N of 75' badge when window clips rows, got:\n%s", plain)
+		}
+		if strings.Contains(plain, "75+") {
+			t.Fatalf("clipped rows must not render lower-bound '75+', got:\n%s", plain)
 		}
 	})
 
 	t.Run("truncated list shows N of M not N+", func(t *testing.T) {
-		// 50 visible rows, 75 total — the classic Done-column cap scenario.
-		state := makeState(50, 75, false)
+		// 50 visible rows, 75 total, TotalIsExact=false, tall terminal → all 50 fit.
+		// Window = height-3 = 77, so all 50 rows fit.
+		// The header should show "50 of 75" because TotalIsExact=false (DB has more).
+		state := makeState(50, 75, false, 80)
 		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
 
 		if !strings.Contains(plain, "50 of 75") {
@@ -307,6 +328,59 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 			t.Fatalf("truncated list must not render exact count as lower-bound '75+', got:\n%s", plain)
 		}
 	})
+}
+
+// TestRenderLargeColumnScrollWindowGolden verifies the board renderer with a
+// large column + non-zero ScrollOffset. The header must show "N of M" and the
+// visible rows must match the scroll window (offset=10, window ~8 rows).
+func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
+	t.Parallel()
+
+	// 50 rows, ScrollOffset=20, height=12 → innerHeight=10 → window shows rows 20..29.
+	const rowCount = 50
+	issues := make([]domain.IssueSummary, rowCount)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("bw-%d", i),
+			Title: fmt.Sprintf("Issue number %d", i),
+			Type:  "task",
+		}
+	}
+
+	state := State{
+		DashboardTitle: "Test",
+		FocusedColumn:  0,
+		Width:          80,
+		Height:         12,
+		Columns: []Column{{
+			Title:        "Ready",
+			Rows:         issues,
+			SelectedRow:  20,
+			ScrollOffset: 20,
+			Total:        rowCount,
+			TotalIsExact: true,
+		}},
+	}
+
+	rendered := Render(state)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(rendered, "")
+
+	// Header must show "N of 50".
+	if !strings.Contains(plain, "of 50") {
+		t.Errorf("expected 'of 50' in header, got:\n%s", plain)
+	}
+
+	// First row in window must be row 20.
+	if !strings.Contains(plain, "number 20") {
+		t.Errorf("expected row 20 to be first visible, got:\n%s", plain)
+	}
+
+	// Row 0 must NOT appear (before the window).
+	if strings.Contains(plain, "number 0") {
+		t.Errorf("expected row 0 to be hidden by scroll, got:\n%s", plain)
+	}
+
+	assertGoldenNormalized(t, []byte(rendered), "large_column_window.golden")
 }
 
 func assertEqualColumnHeights(t *testing.T, view string) {

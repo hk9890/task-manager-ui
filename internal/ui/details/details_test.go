@@ -1,6 +1,7 @@
 package details
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1162,4 +1163,51 @@ func TestSkeletonFalseStillShowsRealCountsAndDeps(t *testing.T) {
 	if strings.Contains(plain, ": "+issuerow.SkeletonGlyph) {
 		t.Errorf("expected no skeleton glyphs in non-skeleton render Counts, but found in:\n%s", plain)
 	}
+}
+
+// TestRenderLongDepsWindowGolden verifies that a deps pane with more rows than
+// the inner window shows "N of M" in the header after a non-zero scroll offset.
+func TestRenderLongDepsWindowGolden(t *testing.T) {
+	t.Parallel()
+
+	// Build 30 dep refs: 10 BlockedBy + 10 Blocks + 10 Related.
+	makeRefs := func(prefix string, n int) []domain.IssueReference {
+		refs := make([]domain.IssueReference, n)
+		for i := range refs {
+			refs[i] = domain.IssueReference{
+				ID:    fmt.Sprintf("bw-%s%02d", prefix, i),
+				Title: fmt.Sprintf("%s issue %d", prefix, i),
+			}
+		}
+		return refs
+	}
+
+	detail := domain.IssueDetail{
+		Summary:   domain.IssueSummary{ID: "bw-main", Title: "Main issue", Status: "open", Type: "task", Priority: 1},
+		BlockedBy: makeRefs("bb", 10),
+		Blocks:    makeRefs("bl", 10),
+		Related:   makeRefs("re", 10),
+	}
+
+	// Use three-pane width and small height so the deps pane is clipped.
+	// At height=15, innerHeight=13; with 30 deps + 4 group headers + 3 separators
+	// = 37 rendered lines, only 13 are visible.
+	view := Render(State{
+		SelectionID:              "bw-main",
+		Detail:                   detail,
+		BrowserItems:             append(append(detail.BlockedBy, detail.Blocks...), detail.Related...),
+		BrowserSelectedIssueID:   "bw-bb00",
+		DependenciesScrollOffset: 10,
+		Width:                    InspectorThreeColumnMinWidth,
+		Height:                   15,
+	})
+
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+
+	// Header must show "N of M" since the window clips.
+	if !strings.Contains(plain, "of") {
+		t.Fatalf("expected 'N of M' in Dependencies header when window clips, got:\n%s", plain)
+	}
+
+	assertGolden(t, []byte(view), "long_deps_window.golden")
 }

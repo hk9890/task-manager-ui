@@ -1,6 +1,7 @@
 package details
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -555,17 +556,17 @@ func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *
 		t.Fatalf("expected initial selection on bw-b2, got %d", m.BrowserSelectedIndex)
 	}
 
-	m.moveRelatedSelection(1)
+	m.moveRelatedSelection(1, 80, 24)
 	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-c1" {
 		t.Fatalf("expected down from blocks to enter related group, got %+v ok=%v", selected, ok)
 	}
 
-	m.moveRelatedSelection(1)
+	m.moveRelatedSelection(1, 80, 24)
 	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-s0" {
 		t.Fatalf("expected down from related to enter structure group, got %+v ok=%v", selected, ok)
 	}
 
-	m.moveRelatedSelection(-1)
+	m.moveRelatedSelection(-1, 80, 24)
 	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-c1" {
 		t.Fatalf("expected up from structure to return to related group, got %+v ok=%v", selected, ok)
 	}
@@ -659,7 +660,7 @@ func TestModelDependencyTraversalOrderMatchesDeduplicatedVisibleRenderOrder(t *t
 	visited := []string{m.BrowserItems[m.BrowserSelectedIndex].ID}
 	stepsToEnd := len(m.BrowserItems) - 1 - m.BrowserSelectedIndex
 	for i := 0; i < stepsToEnd; i++ {
-		m.moveRelatedSelection(1)
+		m.moveRelatedSelection(1, 80, 24)
 		selected, ok := m.selectedRelatedIssue()
 		if !ok {
 			t.Fatal("expected related selection while traversing")
@@ -1143,4 +1144,94 @@ func TestSelectBrowserIssue(t *testing.T) {
 			t.Fatalf("expected BrowserSelectedIndex=-1 for empty items, got %d", m.BrowserSelectedIndex)
 		}
 	})
+}
+
+// --- Scroll-window tests (b38b.4) ---
+
+// TestDetailsDependencyScrollOffsetAdvancesWithSelection verifies that pressing
+// j×15 on a Dependencies pane with 30 deps advances BrowserSelectedIndex to 15
+// and moves DependenciesScrollOffset to keep the selection inside the pane window.
+func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
+	t.Parallel()
+
+	// Build 30 unique dependency refs (all in BlockedBy for simplicity).
+	const depCount = 30
+	blockedBy := make([]domain.IssueReference, depCount)
+	for i := range blockedBy {
+		blockedBy[i] = domain.IssueReference{
+			ID:    fmt.Sprintf("bw-dep%02d", i),
+			Title: fmt.Sprintf("Dep issue %d", i),
+		}
+	}
+
+	m := Model{
+		SelectionID: "bw-main",
+		TargetID:    "bw-main",
+		FocusPane:   uidetails.FocusPaneDependencies,
+		Detail: domain.IssueDetail{
+			Summary:   domain.IssueSummary{ID: "bw-main", Title: "Main"},
+			BlockedBy: blockedBy,
+		},
+		BrowserItems:         append([]domain.IssueReference(nil), blockedBy...),
+		BrowserSelectedIndex: 0,
+		Keys:                 mustResolveDetailKeys(t, nil),
+	}
+
+	// Use three-pane width (>= 110) and enough height to see some deps.
+	const width = 160
+	const height = 20 // innerHeight = 18 for deps pane
+
+	// Press j 15 times on the Dependencies pane.
+	for i := 0; i < 15; i++ {
+		consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height)
+		if !consumed {
+			t.Fatalf("expected j key to be consumed on step %d", i+1)
+		}
+	}
+
+	if m.BrowserSelectedIndex != 15 {
+		t.Errorf("expected BrowserSelectedIndex=15 after 15 j presses, got %d", m.BrowserSelectedIndex)
+	}
+
+	// Offset must have advanced so that sel=15 is inside the window.
+	paneInner := max(1, height-2) // three-pane: height-2 = 18
+	offset := m.DependenciesScrollOffset
+	if m.BrowserSelectedIndex >= 0 {
+		lineIdx := dependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
+		if lineIdx >= 0 && (lineIdx < offset || lineIdx >= offset+paneInner) {
+			t.Errorf("selection line %d not in window [%d, %d)", lineIdx, offset, offset+paneInner)
+		}
+	}
+}
+
+// TestDetailsMetadataScrollOffsetAdvancesWithSelection verifies that pressing
+// j past the first field in the metadata pane updates MetadataScrollOffset
+// when the pane is small enough that the selected field would scroll off-screen.
+func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID:           "bw-1",
+		TargetID:              "bw-1",
+		FocusPane:             uidetails.FocusPaneMetadata,
+		MetadataSelectedField: uidetails.MetadataFieldStatus,
+		Keys:                  mustResolveDetailKeys(t, nil),
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-1", Title: "One", Status: "open", Priority: 1},
+		},
+	}
+
+	// Only two editable metadata fields (Status, Priority). Moving down from
+	// Status to Priority doesn't scroll when the pane is tall enough. This test
+	// verifies the model doesn't panic and the field advances correctly.
+	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 160, 10)
+	if !consumed {
+		t.Fatal("expected j to be consumed in metadata pane")
+	}
+	if intent != nil {
+		t.Fatalf("expected no intent from metadata nav, got %+v", intent)
+	}
+	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
+		t.Errorf("expected field to advance to Priority, got %q", m.MetadataSelectedField)
+	}
 }

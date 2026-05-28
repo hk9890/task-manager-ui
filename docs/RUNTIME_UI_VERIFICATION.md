@@ -204,3 +204,47 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 - `N` does not change after resize: `loadDashboardCmd` is not passing `sectionItemCapacity()` into `DashboardOptions.ClosedLimit`, or the repository impl is ignoring it. Check `internal/mode/board/model.go` and the relevant repository impl.
 - `N` does not equal `height - 3`: `sectionItemCapacity()` may not be receiving the updated window size — check the `WindowSizeMsg` handler in `internal/mode/board/model.go`.
 - `M` equals `N` after resize: `ClosedTotal` is being computed after the limit slice instead of before. Check `internal/repository/memory/repository.go` and `internal/repository/beads/lean_reads.go`.
+
+## 6) Board and details scroll-window visibility: EnsureVisible (b38b.4)
+
+**What this verifies:** After pressing `j` past the visible window boundary, the selected row stays visible (the `›` chevron remains on screen) and the column/pane header shows `N of M` to indicate the window is clipping the full list.
+
+**Pre-conditions:**
+
+- Repository has more than 22 ready issues (so that 30 `j` presses push past the viewport at height=25).
+- `bwb` is built.
+
+**Procedure — board Ready column:**
+
+1. Open a terminal at height=25 (22 usable rows per column after borders).
+2. Launch `bwb` against a qualifying repo (e.g. `/home/hans/dev/github/dtctl-test` which has >89 ready issues):
+   ```
+   (cd /home/hans/dev/github/dtctl-test && BD_NON_INTERACTIVE=1 /tmp/bwb)
+   ```
+3. Move focus to the **Ready** column (press `l` or `h` until the Ready header is highlighted).
+4. Press `j` 30 times.
+5. Confirm:
+   - The status line at the bottom shows `Selected:` followed by an issue ID that is deeper in the list (not the topmost issue).
+   - The `›` chevron is visible in the Ready column next to the selected issue.
+   - The Ready column header reads `N of M` (e.g. `22 of 89`) where `N < M`.
+
+**Procedure — details Dependencies pane:**
+
+1. From the board, open an issue that has more than 12 dependency relations (blocked-by + blocks + related).
+2. In the detail view, press `h` to move focus to the Dependencies pane (left pane).
+3. Press `j` until the selection moves past the visible window boundary.
+4. Confirm:
+   - The `›` chevron remains adjacent to the selected dependency row.
+   - The Dependencies pane header shows `N of M` (e.g. `8 of 15`).
+
+**Expected outcome:**
+
+| Step | Pass condition | Fail signal |
+|------|---------------|-------------|
+| Board j×30 | `›` visible in Ready column; header `N of M` with N<M | No chevron on screen; header shows plain count |
+| Details deps scroll | `›` visible in deps pane; header `N of M` | No chevron; plain header count |
+
+**Failure modes and diagnostics:**
+
+- `›` disappears after pressing `j` past the viewport: `EnsureVisible` is not being called from `moveRow` (board) or `moveRelatedSelection` (details). Check `internal/mode/board/model.go` and `internal/mode/details/model.go`.
+- Header shows plain count instead of `N of M` when window clips: the `visibleCount < len(rows)` branch in `internal/ui/board/board.go:Render` is not triggered, or the deps pane header in `internal/ui/details/details.go` is not updated. Check the header logic in both renderers.

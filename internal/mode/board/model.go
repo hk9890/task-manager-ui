@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/repository"
 	uiboard "github.com/hk9890/beads-workbench/internal/ui/board"
+	"github.com/hk9890/beads-workbench/internal/ui/scroll"
 )
 
 // Section titles for the fixed four-column layout.
@@ -83,6 +84,9 @@ type Model struct {
 
 	focusedColumn int
 	selectedRow   map[int]int
+	// scrollOffset tracks the viewport top-row offset for each column so that
+	// the selected row is always within the visible window.
+	scrollOffset map[int]int
 
 	refreshMode   refreshMode
 	refreshAnchor *refreshAnchor
@@ -109,12 +113,13 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 	}
 
 	m := &Model{
-		ctx:         ctx,
-		repo:        repo,
-		logger:      logger,
-		keys:        keys,
-		selectedRow: map[int]int{},
-		refreshMode: refreshModeManual,
+		ctx:          ctx,
+		repo:         repo,
+		logger:       logger,
+		keys:         keys,
+		selectedRow:  map[int]int{},
+		scrollOffset: map[int]int{},
+		refreshMode:  refreshModeManual,
 	}
 	m.columns = initialLoadingColumns()
 	return m
@@ -222,6 +227,7 @@ func (m *Model) View(skeletonPhase int) string {
 			Title:        col.title,
 			Rows:         col.issues,
 			SelectedRow:  selectedRow,
+			ScrollOffset: m.scrollOffset[colIdx],
 			Total:        col.total,
 			TotalIsExact: col.exact,
 			Loading:      col.loading,
@@ -264,6 +270,12 @@ func (m *Model) sectionItemCapacity() int {
 // state without exposing internals to other packages.
 func (m *Model) CurrentSelection() *mode.Selection {
 	return m.currentSelection()
+}
+
+// ScrollOffsetForColumn returns the per-column scroll offset for the given
+// column index. This is a test seam exported for assertions in model_test.go.
+func (m *Model) ScrollOffsetForColumn(colIdx int) int {
+	return m.scrollOffset[colIdx]
 }
 
 // IsLoading reports whether any column is still in its loading state.
@@ -320,9 +332,10 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.refreshAnchor = anchor
 
 	if rm == refreshModeInit || rm == refreshModeManual {
-		// Full reset: move focus to col 0, clear selection map, reset columns.
+		// Full reset: move focus to col 0, clear selection and scroll maps, reset columns.
 		m.focusedColumn = 0
 		m.selectedRow = map[int]int{}
+		m.scrollOffset = map[int]int{}
 		m.columns = initialLoadingColumns()
 	}
 
@@ -376,10 +389,13 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false, err: loadErr},
 	}
 
-	// Ensure selectedRow map has an entry for each column.
+	// Ensure selectedRow and scrollOffset maps have an entry for each column.
 	for i := range m.columns {
 		if _, ok := m.selectedRow[i]; !ok {
 			m.selectedRow[i] = 0
+		}
+		if _, ok := m.scrollOffset[i]; !ok {
+			m.scrollOffset[i] = 0
 		}
 	}
 
@@ -546,6 +562,11 @@ func (m *Model) moveRow(delta int) {
 		idx = len(issues) - 1
 	}
 	m.selectedRow[m.focusedColumn] = idx
+	m.scrollOffset[m.focusedColumn] = scroll.EnsureVisible(
+		m.scrollOffset[m.focusedColumn],
+		idx,
+		m.sectionItemCapacity(),
+	)
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {
