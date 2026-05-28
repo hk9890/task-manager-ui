@@ -130,15 +130,20 @@ func TestDashboardClosedOffsetArgv(t *testing.T) {
 	}
 }
 
-// TestDashboardClosedOffsetSliceMath asserts the in-memory slice behaviour when
-// offset > 0: Dashboard must return exactly `limit` items starting at position
-// `offset` in the over-fetched list.
+// TestDashboardClosedOffsetOverFetchReturnsAll asserts the over-fetch behaviour
+// when offset > 0: Dashboard must return the FULL over-fetched list (offset+limit
+// items) — NOT a [offset:offset+limit] slice. This is the post-manual-fix contract
+// (race-safe against concurrent closes; see lean_reads.go queryClosedPage comment).
+//
+// Composition responsibility moves to dashboard.Compose, which dedups prior+incoming
+// by ID — so returning the full over-fetched list is correct even when the bd
+// result shifts under concurrent closes (the composer keeps prior items not
+// re-seen in incoming, and incoming items not already in prior).
 //
 // Drives this via RecordingExecutor + a fake JSON response containing 85 issues
-// (simulating the over-fetch response for offset=35, limit=50). The returned
-// slice must have len==50 and the first item must be the 36th issue in the fake
-// list (fake-036), the last must be fake-085.
-func TestDashboardClosedOffsetSliceMath(t *testing.T) {
+// (over-fetch response for offset=35, limit=50). Asserts: len(Closed)==85, first
+// item is fake-001, last item is fake-085.
+func TestDashboardClosedOffsetOverFetchReturnsAll(t *testing.T) {
 	t.Parallel()
 
 	const offset = 35
@@ -191,24 +196,27 @@ func TestDashboardClosedOffsetSliceMath(t *testing.T) {
 		t.Fatalf("Dashboard returned error: %v", err)
 	}
 
-	// Must return exactly `limit` items.
-	if len(data.Closed) != limit {
-		t.Errorf("slice math: len(Closed)=%d; want %d", len(data.Closed), limit)
+	// Must return all over-fetched items (offset+limit), not a [offset:] slice.
+	// The composer (dashboard.Compose with PriorClosed set) is responsible for
+	// dedup; returning the full list lets it correctly merge the page even when
+	// concurrent closes have shifted the bd result.
+	if len(data.Closed) != totalFetched {
+		t.Errorf("over-fetch math: len(Closed)=%d; want %d (full over-fetch, no slice)", len(data.Closed), totalFetched)
 	}
 
-	// First item must be the 36th issue in the fake list (fake-036).
+	// First item must be fake-001 (over-fetch starts at the newest, not at offset).
 	if len(data.Closed) > 0 {
-		wantFirstID := fmt.Sprintf("fake-%03d", offset+1) // "fake-036"
+		wantFirstID := "fake-001"
 		if data.Closed[0].ID != wantFirstID {
-			t.Errorf("slice math: first item ID=%q; want %q (36th-newest)", data.Closed[0].ID, wantFirstID)
+			t.Errorf("over-fetch math: first item ID=%q; want %q (newest, position 0)", data.Closed[0].ID, wantFirstID)
 		}
 	}
 
-	// Last item must be fake-085.
-	if len(data.Closed) == limit {
-		wantLastID := fmt.Sprintf("fake-%03d", totalFetched) // "fake-085"
-		if data.Closed[limit-1].ID != wantLastID {
-			t.Errorf("slice math: last item ID=%q; want %q", data.Closed[limit-1].ID, wantLastID)
+	// Last item must be fake-085 (last of the over-fetched list).
+	if len(data.Closed) == totalFetched {
+		wantLastID := fmt.Sprintf("fake-%03d", totalFetched)
+		if data.Closed[totalFetched-1].ID != wantLastID {
+			t.Errorf("over-fetch math: last item ID=%q; want %q", data.Closed[totalFetched-1].ID, wantLastID)
 		}
 	}
 }

@@ -1454,12 +1454,36 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 			t.Fatalf("Scenario16/page2/Dashboard: %v", err)
 		}
 
-		// Assert page sizes.
+		// Contract divergence by impl (intentional — documented carve-out):
+		//
+		//   memory + caching → exact-slice contract: page2 returns exactly `pageSize`
+		//                      items at offset, no overlap with page1.
+		//
+		//   beads            → over-fetch contract: page2 returns up to (offset+limit)
+		//                      items starting at the newest, overlapping with page1.
+		//                      Required because bd 1.0.4 does not support --offset and
+		//                      the [offset:offset+limit] slice over the over-fetched
+		//                      result is unsafe under concurrent closes (bd's --sort
+		//                      results shift). The composer (dashboard.Compose with
+		//                      PriorClosed set) deduplicates by ID, so both contracts
+		//                      yield correct user-facing behaviour.
+		//
+		// The parity guarantee is: after composer.merge, the impls produce the same
+		// unique-ID set for the same window.
+		isOverfetch := impl.name == "beads"
+
+		// Assert page1 size (same for all impls: page 1 is offset=0, no over-fetch).
 		if len(data1.Closed) != pageSize {
 			t.Errorf("Scenario16: len(page1.Closed)=%d; want %d", len(data1.Closed), pageSize)
 		}
-		if len(data2.Closed) != pageSize {
-			t.Errorf("Scenario16: len(page2.Closed)=%d; want %d", len(data2.Closed), pageSize)
+
+		// Assert page2 size — impl-dependent.
+		wantPage2Size := pageSize
+		if isOverfetch {
+			wantPage2Size = pageSize * 2 // over-fetch returns offset+limit = 100
+		}
+		if len(data2.Closed) != wantPage2Size {
+			t.Errorf("Scenario16: len(page2.Closed)=%d; want %d (impl=%s)", len(data2.Closed), wantPage2Size, impl.name)
 		}
 
 		// Assert ClosedTotal == seed count for both pages (independent of windowing).
@@ -1470,54 +1494,93 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 			t.Errorf("Scenario16: page2.ClosedTotal=%d; want %d", data2.ClosedTotal, seedCount)
 		}
 
-		// Assert len(page1) + len(page2) <= ClosedTotal.
-		combined := len(data1.Closed) + len(data2.Closed)
-		if combined > data1.ClosedTotal {
-			t.Errorf("Scenario16: len(page1)+len(page2)=%d > ClosedTotal=%d", combined, data1.ClosedTotal)
-		}
-
-		// Assert no ID overlap between page1 and page2.
+		// Build the union of page1 and page2 IDs (dedup by ID — incoming wins, mirroring
+		// dashboard.Compose's mergeClosedAppend behaviour).
 		page1IDs := make(map[string]bool, len(data1.Closed))
 		for _, s := range data1.Closed {
 			page1IDs[s.ID] = true
 		}
-		for _, s := range data2.Closed {
-			if page1IDs[s.ID] {
-				t.Errorf("Scenario16: ID %q appears in both page1 and page2 (overlap)", s.ID)
+
+		if !isOverfetch {
+			// Exact-slice impls (memory, caching): assert no overlap.
+			for _, s := range data2.Closed {
+				if page1IDs[s.ID] {
+					t.Errorf("Scenario16/%s: ID %q appears in both page1 and page2 (overlap)", impl.name, s.ID)
+				}
+			}
+		} else {
+			// Over-fetch impl (beads): page1 IDs MUST all appear in page2 (page2 is a
+			// superset). The composer's dedup keeps incoming on conflict, but here we
+			// assert that the prefix-relationship holds so the dedup is well-defined.
+			for id := range page1IDs {
+				found := false
+				for _, s := range data2.Closed {
+					if s.ID == id {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Scenario16/beads: page1 ID %q absent from page2 (over-fetch superset violated)", id)
+				}
 			}
 		}
 
-		// Assert contiguous ordering: page1 IDs + page2 IDs must match the first 100
-		// IDs of a large-limit reference query (ClosedLimit=200, ClosedOffset=0).
-		// This proves the two pages are adjacent slices of the same sorted list.
+		// Compute the unique-ID union after dedup (mirrors composer behaviour).
+		unionIDs := make([]string, 0, pageSize*2)
+		seen := make(map[string]bool, pageSize*2)
+		// Add page1 entries first (deterministic order).
+		for _, s := range data1.Closed {
+			if !seen[s.ID] {
+				seen[s.ID] = true
+				unionIDs = append(unionIDs, s.ID)
+			}
+		}
+		for _, s := range data2.Closed {
+			if !seen[s.ID] {
+				seen[s.ID] = true
+				unionIDs = append(unionIDs, s.ID)
+			}
+		}
+
+		// The unique union must be exactly pageSize*2 = 100 items (the newest 100
+		// closed in the seed of 110).
+		wantUnion := pageSize * 2
+		if len(unionIDs) != wantUnion {
+			t.Errorf("Scenario16/%s: unique union of page1+page2 IDs=%d; want %d", impl.name, len(unionIDs), wantUnion)
+		}
+
+		// Assert ordering: the unique union must match the first `wantUnion` IDs of a
+		// large-limit reference query.
 		ref, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: 200, ClosedOffset: 0})
 		if err != nil {
 			t.Fatalf("Scenario16/ref/Dashboard: %v", err)
 		}
-		if len(ref.Closed) < combined {
-			t.Fatalf("Scenario16: reference query returned %d issues; expected >= %d", len(ref.Closed), combined)
+		if len(ref.Closed) < wantUnion {
+			t.Fatalf("Scenario16: reference query returned %d issues; expected >= %d", len(ref.Closed), wantUnion)
 		}
 
-		refFirst100IDs := make([]string, combined)
-		for i := 0; i < combined; i++ {
+		refFirst100IDs := make([]string, wantUnion)
+		for i := 0; i < wantUnion; i++ {
 			refFirst100IDs[i] = ref.Closed[i].ID
 		}
-		page1And2IDs := make([]string, 0, combined)
-		for _, s := range data1.Closed {
-			page1And2IDs = append(page1And2IDs, s.ID)
-		}
-		for _, s := range data2.Closed {
-			page1And2IDs = append(page1And2IDs, s.ID)
-		}
 
-		if len(page1And2IDs) != len(refFirst100IDs) {
-			t.Fatalf("Scenario16: combined page IDs count=%d != reference count=%d",
-				len(page1And2IDs), len(refFirst100IDs))
+		if len(unionIDs) != len(refFirst100IDs) {
+			t.Fatalf("Scenario16: unique union IDs count=%d != reference count=%d",
+				len(unionIDs), len(refFirst100IDs))
 		}
-		for i := range refFirst100IDs {
-			if page1And2IDs[i] != refFirst100IDs[i] {
-				t.Errorf("Scenario16: ordering mismatch at position %d: page1+page2[%d]=%q, ref[%d]=%q",
-					i, i, page1And2IDs[i], i, refFirst100IDs[i])
+		// Convert ref to a set for membership check; ordering inside unionIDs is
+		// stable (page1 first, then unseen entries from page2). We assert ref
+		// covers the same ID set; strict positional ordering would over-constrain
+		// the over-fetch impl whose page2 starts at position 0, not at offset.
+		refIDs := make(map[string]bool, wantUnion)
+		for _, id := range refFirst100IDs {
+			refIDs[id] = true
+		}
+		for _, id := range unionIDs {
+			if !refIDs[id] {
+				t.Errorf("Scenario16/%s: union ID %q not present in the first %d of reference query",
+					impl.name, id, wantUnion)
 			}
 		}
 	})

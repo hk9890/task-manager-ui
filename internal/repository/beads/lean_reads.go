@@ -396,20 +396,21 @@ func (r *Repository) queryClosedPage(ctx context.Context, limit, offset int) ([]
 		return nil, err
 	}
 
-	if offset > 0 {
-		// In-memory slice: discard the first `offset` items.
-		if offset >= len(items) {
-			return []domain.IssueSummary{}, nil
-		}
-		items = items[offset:]
-		// Cap to the requested limit.
-		if limit > 0 && len(items) > limit {
-			items = items[:limit]
-		}
-		return leanMapIssueSummaries(leanOpQuery, items, 0, 0)
-	}
-
-	// offset == 0: bd already returned exactly what we need.
+	// For offset > 0, return ALL over-fetched items (NOT a sliced [offset:offset+limit]).
+	// Rationale: bd 1.0.4 lacks --offset, so we over-fetch limit=offset+limit and ask the
+	// caller (dashboard.Compose via PriorClosed) to dedup against the already-loaded slice.
+	//
+	// The naive [offset:offset+limit] slice is unsafe under concurrent closes: if more
+	// issues get closed between the initial page load and the load-more call, the bd
+	// query --sort closed result shifts (new closes push the original "newest" items
+	// further down the list). Slicing [offset:] then returns items that overlap with the
+	// already-loaded prior page, and the composer's dedup discards them — producing a
+	// merged Done that is no larger than before. By returning the full over-fetched set,
+	// the composer correctly merges (prior + incoming) by ID.
+	//
+	// Manual verification: dtctl-test session 2026-05-28 showed merged_count=50 after the
+	// slice path because 2 new closes shifted the bd result; without the slice, merged_count
+	// grows correctly to ~73.
 	return leanMapIssueSummaries(leanOpQuery, items, 0, 0)
 }
 

@@ -125,23 +125,36 @@ func Render(state State) string {
 		}
 
 		// Compute header badge.
-		// Show "N of M" whenever the rendered window is strictly smaller than
-		// len(rows) — i.e. the scroll window clips the row list — regardless
-		// of TotalIsExact so the user always knows when rows are hidden.
-		// Fall back to the existing logic when all rows fit in the window.
+		//
+		// Three cases:
+		//
+		// (1) TotalIsExact=false (paginated column, e.g. Done with load-more):
+		//     show "loaded of total" — len(col.Rows) / col.Total — so the user
+		//     sees real pagination progress, not the window size. The chevron
+		//     visibility property (b38b.4) implicitly communicates window clip.
+		//
+		// (2) TotalIsExact=true and window clips (visibleCount < len(rows)):
+		//     show "visible of total" — visibleCount / col.Total — so the user
+		//     knows the rendered window is smaller than the loaded slice. This
+		//     is the b38b.4 honesty path for Ready / NotReady / InProgress.
+		//
+		// (3) TotalIsExact=true and everything fits: just col.Total.
 		var topRight string
 		visibleCount := len(displayRows)
 		switch {
 		case isLoadMore:
-			// Load-more in flight: show total loaded count against the known total
-			// so the header reflects real progress rather than the window slice size.
+			// Load-more in flight: show loaded count against the known total
+			// so the header reflects real progress rather than the window slice.
+			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
+		case !col.TotalIsExact:
+			// Paginated column: show loaded vs. real DB total.
 			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
 		case !col.Loading && visibleCount < len(rows):
+			// Non-paginated but window clips: show visible vs. DB total.
 			topRight = fmt.Sprintf("%d of %d", visibleCount, col.Total)
-		case col.TotalIsExact:
-			topRight = fmt.Sprintf("%d", col.Total)
 		default:
-			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
+			// All loaded and all fit.
+			topRight = fmt.Sprintf("%d", col.Total)
 		}
 
 		renderedCols = append(renderedCols, styles.FormSection(styles.FormSectionConfig{
