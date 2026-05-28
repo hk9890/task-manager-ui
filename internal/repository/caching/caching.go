@@ -496,9 +496,6 @@ func (c *CachingRepository) SaveNow() error {
 // replaces any previously cached Dashboard. ForceFresh is a request modifier,
 // not a cache key — it does not change the keying logic.
 //
-// Two concurrent ForceFresh reloads each fan out to backing; acceptable because
-// manual reload is keystroke-driven and idempotent (per grill Q2).
-//
 // Caching strategy for variable ClosedLimit (option a — re-fetch on change):
 // A different requested ClosedLimit is treated as a cache miss, distinct from
 // the dashboardDirty flag. This keeps ForceFresh orthogonal: we never silently
@@ -507,9 +504,36 @@ func (c *CachingRepository) SaveNow() error {
 // backing round-trip on a resize event, which is acceptable because resize
 // events are rare compared to steady-state reads.
 // See internal/repository/caching/doc.go for the full rationale.
+//
+// Caching strategy for ClosedOffset > 0 (pass-through):
+// When opts.ClosedOffset > 0 the caller is requesting a deep page of closed
+// issues that is not part of the first-page snapshot held in the cache. The
+// cache fast-path is bypassed and backing is called unconditionally. On success
+// the returned Closed slice is appended to the persisted dashboardCache snapshot
+// (deduped by ID, latest version wins) and ClosedTotal is updated. This makes
+// subsequent saves carry the full known closed set. The first-page cache
+// (ClosedOffset == 0 path) is NOT modified by this call: its dirty flag and
+// lastDashboardClosedLimit remain unchanged so callers using ClosedOffset == 0
+// continue to receive cached first-page results as before.
 func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
+	}
+
+	// Pass-through path: deep pagination pages bypass the first-page cache.
+	if opts.ClosedOffset > 0 {
+		data, err := c.backing.Dashboard(ctx, opts)
+		if err != nil {
+			return repository.DashboardData{}, err
+		}
+		// Append the returned closed page into the persisted-cache snapshot so
+		// that SaveNow carries the full known closed set. We do NOT touch
+		// dashboardDirty or lastDashboardClosedLimit — the first-page cache
+		// remains valid and unmodified.
+		c.mu.Lock()
+		c.dashboardCache = mergeClosedIntoCache(c.dashboardCache, data)
+		c.mu.Unlock()
+		return data, nil
 	}
 
 	if !opts.ForceFresh {
@@ -539,6 +563,42 @@ func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.Dashb
 	c.mu.Unlock()
 
 	return data, nil
+}
+
+// mergeClosedIntoCache merges the Closed slice from page into the existing
+// dashboardCache snapshot. Issues already in the cache (matched by ID) are
+// replaced with the version from page (latest wins); new issues are appended.
+// ClosedTotal in the returned value is taken from page (backing is authoritative
+// for the total count). All other fields (ReadyExplain, InProgress, Blocked) are
+// left unchanged from existing.
+func mergeClosedIntoCache(existing repository.DashboardData, page repository.DashboardData) repository.DashboardData {
+	if len(page.Closed) == 0 {
+		// Nothing to merge; update ClosedTotal if the page is authoritative.
+		if page.ClosedTotal > 0 {
+			existing.ClosedTotal = page.ClosedTotal
+		}
+		return existing
+	}
+
+	// Build a set of IDs from the incoming page for fast lookup.
+	pageIDs := make(map[string]struct{}, len(page.Closed))
+	for _, issue := range page.Closed {
+		pageIDs[issue.ID] = struct{}{}
+	}
+
+	// Retain existing entries that are NOT overridden by the incoming page.
+	merged := make([]domain.IssueSummary, 0, len(existing.Closed)+len(page.Closed))
+	for _, issue := range existing.Closed {
+		if _, replaced := pageIDs[issue.ID]; !replaced {
+			merged = append(merged, issue)
+		}
+	}
+	// Append all entries from the incoming page (new + replacements).
+	merged = append(merged, page.Closed...)
+
+	existing.Closed = merged
+	existing.ClosedTotal = page.ClosedTotal
+	return existing
 }
 
 // Issue implements repository.Repository.

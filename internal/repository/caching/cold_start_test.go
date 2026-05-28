@@ -32,7 +32,7 @@ func TestColdStart_DashboardFiresBackingReadWhenCacheFileMissing(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{
 				ClosedTotal: 5,
@@ -152,7 +152,7 @@ func TestColdStart_DegenerateFile_DashboardFansOutToBackingOnFirstCall(t *testin
 		}
 	}
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			backingDashCalls++
 			return repository.DashboardData{
 				Closed:      backingIssues,

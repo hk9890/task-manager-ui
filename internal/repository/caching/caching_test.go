@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -28,7 +29,7 @@ type stubRepository struct {
 	mu sync.Mutex
 
 	dashboardCalls int
-	dashboardFn    func(ctx context.Context) (repository.DashboardData, error)
+	dashboardFn    func(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error)
 
 	issueCalls int
 	issueFn    func(ctx context.Context, id string) (domain.IssueDetail, error)
@@ -55,13 +56,13 @@ type stubRepository struct {
 	catalogsFn    func(ctx context.Context) (repository.Catalogs, error)
 }
 
-func (s *stubRepository) Dashboard(ctx context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+func (s *stubRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	s.mu.Lock()
 	s.dashboardCalls++
 	fn := s.dashboardFn
 	s.mu.Unlock()
 	if fn != nil {
-		return fn(ctx)
+		return fn(ctx, opts)
 	}
 	return repository.DashboardData{}, nil
 }
@@ -167,7 +168,7 @@ func TestDashboard_CacheMiss_ThenHit(t *testing.T) {
 		ClosedTotal: 42,
 	}
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return wantData, nil
 		},
 	}
@@ -202,7 +203,7 @@ func TestDashboard_CacheMiss_ThenHit(t *testing.T) {
 func TestDashboard_BackingError_DirtyFlagPreserved(t *testing.T) {
 	callCount := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			callCount++
 			if callCount == 1 {
 				return repository.DashboardData{}, errBacking
@@ -243,7 +244,7 @@ func TestDashboard_ForceFresh_BypassesCacheAndRepopulates(t *testing.T) {
 	freshData := repository.DashboardData{ClosedTotal: 99}
 
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return freshData, nil
 		},
 	}
@@ -266,7 +267,7 @@ func TestDashboard_ForceFresh_BypassesCacheAndRepopulates(t *testing.T) {
 	// Overwrite backing to return stale data so we can distinguish cache-hit
 	// from ForceFresh re-fetch.
 	stub.mu.Lock()
-	stub.dashboardFn = func(_ context.Context) (repository.DashboardData, error) {
+	stub.dashboardFn = func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 		return staleData, nil
 	}
 	stub.mu.Unlock()
@@ -286,7 +287,7 @@ func TestDashboard_ForceFresh_BypassesCacheAndRepopulates(t *testing.T) {
 	// Now update backing to return a new fresh value to confirm ForceFresh uses it.
 	newFreshData := repository.DashboardData{ClosedTotal: 42}
 	stub.mu.Lock()
-	stub.dashboardFn = func(_ context.Context) (repository.DashboardData, error) {
+	stub.dashboardFn = func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 		return newFreshData, nil
 	}
 	stub.mu.Unlock()
@@ -327,7 +328,7 @@ func TestDashboard_NonForceFresh_DoesNotBypassCache(t *testing.T) {
 
 	cachedData := repository.DashboardData{ClosedTotal: 7}
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return cachedData, nil
 		},
 	}
@@ -353,6 +354,262 @@ func TestDashboard_NonForceFresh_DoesNotBypassCache(t *testing.T) {
 	}
 	if stub.dashboardCalls != 1 {
 		t.Fatalf("non-ForceFresh call: expected still 1 backing call (cache hit), got %d", stub.dashboardCalls)
+	}
+}
+
+// ---- ClosedOffset pass-through tests ----
+
+// TestDashboard_ClosedOffset_PassThrough verifies the vtvb.4 caching strategy:
+//  1. A warm cache with ClosedOffset==0 data (35 closed issues) is established.
+//  2. Dashboard(opts{ClosedOffset:35, ClosedLimit:50}) bypasses the cache and
+//     calls backing. The backing receives the call with the correct opts.
+//  3. On success, the returned closed page is appended to the persisted-cache
+//     snapshot (dedup by ID). After the call the snapshot has 85 closed entries
+//     (35 original + 50 from the page).
+//  4. A subsequent Dashboard(opts{ClosedOffset:0}) is served from cache and does
+//     NOT call backing again.
+func TestDashboard_ClosedOffset_PassThrough(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// Build the first-page data: 35 closed issues that will seed the cache.
+	const nFirstPage = 35
+	const nPageTwo = 50
+	const totalClosed = 85
+
+	firstPageClosed := make([]domain.IssueSummary, nFirstPage)
+	for i := range firstPageClosed {
+		firstPageClosed[i] = domain.IssueSummary{
+			ID:     fmt.Sprintf("closed-%03d", i+1),
+			Status: "closed",
+		}
+	}
+	firstPageData := repository.DashboardData{
+		Closed:      firstPageClosed,
+		ClosedTotal: totalClosed, // authoritative total
+	}
+
+	// Build the second-page data: 50 new closed issues (no ID overlap).
+	secondPageClosed := make([]domain.IssueSummary, nPageTwo)
+	for i := range secondPageClosed {
+		secondPageClosed[i] = domain.IssueSummary{
+			ID:     fmt.Sprintf("closed-%03d", nFirstPage+i+1),
+			Status: "closed",
+		}
+	}
+	secondPageData := repository.DashboardData{
+		Closed:      secondPageClosed,
+		ClosedTotal: totalClosed,
+	}
+
+	// Spy: records opts passed by the caching layer. The stub's own mu is
+	// already held by Dashboard before dashboardFn is called, so receivedOpts
+	// is protected against concurrent writes by the stub's mu.
+	var receivedOpts repository.DashboardOptions
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+			receivedOpts = opts
+			if opts.ClosedOffset == 0 {
+				return firstPageData, nil
+			}
+			return secondPageData, nil
+		},
+	}
+
+	c := caching.New(stub)
+
+	// Step 1: warm the cache with the first page (ClosedOffset==0).
+	got0, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: nFirstPage, ClosedOffset: 0})
+	if err != nil {
+		t.Fatalf("seed Dashboard(offset=0): %v", err)
+	}
+	if len(got0.Closed) != nFirstPage {
+		t.Fatalf("seed: got %d closed, want %d", len(got0.Closed), nFirstPage)
+	}
+	seedCalls := stub.dashboardCalls
+
+	// Step 2: call Dashboard with ClosedOffset>0. Must call backing.
+	got1, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: nPageTwo, ClosedOffset: nFirstPage})
+	if err != nil {
+		t.Fatalf("Dashboard(offset=%d): %v", nFirstPage, err)
+	}
+	// (a) Backing received the call.
+	if stub.dashboardCalls != seedCalls+1 {
+		t.Fatalf("ClosedOffset>0: expected 1 additional backing call, got %d total (delta=%d)",
+			stub.dashboardCalls, stub.dashboardCalls-seedCalls)
+	}
+	// Backing received the correct opts.
+	if receivedOpts.ClosedOffset != nFirstPage {
+		t.Fatalf("backing received ClosedOffset=%d, want %d", receivedOpts.ClosedOffset, nFirstPage)
+	}
+	if receivedOpts.ClosedLimit != nPageTwo {
+		t.Fatalf("backing received ClosedLimit=%d, want %d", receivedOpts.ClosedLimit, nPageTwo)
+	}
+	// The method returns the page from backing (not from cache).
+	if len(got1.Closed) != nPageTwo {
+		t.Fatalf("Dashboard(offset=%d): got %d closed, want %d", nFirstPage, len(got1.Closed), nPageTwo)
+	}
+
+	// Step 3: (b) persisted snapshot now has 85 closed entries.
+	// SaveNow is the route to the persisted snapshot; read it back via Hydrate.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+	if err := c.Hydrate(ctx, "", path); err != nil {
+		t.Fatalf("Hydrate(writePath): %v", err)
+	}
+	if err := c.SaveNow(); err != nil {
+		t.Fatalf("SaveNow: %v", err)
+	}
+	_, _, v2Header, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		t.Fatalf("LoadWithManifest: %v", err)
+	}
+	if v2Header == nil {
+		t.Fatal("expected v2 header in persisted file, got nil")
+	}
+	if len(v2Header.DashboardCache.Closed) != totalClosed {
+		t.Fatalf("persisted snapshot: got %d closed entries, want %d (35 original + 50 from page)",
+			len(v2Header.DashboardCache.Closed), totalClosed)
+	}
+
+	// Step 4: (c) subsequent Dashboard(ClosedOffset==0) is served from cache —
+	// does NOT call backing.
+	callsBefore := stub.dashboardCalls
+	_, err = c.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: nFirstPage, ClosedOffset: 0})
+	if err != nil {
+		t.Fatalf("post-offset-load Dashboard(offset=0): %v", err)
+	}
+	if stub.dashboardCalls != callsBefore {
+		t.Fatalf("Dashboard(offset=0) after deep-page load: expected cache hit (0 backing calls), got %d",
+			stub.dashboardCalls-callsBefore)
+	}
+}
+
+// TestDashboard_ClosedOffset_DeduplicatesOnOverlap verifies that when the page
+// returned by backing overlaps with existing cache entries (same IDs), the
+// latest version (from backing) is kept and the total count does not double.
+func TestDashboard_ClosedOffset_DeduplicatesOnOverlap(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const nInitial = 5
+	initial := make([]domain.IssueSummary, nInitial)
+	for i := range initial {
+		initial[i] = domain.IssueSummary{ID: fmt.Sprintf("ov-%d", i+1), Status: "closed"}
+	}
+	// Seed the cache with 5 issues.
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+			if opts.ClosedOffset == 0 {
+				return repository.DashboardData{Closed: initial, ClosedTotal: 10}, nil
+			}
+			// Page overlaps: returns the same 5 IDs but with updated titles,
+			// plus 3 new ones.
+			overlap := make([]domain.IssueSummary, nInitial)
+			for i := range overlap {
+				overlap[i] = domain.IssueSummary{
+					ID: fmt.Sprintf("ov-%d", i+1), Status: "closed",
+				}
+			}
+			newOnes := []domain.IssueSummary{
+				{ID: "ov-6", Status: "closed"},
+				{ID: "ov-7", Status: "closed"},
+				{ID: "ov-8", Status: "closed"},
+			}
+			return repository.DashboardData{
+				Closed:      append(overlap, newOnes...),
+				ClosedTotal: 8,
+			}, nil
+		},
+	}
+	c := caching.New(stub)
+
+	// Warm cache.
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedOffset: 0}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Deep page with overlap.
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedOffset: 5}); err != nil {
+		t.Fatalf("deep page: %v", err)
+	}
+
+	// Write and reload persisted snapshot.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+	if err := c.Hydrate(ctx, "", path); err != nil {
+		t.Fatalf("Hydrate: %v", err)
+	}
+	if err := c.SaveNow(); err != nil {
+		t.Fatalf("SaveNow: %v", err)
+	}
+	_, _, v2Header, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		t.Fatalf("LoadWithManifest: %v", err)
+	}
+	if v2Header == nil {
+		t.Fatal("expected v2 header")
+	}
+	// 5 overlapping + 3 new = 8 total (no doubles).
+	if len(v2Header.DashboardCache.Closed) != 8 {
+		t.Fatalf("dedup: got %d closed entries, want 8 (5 overlap replaced + 3 new)",
+			len(v2Header.DashboardCache.Closed))
+	}
+}
+
+// TestDashboard_ClosedOffset_BackingError_NoMutation verifies that a backing
+// error on a ClosedOffset>0 call does not mutate the persisted-cache snapshot.
+func TestDashboard_ClosedOffset_BackingError_NoMutation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	const nFirstPage = 10
+	firstPage := make([]domain.IssueSummary, nFirstPage)
+	for i := range firstPage {
+		firstPage[i] = domain.IssueSummary{ID: fmt.Sprintf("err-%d", i+1), Status: "closed"}
+	}
+
+	stub := &stubRepository{
+		dashboardFn: func(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
+			if opts.ClosedOffset == 0 {
+				return repository.DashboardData{Closed: firstPage, ClosedTotal: 20}, nil
+			}
+			return repository.DashboardData{}, errBacking
+		},
+	}
+	c := caching.New(stub)
+
+	// Warm cache.
+	if _, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedOffset: 0}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Error on deep page.
+	_, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedOffset: 10})
+	if !errors.Is(err, errBacking) {
+		t.Fatalf("expected errBacking, got %v", err)
+	}
+
+	// Write and reload persisted snapshot: must still have only nFirstPage.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+	if err := c.Hydrate(ctx, "", path); err != nil {
+		t.Fatalf("Hydrate: %v", err)
+	}
+	if err := c.SaveNow(); err != nil {
+		t.Fatalf("SaveNow: %v", err)
+	}
+	_, _, v2Header, err := filestorage.LoadWithManifest(path)
+	if err != nil {
+		t.Fatalf("LoadWithManifest: %v", err)
+	}
+	if v2Header == nil {
+		t.Fatal("expected v2 header")
+	}
+	if len(v2Header.DashboardCache.Closed) != nFirstPage {
+		t.Fatalf("after error: got %d closed entries, want %d (snapshot must be unchanged)",
+			len(v2Header.DashboardCache.Closed), nFirstPage)
 	}
 }
 
@@ -650,7 +907,7 @@ func TestHealthCheck_AlwaysPassesThrough(t *testing.T) {
 func TestCreateIssue_Success_DashboardDirty(t *testing.T) {
 	// Arrange: pre-populate the dashboard cache.
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 1}, nil
 		},
 		createIssueFn: func(_ context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
@@ -707,7 +964,7 @@ func TestCreateIssue_Success_DashboardDirty(t *testing.T) {
 
 func TestCreateIssue_BackingError_NoMutation(t *testing.T) {
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 99}, nil
 		},
 		createIssueFn: func(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
@@ -799,7 +1056,7 @@ func TestUpdateIssue_Success_InvalidatesCache(t *testing.T) {
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
 			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id, Title: "updated from backing"}}, nil
 		},
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 5}, nil
 		},
 		updateIssueFn: func(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
@@ -849,7 +1106,7 @@ func TestUpdateIssue_BackingError_NoMutation(t *testing.T) {
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
 			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id, Title: "cached"}}, nil
 		},
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 3}, nil
 		},
 		updateIssueFn: func(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
@@ -897,7 +1154,7 @@ func TestCloseIssue_Success_InvalidatesCache(t *testing.T) {
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
 			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
 		},
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{}, nil
 		},
 		closeIssueFn: func(_ context.Context, _ string, _ domain.CloseIssueInput) error {
@@ -941,7 +1198,7 @@ func TestCloseIssue_BackingError_NoMutation(t *testing.T) {
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
 			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
 		},
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{}, nil
 		},
 		closeIssueFn: func(_ context.Context, _ string, _ domain.CloseIssueInput) error {
@@ -986,7 +1243,7 @@ func TestAddComment_Success_IssueDropped_DashboardDirty(t *testing.T) {
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
 			return domain.IssueDetail{Summary: domain.IssueSummary{ID: id}}, nil
 		},
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 10}, nil
 		},
 		addCommentFn: func(_ context.Context, _ string, _ domain.AddCommentInput) error {
@@ -1070,7 +1327,7 @@ func TestAddComment_MarksDashboardDirty(t *testing.T) {
 
 	dashCallCount := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCallCount++
 			updatedAt := t0
 			if dashCallCount > 1 {
@@ -1167,7 +1424,7 @@ func TestStartNoVCStatusFunc(t *testing.T) {
 func TestTickFirstHashIsBaseline(t *testing.T) {
 	// First RefreshIfChanged call records hash but does NOT invalidate the cache.
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 1}, nil
 		},
 	}
@@ -1196,7 +1453,7 @@ func TestTickFirstHashIsBaseline(t *testing.T) {
 
 func TestTickUnchangedHashDoesNotInvalidate(t *testing.T) {
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 1}, nil
 		},
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
@@ -1242,7 +1499,7 @@ func TestTickUnchangedHashDoesNotInvalidate(t *testing.T) {
 
 func TestTickChangedHashInvalidatesDashboardAndIssues(t *testing.T) {
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 99}, nil
 		},
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
@@ -1292,7 +1549,7 @@ func TestTickChangedHashInvalidatesDashboardAndIssues(t *testing.T) {
 func TestVCStatusFuncErrorDoesNotCorruptState(t *testing.T) {
 	errVC := errors.New("vc error")
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 5}, nil
 		},
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
@@ -1421,7 +1678,7 @@ func TestConcurrentReadsDuringTick(t *testing.T) {
 	var dashCallCount atomic.Int64
 
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCallCount.Add(1)
 			return repository.DashboardData{ClosedTotal: int(dashCallCount.Load())}, nil
 		},
@@ -1484,7 +1741,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 	var dashCallCount atomic.Int64
 
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCallCount.Add(1)
 			return repository.DashboardData{ClosedTotal: int(dashCallCount.Load())}, nil
 		},
@@ -1608,7 +1865,7 @@ func TestHydrateSchemaMismatch(t *testing.T) {
 	// Hydrate must not return an error — degrade to cold start.
 	backingIssueCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			return repository.DashboardData{ClosedTotal: 77}, nil
 		},
 		issueFn: func(_ context.Context, id string) (domain.IssueDetail, error) {
@@ -1631,7 +1888,7 @@ func TestHydrateSchemaMismatch(t *testing.T) {
 
 	// dashboardDirty is true by default on New, so Dashboard also hits backing.
 	dashCalls := 0
-	stub.dashboardFn = func(_ context.Context) (repository.DashboardData, error) {
+	stub.dashboardFn = func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 		dashCalls++
 		return repository.DashboardData{}, nil
 	}
@@ -1650,7 +1907,7 @@ func TestHydrateSuccess(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 42}, nil
 		},
@@ -1799,7 +2056,7 @@ func TestHydrate_EmptyDashboardCache_FallsBackToBackingFetch(t *testing.T) {
 	backingDashCalls := 0
 	const backingMarker = 7331 // sentinel value to distinguish backing result
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			backingDashCalls++
 			return repository.DashboardData{ClosedTotal: backingMarker}, nil
 		},
@@ -2092,7 +2349,7 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 99}, nil
 		},
@@ -2129,7 +2386,7 @@ func TestHydrateMatchingHashSeedsLastHash(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 5}, nil
 		},
@@ -2169,7 +2426,7 @@ func TestHydrateMismatchedHashKeepsDirty(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 7}, nil
 		},
@@ -2255,7 +2512,7 @@ func TestHydrateEmptyPersistedHash(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 3}, nil
 		},
@@ -2284,7 +2541,7 @@ func TestHydrateVCStatusFuncError(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 2}, nil
 		},
@@ -2318,7 +2575,7 @@ func TestHydrateNoVCStatusFunc(t *testing.T) {
 
 	dashCalls := 0
 	stub := &stubRepository{
-		dashboardFn: func(_ context.Context) (repository.DashboardData, error) {
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
 			dashCalls++
 			return repository.DashboardData{ClosedTotal: 1}, nil
 		},
