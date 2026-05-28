@@ -248,3 +248,66 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 - `›` disappears after pressing `j` past the viewport: `EnsureVisible` is not being called from `moveRow` (board) or `moveRelatedSelection` (details). Check `internal/mode/board/model.go` and `internal/mode/details/model.go`.
 - Header shows plain count instead of `N of M` when window clips: the `visibleCount < len(rows)` branch in `internal/ui/board/board.go:Render` is not triggered, or the deps pane header in `internal/ui/details/details.go` is not updated. Check the header logic in both renderers.
+
+## 7) Deep Done-column navigation: load-more pagination (vtvb)
+
+**What this verifies:** Pressing `j` past the initial loaded slice in the Done column triggers incremental loads, the Done header N grows monotonically toward M, the `›` chevron stays visible throughout (b38b.4 contract), the `r` reload resets state correctly, and the final header format transitions from `N of M` to plain `N` once all issues are loaded.
+
+**Pre-conditions:**
+
+- Repository: `/home/hans/dev/github/dtctl-test` — 89 closed issues at the time of writing, enough to span multiple pagination pages at small terminal heights.
+- `bwb` is built: `mise run build` or `go build -o /tmp/bwb ./cmd/bwb`.
+- Terminal height ≤ 30 rows (so the initial load is a small slice, not all 89). Verify with `echo $LINES`.
+
+**Procedure:**
+
+1. Build bwb:
+   ```bash
+   mise run build
+   ```
+   Or equivalently: `go build -o /tmp/bwb ./cmd/bwb`.
+
+2. Open a terminal at height ≤ 30 rows. Confirm with `echo $LINES`.
+
+3. Launch against the dtctl-test repo:
+   ```bash
+   (cd /home/hans/dev/github/dtctl-test && BD_NON_INTERACTIVE=1 /tmp/bwb)
+   ```
+
+4. Observe the **Done** column header. It should read `N of 89` where `N ≈ height - 3` (e.g. `25 of 89` at height=28). This confirms the initial load is capped and pagination is active.
+
+5. Press `RIGHT` three times (or use `l`/`h`) to focus the Done column.
+
+6. Press `j` repeatedly past the loaded-slice boundary. Confirm:
+   - The Done header N grows (e.g. `25 of 89` → `50 of 89` → `75 of 89`). M stays 89.
+   - The `›` chevron remains visible in the Done column next to the selected issue at all times (b38b.4 scroll-window contract — see §6).
+   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[bwb-debug]` trace:
+     ```bash
+     (cd /home/hans/dev/github/dtctl-test && BD_NON_INTERACTIVE=1 /tmp/bwb --debug 2>/tmp/bwb-debug.log)
+     # in another terminal: tail -f /tmp/bwb-debug.log | grep loadMoreClosed
+     ```
+
+7. Press `r` for manual reload. Confirm:
+   - The Done header resets to the initial viewport-sized N (same as step 4).
+   - The selection returns to the top of the Done column (vtvb.7 contract).
+
+8. Press `j` repeatedly until Done header shows `89 of 89`. Then continue pressing `j` once more. Confirm:
+   - The final header transitions from `89 of 89` to plain `89` (the `TotalIsExact` flip — see `internal/ui/board/board.go` header logic).
+   - No further loads are triggered beyond this point.
+
+**Pass/Fail table:**
+
+| Step | Pass | Fail signal |
+|------|------|-------------|
+| 4 | Initial header `≈(height-3) of 89` | Header missing `of 89`; or N == 89 immediately (no pagination active) |
+| 6 | N grows monotonically; `›` always visible; one load per threshold crossing | N stays at initial value; chevron disappears; multiple loads per crossing |
+| 7 | Header resets to initial N; selection at top of Done | Header keeps deep value; selection position lost |
+| 8 | Final header reads `89 of 89` then flips to plain `89` | Final N < 89; or header never transitions to plain `N` |
+
+**Diagnostics on failure:**
+
+- `r` does not reset N to the initial value: check the `doneLoadedCount` reset path in `internal/mode/board/model.go` (vtvb.7).
+- N does not grow when scrolling deep: check the `loadMoreClosedCmd` dispatch threshold and the offset wiring in the beads repository backend (vtvb.6).
+- Double-loads on a single threshold crossing: check the `doneLoadInFlight` guard (vtvb.8).
+- `›` chevron disappears after pressing `j` past the loaded slice: the b38b.4 `EnsureVisible` scroll-following logic has regressed — see §6 for the diagnostic steps.
+- `89 of 89` never transitions to plain `89`: `TotalIsExact` is not being set when the last page is loaded, or the header renderer in `internal/ui/board/board.go` is not checking it.
