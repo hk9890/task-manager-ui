@@ -13,6 +13,7 @@ package contract_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -1241,6 +1242,268 @@ func runAllScenarios(t *testing.T, impl implFactory) {
 		for _, expected := range []string{"task", "bug", "feature", "chore"} {
 			if !typeNames[expected] {
 				t.Errorf("Scenario13/Catalogs: expected type %q in Types, got %v", expected, cats.Types)
+			}
+		}
+	})
+
+	// ---- Scenario 16: PaginatedClosedFetch ----
+	//
+	// Dashboard must support two-page pagination of closed issues via ClosedOffset:
+	//   - Page 1: ClosedLimit=50, ClosedOffset=0  → first 50 closed issues (DESC by ClosedAt)
+	//   - Page 2: ClosedLimit=50, ClosedOffset=50 → next 50 closed issues (DESC by ClosedAt)
+	//
+	// Assertions (both factories):
+	//   - len(page1.Closed) == 50
+	//   - len(page2.Closed) == 50
+	//   - No ID overlap between page1 and page2
+	//   - Combined order is contiguous: page1+page2 IDs match the first 100 IDs of a
+	//     large-limit (200) query, verifying the pages are adjacent slices of the sorted list.
+	//   - ClosedTotal == seed count (110)
+	//   - len(page1.Closed) + len(page2.Closed) <= ClosedTotal
+	//
+	// Factory notes:
+	//   - memory/caching: issues are seeded via memory.Seed + memory.SeedClosed with
+	//     incrementing timestamps so DESC sort order is deterministic.
+	//   - beads: issues are seeded via bd close in sequence. bd 1.0.4 does not support
+	//     the --offset flag required by queryClosedPage(offset>0). A CommandHook
+	//     intercepts the offset call and emulates server-side pagination via over-fetch
+	//     + in-memory slice, allowing the Repository plumbing to be exercised against
+	//     real bd responses without requiring a bd version that supports --offset.
+	t.Run("PaginatedClosedFetch", func(t *testing.T) {
+		t.Parallel()
+
+		const seedCount = 110
+		const pageSize = 50
+
+		issues := make([]seedIssue, seedCount)
+		for i := range issues {
+			issues[i] = seedIssue{
+				id:        fmt.Sprintf("pbt-pcf-%03d", i+1),
+				title:     fmt.Sprintf("Paginated closed issue %03d", i+1),
+				issueType: "task",
+				status:    "closed",
+			}
+		}
+
+		// buildMemoryWithTimestamps builds a memory.Repository with 110 closed
+		// issues each having a distinct ClosedAt so DESC sort is stable.
+		buildMemoryWithTimestamps := func(t *testing.T) *memory.Repository {
+			t.Helper()
+			base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			mr := memory.New()
+			for i, iss := range issues {
+				mr.Seed(memory.Issue{
+					ID:     iss.id,
+					Title:  iss.title,
+					Status: "closed",
+					Type:   iss.issueType,
+				})
+				// Assign ClosedAt = base + i seconds: issue 001 is oldest,
+				// issue 110 is most recent. DESC sort returns 110…001.
+				mr.SeedClosed(iss.id, base.Add(time.Duration(i)*time.Second), "paginated closed fetch test")
+			}
+			mr.SeedCatalogs(memory.DefaultCatalogs())
+			return mr
+		}
+
+		var r repository.Repository
+
+		switch impl.name {
+		case "memory":
+			// Build memory.Repository manually so we can assign distinct ClosedAt
+			// timestamps. Without explicit ClosedAt values all closed issues have
+			// zero timestamps, making DESC sort order undefined and the ordering
+			// assertions meaningless.
+			r = buildMemoryWithTimestamps(t)
+
+		case "caching":
+			// Caching wraps a memory backing. Use the same timestamp-seeded memory
+			// so the backing sort is stable, then wrap with CachingRepository.
+			// The caching layer passes ClosedOffset>0 calls through to backing
+			// unconditionally (vtvb.4 pass-through strategy).
+			r = repocaching.New(buildMemoryWithTimestamps(t))
+
+		case "beads":
+			// Build a real bd repo seeded with 110 closed issues.
+			dir := filepath.Join(t.TempDir(), "bd-repo-s16")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("Scenario16/beads/mkdir: %v", err)
+			}
+			initBDRepo(t, dir)
+			runBD := func(args ...string) {
+				t.Helper()
+				cmd := exec.Command("bd", args...)
+				cmd.Dir = dir
+				cmd.Env = append(os.Environ(), "BD_NON_INTERACTIVE=1")
+				out, err2 := cmd.CombinedOutput()
+				if err2 != nil {
+					t.Fatalf("bd %s: %v\n%s", strings.Join(args, " "), err2, out)
+				}
+			}
+			for _, iss := range issues {
+				args := []string{"create", "--id", iss.id, "--title", iss.title}
+				if iss.issueType != "" {
+					args = append(args, "--type", iss.issueType)
+				}
+				runBD(args...)
+				runBD("close", iss.id, "--reason", "paginated closed fetch test")
+			}
+
+			runner := bd.NewCommandRunner(bd.RunnerConfig{WorkDir: dir})
+
+			// bd 1.0.4 does not support --offset on bd query. When
+			// queryClosedPage(offset>0) fires, intercept the call and emulate
+			// server-side pagination via over-fetch + in-memory slice.
+			r = repobeads.New(runner, repobeads.WithCommandHook(
+				func(ctx context.Context, req bd.CommandRequest) ([]byte, error) {
+					// Detect the closed-page call with --offset.
+					// Args shape: ["query","status=closed","--json","-a","--sort","closed","--limit","N","--offset","M"]
+					hasOffset := false
+					var offsetVal, limitVal int
+					for i, a := range req.Args {
+						if a == "--offset" && i+1 < len(req.Args) {
+							hasOffset = true
+							fmt.Sscanf(req.Args[i+1], "%d", &offsetVal)
+						}
+						if a == "--limit" && i+1 < len(req.Args) {
+							fmt.Sscanf(req.Args[i+1], "%d", &limitVal)
+						}
+					}
+					if !hasOffset {
+						// Not an offset call: delegate to the real runner.
+						return runner.Run(ctx, req)
+					}
+					// Re-run without --offset but with limit = limitVal+offsetVal
+					// (over-fetch), then let the caller slice in-memory. However,
+					// queryClosedPage with offset>0 passes offset=0,limit=0 to
+					// leanMapIssueSummaries — it relies on bd for the slice. We
+					// must return only the slice [offsetVal : offsetVal+limitVal].
+					overArgs := make([]string, 0, len(req.Args))
+					skipNext := false
+					for _, a := range req.Args {
+						if skipNext {
+							skipNext = false
+							continue
+						}
+						if a == "--offset" {
+							skipNext = true
+							continue
+						}
+						if a == "--limit" {
+							skipNext = true
+							overArgs = append(overArgs, "--limit",
+								fmt.Sprintf("%d", limitVal+offsetVal))
+							continue
+						}
+						overArgs = append(overArgs, a)
+					}
+					raw, err2 := runner.Run(ctx, bd.CommandRequest{
+						Operation: req.Operation,
+						Args:      overArgs,
+					})
+					if err2 != nil {
+						return nil, err2
+					}
+					// raw is a JSON array. Parse, slice [offsetVal:offsetVal+limitVal], re-encode.
+					var all []map[string]any
+					if err3 := json.Unmarshal(raw, &all); err3 != nil {
+						return nil, fmt.Errorf("Scenario16/beads/hook: parse: %w", err3)
+					}
+					if offsetVal >= len(all) {
+						empty, _ := json.Marshal([]map[string]any{})
+						return empty, nil
+					}
+					end := offsetVal + limitVal
+					if end > len(all) {
+						end = len(all)
+					}
+					out, err4 := json.Marshal(all[offsetVal:end])
+					if err4 != nil {
+						return nil, fmt.Errorf("Scenario16/beads/hook: encode: %w", err4)
+					}
+					return out, nil
+				},
+			))
+		}
+
+		ctx2 := context.Background()
+
+		// Page 1: first 50 issues (most recently closed).
+		data1, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: pageSize, ClosedOffset: 0})
+		if err != nil {
+			t.Fatalf("Scenario16/page1/Dashboard: %v", err)
+		}
+
+		// Page 2: next 50 issues.
+		data2, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: pageSize, ClosedOffset: pageSize})
+		if err != nil {
+			t.Fatalf("Scenario16/page2/Dashboard: %v", err)
+		}
+
+		// Assert page sizes.
+		if len(data1.Closed) != pageSize {
+			t.Errorf("Scenario16: len(page1.Closed)=%d; want %d", len(data1.Closed), pageSize)
+		}
+		if len(data2.Closed) != pageSize {
+			t.Errorf("Scenario16: len(page2.Closed)=%d; want %d", len(data2.Closed), pageSize)
+		}
+
+		// Assert ClosedTotal == seed count for both pages (independent of windowing).
+		if data1.ClosedTotal != seedCount {
+			t.Errorf("Scenario16: page1.ClosedTotal=%d; want %d", data1.ClosedTotal, seedCount)
+		}
+		if data2.ClosedTotal != seedCount {
+			t.Errorf("Scenario16: page2.ClosedTotal=%d; want %d", data2.ClosedTotal, seedCount)
+		}
+
+		// Assert len(page1) + len(page2) <= ClosedTotal.
+		combined := len(data1.Closed) + len(data2.Closed)
+		if combined > data1.ClosedTotal {
+			t.Errorf("Scenario16: len(page1)+len(page2)=%d > ClosedTotal=%d", combined, data1.ClosedTotal)
+		}
+
+		// Assert no ID overlap between page1 and page2.
+		page1IDs := make(map[string]bool, len(data1.Closed))
+		for _, s := range data1.Closed {
+			page1IDs[s.ID] = true
+		}
+		for _, s := range data2.Closed {
+			if page1IDs[s.ID] {
+				t.Errorf("Scenario16: ID %q appears in both page1 and page2 (overlap)", s.ID)
+			}
+		}
+
+		// Assert contiguous ordering: page1 IDs + page2 IDs must match the first 100
+		// IDs of a large-limit reference query (ClosedLimit=200, ClosedOffset=0).
+		// This proves the two pages are adjacent slices of the same sorted list.
+		ref, err := r.Dashboard(ctx2, repository.DashboardOptions{ClosedLimit: 200, ClosedOffset: 0})
+		if err != nil {
+			t.Fatalf("Scenario16/ref/Dashboard: %v", err)
+		}
+		if len(ref.Closed) < combined {
+			t.Fatalf("Scenario16: reference query returned %d issues; expected >= %d", len(ref.Closed), combined)
+		}
+
+		refFirst100IDs := make([]string, combined)
+		for i := 0; i < combined; i++ {
+			refFirst100IDs[i] = ref.Closed[i].ID
+		}
+		page1And2IDs := make([]string, 0, combined)
+		for _, s := range data1.Closed {
+			page1And2IDs = append(page1And2IDs, s.ID)
+		}
+		for _, s := range data2.Closed {
+			page1And2IDs = append(page1And2IDs, s.ID)
+		}
+
+		if len(page1And2IDs) != len(refFirst100IDs) {
+			t.Fatalf("Scenario16: combined page IDs count=%d != reference count=%d",
+				len(page1And2IDs), len(refFirst100IDs))
+		}
+		for i := range refFirst100IDs {
+			if page1And2IDs[i] != refFirst100IDs[i] {
+				t.Errorf("Scenario16: ordering mismatch at position %d: page1+page2[%d]=%q, ref[%d]=%q",
+					i, i, page1And2IDs[i], i, refFirst100IDs[i])
 			}
 		}
 	})
