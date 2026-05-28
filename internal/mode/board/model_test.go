@@ -1727,3 +1727,249 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 		t.Error("expected doneLoadInFlight=true after explicit load-more dispatch")
 	}
 }
+
+// --- Done column load-more reset tests (vtvb.7) ---
+
+// TestDoneLoadMore_ManualReloadResetsToPage1 verifies that pressing r (manual
+// reload) while doneLoadedCount=85 resets the state and dispatches a Dashboard
+// call with ClosedOffset=0 and ClosedLimit=sectionItemCapacity(). After the
+// resulting dashboard response arrives, doneLoadedCount reflects only the new
+// page (not the stale 85).
+//
+// Audit note: the r key handler calls startReload(refreshModeManual) which
+// already resets doneLoadedCount=0 and doneLoadInFlight=false (lines 383-384
+// of model.go, vtvb.6). This test is the explicit regression guard for that
+// path.
+func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
+	t.Parallel()
+
+	// Return a fresh page of 20 closed issues on reload so we can verify
+	// doneLoadedCount is set from the new page, not the stale 85.
+	const freshPageSize = 20
+	freshClosed := makeClosedIssues(freshPageSize)
+	stub := &loadMoreCapture{
+		resp: repository.DashboardData{
+			Closed:      freshClosed,
+			ClosedTotal: 736,
+		},
+	}
+
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	// height=23 → sectionItemCapacity()=20.
+	m.SetSize(120, 23)
+
+	// Arrange: 85 Done issues loaded (as if two load-more pages have been fetched).
+	const staleLoaded = 85
+	staleClosed := makeClosedIssues(staleLoaded)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: staleClosed, total: 736, exact: false},
+	}
+	m.doneLoadedCount = staleLoaded
+	m.doneClosedTotal = 736
+	m.doneLoadInFlight = false
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 50
+
+	// AC: pressing r dispatches a reload command.
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	if cmd == nil {
+		t.Fatal("expected non-nil Cmd after r press (manual reload)")
+	}
+
+	// AC: doneLoadedCount must be reset to 0 immediately after the key is handled
+	// (startReload resets before the cmd runs).
+	if m.doneLoadedCount != 0 {
+		t.Errorf("expected doneLoadedCount=0 immediately after r press, got %d", m.doneLoadedCount)
+	}
+	if m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=false immediately after r press (reset by startReload)")
+	}
+
+	// Execute the command to call stub.Dashboard and capture opts.
+	msg := cmd()
+
+	// The reload cmd returns a dashboardLoadedMsg. Feed it back into the model.
+	loaded, ok := msg.(dashboardLoadedMsg)
+	if !ok {
+		t.Fatalf("expected dashboardLoadedMsg from reload cmd, got %T", msg)
+	}
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from manual reload, got %d: %v", len(opts), opts)
+	}
+
+	// AC: ClosedOffset=0 (page-1 reset).
+	if opts[0].ClosedOffset != 0 {
+		t.Errorf("expected ClosedOffset=0 on reload, got %d", opts[0].ClosedOffset)
+	}
+	// AC: ClosedLimit=sectionItemCapacity() (not the load-more page size).
+	wantLimit := m.sectionItemCapacity()
+	if opts[0].ClosedLimit != wantLimit {
+		t.Errorf("expected ClosedLimit=%d on reload, got %d", wantLimit, opts[0].ClosedLimit)
+	}
+	// AC: ForceFresh=true for manual reload.
+	if !opts[0].ForceFresh {
+		t.Errorf("expected ForceFresh=true on manual reload, got false")
+	}
+
+	// Feed the dashboard result back so compose() runs and sets doneLoadedCount.
+	_ = m.Update(loaded)
+
+	// AC: doneLoadedCount must equal the new page size (freshPageSize), not staleLoaded.
+	if m.doneLoadedCount != freshPageSize {
+		t.Errorf("expected doneLoadedCount=%d after reload response, got %d", freshPageSize, m.doneLoadedCount)
+	}
+}
+
+// TestDoneLoadMore_FocusRegainResetsToPage1 verifies that the focus-regain
+// auto-refresh path resets Done pagination to page 1.
+//
+// Architecture note: focus-regain is handled in internal/app/model.go
+// (tea.FocusMsg → maybeAutoRefreshActiveSurfaceCmdOnFocusRegain →
+// refreshActiveSurfaceCmd → m.board.AutoRefresh). AutoRefresh() calls
+// startReload(refreshModeAuto), which resets doneLoadedCount and
+// doneLoadInFlight via the shared counter-reset block in startReload (lines
+// 383-384 of model.go). This test covers the board.AutoRefresh() entry point
+// directly — the app-level wiring is covered by existing app model tests; the
+// board-level counter reset is what we pin here.
+func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
+	t.Parallel()
+
+	const freshPageSize = 20
+	freshClosed := makeClosedIssues(freshPageSize)
+	stub := &loadMoreCapture{
+		resp: repository.DashboardData{
+			Closed:      freshClosed,
+			ClosedTotal: 736,
+		},
+	}
+
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	// height=23 → sectionItemCapacity()=20.
+	m.SetSize(120, 23)
+
+	// Arrange: 85 Done issues loaded (deep into pagination).
+	const staleLoaded = 85
+	staleClosed := makeClosedIssues(staleLoaded)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: staleClosed, total: 736, exact: false},
+	}
+	m.doneLoadedCount = staleLoaded
+	m.doneClosedTotal = 736
+	m.doneLoadInFlight = false
+
+	// Simulate focus-regain auto-refresh by calling AutoRefresh() directly —
+	// this is the same method the app shell calls from refreshActiveSurfaceCmd.
+	cmd := m.AutoRefresh()
+	if cmd == nil {
+		t.Fatal("expected non-nil Cmd from AutoRefresh() (focus-regain path)")
+	}
+
+	// AC: counters reset immediately when AutoRefresh/startReload runs.
+	if m.doneLoadedCount != 0 {
+		t.Errorf("expected doneLoadedCount=0 after AutoRefresh, got %d", m.doneLoadedCount)
+	}
+	if m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=false after AutoRefresh reset")
+	}
+
+	// Execute cmd to capture opts.
+	msg := cmd()
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call from AutoRefresh, got %d: %v", len(opts), opts)
+	}
+
+	// AC: ClosedOffset=0 (page-1 reset).
+	if opts[0].ClosedOffset != 0 {
+		t.Errorf("expected ClosedOffset=0 on focus-regain reload, got %d", opts[0].ClosedOffset)
+	}
+	// AC: ClosedLimit=sectionItemCapacity().
+	wantLimit := m.sectionItemCapacity()
+	if opts[0].ClosedLimit != wantLimit {
+		t.Errorf("expected ClosedLimit=%d on focus-regain reload, got %d", wantLimit, opts[0].ClosedLimit)
+	}
+	// AC: ForceFresh=false for auto-refresh.
+	if opts[0].ForceFresh {
+		t.Errorf("expected ForceFresh=false on auto-refresh, got true")
+	}
+
+	// Feed the dashboard result so compose() runs.
+	loaded, ok := msg.(dashboardLoadedMsg)
+	if !ok {
+		t.Fatalf("expected dashboardLoadedMsg from AutoRefresh cmd, got %T", msg)
+	}
+	_ = m.Update(loaded)
+
+	// AC: doneLoadedCount set from fresh page.
+	if m.doneLoadedCount != freshPageSize {
+		t.Errorf("expected doneLoadedCount=%d after focus-regain reload response, got %d", freshPageSize, m.doneLoadedCount)
+	}
+}
+
+// TestDoneLoadMore_ForceFreshResetsState verifies that the ForceFresh path
+// (manual reload, r key) resets doneLoadedCount and doneLoadInFlight to zero
+// and dispatches with ClosedOffset=0 — the composite ForceFresh+ClosedOffset=0
+// contract that governs full cache-bypass + page-1 reload (vtvb.7).
+//
+// This test is complementary to TestDoneLoadMore_ManualReloadResetsToPage1 and
+// focuses specifically on the ForceFresh+reset interaction rather than the
+// post-compose doneLoadedCount value.
+func TestDoneLoadMore_ForceFreshResetsState(t *testing.T) {
+	t.Parallel()
+
+	stub := &loadMoreCapture{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	m.SetSize(120, 25) // sectionItemCapacity=22
+
+	// Arrange: model has fetched two load-more pages and has a stale in-flight.
+	m.doneLoadedCount = 120
+	m.doneClosedTotal = 500
+	m.doneLoadInFlight = true // leave stale in-flight to confirm reset
+
+	// Trigger manual reload directly (same code path as r key handler).
+	// We bypass the inflight guard by resetting it first — the r key handler
+	// itself guards on m.inflight (not doneLoadInFlight), so this matches the
+	// real code path where doneLoadInFlight is left over from a prior session.
+	m.inflight = false
+	cmd := m.startReload(refreshModeManual)
+	if cmd == nil {
+		t.Fatal("expected non-nil Cmd from startReload(refreshModeManual)")
+	}
+
+	// AC 1: doneLoadedCount reset to 0 synchronously.
+	if m.doneLoadedCount != 0 {
+		t.Errorf("expected doneLoadedCount=0 after startReload(Manual), got %d", m.doneLoadedCount)
+	}
+
+	// AC 2: doneLoadInFlight cleared (stale flag reset).
+	if m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=false after startReload(Manual) reset")
+	}
+
+	// Execute cmd and capture opts.
+	_ = cmd()
+
+	opts := stub.capturedOpts()
+	if len(opts) != 1 {
+		t.Fatalf("expected exactly 1 Dashboard call, got %d: %v", len(opts), opts)
+	}
+
+	// AC 3: ClosedOffset=0 (no leftover offset from previous load-more pages).
+	if opts[0].ClosedOffset != 0 {
+		t.Errorf("expected ClosedOffset=0 (ForceFresh+page1), got %d", opts[0].ClosedOffset)
+	}
+
+	// AC 4: ForceFresh=true (cache-bypass contract).
+	if !opts[0].ForceFresh {
+		t.Errorf("expected ForceFresh=true on manual reload, got false")
+	}
+}
