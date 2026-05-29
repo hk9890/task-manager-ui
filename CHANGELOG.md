@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.7.0]
+
+### Changed
+
+- **Default repository backend is now `beads`** (live `bd` subprocess reads) instead of `caching`. The caching decorator has known correctness bugs (e.g. a stale persisted snapshot can serve a near-empty board — see `internal/repository/caching/testdata/known-bad-cache-fbea/`), so it is now opt-in only via `--repo caching`. No flag change is needed for the new default; existing `--repo caching` / `--repo memory` invocations are unaffected.
+
 ## [v0.6.0]
 
 ### Added

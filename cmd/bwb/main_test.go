@@ -347,10 +347,10 @@ func TestParseCLIRepoFlags(t *testing.T) {
 		stderrContains []string
 	}{
 		{
-			name:     "defaults: repo=caching, repoFile empty",
+			name:     "defaults: repo=beads, repoFile empty",
 			args:     []string{},
 			wantOK:   true,
-			wantRepo: "caching",
+			wantRepo: "beads",
 			wantFile: "",
 		},
 		{
@@ -396,10 +396,10 @@ func TestParseCLIRepoFlags(t *testing.T) {
 			wantFile: "/tmp/x.jsonl",
 		},
 		{
-			name:     "--repo-file alone (caching mode default) is accepted",
+			name:     "--repo-file alone (beads mode default) is accepted",
 			args:     []string{"--repo-file", "data.jsonl"},
 			wantOK:   true,
-			wantRepo: "caching",
+			wantRepo: "beads",
 			wantFile: "data.jsonl",
 		},
 	}

@@ -64,7 +64,7 @@ capture paths.
 
 ## Architectural boundaries
 
-- Official beads surfaces only: active product behavior goes through `repository.Repository`. The `bd`-backed implementation is `internal/repository/beads.Repository`, composed via `constructRepository` with `repository.NewValidating` and `caching.Repository`.
+- Official beads surfaces only: active product behavior goes through `repository.Repository`. The `bd`-backed implementation is `internal/repository/beads.Repository`, composed via `constructRepository` with `repository.NewValidating` by default; the `caching.Repository` decorator is opt-in via `--repo caching`.
 - No direct SQL, no `internal/bql`, and no orchestration/control-plane dependencies in the active `./cmd/bwb` path; see `cmd/bwb/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.

@@ -14,7 +14,7 @@ Dashboard never seeds memory").
 
 ## Symptom these files produce
 
-On a fresh `mise run bwb` (default `--repo caching`) where the bd hash matches
+On a fresh `mise run bwb --repo caching` where the bd hash matches
 the manifest, `caching.Hydrate` recomputes Dashboard from the tiny in-memory
 store and serves a board with only the persisted IDs. The user sees a near-empty
 board even though `bd list --status open` returns 7 and `bd list --status closed`

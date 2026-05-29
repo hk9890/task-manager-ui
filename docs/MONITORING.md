@@ -141,8 +141,9 @@ interactive startup and startup-only commands such as `--check-config` and
 
 ## Caching backend diagnostics
 
-The caching repository backend (default `--repo caching`) emits structured log
-messages via the centralized `internal/logging` sink at the `caching` component.
+The caching repository backend (opt-in via `--repo caching`; not the default)
+emits structured log messages via the centralized `internal/logging` sink at the
+`caching` component.
 Operators can grep these messages in the persistent JSON Lines log to diagnose
 startup, hydration, and persistence issues.
 

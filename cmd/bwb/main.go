@@ -35,7 +35,7 @@ type startupOptions struct {
 	debug       bool
 	autoRefresh bool
 	logManager  *logging.Manager
-	repoFlag    string // "beads", "memory", or "caching" (default)
+	repoFlag    string // "beads" (default), "memory", or "caching"
 	repoFile    string // resolved path; cache file for caching mode, source of truth for memory, informational for beads
 }
 
@@ -175,7 +175,7 @@ type cliOptions struct {
 	checkConfig bool
 	debug       bool
 	noAuto      bool
-	repo        string // "beads", "memory", or "caching" (default)
+	repo        string // "beads" (default), "memory", or "caching"
 	repoFile    string // path to JSONL file; cache file for caching mode, required for memory, informational for beads
 }
 
@@ -365,7 +365,7 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	fs.BoolVar(&opts.debug, "d", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.debug, "debug", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.noAuto, "no-auto-refresh", false, "disable periodic auto-refresh")
-	fs.StringVar(&opts.repo, "repo", "caching", "repository backend: beads, memory, or caching (default)")
+	fs.StringVar(&opts.repo, "repo", "beads", "repository backend: beads (default), memory, or caching")
 	fs.StringVar(&opts.repoFile, "repo-file", "", "path to JSONL repository file (required for --repo=memory; cache file for --repo=caching)")
 
 	if err := fs.Parse(args); err != nil {
@@ -481,9 +481,9 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "      --no-auto-refresh      Disable automatic refresh triggers")
 	_, _ = fmt.Fprintln(w, "      --print-config         Print resolved config YAML")
 	_, _ = fmt.Fprintln(w, "      --check-config         Validate config and exit")
-	_, _ = fmt.Fprintln(w, "      --repo <backend>       Repository backend: beads|memory|caching (default: caching)")
+	_, _ = fmt.Fprintln(w, "      --repo <backend>       Repository backend: beads|memory|caching (default: beads)")
 	_, _ = fmt.Fprintln(w, "      --repo-file <path>     JSONL repository file")
-	_, _ = fmt.Fprintln(w, "                             Default (caching): ~/.cache/bwb/<project-hash>-<session-id>/repo.jsonl")
 	_, _ = fmt.Fprintln(w, "                             Default (beads):   ~/.cache/bwb/<project-hash>/repo.jsonl (informational)")
+	_, _ = fmt.Fprintln(w, "                             Default (caching): ~/.cache/bwb/<project-hash>-<session-id>/repo.jsonl")
 	_, _ = fmt.Fprintln(w, "                             Required when --repo=memory (the file is the source of truth)")
 }
