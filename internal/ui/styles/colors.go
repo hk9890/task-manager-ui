@@ -76,6 +76,16 @@ var (
 
 	SelectionIndicatorStyle = lipgloss.NewStyle().Bold(true).Foreground(BorderHighlightFocusColor)
 	IssueIDMutedStyle       = lipgloss.NewStyle().Foreground(TextSecondaryColor)
+
+	// DependencyCursorBgColor is the background color for the pending cursor row
+	// in the Dependencies pane — the row the user can move with ↑/↓ before
+	// pressing Enter to load it. Distinct from the › subject chevron.
+	DependencyCursorBgColor = lipgloss.AdaptiveColor{Light: "#D0E8FF", Dark: "#1F3A4F"}
+
+	// DependencyCursorStyle applies the background highlight to a pending cursor
+	// row in the Dependencies pane. Use for the movable-cursor row; use the
+	// SelectionIndicatorStyle "› " prefix for the loaded-subject row.
+	DependencyCursorStyle   = lipgloss.NewStyle().Background(DependencyCursorBgColor)
 	IssuePriorityP0Style    = lipgloss.NewStyle().Foreground(IssuePriorityP0Color).Bold(true)
 	IssuePriorityP1Style    = lipgloss.NewStyle().Foreground(IssuePriorityP1Color)
 	IssuePriorityP2Style    = lipgloss.NewStyle().Foreground(IssuePriorityP2Color)

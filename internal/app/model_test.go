@@ -21,6 +21,7 @@ import (
 	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
 	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	"github.com/hk9890/beads-workbench/internal/testing/ui"
+	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
 	"github.com/hk9890/beads-workbench/internal/ui/loading"
 	"github.com/hk9890/beads-workbench/internal/ui/modal"
 )
@@ -1702,7 +1703,11 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	}
 }
 
-func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *testing.T) {
+// TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads verifies
+// the decoupled navigation flow for an issue with a parent-group (Structure pane).
+// After decoupling (Q5): ↑/↓ only moves the cursor highlight (no load cmd);
+// Enter triggers OpenRelatedIssueIntent → loadDetailCmd (non-nil cmd).
+func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
@@ -1749,56 +1754,52 @@ func TestModelDetailModeLeftBrowserUpDownPreviewsIssueWithoutChangingAnchor(t *t
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
+	// (Q6a) Down only moves cursor — no preview load command (nil cmd).
+	prevIndex := m.detail.BrowserSelectedIndex
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
-	if cmd == nil {
-		t.Fatalf("expected down on left browser panel to trigger preview load command")
+	// cmd may be nil or a no-op batch; it must NOT trigger a detail reload.
+	mark := gw.resetMark()
+	m = applyMessages(t, m, runBatch(cmd))
+	if gw.hasCallSince(mark, repository.MethodIssue) {
+		t.Errorf("expected down on browser to NOT trigger repository.Issue call, got calls=%#v", gw.Calls())
 	}
-	// bw-5 already seeded in gw above.
-
-	if m.active != mode.Detail {
-		t.Fatalf("expected app to remain in detail mode after browse preview, got %s", m.active)
+	if m.detail.BrowserSelectedIndex == prevIndex {
+		t.Errorf("expected BrowserSelectedIndex to advance after down, still at %d", prevIndex)
 	}
-	if m.detail.TargetID != "bw-5" {
-		t.Fatalf("expected browser preview target bw-5, got %q", m.detail.TargetID)
-	}
+	// Selection stays anchored; no TargetID change from the arrow alone.
 	if m.detail.SelectionID != "bw-1" {
-		t.Fatalf("expected anchored selection to remain bw-1 while previewing, got %q", m.detail.SelectionID)
+		t.Errorf("expected SelectionID to remain bw-1 after arrow, got %q", m.detail.SelectionID)
 	}
 	if got := firstSelectionID(m, mode.Board); got != "bw-1" {
-		t.Fatalf("expected board selection to stay anchored on bw-1, got %q", got)
+		t.Errorf("expected board selection to stay anchored on bw-1, got %q", got)
 	}
 
-	m = applyMessages(t, m, runBatch(cmd))
-
+	// (Q6b) Enter triggers OpenRelatedIssueIntent → loadDetailCmd (non-nil cmd).
+	mark = gw.resetMark()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
-	if cmd != nil {
-		t.Fatalf("expected enter on left browser panel to be no-op, got command")
-	}
+	m = applyMessages(t, m, runBatch(cmd))
 
 	if m.active != mode.Detail {
-		t.Fatalf("expected app to remain in detail mode after browse no-op enter, got %s", m.active)
+		t.Errorf("expected app to remain in detail mode after Enter on browser panel, got %s", m.active)
 	}
-	if m.detail.TargetID != "bw-5" || m.detail.SelectionID != "bw-1" {
-		t.Fatalf("expected preview target bw-5 with anchored selection bw-1, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	if !gw.hasCallSince(mark, repository.MethodIssue) {
+		t.Errorf("expected Enter on browser to trigger repository.Issue call (loadDetailCmd), calls=%#v", gw.Calls())
 	}
-	if m.detail.ScrollOffset != 0 {
-		t.Fatalf("expected browser preview to reset content scroll offset, got %d", m.detail.ScrollOffset)
-	}
-
-	if m.detail.Detail.Summary.ID != "bw-1" {
-		t.Fatalf("expected anchored detail to remain bw-1, got %q", m.detail.Detail.Summary.ID)
-	}
-	if m.detail.PreviewDetail.Summary.ID != "bw-5" {
-		t.Fatalf("expected loaded browser preview detail bw-5, got %q", m.detail.PreviewDetail.Summary.ID)
+	// Scroll must be reset and Loading must have been set (may now be false after applyMessages resolves the load).
+	if m.detail.ContentScrollOffset != 0 {
+		t.Errorf("expected ContentScrollOffset=0 after Enter-reload, got %d", m.detail.ContentScrollOffset)
 	}
 	if len(m.detail.BrowserItems) != 3 {
-		t.Fatalf("expected stable parent-group browser items (parent + siblings) during preview, got %d", len(m.detail.BrowserItems))
+		t.Errorf("expected stable parent-group browser items (parent + siblings) after Enter reload, got %d", len(m.detail.BrowserItems))
 	}
 }
 
-func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssue(t *testing.T) {
+// TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenEnterLoads
+// verifies the decoupled navigation flow for deps-only (no parent group). After
+// decoupling (Q5): ↑/↓ only moves the cursor (no load); Enter triggers reload.
+func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenEnterLoads(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
@@ -1845,35 +1846,42 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownPreviewsSelectedIssu
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
+	// Down twice: moves cursor to index 2 (bw-4 in the Related group). No load occurs.
+	mark := gw.resetMark()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected down on dependencies pane to trigger preview load command")
+	m = applyMessages(t, m, runBatch(cmd))
+	if gw.hasCallSince(mark, repository.MethodIssue) {
+		t.Errorf("expected first down to NOT trigger Issue call, calls=%#v", gw.Calls())
 	}
-	// bw-5 and bw-4 already seeded in gw above.
-	m = applyMessages(t, m, runBatch(cmd))
+
+	mark = gw.resetMark()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
+	if gw.hasCallSince(mark, repository.MethodIssue) {
+		t.Errorf("expected second down to NOT trigger Issue call, calls=%#v", gw.Calls())
+	}
 
+	// Cursor is now on bw-4 (index 2). Enter triggers reload.
+	mark = gw.resetMark()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
-	if cmd != nil {
-		t.Fatal("expected enter on dependencies pane to be no-op")
-	}
+	m = applyMessages(t, m, runBatch(cmd))
 
 	if m.active != mode.Detail {
-		t.Fatalf("expected app to remain in detail mode after dependency preview, got %s", m.active)
+		t.Errorf("expected app to remain in detail mode after Enter on dependencies pane, got %s", m.active)
 	}
-	if m.detail.TargetID != "bw-4" || m.detail.SelectionID != "bw-1" {
-		t.Fatalf("expected selected dependency bw-4 preview target with anchored selection bw-1, got target=%q selection=%q", m.detail.TargetID, m.detail.SelectionID)
+	if !gw.hasCallSince(mark, repository.MethodIssue) {
+		t.Errorf("expected Enter on dependencies pane to trigger repository.Issue call, calls=%#v", gw.Calls())
 	}
-
-	if m.detail.Detail.Summary.ID != "bw-1" {
-		t.Fatalf("expected anchored detail to remain bw-1, got %q", m.detail.Detail.Summary.ID)
+	// TargetID must point to the cursor row (bw-4).
+	if m.detail.TargetID != "bw-4" {
+		t.Errorf("expected Enter to set TargetID=bw-4 (cursor row), got %q", m.detail.TargetID)
 	}
-	if m.detail.PreviewDetail.Summary.ID != "bw-4" {
-		t.Fatalf("expected loaded dependency issue preview bw-4, got %q", m.detail.PreviewDetail.Summary.ID)
+	// SelectionID stays anchored to the board selection (bw-1).
+	if m.detail.SelectionID != "bw-1" {
+		t.Errorf("expected SelectionID to remain bw-1 after Enter reload, got %q", m.detail.SelectionID)
 	}
 }
 
@@ -2951,6 +2959,84 @@ func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
 	next, cmd = m.Update(cmd())
 	m = next.(Model)
 	assertModalOpenWithoutCatalogToast(m, "Comment on bwf-2")
+}
+
+// TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset
+// verifies that when the Details mode emits OpenRelatedIssueIntent (via Enter on
+// a Dependencies pane row), the app shell handler performs the reload + focus
+// move + scroll reset it already does (Q6c). This test directly sends
+// OpenRelatedIssueIntent via a synthetic KeyMsg that drives the model through
+// the production code path.
+func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t *testing.T) {
+	gw := newTestRepository()
+	gw.seedReady("bw-1", "Main issue", "epic", 1)
+	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+
+	// Put the model into Detail mode with bw-1 loaded and non-zero scroll offsets.
+	m.active = mode.Detail
+	m.detail = detailsmode.Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-1",
+		FocusPane:   uidetails.FocusPaneDependencies,
+		Detail: domain.IssueDetail{
+			Summary:  domain.IssueSummary{ID: "bw-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
+			Children: []domain.IssueReference{{ID: "bw-child", Title: "Child issue"}},
+		},
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-child", Title: "Child issue"},
+		},
+		BrowserSelectedIndex:     0, // cursor on bw-child
+		ContentScrollOffset:      5,
+		MetadataScrollOffset:     3,
+		DependenciesScrollOffset: 1,
+		ScrollOffset:             5,
+		Keys:                     m.keys,
+	}
+	m.sizeKnown = true
+	m.width = 160
+	m.height = 34
+
+	mark := gw.resetMark()
+
+	// Send Enter: drives HandleKey which should emit OpenRelatedIssueIntent{bw-child}.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+
+	// (Q6c) App handler must: set TargetID, Loading=true, reset all scroll offsets.
+	if m.detail.TargetID != "bw-child" {
+		t.Errorf("expected TargetID=bw-child after Enter on dep pane, got %q", m.detail.TargetID)
+	}
+	if !m.detail.Loading {
+		t.Error("expected detail.Loading=true after Enter on dep pane")
+	}
+	if m.detail.ContentScrollOffset != 0 {
+		t.Errorf("expected ContentScrollOffset=0 after Enter-reload, got %d", m.detail.ContentScrollOffset)
+	}
+	if m.detail.MetadataScrollOffset != 0 {
+		t.Errorf("expected MetadataScrollOffset=0 after Enter-reload, got %d", m.detail.MetadataScrollOffset)
+	}
+	if m.detail.DependenciesScrollOffset != 0 {
+		t.Errorf("expected DependenciesScrollOffset=0 after Enter-reload, got %d", m.detail.DependenciesScrollOffset)
+	}
+	if m.detail.ScrollOffset != 0 {
+		t.Errorf("expected ScrollOffset=0 after Enter-reload, got %d", m.detail.ScrollOffset)
+	}
+	if m.active != mode.Detail {
+		t.Errorf("expected mode.Detail to stay active after Enter on dep pane, got %s", m.active)
+	}
+
+	// App must have issued a detail load command (Issue call).
+	m = applyMessages(t, m, runBatch(cmd))
+	if !gw.hasCallSince(mark, repository.MethodIssue) {
+		t.Error("expected repository.Issue call after Enter-reload; handler must dispatch loadDetailCmd")
+	}
 }
 
 func runBatch(cmd tea.Cmd) []tea.Msg {

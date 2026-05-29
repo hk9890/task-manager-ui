@@ -126,7 +126,11 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),
-		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
+		BrowserSelectedIssueID: m.browserSelectedIssueID(),
+		// SubjectIssueID is the currently-loaded issue (Content pane). When it
+		// appears in the Dependencies pane (e.g. in the Structure group), it is
+		// marked with the › chevron so cursor and subject are simultaneously legible.
+		SubjectIssueID:           strings.TrimSpace(m.Detail.Summary.ID),
 		Loading:                  blockingLoad,
 		Skeleton:                 skeletonContent,
 		SkeletonPhase:            skeletonPhase,
@@ -185,6 +189,12 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == uidetails.FocusPaneDependencies {
+		// Wire Enter to open the highlighted related/child issue. This is
+		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
+		// special case, consistent with how Enter in the Metadata pane works.
+		if ref, ok := m.selectedRelatedIssue(); ok {
+			return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
+		}
 		return true, nil
 	}
 
@@ -231,19 +241,15 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	switch m.focusPane() {
 	case uidetails.FocusPaneDependencies:
 		if action == config.DetailActionScrollUp {
-			if m.moveRelatedSelection(-1, maxWidth, viewportHeight) {
-				if ref, ok := m.selectedRelatedIssue(); ok {
-					return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
-				}
-			}
+			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
+			// The full detail reloads only when the user presses Enter (Q5).
+			m.moveRelatedSelection(-1, maxWidth, viewportHeight)
 			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
-			if m.moveRelatedSelection(1, maxWidth, viewportHeight) {
-				if ref, ok := m.selectedRelatedIssue(); ok {
-					return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
-				}
-			}
+			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
+			// The full detail reloads only when the user presses Enter (Q5).
+			m.moveRelatedSelection(1, maxWidth, viewportHeight)
 			return true, nil
 		}
 		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
@@ -417,6 +423,7 @@ func (m *Model) RenderDetail() domain.IssueDetail {
 	content.BlockedBy = append([]domain.IssueReference(nil), m.Detail.BlockedBy...)
 	content.Blocks = append([]domain.IssueReference(nil), m.Detail.Blocks...)
 	content.Related = append([]domain.IssueReference(nil), m.Detail.Related...)
+	content.Children = append([]domain.IssueReference(nil), m.Detail.Children...)
 	content.ParentGroupBrowser = m.Detail.ParentGroupBrowser
 	return content
 }
@@ -567,16 +574,18 @@ func browserItemsFromParentGroup(group domain.ParentGroupBrowserContext) []domai
 }
 
 func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueReference {
+	// Group order: Blocked by, Blocks, Related, Children, Structure.
 	groups := [][]domain.IssueReference{
 		detail.BlockedBy,
 		detail.Blocks,
 		detail.Related,
+		detail.Children,
 	}
 	if strings.TrimSpace(detail.ParentGroupBrowser.Parent.ID) != "" {
 		groups = append(groups, browserItemsFromParentGroup(detail.ParentGroupBrowser))
 	}
 
-	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.ParentGroupBrowser.Children)+1)
+	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+len(detail.ParentGroupBrowser.Children)+1)
 	out := make([]domain.IssueReference, 0, len(seen))
 	for _, refs := range groups {
 		ordered := append([]domain.IssueReference(nil), refs...)

@@ -264,6 +264,10 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	}
 }
 
+// TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused verifies
+// that ↑/↓ in the Dependencies pane moves BrowserSelectedIndex and returns a
+// nil intent (no detail reload). Cursor movement is now decoupled from reload
+// (Q6a, Q5 decoupling). Enter is the only key that triggers OpenRelatedIssueIntent.
 func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *testing.T) {
 	t.Parallel()
 
@@ -281,25 +285,38 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 		},
 	}
 
-	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10); !consumed || intent == nil {
-		t.Fatalf("expected down to move related selection and emit preview intent, consumed=%v intent=%v", consumed, intent)
+	// (Q6a) Arrow moves BrowserSelectedIndex; intent must be nil (no reload).
+	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	if !consumed {
+		t.Fatal("expected down to be consumed in Dependencies pane")
+	}
+	if intent != nil {
+		t.Fatalf("expected down in Dependencies pane to return nil intent (no reload), got %+v", intent)
 	}
 	if m.BrowserSelectedIndex != 1 {
 		t.Fatalf("expected related index to move to 1, got %d", m.BrowserSelectedIndex)
 	}
-	if intent, _ := m.selectedRelatedIssue(); intent.ID != "bw-2" {
-		t.Fatalf("expected selected related issue bw-2 after down, got %q", intent.ID)
+	if selected, _ := m.selectedRelatedIssue(); selected.ID != "bw-2" {
+		t.Fatalf("expected selected related issue bw-2 after down, got %q", selected.ID)
 	}
 
-	if consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10); !consumed || intent == nil {
-		t.Fatalf("expected up to move related selection and emit preview intent, consumed=%v intent=%v", consumed, intent)
+	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	if !consumed {
+		t.Fatal("expected up to be consumed in Dependencies pane")
+	}
+	if intent != nil {
+		t.Fatalf("expected up in Dependencies pane to return nil intent (no reload), got %+v", intent)
 	}
 	if m.BrowserSelectedIndex != 0 {
 		t.Fatalf("expected related index to move back to 0, got %d", m.BrowserSelectedIndex)
 	}
 }
 
-func TestModelDetailEnterOnRelatedPaneIsNoOp(t *testing.T) {
+// TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent verifies that
+// pressing Enter while the Dependencies pane is focused emits
+// OpenRelatedIssueIntent for the highlighted row (Q5, Q6b). This is hardcoded
+// (NOT keymap-driven), consistent with how Enter in the Metadata pane works.
+func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -318,10 +335,13 @@ func TestModelDetailEnterOnRelatedPaneIsNoOp(t *testing.T) {
 
 	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 80, 10)
 	if !consumed {
-		t.Fatal("expected enter on related pane to be consumed")
+		t.Fatal("expected enter on Dependencies pane to be consumed")
 	}
-	if intent != nil {
-		t.Fatalf("expected enter on related pane to be a no-op without intent, got %+v", intent)
+	if intent == nil {
+		t.Fatal("expected enter on Dependencies pane to emit OpenRelatedIssueIntent, got nil")
+	}
+	if intent.IssueID != "bw-3" {
+		t.Fatalf("expected OpenRelatedIssueIntent.IssueID=bw-3 (BrowserSelectedIndex=1), got %q", intent.IssueID)
 	}
 }
 
@@ -1233,5 +1253,112 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	}
 	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
 		t.Errorf("expected field to advance to Priority, got %q", m.MetadataSelectedField)
+	}
+}
+
+// TestRenderDetailChildrenAnchoredToBaseDetail verifies that RenderDetail always
+// overlays Children from m.Detail (the anchor issue), not from any preview target.
+// This guards the index↔line desync blind spot: if content.Children came from the
+// preview issue instead of m.Detail, BrowserItems (built from m.Detail.Children)
+// and the rendered deps pane would disagree.
+func TestRenderDetailChildrenAnchoredToBaseDetail(t *testing.T) {
+	t.Parallel()
+
+	anchorChildren := []domain.IssueReference{
+		{ID: "bw-child1", Title: "Child of anchor"},
+		{ID: "bw-child2", Title: "Another child of anchor"},
+	}
+
+	m := Model{
+		// Anchor issue (SelectionID) has two children.
+		SelectionID: "bw-anchor",
+		// TargetID differs: we are previewing bw-target.
+		TargetID: "bw-target",
+		Detail: domain.IssueDetail{
+			Summary:  domain.IssueSummary{ID: "bw-anchor", Title: "Anchor epic", Status: "open", Type: "epic", Priority: 1},
+			Children: anchorChildren,
+			BlockedBy: []domain.IssueReference{
+				{ID: "bw-target", Title: "Target (also a blocker)", Status: "open", Type: "task", Priority: 2},
+			},
+		},
+		// BrowserItems built from anchor detail.
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-target", Title: "Target (also a blocker)"},
+			{ID: "bw-child1", Title: "Child of anchor"},
+			{ID: "bw-child2", Title: "Another child of anchor"},
+		},
+	}
+
+	// Apply a preview detail for bw-target that has DIFFERENT children.
+	m.ApplyPreviewDetail(domain.IssueDetail{
+		Summary:  domain.IssueSummary{ID: "bw-target", Title: "Target issue", Status: "open", Type: "task", Priority: 2},
+		Children: []domain.IssueReference{{ID: "bw-other-child", Title: "Target's own child"}},
+	})
+
+	render := m.RenderDetail()
+
+	// Children in the rendered detail must come from m.Detail (the anchor), not
+	// from the preview target.
+	if len(render.Children) != len(anchorChildren) {
+		t.Errorf("expected %d children from anchor detail, got %d: %#v",
+			len(anchorChildren), len(render.Children), render.Children)
+	}
+	for i, want := range anchorChildren {
+		if i >= len(render.Children) {
+			break
+		}
+		if render.Children[i].ID != want.ID {
+			t.Errorf("Children[%d]: want ID %q, got %q", i, want.ID, render.Children[i].ID)
+		}
+	}
+
+	// Verify the rendered view shows Children group with correct count in the deps pane.
+	// Use a wide terminal for layout stability.
+	view := m.View(uidetails.InspectorThreeColumnMinWidth, 24, false, 0)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "Children (2)") {
+		t.Errorf("expected 'Children (2)' in rendered deps pane, got:\n%s", plain)
+	}
+	// The preview target's child must NOT appear — only anchor's children are shown.
+	if strings.Contains(plain, "other-child") {
+		t.Errorf("expected preview target's child to be absent from deps pane, got:\n%s", plain)
+	}
+}
+
+// TestBrowserItemsFromDependenciesIncludesChildren verifies that
+// browserItemsFromDependencies includes detail.Children in the flat list,
+// placed between Related and the parent-group Structure items. This is the
+// navigation flat-list ordering (plan-review Q2b).
+func TestBrowserItemsFromDependenciesIncludesChildren(t *testing.T) {
+	t.Parallel()
+
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-epic", Title: "Epic"},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-blocker", Title: "Blocker"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-related", Title: "Related"},
+		},
+		Children: []domain.IssueReference{
+			{ID: "bw-child2", Title: "Child two"},
+			{ID: "bw-child1", Title: "Child one"},
+		},
+	}
+
+	m := Model{}
+	m.ApplyLoadedDetail("bw-epic", detail)
+
+	// Expected flat order: BlockedBy, Related, Children (sorted asc).
+	// bw-blocker, bw-related, bw-child1, bw-child2
+	if len(m.BrowserItems) != 4 {
+		t.Fatalf("expected 4 browser items (blocker + related + 2 children), got %d: %#v",
+			len(m.BrowserItems), m.BrowserItems)
+	}
+	wantOrder := []string{"bw-blocker", "bw-related", "bw-child1", "bw-child2"}
+	for i, want := range wantOrder {
+		if got := m.BrowserItems[i].ID; got != want {
+			t.Errorf("BrowserItems[%d]: want %q, got %q", i, want, got)
+		}
 	}
 }

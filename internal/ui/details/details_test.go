@@ -144,7 +144,10 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 }
 
 func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
-	t.Parallel()
+	// Use TrueColor so the cursor background style emits ANSI escape sequences.
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
 	view := Render(State{
 		SelectionID: "bw-88",
@@ -158,9 +161,19 @@ func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 		Width:                  100,
 	})
 
+	// (a) Cursor row uses background highlight, NOT the › chevron.
+	// DependencyCursorBgColor dark: #1F3A4F → RGB(31,58,79) → "48;2;31;58;79".
+	const wantBgANSI = "48;2;31;58;79"
+	if !strings.Contains(view, wantBgANSI) {
+		t.Fatalf("expected cursor row to carry background ANSI %q for bw-9, got:\n%s", wantBgANSI, view)
+	}
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "│›") || !strings.Contains(plain, "bw-9") {
-		t.Fatalf("expected selected dependency row marker for bw-9, got:\n%s", plain)
+	if !strings.Contains(plain, "bw-9") {
+		t.Fatalf("expected cursor issue bw-9 to appear in deps pane, got:\n%s", plain)
+	}
+	// Cursor row must NOT use the › subject chevron (background takes priority).
+	if strings.Contains(plain, "│›") {
+		t.Fatalf("expected cursor row to NOT use › chevron (background-only), got:\n%s", plain)
 	}
 }
 
@@ -481,8 +494,9 @@ func TestDependencyGroupsDeduplicateIssueIDsAcrossVisibleGroups(t *testing.T) {
 		},
 	}, nil)
 
-	if got := len(groups); got != 3 {
-		t.Fatalf("expected 3 dependency groups, got %d", got)
+	// Now 4 groups: Blocked by, Blocks, Related, Children (Children is empty here).
+	if got := len(groups); got != 4 {
+		t.Fatalf("expected 4 dependency groups, got %d", got)
 	}
 	if got := len(groups[0].Refs); got != 1 || groups[0].Refs[0].ID != "bw-1" {
 		t.Fatalf("expected blocked-by to keep bw-1 once, got %#v", groups[0].Refs)
@@ -492,6 +506,9 @@ func TestDependencyGroupsDeduplicateIssueIDsAcrossVisibleGroups(t *testing.T) {
 	}
 	if got := len(groups[2].Refs); got != 1 || groups[2].Refs[0].ID != "bw-3" {
 		t.Fatalf("expected related to drop duplicate bw-1 and keep bw-3, got %#v", groups[2].Refs)
+	}
+	if got := len(groups[3].Refs); got != 0 {
+		t.Fatalf("expected children to be empty (none provided), got %#v", groups[3].Refs)
 	}
 }
 
@@ -505,7 +522,7 @@ func TestRenderDependenciesPaneLinesDoNotRenderDuplicateIssueRowsAcrossGroups(t 
 			{ID: "bw-1", Title: "Duplicate from blocked-by"},
 			{ID: "bw-3", Title: "Related unique"},
 		},
-	}, nil, "bw-3", 80, false, 0)
+	}, nil, "bw-3", "", 80, false, 0)
 
 	joined := strings.Join(lines, "\n")
 	if got := strings.Count(joined, "bw-1"); got != 1 {
@@ -968,16 +985,19 @@ func TestMaxScrollOffsets(t *testing.T) {
 			wantZeroContent: true,
 		},
 		{
-			name:            "empty detail responsive layout: no content or dep scroll",
+			// The responsive bottom pane is shorter (~10 inner rows), and the
+			// Children group adds 2 lines (label + "(none)"), so a dep offset > 0
+			// is expected for an empty detail in narrow/short viewports.
+			name:            "empty detail responsive layout: no content scroll",
 			state:           State{Detail: emptyDetail, Width: InspectorTwoColumnMinWidth - 10, Height: 30},
-			wantZeroDeps:    true,
 			wantZeroContent: true,
 		},
 		{
-			// zero width/height: defaults to defaultDetailWidth/defaultDetailHeight
+			// zero width/height: defaults to defaultDetailWidth/defaultDetailHeight (80×24).
+			// Width 80 < InspectorTwoColumnMinWidth, so responsive layout is used.
+			// The small bottom pane means the empty detail deps may be > 0.
 			name:            "zero width height uses defaults: no content scroll for empty detail",
 			state:           State{Detail: emptyDetail, Width: 0, Height: 0},
-			wantZeroDeps:    true,
 			wantZeroContent: true,
 		},
 		{
@@ -1210,4 +1230,250 @@ func TestRenderLongDepsWindowGolden(t *testing.T) {
 	}
 
 	assertGolden(t, []byte(view), "long_deps_window.golden")
+}
+
+// TestDependencyRefLineIndexChildrenConsistency asserts that BrowserSelectedIndex
+// ↔ DependencyRefLineIndex returns the correct rendered-line position when a
+// Children group is present. This is the key correctness risk from plan-review Q2:
+// if DependencyRefLineIndex were not updated, arrow navigation onto a child would
+// scroll to the wrong line.
+//
+// The test uses IDs that are not in input order to catch sort-mismatch bugs
+// between orderedReferences (used by (a)/(c)) and sort.SliceStable (used by (b)).
+func TestDependencyRefLineIndexChildrenConsistency(t *testing.T) {
+	t.Parallel()
+
+	detail := domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-parent", Title: "Parent epic", Status: "open", Type: "epic", Priority: 1},
+		BlockedBy: []domain.IssueReference{
+			{ID: "bw-z9", Title: "Blocker Z"},
+		},
+		Blocks: []domain.IssueReference{
+			{ID: "bw-a1", Title: "Downstream A"},
+		},
+		Related: []domain.IssueReference{
+			{ID: "bw-m5", Title: "Related M"},
+		},
+		// Children deliberately out of input order to expose sort-mismatch bugs.
+		Children: []domain.IssueReference{
+			{ID: "bw-c3", Title: "Child C (third)"},
+			{ID: "bw-c1", Title: "Child C (first)"},
+			{ID: "bw-c2", Title: "Child C (second)"},
+		},
+	}
+
+	// browserItems is the flat list in group/sort order matching (b).
+	// Order: BlockedBy asc, Blocks asc, Related asc, Children asc.
+	// BlockedBy: bw-z9
+	// Blocks: bw-a1
+	// Related: bw-m5
+	// Children sorted asc: bw-c1, bw-c2, bw-c3
+	browserItems := []domain.IssueReference{
+		{ID: "bw-z9", Title: "Blocker Z"},
+		{ID: "bw-a1", Title: "Downstream A"},
+		{ID: "bw-m5", Title: "Related M"},
+		{ID: "bw-c1", Title: "Child C (first)"},
+		{ID: "bw-c2", Title: "Child C (second)"},
+		{ID: "bw-c3", Title: "Child C (third)"},
+	}
+
+	// Verify every BrowserSelectedIndex maps to a rendered-line that contains
+	// the expected issue ID.
+	lines := renderDependenciesPaneLines(detail, browserItems, "", "", 80, false, 0)
+	joinedLines := strings.Join(lines, "\n")
+
+	for i, ref := range browserItems {
+		lineIdx := DependencyRefLineIndex(i, browserItems, detail)
+		if lineIdx < 0 || lineIdx >= len(lines) {
+			t.Errorf("browserItems[%d] (ID=%q): DependencyRefLineIndex=%d out of range [0,%d)",
+				i, ref.ID, lineIdx, len(lines))
+			continue
+		}
+		if !strings.Contains(lines[lineIdx], ref.ID) {
+			t.Errorf("browserItems[%d] (ID=%q): DependencyRefLineIndex=%d points to line %q, expected to contain %q\nAll lines:\n%s",
+				i, ref.ID, lineIdx, lines[lineIdx], ref.ID, joinedLines)
+		}
+	}
+
+	// Verify the Children group header is present and correctly placed (before Structure
+	// which is absent here, per group order: Blocked by, Blocks, Related, Children, Structure).
+	if !strings.Contains(joinedLines, "Children (3)") {
+		t.Errorf("expected 'Children (3)' in rendered deps pane, got:\n%s", joinedLines)
+	}
+
+	// Children group must appear after Related group in the rendered output.
+	relatedIdx := strings.Index(joinedLines, "Related (")
+	childrenIdx := strings.Index(joinedLines, "Children (")
+	if relatedIdx < 0 || childrenIdx < 0 {
+		t.Errorf("expected both 'Related (' and 'Children (' in output:\n%s", joinedLines)
+	} else if childrenIdx <= relatedIdx {
+		t.Errorf("expected Children group after Related group, relatedIdx=%d childrenIdx=%d", relatedIdx, childrenIdx)
+	}
+}
+
+// TestRenderChildrenGroupGolden verifies rendering of an epic with children
+// in the Dependencies pane (placed per Q3 ordering: after Related, before Structure).
+func TestRenderChildrenGroupGolden(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-epic",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-epic",
+				Title:    "Epic with children",
+				Status:   "in_progress",
+				Type:     "epic",
+				Priority: 1,
+			},
+			Description: "An epic that has child tasks.",
+			BlockedBy:   []domain.IssueReference{{ID: "bw-blocker", Title: "Upstream dependency"}},
+			Children: []domain.IssueReference{
+				{ID: "bw-child1", Title: "First child task", Type: "task", Priority: 2, Status: "open"},
+				{ID: "bw-child2", Title: "Second child task", Type: "task", Priority: 2, Status: "in_progress"},
+			},
+		},
+		Width:  InspectorTwoColumnMinWidth,
+		Height: 24,
+	})
+
+	assertGolden(t, []byte(view), "children_group.golden")
+}
+
+// --- Q4 two-marker cursor-vs-subject golden assertions ---
+//
+// These three tests encode the three cases from the Q4 two-marker spec:
+//   (a) Cursor/pending row → background-highlight style (no › chevron)
+//   (b) Subject row when in-list (e.g. Structure group) → › chevron
+//   (c) Subject NOT in-list → no subject marker; subject lives in Content/Metadata panes
+
+// TestRenderCursorRowUsesBackgroundHighlightGolden encodes case (a):
+// When BrowserSelectedIssueID is set (cursor row), the row is highlighted with
+// DependencyCursorStyle background rather than the › selection chevron. Uses
+// TrueColor so the ANSI background escape appears in the golden output.
+func TestRenderCursorRowUsesBackgroundHighlightGolden(t *testing.T) {
+	// Require TrueColor to capture background ANSI in the golden.
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	// Render a narrow detail (responsive layout) with cursor=bw-cursor, no subject marker.
+	view := Render(State{
+		SelectionID: "bw-main",
+		Detail: domain.IssueDetail{
+			Summary:   domain.IssueSummary{ID: "bw-main", Title: "Main issue", Status: "open", Type: "task", Priority: 1},
+			BlockedBy: []domain.IssueReference{{ID: "bw-cursor", Title: "Cursor issue", Type: "task", Priority: 2, Status: "open"}},
+			Blocks:    []domain.IssueReference{{ID: "bw-other", Title: "Other issue", Type: "task", Priority: 3, Status: "open"}},
+		},
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-cursor", Title: "Cursor issue"},
+			{ID: "bw-other", Title: "Other issue"},
+		},
+		BrowserSelectedIssueID: "bw-cursor", // cursor on this row
+		SubjectIssueID:         "",          // no in-list subject (bw-main not in deps pane)
+		Width:                  InspectorTwoColumnMinWidth,
+		Height:                 18,
+	})
+
+	assertGolden(t, []byte(view), "cursor_row_background.golden")
+
+	// The cursor row must carry the background ANSI (dark: 48;2;31;58;79) and NOT the › chevron.
+	const wantBgANSI = "48;2;31;58;79"
+	if !strings.Contains(view, wantBgANSI) {
+		t.Errorf("expected cursor row background ANSI %q, got (truncated):\n%.500s", wantBgANSI, view)
+	}
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if strings.Contains(plain, "│›") {
+		t.Errorf("cursor row must NOT use › chevron (background-only), got:\n%s", plain)
+	}
+}
+
+// TestRenderSubjectRowInListUsesChevronGolden encodes case (b):
+// When SubjectIssueID matches a row that appears in the Structure group
+// (the subject issue is a child with a parent, so parentChildSiblings includes self),
+// that row gets the › selection chevron. The cursor is elsewhere (or absent).
+func TestRenderSubjectRowInListUsesChevronGolden(t *testing.T) {
+	t.Parallel()
+
+	// Three-column layout with a Structure group containing the subject (bw-self).
+	view := Render(State{
+		SelectionID: "bw-self",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-self", Title: "Self issue", Status: "open", Type: "task", Priority: 1},
+			BlockedBy: []domain.IssueReference{
+				{ID: "bw-blocker", Title: "Blocker", Type: "task", Priority: 0, Status: "open"},
+			},
+			ParentGroupBrowser: domain.ParentGroupBrowserContext{
+				Parent: domain.IssueReference{ID: "bw-parent", Title: "Parent epic"},
+				Children: []domain.IssueReference{
+					{ID: "bw-self", Title: "Self issue"},
+					{ID: "bw-sibling", Title: "Sibling issue"},
+				},
+			},
+		},
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-blocker", Title: "Blocker"},
+			{ID: "bw-parent", Title: "Parent epic"},
+			{ID: "bw-self", Title: "Self issue"},
+			{ID: "bw-sibling", Title: "Sibling issue"},
+		},
+		BrowserSelectedIssueID: "bw-blocker", // cursor elsewhere
+		SubjectIssueID:         "bw-self",    // subject in-list — must show ›
+		Width:                  InspectorThreeColumnMinWidth,
+		Height:                 18,
+	})
+
+	assertGolden(t, []byte(view), "subject_row_in_list_chevron.golden")
+
+	// Subject row must have the › chevron.
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "›") {
+		t.Errorf("expected subject row in Structure group to carry › chevron, got:\n%s", plain)
+	}
+	// The subject ID must appear in the deps pane with ›.
+	if !strings.Contains(plain, "bw-self") {
+		t.Errorf("expected subject issue bw-self in deps pane, got:\n%s", plain)
+	}
+}
+
+// TestRenderSubjectNotInListNoSubjectMarkerGolden encodes case (c):
+// When the subject is NOT in the deps pane (e.g. top-level epic — no Structure group;
+// or Children group which never includes self), no subject marker appears in the
+// deps pane. The subject lives in the Content/Metadata panes instead.
+func TestRenderSubjectNotInListNoSubjectMarkerGolden(t *testing.T) {
+	t.Parallel()
+
+	// Top-level epic: no ParentGroupBrowser → no Structure group. Children group
+	// does not contain the epic itself. SubjectIssueID=bw-epic is not present
+	// as a browser item, so no › appears in the deps pane.
+	view := Render(State{
+		SelectionID: "bw-epic",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{ID: "bw-epic", Title: "Top-level epic", Status: "open", Type: "epic", Priority: 1},
+			Children: []domain.IssueReference{
+				{ID: "bw-child1", Title: "Child task one", Type: "task", Priority: 2, Status: "open"},
+				{ID: "bw-child2", Title: "Child task two", Type: "task", Priority: 2, Status: "open"},
+			},
+		},
+		BrowserItems: []domain.IssueReference{
+			{ID: "bw-child1", Title: "Child task one"},
+			{ID: "bw-child2", Title: "Child task two"},
+		},
+		BrowserSelectedIssueID: "bw-child1", // cursor on child1
+		SubjectIssueID:         "bw-epic",   // epic is subject but NOT in deps pane
+		Width:                  InspectorThreeColumnMinWidth,
+		Height:                 18,
+	})
+
+	assertGolden(t, []byte(view), "subject_not_in_list_no_marker.golden")
+
+	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	// No › should appear since the subject (bw-epic) is not a browser item.
+	if strings.Contains(plain, "│›") {
+		t.Errorf("expected no › marker when subject is not in deps pane, got:\n%s", plain)
+	}
+	// The epic ID must appear in the Content pane (title/summary line), not in deps pane.
+	if !strings.Contains(plain, "bw-epic") {
+		t.Errorf("expected bw-epic to appear in Content pane as subject, got:\n%s", plain)
+	}
 }
