@@ -7,9 +7,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [v0.7.0]
 
+### Added
+
+- Details pane now renders an epic's children, with Enter-gated navigation into related issues.
+- Startup prunes stale `bwb` session log files so the log directory no longer accumulates dead sessions.
+
 ### Changed
 
 - **Default repository backend is now `beads`** (live `bd` subprocess reads) instead of `caching`. The caching decorator has known correctness bugs (e.g. a stale persisted snapshot can serve a near-empty board — see `internal/repository/caching/testdata/known-bad-cache-fbea/`), so it is now opt-in only via `--repo caching`. No flag change is needed for the new default; existing `--repo caching` / `--repo memory` invocations are unaffected.
+
+### Fixed
+
+- Default mode-switch keybindings are now reachable (previously some defaults were shadowed/unbound).
+- Details pane labels the owner field "Owner" and shows the Children count in the compact summary.
+- Metadata-rail Counts block now includes the Children count.
 
 ## [v0.6.0]
 
