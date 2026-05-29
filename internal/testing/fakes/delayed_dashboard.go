@@ -29,8 +29,8 @@ type DelayedDashboardRepository struct {
 
 	mu       sync.Mutex
 	release  chan struct{} // current gate; each value unblocks one call
-	released bool         // true once ReleaseAll has been called (close)
-	inFlight atomic.Int64 // count of Dashboard calls currently blocked
+	released bool          // true once ReleaseAll has been called (close)
+	inFlight atomic.Int64  // count of Dashboard calls currently blocked
 }
 
 // NewDelayedDashboardRepository creates a DelayedDashboardRepository wrapping

@@ -331,9 +331,9 @@ func TestMeasure_EndToEnd_Unit(t *testing.T) {
 	t.Parallel()
 
 	const (
-		nIssues     = 5
-		samplesCold = 2
-		samplesWarm = 3
+		nIssues      = 5
+		samplesCold  = 2
+		samplesWarm  = 3
 		issueDetailN = 3
 	)
 	const fakeBdVersion = "bd fake-1.0.0 (unit-test)"

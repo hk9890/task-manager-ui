@@ -13,8 +13,8 @@ import (
 // It returns sequential IDs and records no real state without forking
 // any subprocess, so tests run in <<1ms.
 type fakeBdCommander struct {
-	nextID     int
-	bdVersion  string
+	nextID    int
+	bdVersion string
 }
 
 // Compile-time check: fakeBdCommander satisfies bdCommander.
@@ -25,7 +25,7 @@ func newFakeCommander() *fakeBdCommander {
 }
 
 func (f *fakeBdCommander) version() (string, error) { return f.bdVersion, nil }
-func (f *fakeBdCommander) init(_ string) error       { return nil }
+func (f *fakeBdCommander) init(_ string) error      { return nil }
 func (f *fakeBdCommander) create(_ string, _ string, _ int) (string, error) {
 	id := fmt.Sprintf("lt-%04d", f.nextID)
 	f.nextID++
