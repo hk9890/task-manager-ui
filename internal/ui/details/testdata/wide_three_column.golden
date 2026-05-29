@@ -9,14 +9,14 @@
 │  C P3 O bw-3 Renderer cleanup  │  │Inline related work section should be suppressed when rail is acti│  │  Blocked by: 1                 │
 │                                │  │ve.                                                               │  │  Blocks    : 1                 │
 │Children (0)                    │  │                                                                  │  │  Related   : 1                 │
-│(none)                          │  │                                                                  │  │                                │
-│                                │  │                                                                  │  │Quick actions                   │
-│Structure (3)                   │  │                                                                  │  │e Edit issue                    │
-│  ? P0 - …parent Parent epic    │  │                                                                  │  │u Update issue                  │
-│  ? P0 - …ibling Sibling issue  │  │                                                                  │  │a Add comment                   │
-│  ? P0 - bw-wide Wide layout ...│  │                                                                  │  │x Close issue                   │
-│                                │  │                                                                  │  │r Reload detail                 │
+│(none)                          │  │                                                                  │  │  Children  : 0                 │
 │                                │  │                                                                  │  │                                │
+│Structure (3)                   │  │                                                                  │  │Quick actions                   │
+│  ? P0 - …parent Parent epic    │  │                                                                  │  │e Edit issue                    │
+│  ? P0 - …ibling Sibling issue  │  │                                                                  │  │u Update issue                  │
+│  ? P0 - bw-wide Wide layout ...│  │                                                                  │  │a Add comment                   │
+│                                │  │                                                                  │  │x Close issue                   │
+│                                │  │                                                                  │  │r Reload detail                 │
 │                                │  │                                                                  │  │                                │
 │                                │  │                                                                  │  │                                │
 │                                │  │                                                                  │  │                                │

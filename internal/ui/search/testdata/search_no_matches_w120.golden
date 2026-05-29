@@ -9,6 +9,7 @@
 │                                      │  │                                        │  │  Blocked by: 0                 │
 │                                      │  │                                        │  │  Blocks    : 0                 │
 │                                      │  │                                        │  │  Related   : 0                 │
+│                                      │  │                                        │  │  Children  : 0                 │
 │                                      │  │                                        │  │                                │
 │                                      │  │                                        │  │Quick actions                   │
 │                                      │  │                                        │  │e Edit issue                    │
@@ -16,7 +17,6 @@
 │                                      │  │                                        │  │a Add comment                   │
 │                                      │  │                                        │  │x Close issue                   │
 │                                      │  │                                        │  │r Reload detail                 │
-│                                      │  │                                        │  │                                │
 │                                      │  │                                        │  │                                │
 │                                      │  │                                        │  │                                │
 │                                      │  │                                        │  │                                │

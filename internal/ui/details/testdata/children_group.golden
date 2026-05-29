@@ -9,14 +9,14 @@
 │(none)                  │  │                                            │  │  Blocked by: 1                 │
 │                        │  │                                            │  │  Blocks    : 0                 │
 │Children (2)            │  │                                            │  │  Related   : 0                 │
-│  T P2 O …child1 Firs...│  │                                            │  │                                │
-│  T P2 I …child2 Seco...│  │                                            │  │Quick actions                   │
+│  T P2 O …child1 Firs...│  │                                            │  │  Children  : 2                 │
+│  T P2 I …child2 Seco...│  │                                            │  │                                │
+│                        │  │                                            │  │Quick actions                   │
 │                        │  │                                            │  │e Edit issue                    │
 │                        │  │                                            │  │u Update issue                  │
 │                        │  │                                            │  │a Add comment                   │
 │                        │  │                                            │  │x Close issue                   │
 │                        │  │                                            │  │r Reload detail                 │
-│                        │  │                                            │  │                                │
 │                        │  │                                            │  │                                │
 │                        │  │                                            │  │                                │
 │                        │  │                                            │  │                                │

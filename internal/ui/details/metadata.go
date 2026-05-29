@@ -171,6 +171,7 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 			metadataField{label: "Blocked by", value: skeletonCountValue},
 			metadataField{label: "Blocks", value: skeletonCountValue},
 			metadataField{label: "Related", value: skeletonCountValue},
+			metadataField{label: "Children", value: skeletonCountValue},
 		)
 	} else {
 		counts.fields = append(counts.fields,
@@ -178,6 +179,7 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 			metadataField{label: "Blocked by", value: fmt.Sprintf("%d", len(detail.BlockedBy))},
 			metadataField{label: "Blocks", value: fmt.Sprintf("%d", len(detail.Blocks))},
 			metadataField{label: "Related", value: fmt.Sprintf("%d", len(detail.Related))},
+			metadataField{label: "Children", value: fmt.Sprintf("%d", len(detail.Children))},
 		)
 	}
 	groups = append(groups, counts)

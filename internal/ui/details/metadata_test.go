@@ -43,7 +43,7 @@ func TestMetadataFieldsOrderAndCoverage(t *testing.T) {
 		got = append(got, field.label)
 	}
 
-	want := []string{"Type", "Status", "Priority", "Assignee", "Owner", "Created", "Updated", "Duration", "Closed", "Reason", "Comments", "Blocked by", "Blocks", "Related"}
+	want := []string{"Type", "Status", "Priority", "Assignee", "Owner", "Created", "Updated", "Duration", "Closed", "Reason", "Comments", "Blocked by", "Blocks", "Related", "Children"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("metadata field order mismatch\n got: %v\nwant: %v", got, want)
 	}
@@ -92,7 +92,7 @@ func TestMetadataFieldsOmitEmptyOptionalValues(t *testing.T) {
 		got = append(got, field.label)
 	}
 
-	want := []string{"Type", "Status", "Priority", "Comments", "Blocked by", "Blocks", "Related"}
+	want := []string{"Type", "Status", "Priority", "Comments", "Blocked by", "Blocks", "Related", "Children"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("unexpected field set\n got: %v\nwant: %v", got, want)
 	}
@@ -428,4 +428,23 @@ func TestMetadataFieldsOmitDurationWhenClosedMissing(t *testing.T) {
 			t.Fatal("did not expect Duration when ClosedAt is unavailable")
 		}
 	}
+}
+
+func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
+	t.Parallel()
+
+	lines := renderMetadataRail(domain.IssueDetail{
+		Summary: domain.IssueSummary{
+			Type:     "epic",
+			Priority: 1,
+			Status:   "in_progress",
+		},
+		Children: []domain.IssueReference{
+			{ID: "bw-c1", Title: "Child one"},
+			{ID: "bw-c2", Title: "Child two"},
+			{ID: "bw-c3", Title: "Child three"},
+		},
+	}, 44, MetadataFieldNone, false)
+
+	assertGolden(t, []byte(strings.Join(lines, "\n")), "metadata_with_children.golden")
 }

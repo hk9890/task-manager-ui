@@ -9,10 +9,10 @@
 │(none)                          │  │                                                                  │  │  Blocked by: 1                 │
 │                                │  │                                                                  │  │  Blocks    : 0                 │
 │Children (0)                    │  │                                                                  │  │  Related   : 0                 │
-│(none)                          │  │                                                                  │  │                                │
-│                                │  │                                                                  │  │Quick actions                   │
-│Structure (3)                   │  │                                                                  │  │e Edit issue                    │
-│  ? P0 - …parent Parent epic    │  │                                                                  │  │u Update issue                  │
-│› ? P0 - bw-self Self issue     │  │                                                                  │  │a Add comment                   │
-│  ? P0 - …ibling Sibling issue  │  │                                                                  │  │… (1 more)                      │
+│(none)                          │  │                                                                  │  │  Children  : 0                 │
+│                                │  │                                                                  │  │                                │
+│Structure (3)                   │  │                                                                  │  │Quick actions                   │
+│  ? P0 - …parent Parent epic    │  │                                                                  │  │e Edit issue                    │
+│› ? P0 - bw-self Self issue     │  │                                                                  │  │u Update issue                  │
+│  ? P0 - …ibling Sibling issue  │  │                                                                  │  │… (2 more)                      │
 ╰────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯
