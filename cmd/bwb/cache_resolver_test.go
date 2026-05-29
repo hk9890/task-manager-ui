@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -195,4 +199,199 @@ func TestFindLatestSkipsWrongSchemaVersion(t *testing.T) {
 	if got != want {
 		t.Fatalf("expected good file %q, got %q", want, got)
 	}
+
+	// Stale-schema directory must have been pruned.
+	if _, statErr := os.Stat(badDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected stale-schema dir %q to be removed, but it still exists (stat err: %v)", badDir, statErr)
+	}
 }
+
+// TestStaleSchemaCleanupNeverDeletesWinner verifies that the winning session
+// directory is never deleted even when its manifest somehow appears in the
+// stale list (defensive safety guard).
+//
+// This scenario is contrived in practice but the guard must hold regardless.
+func TestStaleSchemaCleanupNeverDeletesWinner(t *testing.T) {
+	t.Parallel()
+
+	baseDir := t.TempDir()
+	const hash = "778899"
+
+	// Write multiple stale-schema directories.
+	for _, sub := range []string{hash + "-sess-stale1", hash + "-sess-stale2"} {
+		dir := filepath.Join(baseDir, sub)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		badManifest := []byte(`{"schema_version": 999, "synced_at": "2026-05-01T06:00:00Z", "bd_commit_hash": ""}`)
+		if err := os.WriteFile(filepath.Join(dir, "repo.jsonl.manifest.json"), badManifest, 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "repo.jsonl"), []byte{}, 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	// One current-schema winner.
+	syncedAt := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	want := writeCacheEntry(t, baseDir, hash+"-sess-winner", syncedAt)
+	winnerDir := filepath.Dir(want)
+
+	got := findLatestProjectCacheFile(baseDir, hash, nil)
+	if got != want {
+		t.Fatalf("expected winner %q, got %q", want, got)
+	}
+
+	// Winner directory must survive.
+	if _, statErr := os.Stat(winnerDir); statErr != nil {
+		t.Fatalf("winner dir %q must not be deleted: %v", winnerDir, statErr)
+	}
+	if _, statErr := os.Stat(want); statErr != nil {
+		t.Fatalf("winner jsonl %q must not be deleted: %v", want, statErr)
+	}
+}
+
+// TestStaleSchemaCleanupPreservesNonWinningCurrentSchema verifies that a
+// current-schema session that was not selected as the winner (older SyncedAt)
+// is NOT deleted. Only stale-schema directories should be pruned.
+func TestStaleSchemaCleanupPreservesNonWinningCurrentSchema(t *testing.T) {
+	t.Parallel()
+
+	baseDir := t.TempDir()
+	const hash = "aabbccdde"
+
+	// Write a stale-schema directory.
+	staleDir := filepath.Join(baseDir, hash+"-sess-stale")
+	if err := os.MkdirAll(staleDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	badManifest := []byte(`{"schema_version": 999, "synced_at": "2026-05-01T06:00:00Z", "bd_commit_hash": ""}`)
+	if err := os.WriteFile(filepath.Join(staleDir, "repo.jsonl.manifest.json"), badManifest, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staleDir, "repo.jsonl"), []byte{}, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Older current-schema session (not selected as winner).
+	t1 := time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC)
+	olderGoodJSONL := writeCacheEntry(t, baseDir, hash+"-sess-older-good", t1)
+	olderGoodDir := filepath.Dir(olderGoodJSONL)
+
+	// Newer current-schema session (selected as winner).
+	t2 := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	want := writeCacheEntry(t, baseDir, hash+"-sess-newest", t2)
+	winnerDir := filepath.Dir(want)
+
+	got := findLatestProjectCacheFile(baseDir, hash, nil)
+	if got != want {
+		t.Fatalf("expected newest file %q, got %q", want, got)
+	}
+
+	// Stale dir must be pruned.
+	if _, statErr := os.Stat(staleDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected stale dir %q to be removed (stat err: %v)", staleDir, statErr)
+	}
+
+	// Non-winning but current-schema dir must survive.
+	if _, statErr := os.Stat(olderGoodDir); statErr != nil {
+		t.Fatalf("non-winning current-schema dir %q must not be deleted: %v", olderGoodDir, statErr)
+	}
+
+	// Winner dir must survive.
+	if _, statErr := os.Stat(winnerDir); statErr != nil {
+		t.Fatalf("winner dir %q must not be deleted: %v", winnerDir, statErr)
+	}
+}
+
+// TestStaleSchemaCleanupEmitsSingleWarnNotPerFile verifies that scanning N
+// stale-schema manifests emits exactly one WARN record (the summary) rather
+// than one per stale file — that is the core noise-reduction guarantee.
+func TestStaleSchemaCleanupEmitsSingleWarnNotPerFile(t *testing.T) {
+	t.Parallel()
+
+	baseDir := t.TempDir()
+	const hash = "ff00ff"
+
+	// Write five stale-schema directories.
+	const staleCount = 5
+	for i := range staleCount {
+		dir := filepath.Join(baseDir, fmt.Sprintf("%s-sess-stale%d", hash, i))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		badManifest := []byte(`{"schema_version": 999, "synced_at": "2026-05-01T06:00:00Z", "bd_commit_hash": ""}`)
+		if err := os.WriteFile(filepath.Join(dir, "repo.jsonl.manifest.json"), badManifest, 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "repo.jsonl"), []byte{}, 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	// One good file so there is a winner.
+	syncedAt := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	writeCacheEntry(t, baseDir, hash+"-sess-good", syncedAt)
+
+	// Capture log records with a minimal inline slog.Handler.
+	var mu sync.Mutex
+	var captured []capturedLogRecord
+	handler := &capturingHandler{mu: &mu, records: &captured}
+	logger := slog.New(handler)
+
+	findLatestProjectCacheFile(baseDir, hash, logger)
+
+	mu.Lock()
+	all := captured
+	mu.Unlock()
+
+	// Count WARN records with the per-file message (must be zero) vs the summary
+	// message (must be one).
+	perFileMsg := "cache resolver: skipping manifest with wrong schema version"
+	summaryMsg := "cache resolver: pruning stale-schema session directories"
+
+	perFileCount := 0
+	summaryCount := 0
+	for _, r := range all {
+		if r.level == slog.LevelWarn {
+			if r.msg == perFileMsg {
+				perFileCount++
+			}
+			if r.msg == summaryMsg {
+				summaryCount++
+			}
+		}
+	}
+	if perFileCount != 0 {
+		t.Errorf("expected 0 per-file WARN records, got %d", perFileCount)
+	}
+	if summaryCount != 1 {
+		t.Errorf("expected 1 summary WARN record, got %d", summaryCount)
+	}
+}
+
+// capturedLogRecord holds the level and message of a single captured slog
+// record. Used by capturingHandler for test assertions.
+type capturedLogRecord struct {
+	level slog.Level
+	msg   string
+}
+
+// capturingHandler is a minimal slog.Handler that records every log record's
+// level and message for inspection in tests.
+type capturingHandler struct {
+	mu      *sync.Mutex
+	records *[]capturedLogRecord
+}
+
+func (h *capturingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+
+func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	*h.records = append(*h.records, capturedLogRecord{r.Level, r.Message})
+	return nil
+}
+
+func (h *capturingHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *capturingHandler) WithGroup(_ string) slog.Handler      { return h }

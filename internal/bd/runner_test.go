@@ -605,6 +605,76 @@ func TestCommandRunnerRunLogsExecutionTraceOnExecutionError(t *testing.T) {
 	}
 }
 
+// TestOsCommandExecutorSignalKillPreservesError verifies that osCommandExecutor
+// returns a non-nil error alongside ExitCode=-1 when a subprocess is killed by
+// context cancellation after it has started. This pins the fix from d2oj.2:
+// previously ExitCode=-1 was returned with err=nil, causing the persistent WARN
+// log records to have no "error" field and making the cause invisible.
+//
+// Context cancellation via a short timeout is the cleanest way to exercise this
+// path: exec.CommandContext sends SIGKILL when the context expires, causing the
+// process to exit with ExitCode=-1 wrapped in *exec.ExitError.
+func TestOsCommandExecutorSignalKillPreservesError(t *testing.T) {
+	t.Parallel()
+
+	// Use a context that times out after a brief delay so the subprocess has time
+	// to start. exec.CommandContext sends SIGKILL on timeout; the subprocess exits
+	// with ExitCode -1 via *exec.ExitError. Without the d2oj.2 fix, osCommandExecutor
+	// swallowed that ExitError and returned nil, producing WARN records with no
+	// "error" field in the persistent log.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	ex := osCommandExecutor{}
+	result, err := ex.Run(ctx, "sleep", []string{"5"}, "", nil)
+
+	// The subprocess was killed; ExitCode must be -1 (os/exec convention for
+	// signal-terminated processes).
+	if result.ExitCode != -1 {
+		t.Fatalf("expected ExitCode -1 for signal-killed process, got %d (err=%v)", result.ExitCode, err)
+	}
+	// The error must be non-nil so that logExecution can attach it as "error".
+	// Before the d2oj.2 fix, err was nil here, making the cause invisible in logs.
+	if err == nil {
+		t.Fatal("expected non-nil error from osCommandExecutor for signal-killed process; got nil — WARN log records will have no error field")
+	}
+}
+
+// TestCommandRunnerRunLogsErrFieldOnSignalKill verifies end-to-end that when a
+// subprocess is killed (executor returns ExitCode -1 with a non-nil error), the
+// WARN log record carries an "error" field. This exercises the logExecution path
+// for the case covered by osCommandExecutor after the d2oj.2 fix.
+func TestCommandRunnerRunLogsErrFieldOnSignalKill(t *testing.T) {
+	t.Parallel()
+
+	// Simulate what osCommandExecutor now returns for signal-killed processes:
+	// ExitCode -1 with the underlying ExitError preserved (non-nil err).
+	signalErr := fmt.Errorf("signal: killed")
+	execStub := &stubExecutor{
+		result: ExecResult{ExitCode: -1},
+		err:    signalErr,
+	}
+	var sink strings.Builder
+	runner := NewCommandRunner(RunnerConfig{
+		Executor: execStub,
+		Logger:   slog.New(slog.NewJSONHandler(&sink, nil)),
+	})
+
+	_, runErr := runner.Run(context.Background(), CommandRequest{Operation: "vc status", Args: []string{"vc", "status", "--json"}})
+	if runErr == nil {
+		t.Fatal("expected error for signal-killed subprocess")
+	}
+	record := decodeLoggedRecord(t, sink.String())
+	if got := record["level"]; got != "WARN" {
+		t.Fatalf("expected signal-kill trace at WARN level, got %#v", got)
+	}
+	assertLoggedFloatEquals(t, record["exit_code"], -1)
+	// The "error" field must be present so the cause is visible in the persistent log.
+	if got := record["error"]; got == nil || !strings.Contains(fmt.Sprint(got), "signal: killed") {
+		t.Fatalf("expected error field with signal cause, got %#v", got)
+	}
+}
+
 type stubExecutor struct {
 	mu      sync.Mutex
 	command string

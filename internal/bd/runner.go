@@ -416,6 +416,14 @@ func (osCommandExecutor) Run(ctx context.Context, command string, args []string,
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
+		// ExitCode() returns -1 when the process was killed by a signal (not a
+		// normal exit). Return the ExitError so logExecution can attach it as the
+		// "error" field on the WARN record, making the signal cause visible in the
+		// persistent log. For normal non-zero exits (exit code > 0) the error is
+		// swallowed here; callers use result.ExitCode to detect those.
+		if result.ExitCode == -1 {
+			return result, err
+		}
 		return result, nil
 	}
 

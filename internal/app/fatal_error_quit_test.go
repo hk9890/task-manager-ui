@@ -72,9 +72,7 @@ func TestFatalErrorScreen_QKeyQuits(t *testing.T) {
 // the documented global quit shortcut (docs/user-guide/key-bindings.md
 // "Shell / Global"). It must work on the fatal screen too.
 //
-// SKIPPED: pins beads-workbench-znri.7. Remove the t.Skip below when the
-// fatal-screen key handler honors ctrl+q so the test activates as a
-// regression guard.
+// Regression guard for znri.7: ctrl+q must continue to quit the fatal screen.
 func TestFatalErrorScreen_CtrlQQuits(t *testing.T) {
 	m := enterFatalErrorState(t)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})

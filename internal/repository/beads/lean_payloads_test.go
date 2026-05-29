@@ -7,6 +7,30 @@ import (
 // sp is a convenience helper that returns a pointer to a string literal.
 func sp(s string) *string { return &s }
 
+// TestLeanDepsFromPayload_NoDepsBlockedByNotNil verifies that leanDepsFromPayload
+// returns a non-nil (empty) BlockedBy slice when the issue has no depends-on
+// dependencies. A nil slice would violate the validating decorator's
+// BlockedByNotNil contract rule.
+func TestLeanDepsFromPayload_NoDepsBlockedByNotNil(t *testing.T) {
+	blockedBy, related, _, hasParent, err := leanDepsFromPayload(nil, "test-op")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasParent {
+		t.Errorf("hasParent: want false for empty input, got true")
+	}
+	if blockedBy == nil {
+		t.Error("BlockedBy must not be nil for an issue with no depends-on deps (BlockedByNotNil contract)")
+	}
+	if len(blockedBy) != 0 {
+		t.Errorf("BlockedBy: want 0 entries, got %d", len(blockedBy))
+	}
+	// related is not contract-checked but we initialize it for symmetry.
+	if related == nil {
+		t.Error("related must not be nil (symmetry with blockedBy)")
+	}
+}
+
 // TestLeanDependentsFromPayload_ParentChildNotInBlocks verifies that entries
 // with dependency_type="parent-child" are routed to the Children bucket and
 // never appear in Blocks.

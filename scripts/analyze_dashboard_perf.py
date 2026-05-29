@@ -95,22 +95,36 @@ class Session:
 
         We define the initial burst as: the contiguous run of misses that begins
         within 1s of session start and is followed by a >1.5s gap (i.e. the
-        next bd call lands more than 1.5s after the previous one ends). Returns
-        None if no misses are within the first second.
+        next bd call's completion timestamp lands more than 1.5s after the
+        previous call's completion timestamp). Returns None if no misses are
+        within the first second.
+
+        Note: t_offset_s is a *completion* timestamp (logged at "bd command
+        finished", after the subprocess returns). The gap is therefore measured
+        between consecutive completion timestamps, not between end-of-one and
+        start-of-next. This correctly handles concurrent board fan-out calls:
+        two calls issued in parallel both complete at roughly the same wall
+        time, so their completion-to-completion gap is near-zero and they are
+        grouped together as expected.
+
+        This metric reflects time to first idle gap (startup plus any
+        uninterrupted leading activity). It is not a pure cold-start latency;
+        a session that begins with sustained browsing and no idle pause will
+        show the entire leading activity window here.
         """
         if not self.misses:
             return None
         if self.misses[0].t_offset_s > 1.0:
             return None
-        prev_end = self.misses[0].t_offset_s
+        prev_t = self.misses[0].t_offset_s
         last_in_burst = self.misses[0]
         for c in self.misses[1:]:
-            gap = c.t_offset_s - prev_end
+            gap = c.t_offset_s - prev_t
             if gap > 1.5:
                 break
             last_in_burst = c
-            prev_end = c.t_offset_s + (c.duration_ms / 1000.0)
-        return last_in_burst.t_offset_s + (last_in_burst.duration_ms / 1000.0)
+            prev_t = c.t_offset_s
+        return last_in_burst.t_offset_s
 
 
 def load_session(path: Path) -> Session | None:

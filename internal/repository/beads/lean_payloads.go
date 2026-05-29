@@ -413,6 +413,8 @@ func leanMapSortField(field domain.SortField) string {
 // leanDepsFromPayload splits a dependencies slice into blockedBy, related, and
 // (if present) the parent issue reference.
 func leanDepsFromPayload(records []leanIssueRefPayload, op string) (blockedBy []domain.IssueReference, related []domain.IssueReference, parentIssue domain.IssueReference, hasParent bool, err error) {
+	blockedBy = make([]domain.IssueReference, 0, len(records))
+	related = make([]domain.IssueReference, 0, len(records))
 	for _, r := range records {
 		ref, refErr := leanToIssueRef(r, op)
 		if refErr != nil {

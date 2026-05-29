@@ -109,10 +109,18 @@ scripts/analyze_dashboard_perf.py --session fb6fed78
 scripts/analyze_dashboard_perf.py --log-dir /path/to/captured/logs --all
 ```
 
-Cold-load wall time is computed as the time from session start to the end of
-the first contiguous miss burst (gap > 1.5s ends the burst). This handles
-the common interleaving where `bd show` lands between the board's 5-command
-fan-out and the second auto-refresh.
+Cold-load wall time is computed as the wall time from session start to the
+completion of the last call in the initial burst (gap > 1.5s between
+consecutive completion timestamps ends the burst). This handles the common
+interleaving where `bd show` lands between the board's 5-command fan-out and
+the second auto-refresh.
+
+Note: "gap" is measured between consecutive *completion* timestamps (each
+`"bd command finished"` record is written after the subprocess returns).
+Concurrent fan-out calls both complete at roughly the same wall time and
+therefore have a near-zero gap; they are grouped together as expected. This
+metric captures time-to-first-idle-gap — startup plus any uninterrupted
+leading activity — rather than pure cold-start latency.
 
 A quick count of bd subprocess calls (all misses since the argv cache was
 removed in 8pxi.7):
