@@ -11,11 +11,11 @@ overridden through runtime config.
 - `ctrl+q` — quit
 - `?` — toggle help
 - `ctrl+space` (`ctrl+@`) — toggle search mode
-- `f13` — switch to board mode
-- `f14` — switch to search mode
-- `f15` — cycle to the next mode
-- `f16` — cycle to the previous mode
+- `1` — switch to board mode
+- `2` — switch to search mode
 - `3` — switch to detail mode
+- `ctrl+pgdown` — cycle to the next mode
+- `ctrl+pgup` — cycle to the previous mode
 - `esc` — return from detail/search to browse, or dismiss toast state
 - `r` — manually reload detail mode from the repository immediately (detail mode only)
 - `e` — edit selected issue in external editor

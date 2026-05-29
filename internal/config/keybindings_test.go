@@ -21,14 +21,14 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 	if !resolved.Match(BoardContext, BoardActionMoveLeft, tea.KeyMsg{Type: tea.KeyLeft}) {
 		t.Fatal("expected board move-left to match left arrow")
 	}
-	if resolved.Primary(ShellContext, ShellActionModeBoard) != "f13" {
-		t.Fatalf("expected placeholder board mode key to be f13, got %q", resolved.Primary(ShellContext, ShellActionModeBoard))
+	if resolved.Primary(ShellContext, ShellActionModeBoard) != "1" {
+		t.Fatalf("expected board mode key to be 1, got %q", resolved.Primary(ShellContext, ShellActionModeBoard))
 	}
 	if resolved.Primary(ShellContext, ShellActionToggleSearch) != "ctrl+@" {
 		t.Fatalf("expected search toggle key ctrl+@, got %q", resolved.Primary(ShellContext, ShellActionToggleSearch))
 	}
-	if resolved.Primary(ShellContext, ShellActionModeCycleNext) != "f15" {
-		t.Fatalf("expected placeholder mode cycle next key to be f15, got %q", resolved.Primary(ShellContext, ShellActionModeCycleNext))
+	if resolved.Primary(ShellContext, ShellActionModeCycleNext) != "ctrl+pgdown" {
+		t.Fatalf("expected mode cycle next key to be ctrl+pgdown, got %q", resolved.Primary(ShellContext, ShellActionModeCycleNext))
 	}
 }
 
