@@ -840,7 +840,7 @@ func renderMarkdownPreviewLines(text, fallback string, width, maxLines int) []st
 }
 
 func summarizeReferences(detail domain.IssueDetail, width int) []string {
-	line := fmt.Sprintf("Blocked by: %d  Blocks: %d  Related: %d", len(detail.BlockedBy), len(detail.Blocks), len(detail.Related))
+	line := fmt.Sprintf("Blocked by: %d  Blocks: %d  Related: %d  Children: %d", len(detail.BlockedBy), len(detail.Blocks), len(detail.Related), len(detail.Children))
 	return []string{styles.TruncateString(line, width)}
 }
 

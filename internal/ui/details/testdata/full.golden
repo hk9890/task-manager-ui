@@ -6,7 +6,7 @@
 │  ? P0 - bw-30 Integrati...│  │Ship issue detail rendering for standalone mode.   │  │  ------------------------------│
 │                           │  │Keep shell-owned selection state.                  │  │  Ownership                     │
 │Related (1)                │  │                                                   │  │  Assignee: alice               │
-│  ? P0 - bw-44 Renderer ...│  │Notes                                              │  │  Creator : hans                │
+│  ? P0 - bw-44 Renderer ...│  │Notes                                              │  │  Owner   : hans                │
 │                           │  │Reference donor rendering patterns only.           │  │  ------------------------------│
 │Children (0)               │  │                                                   │  │  Time                          │
 │(none)                     │  │                                                   │  │  Created : 2026-04-01 12:00    │

@@ -232,6 +232,35 @@ func TestRenderCompactClosedDurationGolden(t *testing.T) {
 	assertGolden(t, []byte(view), "compact_closed_duration.golden")
 }
 
+func TestRenderCompactWithChildrenGolden(t *testing.T) {
+	t.Parallel()
+
+	view := Render(State{
+		SelectionID: "bw-epic-compact",
+		Detail: domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-epic-compact",
+				Title:    "Epic with children compact",
+				Status:   "in_progress",
+				Type:     "epic",
+				Priority: 1,
+				Assignee: "alice",
+			},
+			Description: "An epic summary for the compact surface.",
+			BlockedBy:   []domain.IssueReference{{ID: "bw-10", Title: "Gate issue"}},
+			Children: []domain.IssueReference{
+				{ID: "bw-c1", Title: "Child one", Type: "task", Priority: 2, Status: "open"},
+				{ID: "bw-c2", Title: "Child two", Type: "task", Priority: 2, Status: "in_progress"},
+				{ID: "bw-c3", Title: "Child three", Type: "task", Priority: 3, Status: "open"},
+			},
+		},
+		Width:   56,
+		Compact: true,
+	})
+
+	assertGolden(t, []byte(view), "compact_with_children.golden")
+}
+
 func TestRenderWideThreeColumnGolden(t *testing.T) {
 	t.Parallel()
 

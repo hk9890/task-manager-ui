@@ -43,7 +43,7 @@ func TestMetadataFieldsOrderAndCoverage(t *testing.T) {
 		got = append(got, field.label)
 	}
 
-	want := []string{"Type", "Status", "Priority", "Assignee", "Creator", "Created", "Updated", "Duration", "Closed", "Reason", "Comments", "Blocked by", "Blocks", "Related"}
+	want := []string{"Type", "Status", "Priority", "Assignee", "Owner", "Created", "Updated", "Duration", "Closed", "Reason", "Comments", "Blocked by", "Blocks", "Related"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("metadata field order mismatch\n got: %v\nwant: %v", got, want)
 	}

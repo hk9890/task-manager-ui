@@ -129,7 +129,7 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 		ownership.fields = append(ownership.fields, metadataField{label: "Assignee", value: assignee})
 	}
 	if creator := strings.TrimSpace(detail.Creator); creator != "" {
-		ownership.fields = append(ownership.fields, metadataField{label: "Creator", value: creator})
+		ownership.fields = append(ownership.fields, metadataField{label: "Owner", value: creator})
 	}
 	if len(ownership.fields) > 0 {
 		groups = append(groups, ownership)
