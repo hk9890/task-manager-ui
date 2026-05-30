@@ -11,10 +11,10 @@
 │Children (0)                    │  │                                                                  │  │  Related   : 1                 │
 │(none)                          │  │                                                                  │  │  Children  : 0                 │
 │                                │  │                                                                  │  │                                │
-│Structure (3)                   │  │                                                                  │  │Quick actions                   │
+│Structure (2)                   │  │                                                                  │  │Quick actions                   │
 │  ? P0 - …parent Parent epic    │  │                                                                  │  │e Edit issue                    │
-│  ? P0 - …ibling Sibling issue  │  │                                                                  │  │u Update issue                  │
-│  ? P0 - bw-wide Wide layout ...│  │                                                                  │  │a Add comment                   │
+│› ? P0 - …ibling Sibling issue  │  │                                                                  │  │u Update issue                  │
+│                                │  │                                                                  │  │a Add comment                   │
 │                                │  │                                                                  │  │x Close issue                   │
 │                                │  │                                                                  │  │r Reload detail                 │
 │                                │  │                                                                  │  │                                │

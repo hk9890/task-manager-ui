@@ -1713,25 +1713,24 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-9", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{
-		Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
-		ParentGroupBrowser: domain.ParentGroupBrowserContext{
-			Parent: domain.IssueReference{ID: "bw-1", Title: "Root"},
-			Children: []domain.IssueReference{
-				{ID: "bw-5", Title: "Sibling target"},
-				{ID: "bw-6", Title: "Sibling peer"},
-			},
+	// bw-1 and bw-5 are siblings sharing parent bw-0. The browser panel for either
+	// shows the parent plus the two siblings that are NOT the currently-viewed issue,
+	// so it stays a stable 3 rows as the cursor moves and Enter navigates between them.
+	parentGroup := domain.ParentGroupBrowserContext{
+		Parent: domain.IssueReference{ID: "bw-0", Title: "Parent epic"},
+		Children: []domain.IssueReference{
+			{ID: "bw-1", Title: "Root"},
+			{ID: "bw-5", Title: "Sibling target"},
+			{ID: "bw-6", Title: "Sibling peer"},
 		},
+	}
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:            domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
+		ParentGroupBrowser: parentGroup,
 	})
 	gw.seedIssueDetail(domain.IssueDetail{
-		Summary: domain.IssueSummary{ID: "bw-5", Title: "Sibling target", Status: "in_progress", Type: "bug", Priority: 2},
-		ParentGroupBrowser: domain.ParentGroupBrowserContext{
-			Parent: domain.IssueReference{ID: "bw-1", Title: "Root"},
-			Children: []domain.IssueReference{
-				{ID: "bw-5", Title: "Sibling target"},
-				{ID: "bw-6", Title: "Sibling peer"},
-			},
-		},
+		Summary:            domain.IssueSummary{ID: "bw-5", Title: "Sibling target", Status: "in_progress", Type: "bug", Priority: 2},
+		ParentGroupBrowser: parentGroup,
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())

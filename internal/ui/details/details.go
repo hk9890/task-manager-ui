@@ -40,8 +40,7 @@ type State struct {
 	TargetID                 string
 	Detail                   domain.IssueDetail
 	BrowserItems             []domain.IssueReference
-	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); highlighted with background style
-	SubjectIssueID           string // currently-loaded subject row (shown in Content pane); marked with › when in-list
+	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); marked with the app-wide "› " selection prefix
 	QuickActions             QuickActionLabels
 	Loading                  bool
 	Skeleton                 bool // when true, Content pane renders skeleton rows instead of description body
@@ -181,7 +180,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 
 		contentInnerHeight := max(1, contentHeight-2)
 		bottomInnerHeight := max(1, bottomHeight-2)
-		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", "", dependenciesWidth-2, state.Skeleton, state.SkeletonPhase)
+		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2, state.Skeleton, state.SkeletonPhase)
 		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight, state.Skeleton, state.SkeletonPhase)
 		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
@@ -195,7 +194,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 	innerHeight := max(1, height-2)
 
-	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", "", leftWidth-2, state.Skeleton, state.SkeletonPhase)
+	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight, state.Skeleton, state.SkeletonPhase)
 	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
@@ -256,7 +255,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 func renderDependenciesPane(detail domain.IssueDetail, state State, width, height int) string {
 	innerHeight := max(1, height-2)
-	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, state.SubjectIssueID, width-2, state.Skeleton, state.SkeletonPhase)
+	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2, state.Skeleton, state.SkeletonPhase)
 	dependenciesView, _ := sliceWithOffset(dependencies, state.DependenciesScrollOffset, innerHeight, width-2)
 	totalRefs := countDependencyReferences(detail)
 	var topRight string
@@ -325,7 +324,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 
 	depGroups := dependencyGroups(detail, state.BrowserItems)
-	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, state.SubjectIssueID, leftWidth-2, state.Skeleton, state.SkeletonPhase)
+	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	innerHeight := max(1, height-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
 	totalDepRefs := countDependencyReferences(detail)
@@ -495,8 +494,8 @@ func splitThreeColumnWidths(total int) (left, content, metadata int) {
 	return splitThreePaneWidths(total)
 }
 
-func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domain.IssueReference, cursorIssueID, subjectIssueID string, width int, skeleton bool, skeletonPhase int) []string {
-	return renderRelationshipGroups(dependencyGroups(detail, browserItems), cursorIssueID, subjectIssueID, width, skeleton, skeletonPhase)
+func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domain.IssueReference, cursorIssueID string, width int, skeleton bool, skeletonPhase int) []string {
+	return renderRelationshipGroups(dependencyGroups(detail, browserItems), cursorIssueID, width, skeleton, skeletonPhase)
 }
 
 func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueReference) []relationshipGroup {
@@ -533,10 +532,9 @@ func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueRefe
 	return out
 }
 
-func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID, subjectIssueID string, width int, skeleton bool, skeletonPhase int) []string {
+func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID string, width int, skeleton bool, skeletonPhase int) []string {
 	out := make([]string, 0, 32)
 	cursorIssueID = strings.TrimSpace(cursorIssueID)
-	subjectIssueID = strings.TrimSpace(subjectIssueID)
 	cursorMatched := false
 	for _, group := range groups {
 		ordered := orderedReferences(group.Refs)
@@ -563,8 +561,7 @@ func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID, subject
 			if isCursor {
 				cursorMatched = true
 			}
-			isSubject := subjectIssueID != "" && ref.ID == subjectIssueID
-			out = append(out, renderReferenceRow(ref, width, isCursor, isSubject))
+			out = append(out, renderReferenceRow(ref, width, isCursor))
 		}
 	}
 	if len(out) == 0 {
@@ -1029,37 +1026,19 @@ func hasLogIndicator(line string) bool {
 
 // renderReferenceRow renders a single dependency reference row.
 //
-// Two-marker visual distinction (Q4):
-//   - isCursor: the movable pending-selection row (↑/↓ moves it before Enter loads).
-//     Rendered with a background-highlight (DependencyCursorStyle) covering the full
-//     row width, so it reads as "pending cursor, not yet loaded". The cursor marker
-//     takes visual priority; no › chevron prefix is added.
-//   - isSubject: the currently-loaded subject row, when it appears in-list (e.g.
-//     inside the Structure group). Rendered with the › selection chevron so the
-//     loaded subject and the pending cursor are simultaneously distinguishable.
-//   - When the subject is NOT in-list (Children group never contains self; a
-//     top-level epic has no Structure group), isSubject is false for all rows
-//     and no subject marker appears — the subject lives in the Content/Metadata panes.
-//   - When isCursor and isSubject are both true (cursor landed on the subject row),
-//     the cursor background highlight takes visual priority.
-func renderReferenceRow(ref domain.IssueReference, width int, isCursor, isSubject bool) string {
-	// Subject chevron: use › selection prefix when subject is in-list and cursor is elsewhere.
-	useSubjectChevron := isSubject && !isCursor
-	row := issuerow.RenderReferenceCompact(issuerow.ReferenceRenderConfig{
+// isCursor marks the movable selection row (↑/↓ moves it; Enter commits the load).
+// It is rendered with the app-wide "› " selection prefix via issuerow Selected=true —
+// byte-identical to the cursor in the board, search, and metadata panes, so the one
+// marker the user moves looks the same everywhere. The currently-viewed issue is never
+// in this list (it is excluded when the browser panel is assembled), so it needs no
+// marker here — it lives in the Content/Metadata panes.
+func renderReferenceRow(ref domain.IssueReference, width int, isCursor bool) string {
+	return issuerow.RenderReferenceCompact(issuerow.ReferenceRenderConfig{
 		Issue:    ref,
-		Selected: useSubjectChevron,
+		Selected: isCursor,
 		Width:    width,
 		Styled:   true,
 	})
-	if isCursor {
-		// Cursor background-highlight: pad to full width then apply background.
-		renderedW := lipgloss.Width(row)
-		if renderedW < width {
-			row = row + strings.Repeat(" ", width-renderedW)
-		}
-		row = styles.DependencyCursorStyle.Render(row)
-	}
-	return row
 }
 
 func formatTime(ts time.Time) string {

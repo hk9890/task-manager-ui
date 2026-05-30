@@ -126,11 +126,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),
-		BrowserSelectedIssueID: m.browserSelectedIssueID(),
-		// SubjectIssueID is the currently-loaded issue (Content pane). When it
-		// appears in the Dependencies pane (e.g. in the Structure group), it is
-		// marked with the › chevron so cursor and subject are simultaneously legible.
-		SubjectIssueID:           strings.TrimSpace(m.Detail.Summary.ID),
+		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
 		Loading:                  blockingLoad,
 		Skeleton:                 skeletonContent,
 		SkeletonPhase:            skeletonPhase,
@@ -585,6 +581,11 @@ func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueRefer
 		groups = append(groups, browserItemsFromParentGroup(detail.ParentGroupBrowser))
 	}
 
+	// The currently-viewed issue is shown in the Content pane; it must never
+	// appear in the browser panel itself (it sneaks in via the parent-group
+	// sibling list, which lists all of the parent's children including self).
+	selfID := strings.TrimSpace(detail.Summary.ID)
+
 	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+len(detail.ParentGroupBrowser.Children)+1)
 	out := make([]domain.IssueReference, 0, len(seen))
 	for _, refs := range groups {
@@ -596,6 +597,9 @@ func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueRefer
 		for _, ref := range ordered {
 			refID := strings.TrimSpace(ref.ID)
 			if refID == "" {
+				continue
+			}
+			if refID == selfID {
 				continue
 			}
 			if _, exists := seen[refID]; exists {

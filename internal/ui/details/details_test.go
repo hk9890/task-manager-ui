@@ -144,7 +144,7 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 }
 
 func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
-	// Use TrueColor so the cursor background style emits ANSI escape sequences.
+	// Use TrueColor so the subject background style would emit ANSI escapes if present.
 	previousProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
@@ -161,19 +161,13 @@ func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 		Width:                  100,
 	})
 
-	// (a) Cursor row uses background highlight, NOT the › chevron.
-	// DependencyCursorBgColor dark: #1F3A4F → RGB(31,58,79) → "48;2;31;58;79".
-	const wantBgANSI = "48;2;31;58;79"
-	if !strings.Contains(view, wantBgANSI) {
-		t.Fatalf("expected cursor row to carry background ANSI %q for bw-9, got:\n%s", wantBgANSI, view)
-	}
+	// The movable cursor row uses the app-wide "› " selection prefix.
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	if !strings.Contains(plain, "› ") {
+		t.Fatalf("expected cursor row to carry the › selection prefix, got:\n%s", plain)
+	}
 	if !strings.Contains(plain, "bw-9") {
 		t.Fatalf("expected cursor issue bw-9 to appear in deps pane, got:\n%s", plain)
-	}
-	// Cursor row must NOT use the › subject chevron (background takes priority).
-	if strings.Contains(plain, "│›") {
-		t.Fatalf("expected cursor row to NOT use › chevron (background-only), got:\n%s", plain)
 	}
 }
 
@@ -289,12 +283,13 @@ func TestRenderWideThreeColumnGolden(t *testing.T) {
 				{ID: "bw-3", Title: "Renderer cleanup", Type: "chore", Priority: 3, Status: "open"},
 			},
 		},
+		// The currently-viewed issue (bw-wide) is excluded from the browser panel;
+		// the panel lists the parent and the sibling, and the cursor sits on one of them.
 		BrowserItems: []domain.IssueReference{
 			{ID: "bw-parent", Title: "Parent epic"},
-			{ID: "bw-wide", Title: "Wide layout sample"},
 			{ID: "bw-sibling", Title: "Sibling issue"},
 		},
-		BrowserSelectedIssueID: "bw-wide",
+		BrowserSelectedIssueID: "bw-sibling",
 		Width:                  InspectorThreeColumnMinWidth,
 	})
 
@@ -551,7 +546,7 @@ func TestRenderDependenciesPaneLinesDoNotRenderDuplicateIssueRowsAcrossGroups(t 
 			{ID: "bw-1", Title: "Duplicate from blocked-by"},
 			{ID: "bw-3", Title: "Related unique"},
 		},
-	}, nil, "bw-3", "", 80, false, 0)
+	}, nil, "bw-3", 80, false, 0)
 
 	joined := strings.Join(lines, "\n")
 	if got := strings.Count(joined, "bw-1"); got != 1 {
@@ -1308,7 +1303,7 @@ func TestDependencyRefLineIndexChildrenConsistency(t *testing.T) {
 
 	// Verify every BrowserSelectedIndex maps to a rendered-line that contains
 	// the expected issue ID.
-	lines := renderDependenciesPaneLines(detail, browserItems, "", "", 80, false, 0)
+	lines := renderDependenciesPaneLines(detail, browserItems, "", 80, false, 0)
 	joinedLines := strings.Join(lines, "\n")
 
 	for i, ref := range browserItems {
@@ -1369,24 +1364,24 @@ func TestRenderChildrenGroupGolden(t *testing.T) {
 	assertGolden(t, []byte(view), "children_group.golden")
 }
 
-// --- Q4 two-marker cursor-vs-subject golden assertions ---
+// --- Browser-panel cursor golden assertions ---
 //
-// These three tests encode the three cases from the Q4 two-marker spec:
-//   (a) Cursor/pending row → background-highlight style (no › chevron)
-//   (b) Subject row when in-list (e.g. Structure group) → › chevron
-//   (c) Subject NOT in-list → no subject marker; subject lives in Content/Metadata panes
+// The browser panel has exactly one marker: the movable cursor, rendered with the
+// app-wide "› " selection prefix (identical to board/search/metadata). The
+// currently-viewed issue is excluded from the panel entirely (see the model's
+// browserItemsFromDependencies), so there is no second "subject" marker.
 
-// TestRenderCursorRowUsesBackgroundHighlightGolden encodes case (a):
-// When BrowserSelectedIssueID is set (cursor row), the row is highlighted with
-// DependencyCursorStyle background rather than the › selection chevron. Uses
-// TrueColor so the ANSI background escape appears in the golden output.
-func TestRenderCursorRowUsesBackgroundHighlightGolden(t *testing.T) {
-	// Require TrueColor to capture background ANSI in the golden.
+// TestRenderCursorRowUsesSelectionPrefixGolden: when BrowserSelectedIssueID is set,
+// the cursor row carries the app-wide "› " selection prefix and idle rows carry the
+// blank gutter.
+func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
+	// Pin the color profile so the golden is deterministic regardless of other
+	// tests mutating the global lipgloss profile.
 	previousProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	// Render a narrow detail (responsive layout) with cursor=bw-cursor, no subject marker.
+	// Render a narrow detail (responsive layout) with cursor=bw-cursor.
 	view := Render(State{
 		SelectionID: "bw-main",
 		Detail: domain.IssueDetail{
@@ -1399,82 +1394,29 @@ func TestRenderCursorRowUsesBackgroundHighlightGolden(t *testing.T) {
 			{ID: "bw-other", Title: "Other issue"},
 		},
 		BrowserSelectedIssueID: "bw-cursor", // cursor on this row
-		SubjectIssueID:         "",          // no in-list subject (bw-main not in deps pane)
 		Width:                  InspectorTwoColumnMinWidth,
 		Height:                 18,
 	})
 
-	assertGolden(t, []byte(view), "cursor_row_background.golden")
+	assertGolden(t, []byte(view), "cursor_row_selection_prefix.golden")
 
-	// The cursor row must carry the background ANSI (dark: 48;2;31;58;79) and NOT the › chevron.
-	const wantBgANSI = "48;2;31;58;79"
-	if !strings.Contains(view, wantBgANSI) {
-		t.Errorf("expected cursor row background ANSI %q, got (truncated):\n%.500s", wantBgANSI, view)
-	}
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if strings.Contains(plain, "│›") {
-		t.Errorf("cursor row must NOT use › chevron (background-only), got:\n%s", plain)
-	}
-}
-
-// TestRenderSubjectRowInListUsesChevronGolden encodes case (b):
-// When SubjectIssueID matches a row that appears in the Structure group
-// (the subject issue is a child with a parent, so parentChildSiblings includes self),
-// that row gets the › selection chevron. The cursor is elsewhere (or absent).
-func TestRenderSubjectRowInListUsesChevronGolden(t *testing.T) {
-	t.Parallel()
-
-	// Three-column layout with a Structure group containing the subject (bw-self).
-	view := Render(State{
-		SelectionID: "bw-self",
-		Detail: domain.IssueDetail{
-			Summary: domain.IssueSummary{ID: "bw-self", Title: "Self issue", Status: "open", Type: "task", Priority: 1},
-			BlockedBy: []domain.IssueReference{
-				{ID: "bw-blocker", Title: "Blocker", Type: "task", Priority: 0, Status: "open"},
-			},
-			ParentGroupBrowser: domain.ParentGroupBrowserContext{
-				Parent: domain.IssueReference{ID: "bw-parent", Title: "Parent epic"},
-				Children: []domain.IssueReference{
-					{ID: "bw-self", Title: "Self issue"},
-					{ID: "bw-sibling", Title: "Sibling issue"},
-				},
-			},
-		},
-		BrowserItems: []domain.IssueReference{
-			{ID: "bw-blocker", Title: "Blocker"},
-			{ID: "bw-parent", Title: "Parent epic"},
-			{ID: "bw-self", Title: "Self issue"},
-			{ID: "bw-sibling", Title: "Sibling issue"},
-		},
-		BrowserSelectedIssueID: "bw-blocker", // cursor elsewhere
-		SubjectIssueID:         "bw-self",    // subject in-list — must show ›
-		Width:                  InspectorThreeColumnMinWidth,
-		Height:                 18,
-	})
-
-	assertGolden(t, []byte(view), "subject_row_in_list_chevron.golden")
-
-	// Subject row must have the › chevron.
+	// The cursor row must carry the › selection prefix.
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "›") {
-		t.Errorf("expected subject row in Structure group to carry › chevron, got:\n%s", plain)
-	}
-	// The subject ID must appear in the deps pane with ›.
-	if !strings.Contains(plain, "bw-self") {
-		t.Errorf("expected subject issue bw-self in deps pane, got:\n%s", plain)
+		t.Errorf("expected cursor row to carry the › selection prefix, got:\n%s", plain)
 	}
 }
 
-// TestRenderSubjectNotInListNoSubjectMarkerGolden encodes case (c):
-// When the subject is NOT in the deps pane (e.g. top-level epic — no Structure group;
-// or Children group which never includes self), no subject marker appears in the
-// deps pane. The subject lives in the Content/Metadata panes instead.
-func TestRenderSubjectNotInListNoSubjectMarkerGolden(t *testing.T) {
-	t.Parallel()
+// TestRenderEpicChildrenCursorPrefixGolden: opening an epic renders its Children
+// group; the cursor row carries the "› " prefix, the epic itself appears only in the
+// Content pane (never in the deps pane), and no second marker exists.
+func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
+	// Pin the color profile so the golden is deterministic regardless of other
+	// tests mutating the global lipgloss profile.
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	// Top-level epic: no ParentGroupBrowser → no Structure group. Children group
-	// does not contain the epic itself. SubjectIssueID=bw-epic is not present
-	// as a browser item, so no › appears in the deps pane.
 	view := Render(State{
 		SelectionID: "bw-epic",
 		Detail: domain.IssueDetail{
@@ -1488,21 +1430,20 @@ func TestRenderSubjectNotInListNoSubjectMarkerGolden(t *testing.T) {
 			{ID: "bw-child1", Title: "Child task one"},
 			{ID: "bw-child2", Title: "Child task two"},
 		},
-		BrowserSelectedIssueID: "bw-child1", // cursor on child1
-		SubjectIssueID:         "bw-epic",   // epic is subject but NOT in deps pane
+		BrowserSelectedIssueID: "bw-child1", // cursor on child1 → carries ›
 		Width:                  InspectorThreeColumnMinWidth,
 		Height:                 18,
 	})
 
-	assertGolden(t, []byte(view), "subject_not_in_list_no_marker.golden")
+	assertGolden(t, []byte(view), "epic_children_cursor.golden")
 
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
-	// No › should appear since the subject (bw-epic) is not a browser item.
-	if strings.Contains(plain, "│›") {
-		t.Errorf("expected no › marker when subject is not in deps pane, got:\n%s", plain)
+	// The cursor row (bw-child1) must carry the › selection prefix.
+	if !strings.Contains(plain, "›") {
+		t.Errorf("expected cursor row (bw-child1) to carry the › selection prefix, got:\n%s", plain)
 	}
-	// The epic ID must appear in the Content pane (title/summary line), not in deps pane.
+	// The epic ID must appear in the Content pane (title/summary line).
 	if !strings.Contains(plain, "bw-epic") {
-		t.Errorf("expected bw-epic to appear in Content pane as subject, got:\n%s", plain)
+		t.Errorf("expected bw-epic to appear in Content pane, got:\n%s", plain)
 	}
 }

@@ -507,11 +507,18 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndStructureGroups(t
 	if m.BrowserGroupParentID != "bw-1" {
 		t.Fatalf("expected parent id bw-1, got %q", m.BrowserGroupParentID)
 	}
-	if len(m.BrowserItems) != 6 {
-		t.Fatalf("expected flattened dependencies + structure rows, got %#v", m.BrowserItems)
+	// The currently-viewed issue (bw-42) is excluded from the browser panel even
+	// though it is one of the parent's children — it is shown in the Content pane.
+	if len(m.BrowserItems) != 5 {
+		t.Fatalf("expected flattened dependencies + structure rows minus self, got %#v", m.BrowserItems)
 	}
-	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID, m.BrowserItems[5].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1,bw-42,bw-43" {
-		t.Fatalf("expected grouped dependency/structure ordering, got %v", got)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1,bw-43" {
+		t.Fatalf("expected grouped dependency/structure ordering without self, got %v", got)
+	}
+	for _, ref := range m.BrowserItems {
+		if ref.ID == "bw-42" {
+			t.Fatalf("currently-viewed issue bw-42 must not appear in the browser panel, got %#v", m.BrowserItems)
+		}
 	}
 
 	second := domain.IssueDetail{
@@ -535,11 +542,21 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndStructureGroups(t
 	}
 	m.ApplyLoadedDetail("bw-43", second)
 
-	if len(m.BrowserItems) != 6 {
+	// Now viewing bw-43: it is excluded and bw-42 reappears as a sibling.
+	if len(m.BrowserItems) != 5 {
 		t.Fatalf("expected flattened dependencies + structure rows after sibling load, got %#v", m.BrowserItems)
 	}
-	if m.BrowserSelectedIndex != 5 {
-		t.Fatalf("expected selection to move to bw-43 index, got %d", m.BrowserSelectedIndex)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1,bw-42" {
+		t.Fatalf("expected sibling load ordering without self, got %v", got)
+	}
+	for _, ref := range m.BrowserItems {
+		if ref.ID == "bw-43" {
+			t.Fatalf("currently-viewed issue bw-43 must not appear in the browser panel, got %#v", m.BrowserItems)
+		}
+	}
+	// Selection stays within bounds even though the loaded issue is not in the list.
+	if m.BrowserSelectedIndex < 0 || m.BrowserSelectedIndex >= len(m.BrowserItems) {
+		t.Fatalf("expected selection within [0,%d), got %d", len(m.BrowserItems), m.BrowserSelectedIndex)
 	}
 }
 
@@ -547,8 +564,8 @@ func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *
 	t.Parallel()
 
 	m := Model{}
-	m.ApplyLoadedDetail("bw-b2", domain.IssueDetail{
-		Summary: domain.IssueSummary{ID: "bw-b2", Title: "Target in Blocks"},
+	m.ApplyLoadedDetail("bw-target", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-target", Title: "Subject not in any group"},
 		BlockedBy: []domain.IssueReference{
 			{ID: "bw-a1", Title: "Blocked by one"},
 		},
@@ -572,10 +589,13 @@ func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *
 		t.Fatalf("expected flat traversal order to match rendered groups, got %v", got)
 	}
 
-	if m.BrowserSelectedIndex != 2 {
-		t.Fatalf("expected initial selection on bw-b2, got %d", m.BrowserSelectedIndex)
+	// The subject is not among any group, so selection defaults to the first row.
+	if m.BrowserSelectedIndex != 0 {
+		t.Fatalf("expected initial selection at first row, got %d", m.BrowserSelectedIndex)
 	}
 
+	// Position on the last Blocks row, then walk across group boundaries.
+	m.selectBrowserIssue("bw-b2")
 	m.moveRelatedSelection(1, 80, 24)
 	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-c1" {
 		t.Fatalf("expected down from blocks to enter related group, got %+v ok=%v", selected, ok)
@@ -622,11 +642,11 @@ func TestModelApplyLoadedDetailWithoutParentGroupBuildsBrowserFromDependencies(t
 	t.Parallel()
 
 	m := Model{}
-	m.ApplyLoadedDetail("bw-3", domain.IssueDetail{
+	m.ApplyLoadedDetail("bw-1", domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "bw-1", Title: "Primary"},
 		BlockedBy: []domain.IssueReference{
 			{ID: "bw-3", Title: "Upstream blocker"},
-			{ID: "bw-1", Title: "Auth migration"},
+			{ID: "bw-1", Title: "Self reference — must be excluded"},
 		},
 		Blocks: []domain.IssueReference{
 			{ID: "bw-2", Title: "Docs update"},
@@ -640,14 +660,22 @@ func TestModelApplyLoadedDetailWithoutParentGroupBuildsBrowserFromDependencies(t
 	if m.BrowserGroupParentID != "" {
 		t.Fatalf("expected no parent-group id for dependency-only issue, got %q", m.BrowserGroupParentID)
 	}
-	if len(m.BrowserItems) != 4 {
-		t.Fatalf("expected flattened dependency browser items, got %#v", m.BrowserItems)
+	// bw-1 is the currently-viewed issue and must be excluded even though it appears
+	// in its own BlockedBy group; the duplicate bw-3 is de-duplicated.
+	if len(m.BrowserItems) != 3 {
+		t.Fatalf("expected flattened dependency browser items minus self, got %#v", m.BrowserItems)
 	}
-	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID}; strings.Join(got, ",") != "bw-1,bw-3,bw-2,bw-4" {
-		t.Fatalf("expected deterministic grouped ordering with de-duplication, got %v", got)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID}; strings.Join(got, ",") != "bw-3,bw-2,bw-4" {
+		t.Fatalf("expected deterministic grouped ordering with de-duplication and self-exclusion, got %v", got)
 	}
-	if m.BrowserSelectedIndex != 1 {
-		t.Fatalf("expected selection to target loaded issue bw-3, got index %d", m.BrowserSelectedIndex)
+	for _, ref := range m.BrowserItems {
+		if ref.ID == "bw-1" {
+			t.Fatalf("currently-viewed issue bw-1 must not appear in the browser panel, got %#v", m.BrowserItems)
+		}
+	}
+	// The subject is excluded, so selection defaults to the first row.
+	if m.BrowserSelectedIndex != 0 {
+		t.Fatalf("expected selection at first row, got index %d", m.BrowserSelectedIndex)
 	}
 }
 
