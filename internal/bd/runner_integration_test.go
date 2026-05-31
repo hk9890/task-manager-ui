@@ -6,6 +6,7 @@ import (
 	"context"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/hk9890/beads-workbench/internal/domain"
 )
@@ -55,4 +56,39 @@ func TestMissingBDDatabaseDetectionSubstringPin(t *testing.T) {
 	// signalling that runner.go's substring detection must be revisited.
 	const pinnedSubstring = "no beads database found"
 	assertContains(t, err.Error(), pinnedSubstring)
+}
+
+// TestOsCommandExecutorSignalKillPreservesError verifies that osCommandExecutor
+// returns a non-nil error alongside ExitCode=-1 when a subprocess is killed by
+// context cancellation after it has started. This pins the fix from d2oj.2:
+// previously ExitCode=-1 was returned with err=nil, causing the persistent WARN
+// log records to have no "error" field and making the cause invisible.
+//
+// Context cancellation via a short timeout is the cleanest way to exercise this
+// path: exec.CommandContext sends SIGKILL when the context expires, causing the
+// process to exit with ExitCode=-1 wrapped in *exec.ExitError.
+func TestOsCommandExecutorSignalKillPreservesError(t *testing.T) {
+	t.Parallel()
+
+	// Use a context that times out after a brief delay so the subprocess has time
+	// to start. exec.CommandContext sends SIGKILL on timeout; the subprocess exits
+	// with ExitCode -1 via *exec.ExitError. Without the d2oj.2 fix, osCommandExecutor
+	// swallowed that ExitError and returned nil, producing WARN records with no
+	// "error" field in the persistent log.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	ex := osCommandExecutor{}
+	result, err := ex.Run(ctx, "sleep", []string{"5"}, "", nil)
+
+	// The subprocess was killed; ExitCode must be -1 (os/exec convention for
+	// signal-terminated processes).
+	if result.ExitCode != -1 {
+		t.Fatalf("expected ExitCode -1 for signal-killed process, got %d (err=%v)", result.ExitCode, err)
+	}
+	// The error must be non-nil so that logExecution can attach it as "error".
+	// Before the d2oj.2 fix, err was nil here, making the cause invisible in logs.
+	if err == nil {
+		t.Fatal("expected non-nil error from osCommandExecutor for signal-killed process; got nil — WARN log records will have no error field")
+	}
 }
