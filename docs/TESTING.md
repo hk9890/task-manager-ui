@@ -105,6 +105,33 @@ go test -tags integration ./internal/repository/contract/... -v -run TestReposit
 - **Per-commit / pre-push (local dev):** `mise run quality:fast` is sufficient.
 - **End-of-change validation (closing an epic, acceptance review, before declaring "done"):** `mise run quality` is required — it adds integration tests, which routinely catch parity regressions invisible to the unit suite. `quality:fast` is not a substitute.
 
+## Slow Integration Packages — Risk Justifications
+
+The following packages carry most of the integration wall-time cost (per the test-suite review). Each entry names one concrete regression that a fast in-process or unit test would miss — the reason the subprocess cost is justified.
+
+| Package | ~Time (review) | Regression a fast/in-process test would miss |
+|---|---|---|
+| `cmd/bwb-smoke` | ~62.8s | See dedicated answer below. |
+| `internal/dashboard/parity` | ~51.8s | `bd ready` silently caps at 100 issues without `--limit 0` — a fake repository returns seeded counts and never exercises real bd pagination, so the cap-induced count divergence (and the `TotalIsExact` Done-badge bug class) goes undetected until this parity test runs against a real bd subprocess. |
+| `internal/mode/search/parity` | ~27.3s | The search repository routes different query shapes to different bd verbs (`bd list`, `bd search`, `bd ready`, `bd blocked`) with distinct argv; a fake returns whatever it was seeded with regardless of verb, so misrouting or a wrong flag is invisible. Additionally, `TestSearchParityExternalMtimeUnchanged` catches a read-only write-leak to a real `.beads/` directory — a bug that only manifests against a real filesystem. |
+| `internal/mode/search` (integration) | ~18.4s | `TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback` drives the real search Model via `teatest` against a live bd-backed repository; a synchronous fake never reaches the real subprocess spawn, async Cmd dispatch, or real JSON output parsing path — a broken empty-query argv wiring would only fail here. |
+| `internal/testing/datasets` | ~20s | The parity harness self-tests that `NewRepository` enforces `--readonly` via real bd rejection — a fake would accept any call. A regression here means `ThisRepo`/`External` datasets could silently mutate live tracker data during parity runs; only a real bd subprocess returns the enforcement error. |
+| `internal/testing/loadgen` | ~20s | The single integration test (`TestMeasure_EndToEnd`) exercises real bd-version capture through the full `Generate`→`Measure` pipeline; the remaining tests have been migrated to fake-runner unit tests. A regression where `manifest.BdVersion` or `report.Header.BdVersion` returns empty — because `bd version --json` changed shape or discovery broke — is invisible to the unit tier. |
+| `internal/testing/e2e/embeddedfixture` | ~20s | `TestSharedFixtureRepoPathRoundTrip` verifies that `setup.sh` produces a real-bd-usable repository (`.beads/embeddeddolt` present, `bd ready` succeeds) and enforces a ≥10x speedup on the second call — if the per-process cache regresses to re-seeding on every call, the whole integration suite balloons; this is unfakeable without a real bd subprocess and real filesystem. |
+
+### `cmd/bwb-smoke` 62s challenge: what does a real-binary run catch?
+
+`bwb-smoke` is built by `TestSmokeIntegration` using `go build ./cmd/bwb-smoke` — it is a separate binary compilation step. The unit tests in `main_test.go` already cover flag parsing (`parseChecks`), JSON emission (`emitJSON`), and the in-process render check (`runRenderCheck`) with no subprocess and no binary build.
+
+The 62s integration run's unique catches are:
+
+1. **Build and link of the standalone binary.** A broken import, removed export, or `cmd/bwb-smoke`-local compilation error surfaces here and nowhere else in the test suite.
+2. **Exit-code contract.** The binary must exit 0 on PASS and 1 on FAIL. In-process unit tests call functions directly; they never validate `os.Exit` behavior, which is only observable by running the compiled process.
+3. **Real bd binary discovery and invocation.** `bwb-smoke` constructs a `beads.CommandRunner` at runtime and calls `bd count`, `bd ready`, `bd blocked`, `bd list`, `bd search`, and `bd query` against a seeded database. A wrong argv assembly or a missing `--json` flag fails silently in-process (the unit `runCountCheck`/`runSortCheck`/`runSearchCheck` helpers are called in-process with a pre-built `repo`); only the built binary run exercises the full subprocess invocation path from the main entry point.
+4. **Stdout JSON pipeability.** `TestSmokeIntegrationJSONPipeable` runs the binary and confirms the output is parseable JSON regardless of exit code — testing the `--format json` output contract end-to-end with a real process stdout.
+
+**There are no trim candidates.** Every package above names a real-bd-only regression. The scale-fixture variants (`BWB_SCALE_FIXTURE=1`, `BWB_SCALE_FIXTURE_SMOKE=1`) are already env-gated and skipped by default; their cost does not appear in the measured baseline times above.
+
 ## Runtime UI Verification Workflow (operator runbook)
 
 Use `docs/RUNTIME_UI_VERIFICATION.md` for the concrete, command-oriented workflow.
