@@ -104,14 +104,25 @@ type RunnerConfig struct {
 }
 
 // bdSemCap is the maximum number of bd subprocesses allowed to execute
-// concurrently. Empirical data: solo bd ≈ 0.28 s, 4-way contended calls
-// measured 1.25 s median / 6.1 s p100 (2578 log samples). A board auto-refresh
-// fans out 4 subprocess calls at once; capping at 2 forces contention down to
-// pairs, producing the largest relative latency improvement with minimal
-// throughput cost. Cap 3 would still queue one of the four burst callers but
-// allow slightly higher throughput on heterogeneous bursts; 2 is the more
-// conservative choice given the super-linear contention profile observed.
-const bdSemCap = 2
+// concurrently. A board refresh fans out 5 read calls (Dashboard) and may
+// overlap with the 3-call Catalogs fetch, so the cap governs how those bursts
+// are serialized.
+//
+// The previous value (2) was tuned on stale numbers — its comment cited "solo
+// bd ≈ 0.28 s" and a "super-linear contention profile." Re-benchmarking on the
+// current bd 1.0.4 + embedded Dolt store told a different story:
+//   - solo bd read is now ~0.5 s warm (and ~0.66 s p50 in production logs),
+//     so each refresh is dominated by per-call Dolt open cost, not contention;
+//   - a 5-way fully-parallel refresh measured ~2.40 s median vs ~2.45 s under
+//     cap=2 (10 iterations each, warm) — i.e. the cap added latency rather than
+//     removing it, and the feared super-linear blowup did not reproduce.
+//
+// Raising the cap to 8 lets one full refresh (and an overlapping Catalogs
+// fetch) run in a single wave instead of three serial waves, which mainly helps
+// the slow/cold-path tail (production p99 per-call ≈ 2 s). A bound is still kept
+// — rather than going unlimited — so pathological bursts (refresh + load-more +
+// catalogs) cannot spawn an unbounded number of Dolt-opening subprocesses.
+const bdSemCap = 8
 
 // CommandRunner is a reusable execution layer for bd-backed repository methods.
 type CommandRunner struct {
