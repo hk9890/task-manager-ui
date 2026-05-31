@@ -544,7 +544,11 @@ func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.Dashb
 		if !dirty && !limitChanged {
 			data := c.dashboardCache
 			c.mu.RUnlock()
-			return data, nil
+			// Enforce the ClosedLimit contract on the served value. The serve-cache
+			// can accumulate a superset of closed issues across deep-page
+			// (ClosedOffset>0) loads, which persist into dashboardCache for SaveNow;
+			// a first-page (offset=0) hit must never leak that superset.
+			return boundClosed(data, opts.ClosedLimit), nil
 		}
 		c.mu.RUnlock()
 	}
@@ -563,6 +567,18 @@ func (c *CachingRepository) Dashboard(ctx context.Context, opts repository.Dashb
 	c.mu.Unlock()
 
 	return data, nil
+}
+
+// boundClosed enforces the Dashboard ClosedLimit contract on a served value:
+// DashboardData.Closed must contain at most ClosedLimit entries. A three-index
+// slice (len==cap) is used so a downstream append allocates a new array instead
+// of scribbling into the cache's shared backing array. ClosedLimit <= 0 means
+// "implementation default" per the repository contract, so no bound is applied.
+func boundClosed(data repository.DashboardData, closedLimit int) repository.DashboardData {
+	if closedLimit > 0 && len(data.Closed) > closedLimit {
+		data.Closed = data.Closed[:closedLimit:closedLimit]
+	}
+	return data
 }
 
 // mergeClosedIntoCache merges the Closed slice from page into the existing

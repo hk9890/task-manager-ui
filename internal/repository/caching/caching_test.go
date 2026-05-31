@@ -474,15 +474,21 @@ func TestDashboard_ClosedOffset_PassThrough(t *testing.T) {
 	}
 
 	// Step 4: (c) subsequent Dashboard(ClosedOffset==0) is served from cache —
-	// does NOT call backing.
+	// does NOT call backing — AND respects the requested ClosedLimit. The deep-page
+	// merge in Step 2 grew the persisted snapshot to 85 closed; the first-page serve
+	// must NOT leak that superset (contract: ClosedLimit is the maximum len(Closed)).
 	callsBefore := stub.dashboardCalls
-	_, err = c.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: nFirstPage, ClosedOffset: 0})
+	got4, err := c.Dashboard(ctx, repository.DashboardOptions{ClosedLimit: nFirstPage, ClosedOffset: 0})
 	if err != nil {
 		t.Fatalf("post-offset-load Dashboard(offset=0): %v", err)
 	}
 	if stub.dashboardCalls != callsBefore {
 		t.Fatalf("Dashboard(offset=0) after deep-page load: expected cache hit (0 backing calls), got %d",
 			stub.dashboardCalls-callsBefore)
+	}
+	if len(got4.Closed) > nFirstPage {
+		t.Fatalf("Dashboard(offset=0, ClosedLimit=%d) served %d closed issues — must not exceed ClosedLimit "+
+			"(deep-page merge superset leaked into the first-page serve cache)", nFirstPage, len(got4.Closed))
 	}
 }
 
