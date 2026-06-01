@@ -383,6 +383,57 @@ func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *tes
 	}
 }
 
+// TestRenderDetailOptimisticallyShowsTargetHeaderWhileLoading locks the
+// "see content while deps load" behavior (bd-d4bz). When the user drills into a
+// dependency row, the Content header (title + ID·status·priority) and Core
+// metadata are painted immediately from the already-known IssueReference (via
+// PlaceholderDetail), while the description and Dependencies pane render their
+// skeleton/loading state until the single `bd show` returns. Because the
+// dependency groups ride in the SAME bd payload as the content body, this
+// optimistic header is the achievable form of "decoupling" — it needs no extra
+// subprocess call.
+func TestRenderDetailOptimisticallyShowsTargetHeaderWhileLoading(t *testing.T) {
+	t.Parallel()
+
+	target := domain.IssueReference{ID: "bw-2", Title: "Investigate cache stampede", Status: "in_progress", Type: "bug", Priority: 0}
+	m := Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-2", // drilled target differs from the anchored selection
+		Loading:     true,
+		Detail: domain.IssueDetail{
+			Summary:   domain.IssueSummary{ID: "bw-1", Title: "Anchor", Status: "open", Type: "task", Priority: 1},
+			BlockedBy: []domain.IssueReference{target},
+		},
+		BrowserItems: []domain.IssueReference{target},
+	}
+
+	// Optimistic header/core come straight from the known ref — no load needed.
+	render := m.RenderDetail()
+	if render.Summary.ID != "bw-2" || render.Summary.Title != "Investigate cache stampede" {
+		t.Fatalf("expected optimistic header from known ref, got %#v", render.Summary)
+	}
+	if render.Summary.Status != "in_progress" || render.Summary.Priority != 0 || render.Summary.Type != "bug" {
+		t.Fatalf("expected optimistic core metadata (status/priority/type) from known ref, got %#v", render.Summary)
+	}
+	// Description is intentionally empty so the Skeleton seam renders ▓ rows.
+	if render.Description != "" {
+		t.Fatalf("expected empty description during in-flight window, got %q", render.Description)
+	}
+
+	view := m.View(120, 24, false, 0)
+	// The header is readable immediately: the target's title and status appear.
+	if !strings.Contains(view, "Investigate cache stampede") {
+		t.Fatalf("expected target title in optimistic header, got:\n%s", view)
+	}
+	if !strings.Contains(view, "in_progress") {
+		t.Fatalf("expected target status in optimistic header/core metadata, got:\n%s", view)
+	}
+	// The body and Dependencies pane still show the loading skeleton.
+	if !strings.Contains(view, issuerow.SkeletonGlyph) {
+		t.Fatalf("expected skeleton glyph for in-flight body/deps, got:\n%s", view)
+	}
+}
+
 func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testing.T) {
 	t.Parallel()
 
@@ -479,7 +530,7 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 	}
 }
 
-func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndStructureGroups(t *testing.T) {
+func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndParentGroup(t *testing.T) {
 	t.Parallel()
 
 	m := Model{}
@@ -507,17 +558,21 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndStructureGroups(t
 	if m.BrowserGroupParentID != "bw-1" {
 		t.Fatalf("expected parent id bw-1, got %q", m.BrowserGroupParentID)
 	}
-	// The currently-viewed issue (bw-42) is excluded from the browser panel even
-	// though it is one of the parent's children — it is shown in the Content pane.
-	if len(m.BrowserItems) != 5 {
-		t.Fatalf("expected flattened dependencies + structure rows minus self, got %#v", m.BrowserItems)
+	// Only the parent (bw-1) is appended after the dependency groups; the
+	// parent's other children (siblings such as bw-43) are NOT surfaced, and
+	// the currently-viewed issue (bw-42) is excluded entirely.
+	if len(m.BrowserItems) != 4 {
+		t.Fatalf("expected flattened dependencies + parent row minus self/siblings, got %#v", m.BrowserItems)
 	}
-	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1,bw-43" {
-		t.Fatalf("expected grouped dependency/structure ordering without self, got %v", got)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1" {
+		t.Fatalf("expected grouped dependency ordering followed by parent, got %v", got)
 	}
 	for _, ref := range m.BrowserItems {
 		if ref.ID == "bw-42" {
 			t.Fatalf("currently-viewed issue bw-42 must not appear in the browser panel, got %#v", m.BrowserItems)
+		}
+		if ref.ID == "bw-43" {
+			t.Fatalf("sibling bw-43 must not appear in the browser panel, got %#v", m.BrowserItems)
 		}
 	}
 
@@ -542,16 +597,20 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndStructureGroups(t
 	}
 	m.ApplyLoadedDetail("bw-43", second)
 
-	// Now viewing bw-43: it is excluded and bw-42 reappears as a sibling.
-	if len(m.BrowserItems) != 5 {
-		t.Fatalf("expected flattened dependencies + structure rows after sibling load, got %#v", m.BrowserItems)
+	// Now viewing bw-43: it is excluded, and bw-42 stays absent because
+	// siblings are no longer surfaced — only the parent (bw-1) is appended.
+	if len(m.BrowserItems) != 4 {
+		t.Fatalf("expected flattened dependencies + parent row after reload, got %#v", m.BrowserItems)
 	}
-	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1,bw-42" {
-		t.Fatalf("expected sibling load ordering without self, got %v", got)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1" {
+		t.Fatalf("expected grouped dependency ordering followed by parent, got %v", got)
 	}
 	for _, ref := range m.BrowserItems {
 		if ref.ID == "bw-43" {
 			t.Fatalf("currently-viewed issue bw-43 must not appear in the browser panel, got %#v", m.BrowserItems)
+		}
+		if ref.ID == "bw-42" {
+			t.Fatalf("sibling bw-42 must not appear in the browser panel, got %#v", m.BrowserItems)
 		}
 	}
 	// Selection stays within bounds even though the loaded issue is not in the list.
@@ -577,16 +636,17 @@ func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *
 			{ID: "bw-c1", Title: "Related one"},
 		},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
-			Parent: domain.IssueReference{ID: "bw-s0", Title: "Structure parent"},
+			Parent: domain.IssueReference{ID: "bw-s0", Title: "Parent epic"},
+			// Siblings are seeded but must be excluded from the flat list.
 			Children: []domain.IssueReference{
-				{ID: "bw-s1", Title: "Structure child one"},
-				{ID: "bw-s2", Title: "Structure child two"},
+				{ID: "bw-s1", Title: "Sibling one (excluded)"},
+				{ID: "bw-s2", Title: "Sibling two (excluded)"},
 			},
 		},
 	})
 
-	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID, m.BrowserItems[5].ID, m.BrowserItems[6].ID}; strings.Join(got, ",") != "bw-a1,bw-b1,bw-b2,bw-c1,bw-s0,bw-s1,bw-s2" {
-		t.Fatalf("expected flat traversal order to match rendered groups, got %v", got)
+	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID}; strings.Join(got, ",") != "bw-a1,bw-b1,bw-b2,bw-c1,bw-s0" {
+		t.Fatalf("expected flat traversal order to match rendered groups (parent last, siblings excluded), got %v", got)
 	}
 
 	// The subject is not among any group, so selection defaults to the first row.
@@ -603,12 +663,12 @@ func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *
 
 	m.moveRelatedSelection(1, 80, 24)
 	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-s0" {
-		t.Fatalf("expected down from related to enter structure group, got %+v ok=%v", selected, ok)
+		t.Fatalf("expected down from related to enter parent row, got %+v ok=%v", selected, ok)
 	}
 
 	m.moveRelatedSelection(-1, 80, 24)
 	if selected, ok := m.selectedRelatedIssue(); !ok || selected.ID != "bw-c1" {
-		t.Fatalf("expected up from structure to return to related group, got %+v ok=%v", selected, ok)
+		t.Fatalf("expected up from parent row to return to related group, got %+v ok=%v", selected, ok)
 	}
 }
 
@@ -1355,8 +1415,8 @@ func TestRenderDetailChildrenAnchoredToBaseDetail(t *testing.T) {
 
 // TestBrowserItemsFromDependenciesIncludesChildren verifies that
 // browserItemsFromDependencies includes detail.Children in the flat list,
-// placed between Related and the parent-group Structure items. This is the
-// navigation flat-list ordering (plan-review Q2b).
+// placed between Related and the parent row. This is the navigation
+// flat-list ordering (plan-review Q2b).
 func TestBrowserItemsFromDependenciesIncludesChildren(t *testing.T) {
 	t.Parallel()
 

@@ -193,9 +193,9 @@ func (c *CachingRepository) RefreshIfChanged(ctx context.Context) {
 	c.lastHash = h
 	c.dashboardDirty = true
 	c.memory.Reset()
-	// If the backing store maintains its own cache (e.g. beads.Repository's
-	// parentSiblingCache), drain it too. The type assertion keeps the
-	// dependency narrow — no import of internal/repository/beads required.
+	// If the backing store maintains its own cache, drain it too via the
+	// optional Invalidate() seam. The type assertion keeps the dependency
+	// narrow — no import of the concrete backing package required.
 	if r, ok := c.backing.(interface{ Invalidate() }); ok {
 		r.Invalidate()
 	}

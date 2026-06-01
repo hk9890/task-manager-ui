@@ -3,7 +3,7 @@
 //
 // File layout:
 //
-//   - lean.go           — type, New, parent-sibling cache helper, small utilities
+//   - lean.go           — type, New, run chokepoint, small utilities
 //   - lean_reads.go     — Dashboard, Issue, Search, HealthCheck, Catalogs
 //   - lean_writes.go    — CreateIssue, UpdateIssue, CloseIssue, AddComment
 //   - lean_payloads.go  — package-private JSON DTOs and scalar helpers
@@ -11,8 +11,6 @@ package beads
 
 import (
 	"context"
-	"strings"
-	"sync"
 
 	bdrunner "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/domain"
@@ -33,14 +31,6 @@ type Repository struct {
 	// [WithCommandHook]. When non-nil every call to r.run goes through hook
 	// instead of r.runner.Run. Production callers never set this field.
 	hook runFn
-
-	// parentSiblingCacheMu guards parentSiblingCache.
-	parentSiblingCacheMu sync.RWMutex
-	// parentSiblingCache stores the children list for a given parent issue ID,
-	// keyed by parent ID. Populated lazily by parentChildSiblings; reused
-	// across Issue calls within the same Repository instance so each unique
-	// parent is fetched at most once.
-	parentSiblingCache map[string][]domain.IssueReference
 }
 
 // Compile-time interface assertion.
@@ -52,8 +42,7 @@ var _ repository.Repository = (*Repository)(nil)
 // see each option's documentation for details.
 func New(runner *bdrunner.CommandRunner, opts ...Option) *Repository {
 	r := &Repository{
-		runner:             runner,
-		parentSiblingCache: make(map[string][]domain.IssueReference),
+		runner: runner,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -87,64 +76,6 @@ func repoRunJSON[T any](ctx context.Context, r *Repository, req bdrunner.Command
 		return value, err
 	}
 	return value, nil
-}
-
-// parentChildSiblings returns the children of parentID by running
-// `bd show <parentID> --json` and filtering the dependents for
-// dependency_type == "parent-child". Results are cached per Repository
-// instance so each unique parent is fetched at most once.
-func (r *Repository) parentChildSiblings(ctx context.Context, parentID string) ([]domain.IssueReference, error) {
-	if strings.TrimSpace(parentID) == "" {
-		return nil, nil
-	}
-
-	r.parentSiblingCacheMu.RLock()
-	cached, hit := r.parentSiblingCache[parentID]
-	r.parentSiblingCacheMu.RUnlock()
-	if hit {
-		return cached, nil
-	}
-
-	items, err := leanDecodeIssueArray(ctx, r.run, leanOpShowIssue, []string{"show", parentID, "--json"})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(items) == 0 {
-		return nil, nil
-	}
-
-	dependents := items[0].Dependents
-	out := make([]domain.IssueReference, 0, len(dependents))
-	for _, d := range dependents {
-		if leanOptStr(d.DependencyType) != "parent-child" {
-			continue
-		}
-
-		ref, err := leanToIssueRef(d, leanOpShowIssue)
-		if err != nil {
-			return nil, err
-		}
-
-		out = append(out, ref)
-	}
-
-	r.parentSiblingCacheMu.Lock()
-	r.parentSiblingCache[parentID] = out
-	r.parentSiblingCacheMu.Unlock()
-
-	return out, nil
-}
-
-// Invalidate clears the parentSiblingCache so that subsequent
-// parentChildSiblings calls re-fetch from the bd subprocess. It is called by
-// CachingRepository.RefreshIfChanged (via type assertion) whenever the bd
-// commit hash changes, ensuring that newly-added children become visible
-// without a process restart.
-func (r *Repository) Invalidate() {
-	r.parentSiblingCacheMu.Lock()
-	clear(r.parentSiblingCache)
-	r.parentSiblingCacheMu.Unlock()
 }
 
 // leanMergeUniqueRefs merges reference slices, deduplicating by ID.

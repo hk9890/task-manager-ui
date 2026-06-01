@@ -540,53 +540,26 @@ func (m *Model) selectBrowserIssue(issueID string) {
 	m.normalizeRelatedSelection()
 }
 
-func browserItemsFromParentGroup(group domain.ParentGroupBrowserContext) []domain.IssueReference {
-	seen := make(map[string]struct{}, len(group.Children)+1)
-	out := make([]domain.IssueReference, 0, len(group.Children)+1)
-
-	if parentID := strings.TrimSpace(group.Parent.ID); parentID != "" {
-		out = append(out, group.Parent)
-		seen[parentID] = struct{}{}
-	}
-
-	children := append([]domain.IssueReference(nil), group.Children...)
-	sort.SliceStable(children, func(i, j int) bool {
-		return children[i].ID < children[j].ID
-	})
-
-	for _, child := range children {
-		childID := strings.TrimSpace(child.ID)
-		if childID == "" {
-			continue
-		}
-		if _, exists := seen[childID]; exists {
-			continue
-		}
-		out = append(out, child)
-		seen[childID] = struct{}{}
-	}
-
-	return out
-}
-
 func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueReference {
-	// Group order: Blocked by, Blocks, Related, Children, Structure.
+	// Group order: Blocked by, Blocks, Related, Children, Parent.
 	groups := [][]domain.IssueReference{
 		detail.BlockedBy,
 		detail.Blocks,
 		detail.Related,
 		detail.Children,
 	}
+	// The Parent group surfaces only the parent itself (the last navigable
+	// row drills up to the parent). Siblings are intentionally not listed,
+	// which also avoids a second `bd show` per detail load.
 	if strings.TrimSpace(detail.ParentGroupBrowser.Parent.ID) != "" {
-		groups = append(groups, browserItemsFromParentGroup(detail.ParentGroupBrowser))
+		groups = append(groups, []domain.IssueReference{detail.ParentGroupBrowser.Parent})
 	}
 
 	// The currently-viewed issue is shown in the Content pane; it must never
-	// appear in the browser panel itself (it sneaks in via the parent-group
-	// sibling list, which lists all of the parent's children including self).
+	// appear in the browser panel itself.
 	selfID := strings.TrimSpace(detail.Summary.ID)
 
-	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+len(detail.ParentGroupBrowser.Children)+1)
+	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+1)
 	out := make([]domain.IssueReference, 0, len(seen))
 	for _, refs := range groups {
 		ordered := append([]domain.IssueReference(nil), refs...)

@@ -1704,7 +1704,8 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 }
 
 // TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads verifies
-// the decoupled navigation flow for an issue with a parent-group (Structure pane).
+// the decoupled navigation flow for an issue with a parent group (the parent
+// shows as the last row of the dependency browser).
 // After decoupling (Q5): ↑/↓ only moves the cursor highlight (no load cmd);
 // Enter triggers OpenRelatedIssueIntent → loadDetailCmd (non-nil cmd).
 func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testing.T) {
@@ -1713,24 +1714,22 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	gw := newTestRepository()
 	gw.seedReady("bw-1", "Root", "task", 1)
 	gw.seedInProgress("bw-9", "Other", "task", 2)
-	// bw-1 and bw-5 are siblings sharing parent bw-0. The browser panel for either
-	// shows the parent plus the two siblings that are NOT the currently-viewed issue,
-	// so it stays a stable 3 rows as the cursor moves and Enter navigates between them.
-	parentGroup := domain.ParentGroupBrowserContext{
-		Parent: domain.IssueReference{ID: "bw-0", Title: "Parent epic"},
-		Children: []domain.IssueReference{
-			{ID: "bw-1", Title: "Root"},
-			{ID: "bw-5", Title: "Sibling target"},
-			{ID: "bw-6", Title: "Sibling peer"},
-		},
-	}
+	// bw-1 (viewed) has a blocker, a downstream issue, and a parent. The
+	// dependency browser lists those deps followed by the parent row — a stable
+	// 3 rows. Parent-only: the parent's other children (siblings) are not
+	// surfaced. Pressing Enter on bw-6 (same shape) keeps the panel at 3 rows.
+	parent := domain.IssueReference{ID: "bw-0", Title: "Parent epic"}
 	gw.seedIssueDetail(domain.IssueDetail{
 		Summary:            domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
-		ParentGroupBrowser: parentGroup,
+		BlockedBy:          []domain.IssueReference{{ID: "bw-5", Title: "Upstream"}},
+		Blocks:             []domain.IssueReference{{ID: "bw-6", Title: "Downstream"}},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: parent},
 	})
 	gw.seedIssueDetail(domain.IssueDetail{
-		Summary:            domain.IssueSummary{ID: "bw-5", Title: "Sibling target", Status: "in_progress", Type: "bug", Priority: 2},
-		ParentGroupBrowser: parentGroup,
+		Summary:            domain.IssueSummary{ID: "bw-6", Title: "Downstream", Status: "in_progress", Type: "bug", Priority: 2},
+		BlockedBy:          []domain.IssueReference{{ID: "bw-7", Title: "Upstream two"}},
+		Blocks:             []domain.IssueReference{{ID: "bw-8", Title: "Downstream two"}},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: parent},
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -1791,7 +1790,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 		t.Errorf("expected ContentScrollOffset=0 after Enter-reload, got %d", m.detail.ContentScrollOffset)
 	}
 	if len(m.detail.BrowserItems) != 3 {
-		t.Errorf("expected stable parent-group browser items (parent + siblings) after Enter reload, got %d", len(m.detail.BrowserItems))
+		t.Errorf("expected 3 browser rows (deps + parent) after Enter reload, got %d", len(m.detail.BrowserItems))
 	}
 }
 

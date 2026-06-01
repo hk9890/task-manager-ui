@@ -499,15 +499,17 @@ func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domai
 }
 
 func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueReference) []relationshipGroup {
-	// Group order: Blocked by, Blocks, Related, Children, Structure.
+	// Group order: Blocked by, Blocks, Related, Children, Parent.
+	// The Parent group reads the parent ref directly from detail; browserItems
+	// is used only as a capacity hint for the dedup set below.
 	groups := []relationshipGroup{
 		{Label: "Blocked by", Refs: detail.BlockedBy},
 		{Label: "Blocks", Refs: detail.Blocks},
 		{Label: "Related", Refs: detail.Related},
 		{Label: "Children", Refs: detail.Children},
 	}
-	if len(browserItems) > 0 && strings.TrimSpace(detail.ParentGroupBrowser.Parent.ID) != "" {
-		groups = append(groups, relationshipGroup{Label: "Structure", Refs: browserItems})
+	if parent := detail.ParentGroupBrowser.Parent; strings.TrimSpace(parent.ID) != "" {
+		groups = append(groups, relationshipGroup{Label: "Parent", Refs: []domain.IssueReference{parent}})
 	}
 
 	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+len(browserItems))

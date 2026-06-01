@@ -148,14 +148,12 @@ func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, 
 
 	parentGroupContext := domain.ParentGroupBrowserContext{}
 	if hasParent {
-		siblings, err := r.parentChildSiblings(ctx, parentRef.ID)
-		if err != nil {
-			return domain.IssueDetail{}, err
-		}
-		parentGroupContext = domain.ParentGroupBrowserContext{
-			Parent:   parentRef,
-			Children: siblings,
-		}
+		// Surface only the parent itself in the detail "Parent" group. We
+		// deliberately do NOT fetch the parent's other children (siblings):
+		// that required a second `bd show <parent>` subprocess call per detail
+		// load (~0.4s of Dolt-open overhead). parentRef already arrives in this
+		// issue's own `bd show` payload, so the Parent group costs nothing.
+		parentGroupContext.Parent = parentRef
 	}
 
 	return domain.IssueDetail{

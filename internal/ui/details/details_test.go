@@ -284,12 +284,15 @@ func TestRenderWideThreeColumnGolden(t *testing.T) {
 			},
 		},
 		// The currently-viewed issue (bw-wide) is excluded from the browser panel;
-		// the panel lists the parent and the sibling, and the cursor sits on one of them.
+		// the navigable list is the flattened dependency rows followed by the
+		// parent row (no siblings). The cursor sits on the parent.
 		BrowserItems: []domain.IssueReference{
+			{ID: "bw-1", Title: "Auth migration"},
+			{ID: "bw-2", Title: "Docs update"},
+			{ID: "bw-3", Title: "Renderer cleanup"},
 			{ID: "bw-parent", Title: "Parent epic"},
-			{ID: "bw-sibling", Title: "Sibling issue"},
 		},
-		BrowserSelectedIssueID: "bw-sibling",
+		BrowserSelectedIssueID: "bw-parent",
 		Width:                  InspectorThreeColumnMinWidth,
 	})
 
@@ -459,24 +462,24 @@ func TestRenderWideLayoutWithBrowserUsesLeftIssueBrowserPanel(t *testing.T) {
 				Parent: domain.IssueReference{ID: "bw-parent", Title: "Parent"},
 			},
 		},
+		// Parent-only: the navigable list contains just the parent row; the
+		// cursor sits on it. Siblings/self are no longer surfaced.
 		BrowserItems: []domain.IssueReference{
 			{ID: "bw-parent", Title: "Parent"},
-			{ID: "bw-child", Title: "Child"},
-			{ID: "bw-sibling", Title: "Sibling"},
 		},
-		BrowserSelectedIssueID: "bw-child",
+		BrowserSelectedIssueID: "bw-parent",
 		Width:                  InspectorThreeColumnMinWidth,
 	})
 
 	if !strings.Contains(view, "Dependencies") {
 		t.Fatalf("expected left dependencies panel in wide layout, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Structure (3)") {
-		t.Fatalf("expected structure group in dependencies panel, got:\n%s", view)
+	if !strings.Contains(view, "Parent (1)") {
+		t.Fatalf("expected parent group (parent only, no siblings) in dependencies panel, got:\n%s", view)
 	}
 }
 
-func TestRenderDependenciesOmitsStructureWhenBrowserItemsComeFromDependencyFallback(t *testing.T) {
+func TestRenderDependenciesOmitsParentGroupWhenNoParent(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
@@ -501,8 +504,8 @@ func TestRenderDependenciesOmitsStructureWhenBrowserItemsComeFromDependencyFallb
 		Width: InspectorThreeColumnMinWidth,
 	})
 
-	if strings.Contains(view, "Structure (") {
-		t.Fatalf("expected dependency-fallback view to omit structure group, got:\n%s", view)
+	if strings.Contains(view, "Parent (") {
+		t.Fatalf("expected dependency-only view to omit the parent group, got:\n%s", view)
 	}
 }
 
@@ -1319,8 +1322,8 @@ func TestDependencyRefLineIndexChildrenConsistency(t *testing.T) {
 		}
 	}
 
-	// Verify the Children group header is present and correctly placed (before Structure
-	// which is absent here, per group order: Blocked by, Blocks, Related, Children, Structure).
+	// Verify the Children group header is present and correctly placed (before the Parent
+	// group, which is absent here, per group order: Blocked by, Blocks, Related, Children, Parent).
 	if !strings.Contains(joinedLines, "Children (3)") {
 		t.Errorf("expected 'Children (3)' in rendered deps pane, got:\n%s", joinedLines)
 	}

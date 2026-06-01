@@ -220,3 +220,52 @@ func TestDashboardClosedOffsetOverFetchReturnsAll(t *testing.T) {
 		}
 	}
 }
+
+// TestIssueParentedDetailIssuesSingleShowCall pins the performance contract for
+// the Parent-only change (bd-jzam): loading the detail of an issue that HAS a
+// parent must issue EXACTLY ONE `bd show` subprocess call. The parent ref
+// arrives in the issue's own `bd show` payload (a dependency with
+// dependency_type "parent-child"), so the previous second `bd show <parent>`
+// sibling fetch — ~0.4s of Dolt-open overhead per detail load — is gone. This
+// test fails if anyone reintroduces a sibling/second-show fetch in Issue().
+func TestIssueParentedDetailIssuesSingleShowCall(t *testing.T) {
+	t.Parallel()
+
+	rec := fakes.NewRecordingExecutor()
+	rec.OnArgs([]string{"show", "child-1", "--json"}).Return(bd.ExecResult{Stdout: []byte(`[{
+		"id": "child-1", "title": "Child issue", "status": "open", "issue_type": "task", "priority": 2,
+		"created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+		"dependencies": [
+			{"id": "parent-1", "title": "Parent epic", "issue_type": "epic", "priority": 1, "status": "open", "dependency_type": "parent-child"}
+		]
+	}]`)}, nil)
+
+	runner := bd.NewCommandRunner(bd.RunnerConfig{Command: "bd", Executor: rec})
+	repo := repobeads.New(runner)
+
+	detail, err := repo.Issue(context.Background(), "child-1")
+	if err != nil {
+		t.Fatalf("Issue returned error: %v", err)
+	}
+
+	// The Parent group surfaces the parent from the issue's OWN payload.
+	if detail.ParentGroupBrowser.Parent.ID != "parent-1" {
+		t.Fatalf("expected parent-1 in ParentGroupBrowser.Parent, got %#v", detail.ParentGroupBrowser.Parent)
+	}
+	// Siblings are no longer fetched, so Children must be empty.
+	if len(detail.ParentGroupBrowser.Children) != 0 {
+		t.Fatalf("expected no siblings fetched, got %#v", detail.ParentGroupBrowser.Children)
+	}
+
+	// Crucially: exactly one `bd show`. A second `show parent-1` would be the
+	// regression this test guards against.
+	var showCalls int
+	for _, c := range rec.Calls() {
+		if len(c.Args) >= 1 && c.Args[0] == "show" {
+			showCalls++
+		}
+	}
+	if showCalls != 1 {
+		t.Fatalf("expected exactly one `bd show` for a parented issue, got %d: %#v", showCalls, rec.Calls())
+	}
+}
