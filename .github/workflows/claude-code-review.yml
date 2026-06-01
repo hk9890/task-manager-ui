@@ -1,0 +1,45 @@
+name: Claude Code Review
+
+# Automated PR review.
+#
+# AUTO-REVIEW IS OFF BY DEFAULT to conserve Claude (Max subscription) quota —
+# an auto-review runs a full Claude session on every triggered PR, which adds
+# up fast (especially with Dependabot/bot PRs). Ways to use it:
+#
+#   * On demand (recommended): comment "@claude review this PR" on any PR.
+#     Handled by claude.yml — costs quota only when you ask, and has full PR
+#     context (the diff).
+#   * Manual: run this workflow from the Actions tab (workflow_dispatch).
+#   * Full auto: uncomment the `pull_request:` block below to review every new
+#     PR automatically. The `if:` guard already skips Dependabot/bot PRs.
+
+on:
+  workflow_dispatch: {}
+  # pull_request:
+  #   types: [opened]        # one review when a PR is opened (not on every push)
+
+jobs:
+  review:
+    # When auto-enabled, skip bot PRs (Dependabot etc.) so they don't burn quota.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude PR review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review the pull request for correctness, bugs, missing test coverage,
+            and adherence to the conventions in AGENTS.md and docs/. Leave
+            concise, specific, actionable inline comments; avoid nitpicking.
