@@ -1789,8 +1789,14 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	if m.detail.ContentScrollOffset != 0 {
 		t.Errorf("expected ContentScrollOffset=0 after Enter-reload, got %d", m.detail.ContentScrollOffset)
 	}
-	if len(m.detail.BrowserItems) != 3 {
-		t.Errorf("expected 3 browser rows (deps + parent) after Enter reload, got %d", len(m.detail.BrowserItems))
+	// Full navigation: the Dependencies pane now reflects the DRILLED issue
+	// (bw-6: its blocker bw-7, downstream bw-8, and parent bw-0) — not the
+	// issue we came from.
+	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "bw-7,bw-8,bw-0" {
+		t.Errorf("expected drilled issue's deps+parent in browser, got %v", got)
+	}
+	if m.detail.SelectionID != "bw-6" {
+		t.Errorf("expected SelectionID to follow the drill to bw-6, got %q", m.detail.SelectionID)
 	}
 }
 
@@ -1877,9 +1883,87 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	if m.detail.TargetID != "bw-4" {
 		t.Errorf("expected Enter to set TargetID=bw-4 (cursor row), got %q", m.detail.TargetID)
 	}
-	// SelectionID stays anchored to the board selection (bw-1).
-	if m.detail.SelectionID != "bw-1" {
-		t.Errorf("expected SelectionID to remain bw-1 after Enter reload, got %q", m.detail.SelectionID)
+	// Drilling is a full navigation: SelectionID now follows the target so the
+	// Dependencies pane (and all panes) reflect bw-4, not the issue we came from.
+	if m.detail.SelectionID != "bw-4" {
+		t.Errorf("expected SelectionID to follow the drill to bw-4, got %q", m.detail.SelectionID)
+	}
+}
+
+// TestModelDetailRoundTripEpicToChildAndBackViaParent is the end-to-end proof of
+// the user-requested flow: open an epic's detail, drill into one of its children
+// from the Children group, and then jump back to the epic via the child's own
+// Parent row. The key property is that drilling is a FULL navigation — every
+// pane, including the Dependencies rail, reflects the issue you land on — so the
+// child shows its Parent group (which is what lets you go back up).
+func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("bw-epic", "Auth epic", "epic", 1)
+	// Epic's detail lists its child in the Children group.
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:  domain.IssueSummary{ID: "bw-epic", Title: "Auth epic", Status: "open", Type: "epic", Priority: 1},
+		Children: []domain.IssueReference{{ID: "bw-child", Title: "Login crash", Type: "bug", Priority: 0, Status: "open"}},
+	})
+	// Child's detail lists the epic in its Parent group. Seeded in_progress (not
+	// "open" with no deps) so it does not also land in the Ready column — the
+	// epic stays the sole ready issue and thus the default board selection.
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:            domain.IssueSummary{ID: "bw-child", Title: "Login crash", Status: "in_progress", Type: "bug", Priority: 0},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: domain.IssueReference{ID: "bw-epic", Title: "Auth epic", Type: "epic", Priority: 1, Status: "open"}},
+	})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.width = 160
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// Open the epic's detail (the ready selection).
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.detail.SelectionID != "bw-epic" || m.detail.Detail.Summary.ID != "bw-epic" {
+		t.Fatalf("setup: expected epic detail, got selection=%q detail=%q", m.detail.SelectionID, m.detail.Detail.Summary.ID)
+	}
+	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "bw-child" {
+		t.Fatalf("expected epic deps pane to list its child, got %v", got)
+	}
+
+	// Focus the Dependencies pane and Enter on the child → drill down.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.detail.SelectionID != "bw-child" || m.detail.Detail.Summary.ID != "bw-child" {
+		t.Fatalf("expected to land on the child, got selection=%q detail=%q", m.detail.SelectionID, m.detail.Detail.Summary.ID)
+	}
+	// The fix: the child's Dependencies pane now shows its OWN Parent group.
+	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "bw-epic" {
+		t.Fatalf("expected child deps pane to show its parent epic (drill must update the rail), got %v", got)
+	}
+
+	// Focus the Dependencies pane and Enter on the Parent row → jump back up.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.detail.SelectionID != "bw-epic" || m.detail.Detail.Summary.ID != "bw-epic" {
+		t.Fatalf("expected round-trip back to the epic, got selection=%q detail=%q", m.detail.SelectionID, m.detail.Detail.Summary.ID)
+	}
+	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "bw-child" {
+		t.Fatalf("expected epic deps pane to list its child again after round-trip, got %v", got)
 	}
 }
 
@@ -3086,6 +3170,14 @@ func firstSelectionID(m Model, modeID mode.ID) string {
 		return ""
 	}
 	return sel.Issue.ID
+}
+
+func browserIDs(refs []domain.IssueReference) []string {
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, r.ID)
+	}
+	return out
 }
 
 func withRefreshTickScheduler(t *testing.T, scheduler func() tea.Cmd) {

@@ -686,15 +686,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, modeCmd
 				}
 				m.active = mode.Detail
-				m.detail.SelectBrowserIssue(issueID)
+				// Drilling into a related issue is a full navigation, not a peek:
+				// the target becomes the new detail selection so ALL three panes —
+				// including the Dependencies rail — reflect the target once loaded.
+				// This is what lets you open a child from an epic and then jump
+				// back via the child's own Parent row. Seeding an optimistic
+				// placeholder from the row's known ref renders the header + core
+				// metadata immediately, while the description and Dependencies pane
+				// show their skeleton until the single bd show returns.
+				// ApplyLoadedDetail resets scroll offsets when the issue changes.
+				m.detail.SelectionID = issueID
 				m.detail.TargetID = issueID
+				m.detail.ApplyLoadedDetail(issueID, detailsmode.PlaceholderDetail(issueID, intent.Ref, true))
 				m.detail.Loading = true
 				m.detail.Error = ""
-				m.detail.PreviewDetail = domain.IssueDetail{}
-				m.detail.ContentScrollOffset = 0
-				m.detail.MetadataScrollOffset = 0
-				m.detail.DependenciesScrollOffset = 0
-				m.detail.ScrollOffset = 0
 				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
 			}
 			if consumed {

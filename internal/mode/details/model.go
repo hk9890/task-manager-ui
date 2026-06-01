@@ -40,9 +40,12 @@ type Model struct {
 }
 
 // OpenRelatedIssueIntent requests shell-level navigation to another issue from
-// dedicated detail mode.
+// dedicated detail mode. Ref carries the already-known row data (title, type,
+// status, priority) so the shell can paint an optimistic header immediately
+// while the full detail loads.
 type OpenRelatedIssueIntent struct {
 	IssueID string
+	Ref     domain.IssueReference
 }
 
 // ApplyLoadedDetail stores loaded detail and updates browser-panel state.
@@ -189,7 +192,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
 		// special case, consistent with how Enter in the Metadata pane works.
 		if ref, ok := m.selectedRelatedIssue(); ok {
-			return true, &OpenRelatedIssueIntent{IssueID: ref.ID}
+			return true, &OpenRelatedIssueIntent{IssueID: ref.ID, Ref: ref}
 		}
 		return true, nil
 	}
