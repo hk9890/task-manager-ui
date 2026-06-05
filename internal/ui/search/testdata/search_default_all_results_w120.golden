@@ -1,7 +1,7 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Type query, then press Enter.         │  │Default all result                      │  │  Core                          │
-╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
-╭─ Results ────────────────── 2 exact ─╮  │                                        │  │  Status  : open                │
+│Type query, then press Enter.         │  │T P1 OPN bw-1                           │  │  Core                          │
+╰──────────────────────────────────────╯  │Default all result                      │  │  Type    : task                │
+╭─ Results ────────────────── 2 exact ─╮  │────────────────────────────────────────│  │  Status  : open                │
 │› T P1 OPN bw-1 Default all result    │  │Description                             │  │  Priority: P1                  │
 │  B P0 IP bw-2 Second default         │  │Default preview description             │  │  ------------------------------│
 │                                      │  │                                        │  │  Ownership                     │

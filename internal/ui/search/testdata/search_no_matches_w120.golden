@@ -1,7 +1,7 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│nomatch│                              │  │No selected result.                     │  │  Core                          │
-╰──────────────────────────────────────╯  │(none) · (none) · (unknown)             │  │  Type    : (unknown)           │
-╭─ Results ────────────────── 0 exact ─╮  │                                        │  │  Status  : (none)              │
+│nomatch│                              │  │? P0 (NO (none)                         │  │  Core                          │
+╰──────────────────────────────────────╯  │No selected result.                     │  │  Type    : (unknown)           │
+╭─ Results ────────────────── 0 exact ─╮  │────────────────────────────────────────│  │  Status  : (none)              │
 │No matches for "nomatch".             │  │Description                             │  │  Priority: (unknown)           │
 │                                      │  │Select a result in the search rail to pr│  │  ------------------------------│
 │Try broader terms or clear the query, │  │eview issue content.                    │  │  Counts                        │

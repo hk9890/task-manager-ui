@@ -1,7 +1,7 @@
 ╭─ Dependencies ───── 3 ─╮  ╭─ Content ───────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (1)          │  │Epic with children                          │  │  Core                          │
-│  ? P0 - …locker Upst...│  │bw-epic · in_progress · P1                  │  │  Type    : epic                │
-│                        │  │                                            │  │  Status  : in_progress         │
+│Blocked by (1)          │  │E P1 IP bw-epic                             │  │  Core                          │
+│  ? P0 - …locker Upst...│  │Epic with children                          │  │  Type    : epic                │
+│                        │  │────────────────────────────────────────────│  │  Status  : in_progress         │
 │Blocks (0)              │  │Description                                 │  │  Priority: P1                  │
 │(none)                  │  │An epic that has child tasks.               │  │  ------------------------------│
 │                        │  │                                            │  │  Counts                        │

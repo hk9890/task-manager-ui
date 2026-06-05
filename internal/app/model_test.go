@@ -3121,6 +3121,127 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 	}
 }
 
+// TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail verifies that
+// when the user presses Enter on a row in the Dependencies pane to drill into an
+// issue that itself has dependencies:
+//   - Focus is NOT flipped to Content during the optimistic placeholder phase.
+//   - After the real detailLoadedMsg arrives, focus stays on the Dependencies rail.
+func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T) {
+	gw := newTestRepository()
+	gw.seedReady("bw-1", "Main issue", "epic", 1)
+	// bw-child has its own blockers so it is not a leaf.
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:   domain.IssueSummary{ID: "bw-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2},
+		BlockedBy: []domain.IssueReference{{ID: "bw-blocker", Title: "Blocker"}},
+	})
+	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-blocker", Title: "Blocker", Status: "open"})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.active = mode.Detail
+	m.detail = detailsmode.Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-1",
+		FocusPane:   uidetails.FocusPaneDependencies,
+		Detail: domain.IssueDetail{
+			Summary:  domain.IssueSummary{ID: "bw-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
+			Children: []domain.IssueReference{{ID: "bw-child", Title: "Child issue"}},
+		},
+		BrowserItems:         []domain.IssueReference{{ID: "bw-child", Title: "Child issue"}},
+		BrowserSelectedIndex: 0,
+		Keys:                 m.keys,
+	}
+	m.sizeKnown = true
+	m.width = 160
+	m.height = 34
+
+	// Send Enter to drill into bw-child (has deps → non-leaf).
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+
+	// Placeholder phase: focus must NOT have been flipped to Content.
+	if m.detail.FocusPane != uidetails.FocusPaneDependencies {
+		t.Errorf("placeholder phase: expected FocusPane=Dependencies, got %v", m.detail.FocusPane)
+	}
+
+	// Deliver the real detail (bw-child has BlockedBy so its rail is non-empty).
+	realDetail := domain.IssueDetail{
+		Summary:   domain.IssueSummary{ID: "bw-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2},
+		BlockedBy: []domain.IssueReference{{ID: "bw-blocker", Title: "Blocker"}},
+	}
+	next, _ = m.Update(detailLoadedMsg{issueID: "bw-child", detail: realDetail})
+	m = next.(Model)
+
+	// After real load: non-empty rail → focus must stay on Dependencies.
+	if m.detail.FocusPane != uidetails.FocusPaneDependencies {
+		t.Errorf("after real load with deps: expected FocusPane=Dependencies, got %v", m.detail.FocusPane)
+	}
+
+	// Suppress the unused-variable warning for cmd.
+	_ = cmd
+}
+
+// TestAppHandlerDrillIntoLeafDepMovesFocusToContent verifies that when the user
+// presses Enter on a Dependencies pane row to drill into a leaf issue (no deps),
+// focus moves to the Content pane after the real detail loads.
+func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
+	gw := newTestRepository()
+	gw.seedReady("bw-1", "Main issue", "epic", 1)
+	// bw-leaf has no dependencies.
+	gw.seedIssueSummary(domain.IssueSummary{ID: "bw-leaf", Title: "Leaf issue", Status: "open", Type: "task", Priority: 2})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.active = mode.Detail
+	m.detail = detailsmode.Model{
+		SelectionID: "bw-1",
+		TargetID:    "bw-1",
+		FocusPane:   uidetails.FocusPaneDependencies,
+		Detail: domain.IssueDetail{
+			Summary:  domain.IssueSummary{ID: "bw-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
+			Children: []domain.IssueReference{{ID: "bw-leaf", Title: "Leaf issue"}},
+		},
+		BrowserItems:         []domain.IssueReference{{ID: "bw-leaf", Title: "Leaf issue"}},
+		BrowserSelectedIndex: 0,
+		Keys:                 m.keys,
+	}
+	m.sizeKnown = true
+	m.width = 160
+	m.height = 34
+
+	// Send Enter to drill into bw-leaf (no deps → leaf).
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+
+	// Placeholder phase: focus must NOT have been flipped to Content yet
+	// (the focus decision is deferred to real load, not triggered by the empty placeholder).
+	if m.detail.FocusPane != uidetails.FocusPaneDependencies {
+		t.Errorf("placeholder phase: expected FocusPane=Dependencies (deferred), got %v", m.detail.FocusPane)
+	}
+
+	// Deliver the real detail (bw-leaf has no deps → empty rail).
+	realDetail := domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-leaf", Title: "Leaf issue", Status: "open", Type: "task", Priority: 2},
+	}
+	next, _ = m.Update(detailLoadedMsg{issueID: "bw-leaf", detail: realDetail})
+	m = next.(Model)
+
+	// After real load: empty rail → focus must move to Content.
+	if m.detail.FocusPane != uidetails.FocusPaneContent {
+		t.Errorf("after real load with no deps: expected FocusPane=Content, got %v", m.detail.FocusPane)
+	}
+
+	_ = cmd
+}
+
 func runBatch(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil

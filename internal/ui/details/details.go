@@ -11,6 +11,7 @@ import (
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/markdown"
+	"github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/beads-workbench/internal/ui/styles"
 )
 
@@ -660,13 +661,49 @@ func stripANSI(s string) string {
 	return out.String()
 }
 
+// contentDividerStyle renders the thin header/body divider in a muted border color.
+var contentDividerStyle = lipgloss.NewStyle().Foreground(styles.BorderDefaultColor)
+
+// contentHeaderMetaRow renders the compact, dashboard-styled metadata row shown at the
+// top of the Content pane: type, priority, and status tokens (each in its board color,
+// reusing the shared renderhelpers) followed by the full issue ID (muted). It mirrors
+// the compact issue rows used on the board so the detail header reads consistently.
+// When the styled row would exceed width, it falls back to a width-bounded plain row.
+func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
+	meta := strings.Join([]string{
+		renderhelpers.CompactIssueTypeStyled(summary.Type),
+		renderhelpers.CompactPriorityStyled(summary.Priority),
+		renderhelpers.CompactIssueStateStyled(summary.Status),
+		styles.IssueIDMutedStyle.Render(emptyFallback(summary.ID, "(unknown)")),
+	}, " ")
+	if width > 0 && lipgloss.Width(meta) > width {
+		plain := strings.Join([]string{
+			renderhelpers.CompactIssueType(summary.Type),
+			renderhelpers.CompactPriority(summary.Priority),
+			renderhelpers.CompactIssueState(summary.Status),
+			emptyFallback(summary.ID, "(unknown)"),
+		}, " ")
+		return styles.TruncateString(plain, width)
+	}
+	return meta
+}
+
+// contentHeaderRule renders the thin full-width horizontal divider that separates the
+// Content pane header (meta row + title) from the description body.
+func contentHeaderRule(width int) string {
+	if width < 1 {
+		return ""
+	}
+	return contentDividerStyle.Render(strings.Repeat("─", width))
+}
+
 func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int, skeleton bool, skeletonPhase int) []string {
 	upper := make([]string, 0, 48)
+	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
+	// title, then a thin rule that visually separates the header from the body below.
+	upper = append(upper, contentHeaderMetaRow(detail.Summary, width))
 	upper = append(upper, styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
-	summary := fmt.Sprintf("%s · %s · %s", emptyFallback(detail.Summary.ID, "(unknown)"), emptyFallback(detail.Summary.Status, "(unknown)"), formatPriority(detail.Summary.Priority))
-	upper = append(upper, styles.TruncateString(summary, width))
-
-	upper = append(upper, "")
+	upper = append(upper, contentHeaderRule(width))
 	upper = append(upper, "Description")
 
 	if skeleton {

@@ -155,8 +155,12 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 	}
 
 	initial := m.View(80, 10, false, 0)
-	if !strings.Contains(initial, "Long issue") {
-		t.Fatalf("expected top-of-detail content in initial viewport, got:\n%s", initial)
+	// The Content pane header now leads with the dashboard-styled meta row
+	// (type · priority · status · id); the title renders on the line below it.
+	// In this deliberately short viewport only the top header line is visible,
+	// so assert on the meta row's stable ID token rather than the title.
+	if !strings.Contains(initial, "bw-2") {
+		t.Fatalf("expected top-of-detail content (meta row) in initial viewport, got:\n%s", initial)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
@@ -179,7 +183,9 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected home key to be consumed")
 	}
 	homeView := m.View(80, 10, false, 0)
-	if !strings.Contains(homeView, "Long issue") {
+	// Top of content is the meta row (see initial-viewport note above); the title
+	// sits one line below it and is off-screen in this short viewport.
+	if !strings.Contains(homeView, "bw-2") {
 		t.Fatalf("expected home to return to top, got:\n%s", homeView)
 	}
 }
@@ -1448,5 +1454,126 @@ func TestBrowserItemsFromDependenciesIncludesChildren(t *testing.T) {
 		if got := m.BrowserItems[i].ID; got != want {
 			t.Errorf("BrowserItems[%d]: want %q, got %q", i, want, got)
 		}
+	}
+}
+
+// TestDrillFromDepsFocusRetainedOnRealLoadWithDeps verifies the model-level
+// drill-focus contract: when SetDrillFromDepsFocus is called before the
+// placeholder ApplyLoadedDetail (with Loading=true), clearBrowserPanel does not
+// flip focus, and the real data load with a non-empty rail keeps focus on
+// Dependencies.
+func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
+	t.Parallel()
+
+	// Start: bw-parent is loaded, cursor is on the Dependencies pane.
+	m := Model{
+		SelectionID: "bw-parent",
+		TargetID:    "bw-parent",
+		FocusPane:   uidetails.FocusPaneDependencies,
+		Detail: domain.IssueDetail{
+			Summary:  domain.IssueSummary{ID: "bw-parent"},
+			Children: []domain.IssueReference{{ID: "bw-child"}},
+		},
+		BrowserItems:         []domain.IssueReference{{ID: "bw-child"}},
+		BrowserSelectedIndex: 0,
+	}
+
+	// Simulate the app drill-handler sequence: set Loading and drill-focus before placeholder.
+	m.Loading = true
+	m.SelectionID = "bw-child"
+	m.TargetID = "bw-child"
+	m.SetDrillFromDepsFocus()
+	m.ApplyLoadedDetail("bw-child", PlaceholderDetail("bw-child", domain.IssueReference{ID: "bw-child"}, true))
+
+	// Placeholder phase: focus must not have been flipped to Content.
+	if m.FocusPane != uidetails.FocusPaneDependencies {
+		t.Errorf("placeholder phase: expected FocusPane=Dependencies, got %v", m.FocusPane)
+	}
+
+	// Simulate real data arriving: Loading cleared first, then ApplyLoadedDetail.
+	m.Loading = false
+	m.ApplyLoadedDetail("bw-child", domain.IssueDetail{
+		Summary:   domain.IssueSummary{ID: "bw-child"},
+		BlockedBy: []domain.IssueReference{{ID: "bw-blocker"}},
+	})
+
+	// Non-empty rail: focus must stay on Dependencies.
+	if m.FocusPane != uidetails.FocusPaneDependencies {
+		t.Errorf("real load with deps: expected FocusPane=Dependencies, got %v", m.FocusPane)
+	}
+	// Counter must have been consumed (no leftover).
+	if m.drillDepsFocusCalls != 0 {
+		t.Errorf("expected drillDepsFocusCalls=0 after real load, got %d", m.drillDepsFocusCalls)
+	}
+}
+
+// TestDrillFromDepsFocusMovesToContentOnLeafLoad verifies that when drilling
+// into a leaf issue (no dependencies), focus moves to Content after the real
+// data arrives, but NOT during the placeholder phase.
+func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		SelectionID: "bw-parent",
+		TargetID:    "bw-parent",
+		FocusPane:   uidetails.FocusPaneDependencies,
+		Detail: domain.IssueDetail{
+			Summary:  domain.IssueSummary{ID: "bw-parent"},
+			Children: []domain.IssueReference{{ID: "bw-leaf"}},
+		},
+		BrowserItems:         []domain.IssueReference{{ID: "bw-leaf"}},
+		BrowserSelectedIndex: 0,
+	}
+
+	m.Loading = true
+	m.SelectionID = "bw-leaf"
+	m.TargetID = "bw-leaf"
+	m.SetDrillFromDepsFocus()
+	m.ApplyLoadedDetail("bw-leaf", PlaceholderDetail("bw-leaf", domain.IssueReference{ID: "bw-leaf"}, true))
+
+	// Placeholder phase: focus stays on Dependencies (deferred, not flipped early).
+	if m.FocusPane != uidetails.FocusPaneDependencies {
+		t.Errorf("placeholder phase: expected FocusPane=Dependencies (deferred), got %v", m.FocusPane)
+	}
+
+	// Real load: leaf has no dependencies.
+	m.Loading = false
+	m.ApplyLoadedDetail("bw-leaf", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-leaf"},
+	})
+
+	// Empty rail: focus must move to Content.
+	if m.FocusPane != uidetails.FocusPaneContent {
+		t.Errorf("real load leaf: expected FocusPane=Content, got %v", m.FocusPane)
+	}
+	if m.drillDepsFocusCalls != 0 {
+		t.Errorf("expected drillDepsFocusCalls=0 after real load, got %d", m.drillDepsFocusCalls)
+	}
+}
+
+// TestDrillFromDepsFocusClearDrillFocusCancels verifies that ClearDrillFocus
+// cancels the pending drill sequence: after clearing, clearBrowserPanel flips
+// focus normally.
+func TestDrillFromDepsFocusClearDrillFocusCancels(t *testing.T) {
+	t.Parallel()
+
+	m := Model{
+		FocusPane: uidetails.FocusPaneDependencies,
+	}
+
+	m.Loading = true
+	m.SetDrillFromDepsFocus()
+
+	// Cancel before real load (e.g. load error or selection superseded).
+	m.ClearDrillFocus()
+
+	// ApplyLoadedDetail on a leaf should now flip focus to Content normally.
+	m.Loading = false
+	m.ApplyLoadedDetail("bw-x", domain.IssueDetail{
+		Summary: domain.IssueSummary{ID: "bw-x"},
+	})
+
+	if m.FocusPane != uidetails.FocusPaneContent {
+		t.Errorf("after ClearDrillFocus: expected FocusPane=Content, got %v", m.FocusPane)
 	}
 }

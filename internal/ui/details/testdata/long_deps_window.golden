@@ -1,7 +1,7 @@
 ╭─ Dependencies ────── 13 of 38 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│… (10 earlier)                  │  │Main issue                                                        │  │  Core                          │
-│                                │  │bw-main · open · P1                                               │  │  Type    : task                │
-│Blocks (10)                     │  │                                                                  │  │  Status  : open                │
+│… (10 earlier)                  │  │T P1 OPN bw-main                                                  │  │  Core                          │
+│                                │  │Main issue                                                        │  │  Type    : task                │
+│Blocks (10)                     │  │──────────────────────────────────────────────────────────────────│  │  Status  : open                │
 │  ? P0 - bw-bl00 bl issue 0     │  │Description                                                       │  │  Priority: P1                  │
 │  ? P0 - bw-bl01 bl issue 1     │  │(no description)                                                  │  │  ------------------------------│
 │  ? P0 - bw-bl02 bl issue 2     │  │                                                                  │  │  Counts                        │

@@ -1,7 +1,7 @@
 ╭─ Dependencies ──────── 3 ─╮  ╭─ Content ──────────────────────────── 1 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (1)             │  │Full detail sample                                 │  │  Core                          │
-│  ? P0 - bw-10 Data mode...│  │bw-22 · in_progress · P2                           │  │  Type    : feature             │
-│                           │  │                                                   │  │  Status  : in_progress         │
+│Blocked by (1)             │  │F P2 IP bw-22                                      │  │  Core                          │
+│  ? P0 - bw-10 Data mode...│  │Full detail sample                                 │  │  Type    : feature             │
+│                           │  │───────────────────────────────────────────────────│  │  Status  : in_progress         │
 │Blocks (1)                 │  │Description                                        │  │  Priority: P2                  │
 │  ? P0 - bw-30 Integrati...│  │Ship issue detail rendering for standalone mode.   │  │  ------------------------------│
 │                           │  │Keep shell-owned selection state.                  │  │  Ownership                     │

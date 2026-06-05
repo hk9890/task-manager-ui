@@ -1,7 +1,7 @@
 ╭─ Dependencies ───────────── 3 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (1)                  │  │Wide layout sample                                                │  │  Core                          │
-│  T P1 B bw-1 Auth migration    │  │bw-wide · in_progress · P1                                        │  │  Type    : feature             │
-│                                │  │                                                                  │  │  Status  : in_progress         │
+│Blocked by (1)                  │  │F P1 IP bw-wide                                                   │  │  Core                          │
+│  T P1 B bw-1 Auth migration    │  │Wide layout sample                                                │  │  Type    : feature             │
+│                                │  │──────────────────────────────────────────────────────────────────│  │  Status  : in_progress         │
 │Blocks (1)                      │  │Description                                                       │  │  Priority: P1                  │
 │  D P2 O bw-2 Docs update       │  │Three column layout should render related rail on wide terminals. │  │  ------------------------------│
 │                                │  │                                                                  │  │  Counts                        │

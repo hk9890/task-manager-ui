@@ -1,7 +1,7 @@
 ╭─ Search ──────────────────── reload ─╮  ╭─ Content ──────────────── ░░ comments ─╮  ╭─ Metadata ─────────────────────╮
-│backend                               │  │Backend search result                   │  │  Core                          │
-╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
-╭─ Results ───────────────── 2 capped ─╮  │                                        │  │  Status  : open                │
+│backend                               │  │T P1 OPN bw-1                           │  │  Core                          │
+╰──────────────────────────────────────╯  │Backend search result                   │  │  Type    : task                │
+╭─ Results ───────────────── 2 capped ─╮  │────────────────────────────────────────│  │  Status  : open                │
 │› T P1 OPN bw-1 Backend search result │  │Description                             │  │  Priority: P1                  │
 │  B P0 IP bw-2 Another result         │  │X XX XXX ░░░░░░░░ ░░░░░░░░░░░░░░░       │  │  ------------------------------│
 │                                      │  │X XX XXX ░░░░░░░░ ░░░░░░░░░             │  │  Ownership                     │

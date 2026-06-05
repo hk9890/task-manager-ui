@@ -1,7 +1,7 @@
 ╭─ Dependencies ──────── 0 ─╮  ╭─ Content ──────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (0)             │  │Minimal detail                                     │  │  Core                          │
-│(none)                     │  │bw-1 · open · P1                                   │  │  Type    : task                │
-│                           │  │                                                   │  │  Status  : open                │
+│Blocked by (0)             │  │T P1 OPN bw-1                                      │  │  Core                          │
+│(none)                     │  │Minimal detail                                     │  │  Type    : task                │
+│                           │  │───────────────────────────────────────────────────│  │  Status  : open                │
 │Blocks (0)                 │  │Description                                        │  │  Priority: P1                  │
 │(none)                     │  │(no description)                                   │  │  ------------------------------│
 │                           │  │                                                   │  │  Counts                        │

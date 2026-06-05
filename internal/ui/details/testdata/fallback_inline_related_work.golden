@@ -1,7 +1,7 @@
 ╭─ Dependencies ──────────── 3 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (1)                 │  │Fallback inline related work                                      │  │  Core                          │
-│  ? P0 - bw-11 Dependency A    │  │bw-fallback · open · P2                                           │  │  Type    : task                │
-│                               │  │                                                                  │  │  Status  : open                │
+│Blocked by (1)                 │  │T P2 OPN bw-fallback                                              │  │  Core                          │
+│  ? P0 - bw-11 Dependency A    │  │Fallback inline related work                                      │  │  Type    : task                │
+│                               │  │──────────────────────────────────────────────────────────────────│  │  Status  : open                │
 │Blocks (1)                     │  │Description                                                       │  │  Priority: P2                  │
 │  ? P0 - bw-12 Dependency B    │  │Below wide breakpoint should keep inline related work section.    │  │  ------------------------------│
 │                               │  │                                                                  │  │  Counts                        │

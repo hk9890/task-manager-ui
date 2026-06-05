@@ -1,7 +1,7 @@
 ╭─ Search ───────────────────── draft ─╮  ╭─ Content ──────────────── ░░ comments ─╮  ╭─ Metadata ─────────────────────╮
-│zqx99│                                │  │Backend search result                   │  │  Core                          │
-╰──────────────────────────────────────╯  │bw-1 · open · P1                        │  │  Type    : task                │
-╭─ Results ───────────────── 2 capped ─╮  │                                        │  │  Status  : open                │
+│zqx99│                                │  │T P1 OPN bw-1                           │  │  Core                          │
+╰──────────────────────────────────────╯  │Backend search result                   │  │  Type    : task                │
+╭─ Results ───────────────── 2 capped ─╮  │────────────────────────────────────────│  │  Status  : open                │
 │Results below are stale. Press Ente...│  │Description                             │  │  Priority: P1                  │
 │                                      │  │X XX XXX ░░░░░░░░ ░░░░░░░░░░░░░░░       │  │  ------------------------------│
 │› T P1 OPN bw-1 Backend search result │  │X XX XXX ░░░░░░░░ ░░░░░░░░░             │  │  Ownership                     │

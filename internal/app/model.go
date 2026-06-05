@@ -461,6 +461,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.detail.Detail = domain.IssueDetail{}
 			m.detail.Error = msg.err.Error()
+			// Clear any pending drill-focus counter so a subsequent load is not
+			// incorrectly treated as the real-data leg of a drill sequence.
+			m.detail.ClearDrillFocus()
 			return m, batchCmds(modeCmd, m.showToast("Failed to load selected issue details", toaster.StyleError))
 		}
 
@@ -695,11 +698,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// metadata immediately, while the description and Dependencies pane
 				// show their skeleton until the single bd show returns.
 				// ApplyLoadedDetail resets scroll offsets when the issue changes.
+				//
+				// Focus retention: set Loading and the drill-focus counter before the
+				// placeholder ApplyLoadedDetail call so that clearBrowserPanel does not
+				// flip focus away from the Dependencies pane during the in-flight window.
+				// The real detailLoadedMsg will apply the correct focus decision from
+				// actual rail content via the counter mechanism in ApplyLoadedDetail.
 				m.detail.SelectionID = issueID
 				m.detail.TargetID = issueID
-				m.detail.ApplyLoadedDetail(issueID, detailsmode.PlaceholderDetail(issueID, intent.Ref, true))
 				m.detail.Loading = true
 				m.detail.Error = ""
+				m.detail.SetDrillFromDepsFocus()
+				m.detail.ApplyLoadedDetail(issueID, detailsmode.PlaceholderDetail(issueID, intent.Ref, true))
 				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
 			}
 			if consumed {
@@ -939,6 +949,8 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 	previousID := strings.TrimSpace(m.detail.Detail.Summary.ID)
 	newID := selection.Issue.ID
 	if previousID != strings.TrimSpace(newID) {
+		// A board/search selection change supersedes any pending drill-focus sequence.
+		m.detail.ClearDrillFocus()
 		ref := domain.IssueReference{
 			ID:       selection.Issue.ID,
 			Title:    selection.Issue.Title,

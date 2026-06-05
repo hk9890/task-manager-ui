@@ -37,6 +37,14 @@ type Model struct {
 
 	pendingOpenStatusDialog   bool
 	pendingOpenPriorityDialog bool
+
+	// drillDepsFocusCalls counts remaining ApplyLoadedDetail calls that belong to a
+	// drill-from-Dependencies sequence. Set to 2 (placeholder + real data) by
+	// SetDrillFromDepsFocus when the user presses Enter on the Dependencies pane.
+	// clearBrowserPanel does not flip focus while this counter is > 0.
+	// The focus decision (Dependencies if rail non-empty, Content if empty) is applied
+	// when the counter reaches 0 (the real data load). Reset to 0 by ClearDrillFocus.
+	drillDepsFocusCalls int
 }
 
 // OpenRelatedIssueIntent requests shell-level navigation to another issue from
@@ -48,9 +56,33 @@ type OpenRelatedIssueIntent struct {
 	Ref     domain.IssueReference
 }
 
+// SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation.
+// Call this before applying the optimistic placeholder on an Enter-drill so that:
+//   - the placeholder call does not flip focus away from the Dependencies rail, and
+//   - the real data load sets focus to Dependencies if the rail is non-empty, or to
+//     Content if the drilled issue has no dependencies.
+//
+// The caller must set Loading=true before calling ApplyLoadedDetail with the placeholder
+// so the two-call sequence (placeholder, real data) is correctly distinguished.
+func (m *Model) SetDrillFromDepsFocus() {
+	m.drillDepsFocusCalls = 2
+}
+
+// ClearDrillFocus cancels any pending drill-from-dependencies focus management.
+// Call this when a load error prevents the real ApplyLoadedDetail from firing,
+// or when a new selection supersedes the pending drill.
+func (m *Model) ClearDrillFocus() {
+	m.drillDepsFocusCalls = 0
+}
+
 // ApplyLoadedDetail stores loaded detail and updates browser-panel state.
 // If issueID differs from the previously loaded issue (or no issue was loaded),
 // all three scroll offsets are zeroed before ClampScroll runs.
+//
+// When a drill-from-Dependencies sequence is in progress (drillDepsFocusCalls > 0),
+// the final call (real data) drives the focus decision: Dependencies if the rail is
+// non-empty, Content if empty. Intermediate calls (the optimistic placeholder) do not
+// flip focus.
 func (m *Model) ApplyLoadedDetail(issueID string, detail domain.IssueDetail) {
 	previousID := strings.TrimSpace(m.Detail.Summary.ID)
 	if previousID == "" || previousID != strings.TrimSpace(issueID) {
@@ -62,6 +94,17 @@ func (m *Model) ApplyLoadedDetail(issueID string, detail domain.IssueDetail) {
 	m.Detail = detail
 	m.PreviewDetail = domain.IssueDetail{}
 	m.syncBrowserPanel(issueID)
+	if m.drillDepsFocusCalls > 0 {
+		m.drillDepsFocusCalls--
+		if m.drillDepsFocusCalls == 0 {
+			// Real data arrived: set focus from actual rail content.
+			if len(m.BrowserItems) > 0 {
+				m.FocusPane = uidetails.FocusPaneDependencies
+			} else {
+				m.FocusPane = uidetails.FocusPaneContent
+			}
+		}
+	}
 }
 
 // ApplyPreviewDetail stores loaded preview detail without mutating browser-panel state.
@@ -524,7 +567,9 @@ func (m *Model) clearBrowserPanel() {
 	m.BrowserGroupParentID = ""
 	m.BrowserItems = nil
 	m.BrowserSelectedIndex = -1
-	if m.FocusPane == uidetails.FocusPaneDependencies {
+	// Do not flip focus during an in-flight drill sequence: the placeholder has no
+	// dependencies yet, but the real data load will decide focus from actual rail content.
+	if m.FocusPane == uidetails.FocusPaneDependencies && m.drillDepsFocusCalls <= 0 {
 		m.FocusPane = uidetails.FocusPaneContent
 	}
 }
