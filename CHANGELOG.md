@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.9.0]
+
+### Added
+
+- Detail Content pane header restyled to match the dashboard: a compact metadata row (type · priority · status, colored as on the board, with a muted issue ID), then the title, then a thin rule separating the header from the body.
+
+### Changed
+
+- Drilling into a related issue from the Detail Dependencies rail (Enter) now keeps focus on the Dependencies rail when the target has its own dependencies, and only moves focus to the Content pane for a leaf issue (previously focus always jumped to Content).
+- Detail Content pane loading skeleton now renders prose-shaped placeholder blocks instead of board issue-row shapes; the Dependencies rail keeps its row skeleton.
+
+### Fixed
+
+- Async dialog-open race: pressing Esc during the status/create/update catalog-load window no longer pops Detail→Board and orphans the dialog over the Board — the pending open is cancelled and focus stays in place.
+- Search "no selection" Content preview no longer renders a junk metadata row (`? P0 (NO (none)`) for the empty placeholder.
+
 ## [v0.7.0]
 
 ### Added
