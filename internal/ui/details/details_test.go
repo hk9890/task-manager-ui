@@ -879,6 +879,74 @@ func TestColdStartSkeletonContainsAllThreePaneSectionHeaders(t *testing.T) {
 	}
 }
 
+// TestRenderContentPaneLinesPlaceholderSuppressesMetaRowAndRule verifies that
+// the search "no selection" placeholder (ID="(none)", Type="") renders WITHOUT
+// the dashboard-style meta row or the thin rule, while a real issue summary
+// still renders WITH them.
+func TestRenderContentPaneLinesPlaceholderSuppressesMetaRowAndRule(t *testing.T) {
+	t.Parallel()
+
+	t.Run("placeholder omits meta row and rule", func(t *testing.T) {
+		t.Parallel()
+
+		placeholderDetail := domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				Title:    "No selected result.",
+				ID:       "(none)",
+				Status:   "(none)",
+				Type:     "",
+				Priority: -1,
+			},
+			Description: "Select a result in the search rail to preview issue content.",
+		}
+
+		lines := renderContentPaneLines(placeholderDetail, 80, 20, false, 0)
+		joined := strings.Join(lines, "\n")
+
+		// Must NOT contain the junk meta row tokens.
+		for _, unwanted := range []string{"P0", "(NO", "(none)"} {
+			if strings.Contains(joined, unwanted) {
+				t.Fatalf("placeholder content pane must not contain %q; got:\n%s", unwanted, joined)
+			}
+		}
+		// Must NOT contain the thin rule character.
+		if strings.Contains(joined, "─") {
+			t.Fatalf("placeholder content pane must not contain thin rule; got:\n%s", joined)
+		}
+		// Must contain the placeholder title.
+		if !strings.Contains(joined, "No selected result.") {
+			t.Fatalf("placeholder content pane must contain the title; got:\n%s", joined)
+		}
+	})
+
+	t.Run("real issue retains meta row and rule", func(t *testing.T) {
+		t.Parallel()
+
+		realDetail := domain.IssueDetail{
+			Summary: domain.IssueSummary{
+				ID:       "bw-test",
+				Title:    "Real issue title",
+				Status:   "open",
+				Type:     "task",
+				Priority: 2,
+			},
+			Description: "Real description.",
+		}
+
+		lines := renderContentPaneLines(realDetail, 80, 20, false, 0)
+		joined := strings.Join(lines, "\n")
+
+		// Must contain the thin rule (header separator).
+		if !strings.Contains(joined, "─") {
+			t.Fatalf("real issue content pane must contain the thin rule; got:\n%s", joined)
+		}
+		// Must contain the issue ID in the meta row.
+		if !strings.Contains(joined, "bw-test") {
+			t.Fatalf("real issue content pane must contain the issue ID; got:\n%s", joined)
+		}
+	})
+}
+
 func mustTime(t *testing.T, value string) time.Time {
 	t.Helper()
 
@@ -1448,5 +1516,67 @@ func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 	// The epic ID must appear in the Content pane (title/summary line).
 	if !strings.Contains(plain, "bw-epic") {
 		t.Errorf("expected bw-epic to appear in Content pane, got:\n%s", plain)
+	}
+}
+
+// TestContentBodySkeletonIsProseNotBoardRows verifies the AC for
+// beads-workbench-6zvr: the Content body skeleton must NOT produce board
+// issue-row shapes (issuerow.RenderCompactSkeleton output) and must include at
+// least one blank-line gap separating prose blocks.
+//
+// Two sub-tests exercise representative widths so both narrow (responsive) and
+// wide (three-pane) layout paths are covered.
+func TestContentBodySkeletonIsProseNotBoardRows(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		width int
+		n     int
+	}{
+		{"narrow", InspectorTwoColumnMinWidth - 10, 18},
+		{"wide", InspectorThreeColumnMinWidth + 20, 24},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			const phase = 1 // representative mid-cycle phase
+
+			proseLines := renderProseContentSkeleton(tc.width, tc.n, phase)
+
+			// AC: total line count must equal n.
+			if len(proseLines) != tc.n {
+				t.Fatalf("want %d prose skeleton lines, got %d", tc.n, len(proseLines))
+			}
+
+			// AC: at least one blank line must exist to separate prose blocks.
+			hasBlank := false
+			for _, line := range proseLines {
+				if line == "" {
+					hasBlank = true
+					break
+				}
+			}
+			if !hasBlank {
+				t.Errorf("prose skeleton has no blank lines — expected at least one blank-line gap between prose blocks; lines:\n%v", proseLines)
+			}
+
+			// AC: no prose skeleton line must equal the corresponding
+			// issuerow.RenderCompactSkeleton output (board-row shape).
+			for i, line := range proseLines {
+				boardRow := issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+					Width:  tc.width,
+					Seed:   i,
+					Phase:  phase,
+					Styled: true,
+				})
+				if line == boardRow {
+					t.Errorf("prose skeleton line %d equals board-row skeleton shape — Content body must not look like board rows; line=%q", i, line)
+				}
+			}
+		})
 	}
 }

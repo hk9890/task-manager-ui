@@ -697,8 +697,25 @@ func contentHeaderRule(width int) string {
 	return contentDividerStyle.Render(strings.Repeat("─", width))
 }
 
+// isPlaceholderSummary reports whether the summary is the search "no selection"
+// placeholder built in internal/ui/search/search.go.  The placeholder is
+// identified by the sentinel pair ID=="(none)" and Type==""; neither value can
+// appear on a real issue.
+func isPlaceholderSummary(s domain.IssueSummary) bool {
+	return strings.TrimSpace(s.ID) == "(none)" && strings.TrimSpace(s.Type) == ""
+}
+
 func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int, skeleton bool, skeletonPhase int) []string {
 	upper := make([]string, 0, 48)
+
+	if isPlaceholderSummary(detail.Summary) {
+		// Placeholder case (search "no selection"): suppress the meta row and
+		// thin rule; render only the title line so the pane stays clean.
+		upper = append(upper, styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
+		upper = append(upper, renderMarkdownMultiline(detail.Description, "(no description)", width)...)
+		return upper
+	}
+
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
 	// title, then a thin rule that visually separates the header from the body below.
 	upper = append(upper, contentHeaderMetaRow(detail.Summary, width))
@@ -707,18 +724,13 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	upper = append(upper, "Description")
 
 	if skeleton {
-		// Skeleton mode: render ▓-filled placeholder rows instead of the
+		// Skeleton mode: render prose-style placeholder lines instead of the
 		// description body, bypassing markdown rendering so ANSI sequences
-		// are not corrupted.
+		// are not corrupted.  A short heading bar followed by paragraph blocks
+		// of varying-width ░ lines with blank-line gaps reads as a document
+		// body rather than a list of board rows.
 		n := max(1, availableHeight-len(upper))
-		for i := 0; i < n; i++ {
-			upper = append(upper, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
-				Width:  width,
-				Seed:   i,
-				Phase:  skeletonPhase,
-				Styled: true,
-			}))
-		}
+		upper = append(upper, renderProseContentSkeleton(width, n, skeletonPhase)...)
 		return upper
 	}
 
@@ -751,6 +763,81 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	out = append(out, commentsSection...)
 
 	return out
+}
+
+// proseSkeletonBarFractions is the normative table of bar-fill widths used by
+// renderProseContentSkeleton.  Seven values produce visibly different bar
+// lengths so the column does not read as a uniform block.
+var proseSkeletonBarFractions = [7]float64{0.85, 0.70, 0.55, 0.80, 0.65, 0.75, 0.90}
+
+// renderProseContentSkeleton renders n prose-style placeholder lines for the
+// Content pane description body during the loading skeleton.  The shape is:
+//
+//	heading bar (≈55 % width) ← shorter bar signals a section heading
+//	blank line                ← visual gap before the first paragraph block
+//	paragraph lines (varying widths)
+//	blank line                ← gap between paragraph blocks
+//	… (pattern repeats until n lines are filled)
+//
+// The ░ glyphs are styled with styles.SkeletonShades[phase] (same animation
+// language as the Dependencies rail and board skeletons).
+// Total line count is always n regardless of width or phase.
+func renderProseContentSkeleton(width, n, phase int) []string {
+	if n <= 0 {
+		return nil
+	}
+
+	// Resolve the phase-keyed skeleton colour from the shared shades table.
+	numShades := len(styles.SkeletonShades)
+	idx := ((phase % numShades) + numShades) % numShades
+	color := styles.SkeletonShades[idx]
+	barStyle := lipgloss.NewStyle().Foreground(color)
+
+	barLine := func(fraction float64) string {
+		barWidth := int(float64(width) * fraction)
+		if barWidth < 1 {
+			barWidth = 1
+		}
+		if barWidth > width {
+			barWidth = width
+		}
+		return barStyle.Render(strings.Repeat(issuerow.SkeletonGlyph, barWidth))
+	}
+
+	// Cycle through: heading, blank, para, para, para, blank, para, para, para, blank, …
+	// "heading" uses fraction 0.55; subsequent para lines cycle through proseSkeletonBarFractions.
+	//
+	// The pattern is encoded as a flat []float64 sentinel slice where -1 = blank
+	// and -2 = heading (fraction 0.55).
+	const headingFraction = 0.55
+	const blankSentinel = -1.0
+
+	// Fixed leading segment: heading then blank.
+	pattern := make([]float64, 0, 8)
+	pattern = append(pattern, headingFraction, blankSentinel)
+	// Then cycles of three para lines followed by a blank.
+	for i := 0; i < 3; i++ {
+		pattern = append(pattern,
+			proseSkeletonBarFractions[i*3%7],
+			proseSkeletonBarFractions[(i*3+1)%7],
+			proseSkeletonBarFractions[(i*3+2)%7],
+			blankSentinel,
+		)
+	}
+	// pattern now has 2 + 4*3 = 14 entries; we'll cycle it below.
+
+	lines := make([]string, 0, n)
+	pi := 0
+	for len(lines) < n {
+		entry := pattern[pi%len(pattern)]
+		pi++
+		if entry == blankSentinel {
+			lines = append(lines, "")
+		} else {
+			lines = append(lines, barLine(entry))
+		}
+	}
+	return lines[:n]
 }
 
 func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) []string {

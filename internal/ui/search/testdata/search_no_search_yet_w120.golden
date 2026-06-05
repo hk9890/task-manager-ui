@@ -1,10 +1,10 @@
 ╭─ Search ────────────────────── idle ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-││                                     │  │? P0 (NO (none)                         │  │  Core                          │
-╰──────────────────────────────────────╯  │No selected result.                     │  │  Type    : (unknown)           │
-╭─ Results ──────────────────────── 0 ─╮  │────────────────────────────────────────│  │  Status  : (none)              │
-│No search has run yet.                │  │Description                             │  │  Priority: (unknown)           │
-│                                      │  │Select a result in the search rail to pr│  │  ------------------------------│
-│Type query text, then press Enter to  │  │eview issue content.                    │  │  Counts                        │
+││                                     │  │No selected result.                     │  │  Core                          │
+╰──────────────────────────────────────╯  │Select a result in the search rail to pr│  │  Type    : (unknown)           │
+╭─ Results ──────────────────────── 0 ─╮  │eview issue content.                    │  │  Status  : (none)              │
+│No search has run yet.                │  │                                        │  │  Priority: (unknown)           │
+│                                      │  │                                        │  │  ------------------------------│
+│Type query text, then press Enter to  │  │                                        │  │  Counts                        │
 │search.                               │  │                                        │  │  Comments  : 0                 │
 │                                      │  │                                        │  │  Blocked by: 0                 │
 │                                      │  │                                        │  │  Blocks    : 0                 │

@@ -162,6 +162,16 @@ type surfaceRefreshState struct {
 	lastRefresh time.Time
 }
 
+// pendingDialogGuard tracks an in-flight async dialog-open so that a key
+// press (ESC or otherwise) arriving before the catalog response is delivered
+// can cancel the pending open instead of causing the dialog to appear over the
+// wrong mode. It is keyed on kind (not issue ID) so that the create path,
+// which uses an empty IssueSummary, is handled correctly.
+type pendingDialogGuard struct {
+	active bool
+	kind   mutationKind
+}
+
 type RuntimeOptions struct {
 	DisableAutoRefresh bool
 }
@@ -224,6 +234,15 @@ type Model struct {
 	// then a taller post-resize frame that the terminal renderer could not fully
 	// overwrite (beads-workbench-o7tk).
 	sizeKnown bool
+
+	// pendingDialog guards an in-flight async dialog-open. It is set when the
+	// app dispatches an async catalog-load Cmd (status or create/update) and
+	// cleared at a single choke point at the top of the tea.KeyMsg branch so
+	// that any key — particularly ESC — arriving during the load window can
+	// cancel the pending open before the catalog response arrives. The
+	// catalog-loaded handlers check the guard before opening the modal; if the
+	// guard is not active they drop the result silently.
+	pendingDialog pendingDialogGuard
 
 	runtime RuntimeOptions
 }
@@ -546,8 +565,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow). Use e for edit/save round-trip.", msg.action), toaster.StyleInfo))
 	case mutationCatalogsLoadedMsg:
 		if msg.err != nil {
+			m.pendingDialog = pendingDialogGuard{}
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load mutation catalogs: %v", msg.err), toaster.StyleError))
 		}
+
+		// Only open the modal if the pending-dialog guard is still active for
+		// this kind. If the guard was cleared by a key press (ESC or any other
+		// key arriving during the load window), drop the result silently.
+		if !m.pendingDialog.active || m.pendingDialog.kind != msg.kind {
+			return m, modeCmd
+		}
+		m.pendingDialog = pendingDialogGuard{}
 
 		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
 		m.actionState = dialog
@@ -557,8 +585,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.actionModal.Init())
 	case statusCatalogLoadedMsg:
 		if msg.err != nil {
+			m.pendingDialog = pendingDialogGuard{}
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load status catalog: %v", msg.err), toaster.StyleError))
 		}
+
+		// Only open the modal if the pending-dialog guard is still active for
+		// the status kind. If the guard was cleared by a key press arriving
+		// during the load window, drop the result silently.
+		if !m.pendingDialog.active || m.pendingDialog.kind != mutationStatus {
+			return m, modeCmd
+		}
+		m.pendingDialog = pendingDialogGuard{}
 
 		dialog := buildMutationDialog(mutationStatus, msg.issue, msg.statuses, nil, nil)
 		m.actionState = dialog
@@ -641,6 +678,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = m.toast.Hide()
 		return m, modeCmd
 	case tea.KeyMsg:
+		// Single choke point: any key press clears the pending-dialog guard.
+		// The guard is set when an async catalog-load Cmd is dispatched and must
+		// be cleared before the key is processed so that the catalog-loaded
+		// handler (arriving later) sees the guard is gone and drops its result.
+		// We capture the guard state before clearing so ESC can use it to
+		// decide whether to cancel the pending open instead of popping the mode.
+		hadPendingDialog := m.pendingDialog.active
+		m.pendingDialog = pendingDialogGuard{}
+
 		searchCaptured := false
 		if m.active == mode.Search {
 			if m.search.CapturesShellKey(msg) {
@@ -664,6 +710,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if strings.TrimSpace(issue.ID) == "" {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
+				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
 				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, issue))
 			}
 			if m.detail.ConsumeOpenPriorityDialogIntent() {
@@ -723,6 +770,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
+				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
 				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, selection.Issue))
 			}
 			if m.search.ConsumeOpenPriorityDialogIntent() {
@@ -786,6 +834,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastBrowse = m.active
 			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
+			// If a dialog-open was in flight when ESC arrived, the guard has
+			// already been cleared at the top of this branch. Consume ESC as
+			// "cancel the pending open" and keep the current mode — do NOT pop
+			// Detail → Board (or Search → Board) while the load is in progress.
+			if hadPendingDialog {
+				return m, modeCmd
+			}
 			if m.active == mode.Detail {
 				m.active = m.lastBrowse
 				return m, modeCmd
@@ -814,12 +869,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, batchCmds(modeCmd, prepareEditCmd(m.services, issueID))
 		case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
 			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationCreate, domain.IssueSummary{}))
 		case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
 			selection := m.currentSelection()
 			if selection == nil || selection.Issue.ID == "" {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
 			}
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
 			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationUpdate, selection.Issue))
 		case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
 			selection := m.currentSelection()

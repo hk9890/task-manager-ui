@@ -3505,3 +3505,239 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 		}
 	}
 }
+
+// TestPendingDialogGuardStatusRaceEscCancelsOpen reproduces the async ESC race
+// for the Update Status dialog (beads-workbench-j14c):
+//   - Enter on the Status metadata row dispatches an async catalog-load Cmd and
+//     sets the pending-dialog guard.
+//   - ESC arrives before the catalog response → guard is cleared; ESC is
+//     consumed as "cancel the pending open" without popping Detail → Board.
+//   - The catalog-loaded message arrives → guard is gone → modal is NOT opened.
+//
+// Expected: m.active == Detail, m.showActionModal == false.
+func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("bw-1", "Root", "task", 1)
+	gw.seedInProgress("bw-2", "Other", "task", 2)
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "bw-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
+	gw.seedCatalogs(
+		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
+		[]domain.TypeOption{{Name: "task"}},
+		[]domain.LabelOption{},
+	)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.width = 140
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// Navigate to Detail mode.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Detail {
+		t.Fatalf("expected Detail mode after pressing 3, got %s", m.active)
+	}
+
+	// Navigate to the Metadata pane (Right arrow) and focus the Status row.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	// Press Enter on the Status row — this dispatches the async catalog load and
+	// sets the pending-dialog guard. Capture the Cmd but do NOT execute it yet.
+	next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if catalogLoadCmd == nil {
+		t.Fatal("expected async catalog-load Cmd after Enter on Status row")
+	}
+	if !m.pendingDialog.active {
+		t.Fatal("expected pending-dialog guard to be active after dispatching catalog load")
+	}
+	if m.pendingDialog.kind != mutationStatus {
+		t.Fatalf("expected pending-dialog kind=mutationStatus, got %q", m.pendingDialog.kind)
+	}
+
+	// ESC arrives during the load window. The guard must be cleared and ESC
+	// must NOT pop Detail → Board.
+	next, escCmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if escCmd != nil {
+		// Drain any follow-up commands (e.g. modeCmd from mode sub-models).
+		m = applyMessages(t, m, runBatch(escCmd))
+	}
+
+	if m.active != mode.Detail {
+		t.Fatalf("ESC during pending-dialog load popped mode to %s; want Detail", m.active)
+	}
+	if m.pendingDialog.active {
+		t.Fatal("expected pending-dialog guard to be cleared after ESC")
+	}
+
+	// Now deliver the catalog-loaded message. Because the guard is gone the
+	// handler must drop the result without opening the modal.
+	catalogMsg := catalogLoadCmd()
+	next, afterCmd := m.Update(catalogMsg)
+	m = next.(Model)
+	if afterCmd != nil {
+		m = applyMessages(t, m, runBatch(afterCmd))
+	}
+
+	if m.showActionModal {
+		t.Fatal("expected no action modal after ESC cancelled the pending-dialog open; got orphaned modal")
+	}
+	if m.active != mode.Detail {
+		t.Fatalf("expected mode to remain Detail after catalog arrival with cancelled guard; got %s", m.active)
+	}
+}
+
+// TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen reproduces the async ESC
+// race for the Create and Update mutation dialogs (beads-workbench-j14c).
+// Create dispatches with an empty IssueSummary (no issue ID), so the guard must
+// key on kind, not issue ID.
+//
+//   - Press the Create-issue key → dispatches async catalog load, sets guard.
+//   - ESC arrives before catalog response → guard cleared, no mode switch.
+//   - mutationCatalogsLoadedMsg with kind=mutationCreate arrives → dropped, no modal.
+//
+// The Update path is also checked: guard is set with kind=mutationUpdate.
+func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
+	t.Parallel()
+
+	t.Run("create", func(t *testing.T) {
+		t.Parallel()
+
+		gw := newTestRepository()
+		gw.seedReady("bw-1", "Root", "task", 1)
+		gw.seedCatalogs(
+			[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
+			[]domain.TypeOption{{Name: "task"}, {Name: "bug"}},
+			[]domain.LabelOption{},
+		)
+
+		services, err := NewServices(gw, config.Default(), t.TempDir())
+		if err != nil {
+			t.Fatalf("NewServices returned error: %v", err)
+		}
+
+		m := mustNewModel(t, services)
+		m.width = 140
+		m.height = 34
+		m = applyMessages(t, m, runBatch(m.Init()))
+
+		// Press "c" (ShellActionCreateIssue) — dispatches the async catalog load.
+		next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+		m = next.(Model)
+		if catalogLoadCmd == nil {
+			t.Fatal("expected async catalog-load Cmd after Create-issue key")
+		}
+		if !m.pendingDialog.active {
+			t.Fatal("expected pending-dialog guard to be active after dispatching create catalog load")
+		}
+		if m.pendingDialog.kind != mutationCreate {
+			t.Fatalf("expected pending-dialog kind=mutationCreate, got %q", m.pendingDialog.kind)
+		}
+
+		// ESC during the load window cancels the pending open.
+		next, escCmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		m = next.(Model)
+		if escCmd != nil {
+			m = applyMessages(t, m, runBatch(escCmd))
+		}
+
+		if m.pendingDialog.active {
+			t.Fatal("expected pending-dialog guard cleared after ESC")
+		}
+
+		// Deliver the catalog-loaded message. Guard is gone → modal must NOT open.
+		// Construct the message directly using the empty-issue-ID shape that create uses.
+		catalogMsg := mutationCatalogsLoadedMsg{
+			kind:     mutationCreate,
+			issue:    domain.IssueSummary{}, // empty ID — the create path
+			statuses: []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
+			types:    []domain.TypeOption{{Name: "task"}, {Name: "bug"}},
+			labels:   []domain.LabelOption{},
+		}
+		next, afterCmd := m.Update(catalogMsg)
+		m = next.(Model)
+		if afterCmd != nil {
+			m = applyMessages(t, m, runBatch(afterCmd))
+		}
+
+		if m.showActionModal {
+			t.Fatal("expected no action modal after ESC cancelled the create pending-dialog open; got orphaned modal")
+		}
+	})
+
+	t.Run("update", func(t *testing.T) {
+		t.Parallel()
+
+		gw := newTestRepository()
+		gw.seedReady("bw-1", "Root", "task", 1)
+		gw.seedCatalogs(
+			[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
+			[]domain.TypeOption{{Name: "task"}, {Name: "bug"}},
+			[]domain.LabelOption{},
+		)
+
+		services, err := NewServices(gw, config.Default(), t.TempDir())
+		if err != nil {
+			t.Fatalf("NewServices returned error: %v", err)
+		}
+
+		m := mustNewModel(t, services)
+		m.width = 140
+		m.height = 34
+		m = applyMessages(t, m, runBatch(m.Init()))
+
+		// Press "u" (ShellActionUpdateIssue) — dispatches the async catalog load.
+		next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+		m = next.(Model)
+		if catalogLoadCmd == nil {
+			t.Fatal("expected async catalog-load Cmd after Update-issue key")
+		}
+		if !m.pendingDialog.active {
+			t.Fatal("expected pending-dialog guard to be active after dispatching update catalog load")
+		}
+		if m.pendingDialog.kind != mutationUpdate {
+			t.Fatalf("expected pending-dialog kind=mutationUpdate, got %q", m.pendingDialog.kind)
+		}
+
+		// ESC during the load window cancels the pending open.
+		next, escCmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		m = next.(Model)
+		if escCmd != nil {
+			m = applyMessages(t, m, runBatch(escCmd))
+		}
+
+		if m.pendingDialog.active {
+			t.Fatal("expected pending-dialog guard cleared after ESC")
+		}
+
+		// Deliver the catalog-loaded message. Guard is gone → modal must NOT open.
+		catalogMsg := mutationCatalogsLoadedMsg{
+			kind:     mutationUpdate,
+			issue:    domain.IssueSummary{ID: "bw-1"},
+			statuses: []domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
+			types:    []domain.TypeOption{{Name: "task"}, {Name: "bug"}},
+			labels:   []domain.LabelOption{},
+		}
+		next, afterCmd := m.Update(catalogMsg)
+		m = next.(Model)
+		if afterCmd != nil {
+			m = applyMessages(t, m, runBatch(afterCmd))
+		}
+
+		if m.showActionModal {
+			t.Fatal("expected no action modal after ESC cancelled the update pending-dialog open; got orphaned modal")
+		}
+	})
+}
