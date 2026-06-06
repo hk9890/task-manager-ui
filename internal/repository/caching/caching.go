@@ -392,6 +392,13 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 	if !dirty && dashboardHydrated {
 		c.dashboardCache = hydratedDashboard
 		c.dashboardDirty = false
+		// Restore the persisted closed-limit so the first Dashboard() call with a
+		// matching ClosedLimit is served from cache (limitChanged=false → fast-paint
+		// actually works). Only restored here — not in the else branch — so the
+		// limit takes effect only when the dashboard cache itself is restored.
+		// A zero value (old files written before this field existed) means
+		// limitChanged will be true on the first call → re-fetch, same as before.
+		c.lastDashboardClosedLimit = v2Header.LastDashboardClosedLimit
 	} else {
 		c.dashboardDirty = true
 	}
@@ -456,9 +463,11 @@ func (c *CachingRepository) SaveNow() error {
 	var snapshot []memory.SnapshotIssue
 	var dashboardCache repository.DashboardData
 	var catalogsCache *repository.Catalogs
+	var lastDashboardClosedLimit int
 	if path != "" {
 		snapshot = c.memory.Snapshot()
 		dashboardCache = c.dashboardCache
+		lastDashboardClosedLimit = c.lastDashboardClosedLimit
 		if c.catalogsCache != nil {
 			cats := *c.catalogsCache
 			catalogsCache = &cats
@@ -482,7 +491,7 @@ func (c *CachingRepository) SaveNow() error {
 		}
 		// On error, hash stays "". Save still proceeds.
 	}
-	return filestorage.SaveSnapshotV2WithHash(snapshot, dashboardCache, catalogsCache, path, hash)
+	return filestorage.SaveSnapshotV2WithHash(snapshot, dashboardCache, catalogsCache, lastDashboardClosedLimit, path, hash)
 }
 
 // ---- read methods ----

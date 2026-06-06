@@ -137,7 +137,7 @@ func TestColdStart_DegenerateFile_DashboardFansOutToBackingOnFirstCall(t *testin
 	})
 	snapshot := fileMemory.Snapshot()
 	// SaveSnapshotV2WithHash with zero-value DashboardData = empty dashboardCache.
-	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, nil, filePath, matchHash); err != nil {
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, nil, 0, filePath, matchHash); err != nil {
 		t.Fatalf("create degenerate fixture: %v", err)
 	}
 

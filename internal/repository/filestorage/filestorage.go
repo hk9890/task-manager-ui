@@ -90,6 +90,14 @@ type V2Header struct {
 	IsV2Header     bool                     `json:"v2header"`
 	DashboardCache repository.DashboardData `json:"dashboardCache"`
 	CatalogsCache  *repository.Catalogs     `json:"catalogsCache,omitempty"`
+	// LastDashboardClosedLimit is the ClosedLimit value that was in effect when
+	// the dashboardCache was last populated. Restored by Hydrate into
+	// CachingRepository.lastDashboardClosedLimit so that the first Dashboard()
+	// call after a clean restore is served from cache without a backing re-fetch.
+	// Zero means the limit was unknown at save time (old files written before this
+	// field existed); on restore a zero value causes the first Dashboard() call to
+	// re-fetch from backing — the same behaviour as before this field was added.
+	LastDashboardClosedLimit int `json:"lastDashboardClosedLimit,omitempty"`
 }
 
 // Save writes r's contents to path (JSONL) and path+".manifest.json".
@@ -123,20 +131,21 @@ func SaveWithHash(r *memory.Repository, path string, bdCommitHash string) error 
 // This is kept for callers that only need to persist the memory snapshot
 // (e.g. test helpers that do not hold a caching layer's cache state).
 func SaveSnapshotWithHash(issues []memory.SnapshotIssue, path string, bdCommitHash string) error {
-	return SaveSnapshotV2WithHash(issues, repository.DashboardData{}, nil, path, bdCommitHash)
+	return SaveSnapshotV2WithHash(issues, repository.DashboardData{}, nil, 0, path, bdCommitHash)
 }
 
 // SaveSnapshotV2WithHash writes a pre-captured snapshot and v2 cache state to
 // path (JSONL) and path+".manifest.json" in v2 format.
 //
-// The first JSONL line is a [V2Header] encoding dashboardCache and
-// catalogsCache. Subsequent lines are SnapshotIssue records. The manifest
-// carries SchemaVersion=2 and bdCommitHash.
+// The first JSONL line is a [V2Header] encoding dashboardCache, catalogsCache,
+// and lastDashboardClosedLimit. Subsequent lines are SnapshotIssue records. The
+// manifest carries SchemaVersion=2 and bdCommitHash.
 //
 // catalogsCache may be nil (written as absent in the header JSON). dashboardCache
 // may be a zero-value DashboardData (written as present but empty); callers
 // should only set dashboardDirty=false on Hydrate when the header's
-// DashboardCache is non-empty.
+// DashboardCache is non-empty. lastDashboardClosedLimit is the ClosedLimit that
+// was active when dashboardCache was last populated; pass 0 when unknown.
 //
 // Callers that need to snapshot under a lock to avoid a race between snapshot
 // capture and concurrent Reset should call r.Snapshot() while holding their
@@ -146,6 +155,7 @@ func SaveSnapshotV2WithHash(
 	issues []memory.SnapshotIssue,
 	dashboardCache repository.DashboardData,
 	catalogsCache *repository.Catalogs,
+	lastDashboardClosedLimit int,
 	path string,
 	bdCommitHash string,
 ) error {
@@ -164,9 +174,10 @@ func SaveSnapshotV2WithHash(
 
 	// Write v2 header as first line.
 	header := V2Header{
-		IsV2Header:     true,
-		DashboardCache: dashboardCache,
-		CatalogsCache:  catalogsCache,
+		IsV2Header:               true,
+		DashboardCache:           dashboardCache,
+		CatalogsCache:            catalogsCache,
+		LastDashboardClosedLimit: lastDashboardClosedLimit,
 	}
 	if err := enc.Encode(header); err != nil {
 		_ = tmpJSONL.Close()

@@ -91,7 +91,7 @@ func TestKnownBadCacheRepro_V2Equivalent(t *testing.T) {
 	fixturePath := filepath.Join(dir, "repo.jsonl")
 
 	snapshot := clickTrailMemory.Snapshot()
-	if err := filestorage.SaveSnapshotV2WithHash(snapshot, fullDashboard, nil, fixturePath, knownBadHash); err != nil {
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, fullDashboard, nil, 0, fixturePath, knownBadHash); err != nil {
 		t.Fatalf("create v2 fixture: %v", err)
 	}
 

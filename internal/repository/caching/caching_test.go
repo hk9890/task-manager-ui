@@ -2054,7 +2054,7 @@ func TestHydrate_EmptyDashboardCache_FallsBackToBackingFetch(t *testing.T) {
 	})
 	snapshot := r.Snapshot()
 	// SaveSnapshotV2WithHash with zero-value DashboardData = empty dashboardCache.
-	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, nil, path, matchHash); err != nil {
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, nil, 0, path, matchHash); err != nil {
 		t.Fatalf("SaveSnapshotV2WithHash: %v", err)
 	}
 
@@ -2126,7 +2126,7 @@ func TestHydrate_ValidCatalogsWithEmptyDashboard(t *testing.T) {
 	r := memory.New()
 	r.Seed(memory.Issue{ID: "cats-dash-1", Title: "test issue", Status: "open", Type: "task"})
 	snapshot := r.Snapshot()
-	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, &wantCats, path, matchHash); err != nil {
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, &wantCats, 0, path, matchHash); err != nil {
 		t.Fatalf("SaveSnapshotV2WithHash: %v", err)
 	}
 
@@ -2169,6 +2169,140 @@ func TestHydrate_ValidCatalogsWithEmptyDashboard(t *testing.T) {
 	if backingDashCalls != 1 {
 		t.Fatalf("expected 1 backing Dashboard call (dashboardDirty=true); got %d", backingDashCalls)
 	}
+}
+
+// TestHydrate_PersistedClosedLimit_FastPaintActuallyWorks verifies the fix for
+// the ipq7 Finding 2 bug: Hydrate now restores lastDashboardClosedLimit from the
+// v2 header so that the first Dashboard() call after a clean restore is served
+// from the persisted cache without a backing re-fetch.
+//
+// Before the fix, lastDashboardClosedLimit always started at 0 (from New).
+// Since the first real Dashboard() call uses ClosedLimit>=1, limitChanged was
+// always true → cache miss → re-fetch. The fast-paint path was dead code.
+//
+// Two cases are tested:
+//  1. Matching limit: persisted LastDashboardClosedLimit == first Dashboard()
+//     ClosedLimit → first call served from cache, no backing call.
+//  2. Zero limit (old file): LastDashboardClosedLimit == 0 → limitChanged → re-fetch,
+//     i.e. the same safe fallback as before this fix.
+func TestHydrate_PersistedClosedLimit_FastPaintActuallyWorks(t *testing.T) {
+	t.Parallel()
+
+	const matchHash = "HASH-CLOSED-LIMIT"
+	const closedLimit = 25 // simulates sectionItemCapacity() in production
+
+	// dashCache is the persisted dashboard that Hydrate will restore.
+	// It must be non-empty to trigger the fast-paint branch.
+	dashCache := repository.DashboardData{
+		ClosedTotal: 5,
+		InProgress: []domain.IssueSummary{
+			{ID: "cl-1", Title: "in progress", Status: "in_progress", Type: "task"},
+		},
+		Closed:  []domain.IssueSummary{},
+		Blocked: []domain.IssueSummary{},
+	}
+
+	// buildFile writes a v2 file with the given lastDashboardClosedLimit.
+	buildFile := func(t *testing.T, lastLimit int) string {
+		t.Helper()
+		dir := t.TempDir()
+		path := filepath.Join(dir, "repo.jsonl")
+		r := memory.New()
+		r.Seed(memory.Issue{ID: "cl-1", Title: "in progress", Status: "in_progress", Type: "task"})
+		if err := filestorage.SaveSnapshotV2WithHash(r.Snapshot(), dashCache, nil, lastLimit, path, matchHash); err != nil {
+			t.Fatalf("SaveSnapshotV2WithHash: %v", err)
+		}
+		return path
+	}
+
+	t.Run("matching_limit_serves_from_cache", func(t *testing.T) {
+		t.Parallel()
+		path := buildFile(t, closedLimit)
+
+		backingDashCalls := 0
+		stub := &stubRepository{
+			dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+				backingDashCalls++
+				return repository.DashboardData{ClosedTotal: 999}, nil
+			},
+		}
+		vcFn := func(_ context.Context) (string, error) { return matchHash, nil }
+		c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
+
+		if err := c.Hydrate(context.Background(), path, path); err != nil {
+			t.Fatalf("Hydrate: %v", err)
+		}
+
+		// First Dashboard() with the same ClosedLimit that was persisted must be
+		// served from the restored cache — no backing call.
+		got, err := c.Dashboard(context.Background(), repository.DashboardOptions{ClosedLimit: closedLimit})
+		if err != nil {
+			t.Fatalf("Dashboard: %v", err)
+		}
+		if backingDashCalls != 0 {
+			t.Fatalf("matching limit: expected 0 backing calls (fast-paint cache hit), got %d", backingDashCalls)
+		}
+		// Confirm the restored cache value was served, not the backing's sentinel.
+		if got.ClosedTotal != dashCache.ClosedTotal {
+			t.Fatalf("matching limit: got ClosedTotal=%d, want %d (restored cache)", got.ClosedTotal, dashCache.ClosedTotal)
+		}
+		if len(got.InProgress) != 1 || got.InProgress[0].ID != "cl-1" {
+			t.Fatalf("matching limit: unexpected InProgress: %v", got.InProgress)
+		}
+
+		// A second call with the same limit must also be a cache hit.
+		if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{ClosedLimit: closedLimit}); err != nil {
+			t.Fatalf("second Dashboard: %v", err)
+		}
+		if backingDashCalls != 0 {
+			t.Fatalf("matching limit: second call: expected still 0 backing calls, got %d", backingDashCalls)
+		}
+	})
+
+	t.Run("zero_limit_old_file_refetches_gracefully", func(t *testing.T) {
+		t.Parallel()
+		// Build a file with LastDashboardClosedLimit=0 (simulates a v2 file written
+		// before this field was introduced). On restore, lastDashboardClosedLimit
+		// stays 0 → the first Dashboard() call with ClosedLimit>=1 sees limitChanged=true
+		// → re-fetch from backing. No panic, no incorrect serve.
+		path := buildFile(t, 0)
+
+		backingDashCalls := 0
+		const backingMarker = 42
+		stub := &stubRepository{
+			dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+				backingDashCalls++
+				return repository.DashboardData{ClosedTotal: backingMarker}, nil
+			},
+		}
+		vcFn := func(_ context.Context) (string, error) { return matchHash, nil }
+		c := caching.New(stub, caching.WithVCStatusFunc(vcFn))
+
+		if err := c.Hydrate(context.Background(), path, path); err != nil {
+			t.Fatalf("Hydrate: %v", err)
+		}
+
+		// First Dashboard() with ClosedLimit>=1 must re-fetch (limitChanged=true
+		// because persisted limit was 0 and requested limit is closedLimit).
+		got, err := c.Dashboard(context.Background(), repository.DashboardOptions{ClosedLimit: closedLimit})
+		if err != nil {
+			t.Fatalf("Dashboard: %v", err)
+		}
+		if backingDashCalls != 1 {
+			t.Fatalf("zero limit (old file): expected 1 backing call (re-fetch), got %d", backingDashCalls)
+		}
+		if got.ClosedTotal != backingMarker {
+			t.Fatalf("zero limit: got ClosedTotal=%d, want backing marker %d", got.ClosedTotal, backingMarker)
+		}
+
+		// Second call must be served from the newly populated cache (no re-fetch).
+		if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{ClosedLimit: closedLimit}); err != nil {
+			t.Fatalf("second Dashboard: %v", err)
+		}
+		if backingDashCalls != 1 {
+			t.Fatalf("zero limit: second call: expected still 1 backing call (cache hit), got %d", backingDashCalls)
+		}
+	})
 }
 
 // containsAny reports whether s contains any of the given substrings.
@@ -2389,7 +2523,7 @@ func seedFileWithHash(t *testing.T, path string, hash string) string {
 		Blocked:     []domain.IssueSummary{},
 	}
 	snapshot := r.Snapshot()
-	if err := filestorage.SaveSnapshotV2WithHash(snapshot, dashCache, nil, path, hash); err != nil {
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, dashCache, nil, 0, path, hash); err != nil {
 		t.Fatalf("seedFileWithHash: filestorage.SaveSnapshotV2WithHash: %v", err)
 	}
 	return "hash-issue-1"
@@ -2420,7 +2554,7 @@ func TestHydrateMatchingHashSkipsDashboardRefetch(t *testing.T) {
 		ClosedTotal: 0,
 		Blocked:     []domain.IssueSummary{},
 	}
-	if err := filestorage.SaveSnapshotV2WithHash(r.Snapshot(), dashCache, nil, path, matchHash); err != nil {
+	if err := filestorage.SaveSnapshotV2WithHash(r.Snapshot(), dashCache, nil, 0, path, matchHash); err != nil {
 		t.Fatalf("SaveSnapshotV2WithHash: %v", err)
 	}
 
