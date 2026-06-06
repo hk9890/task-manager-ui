@@ -252,10 +252,6 @@ func TestIssueParentedDetailIssuesSingleShowCall(t *testing.T) {
 	if detail.ParentGroupBrowser.Parent.ID != "parent-1" {
 		t.Fatalf("expected parent-1 in ParentGroupBrowser.Parent, got %#v", detail.ParentGroupBrowser.Parent)
 	}
-	// Siblings are no longer fetched, so Children must be empty.
-	if len(detail.ParentGroupBrowser.Children) != 0 {
-		t.Fatalf("expected no siblings fetched, got %#v", detail.ParentGroupBrowser.Children)
-	}
 
 	// Crucially: exactly one `bd show`. A second `show parent-1` would be the
 	// regression this test guards against.

@@ -462,7 +462,7 @@ func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
 	r := memory.New()
 
-	// Seed ONLY issue A via SeedDetail — do NOT seed B, R, P, or C1.
+	// Seed ONLY issue A via SeedDetail — do NOT seed B, R, or P.
 	// This reproduces the real cache path where only the looked-up issue is in
 	// memory; its cross-refs were fetched from the backing store and stored as
 	// full IssueReferences but never independently seeded.
@@ -483,9 +483,6 @@ func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{
 				ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2,
-			},
-			Children: []domain.IssueReference{
-				{ID: "C1", Title: "Child One", Status: "open", Type: "task", Priority: 0},
 			},
 		},
 	}
@@ -538,19 +535,6 @@ func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
 	if !reflect.DeepEqual(got.ParentGroupBrowser.Parent, wantParent) {
 		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v",
 			got.ParentGroupBrowser.Parent, wantParent)
-	}
-
-	// ParentGroupBrowser.Children[0] must preserve full metadata.
-	if len(got.ParentGroupBrowser.Children) != 1 {
-		t.Fatalf("ParentGroupBrowser.Children: got %d entries, want 1",
-			len(got.ParentGroupBrowser.Children))
-	}
-	wantChild := domain.IssueReference{
-		ID: "C1", Title: "Child One", Status: "open", Type: "task", Priority: 0,
-	}
-	if !reflect.DeepEqual(got.ParentGroupBrowser.Children[0], wantChild) {
-		t.Errorf("ParentGroupBrowser.Children[0]:\n  got  %+v\n  want %+v",
-			got.ParentGroupBrowser.Children[0], wantChild)
 	}
 }
 

@@ -57,7 +57,6 @@ type storedIssue struct {
 	blocksIDs   []string // IDs of issues this one blocks (explicit override; empty = use reverse lookup)
 	related     []string // IDs of related issues
 	parentID    string   // parent group issue ID (empty if no parent)
-	childrenIDs []string // sibling/children IDs in the parent group
 	comments    []storedComment
 	created     time.Time
 	updated     time.Time
@@ -78,7 +77,6 @@ type storedIssue struct {
 	blockedByRefs []domain.IssueReference // corresponds to dependsOn
 	relatedRefs   []domain.IssueReference // corresponds to related
 	parentRef     *domain.IssueReference  // corresponds to parentID (nil = re-resolve)
-	childrenRefs  []domain.IssueReference // corresponds to childrenIDs
 }
 
 // storedComment is a comment record inside a storedIssue.
@@ -105,7 +103,6 @@ type Issue struct {
 	BlocksIDs   []string // IDs of issues this one blocks (explicit; empty = use reverse lookup)
 	Related     []string // IDs of related issues
 	ParentID    string   // parent group issue ID (empty if no parent)
-	ChildrenIDs []string // sibling/children IDs in the parent group
 	Created     time.Time
 	Updated     time.Time
 }
@@ -183,9 +180,6 @@ func (r *Repository) Seed(iss Issue) {
 	blocksIDs := make([]string, len(iss.BlocksIDs))
 	copy(blocksIDs, iss.BlocksIDs)
 
-	childrenIDs := make([]string, len(iss.ChildrenIDs))
-	copy(childrenIDs, iss.ChildrenIDs)
-
 	si := &storedIssue{
 		id:          iss.ID,
 		title:       iss.Title,
@@ -200,7 +194,6 @@ func (r *Repository) Seed(iss Issue) {
 		blocksIDs:   blocksIDs,
 		related:     related,
 		parentID:    iss.ParentID,
-		childrenIDs: childrenIDs,
 		created:     created,
 		updated:     updated,
 	}
@@ -718,7 +711,7 @@ func (r *Repository) Catalogs(ctx context.Context) (repository.Catalogs, error) 
 //
 // # Cross-reference metadata
 //
-// BlockedByRefs, RelatedRefs, ParentRef, and ChildrenRefs carry the full
+// BlockedByRefs, RelatedRefs, and ParentRef carry the full
 // IssueReference metadata (Title, Status, Type, Priority) that was stored at
 // SeedDetail time. These fields follow the same nil-vs-non-nil sentinel as
 // storedIssue:
@@ -746,7 +739,6 @@ type SnapshotIssue struct {
 	DependsOn   []string
 	Related     []string
 	ParentID    string
-	ChildrenIDs []string
 	Comments    []SnapshotComment
 	Created     time.Time
 	Updated     time.Time
@@ -758,7 +750,6 @@ type SnapshotIssue struct {
 	BlockedByRefs []domain.IssueReference // corresponds to DependsOn
 	RelatedRefs   []domain.IssueReference // corresponds to Related
 	ParentRef     *domain.IssueReference  // corresponds to ParentID (nil = re-resolve)
-	ChildrenRefs  []domain.IssueReference // corresponds to ChildrenIDs
 }
 
 // SnapshotComment is the exported view of a storedComment used by Snapshot.
@@ -787,9 +778,6 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 
 		related := make([]string, len(si.related))
 		copy(related, si.related)
-
-		childrenIDs := make([]string, len(si.childrenIDs))
-		copy(childrenIDs, si.childrenIDs)
 
 		comments := make([]SnapshotComment, len(si.comments))
 		for i, c := range si.comments {
@@ -823,12 +811,6 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			parentRef = &ref
 		}
 
-		var childrenRefs []domain.IssueReference
-		if si.childrenRefs != nil {
-			childrenRefs = make([]domain.IssueReference, len(si.childrenRefs))
-			copy(childrenRefs, si.childrenRefs)
-		}
-
 		out = append(out, SnapshotIssue{
 			ID:            si.id,
 			Title:         si.title,
@@ -843,7 +825,6 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			DependsOn:     deps,
 			Related:       related,
 			ParentID:      si.parentID,
-			ChildrenIDs:   childrenIDs,
 			Comments:      comments,
 			Created:       si.created,
 			Updated:       si.updated,
@@ -852,7 +833,6 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			BlockedByRefs: blockedByRefs,
 			RelatedRefs:   relatedRefs,
 			ParentRef:     parentRef,
-			ChildrenRefs:  childrenRefs,
 		})
 	}
 	return out
@@ -1026,31 +1006,6 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 			parentGroupBrowser.Parent = domain.IssueReference{ID: si.parentID}
 		}
 	}
-	var children []domain.IssueReference
-	if si.childrenRefs != nil {
-		// SeedDetail path: childrenRefs were stored verbatim.
-		children = make([]domain.IssueReference, len(si.childrenRefs))
-		copy(children, si.childrenRefs)
-	} else {
-		// Seed path: re-resolve from memory map.
-		children = make([]domain.IssueReference, 0, len(si.childrenIDs))
-		for _, childID := range si.childrenIDs {
-			child, ok := r.issues[childID]
-			if !ok {
-				children = append(children, domain.IssueReference{ID: childID})
-				continue
-			}
-			children = append(children, domain.IssueReference{
-				ID:       child.id,
-				Title:    child.title,
-				Type:     child.issueType,
-				Priority: child.priority,
-				Status:   child.status,
-			})
-		}
-	}
-	parentGroupBrowser.Children = children
-
 	return domain.IssueDetail{
 		Summary:            sum,
 		Creator:            si.creator,

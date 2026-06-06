@@ -553,10 +553,6 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndParentGroup(t *te
 		},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{ID: "bw-1", Title: "Parent"},
-			Children: []domain.IssueReference{
-				{ID: "bw-42", Title: "Child 42"},
-				{ID: "bw-43", Title: "Child 43"},
-			},
 		},
 	}
 	m.ApplyLoadedDetail("bw-42", first)
@@ -565,10 +561,9 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndParentGroup(t *te
 		t.Fatalf("expected parent id bw-1, got %q", m.BrowserGroupParentID)
 	}
 	// Only the parent (bw-1) is appended after the dependency groups; the
-	// parent's other children (siblings such as bw-43) are NOT surfaced, and
-	// the currently-viewed issue (bw-42) is excluded entirely.
+	// currently-viewed issue (bw-42) is excluded entirely.
 	if len(m.BrowserItems) != 4 {
-		t.Fatalf("expected flattened dependencies + parent row minus self/siblings, got %#v", m.BrowserItems)
+		t.Fatalf("expected flattened dependencies + parent row, got %#v", m.BrowserItems)
 	}
 	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID}; strings.Join(got, ",") != "bw-90,bw-91,bw-92,bw-1" {
 		t.Fatalf("expected grouped dependency ordering followed by parent, got %v", got)
@@ -595,10 +590,6 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndParentGroup(t *te
 		},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{ID: "bw-1", Title: "Parent renamed"},
-			Children: []domain.IssueReference{
-				{ID: "bw-42", Title: "Child 42 renamed"},
-				{ID: "bw-43", Title: "Child 43 renamed"},
-			},
 		},
 	}
 	m.ApplyLoadedDetail("bw-43", second)
@@ -643,16 +634,11 @@ func TestModelApplyLoadedDetailBuildsDependencyTraversalOrderAcrossAllGroups(t *
 		},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{ID: "bw-s0", Title: "Parent epic"},
-			// Siblings are seeded but must be excluded from the flat list.
-			Children: []domain.IssueReference{
-				{ID: "bw-s1", Title: "Sibling one (excluded)"},
-				{ID: "bw-s2", Title: "Sibling two (excluded)"},
-			},
 		},
 	})
 
 	if got := []string{m.BrowserItems[0].ID, m.BrowserItems[1].ID, m.BrowserItems[2].ID, m.BrowserItems[3].ID, m.BrowserItems[4].ID}; strings.Join(got, ",") != "bw-a1,bw-b1,bw-b2,bw-c1,bw-s0" {
-		t.Fatalf("expected flat traversal order to match rendered groups (parent last, siblings excluded), got %v", got)
+		t.Fatalf("expected flat traversal order to match rendered groups (parent last), got %v", got)
 	}
 
 	// The subject is not among any group, so selection defaults to the first row.

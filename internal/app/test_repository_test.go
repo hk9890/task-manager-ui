@@ -119,7 +119,7 @@ func (g *appTestRepository) seedIssueSummary(s domain.IssueSummary) {
 
 // seedIssueDetail seeds a full issue detail into the memory repository.
 // It propagates BlockedBy → DependsOn, Blocks → BlocksIDs, Related → Related
-// IDs, and ParentGroupBrowser → ParentID/ChildrenIDs so memory repo's
+// IDs, and ParentGroupBrowser → ParentID so memory repo's
 // toDetailLocked can project them back correctly.
 func (g *appTestRepository) seedIssueDetail(d domain.IssueDetail) {
 	dependsOn := make([]string, 0, len(d.BlockedBy))
@@ -143,13 +143,6 @@ func (g *appTestRepository) seedIssueDetail(d domain.IssueDetail) {
 		}
 	}
 
-	childrenIDs := make([]string, 0, len(d.ParentGroupBrowser.Children))
-	for _, ref := range d.ParentGroupBrowser.Children {
-		if ref.ID != "" {
-			childrenIDs = append(childrenIDs, ref.ID)
-		}
-	}
-
 	g.repo.Seed(memoryrepo.Issue{
 		ID:          d.Summary.ID,
 		Title:       d.Summary.Title,
@@ -164,7 +157,6 @@ func (g *appTestRepository) seedIssueDetail(d domain.IssueDetail) {
 		BlocksIDs:   blocksIDs,
 		Related:     related,
 		ParentID:    d.ParentGroupBrowser.Parent.ID,
-		ChildrenIDs: childrenIDs,
 	})
 }
 

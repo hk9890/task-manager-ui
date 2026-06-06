@@ -1233,7 +1233,7 @@ func TestForget_AbsentID_NoOp(t *testing.T) {
 // ---- Snapshot round-trip tests ----
 
 // TestSnapshot_LosslessRoundTrip_FullDetail verifies that Snapshot/Seed
-// preserves Related, ParentID, ChildrenIDs, and Blocks (via reverse lookup)
+// preserves Related, ParentID, and Blocks (via reverse lookup)
 // through a JSON encode/decode cycle, matching the SaveNow→Hydrate path.
 func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 	base := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
@@ -1249,13 +1249,12 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 
 	// Seed a child issue that also blocks another issue and has a related ref.
 	src.Seed(memory.Issue{
-		ID:          "child-1",
-		Title:       "Child One",
-		Type:        "task",
-		Status:      "open",
-		ParentID:    "epic-1",
-		ChildrenIDs: []string{"grandchild-1"},
-		Related:     []string{"related-1"},
+		ID:       "child-1",
+		Title:    "Child One",
+		Type:     "task",
+		Status:   "open",
+		ParentID: "epic-1",
+		Related:  []string{"related-1"},
 	})
 
 	// Seed the related issue.
@@ -1264,14 +1263,6 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 		Title:  "Related Issue",
 		Type:   "task",
 		Status: "open",
-	})
-
-	// Seed a grandchild just so ChildrenIDs resolves to a full reference.
-	src.Seed(memory.Issue{
-		ID:     "grandchild-1",
-		Title:  "Grandchild",
-		Type:   "task",
-		Status: "in_progress",
 	})
 
 	// Seed an issue that depends on child-1, producing a Blocks entry via reverse lookup.
@@ -1311,7 +1302,6 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 			DependsOn:   decoded.DependsOn,
 			Related:     decoded.Related,
 			ParentID:    decoded.ParentID,
-			ChildrenIDs: decoded.ChildrenIDs,
 			Created:     decoded.Created,
 			Updated:     decoded.Updated,
 		})
@@ -1345,14 +1335,6 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v", got.ParentGroupBrowser.Parent, wantParent)
 	}
 
-	// ParentGroupBrowser.Children should contain grandchild-1.
-	wantChildren := []domain.IssueReference{
-		{ID: "grandchild-1", Title: "Grandchild", Type: "task", Status: "in_progress"},
-	}
-	if !reflect.DeepEqual(got.ParentGroupBrowser.Children, wantChildren) {
-		t.Errorf("ParentGroupBrowser.Children:\n  got  %+v\n  want %+v", got.ParentGroupBrowser.Children, wantChildren)
-	}
-
 	// Blocks: reverse lookup finds blocker-dep-1 (whose DependsOn includes child-1).
 	// Since no explicit blocksIDs are stored, this comes from the reverse scan.
 	if len(got.Blocks) != 1 {
@@ -1368,11 +1350,11 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 // TestSeedDetail_PreservesCrossRefMetadata verifies that SeedDetail stores full
 // IssueReference metadata (Title, Status, Type, Priority) for cross-referenced
 // issues, and that a subsequent Issue call returns those fields verbatim — even
-// when the referenced issues (B, R, P, C1) were never seeded into the store.
+// when the referenced issues (B, R, P) were never seeded into the store.
 func TestSeedDetail_PreservesCrossRefMetadata(t *testing.T) {
 	r := memory.New()
 
-	// Seed ONLY issue A; do NOT seed B, R, P, or C1.
+	// Seed ONLY issue A; do NOT seed B, R, or P.
 	detail := domain.IssueDetail{
 		Summary: domain.IssueSummary{
 			ID:       "A",
@@ -1390,9 +1372,6 @@ func TestSeedDetail_PreservesCrossRefMetadata(t *testing.T) {
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{
 			Parent: domain.IssueReference{
 				ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2,
-			},
-			Children: []domain.IssueReference{
-				{ID: "C1", Title: "Child", Status: "open", Type: "task", Priority: 0},
 			},
 		},
 	}
@@ -1433,19 +1412,6 @@ func TestSeedDetail_PreservesCrossRefMetadata(t *testing.T) {
 	if !reflect.DeepEqual(got.ParentGroupBrowser.Parent, wantParent) {
 		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v",
 			got.ParentGroupBrowser.Parent, wantParent)
-	}
-
-	// ParentGroupBrowser.Children: cross-ref C1 was never seeded — must preserve metadata.
-	if len(got.ParentGroupBrowser.Children) != 1 {
-		t.Fatalf("ParentGroupBrowser.Children: got %d entries, want 1",
-			len(got.ParentGroupBrowser.Children))
-	}
-	wantChild := domain.IssueReference{
-		ID: "C1", Title: "Child", Status: "open", Type: "task", Priority: 0,
-	}
-	if !reflect.DeepEqual(got.ParentGroupBrowser.Children[0], wantChild) {
-		t.Errorf("ParentGroupBrowser.Children[0]:\n  got  %+v\n  want %+v",
-			got.ParentGroupBrowser.Children[0], wantChild)
 	}
 }
 

@@ -27,8 +27,7 @@ type IssueReference struct {
 // ParentGroupBrowserContext is the normalized parent-group relationship
 // projection used by the issue-details left browser panel.
 type ParentGroupBrowserContext struct {
-	Parent   IssueReference
-	Children []IssueReference
+	Parent IssueReference
 }
 
 // IssueComment is a normalized issue comment representation.

@@ -25,13 +25,13 @@ func (r *Repository) Reset() {
 // SnapshotIssue value produced by [Repository.Snapshot]. It is used by
 // [filestorage.LoadWithManifest] to restore persisted issues.
 //
-// When any of snap.BlockedByRefs, snap.RelatedRefs, snap.ParentRef, or
-// snap.ChildrenRefs is non-nil, SeedFromSnapshot stores them verbatim on the
-// storedIssue so that a subsequent Issue call returns the full cross-reference
-// metadata without re-resolving against the memory map. This preserves the
+// When any of snap.BlockedByRefs, snap.RelatedRefs, or snap.ParentRef is
+// non-nil, SeedFromSnapshot stores them verbatim on the storedIssue so that a
+// subsequent Issue call returns the full cross-reference metadata without
+// re-resolving against the memory map. This preserves the
 // Title/Status/Type/Priority of cross-referenced issues across a Save+Load cycle.
 //
-// When all four fields are nil (e.g. an old on-disk JSONL written before these
+// When all three fields are nil (e.g. an old on-disk JSONL written before these
 // fields existed), SeedFromSnapshot falls back to the same re-resolution path
 // as Seed — a subsequent Issue call re-resolves references from the memory map.
 //
@@ -51,7 +51,6 @@ func (r *Repository) SeedFromSnapshot(snap SnapshotIssue) {
 		DependsOn:   snap.DependsOn,
 		Related:     snap.Related,
 		ParentID:    snap.ParentID,
-		ChildrenIDs: snap.ChildrenIDs,
 		Created:     snap.Created,
 		Updated:     snap.Updated,
 	})
@@ -61,7 +60,6 @@ func (r *Repository) SeedFromSnapshot(snap SnapshotIssue) {
 	hasExtras := snap.BlockedByRefs != nil ||
 		snap.RelatedRefs != nil ||
 		snap.ParentRef != nil ||
-		snap.ChildrenRefs != nil ||
 		snap.Creator != ""
 
 	if hasExtras {
@@ -84,11 +82,6 @@ func (r *Repository) SeedFromSnapshot(snap SnapshotIssue) {
 		if snap.ParentRef != nil {
 			ref := *snap.ParentRef
 			si.parentRef = &ref
-		}
-		if snap.ChildrenRefs != nil {
-			refs := make([]domain.IssueReference, len(snap.ChildrenRefs))
-			copy(refs, snap.ChildrenRefs)
-			si.childrenRefs = refs
 		}
 
 		r.mu.Unlock()
@@ -169,7 +162,7 @@ func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 		}
 	}
 
-	// Translate ParentGroupBrowser: store both the raw ID fields (for
+	// Translate ParentGroupBrowser: store the raw parent ID (for
 	// backward-compatible re-resolution paths) and the full IssueReference
 	// metadata (for verbatim projection on cache hit).
 	parentID := detail.ParentGroupBrowser.Parent.ID
@@ -177,13 +170,6 @@ func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 	if parentID != "" {
 		ref := detail.ParentGroupBrowser.Parent
 		parentRef = &ref
-	}
-
-	childrenIDs := make([]string, 0, len(detail.ParentGroupBrowser.Children))
-	childrenRefs := make([]domain.IssueReference, len(detail.ParentGroupBrowser.Children))
-	for i, ref := range detail.ParentGroupBrowser.Children {
-		childrenIDs = append(childrenIDs, ref.ID)
-		childrenRefs[i] = ref
 	}
 
 	si := &storedIssue{
@@ -201,7 +187,6 @@ func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 		blocksIDs:     blocksIDs,
 		related:       related,
 		parentID:      parentID,
-		childrenIDs:   childrenIDs,
 		comments:      comments,
 		created:       sum.CreatedAt,
 		updated:       sum.UpdatedAt,
@@ -210,7 +195,6 @@ func (r *Repository) SeedDetail(detail domain.IssueDetail) {
 		blockedByRefs: blockedByRefs,
 		relatedRefs:   relatedRefs,
 		parentRef:     parentRef,
-		childrenRefs:  childrenRefs,
 	}
 
 	r.mu.Lock()
