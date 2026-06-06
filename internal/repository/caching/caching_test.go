@@ -2100,6 +2100,77 @@ func TestHydrate_EmptyDashboardCache_FallsBackToBackingFetch(t *testing.T) {
 	}
 }
 
+// TestHydrate_ValidCatalogsWithEmptyDashboard verifies that when a v2 file is
+// loaded with a valid CatalogsCache but an empty/zero DashboardCache, the
+// catalogsCache IS restored (no backing call needed for Catalogs) while
+// dashboardDirty remains true (backing still called for Dashboard).
+//
+// This is the regression test for the "Finding 3" bug: the catalogs restore was
+// nested inside the dashboard-hydrated branch, so a degenerate file (empty
+// DashboardCache) would drop the catalogs even when the hash matched.
+func TestHydrate_ValidCatalogsWithEmptyDashboard(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repo.jsonl")
+
+	const matchHash = "HASH-VALID-CATS-NO-DASH"
+
+	wantCats := repository.Catalogs{
+		Types:  []domain.TypeOption{{Name: "task"}, {Name: "bug"}},
+		Labels: []domain.LabelOption{{Name: "p0"}, {Name: "p1"}},
+	}
+
+	// Write a v2 file with a valid CatalogsCache but an empty DashboardCache
+	// (zero-value). This simulates a session saved before any Dashboard fetch.
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "cats-dash-1", Title: "test issue", Status: "open", Type: "task"})
+	snapshot := r.Snapshot()
+	if err := filestorage.SaveSnapshotV2WithHash(snapshot, repository.DashboardData{}, &wantCats, path, matchHash); err != nil {
+		t.Fatalf("SaveSnapshotV2WithHash: %v", err)
+	}
+
+	backingCatalogsCalls := 0
+	backingDashCalls := 0
+	stub := &stubRepository{
+		catalogsFn: func(_ context.Context) (repository.Catalogs, error) {
+			backingCatalogsCalls++
+			return repository.Catalogs{Types: []domain.TypeOption{{Name: "should-not-be-called"}}}, nil
+		},
+		dashboardFn: func(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+			backingDashCalls++
+			return repository.DashboardData{ClosedTotal: 99}, nil
+		},
+	}
+
+	vcFn := func(_ context.Context) (string, error) { return matchHash, nil }
+	c := caching.New(stub, caching.WithVCStatusFunc(vcFn), caching.WithCatalogsTTL(10*time.Minute))
+
+	if err := c.Hydrate(context.Background(), path, path); err != nil {
+		t.Fatalf("Hydrate returned unexpected error: %v", err)
+	}
+
+	// Catalogs must be served from the restored cache — no backing call.
+	gotCats, err := c.Catalogs(context.Background())
+	if err != nil {
+		t.Fatalf("Catalogs: %v", err)
+	}
+	if backingCatalogsCalls != 0 {
+		t.Fatalf("expected Catalogs to be served from restored cache; got %d backing calls", backingCatalogsCalls)
+	}
+	if len(gotCats.Types) != len(wantCats.Types) || gotCats.Types[0].Name != wantCats.Types[0].Name {
+		t.Fatalf("Catalogs: got Types=%v, want %v", gotCats.Types, wantCats.Types)
+	}
+
+	// Dashboard must still hit backing (empty DashboardCache → dashboardDirty=true).
+	if _, err := c.Dashboard(context.Background(), repository.DashboardOptions{}); err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	if backingDashCalls != 1 {
+		t.Fatalf("expected 1 backing Dashboard call (dashboardDirty=true); got %d", backingDashCalls)
+	}
+}
+
 // containsAny reports whether s contains any of the given substrings.
 func containsAny(s string, substrings ...string) bool {
 	for _, sub := range substrings {

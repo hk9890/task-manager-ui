@@ -392,16 +392,19 @@ func (c *CachingRepository) Hydrate(ctx context.Context, loadPath, writePath str
 	if !dirty && dashboardHydrated {
 		c.dashboardCache = hydratedDashboard
 		c.dashboardDirty = false
-		// Restore catalogsCache from v2 header if present. A nil CatalogsCache
-		// in the header means no catalogs were persisted; leave c.catalogsCache
-		// nil so the next Catalogs() call fetches from backing.
-		if v2Header != nil && v2Header.CatalogsCache != nil {
-			cats := *v2Header.CatalogsCache
-			c.catalogsCache = &cats
-			c.catalogsFetched = c.clock()
-		}
 	} else {
 		c.dashboardDirty = true
+	}
+	// Restore catalogsCache from v2 header if present. Gated only on a hash
+	// match (!dirty) and a non-nil persisted CatalogsCache — independent of
+	// whether the dashboard was hydrated. A hash match alone proves the backing
+	// file is unchanged, so the persisted catalogs are provably fresh.
+	// A nil CatalogsCache in the header means no catalogs were persisted; leave
+	// c.catalogsCache nil so the next Catalogs() call fetches from backing.
+	if !dirty && v2Header != nil && v2Header.CatalogsCache != nil {
+		cats := *v2Header.CatalogsCache
+		c.catalogsCache = &cats
+		c.catalogsFetched = c.clock()
 	}
 	if seedHash != "" {
 		c.lastHash = seedHash
