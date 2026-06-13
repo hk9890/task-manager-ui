@@ -15,7 +15,7 @@ workflow. See [Quality Gates](#quality-gates) for the code-change verification
 commands used by that workflow.
 
 For testing strategy, vocabulary, and harness conventions (teatest, golden files,
-fake seams, embedded fixture usage), see `docs/TESTING.md`.
+fake seams), see `docs/TESTING.md`.
 
 ## CLI startup semantics (v1)
 
@@ -32,22 +32,16 @@ Supported flags:
 - `--no-auto-refresh`
 - `--print-config`
 - `--check-config`
-- `--repo <backend>` — repository backend: `beads | memory | caching` (default: `beads`)
-  - `beads` (default): live `bd` subprocess calls on every read; no caching or persistence.
-  - `caching`: wraps the beads backend with an in-memory read cache,
-    per-session JSONL persistence, and background VCS-hash polling for
-    invalidation. Startup prints `"Using caching repository backend; --repo beads disables"`.
-    Opt-in only — known correctness bugs keep it off by default.
+- `--repo <backend>` — repository backend: `taskmgr | memory` (default: `taskmgr`)
+  - `taskmgr` (default): in-process implementation over the task-manager Go SDK
+    (`github.com/hk9890/task-manager/sdk/tasks`). The store is opened at the
+    target project directory; reads and writes run in-process with no subprocess
+    or external binary in the product path.
   - `memory`: loads the full repository from a JSONL file on startup; all reads
     are served from memory; requires `--repo-file`.
 - `--repo-file <path>` — path to the JSONL repository file:
-  - `caching` mode: session cache file; default
-    `~/.cache/bwb/<project-hash>-<session-id>/repo.jsonl` (written on shutdown
-    and periodically; hydrated at startup from a previous session file if it
-    exists). Each session has its own file — multi-session cache consolidation
-    is out of scope.
-  - `beads` mode: informational only (not read or written); default
-    `~/.cache/bwb/<project-hash>/repo.jsonl`.
+  - `taskmgr` mode: ignored (not read or written); the task-manager store at the
+    project directory is the source of truth.
   - `memory` mode: required; the file is the sole source of truth.
 
 Non-interactive flags (`--help`, `--version`, `--print-config`,
@@ -57,7 +51,7 @@ Non-interactive flags (`--help`, `--version`, `--print-config`,
 
 - `--config` sets an explicit config file path. Relative paths resolve against
   the process start cwd.
-- `--cwd` sets the target beads project directory used by repository commands.
+- `--cwd` sets the target project directory used to open the repository backend.
   Relative paths also resolve against process start cwd.
 - `--print-config` loads config, prints the resolved source comment and YAML,
   then exits.
@@ -94,11 +88,12 @@ bwb --check-config
 
 ### Debug diagnostics contract
 
-`--debug` mirrors startup-resolution and `bd`-execution diagnostics to stderr
-(prefixed `[bwb-debug]`); every config-loading startup path also writes
-structured JSON Lines records to a persistent per-session log. `docs/MONITORING.md`
-owns the full contract — event categories, log paths, `session_id` correlation,
-fallback behavior, and capture commands.
+`--debug` mirrors startup-resolution and repository-operation diagnostics to
+stderr (prefixed `[bwb-debug]`); every config-loading startup path also writes
+structured JSON Lines records to a persistent per-session log. Repository traces
+are in-process (no subprocess argv) since the backend runs over the task-manager
+SDK. `docs/MONITORING.md` owns the full contract — event categories, log paths,
+`session_id` correlation, fallback behavior, and capture commands.
 
 ## Package Layout
 
@@ -107,19 +102,20 @@ Current bootstrapped layout:
 ```
 cmd/
   bwb/               # primary TUI binary entrypoint
-  bwb-smoke/         # release-smoke data-consistency check binary (mise run smoke)
 internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
   domain/            # Beads Workbench issue and dashboard models
-  repository/beads/     # bd subprocess runner and argv-level types (CommandRunner, RunnerConfig, ExecResult)
-  repository/beads/  # lean repository.Repository built directly on CommandRunner; typed bd payload decoding
+  repository/        # repository.Repository interface + Validating wrapper + shared errors/types
+  repository/taskmgr/   # production backend: in-process adapter over the task-manager Go SDK
+  repository/memory/    # in-memory backend (loaded from a JSONL file via filestorage)
+  repository/filestorage/  # JSONL load/save for the memory backend
   logging/           # central slog logging package used by runtime startup and repository tracing
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
   mode/              # board/search/details feature models + shell message contracts
   ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, styles)
-  testing/           # fakes, ui harness, datasets, embedded-fixture helpers
+  testing/           # fakes and ui harness helpers
   version/           # build-time injected Version/Commit/Date symbols
 project-plan/        # product, architecture, and execution planning docs
 ```
@@ -128,9 +124,9 @@ project-plan/        # product, architecture, and execution planning docs
 
 1. **No direct SQL.** All issue reads and writes go through `repository.Repository`. No `database/sql`, no Dolt server client, no BQL executor in the primary product path.
 
-2. **Official beads surfaces only.** The `beads.Repository` implementation talks to `bd` CLI commands. Do not read beads internals directly.
+2. **SDK surfaces only.** The `taskmgr.Repository` implementation talks to the task-manager Go SDK (`github.com/hk9890/task-manager/sdk/tasks`) in-process. There is no external CLI binary in the product path; do not read the store's internals directly.
 
-3. **Repository is source-specific.** A `beads.Repository` instance is bound to one beads project. Federation is a future layer above repositories, not a change to the core interface.
+3. **Repository is source-specific.** A `taskmgr.Repository` instance is bound to one task-manager store (one project directory). Federation is a future layer above repositories, not a change to the core interface.
 
 4. **Dashboard renderer and dashboard provider are separate.** The provider (`internal/dashboard`) is a metadata-only catalog: it returns section IDs and titles only. The board model owns repository query routing for each section (three parallel `Query` / `ReadyExplain` calls, fanned out after the provider responds). A file-backed provider can be added later by supplying section IDs and titles without touching the renderer or the board model's query logic.
 
@@ -178,16 +174,16 @@ project-plan/        # product, architecture, and execution planning docs
 
 9. **Selection/detail sync is event-driven, not polled.** Browse modes emit `SelectionChangedMsg` when selection changes; app reacts by updating shared selection state and (when needed) issuing detail loads. Do not reintroduce polling-based synchronization loops.
 
-10. **Repository decoding is typed and operation-scoped.** `internal/repository/beads` decodes command output through typed payload structs and explicit mappers (for example `RunJSON[T]` + `bd*Payload` types). Avoid `map[string]any`/generic map decoding paths for primary read flows.
+10. **Repository mapping is typed and operation-scoped.** `internal/repository/taskmgr` maps the SDK's typed model onto bwb's domain types through explicit converters (see `convert.go`). Avoid `map[string]any`/generic map decoding paths for primary read flows.
 
 11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns repository query routing and validates query types internally.
 
 ## UI Rendering Conventions
 
 **Comment ordering:** The detail view renders comments newest-first (sorted by
-`CreatedAt` descending; ties broken by `ID` descending). This diverges from
-`bd comments` default order (oldest-first) and is intentional — surfacing the
-most recent activity at the top makes triage faster when an issue has many
+`CreatedAt` descending; ties broken by `ID` descending). This diverges from the
+backend's default comment order (oldest-first) and is intentional — surfacing
+the most recent activity at the top makes triage faster when an issue has many
 comments. The section header reads "Comments (N · newest first)" to make the
 ordering obvious to the reader.
 
@@ -262,7 +258,7 @@ Key tasks:
 | `mise run build` | `go build ./cmd/bwb` |
 | `mise run vet` | `go vet ./...` |
 | `mise run test` | unit tests only (no `//go:build integration` tests) |
-| `mise run test:integration` | integration tests (real `bd` + embedded fixture) |
+| `mise run test:integration` | integration tests (build tag: `integration`) |
 | `mise run test:all` | unit + integration |
 | `mise run test:verbose` | unit tests with `-v` |
 | `mise run lint` | pinned `golangci-lint` (version from `.mise.toml` `[tools]`) |
@@ -272,11 +268,10 @@ Key tasks:
 | `mise run test:coverage` | unit+integration tests with a coverage-threshold gate (CI-enforced) |
 | `mise run quality` | full pre-handoff gate: `vet`, `lint`, `guardrails`, unit `test`, `test:integration` |
 | `mise run quality:fast` | fast pre-commit gate: `vet`, `lint`, `guardrails`, unit `test` (skips `test:integration` only) |
-| `mise run smoke` | build + run the `bwb-smoke` release data-consistency check |
 | `mise run vuln` | `govulncheck ./...` — CVE scan against deps + stdlib (CI-enforced; needs network) |
 | `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
 
-**Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) fork real `bd` subprocesses and use the embedded fixture harness; they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess, replays the embedded fixture, or costs >1s, it belongs in an integration test file.
+**Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) exercise real subprocess/OS interactions (for example launcher process execution); they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess or costs >1s, it belongs in an integration test file.
 
 **Tool version pins:** `golangci-lint` and `gotestsum` are pinned in `.mise.toml` under `[tools]` (no leading `v`, e.g. `2.1.6`). `mise` installs and resolves these binaries on the `PATH` for tasks like `mise run lint` and `mise run test`.
 

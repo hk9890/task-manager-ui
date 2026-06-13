@@ -5,15 +5,18 @@
 - Module: `github.com/hk9890/beads-workbench`
 - Binary: `bwb`
 - Entrypoint: `cmd/bwb/main.go`
-- Primary runtime surfaces: Bubble Tea UI + `bd` CLI-backed `repository.Repository`
+- Primary runtime surfaces: Bubble Tea UI + an in-process task-manager-backed `repository.Repository`
 
 ## Upstream dependency
 
-- `bd` (beads issue tracker): <https://github.com/gastownhall/beads>
-- bwb is a thin TUI over `bd`; repository compatibility is pinned in `.mise.toml`
-  (`github:gastownhall/beads` version). When investigating repository behavior
-  surprises, file bugs upstream or check the `bd` source/issues there before
-  patching workarounds in `internal/repository/beads/`.
+- task-manager Go SDK: `github.com/hk9890/task-manager/sdk` (imported as
+  `github.com/hk9890/task-manager/sdk/tasks`).
+- bwb is a thin TUI over the in-process task-manager store; there is no external
+  backend binary in the product path. The SDK version is pinned in `go.mod`
+  (`require github.com/hk9890/task-manager/sdk vX.Y.Z`). When investigating
+  repository behavior surprises, file bugs upstream or check the SDK
+  source/issues there before patching workarounds in
+  `internal/repository/taskmgr/`.
 
 ## CLI startup contract
 
@@ -27,44 +30,47 @@ resolution behavior, see `docs/CODING.md`.
 2. It resolves startup cwd/config options and loads runtime config with
    `internal/config.LoadWithOptions(...)`.
 3. It initializes centralized runtime logging, then constructs the
-   `repository.Repository` stack (beads, validating, caching) via
-   `constructRepository` in `cmd/bwb/main.go`.
+   `repository.Repository` via `constructRepository` in `cmd/bwb/main.go`:
+   for the default `taskmgr` backend it opens an in-process store with
+   `tasks.Open(projectRoot)`, wraps it with
+   `repository/taskmgr.New(store, WithAuthor(...))`, and composes
+   `repository.NewValidating` on top (no caching layer).
 4. It builds shell services with `internal/app.NewServices(...)`.
 5. It starts the TUI with
    `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
 
 When `--debug` is enabled, stderr diagnostics are prefixed with `[bwb-debug]`
-and include startup resolution events plus repository execution traces, while the
-same run also writes structured JSON Lines records with `session_id` to the
-persistent log file. See `docs/MONITORING.md` for the logging contract and
-capture paths.
+and include startup resolution events plus in-process repository execution
+traces (there is no external subprocess argv), while the same run also writes
+structured JSON Lines records with `session_id` to the persistent log file. See
+`docs/MONITORING.md` for the logging contract and capture paths.
 
 ## Package map
 
 | Path | Responsibility |
 | --- | --- |
 | `cmd/bwb` | Binary entrypoint and program bootstrap |
-| `cmd/bwb-smoke` | Release-smoke check binary used by `mise run smoke` for data-consistency verification against a live `bd` repo |
 | `internal/app` | Root shell, mode lifecycle, selection/detail coordination |
 | `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
 | `internal/domain` | Issue, query, mutation, catalog, and error models |
-| `internal/bd` | `bd` subprocess runner and argv-level types (`CommandRunner`, `RunnerConfig`, `ExecResult`) |
-| `internal/repository/beads` | Lean `repository.Repository` implementation built directly on `CommandRunner`; typed `bd` payload decoding |
+| `internal/repository` | `Repository` interface plus the `Validating` decorator and shared error/types helpers |
+| `internal/repository/taskmgr` | Production `repository.Repository` over the in-process task-manager SDK (`sdk/tasks`); maps the SDK's typed model onto bwb domain types |
+| `internal/repository/memory` | In-memory `repository.Repository` for tests and `--repo memory`; backed by `internal/repository/filestorage` JSONL load/save |
 | `internal/logging` | Central slog-based logging package used by startup and repository code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
 | `internal/dashboard` | Built-in dashboard definitions and validation |
 | `internal/mode/*` | Board, search, and details feature-local state/controllers |
 | `internal/launcher` | External tool launch actions and process runner |
 | `internal/launcher/editor` | Rich issue editor handoff flow |
 | `internal/ui/*` | Reusable rendering components and shared styles |
-| `internal/testing/*` | Fakes, UI harnesses, datasets, and embedded-fixture integration support |
+| `internal/testing/*` | Repository fakes and UI test harnesses |
 | `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
 | `project-plan/` | Deeper product, architecture, and implementation planning docs |
-| `.beads/` | On-disk beads issue database (Dolt-backed; the `bd` tracker store) |
+| `.beads/` | On-disk beads issue database (Dolt-backed; the project's own `bd` tracker store — not a product data backend) |
 | `ai.package.yaml` | AI tooling package manifest — declares AI packages/skills used with this repo |
 
 ## Architectural boundaries
 
-- Official beads surfaces only: active product behavior goes through `repository.Repository`. The `bd`-backed implementation is `internal/repository/beads.Repository`, composed via `constructRepository` with `repository.NewValidating` by default; the `caching.Repository` decorator is opt-in via `--repo caching`.
+- Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and wrapped in `repository.NewValidating` by default. There is no `bd` subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
 - No direct SQL, no `internal/bql`, and no orchestration/control-plane dependencies in the active `./cmd/bwb` path; see `cmd/bwb/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.

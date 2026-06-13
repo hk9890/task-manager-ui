@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,16 +12,15 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hk9890/task-manager/sdk/tasks"
 	"gopkg.in/yaml.v3"
 
 	"github.com/hk9890/beads-workbench/internal/app"
-	"github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/logging"
 	"github.com/hk9890/beads-workbench/internal/repository"
-	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
-	repositorycaching "github.com/hk9890/beads-workbench/internal/repository/caching"
 	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
+	repositorytaskmgr "github.com/hk9890/beads-workbench/internal/repository/taskmgr"
 	bwbversion "github.com/hk9890/beads-workbench/internal/version"
 )
 
@@ -54,84 +52,13 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 		}
 		return loaded, noop, nil
 
-	case "caching":
-		// Construct backing beads repository.
-		runnerCfg := bd.RunnerConfig{WorkDir: opts.projectRoot}
-		if opts.logManager != nil {
-			runnerCfg.Logger = opts.logManager.Component("repository")
+	default: // "taskmgr" (default) or unset
+		store, err := tasks.Open(opts.projectRoot)
+		if err != nil {
+			return nil, noop, fmt.Errorf("failed to open task-manager store at %q: %w", opts.projectRoot, err)
 		}
-		runner := bd.NewCommandRunner(runnerCfg)
-		backing := repository.NewValidating(repositorybeads.New(runner), logManagerComponent(opts.logManager, "validating"))
-
-		// Bind vcStatusFunc.
-		vcStatusFunc := func(c context.Context) (string, error) {
-			return bd.VCStatusHash(c, runner)
-		}
-
-		// Construct CachingRepository.
-		cacheLogger := logManagerComponent(opts.logManager, "caching")
-		cache := repositorycaching.New(backing, repositorycaching.WithVCStatusFunc(vcStatusFunc))
-
-		// Ensure the cache file's parent directory exists so SaveNow can rename
-		// into it. A missing directory is logged as a warning; the session
-		// continues without persistence.
-		if opts.repoFile != "" {
-			if err := os.MkdirAll(filepath.Dir(opts.repoFile), 0o755); err != nil {
-				if cacheLogger != nil {
-					cacheLogger.Warn("cache dir creation failed; session will run without persistence", "err", err, "path", opts.repoFile)
-				}
-			}
-		}
-
-		// Determine the load path: scan sibling dirs for the most-recent prior
-		// session's cache file (same project hash, different session ID).
-		// writePath is always the own-session file.
-		writePath := opts.repoFile
-		var loadPath string
-		if opts.repoFile != "" {
-			cacheBaseDir := filepath.Dir(filepath.Dir(opts.repoFile))
-			// projectHash is the part of the directory name before the "-<sessionID>" suffix.
-			ownDir := filepath.Base(filepath.Dir(opts.repoFile))
-			projectHash := ownDir
-			if idx := strings.LastIndexByte(ownDir, '-'); idx >= 0 {
-				projectHash = ownDir[:idx]
-			}
-			loadPath = findLatestProjectCacheFile(cacheBaseDir, projectHash, cacheLogger)
-		}
-
-		// Hydrate from prior session file (loadPath) and write to own session
-		// file (writePath). Warn on error, continue cold.
-		if err := cache.Hydrate(ctx, loadPath, writePath); err != nil {
-			if cacheLogger != nil {
-				cacheLogger.Warn("cache hydrate failed; starting cold", "err", err, "load_path", loadPath, "write_path", writePath)
-			}
-		}
-
-		// Start background refresh + save tick loop.
-		cache.Start(ctx)
-
-		// Log startup mode hint.
-		if cacheLogger != nil {
-			cacheLogger.Info("Using caching repository backend; --repo beads disables", "cache_file", opts.repoFile)
-		}
-
-		cleanup := func() {
-			if err := cache.SaveNow(); err != nil {
-				if cacheLogger != nil {
-					cacheLogger.Warn("cache save on shutdown failed", "err", err)
-				}
-			}
-			cache.Stop()
-		}
-		return cache, cleanup, nil
-
-	default: // "beads" or unset (legacy path)
-		runnerCfg := bd.RunnerConfig{WorkDir: opts.projectRoot}
-		if opts.logManager != nil {
-			runnerCfg.Logger = opts.logManager.Component("repository")
-		}
-		runner := bd.NewCommandRunner(runnerCfg)
-		return repository.NewValidating(repositorybeads.New(runner), logManagerComponent(opts.logManager, "validating")), noop, nil
+		backend := repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor()))
+		return repository.NewValidating(backend, logManagerComponent(opts.logManager, "validating")), noop, nil
 	}
 }
 
@@ -254,25 +181,10 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 
 	autoRefresh := !opts.noAuto
 
-	// Resolve --repo-file: derive defaults and resolve relative paths.
-	// - caching mode: per-session cache file at ~/.cache/bwb/<hash>-<sessionID>/repo.jsonl
-	// - beads mode: informational path at ~/.cache/bwb/<hash>/repo.jsonl (not read/written)
-	// - memory mode: path was validated non-empty in parseCLI; resolve relative paths against startCWD
-	sessionID := ""
-	if logManager != nil {
-		sessionID = logManager.SessionID()
-	}
+	// Resolve --repo-file: only --repo=memory consumes it (the JSONL source of
+	// truth); taskmgr ignores it. Relative paths resolve against the start cwd.
 	resolvedRepoFile := opts.repoFile
-	switch opts.repo {
-	case "caching":
-		if resolvedRepoFile == "" {
-			resolvedRepoFile = defaultRepoFilePath(resolvedCWD, sessionID)
-		}
-	case "beads":
-		if resolvedRepoFile == "" {
-			resolvedRepoFile = defaultRepoFilePath(resolvedCWD, "")
-		}
-	case "memory":
+	if opts.repo == "memory" {
 		resolvedRepoFile = resolveAgainstStartCWD(startCWD, resolvedRepoFile)
 	}
 
@@ -344,6 +256,16 @@ func logManagerComponent(manager *logging.Manager, component string) *slog.Logge
 	return manager.Component(component)
 }
 
+// resolveAuthor determines the identity recorded as the creator of new issues
+// and the author of comments for the task-manager backend. It prefers $USER and
+// falls back to a stable default.
+func resolveAuthor() string {
+	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
+		return u
+	}
+	return "bwb"
+}
+
 func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	var opts cliOptions
 
@@ -365,7 +287,7 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	fs.BoolVar(&opts.debug, "d", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.debug, "debug", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.noAuto, "no-auto-refresh", false, "disable periodic auto-refresh")
-	fs.StringVar(&opts.repo, "repo", "beads", "repository backend: beads (default), memory, or caching")
+	fs.StringVar(&opts.repo, "repo", "taskmgr", "repository backend: taskmgr (default), beads, memory, or caching")
 	fs.StringVar(&opts.repoFile, "repo-file", "", "path to JSONL repository file (required for --repo=memory; cache file for --repo=caching)")
 
 	if err := fs.Parse(args); err != nil {
@@ -383,10 +305,10 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 
 	// Validate --repo value.
 	switch opts.repo {
-	case "beads", "memory", "caching":
+	case "taskmgr", "memory":
 		// valid
 	default:
-		_, _ = fmt.Fprintf(stderr, "--repo must be beads, memory, or caching, got %q\n", opts.repo)
+		_, _ = fmt.Fprintf(stderr, "--repo must be taskmgr or memory, got %q\n", opts.repo)
 		fs.Usage()
 		return cliOptions{}, 2, false
 	}
@@ -399,37 +321,6 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	}
 
 	return opts, 0, true
-}
-
-// defaultRepoFilePath derives the default JSONL cache path for a given project
-// root and optional session ID.
-//
-// The project hash is sha256(absPath)[:12] — a deterministic 12-hex-character
-// identifier derived from the absolute project root. When sessionID is non-empty,
-// the directory component is "<project-hash>-<sessionID>", giving each session
-// its own cache file. When sessionID is empty (e.g. for beads mode where the
-// path is informational), the legacy "<project-hash>" directory is used.
-//
-// Cache directory layout:
-//
-//	~/.cache/bwb/<project-hash>[-<sessionID>]/repo.jsonl
-//
-// os.UserCacheDir() is used in preference to $HOME/.cache because it is
-// platform-aware (returns %AppData%\Local on Windows, ~/Library/Caches on
-// macOS, $XDG_CACHE_HOME or ~/.cache on Linux).
-func defaultRepoFilePath(projectRoot, sessionID string) string {
-	sum := sha256.Sum256([]byte(projectRoot))
-	hash := fmt.Sprintf("%x", sum[:6]) // 6 bytes = 12 hex chars
-	dirComponent := hash
-	if strings.TrimSpace(sessionID) != "" {
-		dirComponent = hash + "-" + strings.TrimSpace(sessionID)
-	}
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		// Fallback: use a fixed relative path so callers always get a non-empty string.
-		cacheDir = filepath.Join(os.TempDir(), ".cache")
-	}
-	return filepath.Join(cacheDir, "bwb", dirComponent, "repo.jsonl")
 }
 
 func resolveAgainstStartCWD(startCWD, path string) string {
@@ -481,9 +372,7 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "      --no-auto-refresh      Disable automatic refresh triggers")
 	_, _ = fmt.Fprintln(w, "      --print-config         Print resolved config YAML")
 	_, _ = fmt.Fprintln(w, "      --check-config         Validate config and exit")
-	_, _ = fmt.Fprintln(w, "      --repo <backend>       Repository backend: beads|memory|caching (default: beads)")
-	_, _ = fmt.Fprintln(w, "      --repo-file <path>     JSONL repository file")
-	_, _ = fmt.Fprintln(w, "                             Default (beads):   ~/.cache/bwb/<project-hash>/repo.jsonl (informational)")
-	_, _ = fmt.Fprintln(w, "                             Default (caching): ~/.cache/bwb/<project-hash>-<session-id>/repo.jsonl")
-	_, _ = fmt.Fprintln(w, "                             Required when --repo=memory (the file is the source of truth)")
+	_, _ = fmt.Fprintln(w, "      --repo <backend>       Repository backend: taskmgr|memory (default: taskmgr)")
+	_, _ = fmt.Fprintln(w, "      --repo-file <path>     JSONL repository file; required when --repo=memory")
+	_, _ = fmt.Fprintln(w, "                             (the file is the source of truth). Ignored by taskmgr.")
 }

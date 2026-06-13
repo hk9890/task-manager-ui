@@ -3,8 +3,8 @@ package board
 // Tests for double-refresh concurrency bug in board mode.
 //
 // The board model has a single m.inflight flag that prevents concurrent refreshes.
-// After the repository migration, the fan-out lives in repository/beads.Dashboard(),
-// and the board fires a single loadDashboardCmd per refresh cycle.
+// The fan-out lives in the repository's Dashboard(), and the board fires a
+// single loadDashboardCmd per refresh cycle.
 //
 // These tests verify that:
 //   - Pressing 'r' while a refresh is already in-flight is a no-op (nil Cmd).

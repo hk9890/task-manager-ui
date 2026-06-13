@@ -6,21 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	beads "github.com/hk9890/beads-workbench/internal/bd"
 	"github.com/hk9890/beads-workbench/internal/config"
 	"github.com/hk9890/beads-workbench/internal/domain"
 	"github.com/hk9890/beads-workbench/internal/mode"
 	"github.com/hk9890/beads-workbench/internal/repository"
-	repositorybeads "github.com/hk9890/beads-workbench/internal/repository/beads"
 	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
 	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
 	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
 )
@@ -880,92 +876,6 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	}
 }
 
-// --- Real Repository + RecordingExecutor subprocess-argv scenario ---
-
-// TestBoardInitRealRepositorySubprocessArgvCardinality wires the board model against
-// a real *beads.Repository + *beads.CommandRunner backed by a *fakes.RecordingExecutor.
-// It asserts that exactly 5 subprocess invocations occur when the single Init cmd
-// is executed (Dashboard fans out ReadyExplain + 3 Query + 1 Count inside repo.Dashboard).
-func TestBoardInitRealRepositorySubprocessArgvCardinality(t *testing.T) {
-	t.Parallel()
-
-	// Expected argv shapes for the 5 subprocess invocations the board fires.
-	// Closed query uses the fixed defaultClosedLimit=50 from repository/beads.
-	argvReadyExplain := []string{"ready", "--explain", "--json"}
-	argvQueryInProgress := []string{"query", "status=in_progress", "--json"}
-	argvQueryClosed := []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "20"}
-	argvCountClosed := []string{"count", "--by-status", "--json", "--status", "closed"}
-	argvQueryStoredBlocked := []string{"query", "status=blocked", "--json"}
-
-	rec := fakes.NewRecordingExecutor()
-
-	// Pre-register canned responses so the repository parse path succeeds.
-	rec.OnArgs(argvReadyExplain).Return(beads.ExecResult{Stdout: []byte(`{
-		"ready": [
-			{"id":"bw-r1","title":"Ready one","status":"open","issue_type":"task","priority":1,"owner":"alice","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-		],
-		"blocked": [],
-		"summary": {"total_ready": 1, "total_blocked": 0, "cycle_count": 0}
-	}`)}, nil)
-
-	rec.OnArgs(argvQueryInProgress).Return(beads.ExecResult{Stdout: []byte(`[
-		{"id":"bw-p1","title":"In progress one","status":"in_progress","issue_type":"task","priority":2,"owner":"bob","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-	]`)}, nil)
-
-	rec.OnArgs(argvQueryClosed).Return(beads.ExecResult{Stdout: []byte(`[
-		{"id":"bw-c1","title":"Closed one","status":"closed","issue_type":"task","priority":1,"owner":"carol","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-	]`)}, nil)
-
-	rec.OnArgs(argvCountClosed).Return(beads.ExecResult{Stdout: []byte(`{
-		"groups": [{"group": "closed", "count": 452}],
-		"total": 452,
-		"schema_version": 1
-	}`)}, nil)
-
-	rec.OnArgs(argvQueryStoredBlocked).Return(beads.ExecResult{Stdout: []byte(`[
-		{"id":"bw-b1","title":"Stored blocked one","status":"blocked","issue_type":"task","priority":2,"owner":"eve","created_at":"2026-04-05T09:00:00Z","updated_at":"2026-04-05T10:00:00Z"}
-	]`)}, nil)
-
-	runner := beads.NewCommandRunner(beads.RunnerConfig{
-		Command:  "bd",
-		Executor: rec,
-	})
-	repo := repositorybeads.New(runner)
-
-	m := NewModel(context.Background(), repo, slog.Default(), resolvedBoardKeys(t))
-
-	// Drive Init: board.Init() now returns a single loadDashboardCmd (not a tea.Batch).
-	initCmd := m.Init()
-	if initCmd == nil {
-		t.Fatalf("Init() must return a non-nil command")
-	}
-
-	// Execute the command — this calls repo.Dashboard() which fans out 5 subprocess calls.
-	_ = initCmd()
-
-	calls := rec.Calls()
-
-	// AC: exactly 5 subprocess invocations (bd ping is dispatched at app level, not here).
-	if len(calls) != 5 {
-		t.Fatalf("expected exactly 5 subprocess invocations on board Init, got %d: %v",
-			len(calls), formatArgvList(calls))
-	}
-
-	// AC: argv for each matches the expected shape.
-	assertArgvPresent(t, calls, argvReadyExplain)
-	assertArgvPresent(t, calls, argvQueryInProgress)
-	assertArgvPresent(t, calls, argvQueryClosed)
-	assertArgvPresent(t, calls, argvCountClosed)
-	assertArgvPresent(t, calls, argvQueryStoredBlocked)
-
-	// AC: regression guard — no "list --status" argv (old data layer).
-	for _, c := range calls {
-		if hasArg(c.Args, "list") && hasArg(c.Args, "--status") {
-			t.Errorf("forbidden 'list --status' pattern observed in call %v (old data layer regression)", c.Args)
-		}
-	}
-}
-
 // TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn is the regression
 // test for beads-workbench-2ev4.2: an issue with status=blocked and no dependency
 // blocker must appear in the Not Ready column.
@@ -1059,37 +969,6 @@ func issueIDs(issues []domain.IssueSummary) []string {
 	return ids
 }
 
-// assertArgvPresent fails the test if none of the recorded calls has args
-// that exactly match want.
-func assertArgvPresent(t *testing.T, calls []fakes.RecordedCall, want []string) {
-	t.Helper()
-	for _, c := range calls {
-		if reflect.DeepEqual(c.Args, want) {
-			return
-		}
-	}
-	t.Errorf("expected subprocess call with argv %v; got calls: %v", want, formatArgvList(calls))
-}
-
-// hasArg reports whether args contains the given token.
-func hasArg(args []string, token string) bool {
-	for _, a := range args {
-		if a == token {
-			return true
-		}
-	}
-	return false
-}
-
-// formatArgvList returns a readable list of all recorded argv slices.
-func formatArgvList(calls []fakes.RecordedCall) [][]string {
-	out := make([][]string, len(calls))
-	for i, c := range calls {
-		out[i] = c.Args
-	}
-	return out
-}
-
 func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 	t.Helper()
 
@@ -1110,81 +989,6 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 		if strings.Contains(view, forbidden) {
 			t.Fatalf("expected board layout to keep compact one-line issue rows without detail-field chrome %q\nview:\n%s", forbidden, view)
 		}
-	}
-}
-
-// --- bd argv pinning for variable --limit (iwvm.7) ---
-
-// TestBoardClosedQueryArgvLimitVariants pins the exact bd query argv that the
-// board model emits for a range of ClosedLimit values: ClosedLimit=0 (falls back
-// to default 50 in beads.Repository), ClosedLimit=50, and ClosedLimit=200.
-//
-// Each case wires the board model against a real *beads.Repository backed by a
-// *fakes.RecordingExecutor so the exact subprocess argv is observable.
-func TestBoardClosedQueryArgvLimitVariants(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		height         int // controls m.closedLimit(); 0 = default (floor 50)
-		wantClosedArgv []string
-	}{
-		{
-			name:           "ClosedLimit_0_default_safe_20",
-			height:         0, // height unknown → sectionItemCapacity() returns 20 (safe default)
-			wantClosedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "20"},
-		},
-		{
-			name:           "ClosedLimit_50",
-			height:         53, // sectionItemCapacity() returns 53-3=50
-			wantClosedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "50"},
-		},
-		{
-			name:           "ClosedLimit_200",
-			height:         203, // sectionItemCapacity() returns 203-3=200
-			wantClosedArgv: []string{"query", "status=closed", "--json", "-a", "--sort", "closed", "--limit", "200"},
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			rec := fakes.NewRecordingExecutor()
-
-			// Pre-register canned responses for all five Dashboard fan-out calls.
-			rec.OnArgs([]string{"ready", "--explain", "--json"}).Return(beads.ExecResult{Stdout: []byte(`{
-				"ready": [], "blocked": [],
-				"summary": {"total_ready": 0, "total_blocked": 0, "cycle_count": 0}
-			}`)}, nil)
-			rec.OnArgs([]string{"query", "status=in_progress", "--json"}).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
-			rec.OnArgs(tc.wantClosedArgv).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
-			rec.OnArgs([]string{"count", "--by-status", "--json", "--status", "closed"}).Return(beads.ExecResult{Stdout: []byte(`{
-				"groups": [{"group": "closed", "count": 0}], "total": 0, "schema_version": 1
-			}`)}, nil)
-			rec.OnArgs([]string{"query", "status=blocked", "--json"}).Return(beads.ExecResult{Stdout: []byte(`[]`)}, nil)
-
-			runner := beads.NewCommandRunner(beads.RunnerConfig{
-				Command:  "bd",
-				Executor: rec,
-			})
-			repo := repositorybeads.New(runner)
-
-			m := NewModel(context.Background(), repo, slog.Default(), resolvedBoardKeys(t))
-			m.SetSize(200, tc.height)
-
-			initCmd := m.Init()
-			if initCmd == nil {
-				t.Fatalf("Init() must return a non-nil command")
-			}
-			_ = initCmd()
-
-			calls := rec.Calls()
-
-			// Assert the exact closed-query argv is present.
-			assertArgvPresent(t, calls, tc.wantClosedArgv)
-		})
 	}
 }
 

@@ -1,9 +1,0 @@
-{
-  "built_in_statuses": [
-    {"name": "open", "description": "Open"},
-    {"name": "closed", "description": "Closed"}
-  ],
-  "custom_statuses": [
-    {"name": "qa", "description": "In QA"}
-  ]
-}

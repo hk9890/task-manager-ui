@@ -7,12 +7,9 @@
 //
 // # Package placement rationale
 //
-// Placed in internal/repository (parent package) rather than
-// internal/repository/beads so it:
-//   - imports only domain + slog (no beads-specific types)
-//   - wraps any Repository implementation (memory, beads, caching)
-//   - allows E4.4 to delete the beads/validating_repository.go without
-//     moving this file
+// Placed in internal/repository (parent package) so it:
+//   - imports only domain + slog (no backend-specific types)
+//   - wraps any Repository implementation (taskmgr, memory)
 //
 // # Rule migration
 //

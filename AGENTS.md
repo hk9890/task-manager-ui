@@ -1,8 +1,8 @@
 # Beads Workbench
 
-A terminal UI for browsing beads issues, creating and updating work, and launching external tools from issue context — the standalone successor to Perles.
+A terminal UI for browsing task-manager issues, creating and updating work, and launching external tools from issue context — the standalone successor to Perles.
 
-**Tech Stack**: Go, Bubble Tea, `bd` CLI (beads issue tracker)
+**Tech Stack**: Go, Bubble Tea, the task-manager Go SDK (`github.com/hk9890/task-manager/sdk/tasks`)
 
 ## Project Overview
 
@@ -21,12 +21,6 @@ Run `mise tasks` to see all available build/test/quality tasks (`mise run <task>
 Read `docs/TESTING.md` for test policy, verification depth, fixtures, and focused commands.
 
 Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
-
-Read `docs/LOAD_TESTING.md` for the agent-runnable load-test recipe: how to configure workload shape, run `mise run test:load`, and read the timing report.
-
-When fixing a bug whose root cause involves fake-vs-real divergence in the beads `Repository` implementation, follow the discipline in `internal/testing/fakes/doc.go`.
-
-When adding or modifying a bd subprocess call, follow the argv contract pattern in `internal/bd/doc.go` (Argv contract testing section).
 
 ## Monitoring
 

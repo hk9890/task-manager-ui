@@ -53,40 +53,25 @@ Run from the repository root.
 
 3. Verify the release commit has a successful `CI` workflow run (release provenance checkpoint).
 
-4. **Smoke check** — run the data-consistency smoke suite from the repo root:
-
-   ```bash
-   mise run smoke
-   ```
-
-   - If exit code is non-zero (any check shows `FAIL`), **do NOT tag** — fix the failure first.
-   - Optional: validate against a second real DB to catch environment-specific issues (substitute any path that contains a `.beads/` directory):
-
-     ```bash
-     BWB_SMOKE_DIR=/path/to/external/repo mise run smoke
-     ```
-
-   See [`docs/RUNTIME_UI_VERIFICATION.md` — Pre-release data-consistency checks](./RUNTIME_UI_VERIFICATION.md#pre-release-data-consistency-checks) for a full explanation of what each check covers and which failures are release-blocking vs advisory.
-
-5. Create an annotated tag on the release commit:
+4. Create an annotated tag on the release commit:
 
    ```bash
    git tag -a vX.Y.Z -m "bwb vX.Y.Z"
    ```
 
-6. Push the tag to origin to trigger the automated release workflow:
+5. Push the tag to origin to trigger the automated release workflow:
 
    ```bash
    git push origin vX.Y.Z
    ```
 
-7. Watch the `Release` workflow complete successfully. It will:
+6. Watch the `Release` workflow complete successfully. It will:
 
    - build `bwb` archives for supported platforms
    - create or update the GitHub release for the tag
    - upload release assets and checksums
 
-8. Post-release verification:
+7. Post-release verification:
 
    ```bash
    gh release view vX.Y.Z
@@ -99,15 +84,15 @@ Run from the repository root.
 When the GitHub Actions workflows are temporarily disabled (for example, while
 private-repo Actions billing is paused), releases can be built and published
 locally from the same `.goreleaser.yaml` used by the CI release job. The
-substitute provenance is the local `mise run quality` + `mise run smoke`
-output recorded on the release commit.
+substitute provenance is the local `mise run quality` output recorded on the
+release commit.
 
 Prerequisites: `goreleaser` v2 in PATH (`go install github.com/goreleaser/goreleaser/v2@latest`), a `GITHUB_TOKEN` with `repo` scope (typically `gh auth token`), and a clean working tree on the release commit.
 
 Procedure:
 
-1. Confirm both `mise run quality` and `mise run smoke` pass on the release
-   commit (substitutes for the CI provenance gate).
+1. Confirm `mise run quality` passes on the release commit (substitutes for
+   the CI provenance gate).
 2. Create and push the annotated tag:
 
    ```bash

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Repository backend replaced.** bwb now reads and writes issues in-process through the [task-manager](https://github.com/hk9890/task-manager) Go SDK (`github.com/hk9890/task-manager/sdk/tasks`) instead of shelling out to the `bd` (beads) CLI. The default `--repo` backend is now `taskmgr`. Issues live as Markdown files under a `.tasks/` directory; bwb expects a `.tasks/` store in the target project (create one with `taskmgr init`).
+- `--debug` repository traces are now in-process; there is no external subprocess argv in the product path.
+
+### Removed
+
+- `--repo beads` and `--repo caching` backends, and the caching layer itself — the in-process SDK removes the subprocess latency the cache existed to hide. The remaining backends are `taskmgr` (default) and `memory` (for tests/inspection).
+- The `bd`-coupled test harness and tooling: the repository parity/contract suite, the `bwb-smoke` and `bwb-loadtest` binaries, the embedded bd fixture, the load-generation and scale-seed scripts, and the `mise` `smoke` / `test:load` / `bwb:fixture` / `verify:refresh` tasks.
+
 ## [v0.9.0]
 
 ### Added

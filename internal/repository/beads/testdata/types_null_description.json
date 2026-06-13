@@ -1,8 +1,0 @@
-{
-  "core_types": [
-    {"name": "task", "description": "Task"},
-    {"name": "bug", "description": null}
-  ],
-  "custom_types": ["spike"],
-  "schema_version": 1
-}
