@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // TestSearchPostSubmitState_StaleMarkersClearedWhenAppliedQueryMatches pins

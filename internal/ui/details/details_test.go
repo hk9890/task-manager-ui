@@ -11,15 +11,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/ui"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 func assertGolden(t *testing.T, output []byte, name string) {
 	t.Helper()
 
-	if os.Getenv("BWB_UPDATE_GOLDEN") == "1" {
+	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
 		path := filepath.Join("testdata", name)
 		if err := os.WriteFile(path, output, 0o600); err != nil {
 			t.Fatalf("write golden %s: %v", path, err)
@@ -634,7 +634,7 @@ func TestRenderCommentsElidesVeryLongLogLikeBodiesWithMarker(t *testing.T) {
 
 	bodyLines := []string{"$ go test ./..."}
 	for i := 0; i < 80; i++ {
-		bodyLines = append(bodyLines, "FAIL\tgithub.com/hk9890/beads-workbench/internal/ui/details\t0.123s")
+		bodyLines = append(bodyLines, "FAIL\tgithub.com/hk9890/task-manager-ui/internal/ui/details\t0.123s")
 	}
 	body := strings.Join(bodyLines, "\n")
 

@@ -1,2 +1,2 @@
-// Package domain defines core Beads Workbench models.
+// Package domain defines core Task Manager UI models.
 package domain

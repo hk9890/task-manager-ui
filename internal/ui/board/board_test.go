@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 func assertGoldenNormalized(t *testing.T, output []byte, golden string) {
@@ -169,7 +169,7 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 			{Title: "In Progress", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Type: "feature", Status: "in_progress", Priority: 1}}, SelectedRow: -1, Total: 1, TotalIsExact: true},
 			{Title: "Blocked", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4.5", Title: "Add editor and launcher integration tests", Type: "bug", Status: "blocked", Priority: 1}}, SelectedRow: 0, Total: 2, TotalIsExact: true},
 			{Title: "Recent Work", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.4", Title: "Deliver editor and launcher flows", Type: "task", Status: "closed", Priority: 1}}, SelectedRow: -1, Total: 15, TotalIsExact: true},
-			{Title: "Assigned", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.1", Title: "Acceptance Review: Beads Workbench v1 standalone product", Type: "epic", Status: "open", Priority: 1}}, SelectedRow: -1, Total: 3, TotalIsExact: true},
+			{Title: "Assigned", Rows: []domain.IssueSummary{{ID: "beads-workbench-yze.1", Title: "Acceptance Review: Task Manager UI v1 standalone product", Type: "epic", Status: "open", Priority: 1}}, SelectedRow: -1, Total: 3, TotalIsExact: true},
 		},
 	}
 

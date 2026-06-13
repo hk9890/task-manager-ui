@@ -14,18 +14,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
-	"github.com/hk9890/beads-workbench/internal/mode"
-	boardmode "github.com/hk9890/beads-workbench/internal/mode/board"
-	detailsmode "github.com/hk9890/beads-workbench/internal/mode/details"
-	searchmode "github.com/hk9890/beads-workbench/internal/mode/search"
-	"github.com/hk9890/beads-workbench/internal/ui/fatalerror"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
-	"github.com/hk9890/beads-workbench/internal/ui/modal"
-	"github.com/hk9890/beads-workbench/internal/ui/styles"
-	"github.com/hk9890/beads-workbench/internal/ui/toaster"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
+	detailsmode "github.com/hk9890/task-manager-ui/internal/mode/details"
+	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
+	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
 const (
@@ -176,7 +176,7 @@ type RuntimeOptions struct {
 	DisableAutoRefresh bool
 }
 
-// Model is the root Bubble Tea shell for Beads Workbench.
+// Model is the root Bubble Tea shell for Task Manager UI.
 //
 // v1 detail presentation model keeps browse and full detail separated:
 //   - Board/Search prioritize high-density triage browsing.
@@ -346,14 +346,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if errors.As(check.err, &gwErr) {
 				switch gwErr.Code {
 				case domain.ErrorCodeCommandUnavailable:
-					m.fatalErrTitle = "beads is not available"
-					m.fatalErrBody = "The bd CLI tool was not found in your PATH.\n\nInstall beads to use this app.\nSee https://github.com/hk9890/beads-workbench for setup instructions."
-					slog.Default().Error("beads health check failed", "error", check.err)
+					m.fatalErrTitle = "task manager is not available"
+					m.fatalErrBody = "The task-manager backend could not be initialized.\n\nSee https://github.com/hk9890/task-manager-ui for setup instructions."
+					slog.Default().Error("task-manager health check failed", "error", check.err)
 					return m, nil
 				case domain.ErrorCodeNoDatabaseFound:
-					m.fatalErrTitle = "no beads project here"
-					m.fatalErrBody = "No beads database was found in this directory.\n\nRun 'bd init' to create a new database, or use --cwd to point to a directory that contains one."
-					slog.Default().Error("beads health check failed", "error", check.err)
+					m.fatalErrTitle = "no task-manager store here"
+					m.fatalErrBody = "No .tasks store was found in this directory.\n\nRun 'taskmgr init' to create one, or use --cwd to point to a directory that contains one."
+					slog.Default().Error("task-manager health check failed", "error", check.err)
 					return m, nil
 				}
 			}
@@ -1037,7 +1037,7 @@ func (m Model) headerSpinnerCell() string {
 }
 
 func (m Model) renderHeader() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render("Beads Workbench")
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render("Task Manager UI")
 
 	tab := func(id mode.ID, label string) string {
 		base := lipgloss.NewStyle().Padding(0, 1)

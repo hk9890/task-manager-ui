@@ -112,7 +112,7 @@ func TestExecProcessRunnerStartsProcess(t *testing.T) {
 // launcher-specific environment variables are added to (not replacing) the
 // parent process environment.
 func TestExecProcessRunnerPreservesParentEnvWhenLauncherEnvSet(t *testing.T) {
-	t.Setenv("BWB_PARENT_ENV", "present")
+	t.Setenv("TASKMGR_UI_PARENT_ENV", "present")
 
 	runner := NewExecProcessRunner()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -122,10 +122,10 @@ func TestExecProcessRunnerPreservesParentEnvWhenLauncherEnvSet(t *testing.T) {
 	okFile := filepath.Join(tmpDir, "ok")
 	failFile := filepath.Join(tmpDir, "fail")
 
-	cmd := "if [ \"$BWB_PARENT_ENV\" = \"present\" ] && [ \"$BWB_LAUNCHER_ENV\" = \"set\" ]; then touch \"$1\"; else touch \"$2\"; fi"
+	cmd := "if [ \"$TASKMGR_UI_PARENT_ENV\" = \"present\" ] && [ \"$TASKMGR_UI_LAUNCHER_ENV\" = \"set\" ]; then touch \"$1\"; else touch \"$2\"; fi"
 	args := []string{"-c", cmd, "sh", okFile, failFile}
 
-	err := runner.Run(ctx, "sh", args, "", []string{"BWB_LAUNCHER_ENV=set"})
+	err := runner.Run(ctx, "sh", args, "", []string{"TASKMGR_UI_LAUNCHER_ENV=set"})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}

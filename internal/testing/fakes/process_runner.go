@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hk9890/beads-workbench/internal/launcher"
+	"github.com/hk9890/task-manager-ui/internal/launcher"
 )
 
 // ProcessRunCall captures one external process run request.

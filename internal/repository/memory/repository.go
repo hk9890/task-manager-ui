@@ -36,8 +36,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // storedIssue is the internal representation of an issue in the memory store.
@@ -932,7 +932,7 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	}
 
 	// Resolve Children: issues for which this issue is the parent (reverse
-	// parentID lookup), mirroring how the beads repository derives the Children
+	// parentID lookup), mirroring how the task-manager backend derives the Children
 	// group from parent-child dependents. Without this the in-memory fake would
 	// diverge from real bd, which always returns the Children group.
 	childrenGroup := make([]domain.IssueReference, 0)

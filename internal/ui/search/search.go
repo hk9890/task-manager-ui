@@ -6,10 +6,10 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
-	"github.com/hk9890/beads-workbench/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 const (

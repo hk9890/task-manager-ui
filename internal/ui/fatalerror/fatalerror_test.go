@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/ui/fatalerror"
+	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
 )
 
 func TestViewContainsExpectedContent(t *testing.T) {
 	t.Parallel()
 
-	view := fatalerror.View("beads is not available", "The bd CLI tool was not found in your PATH.", 80, 24)
+	view := fatalerror.View("task manager is not available", "The task-manager backend could not be initialized.", 80, 24)
 
-	checks := []string{"beads is not available", "bd", "q"}
+	checks := []string{"task manager is not available", "task-manager", "q"}
 	for _, want := range checks {
 		if !strings.Contains(view, want) {
 			t.Errorf("expected %q in View(80,24), output:\n%s", want, view)
@@ -23,12 +23,12 @@ func TestViewContainsExpectedContent(t *testing.T) {
 func TestViewNoDatabaseShowsTailoredContent(t *testing.T) {
 	t.Parallel()
 
-	view := fatalerror.View("no beads project here", "No beads database was found in this directory.", 80, 24)
+	view := fatalerror.View("no task-manager store here", "No .tasks store was found in this directory.", 80, 24)
 
-	if !strings.Contains(view, "no beads project here") {
+	if !strings.Contains(view, "no task-manager store here") {
 		t.Errorf("expected title in no-database view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "No beads database") {
+	if !strings.Contains(view, "No .tasks store") {
 		t.Errorf("expected body in no-database view, got:\n%s", view)
 	}
 }

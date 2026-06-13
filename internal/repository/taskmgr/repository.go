@@ -3,7 +3,7 @@ package taskmgr
 import (
 	"github.com/hk9890/task-manager/sdk/tasks"
 
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // Repository adapts a *tasks.Store to the repository.Repository interface.
@@ -28,7 +28,7 @@ func WithAuthor(author string) Option {
 // New wraps an already-open *tasks.Store. The caller owns the store's lifetime
 // (Open/Init happen outside this package).
 func New(store *tasks.Store, opts ...Option) *Repository {
-	r := &Repository{store: store, author: "bwb"}
+	r := &Repository{store: store, author: "taskmgr-ui"}
 	for _, opt := range opts {
 		opt(r)
 	}

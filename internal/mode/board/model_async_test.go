@@ -37,9 +37,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // startCmdSubcmdsAsync executes cmd and, for each sub-cmd found in the result,

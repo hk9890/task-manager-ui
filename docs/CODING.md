@@ -2,8 +2,8 @@
 
 ## Project Identity
 
-- **Module:** `github.com/hk9890/beads-workbench`
-- **Binary:** `bwb` (`cmd/bwb`)
+- **Module:** `github.com/hk9890/task-manager-ui`
+- **Binary:** `taskmgr-ui` (`cmd/taskmgr-ui`)
 - **Language:** Go
 - **TUI framework:** Bubble Tea
 
@@ -19,7 +19,7 @@ fake seams), see `docs/TESTING.md`.
 
 ## CLI startup semantics (v1)
 
-`cmd/bwb/main.go` intentionally keeps a minimal pre-TUI CLI surface before
+`cmd/taskmgr-ui/main.go` intentionally keeps a minimal pre-TUI CLI surface before
 starting Bubble Tea.
 
 Supported flags:
@@ -60,10 +60,10 @@ Non-interactive flags (`--help`, `--version`, `--print-config`,
 Examples:
 
 ```bash
-bwb --config "$HOME/.config/bwb/config.yaml"
-bwb --cwd ../another-project
-bwb --config "$HOME/.config/bwb/config.yaml" --print-config
-bwb --check-config
+taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml"
+taskmgr-ui --cwd ../another-project
+taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
+taskmgr-ui --check-config
 ```
 
 ### Exit-code contract for non-interactive paths
@@ -80,16 +80,16 @@ bwb --check-config
   `unknown` / `unknown` for local builds (see `internal/version/version.go`).
 - Release/snapshot builds inject version metadata via GoReleaser ldflags
   (see `.goreleaser.yaml`):
-  - `-X github.com/hk9890/beads-workbench/internal/version.Version={{ .Version }}`
-  - `-X github.com/hk9890/beads-workbench/internal/version.Commit={{ .ShortCommit }}`
-  - `-X github.com/hk9890/beads-workbench/internal/version.Date={{ .Date }}`
+  - `-X github.com/hk9890/task-manager-ui/internal/version.Version={{ .Version }}`
+  - `-X github.com/hk9890/task-manager-ui/internal/version.Commit={{ .ShortCommit }}`
+  - `-X github.com/hk9890/task-manager-ui/internal/version.Date={{ .Date }}`
 - The `mise run build` task also injects the same three symbols using
   `git describe` / `git rev-parse` / `date -u` for local dev builds.
 
 ### Debug diagnostics contract
 
 `--debug` mirrors startup-resolution and repository-operation diagnostics to
-stderr (prefixed `[bwb-debug]`); every config-loading startup path also writes
+stderr (prefixed `[taskmgr-ui-debug]`); every config-loading startup path also writes
 structured JSON Lines records to a persistent per-session log. Repository traces
 are in-process (no subprocess argv) since the backend runs over the task-manager
 SDK. `docs/MONITORING.md` owns the full contract — event categories, log paths,
@@ -101,11 +101,11 @@ Current bootstrapped layout:
 
 ```
 cmd/
-  bwb/               # primary TUI binary entrypoint
+  taskmgr-ui/               # primary TUI binary entrypoint
 internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
-  domain/            # Beads Workbench issue and dashboard models
+  domain/            # Task Manager UI issue and dashboard models
   repository/        # repository.Repository interface + Validating wrapper + shared errors/types
   repository/taskmgr/   # production backend: in-process adapter over the task-manager Go SDK
   repository/memory/    # in-memory backend (loaded from a JSONL file via filestorage)
@@ -135,7 +135,7 @@ project-plan/        # product, architecture, and execution planning docs
    **Issue edit document contract (v1):**
    - Editable fields map directly to repository update capabilities: `title`, `description`, `status`, `type`, `priority`, `assignee`, and `labels`.
    - Read-only context (issue id, timestamps, notes, dependencies, related items, comments) is rendered for operator context and ignored by parser/diff logic.
-   - Round-trip behavior is marker-based (`BWB:EDITABLE` / `BWB:FIELD:*`) so parser changes are deterministic and testable.
+   - Round-trip behavior is marker-based (`TASKMGRUI:EDITABLE` / `TASKMGRUI:FIELD:*`) so parser changes are deterministic and testable.
    - The external editor launch is behind a replaceable seam (`internal/launcher/editor.Opener`) so tests never spawn a real interactive editor.
 
 6. **Launchers are thin.** Launchers receive issue context and produce a subprocess. They must not become an orchestration engine.
@@ -174,7 +174,7 @@ project-plan/        # product, architecture, and execution planning docs
 
 9. **Selection/detail sync is event-driven, not polled.** Browse modes emit `SelectionChangedMsg` when selection changes; app reacts by updating shared selection state and (when needed) issuing detail loads. Do not reintroduce polling-based synchronization loops.
 
-10. **Repository mapping is typed and operation-scoped.** `internal/repository/taskmgr` maps the SDK's typed model onto bwb's domain types through explicit converters (see `convert.go`). Avoid `map[string]any`/generic map decoding paths for primary read flows.
+10. **Repository mapping is typed and operation-scoped.** `internal/repository/taskmgr` maps the SDK's typed model onto taskmgr-ui's domain types through explicit converters (see `convert.go`). Avoid `map[string]any`/generic map decoding paths for primary read flows.
 
 11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns repository query routing and validates query types internally.
 
@@ -195,7 +195,7 @@ security rule and the editor/launcher handoff rules are in the Core
 Architectural Rules above; UI component placement is in `docs/OVERVIEW.md`
 under Architectural boundaries.
 
-## Donor Migration Rules (Perles → Beads Workbench)
+## Donor Migration Rules (Perles → Task Manager UI)
 
 This section applies only to a maintainer performing the Perles migration with a
 local checkout of the donor repo; the paths below are maintainer-local and not
@@ -232,7 +232,7 @@ Typical adapted local targets in this repo are `internal/ui/modal/`,
 
 ## Enforced Architecture Guardrails
 
-Automated guardrails are enforced in `cmd/bwb/architecture_guardrails_test.go` by checking the full dependency graph for `./cmd/bwb` (`go list -deps ./cmd/bwb`).
+Automated guardrails are enforced in `cmd/taskmgr-ui/architecture_guardrails_test.go` by checking the full dependency graph for `./cmd/taskmgr-ui` (`go list -deps ./cmd/taskmgr-ui`).
 
 The checks fail if any dependency in the active product path violates these boundaries:
 
@@ -255,14 +255,14 @@ Key tasks:
 
 | Task | What it runs |
 |---|---|
-| `mise run build` | `go build ./cmd/bwb` |
+| `mise run build` | `go build ./cmd/taskmgr-ui` |
 | `mise run vet` | `go vet ./...` |
 | `mise run test` | unit tests only (no `//go:build integration` tests) |
 | `mise run test:integration` | integration tests (build tag: `integration`) |
 | `mise run test:all` | unit + integration |
 | `mise run test:verbose` | unit tests with `-v` |
 | `mise run lint` | pinned `golangci-lint` (version from `.mise.toml` `[tools]`) |
-| `mise run guardrails` | `go test ./cmd/bwb -run TestArchitectureGuardrails` |
+| `mise run guardrails` | `go test ./cmd/taskmgr-ui -run TestArchitectureGuardrails` |
 | `mise run fmt:check` | `goimports` formatting + `go mod tidy` cleanliness check (CI-enforced) |
 | `mise run scripts:check` | shell + Python script syntax validation (CI-enforced) |
 | `mise run test:coverage` | unit+integration tests with a coverage-threshold gate (CI-enforced) |
@@ -283,7 +283,7 @@ For the authoritative pre-handoff landing workflow, see
 - `go vet ./...`
 - pinned `golangci-lint` execution using the version in `.mise.toml`
 - fast architecture-guardrail verification via
-  `go test ./cmd/bwb -run TestArchitectureGuardrails`
+  `go test ./cmd/taskmgr-ui -run TestArchitectureGuardrails`
 - unit tests and integration tests
 
 CI (`.github/workflows/ci.yml`) runs a **superset** of this on an

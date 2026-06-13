@@ -5,7 +5,7 @@ import (
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // Search maps the structured query onto a tasks.Criteria and runs FindPage. The

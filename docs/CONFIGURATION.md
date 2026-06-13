@@ -1,22 +1,22 @@
 # Configuration
 
-Runtime configuration, keybindings, and launcher reference for Beads Workbench.
+Runtime configuration, keybindings, and launcher reference for Task Manager UI.
 For the architectural rules these settings operate under, see `docs/CODING.md`.
 
 ## Runtime configuration (v1)
 
 Configuration lives in `internal/config` and is loaded once at startup via
-`config.LoadWithOptions(...)` (the startup path used by `cmd/bwb/main.go`;
+`config.LoadWithOptions(...)` (the startup path used by `cmd/taskmgr-ui/main.go`;
 `config.Load()` is the simpler no-options variant).
 
 Runtime config path resolution uses `os.UserConfigDir()` and looks for:
 
-- `bwb/config.yaml`
-- on Linux this is typically `~/.config/bwb/config.yaml`
+- `taskmgr-ui/config.yaml`
+- on Linux this is typically `~/.config/taskmgr-ui/config.yaml`
 
 Load semantics:
 
-- Missing config file is allowed; BWB starts with defaults.
+- Missing config file is allowed; taskmgr-ui starts with defaults.
 - Explicit config file values override environment-driven defaults.
 - Unknown YAML keys are ignored and surfaced as startup warnings.
 - Invalid YAML, unreadable existing config files, invalid values, and duplicate

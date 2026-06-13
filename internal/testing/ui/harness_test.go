@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"github.com/hk9890/beads-workbench/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 type modalTeaModel struct {

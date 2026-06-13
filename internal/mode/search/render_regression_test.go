@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // countPaneTopBorders counts occurrences of the box-drawing top-left corner

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
-	"github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
+	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 func TestSaveLoadRoundTrip(t *testing.T) {

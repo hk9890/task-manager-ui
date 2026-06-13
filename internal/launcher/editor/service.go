@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // Service defines the rich issue external-editor flow split into a prepare and
@@ -139,7 +139,7 @@ func (e *IssueEditor) writeTempDocument(issueID, content string) (string, error)
 		e.tempDir = os.TempDir()
 	}
 
-	pattern := fmt.Sprintf("bwb-issue-%s-*.md", issueID)
+	pattern := fmt.Sprintf("taskmgr-ui-issue-%s-*.md", issueID)
 	file, err := os.CreateTemp(e.tempDir, pattern)
 	if err != nil {
 		return "", fmt.Errorf("create temporary issue document: %w", err)

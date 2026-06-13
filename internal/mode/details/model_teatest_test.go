@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
 )
 
 // issueWithLongContent returns an IssueDetail with enough content lines for

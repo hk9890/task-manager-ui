@@ -11,14 +11,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/mode"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
 // searchRepo bundles the memory repo (for seeding) and the error-injecting

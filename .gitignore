@@ -7,13 +7,11 @@
 .opencode/
 .idea/
 .claude/
-/bwb
-/bwb-smoke
+/taskmgr-ui
 coverage.out
 coverage-*.out
 dist/
 /load-test-report.json
-/bwb-loadtest
 __pycache__/
 *.pyc
 

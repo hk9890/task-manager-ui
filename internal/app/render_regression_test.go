@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // countColumnTopLines returns the number of lines in the rendered view that
@@ -117,7 +117,7 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 }
 
 // TestNoDoubledColumnHeadersAfterWindowSizeMsg is the primary regression test
-// for beads-workbench-o7tk: bwb produced TWO rows of column-top borders when a
+// for beads-workbench-o7tk: taskmgr-ui produced TWO rows of column-top borders when a
 // tall terminal sent a WindowSizeMsg after the initial default-size render.
 //
 // Sequence:

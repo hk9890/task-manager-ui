@@ -12,18 +12,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
-	"github.com/hk9890/beads-workbench/internal/mode"
-	detailsmode "github.com/hk9890/beads-workbench/internal/mode/details"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
-	"github.com/hk9890/beads-workbench/internal/testing/ui"
-	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
-	"github.com/hk9890/beads-workbench/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	detailsmode "github.com/hk9890/task-manager-ui/internal/mode/details"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 func TestMain(m *testing.M) {
@@ -2707,7 +2707,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
 	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeCommandUnavailable,
 		Operation: "health check",
-		Message:   "bd command is unavailable",
+		Message:   "task-manager backend unavailable",
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -2749,7 +2749,7 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	gw := newTestRepository()
 	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeCommandUnavailable,
-		Message: "bd command is unavailable",
+		Message: "task-manager backend unavailable",
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -2762,11 +2762,11 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	m = applyMessages(t, m, msgs)
 
 	view := m.View()
-	if !strings.Contains(view, "beads is not available") {
+	if !strings.Contains(view, "task manager is not available") {
 		t.Fatalf("expected fatal error title in View(), got %q", view)
 	}
-	if !strings.Contains(view, "bd") {
-		t.Fatalf("expected 'bd' mention in View(), got %q", view)
+	if !strings.Contains(view, "task-manager") {
+		t.Fatalf("expected 'task-manager' mention in View(), got %q", view)
 	}
 }
 
@@ -2776,7 +2776,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	gw := newTestRepository()
 	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeCommandUnavailable,
-		Message: "bd command is unavailable",
+		Message: "task-manager backend unavailable",
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -2823,7 +2823,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeNoDatabaseFound,
 		Operation: "health check",
-		Message:   "no beads database found",
+		Message:   "no task-manager store found",
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -2839,11 +2839,11 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 		t.Fatal("expected fatalErrTitle to be set after NoDatabaseFound health check")
 	}
 	view := m.View()
-	if !strings.Contains(view, "no beads project here") {
+	if !strings.Contains(view, "no task-manager store here") {
 		t.Fatalf("expected no-database title in View(), got %q", view)
 	}
-	if !strings.Contains(view, "bd init") {
-		t.Fatalf("expected 'bd init' hint in View(), got %q", view)
+	if !strings.Contains(view, "taskmgr") {
+		t.Fatalf("expected 'taskmgr' hint in View(), got %q", view)
 	}
 }
 

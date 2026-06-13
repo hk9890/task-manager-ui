@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 )
 
 func TestFakeEditorPrepareDocumentReturnsConfiguredResult(t *testing.T) {

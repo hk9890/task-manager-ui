@@ -1,4 +1,4 @@
-# Beads Workbench
+# Task Manager UI
 
 A terminal UI for browsing task-manager issues, creating and updating work, and launching external tools from issue context — the standalone successor to Perles.
 

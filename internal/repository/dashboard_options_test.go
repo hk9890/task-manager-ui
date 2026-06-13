@@ -3,7 +3,7 @@ package repository_test
 import (
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // TestDashboardOptionsClosedOffsetField verifies that DashboardOptions has a

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // errInjected is the sentinel used by all mutation error-injection tests.

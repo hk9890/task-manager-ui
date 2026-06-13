@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 var metadataANSIPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)

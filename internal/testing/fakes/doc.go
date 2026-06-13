@@ -1,4 +1,4 @@
-// Package fakes provides lightweight test doubles used across bwb's test suites.
+// Package fakes provides lightweight test doubles used across taskmgr-ui's test suites.
 //
 // It collects hand-written fakes that are too small or too cross-cutting to live
 // next to a single package's tests:

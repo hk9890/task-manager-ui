@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // makeClosedSummary builds an IssueSummary with UpdatedAt set to the given

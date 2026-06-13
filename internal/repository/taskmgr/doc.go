@@ -1,8 +1,8 @@
 // Package taskmgr implements repository.Repository over an in-process
 // task-manager store (github.com/hk9890/task-manager/sdk/tasks).
 //
-// It is the production backend for bwb: a thin adapter mapping the SDK's typed
-// model onto bwb's domain types. The SDK serializes writes (in-process mutex +
+// It is the production backend for taskmgr-ui: a thin adapter mapping the SDK's typed
+// model onto taskmgr-ui's domain types. The SDK serializes writes (in-process mutex +
 // flock) and dedups cross-partition reads, so this wrapper holds no lock of its
 // own; each method only pre-checks ctx cancellation before delegating.
 //

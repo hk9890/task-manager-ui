@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // countColumnTopBorders counts occurrences of the box-drawing top-left corner

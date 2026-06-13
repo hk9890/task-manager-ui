@@ -16,7 +16,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-func TestResolveLogPathCreatesBWBStateDirectory(t *testing.T) {
+func TestResolveLogPathCreatesAppStateDirectory(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -64,11 +64,11 @@ func TestResolveLogPathPerProcessFilename(t *testing.T) {
 	if pathA == pathB {
 		t.Fatalf("expected distinct log paths for distinct session IDs, but both resolved to %q", pathA)
 	}
-	if filepath.Base(pathA) != "bwb-aabbccdd.log" {
-		t.Fatalf("expected bwb-aabbccdd.log, got %q", filepath.Base(pathA))
+	if filepath.Base(pathA) != "taskmgr-ui-aabbccdd.log" {
+		t.Fatalf("expected taskmgr-ui-aabbccdd.log, got %q", filepath.Base(pathA))
 	}
-	if filepath.Base(pathB) != "bwb-11223344.log" {
-		t.Fatalf("expected bwb-11223344.log, got %q", filepath.Base(pathB))
+	if filepath.Base(pathB) != "taskmgr-ui-11223344.log" {
+		t.Fatalf("expected taskmgr-ui-11223344.log, got %q", filepath.Base(pathB))
 	}
 }
 
@@ -85,8 +85,8 @@ func TestResolveLogPathFallsBackToPIDWhenSessionIDEmpty(t *testing.T) {
 	}
 
 	base := filepath.Base(logPath)
-	if !strings.HasPrefix(base, "bwb-pid") || !strings.HasSuffix(base, ".log") {
-		t.Fatalf("expected bwb-pid<N>.log filename pattern, got %q", base)
+	if !strings.HasPrefix(base, "taskmgr-ui-pid") || !strings.HasSuffix(base, ".log") {
+		t.Fatalf("expected taskmgr-ui-pid<N>.log filename pattern, got %q", base)
 	}
 }
 
@@ -166,10 +166,10 @@ func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
 	m.Component("repository").Debug("bd argv trace", "argv", []string{"bd", "show", "ISSUE-1"})
 
 	gotStderr := stderr.String()
-	if !strings.Contains(gotStderr, "[bwb-debug] session_id=cafebabe") {
+	if !strings.Contains(gotStderr, "[taskmgr-ui-debug] session_id=cafebabe") {
 		t.Fatalf("expected debug session line, got %q", gotStderr)
 	}
-	if !strings.Contains(gotStderr, "[bwb-debug] bd argv trace") {
+	if !strings.Contains(gotStderr, "[taskmgr-ui-debug] bd argv trace") {
 		t.Fatalf("expected debug message with prefix, got %q", gotStderr)
 	}
 	if !strings.Contains(gotStderr, "project_root=/tmp/project-b") || !strings.Contains(gotStderr, "build_version=1.2.3") {
@@ -213,7 +213,7 @@ func TestManagerInfoLogsMirrorToStderrWithDebugPrefixWhenDebugEnabled(t *testing
 	m.Component("startup").Info("resolved config path", "path", "/tmp/cfg.yaml")
 
 	gotStderr := stderr.String()
-	if !strings.Contains(gotStderr, "[bwb-debug] resolved config path") || !strings.Contains(gotStderr, "path=/tmp/cfg.yaml") {
+	if !strings.Contains(gotStderr, "[taskmgr-ui-debug] resolved config path") || !strings.Contains(gotStderr, "path=/tmp/cfg.yaml") {
 		t.Fatalf("expected info message with debug prefix, got %q", gotStderr)
 	}
 
@@ -242,7 +242,7 @@ func TestForcedRotationProducesRotatedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildPersistentSink returned error: %v", err)
 	}
-	activeLogName := filepath.Base(logPath) // bwb-rottest1.log
+	activeLogName := filepath.Base(logPath) // taskmgr-ui-rottest1.log
 	// Close the sink and wait for lumberjack's background compression goroutine
 	// to finish before t.TempDir cleanup removes the directory. lumberjack.Close
 	// only closes the active log file; it does not drain the mill goroutine that
@@ -550,13 +550,13 @@ func TestPruneStaleLogFiles(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	bwbDir := filepath.Join(stateDir, stateDirName)
-	if err := os.MkdirAll(bwbDir, 0o755); err != nil {
+	appDir := filepath.Join(stateDir, stateDirName)
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
 	writeFile := func(name string) string {
-		p := filepath.Join(bwbDir, name)
+		p := filepath.Join(appDir, name)
 		if err := os.WriteFile(p, []byte("log"), 0o644); err != nil {
 			t.Fatalf("WriteFile %q: %v", name, err)
 		}
@@ -574,10 +574,10 @@ func TestPruneStaleLogFiles(t *testing.T) {
 	staleAge := time.Duration(rotationMaxAgeDays+1) * 24 * time.Hour
 	freshAge := time.Duration(rotationMaxAgeDays-1) * 24 * time.Hour
 
-	staleA := writeFile("bwb-stale1.log")
-	staleB := writeFile("bwb-stale2.log")
-	freshFile := writeFile("bwb-fresh.log")
-	currentFile := writeFile("bwb-current.log")
+	staleA := writeFile("taskmgr-ui-stale1.log")
+	staleB := writeFile("taskmgr-ui-stale2.log")
+	freshFile := writeFile("taskmgr-ui-fresh.log")
+	currentFile := writeFile("taskmgr-ui-current.log")
 	unrelatedFile := writeFile("other-tool.log") // must not be touched
 
 	setMtime(staleA, staleAge)
@@ -586,16 +586,16 @@ func TestPruneStaleLogFiles(t *testing.T) {
 	setMtime(currentFile, staleAge) // current file is old, but must be kept
 	setMtime(unrelatedFile, staleAge)
 
-	pruneStaleLogFiles(bwbDir, currentFile)
+	pruneStaleLogFiles(appDir, currentFile)
 
-	// Stale bwb-*.log files must be removed.
+	// Stale taskmgr-ui-*.log files must be removed.
 	for _, p := range []string{staleA, staleB} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Errorf("expected stale file %q to be removed, stat err: %v", p, err)
 		}
 	}
 
-	// Fresh bwb-*.log file must be kept.
+	// Fresh taskmgr-ui-*.log file must be kept.
 	if _, err := os.Stat(freshFile); err != nil {
 		t.Errorf("expected fresh file %q to be kept, stat err: %v", freshFile, err)
 	}
@@ -605,7 +605,7 @@ func TestPruneStaleLogFiles(t *testing.T) {
 		t.Errorf("expected current session file %q to be kept, stat err: %v", currentFile, err)
 	}
 
-	// Unrelated file (does not match bwb-*.log glob) must be kept.
+	// Unrelated file (does not match taskmgr-ui-*.log glob) must be kept.
 	if _, err := os.Stat(unrelatedFile); err != nil {
 		t.Errorf("expected unrelated file %q to be kept, stat err: %v", unrelatedFile, err)
 	}
@@ -657,11 +657,11 @@ func decodeJSONLine(t *testing.T, line string) map[string]any {
 //
 // Rotation race mechanism (shared-file case):
 //
-//	writer A: size > MaxSize → rotate: close(bwb.log) rename→bwb-T1.log open new bwb.log
-//	writer B: size > MaxSize → rotate: close(bwb.log) rename→bwb-T2.log (renames A's new file!)
-//	writer A: writes partial JSON to bwb-T2.log (now orphaned/renamed away)
-//	writer B: opens new bwb.log, writes independent records
-//	→ bwb-T2.log (or bwb.log) now contains a split record from A
+//	writer A: size > MaxSize → rotate: close(taskmgr-ui.log) rename→taskmgr-ui-T1.log open new taskmgr-ui.log
+//	writer B: size > MaxSize → rotate: close(taskmgr-ui.log) rename→taskmgr-ui-T2.log (renames A's new file!)
+//	writer A: writes partial JSON to taskmgr-ui-T2.log (now orphaned/renamed away)
+//	writer B: opens new taskmgr-ui.log, writes independent records
+//	→ taskmgr-ui-T2.log (or taskmgr-ui.log) now contains a split record from A
 func TestConcurrentWritersProduceNoTornRecords(t *testing.T) {
 	t.Parallel()
 
@@ -701,8 +701,8 @@ func TestConcurrentWritersProduceNoTornRecords(t *testing.T) {
 			for _, m := range managers {
 				_ = m.Close()
 			}
-			bwbDir := filepath.Join(stateDir, stateDirName)
-			waitForLumberjackMill(t, bwbDir, 15*time.Second)
+			appDir := filepath.Join(stateDir, stateDirName)
+			waitForLumberjackMill(t, appDir, 15*time.Second)
 		})
 
 		var wg sync.WaitGroup
@@ -727,9 +727,9 @@ func TestConcurrentWritersProduceNoTornRecords(t *testing.T) {
 
 		// Verify rotation actually occurred: each writer should have produced at
 		// least 1.25 MB, triggering at least one rotation of the 1 MB MaxSize sink.
-		bwbDir := filepath.Join(stateDir, stateDirName)
-		allEntries, _ := os.ReadDir(bwbDir)
-		t.Logf("PerProcessFiles: files in bwb dir after writes: %v", func() []string {
+		appDir := filepath.Join(stateDir, stateDirName)
+		allEntries, _ := os.ReadDir(appDir)
+		t.Logf("PerProcessFiles: files in taskmgr-ui dir after writes: %v", func() []string {
 			names := make([]string, 0, len(allEntries))
 			for _, e := range allEntries {
 				info, _ := e.Info()
@@ -773,7 +773,7 @@ func TestConcurrentWritersProduceNoTornRecords(t *testing.T) {
 		t.Parallel()
 
 		stateDir := t.TempDir()
-		sharedPath := filepath.Join(stateDir, "shared-bwb.log")
+		sharedPath := filepath.Join(stateDir, "shared-taskmgr-ui.log")
 
 		sinks := make([]*lumberjack.Logger, numWriters)
 		for i := range sinks {

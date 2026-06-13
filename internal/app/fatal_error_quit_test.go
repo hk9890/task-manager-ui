@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // These tests pin the fatal-error screen quit affordances surfaced by
@@ -34,7 +34,7 @@ func enterFatalErrorState(t *testing.T) Model {
 	m := mustNewModel(t, services)
 
 	hc := startupHealthCheckMsg{
-		err: domain.RepositoryError{Code: domain.ErrorCodeNoDatabaseFound, Message: "no beads project here"},
+		err: domain.RepositoryError{Code: domain.ErrorCodeNoDatabaseFound, Message: "no task-manager store here"},
 	}
 	next, _ := m.Update(hc)
 	m = next.(Model)

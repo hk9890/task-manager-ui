@@ -10,16 +10,16 @@ go = "1.26.3"
 CGO_ENABLED = "0"
 
 [tasks.build]
-description = "Build the bwb binary"
+description = "Build the taskmgr-ui binary"
 run = """
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 go build -ldflags "-s -w \
-  -X github.com/hk9890/beads-workbench/internal/version.Version=$VERSION \
-  -X github.com/hk9890/beads-workbench/internal/version.Commit=$COMMIT \
-  -X github.com/hk9890/beads-workbench/internal/version.Date=$DATE" \
-  ./cmd/bwb
+  -X github.com/hk9890/task-manager-ui/internal/version.Version=$VERSION \
+  -X github.com/hk9890/task-manager-ui/internal/version.Commit=$COMMIT \
+  -X github.com/hk9890/task-manager-ui/internal/version.Date=$DATE" \
+  ./cmd/taskmgr-ui
 """
 
 [tasks.fmt]
@@ -36,7 +36,7 @@ run = "golangci-lint run --timeout=5m"
 
 [tasks.guardrails]
 description = "Architecture guardrails (fast)"
-run = "go test ./cmd/bwb -run TestArchitectureGuardrails"
+run = "go test ./cmd/taskmgr-ui -run TestArchitectureGuardrails"
 
 [tasks.vuln]
 description = "Run govulncheck against the module (CVEs in deps + stdlib)"
@@ -103,11 +103,11 @@ depends = ["vet", "lint", "guardrails", "test", "test:integration"]
 [tasks."fmt:check"]
 description = "Check formatting (goimports + go mod tidy)"
 run = """
-OUT=$(goimports -local github.com/hk9890/beads-workbench -l cmd internal)
+OUT=$(goimports -local github.com/hk9890/task-manager-ui -l cmd internal)
 if [ -n "$OUT" ]; then
   echo "Files not formatted:"
   echo "$OUT"
-  echo "Run: goimports -local github.com/hk9890/beads-workbench -w cmd internal"
+  echo "Run: goimports -local github.com/hk9890/task-manager-ui -w cmd internal"
   exit 1
 fi
 go mod tidy
@@ -122,17 +122,17 @@ description = "Install repo git hooks (one-time setup)"
 dir = "{{config_root}}"
 run = "git config core.hooksPath scripts/git-hooks"
 
-[tasks.bwb]
-description = "Build bwb and run interactively against the current project's .tasks store"
+[tasks.taskmgr-ui]
+description = "Build taskmgr-ui and run interactively against the current project's .tasks store"
 dir = "{{config_root}}"
 run = """
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 go build -ldflags "-s -w \
-  -X github.com/hk9890/beads-workbench/internal/version.Version=$VERSION \
-  -X github.com/hk9890/beads-workbench/internal/version.Commit=$COMMIT \
-  -X github.com/hk9890/beads-workbench/internal/version.Date=$DATE" \
-  -o /tmp/bwb ./cmd/bwb
-/tmp/bwb
+  -X github.com/hk9890/task-manager-ui/internal/version.Version=$VERSION \
+  -X github.com/hk9890/task-manager-ui/internal/version.Commit=$COMMIT \
+  -X github.com/hk9890/task-manager-ui/internal/version.Date=$DATE" \
+  -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
+/tmp/taskmgr-ui
 """

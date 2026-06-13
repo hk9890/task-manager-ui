@@ -6,10 +6,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	uidetails "github.com/hk9890/beads-workbench/internal/ui/details"
-	"github.com/hk9890/beads-workbench/internal/ui/scroll"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 )
 
 // Model is the shell-owned standalone detail presentation state.

@@ -1,16 +1,16 @@
 package board
 
 import (
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // FeedTestData drives a single dashboard result message into m, simulating a
 // completed board load with minimal data. It is the exported equivalent of
-// feedDashboard from render_regression_test.go and is used by the bwb-smoke
+// feedDashboard from render_regression_test.go and is used by the taskmgr-ui-smoke
 // render check to populate all 4 columns without a live repository.
 //
-// This function is intended for use by the bwb-smoke binary and integration
+// This function is intended for use by the taskmgr-ui-smoke binary and integration
 // tests only; it bypasses the normal async dispatch path.
 func FeedTestData(m *Model) {
 	_ = m.Update(dashboardLoadedMsg{data: repository.DashboardData{

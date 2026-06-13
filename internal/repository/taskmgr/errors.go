@@ -5,8 +5,8 @@ import (
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 func repoError(code domain.ErrorCode, op, message string, cause error) domain.RepositoryError {

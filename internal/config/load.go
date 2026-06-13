@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const configRelativePath = "bwb/config.yaml"
+const configRelativePath = "taskmgr-ui/config.yaml"
 
 type LoadOptions struct {
 	Path            string
@@ -26,7 +26,7 @@ type Result struct {
 }
 
 // Load resolves the config path via os.UserConfigDir, reads an optional
-// bwb/config.yaml file, merges file-backed values over defaults, and returns
+// taskmgr-ui/config.yaml file, merges file-backed values over defaults, and returns
 // any non-fatal parse warnings.
 func Load() (Result, error) {
 	return LoadWithOptions(LoadOptions{})

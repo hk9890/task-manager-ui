@@ -10,15 +10,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	"github.com/hk9890/beads-workbench/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 func assertGoldenNormalized(t *testing.T, output []byte, name string) {
 	t.Helper()
 
-	if os.Getenv("BWB_UPDATE_GOLDEN") == "1" {
+	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
 		path := filepath.Join("testdata", name)
 		if err := os.WriteFile(path, output, 0o600); err != nil {
 			t.Fatalf("write golden %s: %v", path, err)

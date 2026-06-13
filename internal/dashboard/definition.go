@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // Provider loads dashboard definitions independently from board rendering.

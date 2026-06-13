@@ -6,7 +6,7 @@ import (
 )
 
 // TestSecurityDescriptionCannotHijackLabels verifies that a description body
-// containing a forged BWB:FIELD:LABELS:BEGIN/END block does not overwrite the
+// containing a forged TASKMGRUI:FIELD:LABELS:BEGIN/END block does not overwrite the
 // real labels field that appears later in the document.
 func TestSecurityDescriptionCannotHijackLabels(t *testing.T) {
 	t.Parallel()
@@ -34,15 +34,15 @@ func TestSecurityDescriptionCannotHijackLabels(t *testing.T) {
 
 	_, err := ParseIssueEditDocument(tampered)
 	if err == nil {
-		t.Fatalf("expected parse error when description contains forged BWB:FIELD:LABELS markers, got nil")
+		t.Fatalf("expected parse error when description contains forged TASKMGRUI:FIELD:LABELS markers, got nil")
 	}
-	if !strings.Contains(err.Error(), "BWB:") {
-		t.Fatalf("expected error to reference BWB: token, got: %v", err)
+	if !strings.Contains(err.Error(), "TASKMGRUI:") {
+		t.Fatalf("expected error to reference TASKMGRUI: token, got: %v", err)
 	}
 }
 
 // TestSecurityDescriptionCannotHijackStatus verifies that a description body
-// containing a forged BWB:FIELD:STATUS:BEGIN/END block does not overwrite the
+// containing a forged TASKMGRUI:FIELD:STATUS:BEGIN/END block does not overwrite the
 // real status field that appears later in the document.
 func TestSecurityDescriptionCannotHijackStatus(t *testing.T) {
 	t.Parallel()
@@ -67,15 +67,15 @@ func TestSecurityDescriptionCannotHijackStatus(t *testing.T) {
 
 	_, err := ParseIssueEditDocument(tampered)
 	if err == nil {
-		t.Fatalf("expected parse error when description contains forged BWB:FIELD:STATUS markers, got nil")
+		t.Fatalf("expected parse error when description contains forged TASKMGRUI:FIELD:STATUS markers, got nil")
 	}
-	if !strings.Contains(err.Error(), "BWB:") {
-		t.Fatalf("expected error to reference BWB: token, got: %v", err)
+	if !strings.Contains(err.Error(), "TASKMGRUI:") {
+		t.Fatalf("expected error to reference TASKMGRUI: token, got: %v", err)
 	}
 }
 
 // TestSecurityDescriptionContainingEditableEndReturnsExplicitError verifies
-// that a description body containing BWB:EDITABLE:END produces a specific error
+// that a description body containing TASKMGRUI:EDITABLE:END produces a specific error
 // rather than silently truncating the editable block.
 func TestSecurityDescriptionContainingEditableEndReturnsExplicitError(t *testing.T) {
 	t.Parallel()
@@ -99,26 +99,26 @@ func TestSecurityDescriptionContainingEditableEndReturnsExplicitError(t *testing
 
 	_, err := ParseIssueEditDocument(tampered)
 	if err == nil {
-		t.Fatalf("expected parse error when description contains BWB:EDITABLE:END, got nil")
+		t.Fatalf("expected parse error when description contains TASKMGRUI:EDITABLE:END, got nil")
 	}
 
 	// The error must be specific — it should not be a generic "missing marker"
 	// but should indicate that multiple EDITABLE:END markers were detected or
-	// that the description contains forbidden BWB: tokens.
+	// that the description contains forbidden TASKMGRUI: tokens.
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, "BWB:") && !strings.Contains(errMsg, "multiple") {
-		t.Fatalf("expected error to mention BWB: or multiple markers conflict; got: %v", err)
+	if !strings.Contains(errMsg, "TASKMGRUI:") && !strings.Contains(errMsg, "multiple") {
+		t.Fatalf("expected error to mention TASKMGRUI: or multiple markers conflict; got: %v", err)
 	}
 }
 
-// TestSecurityRoundTripFailsClosedForDescriptionWithBWBToken is a round-trip
+// TestSecurityRoundTripFailsClosedForDescriptionWithTaskmgrUIToken is a round-trip
 // property test: if the rendered document's description field contains any
-// BWB: token (introduced after rendering, e.g. by operator edit), parsing must
+// TASKMGRUI: token (introduced after rendering, e.g. by operator edit), parsing must
 // fail closed — never silently return a result.
-func TestSecurityRoundTripFailsClosedForDescriptionWithBWBToken(t *testing.T) {
+func TestSecurityRoundTripFailsClosedForDescriptionWithTaskmgrUIToken(t *testing.T) {
 	t.Parallel()
 
-	bwbTokens := []struct {
+	markerTokens := []struct {
 		name  string
 		token string
 	}{
@@ -134,10 +134,10 @@ func TestSecurityRoundTripFailsClosedForDescriptionWithBWBToken(t *testing.T) {
 		{"FIELD:PRIORITY:END", issueEditFieldPriorityEnd},
 		{"FIELD:ASSIGNEE:BEGIN", issueEditFieldAssigneeBegin},
 		{"FIELD:ASSIGNEE:END", issueEditFieldAssigneeEnd},
-		{"bare BWB: prefix", "<!-- BWB:CUSTOM:WHATEVER -->"},
+		{"bare TASKMGRUI: prefix", "<!-- TASKMGRUI:CUSTOM:WHATEVER -->"},
 	}
 
-	for _, tc := range bwbTokens {
+	for _, tc := range markerTokens {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

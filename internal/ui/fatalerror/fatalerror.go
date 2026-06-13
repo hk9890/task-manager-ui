@@ -4,7 +4,7 @@ package fatalerror
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hk9890/beads-workbench/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // View renders a centered full-screen error screen with the given title and body.

@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/config"
 )
 
 // These tests pin documented help-modal behavior surfaced by the

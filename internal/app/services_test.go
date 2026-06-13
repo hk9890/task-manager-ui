@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 func TestNewServicesWithLauncherRequiresDependencies(t *testing.T) {
@@ -35,7 +35,7 @@ func TestNewServicesBuildsLauncherFromConfigDefinitions(t *testing.T) {
 			Action:  "editor",
 			Command: "opencode",
 			Args:    []string{"run", "--issue", "{{issue.id}}"},
-			Env:     []string{"BWB_ISSUE_ID={{issue.id}}", "BWB_PROJECT_ROOT={{project.root}}"},
+			Env:     []string{"TASKMGR_UI_ISSUE_ID={{issue.id}}", "TASKMGR_UI_PROJECT_ROOT={{project.root}}"},
 			WorkDir: "{{project.root}}",
 		},
 	}
@@ -70,8 +70,8 @@ func TestCleanStaleTempFiles(t *testing.T) {
 	}
 
 	now := time.Now()
-	stale := createFile("bwb-issue-abc123-001.md", now.Add(-25*time.Hour))
-	recent := createFile("bwb-issue-def456-002.md", now.Add(-1*time.Hour))
+	stale := createFile("taskmgr-ui-issue-abc123-001.md", now.Add(-25*time.Hour))
+	recent := createFile("taskmgr-ui-issue-def456-002.md", now.Add(-1*time.Hour))
 	unrelated := createFile("unrelated.md", now.Add(-48*time.Hour))
 
 	// Override os.TempDir by patching: instead, call the internal helper
@@ -89,7 +89,7 @@ func TestCleanStaleTempFiles(t *testing.T) {
 		t.Errorf("expected recent file %q to still exist: %v", recent, err)
 	}
 
-	// Unrelated file (no bwb-issue prefix) must not be touched; Glob won't match it.
+	// Unrelated file (no taskmgr-ui-issue prefix) must not be touched; Glob won't match it.
 	if _, err := os.Stat(unrelated); err != nil {
 		t.Errorf("expected unrelated file %q to still exist: %v", unrelated, err)
 	}
