@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/hk9890/beads-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/hk9890/beads-workbench/actions/workflows/ci.yml)
 
-A standalone terminal UI for browsing and updating beads issues.
+A standalone terminal UI for browsing and updating task-manager issues.
 
 ## Repository Identity
 
@@ -15,14 +15,16 @@ A standalone terminal UI for browsing and updating beads issues.
 
 - [mise](https://mise.jdx.dev/) — provisions the pinned Go toolchain and dev
   tools from `.mise.toml`, so a separate Go install is not required.
-- `bd` (the beads issue tracker CLI) — required at runtime; `bwb` is a thin TUI
-  over `bd`.
+
+No external CLI is required at runtime. `bwb` reads and writes issues in-process
+via the [task-manager](https://github.com/hk9890/task-manager) Go SDK
+(`github.com/hk9890/task-manager/sdk/tasks`), pinned in `go.mod`.
 
 ### Build and run
 
 ```bash
 mise run build                    # build the bwb binary
-bwb --cwd /path/to/beads-project  # run against a directory containing a .beads/ repo
+bwb --cwd /path/to/project        # run against a directory containing a .tasks/ store
 ```
 
 ## CLI Surface
@@ -35,7 +37,7 @@ For the full flag list, exit codes, config-path behavior, and debug contract, se
 Common examples:
 
 ```bash
-bwb --cwd /path/to/beads-project
+bwb --cwd /path/to/project
 bwb --config "$HOME/.config/bwb/config.yaml" --print-config
 bwb --check-config
 ```

@@ -85,6 +85,9 @@ const (
 	SearchResultSourceBDListFallback SearchResultSource = "bd_list_fallback"
 	SearchResultSourceReadyFilter    SearchResultSource = "bd_ready_filtered"
 	SearchResultSourceBlockedFilter  SearchResultSource = "bd_blocked_filtered"
+	// SearchResultSourceTaskmgrFind identifies a page produced by the in-process
+	// task-manager backend via Store.FindPage.
+	SearchResultSourceTaskmgrFind SearchResultSource = "taskmgr_find"
 )
 
 // SearchResultMetadata carries operator-facing page metadata.

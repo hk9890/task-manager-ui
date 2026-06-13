@@ -3,7 +3,8 @@
 ## Current diagnostics surface
 
 Runtime diagnostics are now centralized through `internal/logging` and used by
-`cmd/bwb/main.go` plus `internal/bd/runner.go`.
+`cmd/bwb/main.go` plus the repository backend (the validating decorator in
+`internal/repository/validating.go`).
 
 - `stdout` remains the success surface for non-interactive `--help`, `--version`,
   `--print-config`, and `--check-config`
@@ -26,7 +27,7 @@ Implemented behavior:
   - each BWB process writes to its own file named after its `session_id`, so
     concurrent processes never share a file or its rotation state
   - this sink is user/machine scoped and the directory can contain log files
-    from multiple sessions, beads projects, and multiple BWB builds
+    from multiple sessions, projects, and multiple BWB builds
 - per-run `session_id` attached to structured records
 - root provenance fields on every record:
   - `project_root`
@@ -52,8 +53,8 @@ Structured records include at least:
 - `session_id`
 - `project_root`
 - `build_version`
-- component-specific fields such as `component`, `argv`, `operation`,
-  `exit_code`, and `duration_ms`
+- component-specific fields such as `component` (for example `startup` or
+  `validating`)
 
 To attribute a session safely in a collected set of log files, use `session_id`
 together with `project_root` and `build_version`. Startup and repository records
@@ -61,142 +62,48 @@ both inherit those root attributes automatically.
 
 ## `--debug` coverage
 
-`--debug` mirrors two categories of machine-visible diagnostics to `stderr`:
+`--debug` mirrors machine-visible startup diagnostics to `stderr`:
 
 - startup resolution lines from `cmd/bwb/main.go` for both interactive and
   non-interactive startup paths that load config
   - resolved config path
   - resolved cwd
   - auto-refresh enabled/disabled
-- `bd` CLI execution traces from `internal/bd/runner.go`
-  - operation name
-  - full argv
-  - exit code
-  - duration in milliseconds
+  - repo backend (`repo` and `repo_file`)
 
-Each `bd` execution trace ("bd command finished") is logged at `INFO` when
-the command succeeds and at `WARN` when it exits non-zero (the `-1` sentinel
-exit code is used for processes that failed to execute). Because `WARN`
-records mirror to `stderr`, a failing `bd` subprocess is operator-visible
-without `--debug`.
+The repository backend is in-process (the task-manager Go SDK,
+`github.com/hk9890/task-manager/sdk/tasks`); there is no external subprocess in
+the product data path and therefore no per-command argv/exit-code/duration
+execution trace. Repository diagnostics are limited to contract-violation
+warnings emitted by the validating decorator (see below).
 
-The argv-level in-process read cache (previously keyed on resolved argv and
-the `.beads/last-touched` mtime token) was removed in 8pxi.7. All reads now
-go through the bd subprocess. The `"bd command cache hit"` log line is no
-longer emitted; all repository activity appears as `"bd command finished"`.
+### Repository contract violations
 
-### Dashboard refresh performance analysis
+The validating decorator (`internal/repository/validating.go`) wraps the
+in-process backend and logs structural-invariant violations at `WARN` under the
+`validating` component:
 
-Use `scripts/analyze_dashboard_perf.py` for structured analysis of the
-repository log stream. The script parses every `bd-<session>.log` under the log
-directory and reports cold-load wall time, miss-latency distribution
-(p50/p95/max), and a per-call chronological trace. It groups by project so a
-single repo's perf can be compared against itself over time. Hit-rate columns
-in the output will always show 0 hits for sessions generated after 8pxi.7
-(the argv cache is gone); old log files from before 8pxi.7 still report
-non-zero hit counts.
+- WARN `"repository contract violation"` — carries the offending `method`, the
+  violated `rule`, and a `sample` of the bad value. The call is never failed;
+  the inner result is returned unchanged. Because `WARN` records mirror to
+  `stderr`, a contract violation is operator-visible even without `--debug`.
 
-```bash
-# list projects with sessions (and how many) — the discovery view
-scripts/analyze_dashboard_perf.py
-
-# aggregate every session for one project (substring match on project_root)
-scripts/analyze_dashboard_perf.py --project beads-workbench
-
-# aggregate every project (cross-project trends, mostly noisy)
-scripts/analyze_dashboard_perf.py --all
-
-# single-session deep-dive (prefix match on session_id)
-scripts/analyze_dashboard_perf.py --session fb6fed78
-
-# override the log directory (CI artifact dirs, captured operator bundles)
-scripts/analyze_dashboard_perf.py --log-dir /path/to/captured/logs --all
-```
-
-Cold-load wall time is computed as the wall time from session start to the
-completion of the last call in the initial burst (gap > 1.5s between
-consecutive completion timestamps ends the burst). This handles the common
-interleaving where `bd show` lands between the board's 5-command fan-out and
-the second auto-refresh.
-
-Note: "gap" is measured between consecutive *completion* timestamps (each
-`"bd command finished"` record is written after the subprocess returns).
-Concurrent fan-out calls both complete at roughly the same wall time and
-therefore have a near-zero gap; they are grouped together as expected. This
-metric captures time-to-first-idle-gap — startup plus any uninterrupted
-leading activity — rather than pure cold-start latency.
-
-A quick count of bd subprocess calls (all misses since the argv cache was
-removed in 8pxi.7):
-
-```bash
-miss=$(grep -c "bd command finished" ~/.local/state/bwb/bwb-<id>.log)
-echo "bd calls this session: $miss"
-```
+In a healthy session no repository records are emitted at all — the in-process
+SDK is fast and the validating decorator is silent unless it detects a
+malformed return value.
 
 The startup debug stream also prints the run `session_id` once so operators can
 correlate stderr output with structured log records. This applies equally to
 interactive startup and startup-only commands such as `--check-config` and
 `--print-config`.
 
-## Caching backend diagnostics
-
-The caching repository backend (opt-in via `--repo caching`; not the default)
-emits structured log messages via the centralized `internal/logging` sink at the
-`caching` component.
-Operators can grep these messages in the persistent JSON Lines log to diagnose
-startup, hydration, and persistence issues.
-
-Startup and shutdown log lines (emitted by `constructRepository` in `cmd/bwb/main.go`):
-
-- INFO `"Using caching repository backend; --repo beads disables"` — emitted on
-  every caching-mode start after `Hydrate` and `Start` succeed; confirms backend
-  selection. Carries the `cache_file` field with the resolved path.
-- WARN `"cache dir creation failed; session will run without persistence"` —
-  `os.MkdirAll` on the cache file's parent directory failed. The session continues
-  but cache data will not be persisted. Check `--repo-file` parent directory
-  permissions; the `path` field in the log record shows the attempted path.
-- WARN `"cache hydrate failed; starting cold"` — `Hydrate` returned a non-nil
-  error other than missing-file or schema-mismatch (both of which are silent
-  expected conditions; see below). The session continues from a cold start.
-  The `load_path` and `write_path` fields identify the files involved.
-- WARN `"cache save on shutdown failed"` — the final `SaveNow` defer in the
-  cleanup function returned an error. Check disk space and write permissions on
-  the cache path. The `err` field carries the underlying error.
-
-Cache resolver log lines (emitted by `findLatestProjectCacheFile` in
-`cmd/bwb/cache_resolver.go` while scanning prior-session manifests):
-
-- WARN `"cache resolver: skipping unreadable manifest"` — a manifest file was
-  found during the prior-session scan but could not be loaded (corrupt or
-  permission error). The resolver skips it and continues to the next candidate.
-  The `path` and `err` fields identify the file and the error.
-- WARN `"cache resolver: skipping manifest with wrong schema version"` — a manifest
-  was readable but carries a schema version that does not match the current
-  binary. The resolver skips it. The `path` and `schema_version` fields are
-  present in the log record.
-
-Silent-by-design conditions:
-
-- Schema-mismatch (`repository.ErrSchemaMismatch`) and missing-file
-  (`fs.ErrNotExist`) errors during `Hydrate` degrade silently to a cold start.
-  No log line is emitted because both are expected on first-ever use or after a
-  schema version bump.
-- `vcStatusFunc` errors in `RefreshIfChanged` (background tick) are silently
-  discarded. A failed tick does not corrupt cache state; the next tick may
-  succeed. No log line is emitted today; in-code TODO notes logging is planned
-  for a future ticket.
-- Periodic `SaveNow` errors in the background `tickLoop` are silently discarded
-  (`_ = c.SaveNow()`); in-code TODO notes logging is planned for a future
-  ticket. The final shutdown save (above) does log on failure.
-
 ## Capture commands
 
 Use stderr capture when you need reproducible operator-facing evidence:
 
 ```bash
-bwb --cwd /path/to/beads-project --debug 2> /tmp/bwb-debug.log
-bwb --cwd /path/to/beads-project --debug --check-config 2> /tmp/bwb-debug-check.log
+bwb --cwd /path/to/project --debug 2> /tmp/bwb-debug.log
+bwb --cwd /path/to/project --debug --check-config 2> /tmp/bwb-debug-check.log
 ```
 
 Use the persistent JSON Lines log when you need durable machine-readable
@@ -236,11 +143,9 @@ Effective capture destinations therefore include:
 
 ## Relevant code paths
 
-- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and caching backend construction (`constructRepository`)
-- `cmd/bwb/cache_resolver.go` — prior-session cache file discovery; emits WARN records for unreadable or schema-mismatched manifests
-- `internal/repository/caching/caching.go` — `CachingRepository` decorator; background tick loop and persistence methods (`Hydrate`, `SaveNow`)
-- `internal/bd/runner.go` — structured per-command `bd` execution traces
-- `internal/bd/runner_test.go` — execution trace coverage for argv/exit code/duration logging
+- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New` → `repository.NewValidating`)
+- `internal/repository/taskmgr/` — in-process task-manager backend (the production repository); behavior tests live alongside it
+- `internal/repository/validating.go` — validating decorator; emits `"repository contract violation"` WARN records under the `validating` component
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
 
@@ -250,9 +155,8 @@ For user-visible runtime capture rather than stderr diagnostics, use the
 verification tooling documented in `docs/RUNTIME_UI_VERIFICATION.md`:
 
 - `scripts/capture_bwb_screen.py`
-- `scripts/verify_bwb_state_flow.py`
 
-Those scripts capture rendered TUI state; they are not part of the logging
+That script captures rendered TUI state; it is not part of the logging
 surface.
 
 ## Current limitations
@@ -264,4 +168,4 @@ The active runtime path still does not provide:
 - tracing/span export
 
 Update this file when `internal/logging/`, `cmd/bwb/main.go`, or
-`internal/bd/runner.go` changes the diagnostics contract.
+`internal/repository/validating.go` changes the diagnostics contract.

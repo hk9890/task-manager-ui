@@ -2,48 +2,34 @@
 
 Use this runbook when a change touches user-visible runtime behavior (layout, navigation, search, startup shell UX, editor/launcher flows).
 
-## Pre-release data-consistency checks
+## Pre-release rendering checks
 
-Run these before tagging any release. They verify that what `bwb` renders on screen matches the live `bd` database.
+Run these before tagging any release. They guard against visible UI artifacts.
 
-### Parity test packages
+### Render-regression test packages
 
 | Package | What it verifies |
 |---------|-----------------|
-| `internal/dashboard/parity` | **Count parity** — column totals (NotReady/Ready/InProgress/Done) match `bd count`; **sort parity** — row order in each column matches `bd ready`, `bd blocked`, `bd list`. |
-| `internal/mode/search/parity` | Search result count and order match `bd search`. |
 | `internal/mode/board/render_regression_test.go` | Frame-stacking regression guard — confirms expected border count per rendered board frame. |
 | `internal/mode/search/render_regression_test.go` | Frame-stacking regression guard for search mode. |
 | `internal/logging/render_regression_test.go` | Log-bleed regression guard — confirms log output does not bleed into rendered frames. |
 
+The `taskmgr` repository backend has its own behavior tests in `internal/repository/taskmgr` that confirm the in-process reads (counts, sort order, search) match the task-manager SDK.
+
 ### Commands
 
 ```bash
-# Fast fixture-backed run (no live DB required, always available):
+# Fast fixture-backed run (no live store required, always available):
 mise run test:integration
-
-# Parity against this repo's live beads DB (~30 s):
-BWB_PARITY_THIS_REPO=1 mise run test:integration
-
-# Parity against an arbitrary external beads DB (read-only):
-BWB_PARITY_EXTERNAL_PATH=/path/to/external/repo mise run test:integration
-
-# Smoke check — builds bwb-smoke and runs all checks against this repo; prints PASS/FAIL report:
-mise run smoke
-
-# Smoke check against an arbitrary external repo (override via env var):
-BWB_SMOKE_DIR=/path/to/external/repo mise run smoke
 ```
 
 ### Release-blocking vs advisory
 
 | Check | Failure means | Action |
 |-------|--------------|--------|
-| count parity (dashboard) | Wrong numbers on screen | **Release blocker** |
-| sort parity (dashboard) | Wrong row order on screen | **Release blocker** |
-| search parity | Wrong search results on screen | **Release blocker** |
 | render regression (board/search/logging) | Visible UI artifact — frame bleed or corrupt borders | **Release blocker** |
-| `t.Logf` diagnostic with PASS status | Advisory only — e.g. `ClosedAtDescPreservedOnRealData` logs diagnostic counts but does not fail | Review the diagnostic; no hard block |
+| `taskmgr` backend behavior tests | Wrong numbers, order, or search results on screen | **Release blocker** |
+| `t.Logf` diagnostic with PASS status | Advisory only — logs diagnostic counts but does not fail | Review the diagnostic; no hard block |
 
 Any test that prints a diagnostic message but ends in PASS is advisory: read the message, judge whether follow-up is needed, but do not hold the release for it.
 
@@ -59,14 +45,19 @@ This is the default quick proof for runtime behavior during implementation. See 
 
 ## 2) Fast manual built-binary review
 
-Run the real app against the embedded fixture:
+Seed a throwaway `.tasks` store with the `taskmgr` CLI, then run the real app against it. `taskmgr` is the default `--repo` backend, so no flag is needed.
 
 ```bash
 go build -o /tmp/bwb ./cmd/bwb
 repoPath="$(mktemp -d)"
-sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
-(cd "$repoPath" && BD_NON_INTERACTIVE=1 /tmp/bwb)
+( cd "$repoPath" \
+  && taskmgr init --prefix bwf \
+  && taskmgr create --title "Ready issue" \
+  && taskmgr create --title "In-progress issue" --type bug )
+(cd "$repoPath" && /tmp/bwb)
 ```
+
+`taskmgr create --json` prints the new ID (e.g. `bwf-0001`) if you need to reference it in a later step.
 
 ### Ad-hoc PTY recipes (copy/paste)
 
@@ -92,7 +83,7 @@ Legacy `--steps delay:key,...` still works, but `--step` wait-based flows are th
 
 ```bash
 repoPath="$(mktemp -d)"
-sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
+( cd "$repoPath" && taskmgr init --prefix bwf && taskmgr create --title "Ready issue" )
 python3 scripts/capture_bwb_screen.py \
   --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 \
   --step 'wait-for-text:Ready:3000' \
@@ -103,45 +94,45 @@ python3 scripts/capture_bwb_screen.py \
   --step 'send-key:ESC' \
   --step 'wait-for-text:Board:2000' \
   --step 'send-key:CTRL+Q' \
-  -- -- env BD_NON_INTERACTIVE=1 /tmp/bwb
+  -- -- /tmp/bwb
 ```
 
-#### B) Mutation save check (wrapper + before/after)
+#### B) Mutation save check (before/after store assertion)
 
-`scripts/verify_bwb_state_flow.py` wraps capture + before/after `bd show --json` assertions.
+Capture the mutation flow, then compare the issue state with `taskmgr show --json` before and after. The `--cwd` store seeded above persists between the capture run and the assertion.
 
 ```bash
 repoPath="$(mktemp -d)"
-sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
-python3 scripts/verify_bwb_state_flow.py \
-  --cwd "$repoPath" \
-  --issue bwf-1 \
-  --flow mutation-save \
-  --app-command env BD_NON_INTERACTIVE=1 /tmp/bwb
+( cd "$repoPath" && taskmgr init --prefix bwf && taskmgr create --title "Ready issue" )
+
+before="$( (cd "$repoPath" && taskmgr show bwf-0001 --json) )"
+
+# Insert the mode-specific edit + save keystrokes as extra --step lines
+# between opening Detail and returning to Board.
+python3 scripts/capture_bwb_screen.py \
+  --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 \
+  --step 'wait-for-text:Selected::3000' \
+  --step 'send-key:ENTER' \
+  --step 'wait-for-text:Detail::3000' \
+  --step 'wait-for-text:Board:2000' \
+  --step 'send-key:CTRL+Q' \
+  -- -- /tmp/bwb
+
+after="$( (cd "$repoPath" && taskmgr show bwf-0001 --json) )"
+[ "$before" != "$after" ] && echo "changed: true" || echo "changed: false"
 ```
 
-Expected: JSON output includes `"ok": true` and `"changed": true`.
+Expected for a save flow: the `before`/`after` JSON differ (`changed: true`).
 
-#### C) Mutation cancel / no-save check (wrapper)
+#### C) Mutation cancel / no-save check
 
-```bash
-repoPath="$(mktemp -d)"
-sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
-python3 scripts/verify_bwb_state_flow.py \
-  --cwd "$repoPath" \
-  --issue bwf-1 \
-  --flow mutation-cancel \
-  --app-command env BD_NON_INTERACTIVE=1 /tmp/bwb
-```
-
-Expected: JSON output includes `"ok": true` and `"changed": false`.
+Same recipe as B, but drive the cancel path (e.g. `ESC` out of the edit without saving). Expected: `before`/`after` JSON are identical (`changed: false`).
 
 #### D) Common failure/timeout messages
 
 - `step <index> (...) timed out after <N>ms`: a specific wait step did not settle; inspect `steps[*].observed_excerpt` and `failure`.
 - `capture timed out after <Ns>`: global timeout was exceeded; increase `--timeout` for longer flows.
 - `missing command after --`: `capture_bwb_screen.py` did not receive the app command.
-- `--app-command requires a command after --`: `verify_bwb_state_flow.py` got no executable command.
 - `ModuleNotFoundError: No module named 'pyte'`: install `pyte` first (`python3 -m pip install --user pyte`).
 
 ## 3) What to verify in the manual run
@@ -173,15 +164,15 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 **Pre-conditions:**
 
-- Repository has more than 200 closed issues. Both `--repo beads` (against this project) and `--repo caching` satisfy this; the `beads` repo has >600 closed issues.
+- A `.tasks` store with more than 200 closed issues. Seed one with the `taskmgr` CLI (`taskmgr init`, then create + `taskmgr close` enough issues), or point `bwb` at an existing store that already has a large closed total. `taskmgr` is the default backend, so no `--repo` flag is needed.
 - `bwb` is built and on `$PATH` or run via `mise run bwb`.
 
 **Procedure:**
 
 1. Open a terminal and resize it so the height is **40 rows**. Verify with `echo $LINES` or your terminal's title bar. Record the height as `H1`.
-2. Launch `bwb` against a qualifying repo:
+2. Launch `bwb` against a qualifying store (run it from the store's directory, or pass `--cwd`):
    ```
-   mise run bwb -- --repo beads
+   (cd /path/to/store && mise run bwb)
    ```
 3. On the board, locate the **Done** column header. It shows `N of M` where `N` is the number of rows loaded and `M` is the true closed total in the database.
 4. Confirm `N` equals `H1 - 3` (e.g. for a 40-row terminal, `N = 37`). `M` should be the real closed total, e.g. `37 of 679`. Record `N` as `N1` and `M` as `M1`.
@@ -203,7 +194,7 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 - `N` does not change after resize: `loadDashboardCmd` is not passing `sectionItemCapacity()` into `DashboardOptions.ClosedLimit`, or the repository impl is ignoring it. Check `internal/mode/board/model.go` and the relevant repository impl.
 - `N` does not equal `height - 3`: `sectionItemCapacity()` may not be receiving the updated window size — check the `WindowSizeMsg` handler in `internal/mode/board/model.go`.
-- `M` equals `N` after resize: `ClosedTotal` is being computed after the limit slice instead of before. Check `internal/repository/memory/repository.go` and `internal/repository/beads/lean_reads.go`.
+- `M` equals `N` after resize: `ClosedTotal` is being computed after the limit slice instead of before. Check `internal/repository/memory/repository.go` and `internal/repository/taskmgr`.
 
 ## 6) Board and details scroll-window visibility: EnsureVisible (b38b.4)
 
@@ -211,15 +202,15 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 **Pre-conditions:**
 
-- Repository has more than 22 ready issues (so that 30 `j` presses push past the viewport at height=25).
+- A `.tasks` store with more than 22 ready issues (so that 30 `j` presses push past the viewport at height=25). Seed one with `taskmgr init` + repeated `taskmgr create`.
 - `bwb` is built.
 
 **Procedure — board Ready column:**
 
 1. Open a terminal at height=25 (22 usable rows per column after borders).
-2. Launch `bwb` against a qualifying repo (e.g. `/home/hans/dev/github/dtctl-test` which has >89 ready issues):
+2. Launch `bwb` from a qualifying store directory:
    ```
-   (cd /home/hans/dev/github/dtctl-test && BD_NON_INTERACTIVE=1 /tmp/bwb)
+   (cd /path/to/store && /tmp/bwb)
    ```
 3. Move focus to the **Ready** column (press `l` or `h` until the Ready header is highlighted).
 4. Press `j` 30 times.
@@ -255,7 +246,7 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 **Pre-conditions:**
 
-- Repository: `/home/hans/dev/github/dtctl-test` — 89 closed issues at the time of writing, enough to span multiple pagination pages at small terminal heights.
+- A `.tasks` store with roughly 89 closed issues — enough to span multiple pagination pages at small terminal heights. Seed one with the `taskmgr` CLI (`taskmgr init`, then create + `taskmgr close` ~89 issues). The examples below use 89 as the closed total `M`; substitute your store's actual closed count.
 - `bwb` is built: `mise run build` or `go build -o /tmp/bwb ./cmd/bwb`.
 - Terminal height ≤ 30 rows (so the initial load is a small slice, not all 89). Verify with `echo $LINES`.
 
@@ -269,9 +260,9 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 2. Open a terminal at height ≤ 30 rows. Confirm with `echo $LINES`.
 
-3. Launch against the dtctl-test repo:
+3. Launch from the seeded store directory:
    ```bash
-   (cd /home/hans/dev/github/dtctl-test && BD_NON_INTERACTIVE=1 /tmp/bwb)
+   (cd /path/to/store && /tmp/bwb)
    ```
 
 4. Observe the **Done** column header. It should read `N of 89` where `N ≈ height - 3` (e.g. `25 of 89` at height=28). This confirms the initial load is capped and pagination is active.
@@ -281,9 +272,9 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 6. Press `j` repeatedly past the loaded-slice boundary. Confirm:
    - The Done header N grows (e.g. `25 of 89` → `50 of 89` → `75 of 89`). M stays 89.
    - The `›` chevron remains visible in the Done column next to the selected issue at all times (b38b.4 scroll-window contract — see §6).
-   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[bwb-debug]` trace:
+   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[bwb-debug]` trace (these are now in-process repository traces, not bd subprocess argv):
      ```bash
-     (cd /home/hans/dev/github/dtctl-test && BD_NON_INTERACTIVE=1 /tmp/bwb --debug 2>/tmp/bwb-debug.log)
+     (cd /path/to/store && /tmp/bwb --debug 2>/tmp/bwb-debug.log)
      # in another terminal: tail -f /tmp/bwb-debug.log | grep loadMoreClosed
      ```
 
@@ -307,7 +298,7 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 **Diagnostics on failure:**
 
 - `r` does not reset N to the initial value: check the `doneLoadedCount` reset path in `internal/mode/board/model.go` (vtvb.7).
-- N does not grow when scrolling deep: check the `loadMoreClosedCmd` dispatch threshold and the offset wiring in the beads repository backend (vtvb.6).
+- N does not grow when scrolling deep: check the `loadMoreClosedCmd` dispatch threshold and the offset wiring in the `taskmgr` repository backend (vtvb.6).
 - Double-loads on a single threshold crossing: check the `doneLoadInFlight` guard (vtvb.8).
 - `›` chevron disappears after pressing `j` past the loaded slice: the b38b.4 `EnsureVisible` scroll-following logic has regressed — see §6 for the diagnostic steps.
 - `89 of 89` never transitions to plain `89`: `TotalIsExact` is not being set when the last page is loaded, or the header renderer in `internal/ui/board/board.go` is not checking it.

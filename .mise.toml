@@ -49,7 +49,7 @@ run = "gotestsum --format pkgname-and-test-fails -- -race ./..."
 CGO_ENABLED = "1"
 
 [tasks."test:integration"]
-description = "Integration tests (real bd binary, embedded fixture)"
+description = "Integration tests (build tag: integration)"
 run = "gotestsum --format pkgname-and-test-fails -- -race -tags=integration ./..."
 [tasks."test:integration".env]
 CGO_ENABLED = "1"
@@ -88,7 +88,6 @@ CGO_ENABLED = "1"
 description = "Validate script syntax (shell + python)"
 dir = "{{config_root}}"
 run = '''
-bash -n internal/testing/e2e/embeddedfixture/setup.sh
 find scripts -maxdepth 1 -name '*.sh' -print0 | xargs -0 --no-run-if-empty bash -n
 find scripts -maxdepth 1 -name '*.py' -print0 | xargs -0 python3 -m py_compile
 '''
@@ -124,7 +123,7 @@ dir = "{{config_root}}"
 run = "git config core.hooksPath scripts/git-hooks"
 
 [tasks.bwb]
-description = "Build bwb and run interactively against this repo's own beads DB (release smoke check)"
+description = "Build bwb and run interactively against the current project's .tasks store"
 dir = "{{config_root}}"
 run = """
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -135,41 +134,5 @@ go build -ldflags "-s -w \
   -X github.com/hk9890/beads-workbench/internal/version.Commit=$COMMIT \
   -X github.com/hk9890/beads-workbench/internal/version.Date=$DATE" \
   -o /tmp/bwb ./cmd/bwb
-BD_NON_INTERACTIVE=1 /tmp/bwb
+/tmp/bwb
 """
-
-[tasks."bwb:fixture"]
-description = "Build bwb and run interactively against the embedded fixture (fresh temp dir each run)"
-dir = "{{config_root}}"
-run = """
-VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
-COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
-DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-go build -ldflags "-s -w \
-  -X github.com/hk9890/beads-workbench/internal/version.Version=$VERSION \
-  -X github.com/hk9890/beads-workbench/internal/version.Commit=$COMMIT \
-  -X github.com/hk9890/beads-workbench/internal/version.Date=$DATE" \
-  -o /tmp/bwb ./cmd/bwb
-repoPath="$(mktemp -d)"
-sh internal/testing/e2e/embeddedfixture/setup.sh "$repoPath" internal/testing/e2e/embeddedfixture/seed.json
-echo "fixture: $repoPath"
-cd "$repoPath" && BD_NON_INTERACTIVE=1 /tmp/bwb
-"""
-
-[tasks.smoke]
-description = "Build and run the bwb-smoke release smoke check. Defaults to this repo's beads DB; override with BWB_SMOKE_DIR=/path/to/other/repo"
-dir = "{{config_root}}"
-run = """
-go build -o /tmp/bwb-smoke ./cmd/bwb-smoke
-BD_NON_INTERACTIVE=1 /tmp/bwb-smoke --dir "${BWB_SMOKE_DIR:-.}" --readonly
-"""
-
-[tasks."test:load"]
-description = "Run the load-test suite end-to-end (generate workload, measure, emit report). Override defaults via LOAD_* env vars. See docs/LOAD_TESTING.md."
-dir = "{{config_root}}"
-run = "bash scripts/load-test.sh"
-
-[tasks."verify:refresh"]
-description = "Runtime verification of refresh-concurrency fix (5q6t.5)"
-dir = "{{config_root}}"
-run = "python scripts/verify_refresh_concurrency.py"

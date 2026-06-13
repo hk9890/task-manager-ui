@@ -1,9 +1,9 @@
 name: CI
 
 # Auto-triggers (push, pull_request) are temporarily disabled while the
-# private-repo GitHub Actions billing is paused. Local quality gates
-# (`mise run quality`, `mise run smoke`) substitute as release provenance
-# in this period — see docs/RELEASING.md.
+# private-repo GitHub Actions billing is paused. The local quality gate
+# (`mise run quality`) substitutes as release provenance in this period —
+# see docs/RELEASING.md.
 #
 # Re-enable by restoring the `push:` and `pull_request:` triggers when
 # Actions billing is restored.
@@ -11,12 +11,7 @@ on:
   workflow_dispatch:
 
 # Ratchet this value upward as coverage improves.
-# Baseline history:
-#   2026-05-16: 76.5%
-#   2026-05-17: 69.6% (bwb-smoke main.go added ~870 lines exercised only via
-#               subprocess integration test, contributing 0% to instrumented
-#               coverage; ratchet up requires GOCOVERDIR + in-process tests)
-# Gate sits ~0.5pt below current to absorb minor fluctuation.
+# Gate sits a couple of points below current to absorb minor fluctuation.
 env:
   COVERAGE_THRESHOLD: 69
   # Disable mise's GitHub artifact-attestation verification for the `bd` install

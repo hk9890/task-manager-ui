@@ -16,3 +16,6 @@ dist/
 /bwb-loadtest
 __pycache__/
 *.pyc
+
+# Local, non-shared working notes
+hako-private/

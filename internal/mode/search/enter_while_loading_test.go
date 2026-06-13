@@ -6,8 +6,8 @@ package search
 // Root cause: when the user presses Enter while Init's empty-query search is
 // still in flight, the triggerSearchWithAnchor re-entry guard (m.loading==true)
 // silently discards the keystroke and returns nil. The user's typed query is
-// never applied; the Init results (all issues, including closed, via bd list
-// --all) remain as the visible result set.
+// never applied; the Init results (all issues, including closed) remain as the
+// visible result set.
 //
 // Fix: when Enter arrives while loading, queue the draft as m.pendingDraft.
 // The searchLoadedMsg handler consumes pendingDraft and re-fires the search
@@ -195,13 +195,12 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 // query the model sends to the repository when the user types+Enter does NOT
 // include a forced "all" statuses filter. The model sends
 // SearchIssuesQuery{Text: "task"} with no Statuses field — the repository layer
-// applies its own default (bd search excludes closed; memory repo includes all
-// when Statuses is unset, which is its documented behavior for unit-test contexts).
+// applies its own default (the memory repo includes all issues when Statuses is
+// unset, which is its documented behavior for unit-test contexts).
 //
-// This test pins the argv-shape contract at the model level using a
-// RecordingExecutor-backed real beads.Repository — so the actual bd args are
-// observable. The real test for closed-issue exclusion at the repository layer
-// is covered by the parity integration tests.
+// This test pins the query-shape contract at the model level using a memory
+// repository, asserting the SearchIssuesQuery the model sends carries no forced
+// status filter.
 func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	t.Parallel()
 
