@@ -9,8 +9,11 @@ import (
 	"github.com/hk9890/beads-workbench/internal/repository"
 )
 
-// Dashboard composes the board snapshot from SDK primitives. Like the memory
-// backend it is atomic: the first underlying error aborts the whole call.
+// Dashboard composes the board snapshot from SDK primitives. It is fail-fast,
+// not snapshot-isolated: the first underlying error aborts the whole call, but
+// the five independent store reads are not a single consistent snapshot, so a
+// concurrent write between them can yield a momentarily inconsistent board.
+// This is acceptable for a single-user, auto-refreshing TUI.
 func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err

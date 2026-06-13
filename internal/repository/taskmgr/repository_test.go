@@ -409,6 +409,30 @@ func TestEmptyStoreNonNilSlices(t *testing.T) {
 	}
 }
 
+func TestSearchInvalidStatusFilter(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+	mustCreate(t, r, domain.CreateIssueInput{Title: "open issue"})
+
+	// Only-unknown status values must match nothing — not widen to all statuses.
+	page, err := r.Search(ctx, domain.SearchIssuesQuery{Statuses: []string{"bogus"}})
+	if err != nil {
+		t.Fatalf("Search(all-invalid): %v", err)
+	}
+	if len(page.Results) != 0 {
+		t.Errorf("all-invalid status filter returned %d results, want 0", len(page.Results))
+	}
+
+	// A mix keeps the valid values and drops the unknown one.
+	page, err = r.Search(ctx, domain.SearchIssuesQuery{Statuses: []string{"open", "bogus"}})
+	if err != nil {
+		t.Fatalf("Search(mixed): %v", err)
+	}
+	if len(page.Results) != 1 {
+		t.Errorf("[open,bogus] returned %d results, want 1", len(page.Results))
+	}
+}
+
 // -- helpers --
 
 func summaryIDs(s []domain.IssueSummary) []string {

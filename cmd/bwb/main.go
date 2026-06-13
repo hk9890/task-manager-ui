@@ -33,7 +33,7 @@ type startupOptions struct {
 	debug       bool
 	autoRefresh bool
 	logManager  *logging.Manager
-	repoFlag    string // "beads" (default), "memory", or "caching"
+	repoFlag    string // "taskmgr" (default) or "memory"
 	repoFile    string // resolved path; cache file for caching mode, source of truth for memory, informational for beads
 }
 
@@ -102,7 +102,7 @@ type cliOptions struct {
 	checkConfig bool
 	debug       bool
 	noAuto      bool
-	repo        string // "beads" (default), "memory", or "caching"
+	repo        string // "taskmgr" (default) or "memory"
 	repoFile    string // path to JSONL file; cache file for caching mode, required for memory, informational for beads
 }
 
@@ -257,11 +257,13 @@ func logManagerComponent(manager *logging.Manager, component string) *slog.Logge
 }
 
 // resolveAuthor determines the identity recorded as the creator of new issues
-// and the author of comments for the task-manager backend. It prefers $USER and
-// falls back to a stable default.
+// and the author of comments for the task-manager backend. It prefers $USER
+// ($USERNAME on Windows) and falls back to a stable default.
 func resolveAuthor() string {
-	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
-		return u
+	for _, env := range []string{"USER", "USERNAME"} {
+		if u := strings.TrimSpace(os.Getenv(env)); u != "" {
+			return u
+		}
 	}
 	return "bwb"
 }
@@ -287,8 +289,8 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	fs.BoolVar(&opts.debug, "d", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.debug, "debug", false, "enable debug diagnostics")
 	fs.BoolVar(&opts.noAuto, "no-auto-refresh", false, "disable periodic auto-refresh")
-	fs.StringVar(&opts.repo, "repo", "taskmgr", "repository backend: taskmgr (default), beads, memory, or caching")
-	fs.StringVar(&opts.repoFile, "repo-file", "", "path to JSONL repository file (required for --repo=memory; cache file for --repo=caching)")
+	fs.StringVar(&opts.repo, "repo", "taskmgr", "repository backend: taskmgr (default) or memory")
+	fs.StringVar(&opts.repoFile, "repo-file", "", "path to JSONL repository file (required for --repo=memory; ignored by --repo=taskmgr)")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {

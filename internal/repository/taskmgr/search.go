@@ -21,6 +21,16 @@ func (r *Repository) Search(ctx context.Context, q domain.SearchIssuesQuery) (do
 		return domain.SearchResultPage{}, err
 	}
 	criteria, opt := buildCriteria(q)
+
+	// If the caller requested a status/type filter but every value was unknown,
+	// nothing can match. Return empty rather than letting the now-empty filter
+	// widen the result to all statuses/types (which would also trip the
+	// validating decorator's filter-respected check, one warn per result).
+	if (len(q.Statuses) > 0 && len(criteria.Statuses) == 0) ||
+		(len(q.Types) > 0 && len(criteria.Types) == 0) {
+		return emptySearchPage(q.Limit), nil
+	}
+
 	page, err := r.store.FindPage(criteria, opt)
 	if err != nil {
 		return domain.SearchResultPage{}, mapReadErr("search", err)
@@ -47,6 +57,20 @@ func (r *Repository) Search(ctx context.Context, q domain.SearchIssuesQuery) (do
 			Source:         domain.SearchResultSourceTaskmgrFind,
 		},
 	}, nil
+}
+
+// emptySearchPage returns a complete, zero-result page (used when a requested
+// filter cannot match anything).
+func emptySearchPage(limit int) domain.SearchResultPage {
+	return domain.SearchResultPage{
+		Results: []domain.SearchResult{},
+		Metadata: domain.SearchResultMetadata{
+			ReturnedCount:  0,
+			RequestedLimit: limit,
+			Completeness:   domain.SearchResultCompletenessExact,
+			Source:         domain.SearchResultSourceTaskmgrFind,
+		},
+	}
 }
 
 // buildCriteria translates a SearchIssuesQuery into a tasks.Criteria plus the
