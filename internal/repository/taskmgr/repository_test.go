@@ -119,6 +119,10 @@ func TestDashboardSections(t *testing.T) {
 	if err := r.UpdateIssue(ctx, idC, domain.UpdateIssueInput{Status: ptr("blocked")}); err != nil {
 		t.Fatalf("update C: %v", err)
 	}
+	idG := mustCreate(t, r, domain.CreateIssueInput{Title: "G deferred"})
+	if err := r.UpdateIssue(ctx, idG, domain.UpdateIssueInput{Status: ptr("deferred")}); err != nil {
+		t.Fatalf("update G: %v", err)
+	}
 	idF := mustCreate(t, r, domain.CreateIssueInput{Title: "F closed"})
 	if err := r.CloseIssue(ctx, idF, domain.CloseIssueInput{Reason: "done"}); err != nil {
 		t.Fatalf("close F: %v", err)
@@ -150,6 +154,10 @@ func TestDashboardSections(t *testing.T) {
 	}
 	if !containsID(summaryIDs(dash.Blocked), idC) {
 		t.Errorf("Blocked(status) missing C: %v", summaryIDs(dash.Blocked))
+	}
+	// A deferred issue (active, non-closed) must stay visible in the Not Ready set.
+	if !containsID(summaryIDs(dash.Blocked), idG) {
+		t.Errorf("Not Ready missing deferred G: %v", summaryIDs(dash.Blocked))
 	}
 	if !containsID(summaryIDs(dash.Closed), idF) {
 		t.Errorf("Closed missing F: %v", summaryIDs(dash.Closed))
@@ -430,6 +438,26 @@ func TestSearchInvalidStatusFilter(t *testing.T) {
 	}
 	if len(page.Results) != 1 {
 		t.Errorf("[open,bogus] returned %d results, want 1", len(page.Results))
+	}
+}
+
+func TestSearchByDeferredStatus(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+	id := mustCreate(t, r, domain.CreateIssueInput{Title: "postponed"})
+	if err := r.UpdateIssue(ctx, id, domain.UpdateIssueInput{Status: ptr("deferred")}); err != nil {
+		t.Fatalf("set deferred: %v", err)
+	}
+	_ = mustCreate(t, r, domain.CreateIssueInput{Title: "active"}) // open control
+
+	// Regression for task-manager #21: filtering by the "deferred" status must
+	// reach the query engine without a parse error (fixed in sdk v0.3.1).
+	page, err := r.Search(ctx, domain.SearchIssuesQuery{Statuses: []string{"deferred"}})
+	if err != nil {
+		t.Fatalf("Search by deferred: %v", err)
+	}
+	if ids := searchIDs(page.Results); !equalSlice(ids, []string{id}) {
+		t.Errorf("deferred filter = %v, want [%s]", ids, id)
 	}
 }
 

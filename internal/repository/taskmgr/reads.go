@@ -31,7 +31,11 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 	if err != nil {
 		return repository.DashboardData{}, mapReadErr("dashboard", err)
 	}
-	blockedStatus, err := r.store.List(tasks.Filter{Expr: `status == "blocked"`})
+	// Feeds the board's Not Ready column (the dashboard composer merges this with
+	// the dep-blocked set, deduped by ID). "deferred" is an active, non-closed
+	// status (work consciously postponed) that is neither ready nor in-progress,
+	// so it joins blocked-status issues here to stay visible on the board.
+	notReady, err := r.store.List(tasks.Filter{Expr: `status == "blocked" || status == "deferred"`})
 	if err != nil {
 		return repository.DashboardData{}, mapReadErr("dashboard", err)
 	}
@@ -61,7 +65,7 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 		InProgress:  toSummaries(inProgress),
 		Closed:      toSummaries(closedPage.Issues),
 		ClosedTotal: closedPage.Total,
-		Blocked:     toSummaries(blockedStatus),
+		Blocked:     toSummaries(notReady),
 	}, nil
 }
 

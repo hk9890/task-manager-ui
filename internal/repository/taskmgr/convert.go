@@ -132,6 +132,8 @@ func statusDescription(s tasks.Status) string {
 		return "Actively being worked on"
 	case tasks.StatusBlocked:
 		return "Blocked by a dependency"
+	case tasks.StatusDeferred:
+		return "Consciously postponed"
 	case tasks.StatusClosed:
 		return "Completed or closed"
 	default:
