@@ -19,5 +19,8 @@ dist/
 __pycache__/
 *.pyc
 
+# In-process task-manager backend local data store (runtime, machine-local)
+.tasks/
+
 # Local, non-shared working notes
 hako-private/
