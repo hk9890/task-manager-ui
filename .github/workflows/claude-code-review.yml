@@ -2,21 +2,19 @@ name: Claude Code Review
 
 # Automated PR review.
 #
-# AUTO-REVIEW IS OFF BY DEFAULT to conserve Claude (Max subscription) quota —
-# an auto-review runs a full Claude session on every triggered PR, which adds
-# up fast (especially with Dependabot/bot PRs). Ways to use it:
+# AUTO-REVIEW IS ON: every newly-opened PR gets one Claude review (on `opened`,
+# not on every push). The `if:` guard below skips Dependabot/bot PRs so they
+# don't burn Claude (Max subscription) quota. Other ways to use it:
 #
-#   * On demand (recommended): comment "@claude review this PR" on any PR.
-#     Handled by claude.yml — costs quota only when you ask, and has full PR
-#     context (the diff).
+#   * On demand: comment "@claude review this PR" on any PR. Handled by
+#     claude.yml — useful to re-review after pushing changes.
 #   * Manual: run this workflow from the Actions tab (workflow_dispatch).
-#   * Full auto: uncomment the `pull_request:` block below to review every new
-#     PR automatically. The `if:` guard already skips Dependabot/bot PRs.
+#   * To disable auto-review, comment out the `pull_request:` block below.
 
 on:
   workflow_dispatch: {}
-  # pull_request:
-  #   types: [opened]        # one review when a PR is opened (not on every push)
+  pull_request:
+    types: [opened]        # one review when a PR is opened (not on every push)
 
 jobs:
   review:
