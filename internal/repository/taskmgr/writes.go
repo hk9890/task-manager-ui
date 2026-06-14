@@ -15,7 +15,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 	if err := ctx.Err(); err != nil {
 		return domain.CreateIssueResult{}, err
 	}
-	iss, err := r.store.Create(tasks.CreateInput{
+	res, err := r.store.Create(tasks.CreateInput{
 		Title:       input.Title,
 		Description: input.Description,
 		Type:        tasks.Type(input.Type),
@@ -27,7 +27,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 	if err != nil {
 		return domain.CreateIssueResult{}, mapWriteErr("create issue", err)
 	}
-	return domain.CreateIssueResult{IssueID: iss.ID}, nil
+	return domain.CreateIssueResult{IssueID: res.Issue.ID}, nil
 }
 
 // UpdateIssue applies a partial update. Status transitions (close/reopen) are
