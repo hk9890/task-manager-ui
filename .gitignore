@@ -8,6 +8,10 @@
 .idea/
 .claude/
 /taskmgr-ui
+# Legacy bwb-named local build artifacts (pre-rename); keep ignored until gone
+/bwb
+/bwb-smoke
+/bwb-loadtest
 coverage.out
 coverage-*.out
 dist/
