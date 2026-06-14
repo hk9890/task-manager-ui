@@ -1,0 +1,6 @@
+---
+id: negi7ah9
+author: Hans Kohlreiter
+created: 2026-05-27T21:53:29Z
+body: |-
+  Moved TestGenerate_BlockerInvariant and TestGenerate_EdgeSortStability from generate_integration_test.go to generate_test.go (unit tier). No helpers needed to move — makeSpec, buildPlan, planEdgeKeys were already in generate_test.go. generate_integration_test.go is now a comment-only tombstone. AC verified: mise run test ./internal/testing/loadgen/... runs both tests (PASS); mise run test:integration ./internal/testing/loadgen/... continues to pass via measure_integration_test.go smoke; quality:fast passes (1070 tests, 0 lint).

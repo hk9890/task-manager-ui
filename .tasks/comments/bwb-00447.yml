@@ -1,0 +1,11 @@
+---
+id: qeesn5ya
+author: Hans Kohlreiter
+created: 2026-05-25T19:27:48Z
+body: |-
+  Worktree branch: worktree-agent-a96f56223d6025d4b, commit 618ff98.
+
+  Notes from tasker report:
+  - packages.Load still invokes go list internally at runtime; AC (no exec.Command/os/exec in source) is met. New ceiling for the guardrails sub-test is ~43ms (warm ~30ms), down from 65ms subprocess. No concern.
+  - go.mod gained golang.org/x/tools v0.45.0 plus transitive indirect deps (x/net, x/sys, x/term, x/text, x/mod). Standard Go tooling adjacents.
+  - After relocation, internal/launcher/process_runner_test.go is package-decl only (no test funcs). Left intact per literal ticket scope; sibling test files cover the package in unit tier.

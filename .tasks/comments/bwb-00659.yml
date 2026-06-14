@@ -1,0 +1,6 @@
+---
+id: hbrt1mpi
+author: Hans Kohlreiter
+created: 2026-05-22T19:36:32Z
+body: |-
+  Verified. All 4 AC pass with direct evidence: go test ./internal/gateway/beads/... PASS (3 pkgs); race tests PASS, no races; mise run quality:fast 1078 tests pass, 0 vet, 0 lint. Semaphore cap=2 (runner.go:114), TestConcurrencyCapBurst enforces it. Cache hit/miss/invalidation confirmed by 8 cache tests; token = mtime of .beads/last-touched. Board issues 4 bd commands (model.go:378 pendingResults=4); ssom closed-count call intact. docs/MONITORING.md updated with cache-hit contract.

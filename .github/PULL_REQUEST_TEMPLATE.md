@@ -1,13 +1,13 @@
 <!--
-Keep this short. Detail belongs in the linked bd issue and commit messages.
+Keep this short. Detail belongs in the linked task-manager issue and commit messages.
 Delete sections that do not apply.
 -->
 
 ## What & why
 
-<!-- One paragraph: what changed and why. Reference the bd issue. -->
+<!-- One paragraph: what changed and why. Reference the task-manager issue. -->
 
-Closes bd-XXX
+Closes bwb-XXX
 
 ## Verification
 

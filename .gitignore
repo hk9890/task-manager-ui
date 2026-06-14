@@ -1,8 +1,5 @@
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
+# Editor / agent local dirs
 .coder/
 .opencode/
 .idea/
@@ -18,9 +15,6 @@ dist/
 /load-test-report.json
 __pycache__/
 *.pyc
-
-# In-process task-manager backend local data store (runtime, machine-local)
-.tasks/
 
 # Local, non-shared working notes
 hako-private/

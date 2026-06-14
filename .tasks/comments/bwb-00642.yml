@@ -1,0 +1,6 @@
+---
+id: 3sq71iam
+author: Hans Kohlreiter
+created: 2026-05-17T09:51:50Z
+body: |-
+  Done. 14 argv shapes pinned with 35 sub-cases (boundary coverage for limits and heights). Tests added in read_gateway_test.go, model_test.go (board), argv_cardinality_test.go (search). ARGV_CONTRACT.md pinning table updated. Deliberate-break verified: changing searchIssuesFromReady argv shape immediately fires TestSearchIssuesWorkStateReadyArgvShape. Quality green.

@@ -1,0 +1,12 @@
+---
+id: 78atodfp
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:19Z
+body: |-
+  Cites verified against current source. No changes.
+---
+id: f29jcup4
+author: Hans Kohlreiter
+created: 2026-05-16T04:09:15Z
+body: |-
+  Implemented. mode/search/model.go handleKey now only consumes Esc when focus==FocusQuery; non-query focus states return nil and CapturesShellKey already returns false → shell-level escape action fires (returns to Board). TestModelSearchEscFromResultsFocusReturnsToBoard added in app/model_test.go covering the new path.

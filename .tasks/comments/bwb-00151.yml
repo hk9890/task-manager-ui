@@ -1,0 +1,10 @@
+---
+id: owz4r2nu
+author: Hans Kohlreiter
+created: 2026-05-15T10:24:35Z
+body: |-
+  Implemented progress-aware loading counter in board View(). During section loads, board now shows '⏳ Loading board (N / M sections)…' incrementing as each sectionLoadedMsg arrives; falls back to generic loading message while dashboard definition is loading. No changes to loading.go needed.
+
+  Profiling finding: section queries are serialized by a mutex in CommandRunner (runner.go:103) due to Dolt file locking — load time is O(N × per_call), not O(max). For a 4-section board this is ~4× slower than parallel execution. Each bd CLI call is a separate process spawn logged at INFO level with duration_ms. Candidate follow-up: bd server mode or read-only concurrency relaxation.
+
+  Build: clean. All 29 packages pass.

@@ -1,0 +1,6 @@
+---
+id: qmkxhva8
+author: Hans Kohlreiter
+created: 2026-05-16T13:43:14Z
+body: |-
+  Root cause: lumberjack.Logger.Close() doesn't drain its background millRun goroutine that gzip-compresses rotated backups. Test cleanup ran sink.Close() then immediately returned, racing with t.TempDir RemoveAll while the goroutine still held files open. Fix: new waitForLumberjackMill() helper polls logDir for uncompressed .log files (5ms interval, 5s timeout) after Close. Baseline 4/50 → post-fix 0/50. No production change; compression still tested. Quality green.

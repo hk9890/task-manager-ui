@@ -1,0 +1,6 @@
+---
+id: fjgzil7l
+author: Hans Kohlreiter
+created: 2026-05-22T09:26:25Z
+body: |-
+  Done. git mv writes.go->write_gateway.go; model_teatest.go->model_teatest_helper_test.go (test-only now). Fixed stale path refs in ARGV_CONTRACT.md, interface.go, writes_test.go. Combined build+test green (1070 tests).

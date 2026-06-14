@@ -1,0 +1,12 @@
+---
+id: xcfq5c9b
+author: Hans Kohlreiter
+created: 2026-05-30T15:25:59Z
+body: |-
+  Plan review (reviewer a2db89): corrected premise. Measured on-host bd init ~1.18s vs bd create ~0.8s each; init is ~15% of per-scenario cost, NOT the driver. 'Share bd init across read-only scenarios' architecturally blocked — each scenario uses a distinct seed via impl.build(t, seed), no shared fixture. Reframed lever to consolidating per-scenario bd create count onto a shared seeded-superset fixture for read-only cases. t.Parallel() at impl+scenario level invalidates the additive 7.8s*scenario model. Title and AC updated.
+---
+id: 4n8df9f0
+author: Hans Kohlreiter
+created: 2026-05-31T12:00:41Z
+body: |-
+  STOP — no viable in-scope lever (no code changed). Measured baseline 175s. Per-scenario beads breakdown: S16 PaginatedClosedFetch=137s (78% of wall), S14 ClosedLimitRespected=23s, S15 DashboardSeedsMemory=23s, all others <=10s. S16 builds its repo inline (parity_integration_test.go:1326-1350) with 110 create + 110 close = 220 sequential bd calls, bypassing impl.build entirely. Every read-only consolidation candidate runs in PARALLEL behind S16 (t.Parallel at impl+scenario level) and finishes in 1-8s, so consolidating them shifts the critical path by ~0s. S14/S15 assert exact issue counts so can't join a shared fixture; S2/S3/S4/S5/S7 reuse pbt-1/2/3 IDs with conflicting states (namespacing = parity risk for 0 gain). Real lever is reducing S16 seedCount/pageSize — a pagination-coverage tradeoff requiring a decision. Filed as follow-up. Disposition: closing as not-actionable-as-scoped.

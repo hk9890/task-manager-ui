@@ -1,0 +1,6 @@
+---
+id: 32wq3eso
+author: Hans Kohlreiter
+created: 2026-05-24T14:16:24Z
+body: |-
+  Both leanSearchMetadataFromBackend AND searchPageFromRecords had the identical bug; both fixed. New default is Exact; Partial only when requestedLimit>0 AND returnedCount>=requestedLimit. New test file lean_reads_test.go with two table-driven tests (5 subtests each). Tasker flagged two non-blocking follow-ups: (1) SearchResultCompletenessMaybeMore now unreachable from these paths, (2) leanSearchMetadataFromBackend still sets Notice=searchNoticeMaybeMore unconditionally though UI doesn't read Notice. quality:fast green (990 tests). Commit 67849de.

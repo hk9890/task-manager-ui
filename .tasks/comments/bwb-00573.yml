@@ -1,0 +1,6 @@
+---
+id: d5y7t22b
+author: Hans Kohlreiter
+created: 2026-05-16T16:47:05Z
+body: |-
+  Done. 3 regression test files created (board, search, logging). Deliberate-break verification: removing sizeKnown guard fires TestViewReturnsEmptyBeforeWindowSizeMsg; removing stderr-suppression fires TestStderrSuppressionBlocksWarnDuringActiveSession. Quality gate green. Both o7tk root causes have permanent regression coverage.

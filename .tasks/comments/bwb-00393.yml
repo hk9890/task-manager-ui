@@ -1,0 +1,18 @@
+---
+id: 7iqyes1s
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:41Z
+body: |-
+  Review finding — 'validation' scope is vague without concrete invalid states. What: instructions say 'add validation or contract helpers defining minimum valid dashboard/section shape' and 'add tests for empty, invalid, and valid multi-dashboard provider outputs'. But the task does not enumerate what invalid means. Why: the tasker will have to invent the invalid cases. Looking at definition.go, the concrete failure modes are: (1) Definition with empty ID or Title, (2) Section with empty ID/Title, (3) Section with Query.Type that does not match any populated query payload, (4) Section with unsupported QueryType, (5) Definition with zero sections, (6) Provider returning zero definitions. Some of these already fail implicitly in runSectionQuery (line 388 in board/model.go: 'unsupported dashboard query type'). Suggested action: enumerate the invalid states in the instructions so the tasker builds the right validation and the right tests.
+---
+id: rg7tzhxe
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:46Z
+body: |-
+  Review finding — missing dependency on wz9.3 may create a consistency gap. What: wz9.4 does not depend on wz9.3, but the dashboard Query struct (definition.go line 37-45) maps directly to gateway query types. If wz9.3 changes the gateway query types or adds new ones (e.g., search-based sections), the dashboard contract should reflect that. Why: in practice this is probably fine because wz9.3 only changes internal decoding, not the BeadsGateway interface (acceptance criterion: 'BeadsGateway interface remains unchanged'). But if wz9.3 accidentally surfaces new query capabilities, wz9.4 would need to know. Suggested action: no hard dependency needed — the BeadsGateway interface stability guarantee in wz9.3 makes this safe. Just noting for awareness.
+---
+id: 99dtz7uo
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:53Z
+body: |-
+  Review question — where does validation execute? What: the instructions say to add validation helpers and have board/model.go consume validated definitions. But it is not clear whether validation should happen (A) inside the Provider itself (Validate on return), (B) in a separate Validate() function called by the board before use, or (C) in the board loader when it receives definitions. Why: this affects error reporting and the contract boundary. If the provider validates, a file-backed provider must also validate — good, but couples Provider to validation rules. If the board validates, each consumer re-validates — redundant. Option B is cleanest: provider returns, board calls Validate(defs) before use. Suggested action: specify in instructions that validation should be a standalone function in internal/dashboard (not on Provider, not in board) so both built-in and future file-backed providers get the same gate.

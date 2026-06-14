@@ -1,0 +1,18 @@
+---
+id: aqqk8qag
+author: Hans Kohlreiter
+created: 2026-04-18T21:50:27Z
+body: |-
+  Root cause confirmed at read_gateway.go:152. What: referencesFromPayload(primary.Dependents) dumps all dependents into Blocks without checking dependency_type. The x2u fix added relates-to filtering only on the dependencies side (line 543), not the dependents side. A bd dep relate A B produces relates-to entries in both A.dependencies and B.dependents — the dependencies side now correctly routes to Related, but the dependents side still falls through to Blocks. Why: this means every relates-to link appears under both Related AND Blocks, which is the exact symptom described. Suggested action: replace referencesFromPayload for dependents with a type-aware function (like dependencyReferencesFromPayload but for the dependent direction) that routes relates-to dependents to Related and parent-child dependents to nowhere (they are handled by parent-group). This is the mirror of the x2u fix.
+---
+id: 5eiyrcmt
+author: Hans Kohlreiter
+created: 2026-04-18T21:50:31Z
+body: |-
+  Missing acceptance criterion. What: no criterion explicitly states that dependents with dependency_type relates-to must NOT appear in Blocks. Why: a tasker could fix the Related rendering without removing the duplicate from Blocks, leaving the bug half-fixed. Suggested action: add criterion: 'An issue whose dependents include a relates-to entry must show that entry only under Related, not under Blocks.'
+---
+id: 4wjps961
+author: Hans Kohlreiter
+created: 2026-04-18T21:50:45Z
+body: |-
+  Ordering relative to 74r/6eq. What: 6sk is a functional correctness bug in the gateway layer (read_gateway.go). 74r/6eq are cosmetic layout bugs in details.go. Why: 6sk changes what data flows into Blocks vs Related, which affects row counts in the Dependencies pane. If 74r width tuning is done first, the visible result will shift when 6sk removes phantom Blocks entries. No code conflict — 6sk touches read_gateway.go, 74r/6eq touch details.go — but visual verification would need redoing. Suggested action: fix 6sk before 74r/6eq. 6sk and yxjx are independent (gateway vs UI) and can run in parallel.

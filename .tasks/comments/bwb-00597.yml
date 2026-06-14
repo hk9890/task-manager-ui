@@ -1,0 +1,22 @@
+---
+id: hytwj7t4
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:26Z
+body: |-
+  ## Task .2 is well-scoped but the dependency chain creates unnecessary serialization
+
+  **What**: Task .2 depends on .1 and .3 depends on .2 and .4 depends on both .2 and .3. This means all implementation work is serialized: .1 → .2 → .3 → .4 → .5. Five sequential tasks for what could be two parallel tracks.
+
+  **Why**: If the harness (task .1) takes longer than expected or needs rework, the entire epic is blocked. The scenario definitions (.2) and assertion helpers (.3) are conceptually independent — you can define "what scenarios to run" and "what assertions to make" without the harness being complete, especially if the harness turns out to be an extension of existing teatest infrastructure rather than a new tool.
+
+  **Suggested action**: Restructure to allow .2 and .3 to start in parallel once .1 provides a minimal harness. The scenario runner can define scenario specs (key sequences, expected states) even before the capture harness exists, and the assertion helpers can be built against `View()` string output regardless of how that output is obtained. This reduces critical path from 5 sequential tasks to ~3 stages.
+---
+id: n0mr3han
+author: Hans Kohlreiter
+created: 2026-04-07T17:20:01Z
+body: |-
+  Status: implemented.
+  Outcome: added reusable deterministic scenario helpers in internal/testing/ui and explicit workflow tests for board/search/detail/editor/launcher flows.
+  Artifacts: internal/testing/ui/scenarios.go, internal/testing/ui/scenarios_controller.go, internal/testing/ui/scenarios_test.go, internal/app/scenario_workflow_test.go, internal/mode/search/model_test.go.
+  Verification: go test ./internal/testing/ui ./internal/mode/search ./internal/mode/details ./internal/app ./internal/launcher/...
+  Next step: close task and proceed to structured assertions / fast entrypoints in gyg.3.

@@ -1,0 +1,6 @@
+---
+id: t8wctgel
+author: Hans Kohlreiter
+created: 2026-05-16T12:52:41Z
+body: |-
+  Verifier report: all 10 ACs PASS with direct execution evidence. Unit median 0.188s (target <10s), integration median 28.6s (target <30s, 1.4s margin). Coverage map confirmed: every deleted assertion has a counterpart. All 12 read methods + 4 write methods exercised. 445 test count preserved. Quality green. Advisory only (not blocking): TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback dominates integration tier at 13.4s — flag if it grows.

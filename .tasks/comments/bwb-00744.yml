@@ -1,0 +1,6 @@
+---
+id: o8nt6vxw
+author: Hans Kohlreiter
+created: 2026-05-28T14:10:54Z
+body: |-
+  Implemented. New fakes.DelayedDashboardRepository (internal/testing/fakes/delayed_dashboard.go). TestDoneLoadMore_InFlightGuard in internal/mode/board/model_async_test.go proves the guard: 5 j-presses while in-flight produce exactly 1 in-flight Dashboard call (not 6). Regression detection confirmed by disabling the guard. quality:fast green (1132).

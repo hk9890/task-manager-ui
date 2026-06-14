@@ -1,0 +1,6 @@
+---
+id: 8rvgcm3a
+author: Hans Kohlreiter
+created: 2026-04-12T10:58:48Z
+body: |-
+  Data model gap blocks row rendering. What: acceptance criteria say rows must include type, priority, status, compact issue id, and truncated title. But domain.IssueReference only has ID and Title. The gateway's referencesFromMapArray discards status, priority, and issue_type from bd show --json output even though bd already provides them. The shared RenderCompact in issuerow takes domain.IssueSummary not IssueReference. Why: a tasker picking up syf.3 will discover they cannot render the specified fields because the data does not exist in the domain model. This is a hidden prerequisite. Suggested action: either (a) add a prerequisite task to enrich IssueReference with Status/Type/Priority and update the gateway parser, or (b) explicitly reduce the row spec to ID + truncated title only and adjust acceptance criteria.

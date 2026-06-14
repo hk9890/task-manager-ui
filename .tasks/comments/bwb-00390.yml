@@ -1,0 +1,12 @@
+---
+id: 0i7mbv61
+author: Hans Kohlreiter
+created: 2026-04-12T14:05:37Z
+body: |-
+  Most open questions are already answered by user decisions. What: The user's stated direction resolves panel roles (left=browser, center=content, right=metadata+actions), navigation model (Enter updates adjacent detail, consistent focus across app), and full-height/width contract (all screens must use full terminal dimensions consistently). Why: This task is blocking .1 and .2 but its open questions are largely resolved — leaving it as-is stalls execution unnecessarily. Suggested action: Convert this from a discussion task into a brief contract document task. The tasker should codify the user's stated decisions into acceptance criteria rather than re-discovering them. The remaining genuinely open question is: what does the panel model look like for board and search modes — do they also get the three-panel layout, or does only dedicated detail have it? That specific question should be explicitly answered before unblocking.
+---
+id: jku0hwea
+author: Hans Kohlreiter
+created: 2026-04-12T14:05:48Z
+body: |-
+  Missing open question: board/search panel model is undefined. What: The epic says 'board, search, and detail share a coherent panel-layout model' but the user's direction focuses on the dedicated detail three-panel layout. Board and search currently render as single full-body surfaces (board = column grid, search = query/results/preview). The .4 contract must explicitly state whether board and search adopt the same three-panel split or retain their current single-surface layouts with only the shared sizing contract applied. Why: If .1 and .2 assume board/search get the three-panel treatment but they don't, the shared layout contract will be over-designed. If they don't get it, the 'coherent panel model' success criterion needs to be scoped to mean 'consistent sizing plus shared primitives' not 'identical panel structure'. Suggested action: Add this as an explicit decision point in .4's instructions.

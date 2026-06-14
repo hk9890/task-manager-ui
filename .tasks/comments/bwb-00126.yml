@@ -1,0 +1,6 @@
+---
+id: 4wqg1muo
+author: Hans Kohlreiter
+created: 2026-05-16T16:46:59Z
+body: |-
+  Option 2 implemented: removed UpdatedAt-proxy defensive check from composer.go. Empirically supported by izds diagnostic on this-repo (49/50 positions diverge between updated_at and closed_at — proxy was unreliable). 4 nil-warning regression cases added in composer_test. Sort correctness now verified by parity test izds.

@@ -1,0 +1,6 @@
+---
+id: rqgbo3zs
+author: Hans Kohlreiter
+created: 2026-04-20T12:30:04Z
+body: |-
+  Finishing the remaining follow-up: add an explicit focused test for Up-from-first-result returning to query, rerun focused and full test suites, then land only the search-navigation files plus tracker state without touching unrelated working tree changes.

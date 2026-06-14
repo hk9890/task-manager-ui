@@ -1,0 +1,6 @@
+---
+id: eseul8uc
+author: Hans Kohlreiter
+created: 2026-05-28T10:43:24Z
+body: |-
+  Done. Updated docs/RUNTIME_UI_VERIFICATION.md §5 only — removed all 50-row floor assertions, rewrote pass criteria to use `height - 3` formula (with concrete examples: H1=40→N=37, H2=200→N=197). Also bumped pre-condition from >50 to >200 closed issues to match the new resize target. Cross-ref check: no other docs link §5 by anchor. mise run quality:fast passes (1070 tests, 0 lint).

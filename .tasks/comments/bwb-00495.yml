@@ -1,0 +1,6 @@
+---
+id: wc99swi6
+author: Hans Kohlreiter
+created: 2026-05-19T15:27:56Z
+body: |-
+  Completed in commit b182315. Deleted 4 unused ResetCalls (RecordingExecutor, FakeEditor, FakeLauncher, FakeProcessRunner), deleted mode/search.Model.CurrentSelection (no callers), kept mode/board.Model.CurrentSelection with documented test-seam doc comment. quality:fast clean (853 tests).

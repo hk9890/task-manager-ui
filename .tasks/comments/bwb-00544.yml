@@ -1,0 +1,6 @@
+---
+id: lbbgndpk
+author: Hans Kohlreiter
+created: 2026-05-28T13:24:01Z
+body: |-
+  Implemented in commit 95aa728. queryClosedPage in lean_reads.go appends --offset only when ClosedOffset>0. Argv pinned in lean_reads_argv_test.go::TestDashboardClosedOffsetArgv. ARGV_CONTRACT.md updated. quality:fast + integration contract green.

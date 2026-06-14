@@ -1,0 +1,12 @@
+---
+id: 4yseae3x
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:06Z
+body: |-
+  Contradiction: step 2 strips \x0a (newline is in \x00-\x1f) but step 3 expects literal \n to survive. Pick (a): strip all C0 including \x0a and update step 3's test to assert \n is stripped. Newlines in argv/env are exploitable for ANSI/log injection.
+---
+id: yvzq64jq
+author: Hans Kohlreiter
+created: 2026-05-16T04:09:14Z
+body: |-
+  Implemented. stripC0 helper removes \x00-\x1f (including \t,\n,\x1b) from interpolated values; applied uniformly in templateInterpolator.Interpolate. envEntryRe (^[A-Za-z_][A-Za-z0-9_]*=.*$) validates Env entries post-interpolation with descriptive error before Launch dispatches to runner. Renamed existing newline-in-assignee test to assert stripping (option a per reviewer comment) and added 3 new tests covering newline-in-title, ANSI-in-title, missing-equals env entry.

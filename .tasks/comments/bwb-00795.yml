@@ -1,0 +1,87 @@
+---
+id: 87fbk118
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:16Z
+body: |-
+  ## Search mode depends on gateway capabilities not yet planned in Phase 1
+
+  **What**: This task requires text search and structured filters for status, type, priority, assignee, labels, ready, and blocked. It says to use "gateway-backed filtering first." However, Phase 1 (omd.4) does not include a SearchIssues gateway method or catalog queries for populating filter options. The bd CLI has a dedicated `bd search` command with rich filtering, and `bd list` has separate filter flags — these are different commands with different semantics.
+
+  **Why**: An agent executing this task will find no SearchIssues method on the gateway and no catalog queries for populating filter dropdowns. They'll either add gateway methods (unplanned scope), shell out directly (architecture violation), or build a degraded experience. This is a hidden cross-epic dependency.
+
+  **Suggested action**: Either (1) add SearchIssues and catalog methods to Phase 1 scope (omd.2 and omd.4), or (2) add a new task in the browsing epic (yze.3) that explicitly extends the gateway with search and catalog capabilities before this task runs. Option 1 is cleaner because it keeps all gateway work in one epic.
+---
+id: x624wlqb
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:18Z
+body: |-
+  ## Search mode (yze.3.3) criteria say "Text search works" and "Structured filters work" — no way for an agent to verify
+
+  **What**: Task beads-workbench-yze.3.3 acceptance criteria are: "Text search works", "Structured filters for status, type, priority, assignee, labels, ready, and blocked work", and "No BQL or custom query language is introduced." The first two are human-verification statements.
+
+  **Why**: "Works" is not testable. An agent needs: "text search with query 'foo' against a fake gateway returning matching issues produces a model with those issues in the result list." Seven structured filters are listed but there's no requirement to test each one. An agent cannot verify "status filter works" without running the app and trying it.
+
+  **Suggested action**: Replace behavioral criteria with test-oriented criteria:
+  - "Text search sends the expected gateway query and displays matching results (verified by test)"
+  - "Each structured filter (status, type, priority, assignee, labels, ready, blocked) is exercised by at least one test case against a fake gateway"
+  - "Filter combination is tested (e.g., status + assignee)"
+---
+id: x8qggxog
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:37Z
+body: |-
+  ## [LOW] Search task needs to explicitly prohibit gateway bypass for text search
+
+  **What**: Instruction 3 says "Use gateway-backed filtering first." This is correct. But instruction 2 lists "text search UX" alongside structured filters. If the gateway's `bd search` command doesn't support the needed text search behavior, an implementer might bypass the gateway and shell out to `bd search` directly from the mode controller.
+
+  **Why**: The architecture requires that "the UI never shells out directly" (ARCHITECTURE.md line 106). If text search requires a `bd search` command that isn't currently part of the `BeadsGateway` interface, the correct fix is to add a search method to the gateway, not to bypass it. Without this being explicit, a shortcut is likely.
+
+  **Suggested action**: Add instruction: "If text search requires a `bd` command not yet covered by the gateway interface, extend the gateway interface with a search method rather than shelling out directly from the mode controller." This reinforces the gateway-only data access rule.
+---
+id: sstqtkcz
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:09Z
+body: |-
+  ## PASS: Search routing through gateway is explicitly required
+
+  **What**: Task yze.3.3 now includes explicit instructions: "Use only gateway-exposed search and catalog methods; do not shell out directly from the mode/controller" and "Do not introduce BQL parsing, SQL query generation, or generalized expression evaluation." The acceptance criterion "No direct UI-layer shell-out bypasses the gateway" is verifiable.
+
+  **Why**: Search is the area most likely to bypass the gateway because text search via `bd search` might not initially be on the gateway interface. The updated task now includes an existing comment recommending that missing gateway methods be added to the gateway rather than bypassed. The combination of the explicit no-shell-out criterion and the omd.8 automated guardrails provides adequate protection.
+
+  **Suggested action**: None for the explicit prohibition. However, the earlier comment about adding SearchIssues to the Phase 1 gateway scope (omd.4) remains relevant — see that comment for the cross-epic dependency concern.
+---
+id: loq11jva
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:22Z
+body: |-
+  ## yze.3.3 (search mode) includes automated test criteria per filter — prior gap addressed but tests require gateway search method
+
+  **What**: `beads-workbench-yze.3.3` acceptance criteria now include "Each supported structured filter has automated test coverage" and list all seven filters (status, type, priority, assignee, labels, ready, blocked). Combined with the "no direct UI-layer shell-out bypasses the gateway" criterion, this forces test-driven verification against the gateway interface.
+
+  **Why**: The dependency chain for this to work is: omd.2 defines the gateway interface with search/catalog methods → omd.4 implements them → yze.5 creates the fake gateway → yze.3.3 builds search against the gateway → yze.3.5 adds cross-surface integration tests. This chain is now complete. The filter-level test granularity means each filter can be independently verified.
+
+  **Suggested action**: No change needed. The search test criteria are appropriately granular.
+---
+id: dzl9yaho
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:22Z
+body: |-
+  ## [MINOR] Search task could be more explicit about gateway-only fallback behavior
+
+  **What**: Instruction #2 says "Use only gateway-exposed search and catalog methods; do not shell out directly from the mode/controller." This is correct. But if a gap in the gateway is discovered at implementation time, the task should make the correct fallback unmistakable: extend the gateway interface, don't bypass it.
+
+  **Why**: The gateway scope (omd.2/omd.4) now covers search and catalogs, so this is unlikely to be a problem. But defense-in-depth matters for a core architectural boundary.
+
+  **Suggested action**: No change strictly required. The existing instruction is adequate for a careful implementer. If desired, append to instruction #2: "If search requires a gateway capability not yet implemented, extend the gateway rather than bypassing it from the mode controller."
+---
+id: mi4fq8d7
+author: Hans Kohlreiter
+created: 2026-04-05T16:31:26Z
+body: |-
+  Verifier found the initial search-mode implementation was structurally present but failed in the active runtime path: empty-query init called unsupported bd search behavior and shell hotkeys hijacked search text entry. Follow-up bug beads-workbench-njw fixed both regressions, and verifier then confirmed the search task's intended runtime behavior now holds in the shipped app path.
+---
+id: 9hlvhpt9
+author: Hans Kohlreiter
+created: 2026-04-05T16:43:34Z
+body: |-
+  Verifier PASS after follow-up bug beads-workbench-njw: search mode is active in the app shell, text search works through the gateway, structured filters for status/type/priority/assignee/labels/ready/blocked are implemented and test-covered, and the active runtime path no longer errors on empty query or hijacks search text entry. go build ./cmd/bwb, go vet ./..., and go test ./... all pass.

@@ -1,0 +1,12 @@
+---
+id: tykahko1
+author: Hans Kohlreiter
+created: 2026-04-10T17:00:42Z
+body: |-
+  Instruction #1 (rename DashboardDefinitionProvider → Provider) will touch 3 files: definition.go, builtin_provider.go, and mode/board/model.go. This is a straightforward rename, BUT if 2t4 also modifies dashboard/builtin_provider.go (deleting actorResolver), there's a merge conflict risk. Both are Wave 2 (dsd depends on 2t4), so ordering is correct — but if the dead code removal changes line numbers or nearby context, the rename could conflict. Why: not a blocker, just noting that the tasker should work from fresh code after 2t4 completes. Suggested action: no change needed, the dependency is already correct.
+---
+id: kpdmcd1l
+author: Hans Kohlreiter
+created: 2026-04-10T17:01:35Z
+body: |-
+  Instruction #5 (consolidate catalog option types) and #6 (typed keybinding context) are marked 'optional' and 'discuss first'. These weaken the task's acceptance criteria — a tasker could skip both and still pass. Why: optional items in a chore task create ambiguity about 'done.' If they're not worth doing, remove them from the task. If they are, make them non-optional. Suggested action: either commit to these items or remove them. If keeping them optional, add explicit criteria like 'items #5 and #6 are optional; if skipped, add a comment explaining why.'

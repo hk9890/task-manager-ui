@@ -1,0 +1,12 @@
+---
+id: 7n8cfzum
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:12Z
+body: |-
+  Note: validateResolved (load.go:209-234) already runs ResolveKeyBindings — the model.go:170 panic is only reachable if a caller skips Load. Reframe as 'defensive hardening for direct-construction callers (tests, future programmatic embed)' rather than a real-user bug.
+---
+id: r1at1usd
+author: Hans Kohlreiter
+created: 2026-05-16T04:18:28Z
+body: |-
+  Implemented. config.Result now carries ResolvedKeyBindings (computed once in validateResolved). NewModel and NewModelWithOptions return (Model, error) instead of panicking. cmd/bwb/main.go startInteractive wraps the error and returns it (caller maps to exit code 1). All test callers updated via mustNewModel/mustNewModelWithOptions helpers; scenario_workflow_test.go updated. New TestNewModelWithOptionsReturnsErrorOnInvalidKeyBindings asserts the error path.

@@ -1,0 +1,6 @@
+---
+id: 3oxhce1a
+author: Hans Kohlreiter
+created: 2026-05-24T13:46:02Z
+body: |-
+  Option C implemented: Hydrate fails fast when c.started==true. Guard at function entry under c.mu.RLock; godoc updated to state the precondition. Test TestHydrate_AfterStart_ReturnsError. quality:fast green (973 tests). Commit 04c47aa.

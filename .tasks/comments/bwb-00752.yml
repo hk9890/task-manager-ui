@@ -1,0 +1,6 @@
+---
+id: if4n6f3e
+author: Hans Kohlreiter
+created: 2026-05-24T07:15:16Z
+body: |-
+  Done. Hydrate(path)/SaveNow() + periodic save ticker added. caching.go: cacheFilePath + saveInterval fields, default 30s; tickLoop runs two tickers (refresh + save) in select. options.go: WithSaveInterval(d). 11 new tests, -race clean: TestHydrate{EmptyPath,MissingFile,SchemaMismatch,Success,OtherError}, TestSaveNow{EmptyPath,Success,ConcurrentMutation,Error}, TestPeriodicSaveTickFires, TestRoundTripHydrateThenSave. Locking: SaveNow takes c.mu.RLock briefly to read path+mem pointer, releases, calls filestorage.Save which takes memory.mu.RLock internally — no nested locking, no deadlock path. Limitation for kxci.5: periodic save only fires when tickLoop is running (vcStatusFunc != nil). App wiring must set both options together; documented in tickLoop godoc. SaveNow at shutdown works regardless. mise run quality green (1169 unit / 1342 integration, 0 lint, fmt:check + scripts:check clean).

@@ -1,0 +1,6 @@
+---
+id: 0gcappwq
+author: Hans Kohlreiter
+created: 2026-05-17T10:45:20Z
+body: |-
+  Done. 983 tests run against scale fixture, 9 env-gated skips, 0 failures. Fixed 4 issues: (1) parity tests passed --limit 0 to BdReady (bd cap quirk); (2) smoke binary same fix; (3) TestSmokeIntegrationScaleFixture uses shared cache (eliminates per-test 7-9min seeding); (4) fixture.go errcheck on lockFile.Close. One bd-upstream bug filed (n7cd: bd ready --json 100-cap). interface.go scale-quirks appendix updated. mise run quality green.

@@ -1,0 +1,6 @@
+---
+id: f4ds5c6u
+author: Hans Kohlreiter
+created: 2026-05-22T09:26:27Z
+body: |-
+  Done. Added rationale comments to the 3 subprocess-spawn sites; NewModel keybindings param de-variadic'd (all call sites already passed exactly one arg). Build+test green (1070 tests).

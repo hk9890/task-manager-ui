@@ -1,0 +1,6 @@
+---
+id: 19s9nrup
+author: Hans Kohlreiter
+created: 2026-04-05T16:00:46Z
+body: |-
+  Verifier PASS: cmd/bwb now uses the standalone board controller in the active runtime path; board columns/sections come from the dashboard provider and supported query types; real board navigation updates shell selection/detail state; duplicate list-only board runtime logic no longer drives the app path; go build ./cmd/bwb, go vet ./..., and go test ./... all pass.

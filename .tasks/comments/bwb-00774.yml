@@ -1,0 +1,12 @@
+---
+id: 3xz1l513
+author: Hans Kohlreiter
+created: 2026-04-12T10:58:54Z
+body: |-
+  Keybinding conflict not addressed. What: detail context currently binds j/down to scroll_down and k/up to scroll_up (config/keybindings.go:144-145). Task says up/down should select rail rows when rail is focused, but up/down already mean scroll. The task says 'preserve current content scrolling behavior when the content pane is focused' but does not specify how the same keys dispatch differently per focused pane. Why: a tasker must design the focus-aware key dispatch from scratch since the current HandleKey in mode/details/model.go has no concept of pane focus. This is a design decision disguised as an implementation task. Suggested action: add explicit instructions for how pane focus changes key dispatch — either (a) new detail actions like rail_move_up/rail_move_down that share the same default bindings but dispatch based on focus state, or (b) reuse existing scroll_up/scroll_down with focus-conditional behavior documented in the task.
+---
+id: gsrosg0h
+author: Hans Kohlreiter
+created: 2026-04-12T10:59:07Z
+body: |-
+  Enter key conflict with shell-level issue actions. What: task says Enter opens a selected related issue from the rail. But the app model (internal/app/model.go) handles key dispatch at the shell level before mode-specific handling. If Enter is already consumed by the shell for other actions in detail mode, the rail's Enter will never fire. Why: the task's files-to-modify list includes app/model.go which suggests the author is aware of shell-level dispatch, but the instructions don't describe how Enter dispatch precedence works when the rail is focused vs when it is not. Suggested action: add an instruction that rail Enter is dispatched as a mode-level intent (a tea.Cmd or custom message) from mode/details back to the app, not as a direct key match in app/model.go.

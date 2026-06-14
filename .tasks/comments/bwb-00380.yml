@@ -1,0 +1,18 @@
+---
+id: fhgy4pki
+author: Hans Kohlreiter
+created: 2026-04-23T07:36:50Z
+body: |-
+  Reviewer found one unresolved product decision before implementation: may we truncate/elide very long single comments with a marker like ‘… (+K lines elided)’ to restore readability, or must full pasted output remain fully inline? This materially affects the fix strategy, so the issue is blocked pending user direction. Reviewer also noted a secondary preference question on oldest-first vs newest-first comment ordering.
+---
+id: zww8wpit
+author: Hans Kohlreiter
+created: 2026-04-23T07:38:11Z
+body: |-
+  User resolved the open questions: allow inline elision/collapse of very long pasted-output comments, and switch detail comments to newest-first. Issue is now executable again.
+---
+id: bx7w0stw
+author: Hans Kohlreiter
+created: 2026-04-23T07:43:16Z
+body: |-
+  Implemented comment readability overhaul: newest-first ordering, per-comment framing, conservative log-like detection (including tab expansion), and inline elision marker for long bodies. Verified in built /tmp/bwb against real epic beads-workbench-2shr with paged comment-history capture; readability is now acceptable. Artifact: ~/.local/share/opencode/tool-output/tool_db94a745b001eJBFfbWY7ZIek3

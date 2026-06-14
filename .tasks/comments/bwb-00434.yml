@@ -1,0 +1,10 @@
+---
+id: snbphfbk
+author: Hans Kohlreiter
+created: 2026-05-29T08:16:43Z
+body: |-
+  Implemented (tasker). Children group added to the detail Dependencies pane. Three parallel orderings kept in lockstep: dependencyGroups() (a), browserItemsFromDependencies() (b), and DependencyRefLineIndex() (c) — (c) delegates to (a) so the fix propagates. countDependencyReferences() now includes children. RenderDetail() overlays content.Children from m.Detail (anchor) to prevent a preview-path desync where the rendered Children group could come from the preview target while BrowserItems came from the anchor. Group order: Blocked by, Blocks, Related, Children, Structure (Q3). Children rendered unconditionally like the other dep groups (not conditional like Structure).
+
+  Tests: `mise run test` → 1136 pass, 0 fail, lint clean. Added TestDependencyRefLineIndexChildrenConsistency (BrowserSelectedIndex↔rendered-line, out-of-order child IDs to catch sort mismatch — the Q2 consistency guard), TestRenderDetailChildrenAnchoredToBaseDetail, TestBrowserItemsFromDependenciesIncludesChildren, TestRenderChildrenGroupGolden (new children_group.golden). 7 existing goldens regenerated.
+
+  Q7 honored: no repository change (children already populated); not added as a checkbox. Out-of-scope finding filed separately: compact-mode summarizeReferences() omits the Children count (P4). Code committed by the orchestrator at epic close, not per-task.

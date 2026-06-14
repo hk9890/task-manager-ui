@@ -20,7 +20,7 @@ The repository uses a two-tier model.
 
 - Tagged with `//go:build integration` and built only under `mise run test:integration` (and the `quality` / `test:coverage` gates).
 - These exercise real OS-level seams (for example launcher subprocess execution) that a synchronous fake cannot reach.
-- No external `bd` binary is required: the repository backend is the in-process task-manager SDK, and integration tests construct their stores directly.
+- No external tracker binary is required: the repository backend is the in-process task-manager SDK, and integration tests construct their stores directly.
 - Example: `internal/launcher/process_runner_integration_test.go`.
 
 ### Backend behavior tests

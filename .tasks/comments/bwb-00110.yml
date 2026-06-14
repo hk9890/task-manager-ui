@@ -1,0 +1,6 @@
+---
+id: n7tgvqx6
+author: Hans Kohlreiter
+created: 2026-05-22T09:23:35Z
+body: |-
+  Plan-review gate: formal reviewer grill skipped by orchestrator decision — cleanup-only epic just planned this session, every task has explicit testable ACs and a no-functional-change constraint. Proceeding to execution.

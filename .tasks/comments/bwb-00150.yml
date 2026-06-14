@@ -1,0 +1,8 @@
+---
+id: 8wu42rxm
+author: Hans Kohlreiter
+created: 2026-05-15T10:24:40Z
+body: |-
+  Implemented. Added HealthCheck to BeadsGateway interface + Gateway implementation + FakeBeadsGateway. Created internal/ui/fatalerror package with centered full-screen error view. Modified app/model.go: health check dispatched in Init(), fatalErr field gates View() and Update() — only quit/resize handled when fatalErr is set. Failure logged via slog.Default().Error.
+
+  Build: clean. All 29 packages pass.

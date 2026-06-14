@@ -1,0 +1,18 @@
+---
+id: ikzzlqn4
+author: Hans Kohlreiter
+created: 2026-04-19T20:34:36Z
+body: |-
+  Triage merged duplicate beads-workbench-lgih into this issue. This survivor now covers the same mutation-catalog JSON decode failure across detail comment and board create/update modal entry points on the seeded fixture.
+---
+id: 8wy9vlto
+author: Hans Kohlreiter
+created: 2026-04-20T15:11:41Z
+body: |-
+  Root cause confirmed: real `bd label list-all --json` returns objects like {"label":"area:app","count":2}, but the gateway decodes a []string. That decode failure aborts mutation catalog loading before create/update modals open.
+---
+id: ososmzr0
+author: Hans Kohlreiter
+created: 2026-04-20T15:24:05Z
+body: |-
+  Implemented local fix: decode `bd label list-all --json` as objects with a `label` field, updated gateway fixture shape, and added embedded-fixture coverage proving create/update/comment modals open without the mutation-catalog toast. Verified with focused gateway/app tests plus a built-binary capture run showing Create Issue, Update Issue bwf-2, and Comment on bwf-2 modals.

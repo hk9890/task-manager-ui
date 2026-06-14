@@ -1,0 +1,12 @@
+---
+id: 5znhl14l
+author: Hans Kohlreiter
+created: 2026-04-11T13:16:52Z
+body: |-
+  Design note: glamour ANSI output can break golden test comparisons. What: glamour produces ANSI escape sequences in its output. The project relies heavily on golden file testing (details_test.go, search_test.go) with AssertMatchesGolden and AssertMatchesGoldenNormalized. Why: all existing golden files for detail rendering will need regeneration, and the test strategy for the renderer itself needs to decide whether to test raw ANSI output or stripped output. Suggested action: add a testing note to spi.1 instructions specifying whether the renderer tests will use golden files with ANSI output or test via stripped-text assertions, and flag that spi.2 will invalidate existing detail goldens.
+---
+id: 93kihfaf
+author: Hans Kohlreiter
+created: 2026-04-11T13:16:57Z
+body: |-
+  Acceptance criteria gap: no criterion for what happens when glamour is given non-markdown plain text. What: beads issue descriptions are not guaranteed to be valid markdown — some may be plain text or mixed. Why: if the renderer chokes on plain text or produces worse output than the current renderMultiline, that is a regression. The fallback criterion says 'when rendering fails' but doesn't cover the case where rendering 'succeeds' but produces ugly output for non-markdown input. Suggested action: add an acceptance criterion like 'plain text content renders at least as readably as the current plain text renderer'.

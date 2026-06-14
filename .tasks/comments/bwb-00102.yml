@@ -1,0 +1,40 @@
+---
+id: wns2l16s
+author: Hans Kohlreiter
+created: 2026-05-25T11:52:53Z
+body: |-
+  ## Orchestrator design decisions (executing under "implement everything" goal)
+
+  The grill-question gate normally walks open design questions with the user. Per the active goal directive "work until everything is implemented, do not stop", these are decided by the orchestrator using sensible defaults and recorded here. If any prove wrong, file follow-up tickets.
+
+  ### 1. Generator entry point
+  Go package `internal/testing/loadgen/` (library) + thin CLI at `cmd/bwb-loadtest/`. The mise task invokes the CLI. Tests can use the library directly. Single source of truth for the workload model.
+
+  ### 2. Report location
+  `./load-test-report.json` in repo cwd by default; configurable via `--out <path>` flag. Stdout always gets a human-readable summary table. Add `/load-test-report.json` to `.gitignore`.
+
+  ### 3. Default sample sizes
+  - Cold-path ops (Dashboard cold, fresh-cache hydrate): N=5
+  - Hot/warm ops (Dashboard warm, search matrix, GetIssueDetail, hot reads): N=20
+  Configurable via `--samples-cold N` / `--samples-warm N` flags (and matching env vars).
+
+  ### 4. Comments
+  v1 includes optional comment generation via `bd comment` subprocess. Slow at scale (one subprocess per comment) but realistic. The CLI exposes `--comments-per-issue avg-depth` (default 0, off). Document the slowness in `docs/LOAD_TESTING.md`.
+
+  ### 5. Reproducibility bar
+  Same seed → identical workload SHAPE (counts per status, id-assignment order, dep edge structure). Numbers (latencies, exact timestamps in `bd` rows) vary; the comparator normalizes timestamps. Documented tolerance: "report timing numbers vary roughly ±20% run-to-run; manifest counts and dependency structure are byte-identical".
+
+  ### 6. Blocked status coordination
+  A `blocked` issue requires ≥1 incoming blocker edge. Those mandatory edges DO count against the dep-density budget. If density × total_issues < blocked_count, mandatory edges exceed the budget — the generator emits a warning and proceeds (does not error). The actual edge count is reported in the manifest.
+
+  ### 7. Scale-fixture relationship
+  Parallel path. Existing `internal/testing/e2e/embeddedfixture/` and `SharedScaleFixtureRepoPath` stay untouched (the two parity tests + `scale_fixture_smoke_test.go` depend on the exact shape). The new generator is independent at `internal/testing/loadgen/` + `cmd/bwb-loadtest/`. No silent re-runs.
+
+  ### Sequencing
+  - bjyt.2 (generator) first — defines workload spec and seeded `.beads/` output
+  - bjyt.3 (measurement harness) consumes .2's API
+  - bjyt.1 (mise task) wires .2 + .3 behind `mise run test:load`
+  - bjyt.4 (docs) writes the agent-runnable recipe
+  - bjyt.5 (acceptance review) verifies all four
+
+  Each subtask runs serially in its own tasker.

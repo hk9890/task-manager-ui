@@ -1,0 +1,6 @@
+---
+id: aqugaula
+author: Hans Kohlreiter
+created: 2026-04-10T17:02:39Z
+body: |-
+  Solid task — clear, specific, testable, correct fix. One minor note: the instruction says 'Add os to imports if not already present' but os/exec is already imported (which is in the os subtree, not the os package itself). The tasker needs to add 'os' as a separate import since os.Environ() requires it. No action needed — just confirming this is a well-specified bug fix.

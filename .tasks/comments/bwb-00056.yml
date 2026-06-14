@@ -1,0 +1,18 @@
+---
+id: ur5fgapp
+author: Hans Kohlreiter
+created: 2026-04-18T20:18:01Z
+body: |-
+  Review: Well-scoped, straightforward visual change. No hidden complexity. One observation: the current rendering in renderThreePane (details.go:195-198) uses a '│' separator for metadata but no box for any pane — Dependencies and Content are also unboxed columns. What: verify that Dependencies and Content actually use frames/borders today. If they don't, this bug may be requesting framing for metadata alone, which would create visual inconsistency in the opposite direction. Why: the description says 'match the other major panes' but if those panes aren't framed either, the fix scope changes. Suggested action: confirm current frame state of all three panes before implementing; if none are framed, consider whether all three should be, or just metadata.
+---
+id: 28ohsazz
+author: Hans Kohlreiter
+created: 2026-04-18T20:23:40Z
+body: |-
+  Set review — frame scope is ambiguous and prior reviewer's concern is unresolved. What: the prior comment correctly identified that Dependencies and Content are ALSO unboxed (renderThreePane joins columns with padToWidth + gap, no borders). The description says 'match the other major panes' but those panes have no frames either. Why: if you frame only metadata, you create a different inconsistency. If you frame all three, scope triples. The owner hasn't responded to clarify intent. Suggested action: owner must decide: (a) frame all three panes consistently, or (b) frame metadata only and accept the asymmetry. Option (a) is the right call but needs to be stated explicitly. This issue is blocked on that decision.
+---
+id: 8dq5msn3
+author: Hans Kohlreiter
+created: 2026-04-18T22:19:46Z
+body: |-
+  Verifier rerun: PASS. Built /tmp/bwb and reviewed real detail mode against embedded fixture at 120x34 and 160x34. Metadata now renders as a framed panel, three-pane composition looks coherent, and metadata paging/scroll behavior remained intact in runtime review.

@@ -1,0 +1,12 @@
+---
+id: 5sqb5y7a
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:35Z
+body: |-
+  ## STRENGTH: Command runner test seams (omd.3) are explicitly required
+
+  **What**: Task beads-workbench-omd.3 explicitly requires "Build test seams for command execution" and "Tests can exercise command behavior without fragile shell-only coupling." This is one of the few places where the plan correctly requires testability as part of the implementation — not as an afterthought in a separate test task.
+
+  **Why**: The command runner is the lowest-level boundary between the app and the external `bd` CLI. Having test seams here means all gateway-level tests can avoid subprocess execution, which is exactly right for agent-automated testing. This is the model that should be replicated for the editor opener and launcher executor.
+
+  **Suggested action**: Use omd.3 as the template when strengthening testability requirements for yze.4.1 (editor flow) and yze.4.3 (launcher framework). The pattern is: "implementation task requires test seam; test task exercises it."

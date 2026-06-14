@@ -1,0 +1,6 @@
+---
+id: v3hd9abg
+author: Hans Kohlreiter
+created: 2026-05-23T22:01:54Z
+body: |-
+  Implemented. Files: internal/repository/filestorage/filestorage.go (Save/Load with atomic temp+rename, two-file: jsonl + .manifest.json, ErrSchemaMismatch on version mismatch), filestorage_test.go (4 tests including round-trip + schema mismatch + missing manifest + empty repo), contract/parity_integration_test.go (build tag integration, all 13 scenarios). Modified memory/repository.go: added Snapshot()+SnapshotIssue/SnapshotComment exported types + SeedClosed() helper. Deviation: Save/Load placed in filestorage/ sibling package (not repository/file.go) to avoid import cycle — documented in package godoc. Parity suite: all 13 pass for memory (PartialDashboardFailure skipped, N/A documented); all 12 + PartialDashboardFailure pass for beads (forced via stub of underlying BeadsGateway). Scenario 7 asserts title-substring parity; notes/description match asserted memory-only (bd searches title-only). Falsifiability verified by inverting memory's sort comparator and seeing SortDirection test fail with expected diagnostic, then reverted. mise run quality green (1370 tests, 0 fail). Parity suite picked up by mise run test:integration.

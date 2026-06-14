@@ -1,0 +1,12 @@
+---
+id: tnn7m8w2
+author: Hans Kohlreiter
+created: 2026-05-16T03:32:57Z
+body: |-
+  Update cites: searchIssuePageFromRecords→:453, searchIssuesFromList→:390, empty-text+WorkState branch→SearchIssues :303. Pick option 2 (typed notice) — option 1 (validation error) would break callers that intentionally want the full ready/blocked queue.
+---
+id: lvt4rmtp
+author: Hans Kohlreiter
+created: 2026-05-16T04:09:16Z
+body: |-
+  Implemented both G5 and G7 in read_gateway.go. G5: searchIssuePageFromRecords now uses new searchMetadataFromCappedBackendRecords helper — completeness reports MaybeMore at limit boundary, Partial otherwise, never falsely Exact. G7: empty-text + WorkState Ready/Blocked attaches searchNoticeNoTextFilter constant via existing SearchResultMetadata.Notice field (no new domain type needed). 3 new tests; 2 existing tests updated where their Exact assertions were testing the bug itself.

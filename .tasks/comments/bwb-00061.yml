@@ -1,0 +1,18 @@
+---
+id: tijx158w
+author: Hans Kohlreiter
+created: 2026-04-11T13:16:15Z
+body: |-
+  Investigation: release tag v0.1.0 exists on GitHub but has zero attached assets. The repository currently has CI only and a manual release doc, but no packaging/upload automation (no GoReleaser config and no release workflow). This is why mise github backend cannot match linux-x64 assets. Plan: add tag-triggered GitHub release automation that builds archives for supported platforms, update release docs, and backfill v0.1.0 assets.
+---
+id: pplt8kbp
+author: Hans Kohlreiter
+created: 2026-04-11T13:20:18Z
+body: |-
+  Update after fix: repository-side release problem is corrected. v0.1.0 now has uploaded assets (linux/macos x64+arm64 plus checksums), and the repo now has tag-triggered GoReleaser automation. However, local verification with mise 2026.3.5 still fails and reports an empty available-asset list even though GitHub API/gh release view show the assets. This points to an additional mise/private-GitHub backend issue or stale/private-auth behavior outside this repo. The repo-side bug remains fixed for future releases and for consumers that can see private release assets correctly.
+---
+id: 2gksslp9
+author: Hans Kohlreiter
+created: 2026-04-11T13:20:59Z
+body: |-
+  Verification complete: tag-triggered release automation is in the repo, v0.1.0 now has linux/macos assets attached, and mise install succeeds when using a fresh cache. Existing local mise caches created before the backfill can remain stale; on a fresh machine or after clearing the GitHub release cache, install works.

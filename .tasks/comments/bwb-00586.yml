@@ -1,0 +1,18 @@
+---
+id: kd4pq4kf
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:45Z
+body: |-
+  Review finding — acceptance criterion is testable but the 'which mechanism wins' decision is unspecified. What: the instructions say 'pick a single selection sync mechanism' but do not state which one the tasker should pick. The two mechanisms are: (A) SelectionChangedMsg emitted by board/search after state changes, handled at model.go line 302; (B) syncSelectionFromControllers() polling via type-asserted CurrentSelection() at model.go line 159/483. Why: this is a design decision that materially affects how board/search communicate with the shell. If the tasker picks the wrong one, they either add coupling or break the Bubble Tea message-passing pattern. The message-based approach (A) is clearly better because it follows Bubble Tea conventions and eliminates the type assertion polling code. Suggested action: state in instructions that the message-based path (SelectionChangedMsg) should be kept and the polling path (syncSelectionFromControllers) should be removed. This removes ambiguity without adding scope.
+---
+id: 472970qc
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:51Z
+body: |-
+  Review finding — extraction scope is vague. What: instruction 2 says 'extract focused helpers or files inside internal/app for selection and detail coordination and for shell owned action flows where that meaningfully shrinks model.go'. No concrete split point or target file count is given. Why: a tasker could extract anything from nothing to ten files. This is the kind of instruction that leads to over-engineering or analysis paralysis. The real goal is: keep model.go's Update function readable after removing the dual sync. Suggested action: tighten to something like 'extract detail coordination (ensureDetailForCurrentSelectionCmd and related helpers) into a focused file if it meaningfully reduces model.go line count; do not create new packages or new abstractions.'
+---
+id: eskl68wh
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:57Z
+body: |-
+  Review question — dependency on wz9.1 may be over-constrained. What: wz9.2 depends on wz9.1. The selection unification (removing syncSelectionFromControllers polling) could technically be done before or independently of flattening mode.Controller storage. The polling code type-asserts through mode.Controller, yes, but removing the polling path and keeping only SelectionChangedMsg does not require the Controller interface to be gone first. Why: if the dependency is hard, these two tasks are serial and the critical path is longer. If the dependency could be relaxed, a tasker could work on wz9.2 in parallel with wz9.1 (or even first). Suggested action: consider whether the dependency should be 'soft' (recommended ordering) rather than 'hard' (blocks). If wz9.1 lands first the cleanup is cleaner, but wz9.2 is independently viable.

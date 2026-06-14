@@ -1,0 +1,12 @@
+---
+id: x3e6bzor
+author: Hans Kohlreiter
+created: 2026-04-09T18:17:28Z
+body: |-
+  Verifier rerun: STILL REPRODUCIBLE on current tree. docs/CODING.md now covers shared row ownership and the no-shared-list decision, but it still does not explicitly document internal/ui/details as the dedicated detail component or clearly name the generic panel/container boundary expected by ekp.4. Artifacts: /tmp/bwb-ekp4-runtime-8hwb3bt7 and /tmp/bwb-ekp4-detailok-x2lovvjy.
+---
+id: nztqtu8a
+author: Hans Kohlreiter
+created: 2026-04-09T19:10:36Z
+body: |-
+  Taking this on now: update docs/CODING.md to explicitly document panel/container and dedicated detail component boundaries, then rerun acceptance verification.

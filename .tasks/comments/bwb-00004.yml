@@ -1,0 +1,30 @@
+---
+id: f87xmf0d
+author: Hans Kohlreiter
+created: 2026-04-06T18:36:37Z
+body: |-
+  Focused board/app snapshot reconciliation is now passing. Remaining focused failure is the board-mode density heuristic in internal/mode/board/model_test.go: the old maxChromeOverhead thresholds assume short floating-card lanes and now fail intentionally with the new full-height Perles-style columns. Next step is to recalibrate or replace that assertion so it validates dense rows without rejecting full-height lanes.
+---
+id: x6zaefcc
+author: Hans Kohlreiter
+created: 2026-04-06T18:37:00Z
+body: |-
+  Updated internal/mode/board density coverage to validate compact one-line issue rows without penalizing intentional full-height lane padding. This keeps UX guardrails aligned with the Perles-style full-height dashboard requirement.
+---
+id: 7284zq3f
+author: Hans Kohlreiter
+created: 2026-04-06T18:43:13Z
+body: |-
+  Verification review performed for beads-workbench-12h.
+  - [PASS] Equal visual height on representative terminal sizes — tested via 'go test ./internal/ui/board', 'go test ./internal/mode/board -run TestBoardModeDashboardLayoutGoldensAcrossWidths -v', and reviewed board/app goldens at 80/120/180 cols. Observed equal-height bordered columns with shared bottom borders.
+  - [PASS] Lanes extend to the bottom of the available board area — reviewed internal/ui/board/board.go (fixed section height via FormSection Height) plus app/board goldens. Observed columns padded to full height instead of short top-floating cards.
+  - [PASS] Board reads as a coherent full-screen dashboard grid closer to Perles — reviewed embedded-fixture full-board and board→detail→board goldens/tests. Observed no sidebar chrome and consistent full-height multi-column grid.
+  - [PASS] Updated golden/runtime tests verify lane height and bottom alignment behavior — observed passing commands: 'go test ./internal/ui/styles ./internal/ui/board ./internal/mode/board ./internal/app', 'go build ./cmd/bwb', 'go vet ./...', 'go test ./...'.
+  - [UNVERIFIED] Real PTY/runtime review confirms the floating-box look is gone — available script/PTy evidence does not show the rendered alt-screen board, only terminal probes. This acceptance criterion remains unverified.
+  Result: BLOCKED pending better runtime evidence. Created follow-up bug beads-workbench-w4z to track the verification gap.
+---
+id: wxr7cux1
+author: Hans Kohlreiter
+created: 2026-04-06T20:37:16Z
+body: |-
+  User visually confirmed the dashboard now really looks better and the full-height lane change meets the intended improvement. This satisfies the remaining runtime-review acceptance need that automated PTY capture could not directly preserve.

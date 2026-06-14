@@ -1,0 +1,6 @@
+---
+id: s0uy715d
+author: Hans Kohlreiter
+created: 2026-06-06T13:23:31Z
+body: |-
+  Done — commit 16108fe. Added LastDashboardClosedLimit to filestorage.V2Header (omitempty schema bump), persisted it in SaveNow, and restored it in Hydrate's dashboard-hydrated branch only. The v2 fast-paint now actually serves the persisted first paint. Safe per ipq7's boundClosed(serve) truncation (12fef25, confirmed at caching.go:554). Old files decode limit=0 and re-fetch gracefully (verified). Added TestHydrate_PersistedClosedLimit_FastPaintActuallyWorks (matching-limit cache hit + old-file re-fetch). Full quality gate green (1321 tests).

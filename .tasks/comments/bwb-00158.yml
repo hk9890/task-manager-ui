@@ -1,0 +1,10 @@
+---
+id: brb8yeuf
+author: Hans Kohlreiter
+created: 2026-04-20T14:23:27Z
+body: |-
+  Fixed by updating release-readiness guidance to use explicit module-version GoReleaser commands. Re-verified successfully on current main with:
+  - go run github.com/goreleaser/goreleaser/v2@latest check
+  - go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean
+
+  No repository docs contained the broken form; the correction was needed in beads release-task guidance.

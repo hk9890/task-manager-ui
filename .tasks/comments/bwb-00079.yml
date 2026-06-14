@@ -1,0 +1,6 @@
+---
+id: xvf5r6o6
+author: Hans Kohlreiter
+created: 2026-04-06T22:46:00Z
+body: |-
+  Removed the duplicate named blocked-by line from compact detail preview so compact mode now shows only the concise dependency summary. Focused detail/search/app tests and the full go test ./... suite pass.

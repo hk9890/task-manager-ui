@@ -68,7 +68,7 @@ gates, and `docs/CODING.md` for build/test details.
 - [`docs/TESTING.md`](./docs/TESTING.md) — test policy, fixtures, and runtime verification expectations
 - [`docs/MONITORING.md`](./docs/MONITORING.md) — centralized logging contract and evidence capture points
 - [`docs/RUNTIME_UI_VERIFICATION.md`](./docs/RUNTIME_UI_VERIFICATION.md) — built-binary runtime UI verification runbook
-- [`docs/CHANGE-WORKFLOW.md`](./docs/CHANGE-WORKFLOW.md) — beads-first change landing and session completion workflow
+- [`docs/CHANGE-WORKFLOW.md`](./docs/CHANGE-WORKFLOW.md) — task-manager-first change landing and session completion workflow
 - [`docs/RELEASING.md`](./docs/RELEASING.md) — tag-triggered release workflow
 - [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — default keybindings reference
 

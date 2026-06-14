@@ -1,0 +1,18 @@
+---
+id: 9cdvxoq3
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:52Z
+body: |-
+  Review pass: correctly structured as a blocked discussion task. What: The issue correctly identifies this as a policy decision, not an implementation task. The blocked status + needs:discussion label is the right pattern. Open questions are well-framed with three distinct options. Instructions correctly say 'do nothing until decision is made' and then create follow-up work. This is exactly how a discussion-blocked task should look.
+---
+id: 6mrabki5
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:59Z
+body: |-
+  Priority concern: P1 may be too high for a blocked discussion item. What: This is P1 but it is blocked and requires human decision-making with no timeline. Meanwhile, the actionable work (f51, vr5, 2ue) can all proceed independently. P1 on a blocked item creates false urgency in priority-sorted views. Why: It pushes this above 2ue (P2) in triage views even though 2ue is immediately actionable and this is not. Suggested action: Either downgrade to P2, or keep P1 only if the maintainer genuinely wants this decision resolved before any of the other release work proceeds (which the current structure does not enforce — nothing depends on this).
+---
+id: 64luk6j4
+author: Hans Kohlreiter
+created: 2026-04-11T12:46:59Z
+body: |-
+  Maintainer policy decision recorded: keep this repository private; releases are internal-only for this repo unless a future policy decision changes that.

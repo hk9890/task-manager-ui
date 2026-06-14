@@ -1,0 +1,12 @@
+---
+id: 8p3oyhjj
+author: Hans Kohlreiter
+created: 2026-05-21T18:51:45Z
+body: |-
+  Implemented + verified. row.go: SkeletonGlyph ▓→░, title slot now rotates loading…/fetching…/reading…. board.go: skeletonRowCounts{4,6,3,5} per column index. Tests updated, 2 search goldens regenerated, full 'mise run quality' green (1206 tests). Left uncommitted for review.
+---
+id: nhyoa6jh
+author: Hans Kohlreiter
+created: 2026-05-22T06:25:27Z
+body: |-
+  Revised per user feedback: dropped the loading…/fetching… text. Skeleton row is now 'X XX XXX' gray metadata placeholders + a ░ id bar + a ░ title bar whose width varies per row (skeletonTitleFractions restored). Per-column row counts {4,6,3,5} unchanged. Tests reworked, search goldens regenerated, lint + quality:fast green.

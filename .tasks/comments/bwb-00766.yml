@@ -1,0 +1,23 @@
+---
+id: kpq1agve
+author: Hans Kohlreiter
+created: 2026-05-17T18:53:02Z
+body: |-
+  ## Verifier report (beads-tasks:verifier) — ALL 10 CRITERIA PASS
+
+  | # | Criterion | Result | Evidence |
+  |---|---|---|---|
+  | 1 | All impl tasks closed | PASS | h2xu.1/.2/.3/.4 all CLOSED |
+  | 2 | T4 PASS recorded | PASS | All 6 checks documented; Check 6 ship-and-tune per criteria |
+  | 3 | `mise run quality` green | PASS | 814 unit + 948 integration tests, 0 lint, 0 vet |
+  | 4 | No `░` in internal/ui/ | PASS | grep returns zero matches |
+  | 5 | No `⏳` in internal/ui/ | PASS | grep returns zero matches |
+  | 6 | 4 surfaces route via RenderCompactSkeleton | PASS | board.go:195, search.go:339, details.go:529 |
+  | 7 | `internal/ui/skeleton/` deleted | PASS | dir does not exist |
+  | 8 | `loading.View()` deleted | PASS | grep returns no `func View(` |
+  | 9 | Layout-stability boundaries match | PASS | Both snapshots: `[0,32,35,67,70,103,106,139]` byte-identical |
+  | 10 | T4-discovered bugs closed | PASS | Both fixed inline (df481bd, 0a8fcd4); no open follow-ups from T4 |
+
+  **Recommendation: CLOSE EPIC**
+
+  `9qpm` (refresh per-surface indicator) is a planning-pass follow-up, explicitly out-of-scope.

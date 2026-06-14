@@ -1,0 +1,6 @@
+---
+id: f4rc3891
+author: Hans Kohlreiter
+created: 2026-05-16T07:14:35Z
+body: |-
+  Swept .claude/, bd remember, AGENTS.md, CLAUDE.md, docs/. Two files updated: docs/RELEASING.md (CI description rephrased) and docs/test-baseline-2026-05-16.md (3 occurrences in historical baseline context, reordered flags + added mise pointers). bd remember had zero hits. AGENTS.md and CLAUDE.md already clean from i1th.6. Final AC grep: zero hits. .claude/worktrees/ excluded — stale locked worktree, not agent guidance.

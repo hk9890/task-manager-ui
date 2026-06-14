@@ -1,0 +1,12 @@
+---
+id: 812l2e0e
+author: Hans Kohlreiter
+created: 2026-05-16T06:18:54Z
+body: |-
+  Body rewritten (reviewer F13/F14/F15/F17): changed 'add to' → 'Create' since .mise.toml doesn't exist; added [tools] go = <version-from-go.mod> block (resolves CI Go-install source-of-truth question in i1th.7); added quality:fast variant per user decision; resolved scripts task glob via dir=config_root + find/xargs; aligned all version-pin invocations to no-literal-v convention.
+---
+id: kp7499fa
+author: Hans Kohlreiter
+created: 2026-05-16T07:08:04Z
+body: |-
+  .mise.toml created with [tools] go=1.24.2 (from go.mod), [env] CGO_ENABLED=0, and 11 tasks (build, fmt, vet, lint, guardrails, test, test:integration, test:all, test:verbose, scripts, quality:fast, quality). All mise run X commands verified: test (601 tests, ~18s), test:integration (613 tests, ~99s), quality:fast, quality. Short-circuit AC confirmed via injected vet error (~145ms fail). Pre-existing flaky TestForcedRotationProducesRotatedOutput in internal/logging noted as separate bug.

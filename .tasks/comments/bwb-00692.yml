@@ -1,0 +1,6 @@
+---
+id: dvsjjm3i
+author: Hans Kohlreiter
+created: 2026-05-17T10:45:18Z
+body: |-
+  Done. Bare FakeBeadsGateway now passes RunWriteContract; writeAwareFake deleted. 5 fake updates (CreateIssue validation + ID gen + issueStore, UpdateIssue existence + mutation, CloseIssue status, AddComment append, CountIssues live counting). SeedIssue helper added for tests that need pre-existing state. Drift log extended (5 entries dated 2026-05-17). One consumer test fixed (editor/service_test.go — setup gap, not production bug). mise run quality green (805+939 tests, 0 lint, 0 vet).

@@ -1,0 +1,90 @@
+---
+id: 9cpljn3o
+author: Hans Kohlreiter
+created: 2026-04-06T20:57:50Z
+body: |-
+  Scope clarification from discussion: use Perles only as a UX reference donor for the full-text search workflow first. Priority is not to reproduce all of Perles search capabilities; priority is to make entering search, seeing results, and returning to board feel right and work reliably without the current ugly/broken mode-switch and form-heavy UX.
+---
+id: dyuqzjyx
+author: Hans Kohlreiter
+created: 2026-04-06T21:10:31Z
+body: |-
+  Implemented first-pass search-mode redesign around a Perles-inspired full-text workflow: ctrl+space mode toggle, esc back to board, query/results/preview split layout, simplified text-first controller, and updated renderer/controller/app tests. Focused search and app tests are being used as the immediate validation loop before broader quality gates.
+---
+id: myh1foim
+author: Hans Kohlreiter
+created: 2026-04-06T21:49:54Z
+body: |-
+  Search redesign and broader UX polish are holding up under focused and broad validation. One remaining test failure during the full suite is in internal/mode/details/model_test.go because it asserted the old detail text prefix format; this is just a test expectation update caused by the deliberate detail presentation cleanup.
+---
+id: 0evmhdzp
+author: Hans Kohlreiter
+created: 2026-04-06T21:57:27Z
+body: |-
+  Additional direct runtime feedback: search still has three unacceptable UX problems after the first redesign pass. (1) The query field does not feel like a real text field because there is no visible cursor/caret. (2) The leading '/' in the query area feels wrong/confusing in this product and should be removed unless it serves a clearly justified purpose. (3) Typing causes visible flicker, which makes the interaction feel broken. Next step is to make the search box feel like a real focused input and keep the search layout stable while queries are running instead of flashing a loading screen.
+---
+id: 4vzhd2wi
+author: Hans Kohlreiter
+created: 2026-04-06T21:58:19Z
+body: |-
+  Second search UX pass addresses the remaining obvious problems: removed the confusing leading slash from the visible query field, added a caret-like focused input affordance, and stopped swapping the whole screen to a loading view while typing so the layout stays stable and avoids flicker. Focused search/app tests are validating this pass.
+---
+id: oki0sch9
+author: Hans Kohlreiter
+created: 2026-04-06T22:09:42Z
+body: |-
+  Current code state is committed-ready: Perles-style ctrl+space toggle, stable text-first search layout, visible caret-like focused input, and reduced typing flicker via stable in-place loading behavior. Full go test suite passes, but the issue remains open for any further runtime polish discovered in direct use.
+---
+id: f1pj35co
+author: Hans Kohlreiter
+created: 2026-04-06T22:11:06Z
+body: |-
+  Session landed in git with commits c0352f6 and 9fe6b30 after search/detail/dashboard UX work. Note: session-close Pushing to Dolt remote... could not run because this repo currently has no configured Dolt remote; git push to origin/main is being completed separately.
+---
+id: p55pf7jh
+author: Hans Kohlreiter
+created: 2026-04-06T22:17:43Z
+body: |-
+  ## UX Review: Help text describes phantom search features
+
+  **What**: `shellKeyHelp()` in `internal/app/model.go` (lines 674-701) describes search filters that do not exist: `f` to cycle filter focus, status/type/priority cycling, Ready/Blocked toggles, and assignee filters. A user pressing `?` in search mode gets instructions for features that are not implemented. This is actively misleading — the only search capability is free-text query.
+
+  **Why**: This is a trust-killer. A user who reads the help and tries to use filters will think the app is broken. Help text that lies is worse than no help text. It also means the acceptance criteria "search mode is visually coherent and no longer presents as a broken search-box workflow" cannot be checked off — a core operator surface (help) is incoherent.
+
+  **Suggested action**: Strip the phantom filter descriptions from `shellKeyHelp()`. Only document what actually works: free-text query, tab to cycle panes, enter to select, esc to return. If filters are planned future work, that's a separate issue — help text must match current reality.
+---
+id: ojcovgk5
+author: Hans Kohlreiter
+created: 2026-04-06T22:17:50Z
+body: |-
+  ## UX Review: Tab key double-fires in search mode
+
+  **What**: When `tab` is pressed in search mode, the key message is forwarded to the search controller (which calls `cycleFocus(1)` at `internal/mode/search/model.go:132`), AND THEN the shell's own tab handler (`internal/app/model.go:258-270`) also fires because `CapturesShellKey` does not capture `tab`. This means a single tab press both mutates search pane focus AND triggers a mode switch. The user gets unpredictable behavior.
+
+  **Why**: This is a real interaction bug. The search mode was redesigned around 3-pane focus cycling with tab, but the shell still interprets tab as a mode-switch key. These two behaviors conflict. A user pressing tab in search to cycle from query → results → preview will instead get yanked out of search mode. This directly contradicts the "entering search and returning to board are smooth and discoverable" acceptance criterion.
+
+  **Suggested action**: Either (a) have search mode's `CapturesShellKey` return true for `tab` so the shell doesn't also handle it, or (b) change the pane cycling key in search to something that doesn't conflict with shell-level mode switching. Option (a) is simpler and more consistent — search mode owns tab when active.
+---
+id: vq5yelkl
+author: Hans Kohlreiter
+created: 2026-04-06T22:17:57Z
+body: |-
+  ## UX Review: Search mode has zero golden test coverage
+
+  **What**: Board mode has 8+ golden files across terminal widths (80, 120, 200 cols). Detail mode has 5 golden files (full and compact). Search mode — the most recently redesigned and most complex rendering surface (3-pane layout with query, results, and preview) — has zero golden files. Its tests use only `strings.Contains` assertions.
+
+  **Why**: Golden tests are the primary visual regression safety net in this project. Without them, any change to search rendering could silently break the layout and nobody would know until manual inspection. Given that search mode was just redesigned to fix visual problems, shipping it without golden coverage means the fix itself is unprotected. The acceptance criterion "search mode is visually coherent" is not verifiable by the test suite.
+
+  **Suggested action**: Add golden files for search mode at minimum: (1) results with a selected item showing preview, (2) empty results state, (3) narrow terminal width to test truncation. Follow the same pattern used by `internal/ui/board/board_test.go` and `internal/ui/details/details_test.go`.
+---
+id: hfkqqg0a
+author: Hans Kohlreiter
+created: 2026-04-06T22:18:03Z
+body: |-
+  ## UX Review: Bug 925 is NOT done — three open issues remain
+
+  **What**: After full UX review of search mode in its current state, three distinct problems remain that prevent closing this bug: (1) help text describes non-existent filter features, (2) tab key double-fires causing unpredictable mode switching, (3) no golden test coverage for the search renderer. See individual comments on each.
+
+  **Why**: The acceptance criteria state "search mode is visually coherent and no longer presents as a broken search-box workflow" and "entering search and returning to board are smooth and discoverable." The tab double-fire directly breaks smooth entry/exit. The phantom help text breaks coherence. The missing goldens mean coherence can't be verified going forward. The visual layout itself IS improved — credit where due — but these three issues keep the bug open.
+
+  **Suggested action**: Address the three findings in this order: (1) fix tab double-handling first — it's an interaction bug users will hit immediately, (2) strip phantom help text — quick fix, high trust impact, (3) add golden tests — protects the investment already made in the redesign.

@@ -1,0 +1,60 @@
+---
+id: 69hq8st7
+author: Hans Kohlreiter
+created: 2026-04-19T21:52:37Z
+body: |-
+  Requested during search planning so dedicated detail dependency browsing matches search-style live preview semantics.
+---
+id: eisvzb64
+author: Hans Kohlreiter
+created: 2026-04-19T21:56:56Z
+body: |-
+  User approved the dedicated detail dependency-browser live-preview direction and requested reviewer feedback before implementation.
+---
+id: mr63dbl0
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:31Z
+body: |-
+  Verdict on approved direction: SOUND but architecturally heavier than the issue currently suggests. What: 'auto-update Content+Metadata on Up/Down in dependency pane' is a one-line behavior change in mode/details/model.go (lines 183-189 already special-case ScrollUp/Down to moveRelatedSelection); the hard parts are everything around it. Why: the issue text reads as a small UX tweak but it actually requires (a) a new shell pathway because detail mode does NOT emit mode.SelectionChangedMsg today (app/model.go:388 hard-filters non-Board/non-Search), (b) a decision about what 'currentSelection' means when the user is browsing a different issue inside detail, (c) repurposing Enter, (d) the same stale-detail rule aqps needs. Suggested action: keep 2shr.2 as-is but mark blocked-by aqps so it can reuse aqps's exported render helpers and stale-loading rule rather than reinventing them.
+---
+id: 49y95j8r
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:39Z
+body: |-
+  Architectural finding: detail dependency-browse needs a NEW load path that does not corrupt shell selection. What: today, detail mode's HandleKey on dep-pane Up/Down only updates BrowserSelectedIndex (mode/details/model.go:183-189). To trigger Content+Metadata refresh, something must call loadDetailCmd for the highlighted dep-issue. But if you do this by setting m.detail.SelectionID/TargetID and calling loadDetailCmd, you're overwriting the shell's idea of 'which issue is selected' (app/model.go currentSelection() comes from selectedByMode[Board|Search], NOT m.detail.SelectionID — but ensureDetailForCurrentSelectionCmd will fight the dep-browse on the next mode switch). Why: Esc back to board could now leave the user on a different highlighted row than expected; o (open detail) from board could re-load the wrong issue. Suggested action: introduce an explicit DetailBrowseTargetID separate from m.detail.SelectionID. The browser pane drives DetailBrowseTargetID + loadDetailCmd; m.detail.SelectionID (the shell-anchored selection) only changes on explicit Enter or on Esc-then-reopen. Document this in AC.
+---
+id: 8rjrao1i
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:45Z
+body: |-
+  Enter-key repurpose decision missing. What: instructions say 'remove or repurpose dependency-pane Enter behavior' but do not pick. Today Enter emits OpenRelatedIssueIntent which the shell handles by replacing m.detail.SelectionID/TargetID and reloading (app/model.go:454-467) — i.e., Enter 'commits' the dep-browsed issue as the new anchored detail. Why: that semantic is actually still useful: live-preview lets you peek; Enter promotes the peeked issue to the new permanent detail anchor (changes header context, makes its dependencies the new browser, makes it the issue Esc-back returns to). Suggested action (recommended): KEEP Enter as 'commit dep-browsed issue as new detail anchor' and add this as an AC bullet. Update mode/details tests to assert that Up/Down loads-but-does-not-anchor while Enter swaps the anchor (and resets the BrowserItems to the newly anchored issue's dependencies).
+---
+id: 2i4k4c6f
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:52Z
+body: |-
+  UX regression risk: mid-browse browser-list rewrite. What: when dep-browse loads a new detail, mode/details.ApplyLoadedDetail calls syncBrowserPanel which calls browserItemsFromDependencies on the NEW detail and calls selectBrowserIssue(issueID) — meaning the browser list under the cursor gets replaced mid-browse if the user lingers on a row long enough for ShowIssue to resolve. Why: this will jerk the cursor to a different position (or to -1 if the new issue's dep set doesn't contain the highlighted one), breaking 'keep traversal usable across dependency items' from the AC. Suggested action: when in live-preview mode (Up/Down without Enter), do NOT call ApplyLoadedDetail's syncBrowserPanel — only update Content+Metadata data. Browser list should only be rebuilt on Enter (anchor commit). Add this as an explicit AC bullet and add a test that Up/Down preserves BrowserItems and BrowserSelectedIndex across detailLoadedMsg.
+---
+id: 4zl1jkyc
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:56Z
+body: |-
+  Tests essential before merge. What: (1) mode/details test that Up/Down in dep pane (a) advances BrowserSelectedIndex, (b) emits a loadDetail intent for the new ID, (c) does NOT change m.detail.SelectionID; (2) test that Enter in dep pane DOES change SelectionID and rebuilds browser list; (3) app/model integration test that dep-browse loadDetail does not overwrite selectedByMode[Board]; (4) app/model test that Esc from detail returns user to original board selection (NOT the dep-browsed issue); (5) loading affordance test mirroring aqps's stale-preview test; (6) golden update for any detail-mode wide rendering that shows 'browsing: bw-X (preview)' header context vs anchored. Suggested action: add this list to AC.
+---
+id: 86irv888
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:59Z
+body: |-
+  Acceptance criteria gaps after user clarification: (1) browse-vs-anchor distinction (DetailBrowseTargetID vs SelectionID), (2) Enter semantic ('commit anchor'), (3) browser-list immutability during live preview (only rebuild on Enter), (4) header context indication that user is previewing vs anchored, (5) Esc behavior (return to original anchored detail or to board?), (6) reuse of aqps's stale-loading affordance. Suggested action: add each as an AC bullet before implementation starts.
+---
+id: vecyz9dp
+author: Hans Kohlreiter
+created: 2026-04-20T05:53:44Z
+body: |-
+  User clarified final interaction rule: Enter in the dependency/browser pane is now a no-op because Up/Down already auto-select and auto-preview issues. Also added dependency on aqps so shared pane extraction/loading rules land first.
+---
+id: ck5qy8iy
+author: Hans Kohlreiter
+created: 2026-04-20T05:55:21Z
+body: |-
+  Implementation decisions locked for execution: aqps lands first; detail dependency live preview reuses aqps shared pane helpers and stale/loading rule; preview browsing must keep the dependency/browser list stable while moving through rows; Up/Down previews immediately, Enter is a no-op, and board/search anchored selections must not be corrupted by detail browse preview state.

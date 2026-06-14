@@ -1,0 +1,12 @@
+---
+id: bbtxpyvy
+author: Hans Kohlreiter
+created: 2026-05-15T23:05:22Z
+body: |-
+  Tracked under epic beads-workbench-au54 via task beads-workbench-5b1k (active). This issue will be closed as duplicate once 5b1k lands. Do not start work here in parallel.
+---
+id: i0y6g8qh
+author: Hans Kohlreiter
+created: 2026-05-16T03:31:35Z
+body: |-
+  Closing as duplicate. Verified during audit-ticket review: runner.go:60-118 already shows sync.RWMutex split with IsWrite discrimination, and TestRWMutexWriteExclusion soak test exists. Landed under epic beads-workbench-au54 (task 5b1k). No further work needed here.

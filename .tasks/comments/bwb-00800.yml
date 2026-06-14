@@ -1,0 +1,63 @@
+---
+id: nebbai8j
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:30Z
+body: |-
+  ## Task mixes two concerns: CRUD UI actions AND editor-dependent flows
+
+  **What**: This task covers "create issue, update issue metadata, close issue, and add comment" as direct UI actions. But issue creation is a significant flow — it needs either a form or an editor buffer, not just a "quick action." The instructions say "keep inline quick actions focused on small mutations while leaving rich editing to the external editor flow," but creating an issue is not a small mutation. Meanwhile, the external editor task (yze.4.1) is scoped as "editing existing issues," not "creating new issues."
+
+  **Why**: Neither yze.4.1 nor yze.4.2 clearly owns the create-issue UX. An agent implementing yze.4.2 will try to build an inline create flow (which will be complex enough to need an editor), while yze.4.1 focuses on edit-existing. The create flow will either be under-built or will duplicate editor infrastructure. This ambiguity will cause rework.
+
+  **Suggested action**: Explicitly decide: does issue creation use the external editor flow (temp-file with blank issue template) or an inline form? If editor, add "create new issue" to yze.4.1's scope and reduce yze.4.2 to update/close/comment only. If inline form, add specific acceptance criteria for what the create form looks like. The product doc (PRODUCT.md line 98-101) says the preferred editing flow is editor-based — creation should follow that pattern.
+---
+id: cjvr6fmo
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:46Z
+body: |-
+  ## CRUD UI tests (yze.4.2 + yze.4.5) don't specify what "covered by tests" means for interactive form flows
+
+  **What**: Task beads-workbench-yze.4.2 implements "create issue, update issue metadata, close issue, and add comment" as UI actions. Task yze.4.5 says these flows should be "covered by tests." But create/update flows involve input forms — how does an agent test an input form? The tasks don't specify whether the UI uses inline text inputs, modal forms, or single-field prompts. Testing strategy depends entirely on the UI shape.
+
+  **Why**: If create-issue involves a multi-field form (title, type, priority, description), testing it requires simulating keystrokes into text inputs, tab-navigating between fields, and confirming submission. This is possible with Bubble Tea's `tea.KeyMsg` but only if the test knows the exact key sequence and the form model is testable in isolation. Without specifying this, the implementer may build a form that can only be tested by running the TUI interactively.
+
+  **Suggested action**: Add to yze.4.2 instructions:
+  - "UI actions for create/update/close/comment MUST be testable via tea.KeyMsg sequences without a real terminal"
+  - "Each action's model should accept gateway input/output through the `BeadsGateway` interface (fakeable)"
+  - "Quick actions (close, comment) should be simple enough to test as: send action key → modal appears → confirm → gateway.CloseIssue called with correct args"
+---
+id: k2d1xw1h
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:46Z
+body: |-
+  ## [MEDIUM] Create/update task does not mention how it gets status/type options for UI controls
+
+  **What**: This task says "Add UI actions for create issue, update issue metadata, close issue, and add comment" and "Route all write operations through the new gateway." But creating or updating an issue requires presenting valid status values, type values, priority values, and possibly label options to the user. There is no mention of where these come from.
+
+  **Why**: If the gateway interface doesn't have catalog methods (see related comment on beads-workbench-omd.2), this task will either hardcode options or skip validation. If it does have catalog methods, this task should use them. Either way, the dependency is unstated.
+
+  **Suggested action**: Add instruction: "Use the gateway's catalog methods (StatusCatalog, TypeCatalog) to populate selection controls for create and update forms. Do not hardcode status or type values." Add acceptance criterion: "Create and update forms populate options from gateway catalog methods."
+---
+id: bsy31lr0
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:17Z
+body: |-
+  ## [PASS] Create/update task now has explicit ownership boundary and catalog usage
+
+  **What**: The updated yze.4.2 forces an explicit create-issue UX decision (instruction #1), requires gateway catalog usage for UI controls (instruction #4), and includes automated test requirements (instruction #7). The ownership boundary with the editor flow is now an explicit deliverable.
+
+  **Why**: The first review flagged ambiguous create-issue ownership and missing catalog dependency. Both are addressed.
+
+  **Suggested action**: None.
+---
+id: ii4siklg
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:27Z
+body: |-
+  ## yze.4.2 (CRUD actions) now explicitly requires gateway catalog usage and automated tests — prior gaps addressed
+
+  **What**: `beads-workbench-yze.4.2` now includes "Use gateway-provided status/type/label catalogs for UI controls where needed" and "Add automated tests for all supported mutation flows using non-interactive UI/test seams" in its instructions. Acceptance criteria include "UI controls use gateway-provided catalogs where needed" and "Automated tests cover the supported mutation flows without manual UI inspection."
+
+  **Why**: The prior review identified two gaps: (1) the task didn't mention where status/type options come from, and (2) test criteria were vague. Both are now addressed. The catalog dependency connects back to omd.2 and omd.4 where these methods are defined and implemented. The test criteria connect to yze.5's fake gateway.
+
+  **Suggested action**: No change needed. The CRUD action task is now properly specified for gateway integration and automated verification.

@@ -1,0 +1,6 @@
+---
+id: 670vsn27
+author: Hans Kohlreiter
+created: 2026-05-16T04:32:01Z
+body: |-
+  Implemented. New model_teatest.go thin tea.Model wrapper routes WindowSizeMsg + KeyMsg through HandleKey. model_teatest_test.go: TestDetailsTeatestFocusSwitchRetainsScrollOffsets (scroll content, switch to deps, scroll deps, return to content, visit metadata, return to content — assert content offset >0 and deps offset >0); TestDetailsTeatestSelectionChangeResetsAllScrollOffsets (scroll both panes, then ApplyLoadedDetail with different issue ID — assert all four offsets back to 0). Full gate green.

@@ -1,0 +1,6 @@
+---
+id: 1mz49b4z
+author: Hans Kohlreiter
+created: 2026-05-28T13:24:04Z
+body: |-
+  Implemented in commit 932596e. Offset-then-limit windowing in memory.Repository.Dashboard. Tests: TestDashboard_ClosedOffset_Pages + TestDashboard_ClosedOffset_BeyondEnd. quality:fast green.

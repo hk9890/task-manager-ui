@@ -1,0 +1,6 @@
+---
+id: hohlrrve
+author: Hans Kohlreiter
+created: 2026-05-16T12:35:59Z
+body: |-
+  Links/deps scenario landed: BDLinkRelated + BDDepRelate + BDDepAdd as sub-tests. Wall: 6.6s (target <15s). Per-test mutable copies via SharedFixtureRepoPath (each call cp's the cached seed). Tasker corrected ticket step 3 syntax: bd dep add semantics are 'issue depends-on' so 'bwf-1 blocks bwf-2' is 'bd dep add bwf-2 bwf-1' (idempotent against the seed's existing dep). Quality green.

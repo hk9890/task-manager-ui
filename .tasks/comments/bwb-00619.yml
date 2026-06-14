@@ -1,0 +1,6 @@
+---
+id: msgel6hw
+author: Hans Kohlreiter
+created: 2026-05-16T12:18:26Z
+body: |-
+  Scaffolding landed. contract.go with RunReadContract + GatewayFactory type. fake_contract_test.go uses external 'contract_test' package and primeFakeFromFixtureSpec to load fake from seed.json. real_contract_integration_test.go uses SharedFixtureRepoPath. Both tests run, all 24 subtests t.Skip as designed. Quality green.

@@ -1,0 +1,12 @@
+---
+id: 2h2yu9lz
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:11Z
+body: |-
+  Specify the styles.Section narrow-fallback contract: return the literal string 'too narrow' (lowercase, no styling) so it's deterministic in goldens. Update AC: add 'styles.Section returns the literal too narrow below width 6, asserted by test.'
+---
+id: 2mxia4wk
+author: Hans Kohlreiter
+created: 2026-05-16T04:18:27Z
+body: |-
+  Implemented. styles.FormSection returns literal 'too narrow' when cfg.Width<6 (test verifies widths 0/1/3/5 plus boundary at 6). details.Render returns 'Terminal too narrow' when width<30 (test verifies width=20 fallback, width=30 no-panic). All existing 80/120/180 goldens still pass.

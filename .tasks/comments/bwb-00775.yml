@@ -1,0 +1,24 @@
+---
+id: mk5a6nbm
+author: Hans Kohlreiter
+created: 2026-04-07T15:22:05Z
+body: |-
+  ## Acceptance review (.6) criteria should include a stability/speed gate
+
+  **What**: Task .6 acceptance criteria cover functional aspects (capture works, scenarios executable, search verifiable) but don't include non-functional requirements for the harness itself: execution time, flakiness rate, cleanup behavior.
+
+  **Why**: A runtime UI verification harness that takes 30 seconds per scenario or fails 10% of the time due to timing issues will be abandoned. The whole point of the epic is "fast" verification — the acceptance review should verify that.
+
+  **Suggested action**: Add acceptance criteria:
+  - Full verification suite completes in <30 seconds (or whatever the target is)
+  - Verification suite passes 10/10 consecutive runs without flakes
+  - No zombie processes or temp files left after test suite completion (including on failure)
+---
+id: 2csjt4xd
+author: Hans Kohlreiter
+created: 2026-04-07T17:33:45Z
+body: |-
+  Status: verifier passed.
+  Outcome: acceptance review passed; focused UI verification suite is fast and stable, docs match implementation, and editor/launcher plus board/search/detail flows are explicitly covered.
+  Verification: verifier ran focused suites, embedded-fixture checks, go build ./cmd/bwb, and 5 repeated fresh runs of the focused suite with no flakes (avg ~4.5s).
+  Next step: close acceptance review and epic.

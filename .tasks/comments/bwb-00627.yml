@@ -1,0 +1,6 @@
+---
+id: cemq4t30
+author: Hans Kohlreiter
+created: 2026-05-16T14:39:17Z
+body: |-
+  Implemented per-column loading + non-blocking refresh on board. Removed top-level m.loading/m.loadError; added per-column loading bool and err error to columnData. IsLoading() derives from columns. View() always renders 4-column layout (short-circuit removed). Skeleton rows render via skeleton.SkeletonRow when column is loading with no issues; stale issues remain visible during refresh; per-call errors route only to affected columns (ReadyExplain → Not Ready+Ready, in_progress → In Progress, closed → Done). 5 new tests added covering cold start, atomic swap, partial error, empty-board keyboard no-op, and stale-during-refresh. Scoped tests pass; full suite green.

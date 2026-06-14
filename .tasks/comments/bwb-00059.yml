@@ -1,0 +1,30 @@
+---
+id: 74lpspxz
+author: Hans Kohlreiter
+created: 2026-04-12T13:22:51Z
+body: |-
+  Planning corrected after creation failure. Added blocked discussion task beads-workbench-9dn.4 for the cross-mode panel contract, blocked implementation tasks behind it, and attached acceptance review beads-workbench-9tl to the epic. Explicitly carrying forward user feedback that full-height/full-width usage and panel consistency are first-class requirements.
+---
+id: q04epwxf
+author: Hans Kohlreiter
+created: 2026-04-12T14:06:57Z
+body: |-
+  Plan structure is sound but has one gap that will stall execution: the left browser panel data source. What: The dependency graph (.4 → .1, .4 → .2, then .3, then acceptance) is correct. The task decomposition is reasonable — sizing contract, panel promotion, metadata actions, acceptance. However, all tasks downstream of .4 depend on a decision .4 does not explicitly surface: what data populates the left browser panel in detail mode? The user says 'similar to browsing issues in the dashboard' which implies the board/search issue list carries over into detail, but this is not stated in any task. Why: This is the single decision that determines whether .2 is a 'rewire existing related-issues rail' task or a 'build new issue-list passthrough from board/search into detail' task. These are materially different in scope and wiring. Suggested action: Add this as an explicit question to .4 and resolve it before unblocking. Also add .1 and .2 as dependencies for .3 — they are currently missing.
+---
+id: jqhmefe8
+author: Hans Kohlreiter
+created: 2026-04-12T14:08:06Z
+body: |-
+  Reviewer verdict: plan is sound but not execution-ready yet. Updated tasks to reflect resolved UX decisions, added missing .3 dependencies on sizing/browser work, and narrowed remaining blocking questions to the dedicated-detail browser data source, board/search alignment with the shared panel model, and the exact Enter-driven status-edit interaction.
+---
+id: 9ma2rsv9
+author: Hans Kohlreiter
+created: 2026-04-12T16:09:48Z
+body: |-
+  Discussion resolved the core panel contract: the special left browser panel exists only in issue details view, not board/search; it should show a stable parent-group context (parent issue plus sibling child issues), and selecting items there updates center/right detail without changing the left panel contents. Added a dedicated backend task for parent-group browser context because current domain/gateway models do not expose parent/child grouping.
+---
+id: pfzd10pn
+author: Hans Kohlreiter
+created: 2026-04-12T16:13:27Z
+body: |-
+  Final remaining UX decision resolved: status editing in the right metadata panel uses a dialog when Enter is pressed on the status field. Reuse an existing dialog pattern if suitable; otherwise create a dedicated status dialog. Priority remains out of scope for the first pass.

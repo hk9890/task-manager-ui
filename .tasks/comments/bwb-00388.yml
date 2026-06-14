@@ -1,0 +1,48 @@
+---
+id: 1zti80zm
+author: Hans Kohlreiter
+created: 2026-04-19T18:29:50Z
+body: |-
+  Root cause confirmed: idle-based settle detection is incompatible with cursor blink. What: The capture loop (capture_bwb_screen.py lines 85-95) breaks only when select() returns no data for settle_wait duration. The status modal returns textinput.Blink (modal.go:162), which produces periodic cursor escape sequences on the PTY. The stream never goes idle, so the loop runs until timeout. Why: This is a fundamental design conflict — any Bubble Tea component with Blink will trigger the same timeout. Suggested action: Replace idle-based termination with a step-count-based approach: after all steps are sent, read for a fixed post-step settle duration (e.g. drain for N seconds then break), rather than waiting for silence.
+---
+id: kweun1wl
+author: Hans Kohlreiter
+created: 2026-04-19T18:29:59Z
+body: |-
+  Fix direction: time-boxed drain, not silence detection. What: After all steps are fed, switch to a fixed drain window (e.g. 0.5s) that reads all available output but exits on elapsed time, not on silence. The current 'continue on data, break on no-data' pattern (lines 89-95) must be inverted to 'drain until time, then break'. Why: This is the minimal change — it keeps the existing PTY/pyte architecture, still captures the final screen state, and works regardless of whether the target component produces periodic output. Do NOT add app-side signaling (e.g. a 'capture ready' marker) — that couples the capture tool to app internals and is disproportionate to the problem.
+---
+id: e0p3uqy9
+author: Hans Kohlreiter
+created: 2026-04-19T18:30:07Z
+body: |-
+  Risk: settle_wait semantics change affects all existing callers. What: Changing the post-step drain from 'wait for silence' to 'wait for duration' changes behavior for ALL capture invocations, not just modal ones. Currently non-modal captures exit early when output stops; after the fix they'll always wait the full drain window. Why: This could slow down non-modal captures unnecessarily. Suggested action: Keep settle_wait short (0.25-0.5s) which is acceptable for both cases, or add a --drain-time flag separate from --settle-wait so existing non-modal behavior is preserved. Prefer the simpler option (just use settle_wait as drain time) unless test suite timing becomes a problem.
+---
+id: hpssddeg
+author: Hans Kohlreiter
+created: 2026-04-19T18:30:14Z
+body: |-
+  Verification plan: Three checks needed. (1) Repro the exact steps from the bug (3,RIGHT,ENTER for status modal) — must complete without timeout. (2) Run an existing non-modal capture path (e.g. just navigate to a pane) — must still produce correct output and not regress in timing. (3) Confirm the captured screen JSON actually contains the modal content (text input field visible), not a pre-modal or blank screen. All three can be scripted as shell assertions in a test harness.
+---
+id: xdcqpp90
+author: Hans Kohlreiter
+created: 2026-04-19T18:30:19Z
+body: |-
+  Verdict: straightforward. The bug is a clear design mismatch (idle detection vs periodic output), the fix is a ~10-line change to the drain loop in one file (capture_bwb_screen.py), and verification is mechanical. No architectural changes needed.
+---
+id: 17dkngst
+author: Hans Kohlreiter
+created: 2026-04-19T21:06:15Z
+body: |-
+  Execution started. Reviewer analysis suggests the timeout is caused by capture script silence detection interacting with modal cursor blink. Plan: fix scripts/capture_bwb_screen.py to use deterministic post-step draining rather than waiting for full PTY idleness, then verify modal and non-modal capture paths.
+---
+id: du1ein1w
+author: Hans Kohlreiter
+created: 2026-04-19T21:08:08Z
+body: |-
+  Execution note: before editing, I checked for overlap and found scripts/capture_bwb_screen.py already has substantial in-progress worktree changes. I reran the exact modal repro against the current worktree and it PASSED: the status modal was captured successfully, no 10s timeout occurred, checkpoint status-modal-open was recorded, and child cleanup completed cleanly (ctrl+c + sigterm). To avoid clobbering parallel script work, I did not add overlapping edits. Current reality: nh66 appears fixed in the existing in-progress capture-script changes, but it is not yet landed in git.
+---
+id: ais3z7am
+author: Hans Kohlreiter
+created: 2026-04-19T21:09:01Z
+body: |-
+  Reproduced the original status-modal capture path with the current helper and it no longer times out. The underlying modal-capture problem appears to have been fixed by the later capture-script work from the verification-toolkit effort, so this bug is now effectively resolved by that work.

@@ -1,0 +1,25 @@
+---
+id: qftkvf3m
+author: Hans Kohlreiter
+created: 2026-06-05T15:54:08Z
+body: |-
+  Investigation complete — NO in-code defect (resolved as not-a-bug-in-code; behavior pinned by test).
+
+  Drove the search model deterministically through (large result set) -> (submit narrow query) ->
+  (deliver smaller searchLoadedMsg) and inspected View() at each step:
+  - View() after the swap contains ONLY the new result titles — no stale rows (asserted via Contains).
+  - FormSection (internal/ui/styles/section.go:59-78) pads the short body to the fixed results height; the
+    Results box never leaves unfilled stale slots.
+  - The page swap (searchLoadedMsg -> m.page) is atomic; old+new rows never coexist.
+  - Total frame height is stable (terminal height) across result counts — no real height shrink.
+  Conclusion: the stale rows seen in the screen capture are a terminal-emulator mid-repaint artifact
+  (the pyte capture snapshotted between Bubble Tea line-writes), not something the View emits. This
+  matches the reviewer's prediction and the epic's allowed outcome.
+
+  Added deterministic regression pin: internal/mode/search/shrink_transition_regression_test.go
+  (TestSearchShrinkTransition_NoStaleRowsInView + _IntermediateStateDoesNotExposeCombinedRows) — fails
+  if FormSection padding is removed or the page swap becomes non-atomic (the changes that WOULD produce
+  real stale rows). Verified independently (PASS). mise run quality passes (1163 unit + 1314 integration).
+
+  Possible future enhancement (out of scope, not filed): show a results skeleton during the async search
+  (like the board) so stale results aren't shown at all during the in-flight window.

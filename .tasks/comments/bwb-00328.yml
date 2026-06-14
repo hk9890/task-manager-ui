@@ -1,0 +1,6 @@
+---
+id: 7he39nwg
+author: Hans Kohlreiter
+created: 2026-05-24T12:59:59Z
+body: |-
+  Fixed both CreateTemp call sites to use filepath.Dir; new test TestSaveWithHash_TempInDestinationDir proves fix with TMPDIR=/nonexistent. mise run quality:fast green (961/961 tests, lint 0 issues, guardrails ok). Commit 08229ae.

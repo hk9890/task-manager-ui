@@ -1,0 +1,6 @@
+---
+id: 4j4vgx4s
+author: Hans Kohlreiter
+created: 2026-05-24T11:23:46Z
+body: |-
+  Done. 5 commits (f33763f–a5f3a5d): deleted gateway-shape tests, contract/ subpackage, legacy gateway impls (read_gateway.go, read_payloads.go, validating_gateway.go, writes.go), BeadsGateway interface + legacyRepository adapter, and contractcheck/ subpackage. One incidental fix: two notice-string constants shared between legacy Gateway and lean Repository were migrated to lean_reads.go. internal/repository/beads/ now 1510 LOC (6 files, all lean). quality:fast + test:all + build + smoke pass.

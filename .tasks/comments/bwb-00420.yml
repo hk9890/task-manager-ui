@@ -1,0 +1,12 @@
+---
+id: vxjx8arf
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:38Z
+body: |-
+  ## yze.3.3 (search) and yze.3.4 (details) can start in parallel with yze.3.1 — but should they?
+
+  **What**: `beads-workbench-yze.3.3` (search mode) and `beads-workbench-yze.3.4` (detail mode) both depend only on `beads-workbench-yze.2.5` (app shell acceptance). They do NOT depend on `beads-workbench-yze.3.1` (dashboard definitions). This means search and detail work can start before dashboards are defined.
+
+  **Why**: This is largely correct. Search mode doesn't need dashboard definitions — it queries the gateway independently. Detail mode doesn't need dashboards either — it renders a selected issue. However, there is a subtle integration concern: the board (yze.3.2) depends on dashboard definitions (yze.3.1) and will wire selection into detail state. If the detail mode (yze.3.4) is built without awareness of how the board's selection model feeds into it, the integration may not compose cleanly.
+
+  **Suggested action**: The current parallel structure is acceptable. The shell's selected-issue state (from yze.2.3) is the integration contract that both board and detail must use. No dependency change needed, but the detail task should reference the shell's selection state contract explicitly (which it does implicitly through the app shell acceptance gate).

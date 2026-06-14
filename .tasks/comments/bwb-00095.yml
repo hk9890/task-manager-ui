@@ -1,0 +1,6 @@
+---
+id: ad3blk27
+author: Hans Kohlreiter
+created: 2026-06-01T19:45:46Z
+body: |-
+  Implemented. Detail Dependencies 'Structure' group renamed to 'Parent' and now shows only the parent (parent ref comes from the issue's own bd show payload). Beads Repository.Issue() no longer calls parentChildSiblings; the per-detail second 'bd show <parent>' is gone (the ~0.4s Dolt-open cost). Removed dead parentSiblingCache/Invalidate machinery; updated memory/UI/model + tests. New argv-contract test TestIssueParentedDetailIssuesSingleShowCall pins exactly-one-show. Verified end-to-end against real bd 1.0.4: child detail renders 'Parent (1)' with only the parent (sibling absent), and Enter on the Parent row drills up. quality + integration + fmt:check + scripts:check all green. NOTE: ParentGroupBrowserContext.Children is now unread (memory still writes it); follow-up filed to delete it. Code not yet git-committed (awaiting user).

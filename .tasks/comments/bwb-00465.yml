@@ -1,0 +1,12 @@
+---
+id: 5uhj7g0w
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:30Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q2 (Option 2 / delete is not viable — no transitive coverage; mandate Option 1) and Q3 (use canonical captured-*testing.T + Skipped() pattern; the existing 'can't introspect' comment is factually wrong and must be removed). Description rewritten with the canonical pattern and the falsifiability check.
+---
+id: 35fedvyr
+author: Hans Kohlreiter
+created: 2026-05-23T12:41:18Z
+body: |-
+  Rewrote TestThisRepoSkipsWhenEnvNotSet and TestExternalSkipsWhenEnvNotSet using the canonical captured-*testing.T + Skipped() pattern with parent-level t.Fatalf. Removed the incorrect 'can't introspect t.Skipped()' comment block. Falsifiability verified: disabling the respective t.Skip calls in datasets.ThisRepo and datasets.External caused both new tests to fail with the t.Fatalf message; production code (datasets.go) restored — git diff empty. mise run test green (1101 tests); mise run test:integration green (1239 tests, 16 expected env-gated skips). One transient TestMutationStatusGatewayError flake observed once under -race during parallel-tasker execution; did not reproduce in subsequent runs (insufficient evidence to file as a bug).

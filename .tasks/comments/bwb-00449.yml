@@ -1,0 +1,8 @@
+---
+id: ip72du7d
+author: Hans Kohlreiter
+created: 2026-05-25T19:36:03Z
+body: |-
+  Worktree branch: worktree-agent-a486075d14d353bf7, commit a553d43. Implemented fallback signal-channel (Services.OnEditIssueResult hook) — justified per ticket spec by the existing in-file CI-experience doc-comments at lines 92-96 and 278-283. Wall times 60ms (down from 260ms baseline). 10x-race 10/10 pass.
+
+  NOTE FOR j5bg VERIFIER: c4la modified internal/app/services.go and internal/app/model.go (non-_test.go production code). The j5bg conditional UI-smoke clause IS triggered — the verifier MUST launch bwb and run the runtime UI verification per docs/RUNTIME_UI_VERIFICATION.md (issue list, filter, edit flow, toast on success).

@@ -1,0 +1,6 @@
+---
+id: 7ewujyiw
+author: Hans Kohlreiter
+created: 2026-04-10T16:37:57Z
+body: |-
+  Note: the generic approach requires the Controller interface to return (Controller, tea.Cmd) from Update, which it does. However, Go generics can't directly express 'T where T.Update returns (T, tea.Cmd)' due to the self-referential constraint limitation. The practical fix may be a shared function that takes an update func and drainCmd, rather than true generics. Either way, linking the two implementations with a comment is the minimum action.

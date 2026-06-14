@@ -1,0 +1,12 @@
+---
+id: 2ziy74oq
+author: Hans Kohlreiter
+created: 2026-04-10T16:59:02Z
+body: |-
+  Inaccurate code sample: the instruction says GatewayError has a 'Category' field and proposes 'fmt.Sprintf("%s: %s: %s", e.Category, e.Message, e.Cause.Error())'. The actual struct has Code (ErrorCode), Operation, Message, and Cause — no Category field. The existing Error() method already formats Operation+Code or Operation+Message. Why: the proposed code won't compile. The tasker will waste time reconciling the instructions with the actual code. Suggested action: update the sample to work with the actual struct fields. The fix should append Cause to the existing format chains, e.g. when Cause is non-nil, append ': cause.Error()' to whatever the current format returns.
+---
+id: dqkg5s1b
+author: Hans Kohlreiter
+created: 2026-04-10T16:59:10Z
+body: |-
+  Missing complexity: the real Error() method has 4 branches (empty message + empty op, empty message + op, message + empty op, message + op). Appending Cause to each branch means modifying 4 code paths, not 2 as the instructions suggest. Why: the tasker will likely miss branches or restructure incorrectly. Suggested action: show the actual 4-branch structure in the instructions, or suggest factoring out a base string first then appending cause — either way, acknowledge the real complexity.

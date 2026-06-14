@@ -1,0 +1,16 @@
+---
+id: xf4d6pbt
+author: Hans Kohlreiter
+created: 2026-05-31T13:43:11Z
+body: |-
+  Adversarial correctness audit of caching.go complete (backed by repository contract: ClosedLimit is the MAXIMUM len(DashboardData.Closed)).
+
+  CORRECTNESS bug found + fixed (commit 12fef25): the ClosedOffset>0 deep-page path merges paged closed issues into c.dashboardCache (growing .Closed past ClosedLimit) with dashboardDirty=false. The offset=0 fast-path then served that superset verbatim on the next non-ForceFresh read (e.g. periodic auto-refresh, which does not set ForceFresh) — a contract violation surfacing stale session-old closed rows. Fixed by truncating the first-page serve to ClosedLimit (boundClosed, three-index slice). Gave TestDashboard_ClosedOffset_PassThrough Step 4 teeth (red: served 85 for limit-35; green: <=35).
+
+  Audit also confirmed CLEAN: return-by-value aliasing is safe (composer copies before sorting; mergeClosedIntoCache reallocates), and all mutation methods (Create/Update/Close/AddComment) + RefreshIfChanged invalidate correctly.
+
+  Two PERFORMANCE (not correctness) follow-ups filed:
+  - beads-workbench-3c37: lastDashboardClosedLimit not persisted/restored -> v2 fast-paint is effectively dead (always re-fetches). Now SAFE to enable thanks to this fix.
+  - beads-workbench-zw5e: catalogs not restored on hash-match when dashboardCache empty.
+
+  Re-promotion to default backend is gated on 3c37 (fast-paint must actually work), but the correctness scope of this issue is resolved. Gates green: fmt/lint/guardrails clean, full suite (35 pkgs) passes.

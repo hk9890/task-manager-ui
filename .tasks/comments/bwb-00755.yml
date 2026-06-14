@@ -1,0 +1,20 @@
+---
+id: mvaf7k2p
+author: Hans Kohlreiter
+created: 2026-05-17T09:19:42Z
+body: |-
+  Tracked for implementation by epic beads-workbench-5q6t (created 2026-05-16 from independent analysis of this same bug). The epic's plan:
+
+  - 5q6t.4 — write failing regression tests first (TDD)
+  - 5q6t.1 — guard board manual reload (the call site at internal/mode/board/model.go:233-234 named in this bug)
+  - 5q6t.2 — guard search manual reload (same class of bug, different surface)
+  - 5q6t.3 — defense-in-depth: dedicated inflight bool inside startReload
+  - 5q6t.5 — full-app verification: hammer 'r' against built bwb, this bug is blocked by .5 completing
+
+  This bug will be closed when 5q6t.5 verification passes, with the runtime log evidence preserved here as the canonical reproduction record.
+---
+id: dtermp7v
+author: Hans Kohlreiter
+created: 2026-05-17T09:42:22Z
+body: |-
+  Fixed. Added 'if m.IsLoading() { return nil }' guard to BoardActionReload handler (mirrors existing AutoRefresh guard). Regression tests TestManualReloadWhileInFlightIsIgnored + TestAutoRefreshAlreadyHasInFlightGuard added; both pass after fix, manual-reload test fails before. Quality green (736 unit + 851 integration).

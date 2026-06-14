@@ -1,0 +1,6 @@
+---
+id: skeczttp
+author: Hans Kohlreiter
+created: 2026-05-16T18:51:09Z
+body: |-
+  Fixed. ShowIssue in read_gateway.go (line 252) now uses optionalString(primary.Description) instead of requiredString — bd's omission of the description key for issues without one is now treated as the valid state it represents (empty string). New TestGatewayShowIssueHandlesMissingDescription pins this behavior. All 17 ShowIssue unit tests pass; mise run quality green. Tasker audited remaining required fields in the ShowIssue decoder and found none at risk of the same pattern. App-level verification gated on user TTY but the bug class is unambiguous.

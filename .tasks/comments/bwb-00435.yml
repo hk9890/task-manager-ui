@@ -1,0 +1,24 @@
+---
+id: 426viqv6
+author: Hans Kohlreiter
+created: 2026-05-29T11:03:01Z
+body: |-
+  RECOMMENDATION (decision pending — accept/optimize call is the human's; task left open):
+
+  Investigation complete. Both optimizations this task proposes are ALREADY in place:
+  1. Dashboard fan-out is already fully parallel (errgroup, internal/repository/beads/lean_reads.go:42-99). Wall time = slowest single bd subprocess (~1.4s), not the sum (~6-7s sequential).
+  2. Dashboard caching is already live (CachingRepository, internal/repository/caching/caching.go): warm reads = 0ms (confirmed by load test), dirty-flag invalidation on writes, background hash-poll for external changes, cross-session fast-paint via Hydrate.
+
+  Load test (seed=42, 30 issues, bd 1.0.4): dashboard.cold p95 1450ms — same ballpark as the real-session signal (1.3-1.6s). The match shows the latency is the per-bd-subprocess floor (irreducible at the app layer), not repo-size-driven.
+
+  Call-mix: vc status is 95% of bd calls (cheap background poll); cold dashboard fan-outs are a minority and most are served warm — the user rarely pays the 1.4s. The "show issue p95 1602ms" cited in the task is the issue-detail cold path (single bd show), not part of the dashboard fan-out.
+
+  Recommendation: ACCEPT current per-call latency. No further parallel/cache optimization is available or warranted. The only remaining lever (progressive/streaming column paint to cut PERCEIVED cold latency) is a UX rewrite not justified by current hit rate or magnitude — defer unless user feedback flags cold-start latency as a pain point.
+
+  Awaiting human decision: ACCEPT (close with this rationale) or OPTIMIZE (file the streaming-render follow-up).
+---
+id: rqrk18hv
+author: Hans Kohlreiter
+created: 2026-05-29T11:06:06Z
+body: |-
+  DECISION: ACCEPT (Hans, 2026-05-29). Current dashboard fan-out per-call latency (p95 ~1.4s) is accepted as-is. Rationale: the fan-out is already fully parallel (errgroup) and cached (warm reads 0ms); the residual ~1.4s is the irreducible per-bd-subprocess floor with no remaining app-layer optimization. The only further lever (progressive/streaming column paint for perceived latency) is a UX rewrite not justified by the current hit rate (cold fan-outs are a minority of calls; vc status is 95%). No follow-up filed; revisit only if user feedback flags cold-start latency.

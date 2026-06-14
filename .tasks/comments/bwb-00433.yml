@@ -1,0 +1,10 @@
+---
+id: ogcodvsb
+author: Hans Kohlreiter
+created: 2026-05-29T14:35:44Z
+body: |-
+  Fixed in working tree. Swapped the two markers in renderReferenceRow (internal/ui/details/details.go): the movable cursor now routes through issuerow Selected:true → styles.SelectionPrefix '› ' (byte-identical to board/search/metadata); the loaded subject takes the background highlight as an interim. Renamed the inverted goldens (cursor_row_background→cursor_row_selection_prefix, subject_row_in_list_chevron→subject_row_in_list_background) + test funcs, and rewrote the Q4 doc blocks in details.go and the DependencyCursorStyle comment in colors.go.
+
+  Verified in the real TUI (PTY capture against a fresh fixture, 160-col 3-column layout): cursor '›' renders on the selected row; ↓ moves '›' through cur-2→cur-3→cur-4 with the Content pane STAYING on cur-1 (no reload); Enter commits and Content navigates to the row under '›' (cur-4). Full gate green: fmt/lint/guardrails clean, 1149 unit tests pass.
+
+  Subject=background is provisional pending follow-up UX steps.

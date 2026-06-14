@@ -1,0 +1,6 @@
+---
+id: kn615elw
+author: Hans Kohlreiter
+created: 2026-04-24T15:08:30Z
+body: |-
+  Tasker completed foundation logging package implementation. Added internal/logging with session-aware slog JSONL file sink under XDG state, stderr mirroring contract, lumberjack rotation defaults (10 MB / 5 backups / 30 days / compress), and stderr-only fallback with a single warning on log-path failure. Reported tests: go test ./internal/logging and full go test ./... both passing.

@@ -1,0 +1,6 @@
+---
+id: 2dj9uegm
+author: Hans Kohlreiter
+created: 2026-04-20T15:35:14Z
+body: |-
+  Finding: Acceptance task lacks a non-TTY verification mechanism. Why: AC #2 says 'Non-interactive CLI paths work without a TTY failure' but does not say how to prove it in a developer's interactive terminal session — running 'bwb --help' in a tmux pane will succeed even if the path internally touched a TTY API. Suggested action: add an AC item: 'Verify by running each non-interactive flag with stdout+stderr piped to a file (e.g. bwb --help > /tmp/h 2>&1; echo 0) and confirm exit code matches the documented contract; OR rely on the test asserted by s2d1.1 if added there.' Also add the need:review label when this task becomes ready.

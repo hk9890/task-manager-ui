@@ -1,0 +1,6 @@
+---
+id: l5c9imo2
+author: Hans Kohlreiter
+created: 2026-05-23T12:50:26Z
+body: |-
+  Added 3-line retention-bounding comment immediately above readCache.entries in internal/gateway/beads/cache.go. No behavioral change. Untouched: the singleflight field/import/docblock (reserved for dfc3, which is now unblocked). quality:fast green.

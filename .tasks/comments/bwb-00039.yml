@@ -1,0 +1,24 @@
+---
+id: 65426djo
+author: Hans Kohlreiter
+created: 2026-05-11T05:23:03Z
+body: |-
+  Review finding: current behavior is intentional, not an accidental regression. cmd/bwb/main.go explicitly skips logger construction for --print-config/--check-config, and existing startup tests assert that non-interactive paths do not initialize logging. The real gap is the docs/implementation contract: docs/MONITORING.md describes --debug stderr mirroring too broadly. Recommendation: narrow the bug scope to a documentation/contract fix by default; only expand code behavior if we explicitly decide non-interactive --debug should produce diagnostics.
+---
+id: mziy4xbg
+author: Hans Kohlreiter
+created: 2026-05-11T06:07:43Z
+body: |-
+  Discussion resolved: BWB should use full logging always, with no special handling for non-interactive paths. This issue now tracks implementing the same logging/debug contract for non-interactive commands such as --check-config and --print-config.
+---
+id: 9lo0s0vk
+author: Hans Kohlreiter
+created: 2026-05-11T06:19:47Z
+body: |-
+  Implemented all-path startup logging for --check-config/--print-config. Removed the non-interactive logger skip, kept stdout result behavior unchanged, added explicit test coverage for non-interactive debug/persistent logging, and updated monitoring docs. Verified with focused tests plus built-binary runs showing stderr startup diagnostics and persistent records in /tmp/bwb-my5o-state/bwb/bwb.log.
+---
+id: 4jqs60uh
+author: Hans Kohlreiter
+created: 2026-05-11T06:19:52Z
+body: |-
+  Verifier: PASS. All acceptance criteria verified by code inspection and test execution. Logger construction now runs for --check-config and --print-config, non-interactive --debug emits startup diagnostics and persistent log records, automated coverage exists for the new behavior, and docs describe the all-path logging contract accurately. Recommend closing beads-workbench-my5o.

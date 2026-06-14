@@ -1,0 +1,18 @@
+---
+id: b07h78f3
+author: Hans Kohlreiter
+created: 2026-04-18T21:50:35Z
+body: |-
+  Root cause confirmed at details.go:270-271. What: dependencyGroups() unconditionally appends a Structure section from browserItems. After 2l4 populated browserItems from BlockedBy+Blocks+Related refs when no parent-group exists, these same refs now appear in both their typed sections (Blocked by/Blocks/Related) AND the Structure section. Why: Structure is meant for parent-group browsing context (parent + siblings), not a flat dump of dependency refs. When browserItems come from dependencies, Structure just duplicates them. Suggested action: suppress the Structure group when browserItems were populated from dependencies rather than from a parent-group. The simplest approach: add a flag (e.g., BrowserFromParentGroup bool) to the detail state, and only render Structure when that flag is true.
+---
+id: sn2dn91i
+author: Hans Kohlreiter
+created: 2026-04-18T21:50:38Z
+body: |-
+  Missing acceptance criterion. What: no criterion says Structure must not render when browserItems come from dependency fallback. Why: a tasker could suppress duplicate rows in some other way (deduplication) rather than fixing the actual semantic problem — Structure has no meaning without parent-group context. Suggested action: add criterion: 'When BrowserItems are populated from dependency refs (no parent-group), the Structure section must not appear in the Dependencies pane.'
+---
+id: i5dftrhv
+author: Hans Kohlreiter
+created: 2026-04-18T21:50:48Z
+body: |-
+  Ordering relative to 74r/6eq. What: yxjx touches dependencyGroups() in details.go which affects rendered row count in the Dependencies pane. 74r changes pane width. Why: fixing yxjx removes the entire Structure section for dependency-only issues, reducing pane content. Width tuning in 74r should account for the final content, not the inflated duplicate. Suggested action: fix yxjx before 74r. yxjx and 6sk are independent and can run in parallel.

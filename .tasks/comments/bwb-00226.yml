@@ -1,0 +1,6 @@
+---
+id: 17knv55i
+author: Hans Kohlreiter
+created: 2026-05-27T21:53:19Z
+body: |-
+  Verified: no import cycle exists. Scratch package beads test importing internal/testing/fakes compiled cleanly. Removed stale cycle warning from internal/testing/fakes/doc.go and replaced it with accurate guidance — fakes imports internal/bd (not internal/repository/beads), so both package-beads and package-beads_test styles are freely available in internal/repository/beads/. Also fixed canonical pattern snippet to use the correct bdrunner import alias. quality:fast passes (1070 tests, 0 lint). Discovered stale cycle warning in internal/bd/doc.go line 39 — filed as separate P4.

@@ -1,0 +1,84 @@
+---
+id: 09sfh8uf
+author: Hans Kohlreiter
+created: 2026-04-07T17:16:33Z
+body: |-
+  ## ni1.3 is undersized for its actual scope — this is the riskiest task and should be split
+
+  **What**: ni1.3 asks for: (1) inventory all hard-coded bindings across 5 packages, (2) design a central keymap model with named actions, (3) refactor all 5 packages to use it, (4) add YAML config merge for keybindings, (5) validate at startup, (6) update help rendering, (7) add tests for all of the above. That's a full architecture refactor touching every input handler in the app.
+
+  **Why**: Looking at the actual code, here's the real scope:
+  - `internal/app/model.go` has ~30 distinct key handlers in its switch statement (lines 333-474)
+  - `internal/mode/board/model.go` has ~6 key handlers (lines 149-196)
+  - `internal/mode/search/model.go` has ~15 key handlers split across KeyType and KeyRunes cases (lines 90-171) PLUS the `CapturesShellKey` interaction
+  - `internal/mode/details/model.go` has ~8 key handlers (lines 93-119)
+  - `internal/ui/modal/modal.go` has its own `KeyMap` (lines 62-86) which is ALREADY centralized but separate
+
+  That's ~60 keybindings across 5 packages with complex interaction rules (search captures shell keys, detail captures scroll keys before shell sees them, modal has its own keymap). Refactoring this in one task is high-risk.
+
+  **Suggested action**: Split ni1.3 into two tasks:
+  - **ni1.3a**: "Centralize keymap model and refactor shell + board bindings" — introduce the keymap model in `internal/config`, refactor `app/model.go` and `board/model.go` to use it, add YAML override support and validation, update tests. This covers the simpler cases first.
+  - **ni1.3b**: "Extend configurable bindings to search, detail, and modal" — refactor search (with its CapturesShellKey complexity), detail scroll, and modal navigation. Depends on ni1.3a. This reduces blast radius and validates the keymap design before tackling search.
+---
+id: tldl8yek
+author: Hans Kohlreiter
+created: 2026-04-07T17:16:48Z
+body: |-
+  ## Search CapturesShellKey interaction is a landmine not called out in instructions
+
+  **What**: `search.Model.CapturesShellKey()` (search/model.go lines 332-354) is a dynamic key-capture mechanism — when search query has focus, most rune keys are captured before the shell sees them, but `1`, `2`, `3` are explicitly punched through. The shell checks this via a type assertion before processing its own key handlers (app/model.go lines 319-327).
+
+  When keybindings become configurable, this interaction becomes much harder: if a user remaps quit from `q` to `x`, the search capture logic needs to know to pass `x` through. The current hard-coded "pass through 1/2/3" exemption list must become dynamic.
+
+  **Why**: If this isn't addressed, configuring keybindings will silently break search mode. The user remaps `b` to something, search swallows it while query is focused, and the binding never fires. This is the kind of bug that only surfaces during manual testing in a specific mode.
+
+  **Suggested action**: Add an explicit instruction: "The search CapturesShellKey mechanism must be updated to consult the configured keymap — shell-level action keys must pass through search capture regardless of what they're remapped to." Add acceptance criterion: "Shell-level keybindings (quit, mode-switch, help) work correctly even when search query input has focus, regardless of configured bindings."
+---
+id: 1yx6zoi7
+author: Hans Kohlreiter
+created: 2026-04-07T17:16:55Z
+body: |-
+  ## "Binding context" concept is not defined — conflict detection requires it
+
+  **What**: The task says "fail with clear errors for duplicate bindings in the same context" but never defines what a "context" is. Looking at the code, there are at least 5-6 key-handling scopes: shell-global, board-mode, search-results, search-query, detail-mode, and modal. Some overlap: `j` means "move down" in board, "move down" in search results, and "scroll down" in detail — this is fine because they're different modes. But `q` in shell is quit while search query would capture it as a character.
+
+  **Why**: Without defining contexts, the conflict validator will either (a) reject perfectly valid configs where `j` is used in multiple modes, or (b) miss real conflicts where two actions in the same mode share a key. A tasker guessing at this will get it wrong.
+
+  **Suggested action**: Define the binding contexts explicitly in the instructions:
+  - `shell` — keys processed in `app/model.go` Update (mode-switch, quit, help, actions like e/c/u/x/a and detail-only n/p/l/r)
+  - `board` — keys processed in `board/model.go` Update (h/l/j/k, enter/o, r)
+  - `search-browse` — keys processed when search focus is on results/preview (j/k/h/l, /, r, enter)
+  - `search-input` — reserved for query capture (probably not configurable)
+  - `detail` — scroll keys processed in `details/model.go` HandleKey (j/k, pgup/pgdn, home/end)
+  - `modal` — keys processed in `modal/modal.go` Update (already has its own KeyMap)
+
+  Duplicate detection should be per-context. Cross-context overlap is expected and valid.
+---
+id: aherzutg
+author: Hans Kohlreiter
+created: 2026-04-07T17:17:02Z
+body: |-
+  ## Modal already has its own KeyMap — instructions don't address unification
+
+  **What**: `internal/ui/modal/modal.go` already has a `KeyMap` struct (lines 62-86) with `DefaultKeyMap` and the `NewWithKeys` constructor. This is already a centralized-ish keymap for modal navigation. The ni1.3 instructions say to "refactor the shell and mode controllers to consult the central keymap" but don't address whether the modal's existing KeyMap should be replaced, wrapped, or left alone.
+
+  **Why**: If the tasker builds a new central keymap model and also tries to replace the modal KeyMap, they're modifying a well-tested working system unnecessarily. If they leave the modal KeyMap alone, there are now two keymap systems in the app. Either way, the instructions need to be clear.
+
+  **Suggested action**: Add instruction: "The modal package already has its own KeyMap. Leave `modal.KeyMap` as-is but populate it from the central keymap's modal context when constructing modals. Do not replace the modal KeyMap type — adapt the central config to feed into it."
+---
+id: p22d06z1
+author: Hans Kohlreiter
+created: 2026-04-08T13:29:37Z
+body: |-
+  Implemented the shell/board keymap foundation:
+  - added central keybinding model and validation in `internal/config`
+  - extended config loading to merge `keybindings.shell` and `keybindings.board`
+  - refactored shell hotkeys in `internal/app/model.go` to use resolved bindings
+  - refactored board mode hotkeys in `internal/mode/board/model.go` to use resolved bindings
+  - updated help/footer text to render configured shell/board bindings
+  - added focused tests for config merge/conflict handling and configured shell/board behavior
+
+  Validation run:
+  - `go build ./cmd/bwb`
+  - `go vet ./...`
+  - `go test ./...`

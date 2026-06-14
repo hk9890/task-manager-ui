@@ -1,0 +1,6 @@
+---
+id: bt83khrl
+author: Hans Kohlreiter
+created: 2026-05-24T10:24:03Z
+body: |-
+  Done. NewValidating decorator in internal/repository/validating.go; 28 tests in validating_test.go. All rules migrated from contractcheck spec (not imported). Ssom check stateless in-call. No production wiring (E4.3), no deletions (E4.4). Quality gate green: 1232 tests, 0 lint. Commits: 4bdbc0b, 99e745d.

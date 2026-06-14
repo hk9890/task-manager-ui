@@ -1,0 +1,6 @@
+---
+id: mxdwpqay
+author: Hans Kohlreiter
+created: 2026-05-19T15:39:59Z
+body: |-
+  Completed in commit 96a0b2c. All 6 functions now >=80%: MaxScrollOffsets 0→100, splitResponsiveLayoutHeights 38.9→88.9, splitThreePaneWidths 46.2→92.3, splitWideWidths 44→92, splitNarrowWidths 58.3→83.3, splitNarrowRightHeights 53.3→93.3. Test runtime 27ms total. Filed dy5u (P4) for the remaining unreachable guard branch in splitResponsiveLayoutHeights.

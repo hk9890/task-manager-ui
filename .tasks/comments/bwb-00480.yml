@@ -1,0 +1,12 @@
+---
+id: o1stoj3o
+author: Hans Kohlreiter
+created: 2026-05-22T10:24:05Z
+body: |-
+  Review (2026-05-22): core bug VERIFIED, but the original description's premise was empirically WRONG and has now been CORRECTED (title + description updated). Re-ran the repro: comment-only ('# comment') and whitespace-only files BOTH fail with 'decode yaml: EOF' exit 1, identical to the 0-byte case; only a bare '---' document marker reaches the len(node.Content)==0 fallback at load.go:145. The real defect is broader than first filed: ALL effectively-empty configs fail. The suggested fix (errors.Is(err, io.EOF) -> treat as empty/defaults) is correct and covers all three cases at once. KEEP P2. Ticket is now execution-ready.
+---
+id: 2gtu1w5i
+author: Hans Kohlreiter
+created: 2026-05-22T11:01:23Z
+body: |-
+  Fixed & verified (acceptance review 2026-05-22). decodeOverride (config/load.go) now treats io.EOF from yaml.Decode as empty input -> returns empty override/defaults instead of wrapping 'decode yaml: EOF'. Live repro confirmed: 0-byte, whitespace-only, and comment-only --config files all exit 0 'config OK'; malformed YAML still fails with a real error (no regression). Table-driven tests added for all three empty variants. Verifier: PASS. Full quality suite green.

@@ -1,0 +1,26 @@
+---
+id: ku81bwp6
+author: Hans Kohlreiter
+created: 2026-05-25T19:19:38Z
+body: |-
+  ## Plan-review grill — applied 2026-05-25
+
+  Reviewer (beads-tasks:reviewer in plan-grilling mode) returned YELLOW with 10 questions; all resolved with user before any tasker spawn.
+
+  **Description updates (folded into the child tasks):**
+  - Q1 → hqsk: also fixes wrong package path `internal/repository/beads/contract/` (lines 21, 97) AND the third dead symbol `TestRealRepositoryReadContract` (line 69), in addition to the originally-listed three symbols.
+  - Q2 → c4la: preferred signal is output-text polling (already used in the same file at lines 142, 237, 323); model-state polling is removed from preference order (teatest owns the model during run); signal-channel is the fallback if output polling flakes under 10× -race.
+  - Q3 → ku9t: pinned to DELETE path. Plan-review verified `bd show beads-workbench-kb8e` shows the epic closed 2026-05-24 with 15/15 PASS — the script has no ongoing value.
+  - Q5 → 43th: acceptance OR replaced with AND. Must convert at least 2 of the 3 E2E tests to fake-runner unit tests AND keep at most one ≤15s real-bd smoke. New wall-time budget: ≤20s for the loadgen integration package (down from ~131s).
+  - Q7 → y1ki: architecture_guardrails_test.go is REFACTORED to use `golang.org/x/tools/go/packages` (in-process), NOT relocated to integration. process_runner_test.go is still relocated. Keeps bql-import, direct-SQL, orchestration guardrails on every commit.
+  - Q9 → j5bg: manual binary-launch gate replaced with a conditional gate. Manual smoke is only required if any tasker modified non-`_test.go` production code outside docs/ and scripts/.
+  - Q10 → 7202: argv assertions now address label CSV ordering question; stale doc-comment at `lean_writes.go:84` ("enumerate each") added to scope; canonical fake wiring named explicitly.
+
+  **Tightenings (informational, no scope change):**
+  - Q4: loadgen `*_integration_test.go` files already carry `//go:build integration` — no collision between y1ki scope and 43th scope.
+  - Q6: canonical fake wiring for 7202 is `fakes.NewRecordingExecutor()` + `bdrunner.NewCommandRunner(bd.RunnerConfig{Executor: rec})` — same wiring as `internal/mode/search/argv_cardinality_test.go:27`. Already folded into 7202's description.
+  - Q8: confirmed the only file touched by more than one task is `docs/TESTING.md` (hqsk-only). The 6-way parallel-worktree plan has zero cross-cutting source-file conflicts.
+
+  **Verdict applied:** GREEN (proceed). All five blocking questions and all five tightenings resolved into task bodies or this comment. No `need:review` label was attached; this comment is the explicit `reviewed` marker.
+
+  Reviewer agent ID: abbf30be3fdc519cf

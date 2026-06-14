@@ -1,0 +1,6 @@
+---
+id: a80ifixj
+author: Hans Kohlreiter
+created: 2026-04-23T08:06:22Z
+body: |-
+  Candidate release commit 61f7fce (fix: polish detail rendering and prepare v0.3.0 release) is now pushed on main. Local focused runtime tests passed. Full quality-gate run needs one clean rerun for the lint invocation, and GitHub CI for 61f7fce is currently in progress. Release tag creation is blocked on that CI/provenance check.

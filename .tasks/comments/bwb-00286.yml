@@ -1,0 +1,6 @@
+---
+id: 7934gae7
+author: Hans Kohlreiter
+created: 2026-05-29T09:11:59Z
+body: |-
+  Fixed: ran goimports -local github.com/hk9890/beads-workbench -w on the 3 files (internal/testing/fakes/delayed_dashboard.go, internal/testing/loadgen/generate_test.go, internal/testing/loadgen/measure_test.go). mise run fmt:check now clean. Folded into the 44rr landing commit.

@@ -1,0 +1,48 @@
+---
+id: zy69kngu
+author: Hans Kohlreiter
+created: 2026-04-06T21:47:50Z
+body: |-
+  User wants the complete browse/search/detail experience to feel nice, not merely functional. Search is already being reshaped under beads-workbench-925; this task is now active in parallel to improve detail presentation quality and the overall operator feel of the issue-inspection loop.
+---
+id: 9hyg6809
+author: Hans Kohlreiter
+created: 2026-04-06T21:48:56Z
+body: |-
+  Applied first-pass detail presentation polish while improving the overall browse/search/detail experience: cleaner metadata hierarchy, less dump-like section labels, compact preview improvements, and shell detail header now shows the current issue ID. Focused detail/search/app tests are the current validation loop before broader gates.
+---
+id: nkfmlz1j
+author: Hans Kohlreiter
+created: 2026-04-06T22:09:42Z
+body: |-
+  Current code state is committed-ready: detail presentation hierarchy and compact preview were polished and full tests pass. Issue remains open for any further runtime polish discovered in direct use.
+---
+id: b8rybfv0
+author: Hans Kohlreiter
+created: 2026-04-06T22:11:07Z
+body: |-
+  Session landed in git with commits c0352f6 and 9fe6b30 after search/detail/dashboard UX work. Note: session-close Pushing to Dolt remote... could not run because this repo currently has no configured Dolt remote; git push to origin/main is being completed separately.
+---
+id: 6m9h0nqk
+author: Hans Kohlreiter
+created: 2026-04-06T22:18:14Z
+body: |-
+  ## UX Review: Compact detail view shows duplicate "Blocked by" information
+
+  **What**: In `internal/ui/details/details.go` lines 107-110, `renderCompact()` outputs the `BlockedBy` field twice when non-empty. First as `Blocked by: Data model Update` (line 107-108), then immediately as part of the dependency summary line `Blocked by: 1  Blocks: 1  Related: 1` (line 110). This is confirmed visible in `internal/ui/details/testdata/compact.golden` — both lines appear consecutively.
+
+  **Why**: This makes the compact view look unpolished and confusing. A user scanning the compact detail sees "Blocked by" twice with different formats (name vs count) and has to mentally reconcile them. The acceptance criterion is "detail presentation is more readable and visually polished" — duplicate information is the opposite of polished.
+
+  **Suggested action**: Remove the first `Blocked by:` line (the one showing the name) from compact view. In compact mode, the summary counts (`Blocked by: 1  Blocks: 1  Related: 1`) are sufficient. The full detail view can show names. Update the `compact.golden` file to match.
+---
+id: yi8qcih5
+author: Hans Kohlreiter
+created: 2026-04-06T22:18:19Z
+body: |-
+  ## UX Review: Bug e98 is mostly done — one issue remains
+
+  **What**: After full UX review of detail mode, the presentation is genuinely improved. The FormSection borders create clear visual hierarchy, metadata layout is clean, full/compact modes work correctly, and board→detail→board navigation with esc is smooth. One defect remains: duplicate "Blocked by" rendering in compact view (see separate comment).
+
+  **Why**: The acceptance criteria are largely met. Detail mode is functionally correct, the presentation is more readable and polished, and navigation works. The duplicate Blocked By is a minor polish issue that should be fixed before closing, but it doesn't block the overall assessment that this bug is nearly complete.
+
+  **Suggested action**: Fix the compact view duplicate, update the golden, and this bug can be closed.

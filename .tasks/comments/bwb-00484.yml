@@ -1,0 +1,6 @@
+---
+id: pyvvkqxs
+author: Hans Kohlreiter
+created: 2026-05-22T09:27:51Z
+body: |-
+  Done. Added '## Mode package shapes' section to docs/OVERVIEW.md contrasting board/search (tea.Model shape) vs details (shell-driven, HandleKey). Added one-line cross-reference to CODING.md rule 8. Docs-only; no Go code changed.

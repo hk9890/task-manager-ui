@@ -1,0 +1,12 @@
+---
+id: 1157vdph
+author: Hans Kohlreiter
+created: 2026-04-22T18:55:59Z
+body: |-
+  Reproduced on 2026-04-22 against the current workspace. `go test ./internal/app -run TestModelDetailModeSupportsScrollingLongContent -v` fails because the End-key assertion never reaches the bottom description content and instead lands in the comments/metadata tail. `go test ./internal/mode/details -run TestModelDetailScrollMovesViewportForLongContent -v` fails for the same reason. This bug is still relevant.
+---
+id: m6z5fq94
+author: Hans Kohlreiter
+created: 2026-04-22T20:04:25Z
+body: |-
+  Fixed on 2026-04-22. Detail content scrolling no longer gets pushed past the description by empty placeholder notes/comments sections, so End reaches the bottom of real content again. Verified by passing `go test ./internal/mode/details -v`, `go test ./internal/app -run TestModelDetailModeSupportsScrollingLongContent -v`, and the focused package suite `go test ./internal/ui/details ./internal/mode/details ./internal/app ./internal/ui/search`.

@@ -1,0 +1,18 @@
+---
+id: u3dll3hu
+author: Hans Kohlreiter
+created: 2026-04-10T17:02:57Z
+body: |-
+  Acceptance criteria are thorough. One addition needed: criteria should include 'no duplicate scope between tasks — verify that buildFilterArgs extraction appears in exactly one delivered task, not two.' Why: the ia6/0jc overlap means the verifier needs to check that the duplicate work was resolved, not just that both tasks 'passed.' Suggested action: add a criteria item for 'no overlapping changes between tasks.'
+---
+id: 3edsd5an
+author: Hans Kohlreiter
+created: 2026-04-10T18:00:55Z
+body: |-
+  Verifier run: BLOCKED. Re-ran go build ./cmd/bwb, go vet ./..., go test -count=1 ./..., and go test -race ./...; all pass. Requested bug fixes, dead-code removals, helper consolidation, new test files, and conventions verified except DRY cleanup still leaves renderhelpers.MaxInt plus production callers. Tracking bug: beads-workbench-8ad.1. Next: remove MaxInt and migrate callers to Go builtins, then rerun acceptance review.
+---
+id: d4wkc290
+author: Hans Kohlreiter
+created: 2026-04-10T18:07:08Z
+body: |-
+  Verifier rerun: PASS. Confirmed renderhelpers/helpers.go no longer contains MaxInt; board.go and search.go no longer import renderhelpers; issuerow/row.go uses max() builtin. Quality gates rerun pass: go build ./cmd/bwb, go vet ./..., go test -count=1 ./..., go test -race ./....

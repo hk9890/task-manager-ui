@@ -1,0 +1,21 @@
+---
+id: ecmngcii
+author: Hans Kohlreiter
+created: 2026-05-17T21:41:41Z
+body: |-
+  Fixed board and search mode logger labels.
+
+  Root cause confirmed: `services.Logger` carried `component=dashboard`; all mode models that received it inherited the misleading label.
+
+  Changes:
+  - `cmd/bwb/main.go:46`: `Component("dashboard")` → `Logger()` (services.Logger is now the root logger, no `component` attr).
+  - `internal/app/services.go`: doc comment updated — services.Logger must be root.
+  - `internal/app/model.go:248-249`: `NewModelWithOptions` derives per-mode loggers via new `modeLogger(services.Logger, "board")` / `modeLogger(services.Logger, "search")` helper.
+  - `internal/mode/search/model.go:320,:401`: also removed inline `"component", "search"` attrs (same duplicate-key anti-pattern as [[xm6u]] but in search, not board — picked up by the audit per ticket).
+  - Added regression tests `TestBoardModeLogCarriesComponentBoard` and `TestSearchModeLogCarriesComponentSearch` asserting the JSON line has exactly one `"component":` key with the correct value per mode.
+
+  Details mode has no logger field — not affected.
+
+  Commands: `mise run quality:fast` (826 tests pass), `mise run lint` (0 issues), `go build ./...` (clean).
+
+  Verifier spawned. Awaiting accept/reject.

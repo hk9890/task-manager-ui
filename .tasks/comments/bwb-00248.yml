@@ -1,0 +1,12 @@
+---
+id: tm5sdkvf
+author: Hans Kohlreiter
+created: 2026-05-16T20:03:01Z
+body: |-
+  **Epic-review 2026-05-16 (tightening)**
+
+  Reviewed by orchestrator + independent reviewer before activation. Most defensible of the 3 epics queued this session — solid cleanup (ppja.1 removes 68 routingExecutor refs) + extends a proven pattern (the existing TestBoardInitRealGatewaySubprocessArgvCardinality). GO as planned with one tightening:
+
+  **ppja.3 (dynamic-flag clause)** — the original wording "parametrize the test or pin the common cases" punts on the hardest case. Dynamic flags (e.g. `--limit` driven by terminal height) are exactly where argv regressions hide. Tightened to: "every dynamic flag pinned at default + max + min + 1 boundary value." See updated description on ppja.3.
+
+  **Priority note**: P1 bugs ule7 and 5q6t take precedence over this P3 work — defer activation.

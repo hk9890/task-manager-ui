@@ -1,0 +1,18 @@
+---
+id: hjyidtwr
+author: Hans Kohlreiter
+created: 2026-04-10T16:58:39Z
+body: |-
+  Duplicate scope with ia6: instruction #4 (extract buildFilterArgs) is identical to ia6's first deliverable. Both tasks claim the same read_gateway.go refactor. Why: the tasker will do this work twice, or the second task will find it already done and be confused about scope. Suggested action: remove instruction #4 from 0jc entirely — ia6 already owns the gateway read method deduplication including buildFilterArgs.
+---
+id: uokjc2mc
+author: Hans Kohlreiter
+created: 2026-04-10T17:01:07Z
+body: |-
+  Missing maxInt in details package: this task lists maxInt replacements in modal, issuerow, renderhelpers, and app — but misses internal/mode/details/model.go which also has a hand-rolled maxInt (line 142). Why: the goal is 'zero hand-rolled maxInt/minInt helpers remain' but this instance would survive. Suggested action: add internal/mode/details/model.go to the file list and replace maxInt with max().
+---
+id: wwamh49d
+author: Hans Kohlreiter
+created: 2026-04-10T17:03:17Z
+body: |-
+  Inaccurate instruction #1: claims renderhelpers/helpers.go (~line 128) has maxInt/minInt to replace, but the file has NO maxInt or minInt definitions. Checked via grep — zero matches. Why: the tasker will look for code that doesn't exist and question the instructions. The actual maxInt locations are: modal/modal.go, issuerow/row.go, app/model.go, and mode/details/model.go (the last one already flagged as missing). Suggested action: remove renderhelpers from instruction #1's file list.

@@ -1,0 +1,17 @@
+---
+id: 72sdpvih
+author: Hans Kohlreiter
+created: 2026-05-17T21:35:43Z
+body: |-
+  Fixed duplicate `component` JSON key in board mode logger.
+
+  Root cause confirmed: `m.logger` inherits `component=dashboard` from `cmd/bwb/main.go:46`; three sites in `internal/mode/board/model.go` re-added a `component` key inline.
+
+  Changes:
+  - `internal/mode/board/model.go` lines 242-244, 357-360: removed `"component", "board"` from two Debug calls.
+  - `internal/mode/board/model.go` lines 427-439: dropped `logger := m.logger.With("component", "dashboard")`; replaced `logger.Warn` with `m.logger.Warn`.
+  - `internal/mode/board/model_test.go`: added `TestBoardModeWarningLogNoDuplicateComponentKey` — slog JSON handler regression test asserting exactly one `"component":` per warning log line.
+
+  Commands: `mise run quality:fast` (818 tests pass), `mise run test` (818 tests pass).
+
+  Verifier spawned. Awaiting accept/reject before close.

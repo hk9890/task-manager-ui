@@ -1,0 +1,6 @@
+---
+id: 3czc82e4
+author: Hans Kohlreiter
+created: 2026-05-16T18:45:35Z
+body: |-
+  Done. interface.go expanded from 33 lines to full contract spec per method (preconditions/postconditions/error semantics/bd quirks with dispositions); top-of-file audit appendix records methodology and bd version (1.0.4). Audit DB: /tmp/tmp.dbLu1NDdcf (ephemeral, mktemp). mise run quality green (686 unit + 771 integration). Per discipline, 3 bugs filed with link-back deps (see orchestrator-applied separately).

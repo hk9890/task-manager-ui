@@ -1,0 +1,6 @@
+---
+id: dxyfqntd
+author: Hans Kohlreiter
+created: 2026-05-17T09:42:15Z
+body: |-
+  Done. interface.go extended with full write contract (preconditions/postconditions/side effects/idempotency/error semantics) for all 4 write methods + 2026-05-17 write quirks appendix. 34 real-bd invocations exercised. One bug filed under discipline: ubav (ClearLabels silent no-op).

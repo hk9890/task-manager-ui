@@ -1,0 +1,30 @@
+---
+id: 8rbwrobr
+author: Hans Kohlreiter
+created: 2026-05-24T09:51:23Z
+body: |-
+  Plan reviewed in conversation 2026-05-24 — user iterated on scope twice (Option A vs B, then collapsed to lean reimpl + validating decorator on Repository boundary). Confirmed: reimplement (no copy), move validation to Repository boundary, delete legacy, migrate callers. Plan-review gate satisfied.
+---
+id: k2c70d4a
+author: Hans Kohlreiter
+created: 2026-05-24T11:42:00Z
+body: |-
+  Epic complete. All 6 implementation subtasks closed (k4g4.1, k4g4.2, k4g4.3, k4g4.6, k4g4.4, k4g4.5) plus AR mdqk. Acceptance criteria fully satisfied — see mdqk for per-AC evidence.
+
+  Final state:
+  - internal/repository/beads/ = 1,554 LOC across 7 files, all lean (was ≈6,300)
+  - repository.NewValidating decorator at the Repository boundary
+  - 0 hits for BeadsGateway/NewCLIGateway/validatingGateway across the tree
+  - 0 hits for gateway-era vocabulary in docs/AGENTS.md/project-plan/
+  - mise run smoke PASS (real-application end-to-end)
+  - mise run quality green (unit + integration + parity + contract tiers)
+
+  Production wiring chain: CommandRunner → repositorybeads.New → repository.NewValidating → caching.New.
+---
+id: gwaetkhy
+author: Hans Kohlreiter
+created: 2026-05-24T11:59:44Z
+body: |-
+  Epic now genuinely complete after full gateway purge (commit ff591f4). Earlier close was premature — only the BeadsGateway interface was deleted, not the vocabulary or the gateway-named carrier directory. The user pushed back, correctly, and this second pass removed all remaining gateway references (524 hits → 0) and moved internal/gateway/beads/ → internal/bd/.
+
+  Final verification: mise run quality green (960 unit + 1066 integration), mise run smoke PASS, bwb binary runs.

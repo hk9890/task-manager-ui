@@ -1,0 +1,6 @@
+---
+id: mzgta72q
+author: Hans Kohlreiter
+created: 2026-04-14T06:41:21Z
+body: |-
+  Consolidation note: this task, beads-workbench-zlw, and beads-workbench-705 are all facets of the same quality-gate duplication problem. They can be addressed in a single change: (1) consolidate CODING.md internal copies, (2) make CHANGE-WORKFLOW.md reference CODING.md instead of repeating, (3) make TESTING.md and RELEASING.md reference instead of repeating. Suggested approach: fix beads-workbench-705 first (CODING.md internal), then beads-workbench-zlw and this one together.

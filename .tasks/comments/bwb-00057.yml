@@ -1,0 +1,24 @@
+---
+id: hhw5c4lz
+author: Hans Kohlreiter
+created: 2026-04-18T20:17:56Z
+body: |-
+  Review: Well-scoped and actionable. The code path is clear (splitThreePaneWidths, line 212). One concern: the description says 'roughly around double current width' but doesn't specify a target ratio or formula. What: acceptance criteria should specify the desired allocation (e.g., 'left pane gets 1/3 of available minus metadata' or a specific min/max range). Why: without a target, the implementer will guess and may need rework. Suggested action: add a concrete width target or ratio to the description, e.g., 'left = clamp(available/3, 30..50)' or similar.
+---
+id: ghimlhk8
+author: Hans Kohlreiter
+created: 2026-04-18T20:23:40Z
+body: |-
+  Set review — width target still missing. What: prior reviewer correctly flagged that no concrete ratio/formula is specified. The description still says 'roughly around double' which is not implementable. Why: the implementer will pick an arbitrary number, get feedback, and rework. Suggested action: owner should specify a target formula before this is ready for implementation, e.g., 'left = clamp(available/3, 30..50)' with metadata staying at 34. This is a 1-line constant change once the target is decided — do not overcomplicate.
+---
+id: 2ktlhdo8
+author: Hans Kohlreiter
+created: 2026-04-18T20:24:07Z
+body: |-
+  Execution ordering note for full set (74r, 6eq, 59z, axe, pxs). Recommended order: (1) 59z — render wiring fix, highest value, no dependencies. (2) 74r — width change, requires owner to specify target first. (3) 6eq — framing, requires owner decision on scope, touches same renderThreePane code as 74r so do after. (4) axe — new feature, lowest risk of rework if done after layout stabilizes. (5) pxs — investigation only, may close as non-bug. Coupling risk: 74r and 6eq both modify renderThreePane/splitThreePaneWidths and the column assembly code. If done in parallel they will conflict. Do them sequentially.
+---
+id: cftpadfl
+author: Hans Kohlreiter
+created: 2026-04-18T22:19:45Z
+body: |-
+  Verifier rerun: PASS. Built /tmp/bwb and reviewed real detail mode against embedded fixture at 120x34 and 160x34. Dependencies rail is materially wider (~29 cols at 120, ~39 at 160), titles are more readable, content remains usable, and no dependency-pane regressions were observed.

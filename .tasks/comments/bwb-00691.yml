@@ -1,0 +1,49 @@
+---
+id: 8lyg93w5
+author: Hans Kohlreiter
+created: 2026-05-17T18:34:02Z
+body: |-
+  ## Carry-over from T2 ([[h2xu.2]]) — required for plumbing
+
+  T2 added `State.Skeleton bool` to `details.State`. The skeleton-rendering branch in `renderContentPaneLines` already calls `issuerow.RenderCompactSkeleton` per the T1 primitive.
+
+  **Updated plumbing target for T3:**
+
+  1. `RenderContentPane` in `internal/ui/details/details.go` currently has 6 params (..., focused, scrollOffset, **skeleton bool**). Add a 7th: `skeletonPhase int`.
+  2. `details.State` already has `Skeleton bool` at line 46 — add `SkeletonPhase int` adjacent.
+  3. `renderContentPaneLines` in `details.go` already receives `skeleton bool` as 4th param — add `skeletonPhase int` as 5th. Pass to `issuerow.RenderCompactSkeleton(SkeletonOpts{..., Phase: skeletonPhase})`.
+  4. `internal/ui/search/search.go` calls `RenderContentPane(...)` at lines ~116 and ~157 — pass `search.State.SkeletonPhase` as the new arg. Add `SkeletonPhase int` to `search.State` next to wherever `Skeleton`-related state lives.
+  5. `internal/ui/board/board.go` and the board column renderer also need `SkeletonPhase` plumbed to its `RenderCompactSkeleton` call site.
+
+  **PlaceholderDetail** (set by `mode/details/model.go:View()`) is now ready for pulse — it already routes through the same content-pane skeleton branch. No extra rework needed once `SkeletonPhase` is plumbed.
+---
+id: mgve2ajk
+author: Hans Kohlreiter
+created: 2026-05-17T18:45:38Z
+body: |-
+  ## Tasker complete (commit cf00d78)
+
+  Tasker implemented per spec. `mise run quality:fast` green (814 tests, 0 lint).
+
+  **Verification:**
+  - `loading.SkeletonPhase(frame int) int` exists; tested for advance-every-4-frames + negative-returns-zero.
+  - `styles.SkeletonShades = []lipgloss.AdaptiveColor{...}` with hand-picked Light + Dark hex pairs (Light: #C8CCC0/#D9DCCF/#EAEDE0; Dark: #454545/#696969/#7F7F7F).
+  - `SkeletonOpts.Phase int` added; `RenderCompactSkeleton` cycles color by phase. `TestRenderCompactSkeletonPhaseCyclesColor` verifies different styled bytes / identical plain text across phases.
+  - Mode-View signatures changed: `board.Model.View(skeletonPhase int)`, `search.Model.View(skeletonPhase int)`, `details.Model.View(..., skeletonPhase int)`.
+  - `internal/app/model.go` passes `loading.SkeletonPhase(m.spinnerFrame)` at each mode-View call.
+  - `RenderContentPane` extended to 7 params (added `skeletonPhase int`).
+  - Pulse cycle: 3 phases × 4 frames × 100 ms = ~1.2 s.
+
+  **Known limitation:** Light theme dynamic range is narrower (~18 hex steps luminance). Pulse will be subtle on light terminals; T4 must verify perceptibility on both themes.
+
+  **ControllerAdapter change:** `ui.Controller.View(skeletonPhase int)` — adapter passes 0 for tea.Model compatibility (teatest harness). Non-issue for structural tests.
+---
+id: l84mrpti
+author: Hans Kohlreiter
+created: 2026-05-17T18:47:14Z
+body: |-
+  ## Follow-up fix (commit df481bd)
+
+  Full `mise run quality` exposed an integration test that hadn't been updated for T3's `Model.View(skeletonPhase int)` signature change: `internal/mode/search/model_integration_test.go:61-62`. Tasker had run `mise run quality:fast` (no integration tests) before commit and missed it.
+
+  Orchestrator patched directly — added `0` (test phase) to both `finalModel.View()` calls. Full `mise run quality` now green (948 tests, 16 skipped, 0 failures).

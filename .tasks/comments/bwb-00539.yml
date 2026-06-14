@@ -1,0 +1,23 @@
+---
+id: l6tovfwi
+author: Hans Kohlreiter
+created: 2026-05-17T21:55:41Z
+body: |-
+  Wired Dim+Phase through all three refresh paths.
+
+  - Board (`internal/ui/board/board.go:221-229`): `renderColumnRows` passes `Dim:true, Phase:skeletonPhase` when `Loading && len(rows)>0`.
+  - Search (`internal/ui/search/search.go:320-333`): `renderResultRows` sets `dim := state.Loading && len(state.Results)>0` and threads it to every `RenderCompact` call.
+  - Details (`internal/ui/details/details.go:140-162`): refactored `Render` to capture output, then wraps with `lipgloss.NewStyle().Faint(true).Foreground(SkeletonShades[phase])` when `Loading && Detail.Summary.ID!=""`.
+
+  Tests updated:
+  - `internal/mode/details/model_test.go`: `TestRefreshSameIssueKeepsStaleContent` and `TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent` now strip ANSI before asserting stale title visibility.
+
+  Tests added:
+  - `internal/ui/board/board_test.go`: `TestRefreshBoardCarriesDimPhaseStyle`
+  - `internal/ui/search/search_test.go`: `TestRefreshSearchCarriesDimPhaseStyle`
+  - `internal/ui/details/details_test.go`: `TestRefreshDetailsCarriesDimPhaseStyle`
+  - `internal/app/model_loading_refresh_test.go`: `TestSkeletonPhaseCyclesThroughAllShades`
+
+  Commands: `mise run test` (830 tests pass), `mise run quality` (964 tests pass, 16 skipped opt-in).
+
+  Verifier spawned. Awaiting accept/reject. Unblocks zg50 (acceptance review).

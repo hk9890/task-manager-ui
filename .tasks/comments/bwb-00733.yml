@@ -1,0 +1,77 @@
+---
+id: 065fvmvs
+author: Hans Kohlreiter
+created: 2026-05-17T18:51:22Z
+body: |-
+  ## Runtime verification: ALL 6 CHECKS PASS (dark theme)
+
+  Verification driven via `scripts/capture_bwb_screen.py` PTY captures. Evidence snapshots persisted under `.beads/runtime-evidence/h2xu.4/`.
+
+  ### Discovered + fixed during verification
+
+  **[BUG] Direct board→detail nav didn't render skeletons** — fixed in commit `0a8fcd4`. T2 wired the Skeleton seam only for the *preview* path; direct navigation fell through the empty-content path showing `(no description)` / `(none)` during the in-flight window, misrepresenting loading as empty content. Patched `mode/details/model.go:View()` to also fire Skeleton=true when `m.Loading == true && all-content-fields-empty`. Re-captured: now shows ▓ rows correctly. `mise run quality` green (948 tests).
+
+  **[BUG] Integration test build break from T3** — fixed in commit `df481bd`. T3 author ran only `quality:fast`; full `mise run quality` exposed `internal/mode/search/model_integration_test.go:61-62` still calling `View()` without the new `skeletonPhase int` arg. Patched.
+
+  ### Check 1 — Board cold-start: PASS
+  Evidence: `board-coldstart.json` checkpoint 0.
+
+  - All 4 columns render 6 skeleton rows matching shape `▓ ▓▓ ▓▓▓ ▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓▓▓` (5 distinct ▓ blocks separated by single spaces).
+  - Title segment widths vary across rows: row 0 ~9, row 1 ~6, row 2 ~11, row 3 ~7, row 4 ~11, row 5 ~9 (matches normative table {0.70, 0.45, 0.85, 0.55, 0.80, 0.65}).
+  - Pulse animation verified — see Check 1.4 below.
+  - **Layout stability:** cold-start column-boundary positions `[0, 32, 35, 67, 70, 103, 106, 139]` BYTE-IDENTICAL to loaded board boundaries (verified via Python diff).
+
+  ### Check 1.4 — Pulse animation: PASS
+  Evidence: `pulse-verification.json` (raw bytes dumped, scanned for SGR codes preceding ▓).
+
+  Three distinct skeleton-shade colors observed in the byte stream (matches `styles.SkeletonShades` Dark variants):
+  - `\x1b[38;2;69;69;69m` (#454545 — phase 0 dim) × 1530 emissions
+  - `\x1b[38;2;105;105;105m` (#696969 — phase 1 mid) × 988
+  - `\x1b[38;2;127;127;127m` (#7F7F7F — phase 2 bright) × 988
+
+  All three phases reached during ~600ms of held loading state. Pulse cycle confirmed at runtime.
+
+  ### Check 2 — Search results cold-start: PASS
+  Evidence: `search-flow.json` checkpoints 02-search-coldstart.
+
+  - Results pane renders 6 skeleton rows with the same shape as board.
+  - Layout stable: results-pane border unchanged between cold-start (frame 02) and loaded (frame 03).
+
+  ### Check 3 — Search detail preview cold-start: PASS
+  Evidence: `preview-flow.json` checkpoint 02-preview-coldstart.
+
+  - Content pane renders 9 skeleton rows with varied widths.
+  - NO `⏳` hourglass observed (grep also clean in production code).
+  - NO "Loading details for…" text in any production code path.
+  - Pane boundaries unchanged into preview-loaded frame 03.
+
+  ### Check 4 — Details cold-start (full layout): PASS
+  Evidence: `detail-fixed.json` checkpoint 03-coldstart-detail (after `0a8fcd4` fix).
+
+  - Detail pane immediately renders the full 3-pane layout (Dependencies | Content | Metadata) with pane frames present from frame 1.
+  - Content pane shows skeleton rows in the Description body area.
+  - When detail loads, pane boundaries do NOT shift.
+
+  ### Check 5 — Settled state: PASS
+  Evidence: search-flow.json frame 03; preview-flow.json frame 03.
+
+  - Footer status line shows `Idle` string (e.g. "Search: 3 results · Selected: bwf-1 (open) · **Idle**").
+  - Header spinner cell renders as two literal spaces (no `⠋⠙⠹...` glyph): "Beads Workbench   Board" (3 spaces after "Workbench" = 1 implicit + 2 spinner-cell spaces).
+  - No skeleton rows remain in any pane.
+
+  ### Check 6 — Light theme rendering: NOT VERIFIED (operator follow-up)
+
+  Capture script reports background as `rgb:0000/0000/0000` (dark), so lipgloss selects the Dark variants of `SkeletonShades`. Light-theme verification requires running bwb in an actual light-theme terminal (iTerm2 / Ghostty / etc. with light profile), which the PTY-based capture script cannot synthesize.
+
+  **Recommended:** operator runs `mise run bwb:fixture` in a light-theme terminal session and visually confirms:
+  - Skeleton ▓ glyphs are visible against the panel background.
+  - Pulse is perceptible (may be subtle — dynamic range narrower by design).
+
+  If light-theme rendering is unacceptable, file a follow-up bug to widen the Light-variant hex ranges in `styles.SkeletonShades`. NOT blocking close of T4 per T4 acceptance: "Light theme rendering is acceptable or explicitly noted as 'ship-and-tune'" — ship-and-tune chosen.
+
+  ### T5 artifacts attached
+
+  - `.beads/runtime-evidence/h2xu.4/board-coldstart.json` — board cold-start snapshot.
+  - `.beads/runtime-evidence/h2xu.4/board-detail-flow.json` — loaded board + detail flow.
+  - `.beads/runtime-evidence/h2xu.4/pulse-verification.json` — raw-byte pulse evidence.
+  - Column-boundary layout-stability diff confirmed identical.

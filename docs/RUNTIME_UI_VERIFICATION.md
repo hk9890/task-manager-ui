@@ -272,7 +272,7 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 6. Press `j` repeatedly past the loaded-slice boundary. Confirm:
    - The Done header N grows (e.g. `25 of 89` → `50 of 89` → `75 of 89`). M stays 89.
    - The `›` chevron remains visible in the Done column next to the selected issue at all times (b38b.4 scroll-window contract — see §6).
-   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[taskmgr-ui-debug]` trace (these are now in-process repository traces, not bd subprocess argv):
+   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[taskmgr-ui-debug]` trace (these are now in-process repository traces, not external tracker-CLI subprocess argv):
      ```bash
      (cd /path/to/store && /tmp/taskmgr-ui --debug 2>/tmp/taskmgr-ui-debug.log)
      # in another terminal: tail -f /tmp/taskmgr-ui-debug.log | grep loadMoreClosed

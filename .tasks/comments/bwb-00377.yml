@@ -1,0 +1,18 @@
+---
+id: 3pe64kpe
+author: Hans Kohlreiter
+created: 2026-05-11T06:29:05Z
+body: |-
+  User directed this epic to start with deep research on search-interface design, not just backend semantics. Research focus now explicitly includes how the search UI should communicate complete vs capped/partial results, query state, and follow-on operator actions while staying aligned with the result-completeness redesign.
+---
+id: 5r1j77zb
+author: Hans Kohlreiter
+created: 2026-05-11T06:33:07Z
+body: |-
+  Research summary so far: the current search UI cannot represent result completeness honestly. `domain.SearchResultPage.Total` is overloaded/inconsistent across paths, search mode flattens the page into `[]IssueSummary` and drops metadata, and `ui/search` only shows `len(results)` so a capped result set looks complete. Recommended direction: keep the existing 3-pane layout, but introduce an explicit search-page contract (returned count, requested limit, completeness/may-have-more, source, notices) plus search-mode state for draft query vs applied query. UI should show exact vs capped states explicitly in pane headers/footer hints and keep stale results visible during reload. Avoid pagination, live search, and complex filter UI until correctness metadata is in place.
+---
+id: 0wxftzbc
+author: Hans Kohlreiter
+created: 2026-05-11T14:39:08Z
+body: |-
+  Follow-up implementation plan created under the epic: (1) beads-workbench-47v0.3 introduces explicit search result completeness metadata in the gateway/domain contract, (2) beads-workbench-47v0.4 preserves search session state and page metadata in search mode, and (3) beads-workbench-47v0.5 updates the search UI to render honest exact/capped/loading/empty states with inline reload feedback. Dependencies enforce contract -> mode -> UI, and all three block the acceptance review task.

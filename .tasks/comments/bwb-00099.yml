@@ -1,0 +1,13 @@
+---
+id: gv832rd9
+author: Hans Kohlreiter
+created: 2026-05-29T11:19:52Z
+body: |-
+  Epic complete — acceptance review d2oj.7 PASSED. All monitoring-data findings addressed:
+  - d2oj.1 (BlockedBy nil-slice) — FIXED
+  - d2oj.2 (exit_code=-1 exec-error visibility) — FIXED (diagnostic "error" field)
+  - d2oj.3 (dashboard fan-out p95 ~1.4s) — ACCEPTED with rationale (already parallel+cached; irreducible bd-subprocess floor)
+  - d2oj.4 (wrong-schema cache WARN spam) — FIXED (prune + single summary WARN)
+  - d2oj.5 (bare build_version=dev) — FIXED (git-describe ldflags)
+  - d2oj.6 (53s cold-load measurement artifact) — FIXED (gap computation corrected; 53.49s -> 3.09s)
+  Code committed in 657025a (+ UI siblings in 08fced2). Full quality gate green (1297 tests incl. integration; lint clean). Follow-up beads-workbench-9xwz filed (metadata-rail Counts block also omits Children, P4). Closing.

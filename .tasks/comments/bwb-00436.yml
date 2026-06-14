@@ -1,0 +1,6 @@
+---
+id: 9c313248
+author: Hans Kohlreiter
+created: 2026-05-29T11:02:36Z
+body: |-
+  Fixed in internal/bd/runner.go: osCommandExecutor.Run was swallowing the *exec.ExitError for signal-killed processes (ExitCode=-1), returning err=nil to logExecution so no "error" field appeared on the WARN record. Now ExitCode=-1 cases return the ExitError alongside the result; logExecution attaches it as the "error" field, so the underlying exec cause is visible in logs. Two tests added: TestOsCommandExecutorSignalKillPreservesError (pins the executor fix via context-cancelled sleep) and TestCommandRunnerRunLogsErrFieldOnSignalKill (end-to-end log field check). Spawn-failure path (err!=nil, ExitCode=0) already logged "error" correctly — unchanged. Note: log field key is "error"; MONITORING.md uses "err" only for the caching component (pre-existing cross-component naming inconsistency, candidate for a follow-up doc chore). Suite + race + integration green.

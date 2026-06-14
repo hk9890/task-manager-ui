@@ -1,0 +1,12 @@
+---
+id: urxdfzcf
+author: Hans Kohlreiter
+created: 2026-04-19T08:06:21Z
+body: |-
+  Root cause confirmed: moveRelatedSelection (model.go:309-324) navigates a flat BrowserItems list, but the rendering in dependencyGroups (details.go:273-283) includes Structure items via browserItems only when ParentGroupBrowser is present. The flat list is built by browserItemsFromDependencies (model.go:436-465) which concatenates BlockedBy+Blocks+Related but does NOT include Structure/browserItems. So when ParentGroupBrowser exists, browserItemsFromParentGroup builds a completely different list (parent+children), and BrowserItems is that structure list — meaning dependency-group rows (BlockedBy/Blocks/Related) shown in the rendering are NOT in the navigation list at all. The asymmetric behavior comes from the mismatch between what renderRelationshipGroups renders vs what BrowserItems contains. Fix: BrowserItems must be rebuilt as a flat ordered list matching the exact rendered row order across ALL visible non-empty groups (BlockedBy → Blocks → Related → Structure), so moveRelatedSelection traverses them linearly. syncBrowserPanel needs to unify both paths.
+---
+id: v9gzhcml
+author: Hans Kohlreiter
+created: 2026-04-19T08:06:27Z
+body: |-
+  Coupling note: 4k8p and 3ymu are independent. 4k8p is purely rendering (metadata.go + details.go renderMetadataPaneLines). 3ymu is purely navigation model (model.go syncBrowserPanel/browserItemsFromDependencies). No shared code paths. Recommended order: fix 3ymu first — it's a functional navigation bug (users cannot reach items). Then 4k8p — it's cosmetic polish. Both are small (< 30 lines changed each).

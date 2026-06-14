@@ -1,0 +1,6 @@
+---
+id: y3rc1w9v
+author: Hans Kohlreiter
+created: 2026-05-16T18:51:07Z
+body: |-
+  Fixed. Inverted sort logic in read_gateway.go ListIssues (line 81) and Query (line 117) so --reverse is now emitted only for SortDirectionAscending. Updated 3 gateway argv tests + TestBoardInitRealGatewaySubprocessArgvCardinality + cmd/bwb-smoke bdQueryClosed + parity test reference call. Added TestGatewaySortDirectionDescendingEmitsNoReverseFlag (4 subtests) as regression guard. mise run quality green (777 tests). BWB_PARITY_THIS_REPO=1 sort parity on this repo: Done 50/50 positions match — both sides now agree on the CORRECT newest-first order. App-level verification still pending user TTY confirmation that the Done column now shows newest-closed-first (gated on visual check).

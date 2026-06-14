@@ -1,0 +1,6 @@
+---
+id: cmtoc9lf
+author: Hans Kohlreiter
+created: 2026-05-28T13:53:21Z
+body: |-
+  Implemented. queryClosedPage now over-fetches limit+offset and slices in Go when offset>0 (bd 1.0.4 lacks --offset). Argv pin asserts no --offset; new SliceMath test pins the in-process windowing. ARGV_CONTRACT.md and PaginatedClosedFetch hook comment updated. quality:fast + test:integration green.

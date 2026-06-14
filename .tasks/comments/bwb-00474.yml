@@ -1,0 +1,12 @@
+---
+id: f9sz7p8f
+author: Hans Kohlreiter
+created: 2026-05-22T17:37:04Z
+body: |-
+  DISPOSITION (user, html-ask 2026-05-22): Option A -- code fix. Give board mode the same 'consumed'-style early return so a key handled by the active browse mode is not re-dispatched to shell actions.
+---
+id: 051vcpix
+author: Hans Kohlreiter
+created: 2026-05-22T17:47:55Z
+body: |-
+  FIXED (commit 819b113): added board.Model.CapturesShellKey (mirrors search.Model) and an early-return guard in internal/app/model.go so a key the board claims is not re-dispatched to the shell action switch. Keys the board does not bind still reach shell actions. Default l/r overlaps unaffected. Tests TestBoardCapturesShellKeyPreventsDoubleFireOnOverlappingBinding and TestBoardNonCapturedKeyStillReachesShellActionSwitch added. mise run quality:fast clean (1093 tests).

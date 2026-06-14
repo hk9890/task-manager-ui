@@ -1,0 +1,6 @@
+---
+id: xg1ihtef
+author: Hans Kohlreiter
+created: 2026-05-24T06:59:17Z
+body: |-
+  Implemented. Files: internal/repository/caching/{caching.go,options.go,caching_test.go} + internal/repository/memory/forget.go (Forget + SeedDetail helpers). Uses dashboardCache+dashboardDirty pattern (simpler); memory.Repository used as per-ID issue cache only. ctx.Err() at entry of cache-hit paths conforms to Repository cancellation contract. SeedDetail added because CreateIssue must seed memory with backing's assigned ID (memory.CreateIssue would overwrite with its own idgen). 18 caching tests pass -race clean. mise run quality green (1149 unit / 1322 integration, 0 lint).

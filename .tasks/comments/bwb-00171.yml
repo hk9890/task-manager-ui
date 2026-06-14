@@ -1,0 +1,12 @@
+---
+id: byf6wgtc
+author: Hans Kohlreiter
+created: 2026-04-18T21:32:09Z
+body: |-
+  Review: Root cause confirmed — single-line fix. What: read_gateway.go:543 checks dependencyType == "related" but bd dep relate produces dependency_type "relates-to". The condition needs to also match "relates-to". Why: this is a data contract mismatch between bd CLI output and gateway parsing. Every relates-to link falls through to blockedBy (line 557). Suggested action: change line 543 to 'if dependencyType == "related" || dependencyType == "relates-to"'. Add a test case with dependency_type "relates-to" in read_gateway_test.go.
+---
+id: 4pjw1fwd
+author: Hans Kohlreiter
+created: 2026-04-18T21:32:13Z
+body: |-
+  Review: Bug is well-scoped and actionable. One minor wording improvement. What: the repro steps say 'run bd create --id bwf-6 ... and bd dep relate bwf-2 bwf-6' but the acceptance criteria don't explicitly state the gateway must handle both 'related' and 'relates-to' dependency types. Why: a tasker might fix only 'relates-to' and break the existing 'related' path, or vice versa. Suggested action: add acceptance criterion: 'dependencyReferencesFromPayload classifies both dependency_type "related" and "relates-to" as related work, verified by unit tests for each.'

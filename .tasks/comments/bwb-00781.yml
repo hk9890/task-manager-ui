@@ -1,0 +1,24 @@
+---
+id: k33b4m9n
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:54Z
+body: |-
+  F21 (Major) — 'Files to Modify' lists 5 files but the real scope is a repo-wide sweep. Update instruction 1 to: 'grep -RnE "(make [a-z]+|go test ./\\.\\.\\.)" docs/ AGENTS.md CLAUDE.md and update every hit'. The 5 named files are the minimum expected set, not the exhaustive one.
+---
+id: 6lci6ipq
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:55Z
+body: |-
+  F22 (Minor) — Step 5 leaves runtime-ui mise-task decision open. Decision: SKIP the extra task. Runtime-ui tests are package-scoped and the -run flag invocation is what the doc teaches; an extra mise task adds surface without value.
+---
+id: z23efavb
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:55Z
+body: |-
+  F23 (Minor) — AC 'no broken internal doc links (Makefile not referenced)' — Makefile isn't a link target. Replace with: 'grep -RnE "\bmake [a-z]+\b" docs/ AGENTS.md CLAUDE.md returns zero hits outside CHANGELOG.md'.
+---
+id: mhg5q9mz
+author: Hans Kohlreiter
+created: 2026-05-16T07:12:22Z
+body: |-
+  Docs updated across 6 files: TESTING.md (two-tier vocabulary, build-tag rule, mise commands, baseline ref), CHANGE-WORKFLOW.md (mise run quality + quality:fast + hooks:install), CODING.md (full task table + gotestsum/golangci-lint pin paragraph), AGENTS.md (mise tasks note), RELEASING.md (CI clarification), test-baseline.md (header note). RUNTIME_UI_VERIFICATION.md verified clean (focused unit-test invocations remain). Final grep for 'make <target>' in docs/AGENTS/CLAUDE returns zero hits.

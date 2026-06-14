@@ -1,0 +1,6 @@
+---
+id: 5hlagdof
+author: Hans Kohlreiter
+created: 2026-05-15T18:33:15Z
+body: |-
+  Implemented SortFieldClosedAt in domain, mapped to --sort closed in gateway, and switched doneSection() to use it. Two new gateway tests cover the mapping and the B-before-A ordering scenario. go build ./... and go test ./internal/dashboard/... ./internal/gateway/... pass.

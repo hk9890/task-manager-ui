@@ -1,0 +1,6 @@
+---
+id: vr38xf6x
+author: Hans Kohlreiter
+created: 2026-04-10T17:01:44Z
+body: |-
+  Task scope is large: 11 files modified, 4 distinct extraction/consolidation operations, touching test infrastructure used by 8+ test files. This is the most cross-cutting non-bug task. Why: if any extraction breaks a test import or changes a helper signature, it cascades across all consuming test files. A partial failure is hard to recover from. Suggested action: not blocking, but the tasker should commit after each extraction group (1. hasGatewayCall, 2. controllerAdapter, 3. ansiEscapePattern, 4. FakeProcessRunner) and run go test ./... between each. Make this explicit in the instructions.

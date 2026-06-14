@@ -1,0 +1,24 @@
+---
+id: uz4ppw4u
+author: Hans Kohlreiter
+created: 2026-05-11T05:23:10Z
+body: |-
+  Review finding: board and search truncation should not be treated as the same bug. Board column caps are a plausible intentional dashboard UX choice, but search capping without indication is the real user-facing gap. Recommendation: narrow this issue to search-result truncation specifically, and decide the implementation direction before coding (for example raise the search limit to a safer bound and/or surface a partial-results indicator). Also note that the current domain total count is derived from the capped result length, so the model cannot distinguish complete from truncated results today.
+---
+id: 1o2sish7
+author: Hans Kohlreiter
+created: 2026-05-11T05:23:14Z
+body: |-
+  Review finding: this issue is not implementation-ready as written because the acceptance criteria allow multiple materially different fixes (stderr parsing, limit changes, UI indication, query redesign). Recommendation: keep this under review until the scope is tightened to a single direction.
+---
+id: 2roc14m2
+author: Hans Kohlreiter
+created: 2026-05-11T06:07:57Z
+body: |-
+  Discussion resolved: this is not a narrow bug fix but a fundamental design problem around capped search/result completeness. We want to treat this as an initiative and start with research, likely including whether the data access interface needs to change.
+---
+id: lm3zrpe4
+author: Hans Kohlreiter
+created: 2026-05-11T06:08:46Z
+body: |-
+  Superseded by epic beads-workbench-47v0, which tracks the broader redesign of search/result completeness handling and the initial research task beads-workbench-47v0.1.

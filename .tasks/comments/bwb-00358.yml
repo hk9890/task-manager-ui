@@ -1,0 +1,12 @@
+---
+id: 7t9ju2ko
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:04Z
+body: |-
+  Pick one parse strategy: prefer 'find marker AFTER its section heading' (deterministic + symmetric with render order). Drop the LAST-occurrence alternative — it silently masks malformed inputs.
+---
+id: eopnm155
+author: Hans Kohlreiter
+created: 2026-05-16T03:58:53Z
+body: |-
+  Implemented (with orchestrator fix-up — original tasker's render-signature change was inconsistent with tests and left build broken). Final approach: parse-side only. ParseIssueEditDocument now: (1) rejects content with multiple BWB:EDITABLE:END markers, (2) rejects description containing any BWB: token via issueEditCheckDescriptionForMarkers, (3) extracts post-description fields from afterDesc substring (after issueEditFieldDescriptionEnd) — the 'find marker AFTER section heading' strategy. Render signature kept as string (single return). 4 security tests pass; full quality gate green.

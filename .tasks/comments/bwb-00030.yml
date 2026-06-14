@@ -1,0 +1,22 @@
+---
+id: tmnub81f
+author: Hans Kohlreiter
+created: 2026-05-16T16:28:06Z
+body: |-
+  Scope expanded — two distinct root causes for the doubled-header visual artifact:
+
+  1. Pre-WindowSizeMsg first frame rendered at default dimensions (height=34, closedLimit=50). Second frame on top after WindowSizeMsg with taller dimensions; first frame's column-top row never cleared from alt-screen. FIXED in Wave 1b tasker: added sizeKnown bool guard to app/model.View(); regression test TestViewReturnsEmptyBeforeWindowSizeMsg.
+
+  2. stderrHandler in internal/logging/logging.go:312-320 writes warn+ slog records to os.Stderr unconditionally. cmd/bwb/main.go:53 runs tea.NewProgram with WithAltScreen against the same TTY (os.Stderr defaults to /dev/tty for the user). So slog warn writes corrupt the alt-screen display during runtime. Introduced by commits 4b8af45 (logging foundation) and 030d159 (centralized runtime diagnostics through slog). Visible smoking gun: 'warn: backend sort assumption broken count=56 threshold=-1' appears at bottom of user's screenshot, OUTSIDE the alt-screen frame. NEEDS FIX: suppress stderr handler in interactive mode (logs go to persistent file only); add regression test that asserts no stderr writes occur after tea.Program.Run begins.
+---
+id: yrs9ba8v
+author: Hans Kohlreiter
+created: 2026-05-16T16:31:46Z
+body: |-
+  Both root causes implemented. Wave 1b second tasker added Manager.SetStderrSuppressed via *atomic.Bool in stderrHandler; runWithLogger toggles suppress=true around start() so runtime warn+ records reach only the persistent file, not the alt-screen TTY. Regression tests: TestSetStderrSuppressedBlocksStderrButNotPersistentLog + TestStartInteractiveSuppressesStderrDuringRun. Full quality gate green: 666 unit + 706 integration tests, 0 lint, guardrails pass. STATUS: keeping open pending visual verification in a real TTY — run mise run bwb in a tall terminal against a multi-issue DB and confirm (a) only one row of column-top borders visible, (b) no 'warn:' lines outside the alt-screen frame, (c) ~/.local/state/bwb/bwb.log still receives all warn entries.
+---
+id: tl7mzx1o
+author: Hans Kohlreiter
+created: 2026-05-16T19:32:42Z
+body: |-
+  Visually verified by user in real TTY (2026-05-16): single row of column-top borders, no warn lines outside the alt-screen frame, Done column shows correct totals. Both root causes confirmed fixed (sizeKnown guard + stderr suppression).

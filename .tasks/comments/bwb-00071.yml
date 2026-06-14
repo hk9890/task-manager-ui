@@ -1,0 +1,40 @@
+---
+id: q5kbbwvc
+author: Hans Kohlreiter
+created: 2026-04-09T14:03:38Z
+body: |-
+  Plan review: Task boundaries are correct for the scope. What: ekp.1 (docs), ekp.2 (extract row), ekp.3 (evaluate list), ekp.4 (acceptance) is a clean decomposition with the right sequencing. ekp.2 is where the actual value lives; ekp.1 and ekp.3 are support tasks. No merge or split needed. Why: the tasks map 1:1 to the decisions that need to be made and the code that needs to change.
+---
+id: 01hfznoo
+author: Hans Kohlreiter
+created: 2026-04-09T14:03:42Z
+body: |-
+  Plan review — simplification opportunity. What: ekp.1 (documentation task) should be folded into ekp.2 as a deliverable, not a separate task. The docs produced by ekp.1 describe architectural decisions that only become real when ekp.2 lands. A standalone doc-writing task before implementation risks producing aspirational architecture that gets revised during extraction anyway. Why: separating 'write docs about what we will do' from 'do it and document it' adds a round-trip for no value. The tasker implementing ekp.2 will need to make the real boundary decisions during extraction, and those decisions should drive the docs. Suggested action: merge ekp.1 acceptance criteria into ekp.2 (add 'update docs/CODING.md with row/list/panel/detail architecture guidance' as a final step in ekp.2's instructions) and close ekp.1 as folded into ekp.2.
+---
+id: xc7vt4ig
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:53Z
+body: |-
+  Review finding: hidden risk — search golden files will break and that is the point, but the task should say so. What: search has 4 golden tests (search_results_preview_w120, search_empty_results_w120, search_results_narrow_w80, search_default_all_results_w120) that assert the current plain-text row format. When ekp.2 switches search to the styled shared renderer, every one of these goldens will need to be regenerated (the test harness supports BWB_UPDATE_GOLDEN=1 for this). The board also has goldens but those should only change if the row contract changes. Why: ekp.2's instructions mention 'board/search/shared renderer tests and goldens as needed' but do not call out that search golden regeneration is mandatory, not optional. A tasker might treat golden breakage as a bug rather than expected. Suggested action: add to ekp.2 instructions: 'Search golden files will break when adopting the styled shared renderer. Regenerate them with BWB_UPDATE_GOLDEN=1 and verify the diff shows the expected styling change.'
+---
+id: nqmezb5u
+author: Hans Kohlreiter
+created: 2026-04-09T14:05:00Z
+body: |-
+  Review finding: no missing tracker updates needed right now. What: the related bug beads-workbench-b9u is properly cross-referenced from ekp.2, with ekp.2 explicitly instructed to resolve or supersede it. The epic's success criteria are testable. The quality gate commands match docs/CODING.md. No orphaned or missing issues. Why: tracker hygiene looks clean — no action needed.
+---
+id: metn525k
+author: Hans Kohlreiter
+created: 2026-04-09T14:06:32Z
+body: |-
+  Reviewer feedback applied: merged ekp.1 into ekp.2, clarified shared-row acceptance criteria and input-type/id-width decisions, and added a formal dependency from ekp.3 to ekp.2.
+---
+id: j3i0dy6x
+author: Hans Kohlreiter
+created: 2026-04-09T19:31:17Z
+body: |-
+  Verifier final: PASS.
+  - Epic success criteria verified against current tree and tracker state.
+  - Child tasks closed; shared compact row path is real; detail remains dedicated; docs and runtime verification now pass.
+  Artifact: /tmp/bwb-ekp4-final-verify-TffBx5
+  Next: epic can close.

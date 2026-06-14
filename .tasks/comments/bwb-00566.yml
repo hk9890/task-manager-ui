@@ -1,0 +1,6 @@
+---
+id: oo2u6ev8
+author: Hans Kohlreiter
+created: 2026-05-22T19:31:42Z
+body: |-
+  Implemented. New cache.go: readCache keyed on resolved argv, token = mtime of .beads/last-touched (resolved from runner WorkDir). Cache hit returns stdout before acquiring runMu/semaphore. Invalidation: external writes caught by token advance; IsWrite=true calls invalidate() under runMu.Lock. Only exit-0 reads cached. Per-argv singleflight via golang.org/x/sync/singleflight (promoted indirect->direct, v0.17->v0.20). 8 new tests in cache_test.go cover all AC; race-clean. docs/MONITORING.md updated: cache hits emit no 'bd command finished' record. 1078 tests pass; quality:fast clean.

@@ -1,0 +1,6 @@
+---
+id: qvkpmc85
+author: Hans Kohlreiter
+created: 2026-05-15T09:45:10Z
+body: |-
+  Curated release notes published. Structure: Highlights (2 bullets on search feedback + structured logging), What's Changed (Added: 4 items, Changed: 5 items, Fixed: 1 item), Full Changelog link. Notes now live at https://github.com/hk9890/beads-workbench/releases/tag/v0.4.0

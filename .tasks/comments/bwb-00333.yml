@@ -1,0 +1,6 @@
+---
+id: lxljdt9p
+author: Hans Kohlreiter
+created: 2026-05-24T14:03:18Z
+body: |-
+  invalidateCatalogsLocked() called from all four write methods (CreateIssue/UpdateIssue/CloseIssue/AddComment). Sets catalogsCache=nil; Catalogs() fast path then refetches. TestCreateIssue_InvalidatesCatalogs passes. quality:fast green (976 tests). Commit 260e65f.

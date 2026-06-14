@@ -1,0 +1,6 @@
+---
+id: 840cbxtm
+author: Hans Kohlreiter
+created: 2026-04-10T17:02:46Z
+body: |-
+  Solid task. Clear bug, clear fix, clear test criteria. One thing to verify: are there other shortcut keys besides 'n' and Escape that should also respect the Required guard? If 'y' bypasses Required too (forcing confirmation), that might be a separate issue — but 'y' confirming a Required modal is probably correct behavior. No action needed unless 'y' also has an unintended bypass path.

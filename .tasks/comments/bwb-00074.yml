@@ -1,0 +1,55 @@
+---
+id: i1cjptfo
+author: Hans Kohlreiter
+created: 2026-04-07T15:20:43Z
+body: |-
+  ## Epic goal is sound but "visible screen capture" approach is underspecified and risky
+
+  **What**: The epic repeatedly mentions "capture the visible rendered screen" and distinguishes this from "raw stdout/transcript output." But it never specifies HOW this will work. This is the hardest technical problem in the entire epic and it's treated as an implementation detail inside task .1. The epic says nothing about what tool or technique will be used — pty wrapper? tmux capture-pane? a virtual terminal emulator library? headless xterm?
+
+  **Why**: This is the make-or-break decision for the entire epic. The wrong choice here means hangs, timeouts, CI incompatibility, or fragile tests that pass locally and fail everywhere else. If the implementer picks "just use `script` or `tmux`" without guidance, the results will be platform-dependent and brittle. If they try to write a Go pty wrapper with a VT100 parser, that's a multi-day yak shave.
+
+  Meanwhile, the existing codebase already has a working approach: the `teatest` harness + `WaitForOutputContainsAll` + golden comparison, and the existing embedded-fixture integration tests in `model_test.go` already drive the real gateway, build the real model, send real key messages, and inspect `View()` output. These tests are fast, deterministic, and don't require terminal capture at all.
+
+  **Suggested action**: The epic description needs to explicitly state the capture mechanism. More importantly, evaluate whether the existing `teatest` + `View()` + embedded-fixture approach already achieves 80% of what this epic wants. If the goal is "verify real rendered UI," the existing tests already call `m.View()` on a model backed by real `bd` CLI calls against fixture data. The gap is narrow: alt-screen ANSI rendering differences. State whether that gap justifies a real-terminal capture layer or whether extending the existing approach is sufficient.
+---
+id: 1ikvt9wx
+author: Hans Kohlreiter
+created: 2026-04-07T15:20:46Z
+body: |-
+  ## The epic may be solving a problem the existing test suite already mostly solves
+
+  **What**: The "Why Now" section says "automated tests and goldens alone were not enough to catch real runtime UI problems." But the existing test suite already includes: (1) embedded-fixture integration tests that drive the real `bd` CLI, (2) full-model `View()` golden captures at multiple widths, (3) board-detail-board round-trip tests, (4) search-mode filtering tests, (5) `WaitForOutputContainsAll` for async rendering. The `model_test.go` file is 1200+ lines and covers board/search/detail/edit/launcher flows with real gateway calls.
+
+  **Why**: If the goal is "verify the real rendered terminal UI" and the current tests already inspect `model.View()` output from models wired to real gateways, the incremental value of this epic depends entirely on what "real terminal" adds beyond `View()`. That needs to be clearly stated. If the answer is "ANSI escape code rendering fidelity," that's a narrow gap. If the answer is "we need to test flows where the binary runs as a process," that's a different (and harder) problem.
+
+  **Suggested action**: Add a "gap analysis" section to the epic description that explicitly lists what the current test suite CANNOT catch, with concrete examples of bugs that slipped through. Without this, there's a risk of building an expensive harness that duplicates existing coverage. If the gap is narrow, scale the epic down.
+---
+id: w4lha1cs
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:00Z
+body: |-
+  ## External tool flows (editor, launchers) are completely absent from the epic
+
+  **What**: The app has first-class editor and launcher flows (`e` for edit, `n`/`p`/`l` for launchers). These spawn real subprocesses (editor, nvim, opencode, shell-command). The editor flow is a round-trip: it launches `$EDITOR`, waits for it to exit, reads the file back, and applies changes. Launchers are fire-and-forget background processes. None of the 6 tasks mention verifying these flows.
+
+  **Why**: Editor and launcher flows are the most likely source of hangs, timeouts, and environment-dependent failures in any runtime UI verification harness. The editor flow (`ProcessOpener`) binds stdin/stdout/stderr to `os.Stdin`/`os.Stdout`/`os.Stderr` — this will break or hang in any test harness that captures the terminal. Launchers call `cmd.Start()` which spawns background processes that could leak or interfere with test cleanup. These are exactly the flows where "real terminal" testing is most different from unit testing, and they're not covered.
+
+  **Suggested action**: Either (a) add explicit scope to task .2 covering editor and launcher scenario verification, including how the harness handles subprocess-spawning flows (mock the opener? use a no-op editor command? inject `cat` as `$EDITOR`?), or (b) explicitly scope them OUT with a rationale. Leaving them unmentioned is the worst option because an implementer won't know whether to handle them or skip them.
+---
+id: ofnczxbi
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:53Z
+body: |-
+  ## 5 implementation tasks + 1 acceptance task is over-engineered for the likely outcome
+
+  **What**: The epic has 5 implementation tasks and 1 acceptance review task. Given the existing test infrastructure (teatest, embedded fixtures, golden comparison, 1200+ lines of model tests), the net-new work is likely: (a) a few more integration test scenarios, (b) some higher-level assertion helpers, and (c) documentation. That's 2-3 tasks, not 5.
+
+  **Why**: Over-decomposition creates overhead: each task needs claiming, implementation, verification. If the actual implementation is "add 5 new test functions to model_test.go and 2 helper functions to the testing/ui package," spreading that across 5 tasks with a dependency chain means more coordination cost than implementation cost.
+
+  **Suggested action**: Consider collapsing to 3 tasks:
+  1. **Runtime UI verification harness and scenarios** (merge .1, .2, .3) — build or extend the harness, define scenarios, add assertions. Ship them together since they're tightly coupled.
+  2. **Fast entrypoints and documentation** (merge .4, .5) — wire up easy invocation and document it. These are both "make it usable" work.
+  3. **Acceptance review** (.6) — keep as-is.
+
+  This reduces coordination overhead and lets the implementer make natural design decisions about harness/scenario/assertion boundaries without artificial task splits.

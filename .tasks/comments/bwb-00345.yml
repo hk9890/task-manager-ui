@@ -1,0 +1,6 @@
+---
+id: 02ijomhs
+author: Hans Kohlreiter
+created: 2026-05-22T22:18:38Z
+body: |-
+  Root cause: ReadyExplain excludes status=blocked issues with no dependency blocker; the board's 4 gateway calls (ReadyExplain + Query in_progress + Query closed) had no bucket for them. Fix: added a 5th parallel Query(status=blocked) call merged into the Not Ready column via dashboard.Compose mergeNotReadyIssues, cross-deduping by ID (dep-blocked entries win to preserve BlockedBy detail). Regression test TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn. Commit 7d6944b on perf/bd-latency-cap-and-cache; go test ./... = 1086 pass, quality:fast clean.

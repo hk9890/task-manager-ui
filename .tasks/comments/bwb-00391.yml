@@ -1,0 +1,24 @@
+---
+id: 6fzw9uj1
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:10Z
+body: |-
+  Review finding — scope is clear but write paths are excluded without justification. What: the task targets read paths only. writes.go also likely uses similar patterns. Why: if writes.go uses map[string]any or untyped patterns, excluding it from this task means the gateway still has mixed decoding strategies after the epic closes. The acceptance criterion says 'primary read paths no longer decode through map[string]any' which is fine as scoping language — but the epic success criteria says 'internal/gateway/beads decodes stable bd --json payloads through typed structs instead of generic maps' without qualifying read-only. Suggested action: either (1) verify writes.go does not decode JSON responses through maps and document that it is already clean, or (2) if write commands return JSON output that gets decoded through maps, include those paths in scope.
+---
+id: bv7u6pmi
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:21Z
+body: |-
+  Correction to previous comment — writes.go is clean. Verified: CreateIssue reads stdout as plain string (line 52), UpdateIssue/CloseIssue/AddComment ignore stdout. No map[string]any decoding in write paths. The read-only scope is correct and the epic success criteria alignment is fine.
+---
+id: 7pd1t3q6
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:27Z
+body: |-
+  Review finding — bd --json stability assumption should be pinned. What: the task description says 'stable bd --json output justifies typed command payloads' but does not specify what version of bd this was validated against or how to detect breaking changes. Why: if bd updates its JSON schema, typed structs will silently drop new fields (fine) or fail on removed/renamed fields (not fine). The current map-based approach is ironically more resilient to schema drift. Typed decoding is still the right call, but the task should acknowledge the tradeoff. Suggested action: add a note in instructions: 'use json tags with omitempty where appropriate so optional/new fields do not cause hard failures. Consider adding a lightweight integration smoke test that runs bd list --json against a real beads project to catch schema drift.'
+---
+id: u5xqunlb
+author: Hans Kohlreiter
+created: 2026-04-12T11:13:31Z
+body: |-
+  Review finding — helper function cleanup scope is implicit. What: read_gateway.go lines 552-896 contain ~15 helper functions (stringFromMap, intFromMap, optionalStringFromMap, timestampFromMap, mapArrayFromMap, etc.) that exist solely to extract fields from map[string]any. These should be deleted when typed decoding replaces them. Why: if the helpers survive alongside typed structs, the codebase has dead code and the refactor is incomplete. Suggested action: add explicit acceptance criterion: 'generic map extraction helpers (stringFromMap, intFromMap, etc.) are removed or reduced to the minimum needed for any remaining untyped paths.'

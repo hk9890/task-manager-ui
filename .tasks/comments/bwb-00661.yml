@@ -1,0 +1,6 @@
+---
+id: wnz18eie
+author: Hans Kohlreiter
+created: 2026-05-16T19:06:30Z
+body: |-
+  Done. Created contractcheck package (11 validators) shared by contract suite + new validatingGateway decorator — single source of truth for invariants. NewCLIGateway now wraps by default; NewCLIGatewayRaw available for opt-out. validating_gateway_test.go covers each validator with deliberate-break tests + ssom cross-method invariant test + high-cardinality fast-path test. 849 integration + 734 unit tests pass, 0 lint.

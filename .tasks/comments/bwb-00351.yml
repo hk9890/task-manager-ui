@@ -1,0 +1,6 @@
+---
+id: 4oc4gbf8
+author: Hans Kohlreiter
+created: 2026-05-16T17:23:05Z
+body: |-
+  Done. Renamed datasets.AIConfigManager → datasets.External. Consolidated BWB_PARITY_AICM + BWB_PARITY_AICM_PATH → single BWB_PARITY_EXTERNAL_PATH (no separate enable flag). Removed hardcoded /home/hans/dev/github/ai-config-manager default everywhere. Renamed TestAICM* → TestExternal* across test files. Removed mise smoke:aicm task; smoke now reads BWB_SMOKE_DIR env var (defaults to .). Updated docs. Verified end-to-end: mise run smoke → this-repo Done=461 match; BWB_SMOKE_DIR=/home/hans/dev/github/ai-config-manager mise run smoke → external Done=622 match. External .beads mtimes unchanged. grep for AICM/aicm/AIConfigManager/ai-config-manager returns 0 hits across code/tests/mise/docs.

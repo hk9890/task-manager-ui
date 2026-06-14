@@ -1,0 +1,6 @@
+---
+id: jb4b4xa7
+author: Hans Kohlreiter
+created: 2026-05-16T13:35:25Z
+body: |-
+  TestBoardInitRealGatewaySubprocessArgvCardinality added. Uses real *Gateway + CommandRunner + RecordingExecutor (no fake gateway). Asserts EXACTLY 3 calls on Init (ready --explain --json, query status=in_progress --json, query status=closed --json -a --sort closed --reverse --limit 50). Regression guards: no 'count' token, no 'list --status' pattern. Tasker correction to ticket: bd ping is dispatched at app.Model layer (not board), so board's Init is 3 calls not 4. Quality green.

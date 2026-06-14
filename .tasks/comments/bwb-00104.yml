@@ -1,0 +1,128 @@
+---
+id: c4mhbaxj
+author: Hans Kohlreiter
+created: 2026-05-24T13:00:22Z
+body: |-
+  ## Wrap-up — 20-iteration TUI runtime exploration
+
+  ### Actions tried (20 iterations)
+
+  Built bwb (commit ff591f4) and exercised the running TUI against the embedded fixture (`internal/testing/e2e/embeddedfixture/setup.sh` with seed.json, 5 issues bwf-1..bwf-5) via `scripts/capture_bwb_screen.py`:
+
+  1. Cold-start board capture at 120x34 with default --repo caching + 2.5s wait → empty board (suspicious).
+  2. Re-run at 120x34 with --repo caching + 5s wait → still empty (rules out timing).
+  3. Re-run at 120x34 with --repo beads → board correctly shows 2/2/0/1.
+  4. Second --repo caching run (after prior session JSONL exists) → still empty.
+  5. --repo caching + manual 'r' reload → still empty.
+  6. Inspected ~/.local/state/bwb/bwb-<session>.log → caching session log shows ONLY `vc status` and `ping`, no `bd query`/`ready`/`count` calls fire.
+  7. Filed F1 (znri.2).
+  8. Board → detail navigation (Enter) at 160x40 with --repo beads → works.
+  9. Esc from detail → does NOT return to board (header still 'Detail:'). Confirmed with two Esc presses.
+  10. F13 (documented switch-to-board) from detail → also no-op.
+  11. Pressed '?' to open help, then '?' again to close → modal does not close.
+  12. Tested all dismissal keys for help: q, n, Esc do nothing; Space and Enter dismiss.
+  13. Filed F2 (znri.3), F3 (znri.4), F4 (znri.5).
+  14. Search mode: ctrl+space → 'bwf' → Enter, 3s wait → results still loading.
+  15. Same with 8s wait → 5 results loaded, but UI still labels 'draft'/'5 partial'/'stale'.
+  16. Filed F5 (znri.6).
+  17. CLI exit codes: --version=0, unknown flag=2, positional=2, --check-config=0, --print-config=0. All correct.
+  18. Non-beads cwd: fatal-error screen 'no beads project here' renders with 'Press q or ctrl+c to quit.'
+  19. Pressed 'q' on fatal screen → process does not exit. Pressed ctrl+q → also does not exit. Only ctrl+c (SIGINT) terminates.
+  20. Filed F6 (znri.7).
+
+  ### Tasks filed (6 findings; 0 questions)
+
+  - **znri.2** (F1, P0/P1) — Caching repository backend never fires board reads on cold-start project. Empty session JSONL + 'fresh' manifest = permanent empty board on the default backend. First-run UX is broken on the documented default path.
+  - **znri.3** (F2, P1) — Esc does not return from detail to board, contradicting docs/user-guide/key-bindings.md.
+  - **znri.4** (F3, P2) — '?' does not toggle help closed; only Enter or Space dismiss the help modal.
+  - **znri.5** (F4, P2) — Help modal renders only top portion; bottom border missing; content truncates with no overflow indicator; board cells render through the unrendered modal area.
+  - **znri.6** (F5, P2) — Search 'draft'/'partial'/'stale' markers persist after Enter submits the query; the message asks the user to press Enter again while showing fresh results.
+  - **znri.7** (F6, P1) — Fatal-error 'no beads project' screen ignores q and ctrl+q; only ctrl+c (SIGINT) quits. Discoverability trap for misdirected users.
+
+  ### Coverage and limits
+
+  Focus per Phase 0: **TUI runtime**. Tested against `--repo beads` for most iterations because F1 blocks meaningful exercise of the default `--repo caching` backend.
+
+  **Tested**: cold-start board render (caching and beads backends), board → detail navigation, Esc/F13 from detail, '?' help open/close, all common help-dismissal keys, search toggle/type/submit/results, search stale-marker handling, CLI flag exit codes (--version, --check-config, --print-config, unknown flag, unexpected positional), fatal-error screen on non-beads cwd, fatal-screen quit affordances.
+
+  **NOT explored** (out of session scope or blocked):
+  - External launcher flows: 'n' nvim, 'p' opencode, 'l' shell-command (would require launcher subprocess inspection).
+  - Editor handoff 'e' rich marker-based document round-trip.
+  - Mutation modals: 'c' create, 'u' update, 'a' add comment, 'x' close (the documented per-mutation flows).
+  - search → detail → search round-trip.
+  - Scroll/page keys in detail (pgup/pgdown/home/end).
+  - Mode cycle keys (F15/F16) — F-keys above F12 require terminal capability; not exercised.
+  - Narrow-width layouts (<120 cols) for layout integrity.
+  - --no-auto-refresh effect on background polling.
+  - --debug stderr mirroring (--debug was enabled but stderr was redirected by the capture script).
+  - --repo memory backend (--repo-file required; not exercised).
+  - Caching backend invalidation under external bd mutations (background vc-hash polling behavior).
+  - Re-test of all findings against caching backend (F2–F6 were observed under --repo beads; they likely affect caching identically since they live above the repository layer, but this was not independently re-verified).
+
+  No questions filed (everything observed had a clear-cut answer once isolated).
+---
+id: 2gd2jufw
+author: Hans Kohlreiter
+created: 2026-05-24T14:32:53Z
+body: |-
+  ## Re-verification + analysis (post-rewrite)
+
+  ### PTY harness artifact found
+
+  While reviewing the filed findings for proper bug structure, I discovered the original Esc-related observations were measurement artifacts. `scripts/capture_bwb_screen.py` (lines 52–66) recognizes the key name `ESC` (0x1b), but I had used `ESCAPE` in several steps. The fallthrough at line 66 (`keymap.get(keys, keys).encode()`) silently sent the literal 6-byte string `ESCAPE` rather than the Escape key.
+
+  Re-verified each finding with `send-key:ESC`:
+
+  | Finding | Original claim | Re-verification |
+  |---|---|---|
+  | `znri.3` | Esc does not return detail → board | **DEBUNKED** — closed as not-reproducible. With real ESC byte, Esc returns to board correctly. |
+  | `znri.5` Esc-dismiss claim | Esc does not dismiss help modal | **Still real.** With real ESC byte, modal still ignores Esc. |
+  | `znri.7` general | `q`/`ctrl+q` ignored on fatal screen | **Still real**, and additionally Esc (real ESC byte) is also a no-op on the fatal screen. |
+
+  `znri.5`'s visual rendering claim (missing bottom border, no overflow indicator), `znri.2` (caching backend cold-start), `znri.4` (`?` toggle), and `znri.6` (search stale markers) did not depend on Esc and are unaffected by the artifact.
+
+  ### Bugs rewritten with full project house-style + acceptance criteria
+
+  The surviving findings (5 bugs) were updated to match the format used by closed bugs in this repo (e.g. `beads-workbench-ssom`): explicit **Description / Expected vs Actual / Root Cause / Minimal Repro / Impact / Suggested Fix / Acceptance Criteria / Where Discovered / Related** sections, with priorities set explicitly:
+
+  | ID | P | Title |
+  |---|---|---|
+  | `znri.2` | P0 | Caching repository backend never fires board reads on cold-start project |
+  | `znri.4` | P2 | '?' does not toggle help closed; only Enter or Space dismiss the modal |
+  | `znri.5` | P2 | Help modal renders only top portion; bottom border missing, content truncates with no overflow indicator (incl. Esc-doesn't-dismiss) |
+  | `znri.6` | P2 | Search 'draft'/'partial'/'stale' markers persist after Enter submits the query |
+  | `znri.7` | P1 | Fatal-error 'no beads project' screen ignores q and ctrl+q; only ctrl+c quits |
+
+  ### Why automated tests missed these
+
+  Each finding sits in a blind spot of the existing test strategy. The tests this repo has are good at what they cover; the bugs all live in the gaps between tiers.
+
+  **`znri.2` — Caching backend cold-start**
+
+  The repo's caching tests exercise the decorator with already-populated in-memory data or hand-seeded cache files. No existing test models the "first-ever run against a new project" lifecycle: empty session JSONL written, manifest written eagerly with the current `bd_commit_hash`, and the resulting interaction with the board fetch fan-out. The cache "freshness" check passes (manifest matches current hash) so any test asserting "cache reports fresh" is satisfied — but no test asserts that "fresh" implies "non-empty" or that a real read fan-out happened. The integration tier's `RunReadContract` runs against an already-seeded shared fixture cache, so it never exercises the empty-cache branch through the live `bd` path. The full-app verification recipe in `docs/RUNTIME_UI_VERIFICATION.md` only proves the dashboard renders when the operator's cache directory already has data from prior runs against the *real* repo. **Missing test**: a cold-start lifecycle integration test that starts with no cache directory at all and asserts the cache populates from `bd`.
+
+  **`znri.4` — '?' does not toggle help closed**
+
+  `docs/user-guide/key-bindings.md` documents `?` as a "toggle". `docs/CONFIGURATION.md` § Keybindings, modal context, lists the modal action set as `next/prev/left/right/enter/escape` — `?` is not in the set, so when the modal context owns key routing, `?` is dropped. There is likely a unit test asserting `?` opens help from the shell context; there is unlikely to be a test that drives the second press while the modal is open. **Missing test**: open help, send `?`, assert the modal is hidden. Without this, the "toggle" verb in the docs is unenforced.
+
+  **`znri.5` — Help modal rendering + Esc dismissal**
+
+  The repo has golden-file conventions (`internal/testing/ui/AssertMatchesGolden*`) but the dashboard UX redesign goldens cover board layout, not the help modal. A golden snapshot of the help modal at 80x24 and 120x34 would catch the missing bottom border immediately. For the Esc-dismiss part, the unit test gap mirrors `znri.4`: a `tea.KeyMsg{Type: tea.KeyEsc}` sent while help is open is not asserted to close the modal. **Missing tests**: a help-modal golden at small + medium widths, and a key-handling test for Esc.
+
+  **`znri.6` — Search stale markers persist after Enter**
+
+  The repo has `internal/mode/search/parity` (asserts result count/sort match `bd search`) and a `render_regression_test.go` (frame-stacking guard). Neither asserts the *state labels* in the search UI after a submit+response. A unit test of the search model that asserts `draftQuery == appliedQuery` after a successful response would catch this; a golden file of the search panes after submit would also catch it. **Missing test**: post-submit-and-response state assertion in the search model.
+
+  **`znri.7` — Fatal-error screen quit affordances**
+
+  The fatal-error screen exists for the bd-init failure path. Unit tests likely assert it renders (the message text is present); they probably do not drive its key handler. The component lives ahead of the normal mode lifecycle, so the standard teatest pattern used for board/search/detail does not naturally extend to it. Additionally, the symptom "ctrl+c sometimes needs SIGTERM" hints at alt-screen teardown behavior on error paths that is not modeled by any test. **Missing tests**: a fatal-error model test that drives `q`/`ctrl+q`/`Esc` and asserts `tea.Quit`; ideally a PTY-level recipe in `docs/RUNTIME_UI_VERIFICATION.md` that launches bwb in an empty dir and asserts clean exit on `q`.
+
+  ### Common pattern across the gaps
+
+  Three patterns explain most of the misses:
+
+  1. **Lifecycle tests modeled component-by-component, not end-to-end.** The caching decorator works in isolation. The board model works in isolation. The combination of "fresh install + empty cache + first board fan-out" is not exercised. (`znri.2`)
+  2. **Key routing through overlay/modal context is not tested.** Once a modal is up, the modal context owns keys, and documented global actions (`?` toggle, `Esc` cancel, `ctrl+q` quit) silently stop working. There is no test that asserts the documented global actions still fire from inside a modal or fatal screen. (`znri.4`, `znri.5` Esc-part, `znri.7`)
+  3. **Async-state-machine post-conditions are not asserted.** The search model can be tested for the typing → submit → loading transition, but the final loaded state (with the stale flag cleared, the applied query updated, the result count complete) is not asserted as a single coherent state. (`znri.6`)
+
+  Suggested follow-up at the testing-strategy level (not a bug per finding, but an observation for `docs/TESTING.md`): add a thin "global affordance contract" test that, for each documented global key (`?`, `Esc`, `ctrl+q`, `q` on fatal), asserts the action fires from each major mode AND from each overlay/modal/fatal context. Likely <100 LOC, would have caught three of the five findings here.

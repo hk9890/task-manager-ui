@@ -1,0 +1,31 @@
+---
+id: y5k1rpio
+author: Hans Kohlreiter
+created: 2026-05-17T18:25:33Z
+body: |-
+  ## Carry-over from T1 ([[h2xu.1]])
+
+  `internal/mode/details/model.go:PlaceholderDetail` was updated in T1 to use `RenderCompactSkeleton(opts SkeletonOpts{..., Styled: false})` — UNSTYLED — because the skeleton output is stuffed into `IssueDetail.Description` and goes through `renderMarkdownMultiline` in `internal/ui/details/details.go:514`, which corrupts ANSI escape sequences. Plain `▓` survives; styled bytes do not.
+
+  **Decision for T2:** evaluate whether `PlaceholderDetail` should adopt the new `State.Skeleton bool` seam (introduced in this task for `detailLoadingStub`) so it can render *styled* skeletons and later (T3) participate in pulse animation. If not — i.e. if PlaceholderDetail's flicker is only millisecond-visible during issue-switch and pulse animation is irrelevant there — document the decision and leave the `Styled: false` workaround in place. Either path is acceptable; flag the choice in your return summary.
+---
+id: 4k2sixci
+author: Hans Kohlreiter
+created: 2026-05-17T18:34:00Z
+body: |-
+  ## Tasker complete (commit 77993ae)
+
+  Tasker implemented per spec. `mise run quality:fast` green.
+
+  **Part A:** `renderColdStartSkeleton` rewritten to dispatch through `renderResponsiveLayout` / `renderThreePane` with a synthetic `skeletonDetail`. Layout-stability tests added (`TestColdStartSkeletonLayoutStabilityMatchesLoadedDetail` at narrow + wide + two-column breakpoints).
+
+  **Part B:** `State.Skeleton bool` added to `details.State` as the rendering seam. `renderContentPaneLines` branches on it to emit `RenderCompactSkeleton` rows. `detailLoadingStub` no longer injects rendered text into `Description`. `loading.View()` deleted; `loading_test.go` View tests removed. No `⏳` hourglass remaining in `internal/ui/`.
+
+  **PlaceholderDetail decision:** Adopted the `State.Skeleton = true` seam. PlaceholderDetail now returns `Description: ""` and `mode/details/model.go:View()` sets `Skeleton: true` when previewing target without loaded detail. Styled skeletons throughout; ready for T3 pulse without rework.
+
+  **T3 carry-overs (must be applied to [[h2xu.3]]):**
+  1. `RenderContentPane` signature now takes a `skeleton bool` as 6th parameter (`internal/ui/details/details.go`). T3 will add a `phase int` parameter alongside.
+  2. `details.State.Skeleton` is the gate; T3 should add `SkeletonPhase int` next to it and thread through `renderContentPaneLines` → `RenderCompactSkeleton`.
+  3. Search renderer's `RenderContentPane` calls (at lines ~116, ~157 of `search.go`) need `SkeletonPhase` plumbing — `search.State.SkeletonPhase` propagated.
+
+  No unrelated bugs.

@@ -1,0 +1,43 @@
+---
+id: 3w84a6t7
+author: Hans Kohlreiter
+created: 2026-05-22T13:26:35Z
+body: |-
+  EXPLORATION SUMMARY -- beads-workbench, 2026-05-22 (focus: keybindings)
+
+  Actions tried (10 iterations):
+  1. Keybinding validation via 'bwb --check-config' with crafted configs (invalid key name / unknown action / conflicting key).
+  2. In-app help overlay ('?') vs documented f13-f16 mode keys, driven against the embedded fixture.
+  3. Override merge edge cases: empty key list, post-merge cross-action conflict, within-list duplicate key.
+  4. Search-mode query typing vs configured nav keybindings (code read of search/model.go handleKey).
+  5. Cross-context key routing: rebinding shell create_issue onto board key 'j', verified double-fire at runtime.
+  6. Rebound toggle_help open vs close, verified at runtime (open with 't', close only with hardcoded '?').
+  7. Modal-context keymap + hardcoded y/n (code read of ui/modal/modal.go).
+  8. Board footer + help overlay text -- confirmed config-derived, not hardcoded.
+  9. search CapturesShellKey / shellKeysPassThrough dead-entry analysis.
+  10. Detail-mode keybinding round-trip (3 / j / r / esc) confirmed at runtime.
+
+  Tasks filed (all children of this epic):
+  - aci5.2 (bug) -- Keybinding validation does not 'fail startup' for invalid key names / unknown actions as docs claim; invalid key name loads as 'config OK' with no warning and silently bricks the binding.
+  - aci5.3 (bug) -- Default mode-switch keys f13-f16 are unreachable/undiscoverable; mode_cycle has no usable default binding; in-app help omits them entirely.
+  - aci5.4 (bug) -- Confusing keybinding error when a key is duplicated within one action's own list ('conflicts between move_down and move_down').
+  - aci5.5 (bug) -- Cross-context key collision double-fires: a board/search key also triggers an unguarded shell action; '--check-config' gives a false 'config OK'.
+  - aci5.6 (bug) -- Rebound toggle_help only opens the help overlay; closing is hardcoded to '?'; help text also mislabels the rebound key as a toggle.
+  - aci5.7 (question) -- ShellActionHelp/ModeDetail in search shellKeysPassThrough are dead entries for rune defaults; intent unclear (defensive-for-rebinds vs latent ordering bug).
+
+  Coverage and limits:
+  - Covered: config validation paths, override merge semantics, cross-context routing, help/modal/detail/board key handling, footer/help text derivation.
+  - NOT explored (out of scope for this keybindings-focused session): launcher interpolation/security, the rich editor handoff flow, gateway/bd subprocess behavior, dashboard rendering, search query/result correctness, startup/CLI flags beyond --check-config, mutation flows (create/update/close/comment) end to end.
+  - Tooling limit: ctrl+space (NUL byte) and f13-f16 sequences could not be sent via scripts/capture_bwb_screen.py, so search-mode entry and f-key mode switching were analyzed from source rather than driven live.
+---
+id: s39lhgya
+author: Hans Kohlreiter
+created: 2026-05-22T17:37:06Z
+body: |-
+  REVIEW/PLAN GATE (orchestrator, 2026-05-22): All 6 child findings reviewed by the user via an html-ask decision form; per-finding dispositions recorded as comments on each child. next-step=execute. Proceeding to implementation: aci5.2,5.3,5.4 fix; 5.5 Option A; 5.6 fix; 5.7 reorder.
+---
+id: u9lybk8q
+author: Hans Kohlreiter
+created: 2026-05-22T18:05:53Z
+body: |-
+  EPIC ACCEPTANCE REVIEW (verifier, 2026-05-22): All 6 findings (aci5.2-aci5.7) independently verified against their dispositions. --check-config repros produce correct exit codes; code changes match dispositions at every site; 10 new named tests exist and pass; full suite 30 packages / 1100 tests clean; no regressions between findings (1/2 keys vs board CapturesShellKey, help-overlay vs goldens, cross-action conflict message, esc close all checked). docs/user-guide/key-bindings.md consistent. Recommendation: CLOSE. Fix commits: c480036 ee1ed78 eb99b33 819b113 929ee5c 5f2e7ce.

@@ -1,0 +1,6 @@
+---
+id: hyc1u326
+author: Hans Kohlreiter
+created: 2026-05-22T22:01:18Z
+body: |-
+  Completed in commit 20cef75. teatest coverage added for all three edit-flow paths (success / no-change / editor-error). Root cause of the editor-error test failure: the error path produces a single View() frame with no follow-on async command, so the teatest output buffer could race the renderer flush; the prior repaint workaround also introduced a data race on FakeExecCommand.RunCalled. Fix: added mutex-guarded FakeExecCommand.RunCount(), rewrote the error test to the FinalModel pattern (poll RunCount, then assert on settled model toast state), added testui.WaitForConditionWithTimeout. Verified: go test ./... passes; go test -race -count=10 on TestEditFlow* = 30/30 clean; mise quality:fast = 1085 tests, 0 lint.

@@ -1,0 +1,6 @@
+---
+id: lmlstcp0
+author: Hans Kohlreiter
+created: 2026-05-16T13:12:25Z
+body: |-
+  Baseline measured: unit 75.6%, combined unit+integration 76.5%. Recommended gate for ug82.5: 71% (76.5 - 5pts, rounded down) on combined profile. Top low-coverage packages: internal/testing/fakes 28.5% (test infra), internal/ui/modal 43.6% (real gap), internal/testing/ui 52.4% (test helpers), internal/testing/e2e/embeddedfixture 60.0%, internal/ui/styles 61.0%, internal/gateway/beads/contract 62.2%. Full baseline in docs/coverage-baseline-2026-05-16.md.

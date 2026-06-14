@@ -1,0 +1,18 @@
+---
+id: 2myemjbv
+author: Hans Kohlreiter
+created: 2026-04-19T19:21:53Z
+body: |-
+  Minimum viable capabilities — prioritize wait-for-text over checkpoints. What: The description mentions optionally add companion script for before/after bd show --json checks. That is useful but secondary. The primary value-add over the current script is wait-for-text between steps so multi-step flows are reliable. Why: Without wait-for-text, the tool is just the current script with more steps — still timing-dependent, still flaky. With wait-for-text alone, you get reliable multi-step flows even without state snapshots. Suggested action: Priority order should be (1) wait-for-text/wait-for-no-text in step syntax, (2) intermediate screen capture/checkpoint, (3) before/after state wrapper. Item 1 is the MVP. Items 2-3 are nice-to-have.
+---
+id: pdtv90j5
+author: Hans Kohlreiter
+created: 2026-04-19T19:21:57Z
+body: |-
+  Missing AC — cleanup guarantee. What: No acceptance criterion requires that the PTY child process is always killed even if the script crashes or times out. Why: Orphaned bwb processes will confuse subsequent runs and potentially hold locks on the beads DB. The existing script has basic cleanup but extending it with wait loops increases the risk of edge cases. Suggested action: Add AC requiring that the child process is guaranteed killed on any exit path (timeout, crash, keyboard interrupt). Test this explicitly.
+---
+id: vmxyi46l
+author: Hans Kohlreiter
+created: 2026-04-19T19:34:55Z
+body: |-
+  Pre-execution check: ticket appears stale vs comment decisions. Please fold reviewer guidance into Description/AC (MVP priority: wait-for-text/wait-for-no-text first; explicit AC for guaranteed child cleanup on timeout/crash/interrupt with validation). I’m pausing implementation to avoid guessing scope.

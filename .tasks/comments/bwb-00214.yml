@@ -1,0 +1,30 @@
+---
+id: wrmj2bok
+author: Hans Kohlreiter
+created: 2026-04-05T18:54:40Z
+body: |-
+  ## Bug is accurate and trivially verified — go vet confirms the exact failure
+
+  **What**: Running "go vet ./..." produces: "internal/domain/issue_edit_document.go:101:13: fmt.Sprintf format %d has arg issueEditRefsInline(issue.Related) of wrong type string". Line 101 uses %d for the Related field (a string from issueEditRefsInline), while line 133 uses len(issue.Comments) for the actual integer. The format string has %s on line 100 for Related and %d on line 101 for Comments — but the argument order at lines 132-133 passes Related (string) at position 101 and len(Comments) (int) at position after. The format verb on line 100 is correct (%s for Blocks), line 101 says %d but receives issueEditRefsInline(issue.Related) which is a string. The fix: line 100 should be %s (Related), line 101 should be %d (Comments count) — checking the arg order shows Related comes before Comments, so the format on line 101 should be %s for Related and the Comments count needs its own %d. Actually the issue is simpler: line 100 already has "%s" for Related but the ARGUMENT at that position is Blocks. Let me re-read... Lines 98-101: "- Blocked By: %s / - Blocks: %s / - Related: %s / - Comments: %d". Lines 130-133: issueEditRefsInline(issue.BlockedBy) / issueEditRefsInline(issue.Blocks) / issueEditRefsInline(issue.Related) / len(issue.Comments). So the format/argument order is correct — the fix is literally just confirming. Yes, go vet says %d at line 101 gets a string. But looking at the actual positional arg, line 100 "- Related: %s" matches issueEditRefsInline(issue.Related) and line 101 "- Comments: %d" matches len(issue.Comments). Hmm, go vet says %d gets issueEditRefsInline(issue.Related). This means the argument alignment is off — there's a format/argument positional mismatch somewhere earlier in the Sprintf.
+
+  **Why**: This is a quality gate blocker per CODING.md: "go vet ./..." is a minimum quality gate. It also means "go test ./..." fails for the domain package (vet failures cause test compilation errors). This is a 1-line fix.
+
+  **Suggested action**: The description and acceptance criteria are clear and sufficient. The fix should trace the exact positional mismatch in the Sprintf call — it may be that an earlier format specifier was added without a corresponding argument, shifting all subsequent positions. A careful count of %s/%d verbs vs arguments in the Sprintf starting at line 68 is needed.
+---
+id: ggmskan3
+author: Hans Kohlreiter
+created: 2026-04-05T18:55:26Z
+body: |-
+  ## Root cause identified: missing format verb for issueEditMarkerEditableEnd — all read-only fields are shifted
+
+  **What**: The Sprintf template has 30 format verbs but 31 arguments. The issueEditMarkerEditableEnd (argument 23 at line 125) has no corresponding %s in the template. This shifts all subsequent arguments by one position: the ID field receives EditableEnd marker text, Created At receives the ID, and so on until Related (string) lands on the %d verb for Comments. This means the rendered document has wrong values for ALL read-only context fields, not just a format verb mismatch.
+
+  **Why**: The go vet error ("format %d has arg issueEditRefsInline(issue.Related)") is the symptom. The disease is that every read-only field in the rendered document displays the wrong value. If anyone is using the editor flow, they would see the editable-end marker where the ID should be, the ID where Created At should be, etc. The fix is to add "%s" (or equivalent) between the Labels section end and the Read-Only Context header — a line like "%s\n" for the editable end marker, between current lines 91 and 93.
+
+  **Suggested action**: No change to the bug description needed — the acceptance criteria ("go vet succeeds" and "correct format verbs") will catch the fix. But the implementer should verify the round-trip by checking that RenderIssueEditDocument produces correct read-only field values in the existing golden/unit tests, not just that vet passes.
+---
+id: py8s85b8
+author: Hans Kohlreiter
+created: 2026-04-06T08:53:02Z
+body: |-
+  Verifier PASS: RenderIssueEditDocument now includes the missing format verb for the editable-end marker, read-only context values are no longer shifted, focused internal/domain tests pass, and go vet ./... succeeds.

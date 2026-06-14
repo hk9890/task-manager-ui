@@ -1,0 +1,6 @@
+---
+id: 0r1qp31w
+author: Hans Kohlreiter
+created: 2026-05-31T12:00:15Z
+body: |-
+  Done (commit aa9a2b4). Confirmed process_runner_test.go was a single-line 'package launcher' stub with zero tests; deleted. Verified go test ./internal/launcher/ (0.002s) and go test -tags integration ./internal/launcher/ (0.314s) both PASS.

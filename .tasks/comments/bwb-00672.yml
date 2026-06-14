@@ -1,0 +1,12 @@
+---
+id: ozkve78k
+author: Hans Kohlreiter
+created: 2026-04-12T11:14:01Z
+body: |-
+  Review finding — docs task is straightforward but has a hidden risk: it depends on all four implementation tasks, so it is on the critical path for epic closure. If any implementation task is delayed or reworked, wz9.5 and wz9.6 both block. This is the correct dependency structure — just noting that if the plan slips, docs are the first thing that will tempt someone to skip. Why: docs skipped after refactor = immediately stale architecture docs = worse than no docs. Suggested action: none, the dependency chain is correct. Just keep discipline.
+---
+id: ezvlygzy
+author: Hans Kohlreiter
+created: 2026-04-12T11:14:05Z
+body: |-
+  Review finding — TESTING.md not listed. What: docs/CODING.md references docs/TESTING.md for testing strategy. If wz9.1 and wz9.2 change how tests work (new fake patterns, new scenario tests, changed golden file conventions), TESTING.md may need updates too. Why: incomplete docs refresh defeats the purpose. Suggested action: add docs/TESTING.md to the files-to-modify list with a conditional note: 'update if test harness patterns change during implementation tasks.'

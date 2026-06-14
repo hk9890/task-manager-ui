@@ -1,0 +1,24 @@
+---
+id: 1tisfcoe
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:52Z
+body: |-
+  F18 (Major) — Mapping list omits 'validate-scripts' (→ mise run scripts) and 'install-hooks' (→ mise run hooks:install, owned by i1th.8). Add both to the mapping before deleting Makefile to avoid silent regression. Coordinate with i1th.8.
+---
+id: av5ckjla
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:53Z
+body: |-
+  F19 (Minor) — Step 3 grep is narrowed by --include filters that miss scripts/ and helper directories. Use a broader sweep: 'grep -RnE "\bmake [a-z]+\b" . --exclude-dir=.git --exclude-dir=node_modules' and check every hit (allow only historical refs in CHANGELOG.md).
+---
+id: oqn2vbl9
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:54Z
+body: |-
+  F20 (Minor) — AC 'Quality gate still green' is vague. Replace with 'mise run quality exits 0'.
+---
+id: wst09eql
+author: Hans Kohlreiter
+created: 2026-05-16T07:10:05Z
+body: |-
+  Makefile deleted. All 6 active targets mapped to existing mise tasks (no new tasks needed): build→build, test→test:all, vet→vet, lint→lint, validate-scripts→scripts, install-hooks→hooks:install, help→mise tasks. README.md 'Developer Convenience Targets' section replaced with 'Developer Tasks' pointing to mise run. docs/ references left for i1th.6. mise run quality exits 0.

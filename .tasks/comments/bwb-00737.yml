@@ -1,0 +1,6 @@
+---
+id: zixs7jp7
+author: Hans Kohlreiter
+created: 2026-05-16T12:40:21Z
+body: |-
+  Migration complete. Audit table: 5 of 7 Bucket A assertions already covered by existing unit tests; 3 new unit tests added (TestModelFixtureShapedBoardCaptureGolden, TestModelStartupBoardLayoutSanityAndNoRuntimeErrors, TestModelMutationModalsOpenWithoutCatalogDecodeToast). Bucket B tests deleted (gateway coverage in i8pt; app-level dep rendering already covered in internal/mode/details). model_integration_test.go deleted along with its hasExecutable/runBDInRepo helpers. Unit suite: 620 tests, 0.607s wall. Integration suite: 649 tests. Quality green.

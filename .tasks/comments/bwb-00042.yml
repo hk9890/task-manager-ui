@@ -1,0 +1,18 @@
+---
+id: b53fz0qn
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:14Z
+body: |-
+  Review: Known-risks framing is too soft. What: epic lists 72vc and yumi under 'Known Risks' with 'check during readiness; if reproduces, treat as blocker'. Both bugs are currently OPEN and document concrete failures in 'go test ./...' which IS the authoritative quality gate per docs/CODING.md. Why: the readiness gate cannot pass while go test ./... fails, so these are not conditional risks — they are hard blockers today. Suggested action: either (a) add explicit blocks-by dependencies from yixr.1 to 72vc and yumi, or (b) require a written waiver decision recorded on the epic before yixr.1 can close.
+---
+id: fgvqaosf
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:18Z
+body: |-
+  Review: No release-commit SHA pinning across tasks. What: yixr.1 validates 'the candidate release commit', yixr.2 commits changelog, yixr.3 tags HEAD — but nothing requires the SHA validated in yixr.1 to equal the SHA tagged in yixr.3. Why: changelog commit in yixr.2 changes HEAD after CI was verified green in yixr.1, so the tagged commit is NOT the commit whose CI provenance was checked. Suggested action: restructure so CI provenance is re-verified after the changelog commit lands on origin (yixr.3 should re-check 'CI green for the exact tagged SHA' before tag push, not rely on yixr.1's earlier check).
+---
+id: tojubonc
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:22Z
+body: |-
+  Review: No version-source / goreleaser dry-run step. What: plan never checks whether bwb embeds a version string (e.g., ldflags in .goreleaser.yaml or a version package) that needs updating, and never runs 'goreleaser check' or a snapshot build before tagging. Why: tag-triggered releases are unforgiving — a malformed .goreleaser.yaml or stale embedded version is only discovered after the tag is pushed, and tags cannot be safely reused. Suggested action: add a step in yixr.1 to (a) confirm version source-of-truth (ldflags vs embedded constant) and (b) run 'goreleaser check' and a local 'goreleaser release --snapshot --clean --skip=publish' to validate the config and archive naming end-to-end.

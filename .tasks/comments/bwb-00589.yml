@@ -1,0 +1,6 @@
+---
+id: 191az47l
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:10Z
+body: |-
+  Missing: what data is available for the right rail timestamps. What: the metadata rail lists 'created, updated, and useful counts' but IssueDetail.Summary has CreatedAt and UpdatedAt. The task doesn't clarify where 'useful counts' come from. Why: bd show JSON exposes epic_total_children, epic_closed_children, and epic_closeable — but only for epics. The domain model doesn't parse these. If the rail wants to show child-progress for epics, the gateway and domain model need extension first. Suggested action: clarify in the task whether 'useful counts' means comment/reference counts (already in IssueDetail) or epic child progress (requires gateway+domain work not scoped here).

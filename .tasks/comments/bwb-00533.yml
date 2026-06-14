@@ -1,0 +1,66 @@
+---
+id: m6eh4ru8
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:42Z
+body: |-
+  Hidden complexity: board reload currently resets all state — loading=true, pendingLoads=0, selectedRow reset to 0 for all columns (line 114-118 of board/model.go). What: preserving selection requires either (a) a new reload path that diffs old/new data and restores cursors, or (b) splitting load into fetch + merge phases. Why: this is the hardest part of the entire epic and the instructions understate it with 'reload can preserve the focused column.' Suggested action: add an instruction step that explicitly says 'introduce a non-destructive reload path separate from the existing full-reset reload triggered by the R key.'
+---
+id: 6dljle1h
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:46Z
+body: |-
+  Missing AC: what happens to detail view during auto-refresh? What: the task says 'board and search' but detail is listed in the epic's success criteria and in t7o.1's routing. Detail view is not mentioned in t7o.2's instructions or AC at all. Why: if board auto-refresh triggers while detail pane is open (split view), the detail pane's issue might disappear from the board. Suggested action: either explicitly scope detail out of t7o.2 with a note, or add an AC covering detail stability during board refresh.
+---
+id: 4avp756g
+author: Hans Kohlreiter
+created: 2026-04-19T08:32:27Z
+body: |-
+  Execution sequencing note: although this task is ready, it also touches internal/app/model.go. Running t7o.1 first to avoid overlapping edits in shared shell orchestration code; t7o.2 remains next once t7o.1 is landed/verified.
+---
+id: oia3grz7
+author: Hans Kohlreiter
+created: 2026-04-19T09:03:39Z
+body: |-
+  Execution note: verifier found search auto-refresh bug beads-workbench-87mc in the shell orchestration foundation. This task's search-safe auto-refresh work must align with that fix (avoid synthetic key injection; use an explicit reload path that preserves query state).
+---
+id: 6c7nv0tp
+author: Hans Kohlreiter
+created: 2026-04-19T09:11:14Z
+body: |-
+  Execution started. This task is now unblocked after t7o.1 and follow-up bug 87mc landed. Focus areas: non-destructive board auto-refresh, safe search refresh behavior, and preserving current context without mode/detail disruption.
+---
+id: 8uqnn5ib
+author: Hans Kohlreiter
+created: 2026-04-19T09:18:13Z
+body: |-
+  Board auto-refresh selectedRow map reset bug. What: In dashboardsLoadedMsg handler (line 135), selectedRow is unconditionally recreated as a new map with all values 0, even during refreshModeAuto. The anchor captures the old row, but restoreFromAnchor writes into the NEW map only for focusedColumn — other columns lose their selectedRow state. Why: If a user navigates to column 1 row 2, then triggers auto-refresh, after restore the other columns (0, 2, 3) will have selectedRow=0 which is correct (new map), BUT if the issue is found in a DIFFERENT column than the anchor's focusedColumn via findIssue, it writes selectedRow[col]=row for that column only — the original anchor.focusedColumn gets no explicit row write and defaults to 0. This is benign since focus moves to the found column, but it's worth noting the row memory for non-focused columns is always lost on auto-refresh. This is acceptable but differs from the AC wording 'preserve focused column AND selected issue' — it only preserves one column's row. Suggested action: Document this as intentional (preserving only focused column is fine for v1), or save per-column rows in anchor if you want stronger preservation later.
+---
+id: u8jp1bsh
+author: Hans Kohlreiter
+created: 2026-04-19T09:18:23Z
+body: |-
+  Board loading=true during auto-refresh blocks View rendering. What: AutoRefresh sets m.loading=true (line 281), which causes View() to render the loading spinner until all sections complete. Why: During auto-refresh, the user sees a flash of loading state instead of stale-but-usable content. This is non-destructive in that it doesn't lose state, but it IS visually disruptive — the user's board disappears momentarily during every tick/focus-regain refresh. A truly non-destructive refresh would keep rendering old data until new data arrives. Suggested action: Consider a 'refreshing' flag separate from 'loading' that still shows old content with a subtle indicator, or accept this flash as v1 behavior and document it.
+---
+id: klw2fmcq
+author: Hans Kohlreiter
+created: 2026-04-19T09:18:38Z
+body: |-
+  Search typing suppression is correct but has a subtle edge. What: The typing flag is set true on keypress and cleared on searchLoadedMsg receipt (line 83). AutoRefresh checks m.typing AND m.focus==FocusQuery. Why: If the user types a character, the search fires, and the response comes back (clearing typing=false) BEFORE the next tick, the tick will auto-refresh even though the user may still be mid-thought. The window between keystrokes where typing=false is a valid auto-refresh window. This is actually fine behavior — it means 'suppress only while a typed query is in-flight' not 'suppress while user is composing.' Suggested action: None needed — this is reasonable semantics. Just noting the behavior is 'in-flight suppression' not 'debounced typing window suppression.'
+---
+id: p4geuprw
+author: Hans Kohlreiter
+created: 2026-04-19T09:18:47Z
+body: |-
+  App-level auto-refresh does not force mode switches or clear detail — verified correct. What: refreshActiveSurfaceCmd (line 759) dispatches to board.AutoRefresh() or search.AutoRefresh() based on active mode. The resulting SelectionChangedMsg flows through the normal path, which calls ensureDetailForCurrentSelectionCmd — but that method short-circuits if detail already has the same issue loaded (line 622). Why: This satisfies AC6 — no forced mode changes, no detail clearing. The tests at lines 423-509 of model_test.go directly verify this. Suggested action: None — this is solid.
+---
+id: v5t0esm7
+author: Hans Kohlreiter
+created: 2026-04-19T09:18:54Z
+body: |-
+  Missing test: board auto-refresh while loading is a no-op. What: AutoRefresh() (line 278) returns nil if IsLoading() is true, but there's no unit test verifying this guard. Why: If this guard regresses, concurrent refreshes could corrupt anchor state or fire duplicate gateway calls. Suggested action: Add a one-liner test that calls AutoRefresh() while board is mid-load and asserts nil return and no state mutation.
+---
+id: pm73ilx9
+author: Hans Kohlreiter
+created: 2026-04-19T09:19:02Z
+body: |-
+  Review verdict: PASS. Implementation is correct and well-tested for the stated AC. The board anchor/restore logic, search typing suppression, and app-level side-effect avoidance all work as specified. Two minor concerns noted (loading flash during auto-refresh, missing guard test for concurrent auto-refresh) — neither are blockers. Architecture fit is good: clean separation between manual reload and auto-refresh paths, no leaky abstractions across mode boundaries.

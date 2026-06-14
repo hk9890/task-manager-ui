@@ -1,0 +1,24 @@
+---
+id: i2k6wd0k
+author: Hans Kohlreiter
+created: 2026-05-17T09:59:40Z
+body: |-
+  Fix landed at fbb4baa on branch 5q6t-refresh-concurrency.
+
+  Change: routed SearchActionReload keyboard handler through Reload() (which already had the m.loading guard), added slog.Debug log inside Reload() on suppression (component=search, trigger=search-manual). Also plumbed *slog.Logger through NewModel() matching the board model pattern.
+
+  Blast radius (5 files):
+  - internal/mode/search/model.go (primary fix + logger field/import/constructor change)
+  - internal/app/model.go (pass services.Logger to NewModel)
+  - internal/mode/search/model_test.go (6 NewModel call sites updated to pass nil logger)
+  - internal/mode/search/model_integration_test.go (1 call site)
+  - internal/mode/search/render_regression_test.go (1 call site)
+
+  Note: the test file from 5q6t.4 (model_double_refresh_test.go) uses initModel(gateway) helper from model_test.go, so it picked up the change transparently — no edit needed to that file.
+
+  Evidence:
+  - TestSearchManualReloadIgnoredWhileInFlight: FAIL → PASS
+  - Full ./internal/mode/search/... suite: all pass
+  - quality:fast: 738 tests, 0 failures, 0 lint issues, vet clean
+
+  With 5q6t.1, the user-visible fix for epic 5q6t is complete. Defense-in-depth (5q6t.3) is now unblocked.

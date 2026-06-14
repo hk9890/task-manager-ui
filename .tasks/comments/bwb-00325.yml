@@ -1,0 +1,6 @@
+---
+id: 2ck8isp8
+author: Hans Kohlreiter
+created: 2026-05-24T13:42:39Z
+body: |-
+  Refactored SaveWithHash → SaveSnapshotWithHash; SaveNow now snapshots inside c.mu.RLock before file IO. Race-test (count=10) passed. Tests: TestSaveNow_AtomicWithRespectToReset/sequential_correctness + concurrent_race_detector. quality:fast green (972 tests). Commit 996cb18.

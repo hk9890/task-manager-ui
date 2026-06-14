@@ -1,0 +1,30 @@
+---
+id: i123uxkr
+author: Hans Kohlreiter
+created: 2026-05-17T18:20:58Z
+body: |-
+  ## Plan-review pass complete (2026-05-17)
+
+  Reviewer (beads-tasks:reviewer) ran a grill pass on this epic. 12 questions returned. All blocking findings resolved with user; non-blocking improvements applied.
+
+  **User decisions:**
+  - Keep T3 (pulse animation) in epic (vs cut as follow-up).
+  - Skeleton API: sibling `RenderCompactSkeleton(opts)` function (vs `Skeleton bool` on `RenderConfig`).
+
+  **Blocking findings applied:**
+  - Q1: Sibling function design — applied to T1.
+  - Q2: Dropped unachievable "identical slot boundaries" parity claim; replaced with `lipgloss.Width == width` + "5 distinct ▓ blocks" — applied to T1.
+  - Q3: `detailLoadingStub` rework moved T1 → T2 (markdown-renderer corruption risk).
+  - Q4: T1 file list expanded to include `PlaceholderDetail` in mode/details/model.go + missing test files.
+  - Q12: SkeletonSeed table pinned as normative {0.70, 0.45, 0.85, 0.55, 0.80, 0.65}.
+
+  **Non-blocking findings applied:**
+  - Q5: T3 plumbing target corrected — State construction is in mode models; signature change on View() methods; added loading.SkeletonPhase() helper.
+  - Q6: T3 uses lipgloss.AdaptiveColor with hand-picked Light + Dark hex pairs.
+  - Q7: T3 kept per user decision.
+  - Q8: Filed follow-up bug [[9qpm]] for refresh per-surface indicator.
+  - Q9: T4 Check 5 sharpened to assert "Idle" string in footer.
+  - Q10: T3 now depends on T2 (both touch details.go/search.go; serialized).
+  - Q11: T5 acceptance adds layout-stability snapshot diff.
+
+  Epic and all 5 child tasks updated. Ready for execution starting with T1.

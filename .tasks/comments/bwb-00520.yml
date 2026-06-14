@@ -1,0 +1,6 @@
+---
+id: xyraknh6
+author: Hans Kohlreiter
+created: 2026-05-16T14:29:30Z
+body: |-
+  Implementation complete. New package internal/ui/skeleton — skeleton.go + skeleton_test.go. All acceptance criteria met: SkeletonRow visible width == requested width, SkeletonGlyph constant pinned to U+2591, edge-case and slot-separation tests pass. Placed in internal/ui/skeleton (ticket's permitted fallback) to enable parallel implementation with 0x36.6 which concurrently modified internal/ui/loading/loading.go. Downstream tickets (.2/.3/.4) should import github.com/hk9890/beads-workbench/internal/ui/skeleton. go build/vet/test all clean.

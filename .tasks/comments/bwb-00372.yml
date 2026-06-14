@@ -1,0 +1,12 @@
+---
+id: tbhla065
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:20Z
+body: |-
+  Hypothesis confirmed: nextMode/prevMode at app/model.go:1070-1100 are duplicative (only default branch differs). Fix in step 2 is correct.
+---
+id: zmbpqxlq
+author: Hans Kohlreiter
+created: 2026-05-16T04:31:57Z
+body: |-
+  Implemented. prevMode now traverses backward (Board→Detail, Search→Board, Detail→Search); lastBrowse param unused (marked _). TestModeCycleDirections asserts forward cycle, backward cycle, and divergence at Board+Detail-with-lastBrowse=Search. All app tests pass.

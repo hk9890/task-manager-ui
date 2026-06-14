@@ -1,0 +1,6 @@
+---
+id: pli3jqe6
+author: Hans Kohlreiter
+created: 2026-04-09T14:03:49Z
+body: |-
+  Review finding: this task should be merged into ekp.2. What: writing architecture docs before implementing the extraction means the docs describe intent, not reality. The actual row/list boundary decisions will be made during ekp.2 implementation. Why: a standalone pre-implementation doc task adds overhead without adding clarity — the tasker doing ekp.2 will make the real tradeoffs and should document them in the same pass. Suggested action: fold ekp.1's acceptance criteria into ekp.2 as a final documentation step, then close ekp.1.

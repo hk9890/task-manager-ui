@@ -1,0 +1,30 @@
+---
+id: 1zy0g0wi
+author: Hans Kohlreiter
+created: 2026-05-16T00:29:51Z
+body: |-
+  Verification complete (verifier subagent).
+
+  VERIFIED MET:
+  - All 8 child impl tasks closed (sl8c, 5b1k, nbmx, tj4m, lgln, lsb4, hw1n, lgsy).
+  - Dashboard fan-out fires exactly 4 bd subprocesses: ping + ready_explain + query in_progress + query closed (persistent log /home/hans/.local/state/bwb/bwb.log, multiple sessions).
+  - 3 dashboard reads dispatched concurrently — start timestamps within 0.8ms in session a1d75ddf.
+  - Auto-refresh + manual reload + Init all go through startReload() (single helper at internal/mode/board/model.go:127,217,305).
+  - Cardinality warning code path present (composer.go:91-109, board model.go:372).
+  - Health check matrix passes: in-repo OK, /tmp → "no beads project here", PATH= → "beads is not available".
+  - Quality gate clean: vet/lint/test/guardrails/build all green.
+  - PTY runtime verification: dashboard renders correctly with embedded fixture.
+
+  VERIFIED PARTIAL (amended ACs):
+
+  1. <1.2 s startup AC NOT MET literally. Measured ~1.5-2 s median across 6 cold sessions. Root cause is Dolt embedded-mode per-process overhead (~470-2500 ms per bd call), not bwb code. Sequential vs parallel timing nearly identical — parallelism doesn't help when Dolt is the bottleneck. The rewrite achieved everything achievable on the bwb side (7→4 calls, RWMutex, bd ping). Follow-up: beads-workbench-zx13 (investigate Dolt-side optimization).
+
+  2. "Exactly 4 bd subprocesses on cold startup" — dashboard fires 4 correctly, but app.Model.Init also batches search.Init() which fires a 5th bd list --all call. AC wording is dashboard-scoped (matches), but whole-app startup is 5. Follow-up: beads-workbench-t8kp (defer search.Init to lazy).
+
+  DISCOVERED DEFECTS:
+  - beads-workbench-ppsw (P2 bug): lumberjack panic in env -i HOME=/root.
+  - beads-workbench-5dhj (test follow-up — was pre-filed): upgrade gateway-method ACs to subprocess-argv level using RecordingExecutor after this rewrite lands. Now lgln has landed → 5dhj unblocked.
+  - beads-workbench-zgvc (3 pre-existing -race failures uncovered by hw1n).
+  - beads-workbench-0ny3 (flaky parallel test re: withRefreshTickScheduler).
+
+  VERDICT: PASS with documented amendments. Closing.

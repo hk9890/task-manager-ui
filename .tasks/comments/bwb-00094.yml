@@ -1,0 +1,6 @@
+---
+id: sdwv0yxu
+author: Hans Kohlreiter
+created: 2026-06-01T19:45:47Z
+body: |-
+  Verified: the optimistic render already exists via PlaceholderDetail + the Skeleton seam. On drilling into a dependency, RenderDetail() seeds Content header + Core metadata from the known IssueReference immediately, while description/comments and the Dependencies pane show skeleton until the single bd show returns. Locked with new unit test TestRenderDetailOptimisticallyShowsTargetHeaderWhileLoading and confirmed live (capture caught header readable while body still skeleton). No backend split needed/possible — deps ride in the same bd payload as content.

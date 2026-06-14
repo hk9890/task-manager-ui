@@ -1,0 +1,12 @@
+---
+id: l5xob7ts
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:33Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q4 (expanded Files to Modify to include the cache.go singleflight field/import/docblock, the cache_test.go TestSingleflightCollapsesIdenticalConcurrentArgv deletion, and the runner.go branch + comments — the original task body undercounted the surface) and Q5 (locked the decision to 'remove without measurement'; step 1 instrumentation deleted, acceptance OR-branch dropped).
+---
+id: f34g8bxj
+author: Hans Kohlreiter
+created: 2026-05-23T12:59:19Z
+body: |-
+  Done. Removed singleflight import, sg field, g.Do block, and all reference comments across cache.go, runner.go, cache_test.go. Deleted TestSingleflightCollapsesIdenticalConcurrentArgv and the dead gatedExecutor type. go mod tidy dropped golang.org/x/sync entirely (go mod why: 'main module does not need package golang.org/x/sync'). Collateral fix: added sync.Mutex to stubExecutor in runner_test.go — singleflight had been masking a latent data race in the test stub; exposed by -race once concurrent reads no longer serialize. mise run quality (vet + lint + guardrails + unit 1101 + integration 1239) all green; fmt:check green.

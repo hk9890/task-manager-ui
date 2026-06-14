@@ -1,0 +1,19 @@
+---
+id: ujvk1fni
+author: Hans Kohlreiter
+created: 2026-04-19T21:17:37Z
+body: |-
+  Fixed by updating the three search preview goldens to match the permanent 2-character metadata gutter and current compact metadata ordering (Status before Priority). Verified with === RUN   TestRenderGoldens
+  === PAUSE TestRenderGoldens
+  === CONT  TestRenderGoldens
+  === RUN   TestRenderGoldens/results_with_preview_w120
+  === RUN   TestRenderGoldens/empty_results_w120
+  === RUN   TestRenderGoldens/results_narrow_w80
+  === RUN   TestRenderGoldens/default_all_results_w120
+  --- PASS: TestRenderGoldens (0.00s)
+      --- PASS: TestRenderGoldens/results_with_preview_w120 (0.00s)
+      --- PASS: TestRenderGoldens/empty_results_w120 (0.00s)
+      --- PASS: TestRenderGoldens/results_narrow_w80 (0.00s)
+      --- PASS: TestRenderGoldens/default_all_results_w120 (0.00s)
+  PASS
+  ok  	github.com/hk9890/beads-workbench/internal/ui/search	(cached) and ok  	github.com/hk9890/beads-workbench/internal/ui/search	(cached).

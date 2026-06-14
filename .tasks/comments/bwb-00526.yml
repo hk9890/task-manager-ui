@@ -1,0 +1,6 @@
+---
+id: obnn5ip3
+author: Hans Kohlreiter
+created: 2026-04-20T11:35:47Z
+body: |-
+  Implemented thin-wrapper Makefile (help/build/test/vet + optional lint/validate-scripts/install-hooks) and docs updates clarifying docs/CODING.md remains authoritative. Verification: make help/build/vet/lint/validate-scripts/install-hooks passed; make test failed due to pre-existing search UI golden mismatches, tracked as beads-workbench-72vc.

@@ -1,0 +1,15 @@
+---
+id: lmywnfih
+author: Hans Kohlreiter
+created: 2026-05-17T09:55:41Z
+body: |-
+  Fix landed at 2b384b3 on branch 5q6t-refresh-concurrency.
+
+  Change: 6-line IsLoading() guard added to BoardActionReload handler in internal/mode/board/model.go, mirroring the existing AutoRefresh() guard at line 323-328. Suppressed refreshes log at debug level (component=board, trigger=board-manual).
+
+  Evidence:
+  - TestBoardManualReloadIgnoredWhileInFlight: FAIL → PASS
+  - TestBoardPendingResultsNeverGoesNegativeUnderKeySpam: FAIL → PASS
+  - Full ./internal/mode/board/... suite: all pass, no regressions
+  - quality:fast: 738 tests, 1 remaining failure (TestSearchManualReloadIgnoredWhileInFlight — 5q6t.2 scope)
+  - go vet clean, golangci-lint 0 issues, architecture guardrails pass

@@ -1,0 +1,153 @@
+---
+id: e9dsk1vk
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:29Z
+body: |-
+  ## Acceptance review tasks cannot be verified by an agent — criteria are human-subjective
+
+  **What**: All four acceptance review tasks (beads-workbench-omd.7, beads-workbench-yze.2.5, beads-workbench-yze.3.6, beads-workbench-yze.4.6) and the product acceptance (beads-workbench-yze.1) use criteria like "External editor handoff works for rich issue editing", "Search works with text and structured filters", "Built-in launchers work with issue-context interpolation", and "Top-level mode switching and selected-issue shell state work". These are human-verification phrases, not agent-verifiable assertions.
+
+  **Why**: An agent verifier cannot determine whether "External editor handoff works" without either: (a) running the full TUI interactively and observing it (manual), or (b) running automated tests that prove the specific behavior. The acceptance reviews say "tests pass" as one criterion, but the other criteria describe behavior that can only be verified by running the app. This creates a gap where acceptance reviews become rubber stamps — the agent checks "tests pass" and then assumes the subjective criteria are met because the code exists.
+
+  **Suggested action**: Rewrite acceptance criteria to be agent-executable. For every criterion that describes behavior ("X works"), replace it with a testable assertion:
+  - Instead of "External editor handoff works" → "Integration test exercising temp-file-create → editor-open → parse-result → gateway-update pipeline passes with fake editor"
+  - Instead of "Search works with text and structured filters" → "Search mode tests cover text search, each structured filter, and combined filters against fake gateway data"
+  - Instead of "Built-in launchers work" → "Launcher tests verify command construction with interpolated issue context for each built-in action"
+
+  The verifier's job should be: run `go test ./...`, check for specific test coverage, and inspect test names — not open the TUI manually.
+---
+id: fcw7lgpo
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:05Z
+body: |-
+  ## v1 acceptance review has no documentation completeness criterion
+
+  **What**: The final v1 acceptance (yze.1) checks product workflows, tests, and architecture compliance. It does not verify that project documentation is complete, current, or sufficient for ongoing development. There is no criterion for `docs/CODING.md` accuracy, `docs/TESTING.md` existence, or any user-facing documentation.
+
+  **Why**: After v1 acceptance closes, the product is "done" and enters maintenance/extension. If docs are stale or absent at this point, every future session — whether fixing bugs, adding features, or onboarding new agents — starts with archaeology instead of documentation. The cost of fixing docs now is near-zero; the cost later is per-session overhead forever.
+
+  **Suggested action**: Add acceptance criteria:
+  - [ ] `docs/CODING.md` accurately describes the current package layout, build commands, and architectural rules
+  - [ ] `docs/TESTING.md` exists and covers test harness, fixtures, and running conventions
+  - [ ] `CLAUDE.md` and `AGENTS.md` reflect the actual project state, not scaffolding placeholders
+  - [ ] Launcher and editor-handoff behavior is documented
+---
+id: tslcx7k8
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:36Z
+body: |-
+  ## Product acceptance review doesn't verify embedded-mode specifically enough
+
+  **What**: Acceptance criterion says "Embedded-mode beads compatibility is verified" but doesn't specify how. There's no task anywhere in the plan that sets up or tests against an embedded-mode beads repository. All gateway development presumably happens against whatever mode the developer's local beads happens to use. Embedded-mode compatibility is a core product principle (PRODUCT.md principle #2) but there's no task that creates a test fixture or verification step for it.
+
+  **Why**: Embedded-mode vs. server-mode beads can have different behaviors around command latency, data freshness, and available features. If the entire development and test cycle happens against server-mode, the product acceptance review becomes the first time anyone tries embedded-mode. Finding problems at final acceptance is the most expensive time to find them.
+
+  **Suggested action**: Add a concrete verification step to one of the integration test tasks (omd.6, yze.3.5, or yze.4.5): "Verify gateway operations work against an embedded-mode beads repository." This doesn't need a full test suite — just a documented manual or scripted smoke test that confirms the gateway works when BEADS_DIR points to an embedded-mode project.
+---
+id: 9czazjh3
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:22Z
+body: |-
+  ## Product acceptance review (yze.1) says "Embedded-mode beads compatibility is verified" but no task produces this verification
+
+  **What**: The final product acceptance (beads-workbench-yze.1) requires "Embedded-mode beads compatibility is verified" as a top-level criterion. However, searching all 24 tasks in the plan, no implementation or test task produces an embedded-mode compatibility test. The closest is omd.6 (gateway fixture tests), but even that task doesn't mention embedded mode.
+
+  **Why**: This criterion will fail at acceptance time because no work was planned to satisfy it. The verifier agent will either: (a) create the embedded-mode test ad-hoc during acceptance review (wrong — reviews should verify, not implement), (b) skip the criterion because "the gateway uses `bd` which supports embedded mode" (assumption, not verification), or (c) fail the review and create a follow-up task (wasted cycle).
+
+  **Suggested action**: Add an explicit embedded-mode integration test to one of the existing test tasks (probably omd.6 or yze.3.5) or create a new task. The test should:
+  - Initialize a temp beads repo in embedded mode
+  - Run representative gateway read/write operations against it
+  - Verify the full stack (gateway → bd → embedded beads) works without a Dolt server
+---
+id: yx6s02xf
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:08Z
+body: |-
+  ## [PASS] v1 product acceptance review now has comprehensive docs verification
+
+  **What**: yze.1 now requires: "docs/CODING.md, docs/TESTING.md, and AGENTS.md match the implemented product" as an explicit acceptance criterion. Instructions step 7 says to verify these three docs accurately reflect the implemented product.
+
+  **Why**: This is the final gate. Having all three key agent-facing docs verified at v1 acceptance means the product cannot be "done" with stale documentation. The earlier per-phase gates (omd.7, yze.2.5, yze.3.6, yze.4.6) ensure incremental accuracy; this final gate is the backstop.
+
+  **Suggested action**: None. This is adequate.
+---
+id: i1xkfdkm
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:56Z
+body: |-
+  ## yze.1 (product acceptance) depends on yze.2.6 (config model) directly — but yze.2.6 has no upstream deps
+
+  **What**: The v1 product acceptance review (`beads-workbench-yze.1`) lists `beads-workbench-yze.2.6` (configuration model) as a direct dependency. This is correct — the config model is a deliverable that must be verified. However, yze.2.6 itself has NO dependencies and appears as "ready" immediately. Combined with the yze.2.5 (app shell acceptance) also depending on yze.2.6, this means the config model is both a prerequisite for the app shell acceptance AND has no ordering constraint on when it starts.
+
+  **Why**: The config model task can be claimed before the app shell, before the gateway, before anything. Since it also blocks yze.2.5 (app shell acceptance), a prematurely-started config task could become a bottleneck if it's done wrong and needs rework — it would block the entire downstream chain.
+
+  **Suggested action**: As noted in a separate comment, add `yze.2.6 depends-on yze.2.1` to ensure the config model is designed after the app container exists. The current state where yze.2.6 blocks yze.2.5 but has no upstream ordering is a structural hazard.
+---
+id: srm19h2p
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:28Z
+body: |-
+  ## [PASS] Product acceptance review has documentation, quality gates, and embedded-mode criteria
+
+  **What**: The updated yze.1 includes: go build/go vet gates, embedded-mode verification via automated tests, docs accuracy for CODING.md/TESTING.md/AGENTS.md, and e2e/smoke test requirements. The dependency chain includes yze.5 (test harness) as a direct dependency.
+
+  **Why**: All first-review findings about missing acceptance criteria are addressed. The acceptance is now agent-executable.
+
+  **Suggested action**: None. Strong enough for execution.
+---
+id: qdxw1egz
+author: Hans Kohlreiter
+created: 2026-04-05T11:32:04Z
+body: |-
+  ## [MAJOR] v1 acceptance requires "The integrated app delivers the v1 workflows" but no task produces an integrated workflow test
+
+  **What**: yze.1 criterion says "The integrated app delivers the v1 workflows defined in project-plan/PRODUCT.md" and "Backend, UI, integration, and end-to-end/smoke tests pass." The embedded-mode smoke tests in yze.3.5 and yze.4.5 cover individual surfaces (browsing smoke, editor/launcher smoke). But no task produces a test that exercises a complete v1 workflow across all surfaces: browse board → select issue → view details → add comment → verify comment appears → open in editor → save changes → verify updates.
+
+  **Why**: The first-pass review requested this exact e2e workflow. The updated plan partially addresses it with per-surface smoke tests, but there is still no CROSS-SURFACE end-to-end test. Surface-level smoke tests can all pass while the surfaces don't compose correctly. The v1 acceptance verifier will have no automated way to prove "the integrated app delivers the v1 workflows" beyond "each surface's tests pass individually."
+
+  **Suggested action**: Add to yze.5 or create a dedicated task: "At least one cross-surface e2e test exercises a complete v1 workflow: board browse → issue selection → detail view → write action → state refresh." This doesn't need to cover every workflow — one complete loop through the product is sufficient to prove integration. Add a corresponding criterion to yze.1: "At least one cross-surface e2e workflow test passes."
+---
+id: escx0bgg
+author: Hans Kohlreiter
+created: 2026-04-06T23:47:48Z
+body: |-
+  yze.4.6 has now passed acceptance and closed. Sending final v1 product acceptance back through verification on the current reconciled tree with build/vet passing, full implementation tasks closed, embedded fixture smoke coverage present, and docs updated to current behavior.
+---
+id: ro3jihdd
+author: Hans Kohlreiter
+created: 2026-04-06T23:54:33Z
+body: |-
+  Re-verification performed on current working tree after yze.4.6 acceptance passed.
+
+  1. [FAIL] All child epics and acceptance review tasks are closed
+  - Tested via: bd show yze.1; bd show yze; bd show yze.2 && bd show yze.3 && bd show omd; bd show yze.4
+  - Observed: omd, yze.2, and yze.3 are CLOSED; yze.4.6 is CLOSED; but child epic yze.4 is still OPEN (eligible for close).
+  - Conclusion: Criterion not met on current beads state. Follow-up bug: beads-workbench-uz4\n\n2. [PASS] The integrated app delivers the v1 workflows defined in project-plan/PRODUCT.md\n- Tested via: go test ./internal/app -run 'TestModel(CreateIssueFlowUsesGatewayCatalogsAndCreateIssue|UpdateCloseAndCommentFlowsUseGatewayWrites|BuiltInLauncherHotkeysUseLauncherService|EditIssueActionUsesEditorServiceAndUpdatesDetail|EmbeddedFixtureBoardToDetailSmokeWorkflow|EmbeddedFixtureDetailEditHotkeyUsesEditorService|EmbeddedFixtureFullBoardCaptureGolden|BoardDetailBoardRoundTripPreservesLayoutAndFocus)' -v; go test ./internal/mode/search -run 'TestSearchMode(TextEntryRendersResultsInProgramHarness|TextQuerySendsGatewaySearch|RepresentativeStates|FocusNavigationAndSelection)' -v; go test ./internal/gateway/beads -run 'TestGateway(ShowIssueMapsDetail|SearchIssuesBuildsCommandAndReturnsPage|SearchIssuesWorkStateReadyUsesReadyAndLocalFilters|SearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters|CreateIssueMapsCommandArgs|CloseIssueMapsCommandArgs|AddCommentMapsCommandArgs|CatalogReads)' -v\n- Observed: browse/detail smoke, search flows, create/update/close/comment flows, editor handoff, and launcher hotkeys all passed.\n- Conclusion: Criterion met.\n\n3. [PASS] Embedded-mode beads compatibility is verified by automated tests\n- Tested via: go test ./internal/app -run 'TestModel(EmbeddedFixtureBoardToDetailSmokeWorkflow|EmbeddedFixtureDetailEditHotkeyUsesEditorService|EmbeddedFixtureFullBoardCaptureGolden)' -v; go test ./internal/testing/e2e/embeddedfixture -v\n- Observed: embedded fixture setup/seed tests passed; embedded board/detail/editor smoke tests passed against seeded embedded-mode repos.\n- Conclusion: Criterion met.\n\n4. [PASS] Backend, UI, integration, and end-to-end/smoke tests pass\n- Tested via: go test ./...\n- Observed: full suite passed across cmd/bwb, app, gateway, launcher, modes, embeddedfixture, fakes, UI packages.\n- Conclusion: Criterion met.\n\n5. [PASS] go build ./cmd/bwb passes\n- Tested via: go build ./cmd/bwb\n- Observed: command exited successfully with no build errors.\n- Conclusion: Criterion met.\n\n6. [PASS] go vet ./... passes\n- Tested via: go vet ./...\n- Observed: command exited successfully with no vet findings.\n- Conclusion: Criterion met.\n\n7. [PASS] No direct SQL, BQL, or orchestration dependency is required in the active product path\n- Tested via: go test ./cmd/bwb -run TestArchitectureGuardrails -v; source inspection of cmd/bwb/architecture_guardrails_test.go and internal/app/services.go\n- Observed: architecture guardrail subtests for direct SQL, internal/bql, and orchestration/control-plane all passed; service container remains gateway/config/launcher/editor only.\n- Conclusion: Criterion met.\n\n8. [PASS] docs/CODING.md, docs/TESTING.md, and AGENTS.md match the implemented product\n- Tested via: inspected docs/CODING.md, docs/TESTING.md, and AGENTS.md against current package layout, embedded fixture harness paths, and the commands run during verification\n- Observed: documented build/test/vet commands matched successful runs; CODING.md package/layout and architecture rules align with current tree; TESTING.md references the embedded fixture harness and verification commands that exist and passed; AGENTS.md still accurately identifies the project and routes coding guidance to docs/CODING.md.\n- Conclusion: Criterion met.\n\n9. [PASS] Any acceptance failures are captured as new follow-up issues\n- Tested via: bd create --type bug ...\n- Observed: created follow-up bug beads-workbench-uz4 for the open-child-epic blocker.\n- Conclusion: Criterion met.\n\nOverall result: BLOCKED / NEEDS_MORE_WORK. yze.1 should remain OPEN until the child-epic closure criterion is satisfied on beads state.
+---
+id: 0pfjf0xp
+author: Hans Kohlreiter
+created: 2026-04-06T23:56:08Z
+body: |-
+  Final acceptance retry: yze.4.6 is closed, yze.4 epic is closed, full go test ./... -count=1 passes from the current working tree, go build and go vet pass, and docs were reconciled to current behavior. Sending yze.1 for final verification.
+---
+id: 4lt49e4b
+author: Hans Kohlreiter
+created: 2026-04-06T23:59:06Z
+body: |-
+  Final acceptance verification performed (2026-04-07):
+  - [PASS] All child epics and acceptance review tasks are closed. Tested via: bd show yze.1; bd show yze; bd show yze.2 && bd show yze.3 && bd show yze.4 && bd show omd. Observed: omd, yze.2, yze.3, yze.4, and yze.5 are CLOSED; dependent acceptance tasks omd.7, yze.2.5, yze.3.6, and yze.4.6 are CLOSED.
+  - [PASS] The integrated app delivers the v1 workflows defined in project-plan/PRODUCT.md. Tested via: go test ./internal/app -run "TestModel(CreateIssueFlowUsesGatewayCatalogsAndCreateIssue|UpdateCloseAndCommentFlowsUseGatewayWrites|BuiltInLauncherHotkeysUseLauncherService|EditIssueActionUsesEditorServiceAndUpdatesDetail|EmbeddedFixtureBoardToDetailSmokeWorkflow|EmbeddedFixtureDetailEditHotkeyUsesEditorService|EmbeddedFixtureFullBoardCaptureGolden|BoardDetailBoardRoundTripPreservesLayoutAndFocus)" -v -count=1; go test ./internal/mode/search -run "TestSearchMode(TextEntryRendersResultsInProgramHarness|TextQuerySendsGatewaySearch|RepresentativeStates|FocusNavigationAndSelection)" -v -count=1; go test ./internal/gateway/beads -run "TestGateway(ShowIssueMapsDetail|SearchIssuesBuildsCommandAndReturnsPage|SearchIssuesWorkStateReadyUsesReadyAndLocalFilters|SearchIssuesWorkStateBlockedUsesBlockedAndLocalFilters|CreateIssueMapsCommandArgs|CloseIssueMapsCommandArgs|AddCommentMapsCommandArgs|CatalogReads)" -v -count=1. Observed: browse/detail smoke, search flows, create/update/close/comment, editor handoff, and launcher hotkeys all passed.
+  - [PASS] Embedded-mode beads compatibility is verified by automated tests. Tested via: go test ./internal/app -run "TestModel(EmbeddedFixtureBoardToDetailSmokeWorkflow|EmbeddedFixtureDetailEditHotkeyUsesEditorService|EmbeddedFixtureFullBoardCaptureGolden)" -v -count=1; go test ./internal/testing/e2e/embeddedfixture -v -count=1. Observed: embedded fixture tests passed against seeded embedded-mode repos.
+  - [PASS] Backend, UI, integration, and end-to-end/smoke tests pass. Tested via: go test ./... -count=1. Observed: full suite PASS across cmd/bwb, app, config, dashboard, gateway, launcher, modes, embeddedfixture, fakes, UI packages.
+  - [PASS] go build ./cmd/bwb passes. Tested via: go build ./cmd/bwb. Observed: success (exit 0).
+  - [PASS] go vet ./... passes. Tested via: go vet ./.... Observed: success (exit 0).
+  - [PASS] No direct SQL, BQL, or orchestration dependency is required in the active product path. Tested via: go test ./cmd/bwb -run TestArchitectureGuardrails -v -count=1 plus inspection of cmd/bwb/architecture_guardrails_test.go and internal/app/services.go. Observed: all guardrail subtests passed; active services remain gateway/config/launcher/editor only.
+  - [PASS] docs/CODING.md, docs/TESTING.md, and AGENTS.md match the implemented product. Tested via: inspection of docs/CODING.md, docs/TESTING.md, AGENTS.md against internal/config/model.go, internal/launcher/service.go, internal/app/model.go, and successful verification commands. Observed: documented build/test/vet commands, package layout, embedded fixture harness, editor/launcher behavior, placeholders, and agent guidance all match current implementation.
+  - [PASS] Any acceptance failures are captured as new follow-up issues. Observed: no acceptance failures found in this verification pass, so no new follow-up issues were required.
+  Result: PASS — all yze.1 acceptance criteria verified on current beads state and current working tree.
+---
+id: ca0uqzdx
+author: Hans Kohlreiter
+created: 2026-04-07T00:00:04Z
+body: |-
+  Final implementation batch committed as b100b7a after acceptance cleanup and verification. Git push to origin/main is being completed; Pushing to Dolt remote... still cannot run in this repo because no Dolt remote is configured.

@@ -1,0 +1,6 @@
+---
+id: r99u7zx0
+author: Hans Kohlreiter
+created: 2026-05-19T15:44:39Z
+body: |-
+  Scope expansion: original plan estimated +5pp from the 5 test files + dead-code removal. Actual gain measured at +2.2pp (69.6% → 71.8%). Added task xvar (contractcheck unit tests) to close the 0%-package gap on contractcheck's 18 validators — should add ~2-3pp from one large 0% block. 8bf2 now blocked on xvar.

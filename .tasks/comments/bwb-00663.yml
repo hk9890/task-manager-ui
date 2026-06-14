@@ -1,0 +1,10 @@
+---
+id: tebv62wj
+author: Hans Kohlreiter
+created: 2026-05-16T16:55:16Z
+body: |-
+  Done. cmd/bwb-smoke implemented with 4 checks (count, sort, search, render), text/json output, --readonly default true. Verified by orchestrator end-to-end:
+  - mise run smoke against this repo: count PASS (Done=459 matches bd), sort PASS, search PASS, render PASS — result: PASS
+  - /tmp/bwb-smoke --dir ai-config-manager --readonly: count PASS (Done=622 matches bd), sort PASS, search PASS, render PASS — result: PASS
+  - AICM .beads mtimes unchanged after run
+  mise run smoke and mise run smoke:aicm both registered as mise tasks.

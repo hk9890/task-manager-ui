@@ -1,0 +1,12 @@
+---
+id: gmpem4e8
+author: Hans Kohlreiter
+created: 2026-04-09T17:43:34Z
+body: |-
+  Verifier review: still reproducible in current tree. Search continues to assemble compact rows separately from board (internal/ui/search/search.go vs internal/ui/board/board.go), so this bug should remain open and not be superseded yet.
+---
+id: 1trbz7eh
+author: Hans Kohlreiter
+created: 2026-04-09T17:44:50Z
+body: |-
+  Resolved by beads-workbench-ekp.2 implementation: search now uses shared compact issuerow renderer with board for selection indicator, metadata token assembly, styling, and deterministic truncation/ID width rules.

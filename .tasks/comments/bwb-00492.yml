@@ -1,0 +1,6 @@
+---
+id: 2s45c4lc
+author: Hans Kohlreiter
+created: 2026-05-19T15:33:33Z
+body: |-
+  Completed in commit 2879cb1. All three target functions reached 100% coverage. SelectBrowserIssue: 0→100%, ClampScroll: 0→100%, clampOffset: 0→100%. Test runtime 8ms. quality:fast clean (877 tests). Observed behavior of SelectBrowserIssue for unknown ID: falls through to normalizeRelatedSelection which silently clamps index — captured in test assertion.

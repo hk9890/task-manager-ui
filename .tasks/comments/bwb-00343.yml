@@ -1,0 +1,6 @@
+---
+id: nyuug70r
+author: Hans Kohlreiter
+created: 2026-05-22T22:33:11Z
+body: |-
+  Implemented. Three coordinated stale-results affordances in internal/ui/search/search.go (banner 'Results below are stale. Press Enter to search for "<draft>".' + dimmed result rows + ' · stale' on the count badge), all active when draftQuery != appliedQuery and no search is in flight. Five new UI-layer tests + one model-level end-to-end test (TestSearchModeStaleDraftIndicatorAppearsAndClears) + new golden. docs/user-guide/key-bindings.md now documents Enter's submit-query role and corrects the misleading 'updates the search query directly' wording; docs/CONFIGURATION.md notes Enter's built-in submit. Commit f39be5d; go test ./... = 1096 pass, quality:fast clean. (A pre-existing unstaged CONFIGURATION.md edit re: tea.Exec editor launch rode along in the same commit.)

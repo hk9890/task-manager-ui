@@ -1,0 +1,18 @@
+---
+id: j6fxwxg3
+author: Hans Kohlreiter
+created: 2026-04-18T21:32:01Z
+body: |-
+  Review: Root cause confirmed and bug is well-scoped. What: BrowserItems is only populated from ParentGroupBrowser (model.go:312), never from BlockedBy/Blocks/Related refs. When an issue has blockers but no parent-group structure, BrowserItems stays empty, so moveRelatedSelection has nothing to move and BrowserSelectedIndex stays -1. The render side (59z fix) correctly passes selection state now, but there are zero items to select. Why: this is the actual functional gap — 59z fixed render wiring but the model never populates BrowserItems for non-structure dependency rows. Suggested action: populateBrowserFromIssue (or equivalent) must flatten BlockedBy + Blocks + Related into BrowserItems when no parent-group is active, so selection/navigation/enter all work on ordinary dependency refs.
+---
+id: kle4v4sq
+author: Hans Kohlreiter
+created: 2026-04-18T21:32:05Z
+body: |-
+  Review: Missing acceptance criterion. What: no criterion says 'BrowserItems must be populated from blocked-by/blocks/related refs when parent-group is absent.' The existing criteria inherited from 59z assume render-only fixes. Why: without this criterion, a tasker could fix render wiring again and miss the model population gap — exactly what happened with 59z. Suggested action: add criterion: 'When an issue has BlockedBy, Blocks, or Related refs but no parent-group structure, BrowserItems must contain those refs and BrowserSelectedIndex must default to 0.'
+---
+id: jfjmy1aa
+author: Hans Kohlreiter
+created: 2026-04-18T21:32:17Z
+body: |-
+  Review: Ordering relative to 74r/6eq. What: 2l4 is a functional bug (dependency browsing is broken); 74r/6eq are cosmetic layout bugs. Why: 2l4 blocks the core use case of navigating dependencies. Layout polish on a non-functional pane is wasted effort if 2l4 changes how BrowserItems are populated (which may affect row count and scroll behavior). Suggested action: implement 2l4 before 74r/6eq. x2u is independent (gateway-only, no UI coupling) and can proceed in parallel with anything.

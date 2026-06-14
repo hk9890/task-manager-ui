@@ -1,0 +1,6 @@
+---
+id: 8r94xjzm
+author: Hans Kohlreiter
+created: 2026-04-19T19:22:01Z
+body: |-
+  Doc scope guard — keep it to recipe format. What: AC says stays short and practical but does not define a length target. Why: Documentation tasks for tooling tend to balloon. The current RUNTIME_UI_VERIFICATION.md is 67 lines and already well-structured. Suggested action: Cap the additions at roughly the same size — add a new section with 3-4 copy-paste recipes (navigation check, mutation save check, mutation cancel check, interpreting failures). No architecture discussion, no rationale sections.

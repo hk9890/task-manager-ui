@@ -1,0 +1,12 @@
+---
+id: knpdraag
+author: Hans Kohlreiter
+created: 2026-05-25T19:24:15Z
+body: |-
+  **AC2 grep-gate clarification (orchestrator note, tasker report 2026-05-25):**
+
+  The literal grep `grep -rn "verify_kb8e" --exclude-dir=.claude --exclude-dir=.git .` still returns matches AFTER the file deletion — but ALL matches are in `.beads/issues.jsonl` at 4 closed-issue records (znri.2 description, znri.8 resolution, kb8e.16 comment, kb8e.17 comment). These are immutable tracker history in the Dolt-backed store, not source code, CI config, docs, or scripts.
+
+  The active source tree has zero `verify_kb8e` references. AC2 is satisfied in spirit. If the literal gate needs to pass byte-for-byte, the orchestrator may add `--exclude-dir=.beads` to the grep when running the acceptance verification.
+
+  Worktree branch: `worktree-agent-ad8f81fbea86a7fa3`, commit `1a00a46`.

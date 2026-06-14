@@ -1,0 +1,6 @@
+---
+id: nj3vno5s
+author: Hans Kohlreiter
+created: 2026-05-10T16:51:41Z
+body: |-
+  Acceptance evidence: full go test ./... passed. Built binary verified against embedded fixture with XDG_STATE_HOME override; persistent JSON log created at /tmp/tmp.MTKY7jPmUM/bwb/bwb.log containing structured startup and gateway records with session_id=eb45013d. Debug stderr output preserved [bwb-debug] prefix while including startup events and gateway execution traces.

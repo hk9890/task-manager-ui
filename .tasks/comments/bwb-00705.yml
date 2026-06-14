@@ -1,0 +1,6 @@
+---
+id: 1e1q9ofd
+author: Hans Kohlreiter
+created: 2026-04-11T18:36:31Z
+body: |-
+  Verifier: FAIL. Grouped 34-column rail, labels section, creator/close metadata, and narrow fallback all verify, but duration is still missing from the metadata rail for closed issues. Evidence: internal/ui/details/metadata.go, internal/ui/details/testdata/full.golden, runtime capture at 120x30 and 100x30. Filed blocker: beads-workbench-an8.4.

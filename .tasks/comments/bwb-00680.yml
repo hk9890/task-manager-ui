@@ -1,0 +1,36 @@
+---
+id: qxv4sluo
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:41Z
+body: |-
+  Review finding: acceptance task is well-structured. What: the verification steps and files-to-inspect list are specific and actionable. The dependency chain (ekp.1, ekp.2, ekp.3 all block ekp.4) ensures nothing is verified prematurely. Quality gate commands are explicit. Why: no change needed — this is solid as written.
+---
+id: xoul2tiu
+author: Hans Kohlreiter
+created: 2026-04-09T17:36:06Z
+body: |-
+  Verifier pre-acceptance review: MOSTLY READY, but final acceptance still needs an explicit built-binary embedded-fixture runtime UI verification step per docs/TESTING.md and docs/RUNTIME_UI_VERIFICATION.md. Tracked in beads-workbench-59u. Current task/dep structure for ekp.2/.3/.4 is otherwise sound.
+---
+id: 8mwv70c4
+author: Hans Kohlreiter
+created: 2026-04-09T17:43:34Z
+body: |-
+  Verifier review: BLOCKED. Board/search still use separate row renderers; no explicit post-row-extraction list decision; docs do not yet describe row/list/panel/detail responsibilities. Bugs: beads-workbench-229, beads-workbench-vhg, beads-workbench-b9x. Focused evidence: internal/ui/board/board.go, internal/ui/search/search.go, docs/CODING.md. Next: land shared row path or document justified alternatives, then rerun runtime + quality-gate acceptance.
+---
+id: cm4x1f5n
+author: Hans Kohlreiter
+created: 2026-04-09T18:16:52Z
+body: |-
+  Verifier rerun: PARTIAL PASS. Shared compact row path is now real and list-abstraction decision is documented; runtime UI and quality gates pass. Remaining blocker: docs/CODING.md still does not explicitly document the dedicated detail component and generic panel/container responsibility, so the architecture/docs acceptance item remains open. Artifacts: /tmp/bwb-ekp4-runtime-8hwb3bt7 and /tmp/bwb-ekp4-detailok-x2lovvjy. Next: update docs to name internal/ui/details as the dedicated detail component and clarify the generic panel/container boundary.
+---
+id: lnne9xm3
+author: Hans Kohlreiter
+created: 2026-04-09T19:31:16Z
+body: |-
+  Verifier final: PASS.
+  - Docs now explicitly distinguish shared row, optional list, generic panel/container, and dedicated detail responsibilities in docs/CODING.md.
+  - Board/search share ui/shared/issuerow; no speculative shared list abstraction was introduced.
+  - Runtime UI verification passed for board/search/detail plus launcher/edit flows.
+  - Quality gates passed: go test ./..., go build ./cmd/bwb, go vet ./...
+  Artifact: /tmp/bwb-ekp4-final-verify-TffBx5
+  Next: close acceptance review and epic.

@@ -1,0 +1,6 @@
+---
+id: jk8rgyi8
+author: Hans Kohlreiter
+created: 2026-05-24T01:12:52Z
+body: |-
+  Done. --repo beads|memory (default beads) and --repo-file <path> flags added to parseCLI. Validation: unknown backend or memory-without-file exits 2 with clear message. defaultRepoFilePath derives ~/.cache/bwb/<sha256(projectRoot)[:12hex]>/repo.jsonl for beads mode (informational; cache wiring is Epic 3). startInteractive switches on repoFlag: memory → filestorage.Load (returns descriptive error including ErrSchemaMismatch); beads → repositorybeads.New as before. 5 new unit tests (parse, default-path, run with memory+file round-trip, exit-2 on memory-no-file, beads default path). docs/CODING.md updated. mise run quality green (1309 tests; +11 from new tests). Manually verified: bwb --help shows new flags; bwb --repo memory (no file) exits 2 with 'requires --repo-file' message.

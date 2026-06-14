@@ -1,0 +1,42 @@
+---
+id: jqjaf945
+author: Hans Kohlreiter
+created: 2026-05-17T22:47:38Z
+body: |-
+  -
+---
+id: 59vnnupx
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:50Z
+body: |-
+  ## Audit report — Health (HealthCheck)
+
+  ### 1. Contract spec
+  From interface.go:171-190. Method HealthCheck(ctx) error. Pre: ctx non-nil. Post: nil on success. Errors: ErrorCodeCommandUnavailable (bd not in PATH), ErrorCodeNoDatabaseFound (no .beads DB), ErrorCodeCommandFailed (other non-zero exit). Quirk: bd ping --json payload ignored on zero exit.
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.fthneshKbE | Log: /tmp/beads-workbench-ya4q-audit.log
+
+  - Returns nil on healthy DB: VERIFIED — bd ping --json exit 0, payload `{"status":"ok",...}`, gateway ignores stdout.
+  - ErrorCodeCommandUnavailable (PATH=/nonexistent): VERIFIED — exec.ErrNotFound → CommandUnavailable.
+  - ErrorCodeNoDatabaseFound (cd /tmp): VERIFIED — bd exit 1, stderr substring "no beads database found" → NoDatabaseFound. Pinned by TestMissingBDDatabaseDetectionSubstringPin.
+  - ErrorCodeCommandFailed (generic non-zero): VERIFIED structurally via code path runner.go:189-194; no distinct bd 1.0.4 trigger produced beyond the no-db case.
+  - Payload ignored on zero exit: VERIFIED — implementation discards stdout (read_gateway.go:72).
+
+  ### 3. Test-coverage verification
+  - argv shape: COVERED by TestGatewayHealthCheckIssuesPingJSON (read_gateway_test.go:939).
+  - CommandUnavailable: COVERED by TestGatewayHealthCheckBdNotFoundReturnsCommandUnavailable.
+  - NoDatabaseFound: COVERED by TestGatewayHealthCheckNoDatabaseReturnsNoDatabaseFound + TestMissingBDDatabaseDetectionSubstringPin.
+  - CommandFailed (generic): GAP — closed via beads-workbench-wz3u (TestGatewayHealthCheckCommandFailed added).
+  - Payload ignored: COVERED implicitly + RunReadContract/HealthCheck.
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/... -run TestFakeGatewayReadContract/HealthCheck
+  - Result: PASS. Also TestRealGatewayReadContract/HealthCheck PASS (3.90s).
+  - All clauses FAKE MATCHES. No HealthCheck entries in fake drift log.
+
+  ### Drift findings
+  **No drift found.** 1 gap addressed by closed followup beads-workbench-wz3u (added TestGatewayHealthCheckCommandFailed).
+
+  ### Summary
+  - Total clauses: 6 | Verified: 6 | Drift: 0 | Gaps: 1 (resolved via wz3u) | Diverges: 0

@@ -1,0 +1,6 @@
+---
+id: 0hmnx9oo
+author: Hans Kohlreiter
+created: 2026-04-19T20:09:58Z
+body: |-
+  Review: Clear and well-scoped. The epic's own success criteria say 'docs/RUNTIME_UI_VERIFICATION.md documents the workflow concisely with practical recipes' — so a doc that still shows only legacy syntax means the epic's doc task (.3) was closed prematurely. Verdict: EPIC BLOCKER — this is a gap in the epic's own deliverable, not optional polish. Suggested action: fix this as part of closing the epic, not as follow-up.

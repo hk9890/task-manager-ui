@@ -1,0 +1,6 @@
+---
+id: xk63blp4
+author: Hans Kohlreiter
+created: 2026-05-24T06:47:48Z
+body: |-
+  Done. VCStatusHash(ctx, runner) helper added at internal/gateway/beads/vc_status.go using bd vc status --json (JSON form confirmed available; returns stable schema_version:1 with commit field). Uses RunJSON[bdVCStatusPayload] per CODING.md typed-payload rule. 3 test functions / 4 cases: success, exec error (ErrorCodeCommandUnavailable), empty commit field (ErrorCodeDecodeFailed), missing commit field. mise run quality green: 1128 unit + 1301 integration tests, 0 lint. No new deps. Note: human-readable Commit: line parser dropped — JSON path is available, dual-path would add unjustified complexity. Ready for kxci.2 consumer.

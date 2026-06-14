@@ -1,0 +1,14 @@
+---
+id: uibdovgn
+author: Hans Kohlreiter
+created: 2026-05-17T21:55:42Z
+body: |-
+  Per-phase ANSI assertion added in `TestRenderCompactDimAppliesSkeletonShadesForeground`.
+
+  Approach: for each phase, renders a NUL-sentinel string via `lipgloss.NewStyle().Foreground(skeletonColor(phase)).Render(sentinel)`, splits on the NUL byte to isolate the exact ANSI escape prefix, then `strings.Contains(dimmed, ansiPrefix)`. A wrong shade table or bad modulo index in `skeletonColor` would produce a different escape and fail this assertion.
+
+  Files: `internal/ui/shared/issuerow/row_test.go` (lines ~303-312, per-phase subtest).
+
+  Commands: `go test ./internal/ui/shared/issuerow/... -v -run TestRenderCompactDimAppliesSkeletonShadesForeground -count=3` (3/3 pass), `mise run quality:fast` (826 tests pass), `mise run test` (826 tests pass).
+
+  Verifier spawned.

@@ -1,0 +1,6 @@
+---
+id: wic9i4sb
+author: Hans Kohlreiter
+created: 2026-05-29T11:02:38Z
+body: |-
+  Fixed: bwb and bwb:fixture tasks in .mise.toml now stamp git-describe into ldflags (matching the existing build task; the interactive run tasks had been copy-pasted without ldflags so version.Version stayed at the compile-time default "dev"). Evidence: ./bwb --version -> "bwb v0.6.0-116-gac84223-dirty". build_version in structured session logs now carries real provenance. Release builds (.goreleaser.yaml) untouched; architecture guardrails test passes. Full suite + race + integration green.

@@ -1,0 +1,6 @@
+---
+id: bti9gbe9
+author: Hans Kohlreiter
+created: 2026-05-24T07:31:58Z
+body: |-
+  Done. Flag default flipped --repo beads → caching (with beads|memory|caching valid). defaultRepoFilePath extended to (projectRoot, sessionID) signature: caching mode uses ~/.cache/bwb/<hash>-<sessionID>/repo.jsonl. constructRepository helper extracted from startInteractive for testability. internal/logging gained SessionID() accessor. caching branch wires: backing → caching.New(WithVCStatusFunc) → Hydrate (best-effort; logs warning on error, continues cold) → Start(ctx). Defer SaveNow + Stop on shutdown. 5 new tests: TestParseCLIRepoFlags +caching cases, TestDefaultRepoFilePathWithSessionID, TestCachingModeStartupWiring, TestCachingModeDefaultRepoFilePath, TestConstructRepositoryCachingWritesCacheFile. docs/CODING.md --repo entries updated. mise run quality green (1175 unit / 1348 integration). Manual smoke: bwb boots; cache file at ~/.cache/bwb/<hash>-<session>/repo.jsonl created with valid manifest. NOTE: discovered AR-blocking gap — Hydrate currently always sets dashboardDirty=true (conservative), causing first Dashboard call to refetch from backing (~3s, violates AR sub-second first paint target). Filing kxci.5a to add bd_commit_hash persistence in manifest + hydrate-time hash comparison.

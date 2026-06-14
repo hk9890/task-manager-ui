@@ -1,0 +1,23 @@
+---
+id: 0cvdzbep
+author: Hans Kohlreiter
+created: 2026-05-28T14:54:35Z
+body: |-
+  Manual verification PASSED against /home/hans/dev/github/dtctl-test (height=28).
+
+  Runtime evidence:
+  - Initial Done header: 23 of 127.
+  - After explicit '>' load-more: 73 of 127 → 123 of 127.
+  - After 'r' reset: 23 of 127, selection returns to top of Not Ready.
+  - Implicit threshold trigger: works; gets queued behind serialized detail-load contention (perf observation, not correctness).
+  - b38b.4 chevron visibility: › visible at row 25 on dtt-45v.23 after j×50 on Ready column (23 of 72).
+  - Ready/NotReady/InProgress 'N of M' header honesty: Ready shows 23 of 72 ✓.
+
+  Automated evidence:
+  - mise run quality: exit 0 (1132 unit + 1282 integration tests, 15 intentional opt-in skips, 0 lint, 0 vet).
+  - PaginatedClosedFetch passes for all three impls (memory, caching, beads).
+  - TestDoneLoadMore_* (8 sub-tests): all pass, including InFlightGuard with DelayedFakeRepository.
+  - TestRenderDoneLoadingMore + TestRenderDoneDeepNavigation goldens: pass.
+  - TestDashboardClosedOffsetArgv + TestDashboardClosedOffsetOverFetchReturnsAll: argv pin holds for the bd 1.0.4 over-fetch workaround.
+
+  All 8 acceptance criteria from vtvb description satisfied. Closing.

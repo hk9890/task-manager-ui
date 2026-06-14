@@ -1,0 +1,18 @@
+---
+id: 96qrw57l
+author: Hans Kohlreiter
+created: 2026-05-16T03:48:09Z
+body: |-
+  Additional symptom observed during beads-workbench-db0z.1 quality gate: TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback also flakes under 'go test ./...' (1s timeout waiting for search UI render) but passes in isolation. Same family — both tests exhibit timing-sensitivity under full parallel load. Worth checking if the withRefreshTickScheduler global is reachable from this test too.
+---
+id: bx77vjgo
+author: Hans Kohlreiter
+created: 2026-05-16T04:09:19Z
+body: |-
+  Another symptom observed by all 5 Wave-C taskers (db0z.6, .8, .9, .14, .15) during quality gate: TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback (mode/search/model_test.go:~470) fails reliably under 'go test ./...' parallel load (WaitFor 1s times out, needs ~10s under contention) but passes in isolation. Multiple independent reports increase confidence this is the withRefreshTickScheduler global racing — same family.
+---
+id: sklzo1hu
+author: Hans Kohlreiter
+created: 2026-05-16T13:02:22Z
+body: |-
+  Fixed via sync.Mutex (schedulerMu) protecting both scheduler test seams (scheduleRefreshTickCmd + scheduleToastDismissCmd). Accessor functions getRefreshTickScheduler/getToastDismissScheduler used at all read sites. Test helpers withRefreshTickScheduler + new withToastDismissScheduler lock around set+restore. internal/app and internal/mode/search both pass -race -count=10 clean. Note: zgvc #2 (TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback) appears resolved as a side effect.

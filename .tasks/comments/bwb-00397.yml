@@ -1,0 +1,6 @@
+---
+id: 4v7fpf44
+author: Hans Kohlreiter
+created: 2026-04-11T12:12:30Z
+body: |-
+  Verification complete: working tree clean on main. After fetching tags, v0.1.0 resolves to 86233df; HEAD is 0167206, with 1 commit after tag (chore: add github-releases skill resource). Quality gates passed locally: go build ./cmd/bwb, go vet ./..., go test ./.... CI check: no .github/workflows files and gh workflow/run list returned none. No local gate failure blocks trust in v0.1.0 baseline, but CI provenance is absent.

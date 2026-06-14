@@ -1,0 +1,18 @@
+---
+id: bnka80ac
+author: Hans Kohlreiter
+created: 2026-04-18T20:18:07Z
+body: |-
+  Review: This is partially already implemented. Code at model.go:178-186 shows moveRelatedSelection is called on scroll-up/down when FocusPaneDependencies is active, and BrowserSelectedIndex is tracked. The real bug is in the render side: renderReferenceRow (details.go:526-532) hardcodes Selected:false and Styled:false, so the selection state is never visually reflected. What: the model-side selection logic exists; only the render path is broken. Why: this means the fix is simpler than the description implies — it's a render wiring bug, not a missing navigation model. Suggested action: narrow the description to 'pass BrowserSelectedIndex to renderReferenceRow so Selected reflects actual state'. This overlaps heavily with beads-workbench-2a6 (Styled:false). Consider merging them into one fix.
+---
+id: ac4desa9
+author: Hans Kohlreiter
+created: 2026-04-18T20:23:46Z
+body: |-
+  Set review — this is solid and ready. What: the prior reviewer correctly identified the fix is render-only (renderReferenceRow hardcodes Selected:false, Styled:false at line 526-532). The model-side selection logic already exists. Acceptance criteria are clear and testable. Why: this is the highest-value fix in the set — it makes the dependency pane actually interactive. One coupling note: if 74r (width change) lands first, the styled rows will render with the new width, which is fine. If 6eq (framing) also lands, the styled rows need to fit inside frame borders. Suggested action: implement this first or second. The fix is: pass selection index and Styled:true through renderReferenceRow. Ensure renderRelationshipGroups receives the selected index to compare against flat row position.
+---
+id: 0v9qlnxa
+author: Hans Kohlreiter
+created: 2026-04-18T21:30:39Z
+body: |-
+  Verifier rerun: FAIL. Shared compact rows render, but live Dependencies selection still only follows BrowserItems/Structure context. On fixture issue bwf-2, blocker rows show no selected-row treatment, DOWN leaves no visible selection change, and ENTER does not open a dependency. Follow-up: beads-workbench-2l4.

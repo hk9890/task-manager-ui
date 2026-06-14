@@ -1,0 +1,14 @@
+---
+id: 7kyupmfg
+author: Hans Kohlreiter
+created: 2026-05-22T07:36:15Z
+body: |-
+  Implemented singleflight deduplication in parentChildSiblings.
+
+  Changes: added golang.org/x/sync/singleflight (go.mod v0.20.0, promoted to direct dep), added parentSiblingGroup singleflight.Group field to the Gateway struct, wrapped the cache-miss fetch in sf.Do(parentID, ...) with a double-checked cache inside the callback. Concurrent sibling loads now collapse onto a single 'bd show <parent>' subprocess.
+
+  Verified by TestGatewayParentChildSiblingsCollatesConcurrentFetchesViaSingleflight (new unit test): launches two concurrent ShowIssue goroutines for siblings, holds the parent fetch on a channel until both are inside singleflight.Do, asserts parentFetchCount == 1. Passes under -race.
+
+  Files: internal/gateway/beads/read_gateway.go, read_gateway_test.go, go.mod, go.sum.
+
+  Orchestrator verification on combined final state: mise run quality:fast (vet, lint 0 issues, guardrails, 1070 unit tests) PASS; mise run test:integration (1208 tests) PASS.

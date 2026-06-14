@@ -1,0 +1,6 @@
+---
+id: tb7kv4h3
+author: Hans Kohlreiter
+created: 2026-04-20T06:36:31Z
+body: |-
+  Execution approved. Locked interaction model: typing in query edits only; Enter runs the search; Down from query enters results when available; Up on first result returns to query; result movement keeps live preview; Left/Right only traverses Results <-> Content <-> Metadata.

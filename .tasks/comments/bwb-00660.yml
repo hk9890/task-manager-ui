@@ -1,0 +1,26 @@
+---
+id: 4vllf38c
+author: Hans Kohlreiter
+created: 2026-05-17T10:04:34Z
+body: |-
+  Landed at 13916cc on branch 5q6t-refresh-concurrency.
+
+  Board: added 'inflight bool' field on Model. Set by startReload after the guard, cleared by maybeCompose. Call-site guards (keyboard handler + AutoRefresh) now check m.inflight directly instead of IsLoading().
+
+  Design decision (validated by test failure): changing IsLoading() to return m.inflight broke 2 tests from epic 0x36 (non-blocking loading UX): TestBoardModeColdStartAllColumnsLoading and TestBoardModePerColumnLoadingState. Those tests check the column-level visual loading state — IsLoading() must keep its column-loading semantics. The refresh-concurrency guard is a different concern: 'is a refresh genuinely in flight?'. The tasker correctly chose option B (keep IsLoading() semantics; have all guards check m.inflight directly). Both call-site guards and the internal guard now use the same m.inflight signal — no semantic drift, no test churn.
+
+  Search: added 'if m.loading { return nil }' at top of triggerSearchWithAnchor with debug log (component=search, trigger=search-internal). Symmetric with board.
+
+  New test TestBoardInternalStartReloadGuardedByInflightFlag calls startReload(refreshModeManual) directly twice, confirms second call returns nil Cmd and leaves pendingResults=4 untouched.
+
+  Files: 3 (board/model.go, board/model_double_refresh_test.go, search/model.go) — 122 insertions, 3 deletions.
+
+  Evidence:
+  - TestBoardInternalStartReloadGuardedByInflightFlag: PASS
+  - Full board suite: 739 tests pass
+  - Full search suite: pass
+  - App tests (TestNonBlockingRefreshBoardSearchBoardFlow, TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes): pass
+  - mise run quality:fast: GREEN
+  - mise run quality (full, with integration tests): GREEN — 854 tests in 64s
+
+  User-visible fix + defense-in-depth complete. 5q6t.5 (runtime verify) is unblocked.

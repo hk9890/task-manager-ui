@@ -1,0 +1,91 @@
+---
+id: nku05c27
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:56Z
+body: |-
+  ## Acceptance review does not check documentation state
+
+  **What**: This acceptance review verifies code, tests, and architecture compliance but has no criterion checking that project docs are current. After Phase 1 closes, `docs/CODING.md` may still say "planned layout," `CLAUDE.md` may still have placeholder sections, and no testing doc may exist despite a full test suite being present.
+
+  **Why**: This is the gate between "foundation" and "UI work." Every agent working on Phase 2+ will read the docs first. If docs are stale or missing at this gate, the problem compounds across all subsequent phases. Acceptance reviews are the natural checkpoint for documentation health.
+
+  **Suggested action**: Add acceptance criteria:
+  - [ ] `docs/CODING.md` accurately reflects the current package layout and build commands
+  - [ ] `CLAUDE.md` placeholder sections are populated with real project information
+  - [ ] `docs/TESTING.md` exists and documents the test harness and fixture approach
+  - [ ] No "planned" or "will be created" language remains in docs for things that now exist
+---
+id: zguvt4gi
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:45Z
+body: |-
+  ## Acceptance reviews say "If acceptance fails, create follow-up issues" — but don't say what AUTOMATED checks to run
+
+  **What**: All acceptance review tasks (omd.7, yze.2.5, yze.3.6, yze.4.6, yze.1) include "If acceptance fails, create follow-up bugs or tasks." This is good process. However, the reviews' actual check is vague: they say "Verify X works" and "Run tests." An agent verifier needs a concrete checklist of automated commands to execute.
+
+  **Why**: An agent running an acceptance review should be able to: (1) run `go test ./...`, (2) run `go build ./cmd/bwb`, (3) run `go vet ./...`, (4) check specific test names/counts for coverage assertions, (5) check that no forbidden imports exist (SQL, BQL). Without specifying these commands, the agent verifier will run `go test` and call it done, even if coverage is inadequate.
+
+  **Suggested action**: Add to each acceptance review task an "Automated verification commands" section:
+  ```
+  go build ./cmd/bwb
+  go test ./...
+  go vet ./...
+  # Check no forbidden imports
+  grep -r "database/sql" internal/ && exit 1 || true
+  # Check test count minimums (specific to each epic)
+  go test -v ./internal/gateway/beads/... 2>&1 | grep -c "^--- PASS" # expect >= N
+  ```
+---
+id: h8ebuurt
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:49Z
+body: |-
+  ## [PASS] Phase 1 acceptance review now enforces docs alignment
+
+  **What**: omd.7 now includes criteria for `docs/CODING.md` matching the implemented foundation architecture AND `docs/TESTING.md` documenting the implemented test strategy. Instructions 6 and 7 explicitly require verifying these docs exist and are current.
+
+  **Why**: This was a blocker-level gap in the original plan. The updated plan closes it. An agent running the Phase 1 acceptance review now has concrete, verifiable docs gates that prevent stale documentation from passing through to Phase 2.
+
+  **Suggested action**: None. This is adequate.
+---
+id: zle6q0hd
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:19Z
+body: |-
+  ## [PASS] Acceptance reviews now include docs gates and quality commands
+
+  **What**: The updated acceptance reviews (omd.7, yze.2.5, yze.3.6, yze.4.6, yze.1) now include `go build ./cmd/bwb`, `go vet ./...`, and docs verification criteria (CODING.md, TESTING.md accuracy checks). The first-pass findings about missing build gates and documentation checkpoints have been addressed.
+
+  **Why**: These are agent-executable checks. An agent verifier can run the build/vet commands and inspect doc accuracy without subjective judgment. This closes the gap where acceptance reviews were rubber stamps.
+
+  **Suggested action**: No change needed. The acceptance reviews now contain the right automated gates.
+---
+id: 9stxqg5i
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:13Z
+body: |-
+  ## PASS: Acceptance reviews include quality gate commands (go build, go vet)
+
+  **What**: Acceptance review tasks omd.7 and yze.1 now explicitly require `go build ./cmd/bwb` and `go vet ./...` as acceptance criteria. The omd.8 task (architecture guardrails) also establishes these as standard quality gates with documentation in `docs/CODING.md`. This addresses the prior review finding about missing build/vet gates.
+
+  **Why**: Having build and vet as explicit acceptance criteria means the verifier agent has concrete automated commands to run, not just subjective "it works" assessments. Combined with omd.8's guardrail enforcement, this creates a strong automated quality baseline.
+
+  **Suggested action**: No change needed. Verify that yze.2.5 and yze.3.6 also include `go build` and `go vet` checks — currently they don't explicitly list them, relying on the "tests pass" criterion. Consider adding explicit build/vet criteria to all intermediate acceptance reviews for consistency.
+---
+id: cpgv0bu2
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:49Z
+body: |-
+  ## [PASS] Acceptance review now includes quality gates and documentation checks
+
+  **What**: The updated omd.7 includes: `go build ./cmd/bwb` passes, `go vet ./...` passes, `docs/CODING.md` matches the implemented foundation, and `docs/TESTING.md` documents the test strategy. This addresses the first review's finding about missing quality gates and documentation checks in acceptance reviews.
+
+  **Why**: The acceptance review is now agent-executable. A verifier agent can run the build/vet commands, check test output, and verify doc accuracy — all without manual UI inspection.
+
+  **Suggested action**: None. This is now strong enough.
+---
+id: jm7v7wu0
+author: Hans Kohlreiter
+created: 2026-04-05T14:06:54Z
+body: |-
+  Acceptance review performed:\n- [PASS] All implementation tasks in the epic are closed — checked via 'bd show beads-workbench-omd.7' and 'bd show beads-workbench-omd'; all implementation dependencies (omd.1-.6, omd.8) are closed and the epic shows 8/9 complete with only omd.7 open.\n- [PASS] 'bwb' entrypoint exists in the repository — inspected cmd/bwb/main.go and cmd/bwb/; observed cmd/bwb/main.go defines package main with func main().\n- [PASS] The active code path depends on official beads surfaces only — inspected internal/gateway/beads/{runner.go,read_gateway.go,writes.go}; observed gateway operations shell out only through the bd CLI command surface (list, ready, blocked, show, search, statuses, types, label list-all, create, update, close, comments add).\n- [PASS] No direct SQL, BQL, or orchestration dependency is required for the gateway foundation — ran 'go list -deps ./cmd/bwb', 'go test -v ./cmd/bwb -run TestArchitectureGuardrails', and searched Go sources for 'database/sql|internal/bql|orchestration|control-plane|control_plane|bql'; observed no forbidden dependencies in the active path, and only the guardrail test references those patterns as checks.\n- [PASS] 'go build ./cmd/bwb' passes — ran 'go build ./cmd/bwb'; observed successful exit with no output.\n- [PASS] 'go vet ./...' passes — ran 'go vet ./...'; observed successful exit with no output.\n- [PASS] Tests for the gateway foundation pass — ran 'go test ./...', 'go test -v ./internal/gateway/beads/...', and 'go test -v ./cmd/bwb -run TestArchitectureGuardrails'; observed all tests passing, including gateway read/write/runner tests and architecture guardrails.\n- [PASS] docs/CODING.md matches the implemented foundation architecture — inspected docs/CODING.md against the repository layout (cmd/bwb, internal/{app,dashboard,domain,gateway,launcher,mode,ui}, docs) and gateway implementation; observed matching module/binary names, build/vet/test commands, package layout, and architectural guardrails.\n- [PASS] docs/TESTING.md documents the implemented foundation test strategy — inspected docs/TESTING.md against internal/gateway/beads tests and fixtures; observed it accurately documents unit-test seams, fixture location, current lack of integration/E2E coverage, and recommended verification commands.\n- [PASS] Any acceptance failures are captured as new follow-up issues — no acceptance failures were found, so no follow-up issues were required.\nResult: PASS — all acceptance criteria verified.

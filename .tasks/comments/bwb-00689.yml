@@ -1,0 +1,12 @@
+---
+id: safybo4n
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:32Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q2 — F1 bullet dropped from acceptance criteria (and the incorrect file path 'internal/mode/board/model.go' for mergeNotReadyIssues is now moot since the bullet is gone; mergeNotReadyIssues actually lives at internal/dashboard/composer.go:103). Acceptance criteria rewritten to cover F2/F3/F4/F5 only.
+---
+id: 0gt4grmr
+author: Hans Kohlreiter
+created: 2026-05-23T13:03:17Z
+body: |-
+  Verification complete. All 6 testable criteria PASS: (1) 3gru/dfc3/gx7n/bfoj all CLOSED; (2) F2 — grep confirms 'stale' only in banner code (lines 287/295) and unrelated in-flight dim comment (line 335); no '· stale' suffix, no stale-draft row dim; (3) F3 — singleflight gone from runner.go + cache.go; 'go mod why golang.org/x/sync' returns 'main module does not need package golang.org/x/sync'; (4) F4 — bounded-retention 3-line comment present above readCache.entries; (5) F5 — TestBoardModeNotReadyBothErrorSourcesSurface passes; both substrings + both errors.Is(sentinel) asserted; (6) mise run quality green (1101 unit + 1239 integration, -race) and mise run fmt:check green. Criterion 7 (/complexity-review re-run) marked UNVERIFIED — non-blocking; can be run post-merge if desired.

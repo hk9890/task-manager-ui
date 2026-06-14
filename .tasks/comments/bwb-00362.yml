@@ -1,0 +1,12 @@
+---
+id: hbdrk57y
+author: Hans Kohlreiter
+created: 2026-05-16T03:32:57Z
+body: |-
+  Update cites — stderrHandler.WithAttrs/WithGroup are at logging.go:297-318 (was :230-254). buildPersistentSink :127-148 unchanged. Both findings still valid.
+---
+id: 71ra3p4l
+author: Hans Kohlreiter
+created: 2026-05-16T03:58:58Z
+body: |-
+  Implemented. stderrHandler.mu changed to *sync.Mutex allocated once in newStderrHandler; WithAttrs/WithGroup copy the pointer so derived handlers coordinate on a single lock. failsafeSink wraps lumberjack writer: on first write error emits one warning to stderr (sentinel-guarded) and routes all subsequent writes there. concurrency_test.go adds: derived-mutex-identity, 10x100 concurrent stderr writes no-interleave, 10x100 concurrent JSON-file writes no-interleave, ENOSPC fake writer one-warning, 20-goroutine race producing exactly-one warning. All pass with -race -count=3.

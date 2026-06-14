@@ -1,0 +1,12 @@
+---
+id: h5awjw9l
+author: Hans Kohlreiter
+created: 2026-04-19T20:33:04Z
+body: |-
+  Tracking note: beads-workbench-3lhw is the implementation task for this epic. Beads does not allow task↔epic dependency edges, so the relationship is captured here by comment instead of a dependency link.
+---
+id: xfsrnens
+author: Hans Kohlreiter
+created: 2026-04-19T21:16:42Z
+body: |-
+  Closing epic: metadata-pane alignment and shared selection gutter work shipped in beads-workbench-3lhw. Remaining fallout is tracked separately in beads-workbench-fbu2 for stale search preview goldens after the gutter change.

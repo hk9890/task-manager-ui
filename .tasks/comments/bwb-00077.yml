@@ -1,0 +1,6 @@
+---
+id: qeegke5x
+author: Hans Kohlreiter
+created: 2026-04-07T12:35:35Z
+body: |-
+  Implemented: search query focus now treats rune keys as text input first, so j/k/h/l/r are inserted normally while query is focused; result-pane hotkeys remain active when results are focused. Added/updated search and app tests and verified with go test ./internal/mode/search ./internal/app plus full go test ./....

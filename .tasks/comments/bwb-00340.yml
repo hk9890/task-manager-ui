@@ -1,0 +1,6 @@
+---
+id: 0xxbx51j
+author: Hans Kohlreiter
+created: 2026-05-23T21:21:08Z
+body: |-
+  Implemented as specified. Package compiles standalone (no impl), all 5 godoc contract bits visible in 'go doc internal/repository.Repository' (concurrency safety, cancellation semantics, partial-failure shape for Dashboard, error code stability, catalog freshness for Catalogs), 14 tests pass in errorinjecting_test.go (error injection per method, delegation when no error set, snapshot isolation, clear-error, call tracking), 'mise run quality' green (1130 unit + 1268 integration tests pass, 0 lint, vet clean, guardrails pass). No file imports internal/gateway/beads/. No deviations from spec.

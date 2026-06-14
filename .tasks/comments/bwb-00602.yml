@@ -1,0 +1,6 @@
+---
+id: pkbetw5m
+author: Hans Kohlreiter
+created: 2026-05-31T12:06:14Z
+body: |-
+  Acceptance review PASS (verifier a932848, evidence re-checked against repo on branch epic/test-review-findings-o4cj). vudi: test absent from untagged build, present+passing under -tags integration -race, still forks REAL process (not stubbed) — confirmed. oe5s: file removed, both tiers pass. zgv4: TESTING.md justifications substantive, all 7 packages exist, bwb-smoke challenge answered. 42hk: disposition evidence-backed (S16 inline-seed structure verified at parity_integration_test.go:1326-1350), oay2 blocked+needs:discussion. mise run quality:fast green (1147 tests, -race). Tier rule holds. Caveat accepted: epic success criterion 'runtime materially reduced' unmet -> dispositioned to oay2.

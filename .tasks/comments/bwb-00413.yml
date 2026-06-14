@@ -1,0 +1,30 @@
+---
+id: guurxt7s
+author: Hans Kohlreiter
+created: 2026-04-08T10:58:11Z
+body: |-
+  Task 1 still renders Detail as a tab via hotkey '3' — task does not address removing the '3' keybinding. What: the current code at model.go:362-367 handles '3' as a Detail mode switch, and model.go:783-804 has nextMode/prevMode cycling through Board→Search→Detail. The task instructions say 'Remove Detail from top-level tab rendering' but do not instruct removal or re-mapping of the '3' hotkey or tab/shift+tab cycling behavior. Why: if '3' still opens Detail, users will perceive Detail as a tab even if it is visually absent, and the tab/shift+tab cycle will still include Detail as a stop. The tasker will either leave this inconsistency or make an undocumented decision. Suggested action: add instruction to remap '3' behavior (e.g., open detail for selected issue only, same as enter) and update tab/shift+tab cycle to skip Detail and cycle Board↔Search only. Detail entry becomes enter/o only.
+---
+id: rg63qe54
+author: Hans Kohlreiter
+created: 2026-04-08T10:58:18Z
+body: |-
+  Header right-side context is underspecified. What: instruction #1 says 'right-aligned context text' but does not define what the context text contains — is it the selected issue ID, the dashboard name, a combined selection+loading summary, or something else? The current footer already shows 'Selected: bwf-2 (blocked)' and loading state. Why: the tasker will have to guess what goes on the right side of the header, leading to either a wrong implementation or a design discussion mid-implementation. Suggested action: specify exactly what the right-side context contains: e.g., selected issue ID + status when an issue is selected, blank otherwise. Alternatively, move this definition into task 2 (chrome styling) and note task 1 only needs a placeholder.
+---
+id: y63ympi9
+author: Hans Kohlreiter
+created: 2026-04-08T10:58:21Z
+body: |-
+  Acceptance criterion 'Footer shows board/search/detail-specific help hints' is not testable as written. What: it says mode-specific help but does not specify what text should appear for each mode, or minimum key hints that must be present. Why: the verifier cannot distinguish a correct implementation from a wrong one without knowing expected content. A tasker could put 'press ? for help' in every mode and technically pass. Suggested action: specify at minimum the key hints that must be present per mode, e.g., Board footer must include h/l, j/k, enter, ?, q; Search footer must include /, esc; Detail footer must include j/k, e, esc.
+---
+id: rmarjkli
+author: Hans Kohlreiter
+created: 2026-04-08T10:58:36Z
+body: |-
+  The footer currently shows selection + loading state (model.go:647-669). Task instructions do not address what happens to this existing footer content. What: the current renderFooter() renders 'Selected: ID (status) · loading summary'. The task says to put mode-specific help in the footer but does not say whether the selection/loading info stays, moves, or is removed. Why: the tasker will either clobber the existing selection/loading footer info or keep two footer lines — both are wrong without explicit direction. Suggested action: specify that the footer has two sections: left = mode-specific help keys (new), right = selected issue + loading summary (existing), on a single line. Or explicitly say the selection info moves to the header context area and footer is help-only.
+---
+id: ojh1rhgq
+author: Hans Kohlreiter
+created: 2026-04-08T10:58:41Z
+body: |-
+  Golden file impact is larger than 'Files to Modify' suggests. What: the task says to modify model.go and model_test.go, but the header/footer changes will break 3 existing golden files (model_mode_switch_detail.golden, model_embedded_board_w120.golden, model_roundtrip_board_back_w120.golden) plus the headerHelpLines test (TestModelBoardHeaderUsesCompactHelpAt120Cols). Why: if the golden update scope is not mentioned, tasker may be surprised by unexpected test failures and may not regenerate all goldens correctly. Suggested action: add the 3 golden files to 'Files to Modify' and note that TestModelBoardHeaderUsesCompactHelpAt120Cols will need to change its assertions.

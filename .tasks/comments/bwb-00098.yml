@@ -1,0 +1,19 @@
+---
+id: z9ix7e1h
+author: Hans Kohlreiter
+created: 2026-05-29T08:04:37Z
+body: |-
+  ## Plan-review gate resolved — 2026-05-29
+
+  Reviewer plan-grill returned `grill-status: needs-answers` (Q1–Q8). Walked all questions with the owner; every question resolved by accepting the reviewer's recommendation. Decisions below; operative scope changes written into the child-task bodies (.1/.2/.3).
+
+  - **Q1** — Keep .1 → .2 strictly sequential (they edit the same three functions: dependencyGroups, the Dependencies branch of HandleKey, and the navigation flat-list). DEPENDS-ON link is correct; do NOT parallelize.
+  - **Q2 (blocking)** — Adding the "Children" group must update THREE parallel orderings in lockstep, all in .1 scope: (a) render order dependencyGroups (details.go), (b) nav flat-list browserItemsFromDependencies (mode/details/model.go), (c) the index→line walk DependencyRefLineIndex (details.go). Added an acceptance criterion to .1 for a BrowserSelectedIndex↔rendered-line consistency test with a Children group present.
+  - **Q3** — Group order: **Blocked by, Blocks, Related, Children, Structure** (Children/downward before Structure/parent+siblings/upward). Same order across all three orderings. Handles the mid-level-epic both-groups case.
+  - **Q4 (blocking)** — Concrete two-marker cursor-vs-subject spec written into .2: (a) cursor/pending row = background-highlight style; (b) subject row = separate persistent marker when in-list; (c) documented "subject not in-list → no marker" case. Each encoded as a golden. Replaces the un-testable "visually distinct" criterion.
+  - **Q5 (simplification)** — Drop the proposed new DetailContext config action for detail-Enter. Detail-Enter is hardcoded (model.go:178-199), not keymap-driven, and a no-op Enter stub already exists at ~187-189. Wire that stub to emit OpenRelatedIssueIntent. Removed config keybindings from .2's files-to-modify.
+  - **Q6** — The reload-on-arrow flow has NO current test coverage (grep of OpenRelatedIssueIntent in *_test.go → none). Added three test assertions to .2: arrow→nil intent (no reload); Enter→OpenRelatedIssueIntent; app handler still reloads+focuses+scroll-resets.
+  - **Q7** — Demoted .1's criterion #4 ("no repo change; confirmed") from an acceptance checkbox to established context in the body (not independently testable; children already populated in lean_reads/lean_payloads).
+  - **Q8** — Gated .3's visual-distinction check on .2's concrete Q4 markers; "looks distinct" is not a sufficient pass condition.
+
+  Line numbers in the task bodies are guidance for the tasker to confirm against the files, not gate conditions. No `need:review` label existed on this epic, so none to remove.

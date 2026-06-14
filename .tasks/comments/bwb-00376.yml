@@ -1,0 +1,6 @@
+---
+id: vwkzqrqv
+author: Hans Kohlreiter
+created: 2026-05-11T14:49:10Z
+body: |-
+  Implemented explicit search result metadata contract. Replaced ambiguous `Total` with `returned_count`/`requested_limit`/`completeness`/`source`/`notice`, updated gateway search/list/ready/blocked paths to report honest completeness semantics, and added targeted gateway/fake/search tests (`go test ./internal/gateway/beads ./internal/testing/fakes ./internal/mode/search`).

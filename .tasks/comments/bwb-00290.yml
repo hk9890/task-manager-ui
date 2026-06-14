@@ -1,0 +1,12 @@
+---
+id: 0ubylfkl
+author: Hans Kohlreiter
+created: 2026-05-22T07:36:23Z
+body: |-
+  Implemented pruneStaleLogFiles in internal/logging/logging.go, called from buildPersistentSink on startup. Globs bwb-*.log in the state dir, computes cutoff from time.Now().AddDate(0,0,-rotationMaxAgeDays) reusing the existing 30-day constant (no second hardcode), skips the current session's file unconditionally, and ignores per-file stat/remove errors so a prune failure never blocks startup.
+
+  Unit test TestPruneStaleLogFiles added: stale files removed, fresh files kept, current session file kept regardless of age, non-matching files untouched. Passes under -race.
+
+  docs/MONITORING.md updated with a bullet describing the prune behavior under 'Implemented behavior'.
+
+  All three acceptance criteria met. Orchestrator verification on combined final state: mise run quality:fast (vet, lint 0 issues, guardrails, 1070 unit tests) PASS; mise run test:integration (1208 tests) PASS. Note: the tasker flagged a 'pre-existing unused sync import' bug in read_gateway_test.go -- this was a transient observation of the concurrently-running beads-workbench-ikoe tasker's mid-edit state; the final combined tree is clean (vet passes). No follow-up needed.

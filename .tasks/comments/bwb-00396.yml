@@ -1,0 +1,6 @@
+---
+id: q4x1kodh
+author: Hans Kohlreiter
+created: 2026-04-11T12:11:37Z
+body: |-
+  Verified v0.1.0 release: non-draft/non-prerelease at https://github.com/hk9890/beads-workbench/releases/tag/v0.1.0. Tag v0.1.0 -> 86233df; HEAD -> 0167206 (one commit ahead: chore touching only ai.package.yaml). Repo visibility is PRIVATE, so release is visible to authorized users but not publicly accessible. ai.package.yaml delta is tooling-only; no patch release required for product correctness. Created follow-up task to reconcile public visibility expectation.

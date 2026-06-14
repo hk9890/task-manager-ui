@@ -1,0 +1,6 @@
+---
+id: kg7j14cp
+author: Hans Kohlreiter
+created: 2026-05-24T13:08:27Z
+body: |-
+  Added Related/ParentID/ChildrenIDs to SnapshotIssue + wired through Snapshot() and filestorage.LoadWithManifest. BlocksIDs intentionally omitted because toDetailLocked reverse-lookup makes DependsOn sufficient. JSON tags omitted to match existing PascalCase convention (no breaking format change). TestSnapshot_LosslessRoundTrip_FullDetail asserts deep-equal on all fields. quality:fast green (963 tests). Commit a352fc0.

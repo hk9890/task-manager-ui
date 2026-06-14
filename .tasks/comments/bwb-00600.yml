@@ -1,0 +1,15 @@
+---
+id: cd42gu6y
+author: Hans Kohlreiter
+created: 2026-06-05T15:59:28Z
+body: |-
+  Implemented. Replaced the board-row skeleton (issuerow.RenderCompactSkeleton) in the Content-body
+  skeleton branch with renderProseContentSkeleton: a heading bar (~55%) then paragraph blocks of
+  varying-width ░ bars with blank-line gaps, pulsing on the same styles.SkeletonShades phase. Same
+  line count (n = max(1, availableHeight-len(upper))) so layout/height is unchanged. Dependencies rail
+  keeps the row skeleton.
+  Tests: TestContentBodySkeletonIsProseNotBoardRows (asserts n lines, >=1 blank gap, and lines != board-row
+  skeleton); TestColdStartSkeletonLayoutStabilityMatchesLoadedDetail still PASS (all 3 sub-tests).
+  Regenerated 3 search loading-state goldens (preview content skeleton now prose-shaped). Verified
+  independently; full go test ./... PASS. mise run quality PASS (1166 unit + 1317 integration).
+  Coexists with dzom's isPlaceholderSummary change in the same function.

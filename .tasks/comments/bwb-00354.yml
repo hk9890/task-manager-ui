@@ -1,0 +1,18 @@
+---
+id: 4kj9pkuy
+author: Hans Kohlreiter
+created: 2026-05-15T23:05:23Z
+body: |-
+  Complementary to beads-workbench-lsb4 (au54 epic). lsb4 swaps the health-check command (bd list → bd ping) but keeps the existing substring detection. This issue tracks the orthogonal improvement to detection mechanism (exit code / structured signal). Sequence: lsb4 first, then this.
+---
+id: c0frr6eb
+author: Hans Kohlreiter
+created: 2026-05-16T03:32:58Z
+body: |-
+  Update cite: stderr substring match is now at runner.go:128 (was :114). Drop instruction step 3 ('file upstream bd request') — orchestrator-level decision, not tasker work. Replace with: 'if no stable signal is available today, document the substring as a pinning test and add a TODO comment.'
+---
+id: dfhzwsii
+author: Hans Kohlreiter
+created: 2026-05-16T04:09:12Z
+body: |-
+  Implemented as best-effort detection. Investigation: bd 1.0.4 has no stable signal (no dedicated exit code, no structured error). TestMissingBDDatabaseDetectionSubstringPin pins the wording with real bd against an empty dir; TODO comment at runner.go detection site references this ticket and the absence of a stable signal upstream.

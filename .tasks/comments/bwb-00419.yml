@@ -1,0 +1,36 @@
+---
+id: 4rt1ife4
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:57Z
+body: |-
+  ## [LOW] Simplification opportunity: consider merging beads-workbench-yze.4.3 and beads-workbench-yze.4.4
+
+  **What**: Task 4.3 creates the launcher framework and task 4.4 adds built-in launcher definitions. These are small, tightly coupled tasks — the framework is useless without at least one launcher, and the built-in launchers are the only way to validate the framework works.
+
+  **Why**: Splitting framework from built-in implementations creates two tasks where one would be more coherent. The framework task has no way to verify its abstractions are correct without real launchers to test against. Merging them would reduce context-switching overhead and ensure the framework is validated during creation rather than after.
+
+  **Suggested action**: Consider merging 4.3 and 4.4 into a single task: "Implement launcher framework with built-in actions for common terminal workflows." Keep the combined acceptance criteria from both. This reduces from 6 tasks to 5 in the editor/launcher epic with no loss of coverage.
+---
+id: 2rdt8fkm
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:19Z
+body: |-
+  ## yze.4.2 (CRUD actions) and yze.4.3 (launcher framework) can run in parallel — correctly structured
+
+  **What**: Both `beads-workbench-yze.4.2` (create/update/close/comment) and `beads-workbench-yze.4.3` (launcher framework) depend only on `beads-workbench-yze.3.6` (browsing acceptance). They do not depend on each other. This correctly enables parallel execution of two independent feature tracks within the editor/launcher epic.
+
+  **Why**: CRUD actions and launchers are orthogonal features — one writes issue data through the gateway, the other spawns external processes. There is no reason for sequential execution. The parallel structure allows two agents to work simultaneously on Phase 4.
+
+  **Suggested action**: No change needed. The parallel structure is correct. Similarly, yze.4.1 (editor flow) is correctly parallel with yze.4.2 and yze.4.3.
+---
+id: 11t1mmvt
+author: Hans Kohlreiter
+created: 2026-04-05T17:31:17Z
+body: |-
+  User review of the current runtime showed the browsing layout is not yet product-acceptable despite functional implementation. Prioritizing quality first: pause further feature expansion and fix the board/detail browsing presentation before continuing deeper editor/launcher work.
+---
+id: 0lqmkji2
+author: Hans Kohlreiter
+created: 2026-04-06T11:58:02Z
+body: |-
+  User explicitly requires no future feature work until the UI is genuinely good. Continue treating UI/dashboard quality as the top priority; do not resume editor/launcher feature expansion until the board/dashboard experience is brought to an actually reviewable standard.

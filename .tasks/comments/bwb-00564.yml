@@ -1,0 +1,6 @@
+---
+id: 5is40zoi
+author: Hans Kohlreiter
+created: 2026-05-24T06:33:43Z
+body: |-
+  Design questions settled 2026-05-24 (user confirmed all recommended options): Q1 invalidation = (a) periodic 'bd vc status' Dolt-commit-hash poll on the refresh tick; treat unchanged hash as no external write; ignore mtime advances from our own bd-show calls. Q2 write semantics = synchronous (bd first, then memory on success). Q3 refresh trigger = hybrid (startup hydrate from persisted JSONL + periodic tick, 60s default). Q4 multi-process safety = per-session cache file at ~/.cache/bwb/<hash>-<session>/ (no locking). Q5 catalogs freshness = TTL refresh (cache catalogs with ~5min TTL, transparent refresh when stale).

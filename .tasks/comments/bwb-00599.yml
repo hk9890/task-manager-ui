@@ -1,0 +1,50 @@
+---
+id: ox8ngzqe
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:50Z
+body: |-
+  ## docs/CODING.md will be immediately stale after bootstrap
+
+  **What**: `docs/CODING.md` line 20 says "Planned layout — directories will be created during implementation" and lists the intended package structure. This task creates the actual directories. After this task closes, the doc will still say "planned" when the layout is real. Meanwhile, `CLAUDE.md` lines 53-69 contain placeholder sections ("_Add your build and test commands here_", "_Add a brief overview of your project architecture_") that should be populated during bootstrap.
+
+  **Why**: `AGENTS.md` line 9 sends every future agent to `docs/CODING.md` as the primary coding reference. If the doc says "planned" when the layout exists, or if `CLAUDE.md` says "add your commands here" when `go build ./cmd/bwb` is the correct command, the first session after bootstrap starts with wrong context. This is the cheapest moment to fix both — the person doing bootstrap knows exactly what landed.
+
+  **Suggested action**: Add two acceptance criteria:
+  - `docs/CODING.md` "Planned layout" section is updated to reflect the actual created layout (remove "Planned layout — directories will be created during implementation" language)
+  - `CLAUDE.md` placeholder sections are populated with real build/test commands, architecture overview, and coding conventions that match what was bootstrapped
+---
+id: ur5h4ee3
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:59Z
+body: |-
+  ## [LOW] Bootstrap task has strong forbidden-path list — positive finding
+
+  **What**: The task explicitly lists four forbidden donor starting points by absolute path: orchestration, bql, beads/infrastructure, and app/app.go. The acceptance criteria include "No SQL, BQL, or orchestration package is added to the active foundation path."
+
+  **Why**: This is a well-constructed guardrail. Naming the specific forbidden paths removes ambiguity for the implementing agent.
+
+  **Suggested action**: None. This is a strong protection.
+---
+id: sh0uzj7v
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:30Z
+body: |-
+  ## [MINOR] docs/CODING.md update is not in omd.1 acceptance criteria — still relies on omd.7 backstop only
+
+  **What**: The prior review comment on omd.1 specifically recommended adding acceptance criteria requiring docs/CODING.md to be updated from "planned layout" to actual layout during the bootstrap task. The updated omd.1 acceptance criteria still do not include a docs update requirement. The docs gate only appears at omd.7 (acceptance review).
+
+  **Why**: This is a minor gap, not a blocker, because omd.7 now catches it. But the optimal time to update "Planned layout — directories will be created during implementation" is during omd.1 when the person doing the bootstrap knows exactly what was created. Deferring to omd.7 means either the acceptance reviewer does it (wrong — reviewers should verify, not implement) or the reviewer creates a follow-up task for a 30-second docs fix that should have been done inline.
+
+  **Suggested action**: Add to omd.1 acceptance criteria: "docs/CODING.md 'Planned layout' language is updated to reflect actually-created directories." This is low-severity because omd.7 is the backstop, but it would be cleaner to fix it at the source.
+---
+id: 35oht5qh
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:53Z
+body: |-
+  ## [MINOR] No implementation task explicitly updates CODING.md package layout — only acceptance reviews verify it
+
+  **What**: Multiple acceptance reviews verify that docs/CODING.md reflects the current architecture. But looking at the implementation tasks themselves, only omd.8 and yze.2.6 explicitly list "docs/CODING.md (update)" in their Files to Modify. The tasks that actually create new packages — omd.1 (bootstrap), omd.2 (domain/gateway interfaces), yze.2.1 (app model), yze.3.x (mode controllers) — do not include docs/CODING.md in their scope.
+
+  **Why**: This means the actual CODING.md update work falls to acceptance reviewers, who are supposed to verify, not implement. The reviewer at omd.7 will find CODING.md says "planned layout" and have to either update it themselves or create a follow-up task. This isn't catastrophic because the acceptance reviews catch it, but it creates unnecessary rework cycles.
+
+  **Suggested action**: This is a low-severity pattern issue. The acceptance review backstop works. But for clean execution, consider adding "Update docs/CODING.md package layout section to reflect created packages" to omd.1's scope. This is the single most impactful place to fix it since omd.1 creates the entire initial package tree.

@@ -1,0 +1,6 @@
+---
+id: kzb0fadc
+author: Hans Kohlreiter
+created: 2026-05-28T13:41:35Z
+body: |-
+  Implemented in commit (next git log entry). Composer PriorClosed merge with ID dedup + sort-merge. Tests added in composer_appendclosed_test.go. quality:fast green (1121).

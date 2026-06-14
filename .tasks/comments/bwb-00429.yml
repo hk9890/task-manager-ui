@@ -1,0 +1,12 @@
+---
+id: ftr06jxl
+author: Hans Kohlreiter
+created: 2026-05-30T15:25:59Z
+body: |-
+  Plan review (reviewer a2db89): flipped recommended fix from option (b) stub rewrite to option (a) retag-as-integration. Verified: option (b) would destroy the only coverage of osCommandExecutor's real SIGKILL->(ExitCode -1, non-nil err) conversion (d2oj.2 fix) — the sibling TestCommandRunnerRunLogsErrFieldOnSignalKill only covers the CommandRunner logging path via a stub. Integration home runner_integration_test.go already exists. Added coverage-preservation AC.
+---
+id: rjoqrgkg
+author: Hans Kohlreiter
+created: 2026-05-31T12:00:13Z
+body: |-
+  Done (commit b40cfff). Moved TestOsCommandExecutorSignalKillPreservesError verbatim from runner_test.go (was untagged, forked real sleep) into runner_integration_test.go; added time import there. Verified: go test -race ./internal/bd/ PASS 1.21s with test absent; go test -tags integration -race ./internal/bd/ PASS, test runs (0.10s). Real-executor SIGKILL coverage preserved (option a), not stub-rewritten.

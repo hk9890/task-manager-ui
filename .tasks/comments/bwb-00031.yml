@@ -1,0 +1,6 @@
+---
+id: 9j99bzhf
+author: Hans Kohlreiter
+created: 2026-05-16T16:00:10Z
+body: |-
+  Plan reviewed in-session with user during planning turn; explicit GO given via /beads-tasks:beads-work invocation 2026-05-16. Proceeding to execution. Bugs ssom/o7tk/kh54 will be fixed before parity tests so the post-fix tests serve as regression coverage on real datasets rather than expected-failure assertions.

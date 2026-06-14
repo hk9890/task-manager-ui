@@ -1,0 +1,6 @@
+---
+id: fai1z00l
+author: Hans Kohlreiter
+created: 2026-05-21T18:34:46Z
+body: |-
+  Investigation complete. Root cause: concurrent bd subprocess fan-out, not slow bd or lock contention. The 20:16 slow cluster was ~12-16 'bd show' subprocesses launched within ~1s; durations form a contention staircase. Standalone 'bd show' is ~410ms warm but 12 concurrent took 4.8s wall. Amplified by redundant parent re-fetches: parentSiblingCache (read_gateway.go ~836-878) is populated only after the fetch, so concurrent sibling loads all cache-miss and re-fetch the same parent. Follow-up fix tracked in beads-workbench-ikoe (single-flight parent fetch). Not release-blocking.

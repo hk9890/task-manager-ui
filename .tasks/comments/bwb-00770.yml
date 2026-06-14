@@ -1,0 +1,6 @@
+---
+id: 2ive2xro
+author: Hans Kohlreiter
+created: 2026-05-24T11:32:14Z
+body: |-
+  Done. All BeadsGateway/beads-gateway vocabulary removed from docs/, AGENTS.md, project-plan/, and all internal/*/doc.go files. Created internal/repository/beads/doc.go. ARCHITECTURE.md Core Interface section rewritten with lean stack diagram. Both acceptance greps return 0 hits. quality:fast + build green. Commits: bf378a2, 1625ead, b91c372.

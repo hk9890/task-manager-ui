@@ -1,0 +1,18 @@
+---
+id: 1draqbkw
+author: Hans Kohlreiter
+created: 2026-04-18T20:18:26Z
+body: |-
+  Review — scroll architecture analysis: The scroll implementation is purely integer-offset based (applyScrollAction at model.go:370-386) with move=1 per key press. There is NO animation, momentum, or async scroll. The 'continues after key stops' symptom is almost certainly terminal key-repeat buffering: held keys generate a burst of KeyMsg events that queue in Bubble Tea's event loop, and the UI processes them after the key is released. This is not a bug in this codebase — it's standard terminal key-repeat behavior. What: the reported symptom is likely terminal key-repeat event queuing, not a scroll state bug. The 'slow' feel is because move=1 scrolls one line per keypress, which at terminal repeat rates feels sluggish for long content. Why: if the real problem is key-repeat perception, the fix is either (a) debouncing scroll events or (b) increasing scroll step size, NOT fixing scroll state logic. Suggested action: (1) verify by testing with a single discrete key tap — if one tap = one line and it stops, it's key-repeat. (2) If confirmed, downgrade to P2 and consider increasing scroll-down step to 2-3 lines, or adding j/k acceleration on held keys. Do NOT redesign the scroll system for a non-bug.
+---
+id: sfkoyr1m
+author: Hans Kohlreiter
+created: 2026-04-18T20:23:58Z
+body: |-
+  Set review — investigation-first framing is correct, likely a non-bug. What: the scroll code (applyScrollAction, move=1) is purely discrete with no animation or momentum. The prior reviewer's analysis is accurate — this is almost certainly terminal key-repeat buffering. The acceptance criteria correctly require reproduction before any code change. Why: this should not block any other work in the set. If investigation confirms key-repeat, the only reasonable action is either (a) close as wontfix/not-a-bug, or (b) optionally increase scroll step to 2-3 lines for faster traversal. Suggested action: deprioritize to last in execution order. Have the implementer do a single-tap test; if single tap = exactly one line of scroll, close this issue with a finding comment. Do not redesign scroll.
+---
+id: hcuq7tw8
+author: Hans Kohlreiter
+created: 2026-04-18T22:29:10Z
+body: |-
+  Verifier: reproduced with embedded fixture + PTY capture. Single Down produced one discrete content-step; rapid repeated Down produced matching discrete queued steps that rendered shortly after the last key. No async momentum or detail-mode state bug found. Artifact: /tmp/bwb-verify-pxs-t8fTvk

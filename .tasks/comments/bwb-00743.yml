@@ -1,0 +1,6 @@
+---
+id: 0z9i00g3
+author: Hans Kohlreiter
+created: 2026-05-17T10:52:57Z
+body: |-
+  Verified. All implementation tasks closed. grep for routingExecutor returns zero. ARGV_CONTRACT.md has 16 verb-level shapes, all marked YES in pinning coverage. Spot-checked tests pass; deliberate-break (add --phantom flag to searchIssuesFromReady) fires immediately. Documentation in place (doc.go Argv contract testing section, AGENTS.md pointer, fakes/doc.go cross-link). No discipline bugs surfaced. mise run quality green (805+939 tests, 0 lint, 0 vet).

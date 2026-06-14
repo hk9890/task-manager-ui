@@ -1,0 +1,12 @@
+---
+id: sfekhamu
+author: Hans Kohlreiter
+created: 2026-06-05T15:42:58Z
+body: |-
+  Implemented. Sentinel detection isPlaceholderSummary (ID=="(none)" && Type=="") with an
+  early-return in renderContentPaneLines that suppresses the meta row + thin rule for the
+  placeholder only; real issue headers unchanged. Test
+  TestRenderContentPaneLinesPlaceholderSuppressesMetaRowAndRule (placeholder-omits + real-retains
+  subtests). Golden diff confirmed: only the two search no-selection goldens changed; "? P0 (NO (none)"
+  and the rule are removed. Verified independently (PASS). Gates: vet, lint (0), guardrails,
+  unit (1161), integration (1312) — all PASS.

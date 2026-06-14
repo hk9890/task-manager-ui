@@ -1,0 +1,27 @@
+---
+id: hzpscapf
+author: Hans Kohlreiter
+created: 2026-05-25T07:37:18Z
+body: |-
+  Implemented in commits ddf01c6 + 9176896.
+
+  `internal/mode/search/model_async_test.go` adds `TestSearchControllerAsyncContracts` with five `t.Run` subtests:
+  - TypeAndEnterDuringInitialLoad_EventuallySubmitsTypedQuery
+  - TypeAndEnterDuringPriorSearch_EventuallySubmitsLatestDraft
+  - EnterIsNotSilentlyDropped
+  - HasDraftChangesResolves
+  - EmptyAutoInitDoesNotLeakClosedRowsUnderTypedDraft
+
+  Run: `go test ./internal/mode/search/... -run TestSearchControllerAsyncContracts -v`
+
+  Helpers added in the test file:
+  - `DelayedFakeRepository` — Release()-driven blocking Search() wrapper around any `repository.Repository`. Documented, exposes `InFlight() int`. Reusable for the detail-mode follow-up.
+  - `bdDefaultFilterRepo` — mirrors `bd search`'s default (drops closed when query.Statuses is empty), used to give the leak test a real result-set assertion that would catch a reversion of `lean_reads.go`.
+
+  The async harness drives the controller via Bubble Tea's real Cmd-then-Msg cadence (not the synchronous `pressAndResolve` drain) — this is the visibility tier that was missing when czkq.4 went undetected.
+
+  `docs/TESTING.md` extended with a paragraph under the Bubble Tea UI Testing Strategy section describing the controller-async contract tier and when to add to it.
+
+  Quality gates green: 1019 tests pass, 0 lint issues, vet clean, fmt clean.
+
+  Note: ticket said "tests should be marked t.Skip or left failing pinning czkq.4". That instruction was stale at execution time (czkq.4 is fixed in commit 2d60d94). Tests are written as passing regression coverage instead. Two of the assertions (pendingDraft-fired check; closed-issues-absent check) would fail if commit 2d60d94 were reverted, satisfying the AC bullet "at least one test demonstrates the bug is reproducible in the harness".

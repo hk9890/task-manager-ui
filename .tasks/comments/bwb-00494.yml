@@ -1,0 +1,6 @@
+---
+id: 4zdjxpl4
+author: Hans Kohlreiter
+created: 2026-05-19T15:29:38Z
+body: |-
+  Completed in commit 5726fbf. prevField 0% → 100%; Update 52.9% → 56.9%; ui/modal package 43.6% → 54.5%. quality:fast clean (859 tests). Test runtime <10ms.

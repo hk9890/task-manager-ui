@@ -1,0 +1,36 @@
+---
+id: 9cc1y0c0
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:09Z
+body: |-
+  ## Gateway interface is missing StatusCatalog, TypeCatalog, and LabelCatalog methods
+
+  **What**: The architecture doc (ARCHITECTURE.md lines 101-103) specifies `StatusCatalog` and `TypeCatalog` on the `BeadsGateway` interface. The task description for omd.2 says to define the gateway interface, but its scope lists only list/ready/blocked/show for reads and create/update/close/comment for writes. It does not mention catalog queries. The bd CLI confirms `bd statuses --json`, `bd types --json`, and `bd label list-all` all exist and return structured data. These are needed by the search UI (yze.3.3 requires structured filters for status, type, priority, assignee, labels) and by the create/update actions (yze.4.2 needs to populate dropdowns).
+
+  **Why**: If the gateway interface is defined without catalog methods, the search and create/update tasks will either (a) shell out to bd directly from the UI, violating the core architectural rule, or (b) require retroactive gateway changes that re-open closed Phase 1 work. This is a gap between the architecture spec and the task instructions.
+
+  **Suggested action**: Add explicit scope items to this task: define `StatusCatalog`, `TypeCatalog`, and `LabelCatalog` (or equivalent) query types and methods on the `BeadsGateway` interface. Also add corresponding implementation items to omd.4 (read operations) to implement these against `bd statuses --json`, `bd types --json`, and `bd label list-all --json`.
+---
+id: 118criua
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:45Z
+body: |-
+  ## [MEDIUM] StatusCatalog and TypeCatalog methods missing from gateway interface scope
+
+  **What**: The ARCHITECTURE.md defines the `BeadsGateway` interface shape with `StatusCatalog(ctx) ([]StatusOption, error)` and `TypeCatalog(ctx) ([]TypeOption, error)` (lines 101-102). These are needed for create/update UI controls (dropdowns for status, type selection). This task's instructions list query/mutation models but do not mention catalog models or catalog methods.
+
+  **Why**: If the gateway interface is defined without catalog methods, the create/update UI tasks (beads-workbench-yze.4.2) will either (a) hardcode status/type values, which breaks across projects, or (b) add catalog methods later as a bolt-on, creating interface churn after the gateway is "accepted." The architecture explicitly calls these out.
+
+  **Suggested action**: Add to instructions: "Define catalog query methods for status and type options as part of the gateway interface, per ARCHITECTURE.md lines 101-102." Add corresponding acceptance criterion: "Catalog methods for status and type options exist on the gateway interface."
+---
+id: 7ww2ueih
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:44Z
+body: |-
+  ## [PASS] Catalog methods are now addressed in both interface and read operations
+
+  **What**: The first review flagged missing StatusCatalog/TypeCatalog/LabelCatalog methods. The updated omd.2 now includes instruction #6: "Include catalog/query methods needed by the UI and write flows, including status, type, and label catalogs" and acceptance criterion #6: "The interface includes catalog methods for status, type, and labels needed by the UI." omd.4 also includes instruction #2: "Implement catalog reads needed by the UI and write flows, including status, type, and label catalogs."
+
+  **Why**: This closes the cross-epic dependency gap where search (yze.3.3) and create/update (yze.4.2) would have needed catalog data that didn't exist in the gateway.
+
+  **Suggested action**: None. This gap is closed.

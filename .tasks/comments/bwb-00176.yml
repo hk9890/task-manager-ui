@@ -1,0 +1,6 @@
+---
+id: qrekgc2c
+author: Hans Kohlreiter
+created: 2026-04-18T15:24:57Z
+body: |-
+  Current repo state note before execution: README.md already includes docs/RUNTIME_UI_VERIFICATION.md and docs/user-guide/key-bindings.md already marks backspace/ctrl+u as built-in/non-configurable. Remaining actionable item is the CODING.md wording mismatch (internal/mode/details vs 'detail' in descriptive text).

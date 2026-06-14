@@ -1,0 +1,12 @@
+---
+id: 5ru3n4py
+author: Hans Kohlreiter
+created: 2026-04-23T06:43:09Z
+body: |-
+  Reviewer found no open questions. Most likely root cause is ANSI-unaware truncation of glamour-rendered markdown/code-block comment lines in the detail renderer, which can leak styling and overflow into adjacent panes. Proceeding with implementation and focused verification.
+---
+id: hjivq8rs
+author: Hans Kohlreiter
+created: 2026-04-23T06:48:04Z
+body: |-
+  Implemented ANSI-safe truncation in shared styles path, added regression tests for ANSI truncation + comment-heavy markdown width bounding, and re-verified detail rendering via PTY capture (artifact: /home/hans/.local/share/opencode/tool-output/tool_db9186a30001IJmDy5PQw5FRWR).

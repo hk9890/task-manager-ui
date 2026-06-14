@@ -1,0 +1,6 @@
+---
+id: gx687hf0
+author: Hans Kohlreiter
+created: 2026-04-19T09:59:59Z
+body: |-
+  Execution started from acceptance-review follow-up. Goal: blur->focus should bypass stale/dirty gating and force immediate refresh of the active surface with regression coverage for board/detail/search behavior.

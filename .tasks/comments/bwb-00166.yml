@@ -1,0 +1,6 @@
+---
+id: mgz8xjf6
+author: Hans Kohlreiter
+created: 2026-04-19T20:09:53Z
+body: |-
+  Review: Issue is clear. The root cause is well-identified — wrapper exits before bd state is flushed. Acceptance criteria are testable. One concern: 'settled post-submit state' is vague. What concrete signal should the wrapper wait for? Disappearance of the modal? Return to board? A specific text pattern? Why: the implementer needs a concrete condition, not just 'wait longer.' Suggested action: acceptance criteria should specify the observable signal (e.g., wait-for-no-text of the modal title, or wait-for-text of the board view). Verdict: EPIC BLOCKER — the wrapper's core value proposition is proving mutation worked; if it can't do that reliably, the toolkit is broken.

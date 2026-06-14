@@ -1,0 +1,24 @@
+---
+id: 93qjmfnr
+author: Hans Kohlreiter
+created: 2026-04-08T11:00:03Z
+body: |-
+  Plan simplification recommendation: merge task 2 into task 1. Task 2 (chrome styling) cannot meaningfully exist as a separate task from task 1 (header restructuring). The current code already applies tab styling — task 1 must make styling decisions to render a working one-line header. Task 2 as a P2 polish pass after task 1 will either find the work already done or create churn re-styling what task 1 just built. Merging them keeps the epic at 3 beads (structural header+footer+styling, board coloring, acceptance) instead of 4. The implementation is small enough to be one task.
+---
+id: 497tkfnj
+author: Hans Kohlreiter
+created: 2026-04-08T11:00:07Z
+body: |-
+  Hidden risk: the UI.ShowModeSwitcherHelp config flag (model.go:600-601) gates the current help lines. Task 1 moves help to the footer, but this config flag check still applies. If this flag is false, the user gets no help at all — neither header nor footer. The plan does not address this. Suggested action: task 1 instructions should state that the footer help is always shown (remove the config gate) or that ShowModeSwitcherHelp now controls footer visibility instead. The config field name may need updating too.
+---
+id: kf52z3k1
+author: Hans Kohlreiter
+created: 2026-04-08T11:00:12Z
+body: |-
+  Donor migration rules compliance: the plan correctly scopes donor reuse to UI primitives only. The referenced donor paths (issuebadge, styles) are within the allowed donor paths listed in CODING.md. The column.go reference is informational context only and imports bql which is on the forbidden list — as long as only the rendering pattern is adapted and no code is copied from column.go's BQL/orchestration paths, this is fine. No compliance issue found.
+---
+id: y9kvnz02
+author: Hans Kohlreiter
+created: 2026-04-08T11:04:19Z
+body: |-
+  Reviewer feedback applied: merged 2sh.2 into 2sh.1, clarified header/footer keyboard behavior, specified header context/footer hints, constrained board-coloring scope, and made acceptance checks concrete.

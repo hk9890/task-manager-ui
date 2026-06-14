@@ -1,0 +1,75 @@
+---
+id: 2rtjsyex
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:41Z
+body: |-
+  ## External editor flow has no subprocess seam for testing — will require manual terminal interaction
+
+  **What**: Task beads-workbench-yze.4.1 implements the external editor flow (launch `$EDITOR`, wait for save, parse result). Task beads-workbench-yze.4.5 says "Add tests for the external editor flow using deterministic temp-file and subprocess seams." However, no task between them actually creates the subprocess seam that makes the editor testable. The implementation task (4.1) says nothing about designing for testability — it says "Copy or adapt only the external-editor and issue-document helpers."
+
+  **Why**: If the editor flow is implemented without an explicit seam (e.g., an `EditorOpener` interface that can be replaced in tests with a function that writes to the temp file programmatically), then tests in 4.5 will either need to actually launch an editor (impossible for agents) or will have to retrofit a seam after the fact (rework). The donor code at `perles/internal/ui/shared/vimtextarea/external_editor.go` likely has its own approach — but the plan doesn't require the transplanted code to preserve or introduce testability seams.
+
+  **Suggested action**: Add an explicit requirement to beads-workbench-yze.4.1:
+  - The editor flow MUST use an injectable `EditorOpener` interface (or equivalent seam) so tests can substitute a fake editor that writes predetermined content to the temp file
+  - The issue document parse/diff logic MUST be testable independently from the subprocess launch
+  - Acceptance criteria should include: "Editor open behavior is behind a replaceable interface for testing"
+---
+id: mit6dcfm
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:48Z
+body: |-
+  ## Editor handoff task needs explicit scope for issue document format spec
+
+  **What**: The instructions say "render editable issue document" and "parse the saved result," but there is no specification of the document format — what frontmatter fields, what sections, what's editable vs. read-only, what happens with unknown fields. The donor paths are listed as reference but the format itself is not defined. The acceptance criteria say "issue documents can be rendered and parsed back into changes" without specifying what the document looks like.
+
+  **Why**: The document format is a contract between the render step and the parse step. Without a spec, the implementing agent will invent a format, which may not round-trip cleanly, may miss fields the update gateway supports, or may include fields that can't be written back. This is the kind of "seems easy, breaks subtly" work that causes rework. The donor format from Perles may have SQL-era assumptions baked into it.
+
+  **Suggested action**: Add an explicit sub-step: "Define the editable issue document format before implementing render/parse." This should specify: (1) which fields appear in the document, (2) which fields are editable vs. read-only, (3) the frontmatter/body structure, (4) how the parser detects changes vs. unchanged fields. This can reference the donor format but must be validated against the new gateway's supported update fields.
+---
+id: 7g61p4ku
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:43Z
+body: |-
+  ## [LOW] Editor flow task correctly isolates donor reuse to clean helpers — positive finding
+
+  **What**: The donor paths referenced (vimtextarea/external_editor.go, editor/issue_markdown.go) have zero BQL/SQL/orchestration imports. These are genuinely clean reuse candidates.
+
+  **Why**: This is architecturally sound. Unlike the board and details donors, these editor helpers are isolated utilities that don't carry architectural baggage.
+
+  **Suggested action**: None. The task correctly targets the cleanest donor components.
+---
+id: jvgdruao
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:06Z
+body: |-
+  ## PASS: yze.4.1 and yze.4.3 now require testability seams in implementation — not deferred to test tasks
+
+  **What**: `beads-workbench-yze.4.1` (editor flow) now includes "Put editor launching behind a replaceable seam so tests never need to spawn a real interactive editor" with acceptance criterion "Editor launch behavior is behind a replaceable seam for automated tests." `beads-workbench-yze.4.3` (launcher framework) includes "Put process launching behind a replaceable seam" with criterion "Process launching is behind a replaceable seam for automated tests." These address the prior review finding about missing subprocess seams.
+
+  **Why**: The testability seams are now required as part of implementation, not as a discovery during the test task. This is the correct pattern — the implementing agent builds the seam, and the test task exercises it. This matches the omd.3 pattern (command runner test seams) that was identified as the strongest testability feature.
+
+  **Suggested action**: No change needed. The seam requirements are properly placed in the implementation tasks.
+---
+id: 8ya9jddy
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:08Z
+body: |-
+  ## [PASS] Editor flow now has testability seams and document format requirements
+
+  **What**: The updated yze.4.1 includes: (1) editor launching behind a replaceable seam, (2) explicit document format definition before implementation, (3) acceptance criteria for both seam and format. Instruction #7 also addresses the create/edit ownership boundary explicitly.
+
+  **Why**: The first review flagged both the missing subprocess seam and the unspecified document format. Both are now explicit requirements.
+
+  **Suggested action**: None. The editor flow is properly specified.
+---
+id: g3lago91
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:23Z
+body: |-
+  ## [PASS] Editor flow now requires replaceable seam — agent-testable without real editor
+
+  **What**: yze.4.1 now includes the acceptance criterion "Editor launch behavior is behind a replaceable seam for automated tests." This directly addresses the first-pass finding that the editor flow had no subprocess seam for testing. Combined with yze.5's requirement for "Fake editor and launcher seams for non-interactive testing," the editor flow is now testable end-to-end: fake editor writes predetermined content → issue document parser extracts changes → gateway receives update.
+
+  **Why**: This is the correct pattern. The seam is created during implementation (yze.4.1), the fake is standardized in the harness (yze.5), and the tests exercise it (yze.4.5). No manual terminal interaction required.
+
+  **Suggested action**: No change needed.

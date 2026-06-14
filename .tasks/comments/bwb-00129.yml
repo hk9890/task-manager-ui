@@ -1,0 +1,6 @@
+---
+id: y4axj7w0
+author: Hans Kohlreiter
+created: 2026-05-16T13:40:33Z
+body: |-
+  Root cause: os.UserConfigDir() returns $HOME/Library/Application Support on macOS, ignoring $XDG_CONFIG_HOME. Tests set XDG_CONFIG_HOME=configHome and wrote config there, but load.go (via UserConfigDir) looked in the macOS path → no file → silent defaults → assertions about errors/values all failed. Fix: testUserConfigDir(t) helper calls os.UserConfigDir() after t.Setenv(HOME=...) so write and read paths match per platform. No production change. Quality green locally. CI verification on next push.

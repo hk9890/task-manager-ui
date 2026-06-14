@@ -1,0 +1,54 @@
+---
+id: ocuf4tdv
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:13Z
+body: |-
+  ## Read operations scope is missing catalog queries and search
+
+  **What**: This task implements ListIssues, ReadyIssues, BlockedIssues, and ShowIssue. It does not implement StatusCatalog, TypeCatalog, LabelCatalog, or SearchIssues. The architecture doc specifies catalog methods on the gateway. The bd CLI has `bd statuses --json`, `bd types --json`, `bd label list-all`, and `bd search --json` — all are official surfaces. The browsing epic (yze.3.3) requires structured filters for status/type/priority/assignee/labels, and the search mode needs a gateway-backed search operation.
+
+  **Why**: Without catalog queries in Phase 1, the search mode task (yze.3.3) will need to either add gateway methods itself (scope creep on a UI task) or hardcode values (fragile, breaks for projects with custom statuses/types). Without a SearchIssues gateway method, the search mode will have to choose between shelling out directly (violating architecture) or abusing ListIssues with filters (which may not match `bd search` semantics for text queries).
+
+  **Suggested action**: Add StatusCatalog, TypeCatalog, LabelCatalog, and SearchIssues to this task's scope and command baseline. The commands are: `bd statuses --json`, `bd types --json`, `bd label list-all --json`, `bd search <query> --json`. This keeps all gateway read operations in one place and avoids retroactive Phase 1 changes.
+---
+id: l2ba1uqp
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:52Z
+body: |-
+  ## [MEDIUM] StatusCatalog and TypeCatalog read operations not included in gateway reads task
+
+  **What**: This task implements `ListIssues`, `ReadyIssues`, `BlockedIssues`, and `ShowIssue`, but does not mention `StatusCatalog` or `TypeCatalog`. These are read operations defined in ARCHITECTURE.md's gateway interface (lines 101-102) and are needed before the UI can render create/update forms.
+
+  **Why**: Status and type catalogs are metadata reads that support the write flows in beads-workbench-yze.4.2 (create/update/close). If they are not implemented in the gateway reads task, they will be missing when the UI tasks need them, causing either a gap in the write UI or ad-hoc implementation outside the gateway.
+
+  **Suggested action**: Add `StatusCatalog` and `TypeCatalog` to the read operations scope, or create a small follow-up task in the gateway epic for catalog operations. The command baseline should include whatever `bd` command surfaces these (likely `bd` metadata commands or parsing from list output).
+---
+id: i8x5zpiu
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:01Z
+body: |-
+  ## MINOR: Gateway read ops (omd.4) includes catalog and search but acceptance criteria only name 4 specific methods
+
+  **What**: The instructions say "Implement catalog reads needed by the UI and write flows, including status, type, and label catalogs" (instruction 2) and "Implement `ListIssues`, `ReadyIssues`, `BlockedIssues`, `ShowIssue`, and `SearchIssues`" (instruction 1). But the acceptance criteria only name ListIssues, ReadyIssues, BlockedIssues, and ShowIssue as specific checkboxes. SearchIssues and catalog reads are covered by the vaguer criterion "Search and catalog reads needed by the UI are available through the gateway."
+
+  **Why**: Acceptance criteria drive verification. An agent verifier checking this task will confirm the 4 named methods exist and pass the vague criterion with minimal effort. SearchIssues and the catalog methods deserve their own acceptance checkboxes to match the instruction specificity. Otherwise the instructions promise more than the criteria enforce.
+
+  **Suggested action**: Add specific acceptance criteria: "SearchIssues returns typed search results", "StatusCatalog returns available status options", "TypeCatalog returns available type options", "LabelCatalog returns available label options" (or whatever the actual catalog surface is).
+---
+id: picfk5z4
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:37Z
+body: |-
+  ## omd.4 and omd.5 now include catalog reads and search — scope gap is closed
+
+  **What**: `beads-workbench-omd.4` now includes "Implement catalog reads needed by the UI and write flows, including status, type, and label catalogs" in its instructions and "Search and catalog reads needed by the UI are available through the gateway" in its acceptance criteria. `beads-workbench-omd.2` includes "catalog/query methods needed by the UI and write flows, including status, type, and label catalogs" in its instructions. This addresses the prior review finding about missing catalog methods.
+
+  **Why**: The search and catalog operations being part of the gateway foundation means the browsing and CRUD tasks (yze.3.3, yze.4.2) will have the gateway methods they need without scope creep or architecture violations. This is a clean resolution of the cross-epic dependency gap.
+
+  **Suggested action**: No change needed. The catalog and search gaps identified in the prior review are now addressed in the task scope.
+---
+id: o549s377
+author: Hans Kohlreiter
+created: 2026-04-05T13:45:34Z
+body: |-
+  Verifier found Phase 1 read-path gaps now tracked in beads-workbench-5d4, beads-workbench-dr3, and beads-workbench-epz. omd.4 remains in progress until those defects are fixed and re-verified.

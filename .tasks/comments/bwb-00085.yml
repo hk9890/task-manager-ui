@@ -1,0 +1,6 @@
+---
+id: 1cbgc6y6
+author: Hans Kohlreiter
+created: 2026-04-06T10:00:52Z
+body: |-
+  Verifier PASS: once visible board content renders on startup, shell selected-issue context now stays synchronized and the runtime no longer shows visible issues while the footer still says Selected: none. Remaining async startup focus wobble has been split into follow-up bug beads-workbench-3tm.

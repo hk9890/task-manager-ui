@@ -1,0 +1,30 @@
+---
+id: dsgm9l4x
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:07Z
+body: |-
+  Type mismatch: bug vs task. What: This is typed as 'bug' but it describes a missing capability (no CI workflow), not broken existing functionality. The repo never had CI, so nothing is regressed. Why: Bug type implies a defect to fix, which sets the wrong expectation for triaging and prioritization. Missing CI on a project that never had it is a task or chore, not a bug. Suggested action: Retype to 'task'.
+---
+id: dhtafl7q
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:13Z
+body: |-
+  Contradictory acceptance criteria. What: The description body has 5 concrete AC checkboxes about creating a CI workflow. The separate 'ACCEPTANCE CRITERIA' field says something completely different — it talks about 'recording the gap' and 'making a decision for future provenance' as if this were a discovery/decision task, not an implementation task. These two sets of AC point at different scopes of work. Why: An agent executing this will not know which AC to satisfy. The body says 'build the workflow,' the field says 'record a decision.' Suggested action: Align on one scope. If this is 'implement CI,' delete the decision-oriented AC field and keep the implementation checkboxes. If this is 'decide on CI strategy,' rewrite the body to match.
+---
+id: wcjr8w5e
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:18Z
+body: |-
+  Missing dependency on private repo constraint. What: This issue says to add GitHub Actions CI, but beads-workbench-2rj flags that the repo is currently private. GitHub Actions minutes for private repos are limited (2000 min/mo on free plan). The issue does not acknowledge this constraint or ask whether CI should be added before the visibility decision. Why: An agent could add CI that silently burns through Actions minutes on a private repo, or the CI may behave differently once the repo goes public. Suggested action: Add a note acknowledging the private-repo Actions-minutes constraint, or add beads-workbench-2rj as a soft dependency (not blocking, but awareness).
+---
+id: zeg3p62k
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:24Z
+body: |-
+  Go version not specified. What: The instructions say to create a CI workflow running go build/vet/test but do not specify which Go version to use. There is no go.mod-level Go version constraint mentioned either. Why: An agent will have to guess the Go version for the workflow matrix. Wrong version choice could cause CI to pass/fail differently than local. Suggested action: Check go.mod for the Go version directive and explicitly require the workflow to use that version.
+---
+id: e7eybc1e
+author: Hans Kohlreiter
+created: 2026-04-11T12:38:01Z
+body: |-
+  Implemented CI provenance workflow: added .github/workflows/ci.yml (push + pull_request) using actions/setup-go with go-version-file=go.mod (go 1.24.2 policy), and running build/vet/test gates. Updated docs/RELEASING.md to reference the CI workflow as release provenance. Note: repo is currently private, so Actions minute usage should be monitored.

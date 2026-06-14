@@ -1,0 +1,18 @@
+---
+id: thuv7qn2
+author: Hans Kohlreiter
+created: 2026-04-12T11:07:00Z
+body: |-
+  Acts as the epic gate for beads-workbench-wz9. Epic closure waits for this review task to pass after all implementation tasks close.
+---
+id: pwk8mtap
+author: Hans Kohlreiter
+created: 2026-04-12T11:14:12Z
+body: |-
+  Review finding — acceptance task is solid. The criteria are concrete: all children closed, build/vet/tests pass, architecture guardrails pass, no hidden follow-on work. The 'no new bugs or follow on tasks hiding inside comments' criterion is exactly right — it forces the verifier to read all task comments and file any outstanding work as tracked issues before closing. Why: this is the right gate. Suggested action: none.
+---
+id: 3y377ur4
+author: Hans Kohlreiter
+created: 2026-04-12T11:14:17Z
+body: |-
+  Review finding — acceptance should explicitly verify architecture guardrail test passes. What: the acceptance criteria say 'build passes, vet passes, tests pass' which implicitly includes the guardrail test in cmd/bwb/architecture_guardrails_test.go. But docs/CODING.md recommends running it explicitly first: 'go test ./cmd/bwb -run TestArchitectureGuardrails'. Why: if the refactor accidentally introduces a forbidden import, the guardrail test catches it — but only if the verifier actually runs it. Relying on 'go test ./...' is correct but making it explicit reduces risk of oversight. Suggested action: add explicit acceptance line: 'Architecture guardrail test passes: go test ./cmd/bwb -run TestArchitectureGuardrails'

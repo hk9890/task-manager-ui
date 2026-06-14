@@ -1,0 +1,6 @@
+---
+id: 6cmgpvrc
+author: Hans Kohlreiter
+created: 2026-05-28T13:17:50Z
+body: |-
+  Implemented in commit 7b342a7. ClosedOffset added with named-field doc comment; zero-behavior change confirmed by all three repo impls' existing unit tests passing unchanged. New test internal/repository/dashboard_options_test.go::TestDashboardOptionsClosedOffsetField pins field shape.

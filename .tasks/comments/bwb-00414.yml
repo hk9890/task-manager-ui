@@ -1,0 +1,12 @@
+---
+id: b9ifu1ka
+author: Hans Kohlreiter
+created: 2026-04-08T10:58:57Z
+body: |-
+  Dependency on task 1 is correct but the styling scope is redundant with task 1 work. What: task 1 must already render tabs with some visual treatment (the current code already applies foreground/background for active vs inactive tabs at model.go:585-591). Task 2 says 'add or reuse styling helpers so the app title is emphasized, the active tab is highlighted, inactive tabs are dimmed.' This is almost exactly what task 1 must implement to render the header correctly. Why: either task 1 leaves the header unstyled (which fails its own AC of rendering Board/Search tabs), or task 2 arrives and finds the styling is already done. This creates re-work or confusion. Suggested action: merge task 2 into task 1. The header chrome styling is not separable from the header layout — you cannot implement a single-line header with tabs without making tab styling decisions. If you want to keep them separate, task 1's instructions must explicitly say 'use placeholder/unstyled rendering' and task 2 must be very clear about what it changes vs what task 1 did.
+---
+id: 3jyrz2oh
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:01Z
+body: |-
+  Acceptance criteria are not testable — 'distinct highlighted treatment' and 'lower-emphasis muted styling' are subjective. What: the criteria say active tab has 'distinct highlighted treatment' and inactive tabs render with 'lower-emphasis muted styling'. There is no way to verify this in a test except by checking specific ANSI escape codes, which the existing golden tests strip. Why: the verifier cannot pass or fail this without running the app and judging visually. Suggested action: either (a) define the specific styles (e.g., active tab = bold + white-on-blue, inactive = dimmed foreground, footer = TextMutedColor), or (b) state that acceptance is visual-only review by the user. Option (a) is better because it lets the tasker make the right choices without guessing.

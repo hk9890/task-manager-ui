@@ -1,0 +1,6 @@
+---
+id: cekmtitj
+author: Hans Kohlreiter
+created: 2026-05-16T12:30:30Z
+body: |-
+  Lifecycle scenario landed: Create→Update→AddComment→Close, each verified by ShowIssue + final ListIssues exclusion. Wall: 11.42s (target <15s). All 4 write methods covered. Quality green.

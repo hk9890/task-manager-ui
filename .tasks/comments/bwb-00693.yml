@@ -1,0 +1,6 @@
+---
+id: fdkdgyt5
+author: Hans Kohlreiter
+created: 2026-05-17T10:45:19Z
+body: |-
+  Closed as won't-do per epic-review decision recorded 2026-05-16 (epic 9x70 comment): 'Drop task 9x70.4 (validatingGateway write extension). The task acknowledges dolt batch-commit will produce false positives; all three proposed mitigations gut the value... Revisit only if a real consumer bug surfaces.' Tasker correctly stopped pre-implementation citing the orphaned-decision readiness failure. Orchestrator honoring the drop.

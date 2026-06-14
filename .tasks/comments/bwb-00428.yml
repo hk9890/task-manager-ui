@@ -1,0 +1,12 @@
+---
+id: 97b4i3bm
+author: Hans Kohlreiter
+created: 2026-05-30T15:25:59Z
+body: |-
+  Plan review note for verifier: the per-package timings (62.8s/51.8s/27.3s/18.4s/~20s) are asserted by the source /project-review-test review, not independently re-measured during planning. Treat as the review's figures.
+---
+id: wbrxp1f2
+author: Hans Kohlreiter
+created: 2026-05-31T12:00:15Z
+body: |-
+  Done (commit b627945). Added 'Slow Integration Packages — Risk Justifications' to docs/TESTING.md covering all 7 packages, each naming a real-bd-only regression a fast test would miss. bwb-smoke 62s challenge answered (binary build/link, exit-code contract, real bd discovery+argv, stdout JSON pipeability; no PTY factor). No trim candidates — scale-fixture variants already env-gated and excluded from baseline.

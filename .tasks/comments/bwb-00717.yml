@@ -1,0 +1,24 @@
+---
+id: u7ttr67k
+author: Hans Kohlreiter
+created: 2026-05-17T10:29:07Z
+body: |-
+  PASS. Runtime verification complete at commit ae906b3 on branch 5q6t-refresh-concurrency.
+
+  'mise run verify:refresh' exits 0. Scenario time: ~6.5-7.5s (under 15s hard timeout).
+
+  Evidence:
+  - Board guard fired 19 times: 'manual board refresh suppressed; refresh already in flight' (slog.Debug entries from 5q6t.1)
+  - Search guard fired 1 time: 'manual search refresh suppressed; refresh already in flight' (5q6t.2)
+  - UI intact after rapid 'r' storms: all 4 column headers visible, fixture issues present (bwf-* IDs), no panic on screen
+  - No panic/fatal log entries; pendingResults never went negative
+
+  Harness implementation: scripts/verify_refresh_concurrency.py drives bwb via PTY using pyte, mirrors the patterns in capture_bwb_screen.py and verify_bwb_state_flow.py. mise task: 'mise run verify:refresh'.
+
+  Harness note (documented for future maintainers): 'bd search' against the embedded fixture completes in ~188ms — fast enough that BubbleTea's event loop processes searchLoadedMsg between 'r' keypresses at 50ms delay, resetting m.loading=false before the next 'r'. A test-only 'bd' wrapper with 'sleep 0.04' (4-line bash script created per-run in tmpdir, PATH-injected only into the bwb child process) broadens the in-flight window to ~280ms so the Reload() guard fires reliably. This is test infrastructure inside the verification script — no product code was changed to accommodate the harness.
+
+  Sample log entries:
+    {"level":"DEBUG","message":"manual board refresh suppressed; refresh already in flight","component":"board","trigger":"board-manual","session_id":"ec2985bf","build_version":"v0.4.0-51-g13916cc"}
+    {"level":"DEBUG","message":"manual search refresh suppressed; refresh already in flight","component":"search","trigger":"search-manual","session_id":"ec2985bf","build_version":"v0.4.0-51-g13916cc"}
+
+  Unblocks 5q6t.6 (acceptance review).

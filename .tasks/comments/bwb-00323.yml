@@ -1,0 +1,39 @@
+---
+id: fig7rv7b
+author: Hans Kohlreiter
+created: 2026-05-25T09:10:09Z
+body: |-
+  ## Plan-review decisions (grill sheet resolved, all 9 questions)
+
+  **Q1 — `ClosedLimit == 0` semantics across impls (BLOCKING) → ACCEPT**
+  Canonical: `ClosedLimit <= 0` means "use implementation default".
+  - `beads.Repository`: fall back to `defaultLeanClosedLimit` (currently 50).
+  - `memory.Repository`: return ALL closed items (no cap).
+  - `caching.Repository`: delegate the 0 verbatim to backing.
+  Matches the contract s4r7.2 locks in. Parity contract test (iwvm.6) must enumerate `ClosedLimit=0`, `=5`, `=50`, `=10000` (overshoot) cases across both memory and beads impls.
+
+  **Q2 — caching strategy on varying limits (BLOCKING) → ACCEPT (option a)**
+  Caching decorator re-fetches on any `ClosedLimit` change. Treat a different requested limit as a cache miss, distinct from `dashboardDirty`. Reject the high-water (slice-from-cache) option to keep `ForceFresh` orthogonal and avoid limit × force-fresh interaction. Document choice in `internal/repository/caching/doc.go` per iwvm.3.
+
+  **Q3 — iwvm depends on s4r7 (BLOCKING) → CONFIRMED**
+  iwvm already depends on s4r7 at epic level. bd's dep graph enforces it. No further change needed; taskers will not pick iwvm work until s4r7 is closed.
+
+  **Q4 — `closedCapForTest = 50` constant (BLOCKING) → ACCEPT**
+  iwvm.10 says "drop" but the constant is used by `sort_parity_integration_test.go:158,282,309,322` for argv pinning math, not just scale tests. RENAME to `testDoneColumnLimit`, keep using it as the test-local choice fed into `DashboardOptions{ClosedLimit: testDoneColumnLimit}`. Only the contract assumption (50-as-fixed-cap) needs to go; the symbol survives.
+
+  **Q5 — argv pinning uses inline `RecordingExecutor.OnArgs` pattern (NON-BLOCKING) → ACCEPT**
+  Follow the live pattern at `internal/mode/board/model_test.go:866`. Update `ARGV_CONTRACT.md` row 115 if `TestBoardClosedQueryArgvLimitDynamicBoundaries` doesn't exist (it doesn't). iwvm.7 fixes the doc drift at the same time.
+
+  **Q6 — iwvm.5 board-model unit test (NON-BLOCKING) → ACCEPT**
+  Extend `TestClosedLimit` at `internal/mode/board/model_test.go:631` with a sibling table that asserts `DashboardOptions.ClosedLimit` value via a recording stub repository. No terminal involvement.
+
+  **Q7 — `ClosedTotal` must be computed BEFORE slice (NON-BLOCKING) → ACCEPT**
+  Add to iwvm.2: "compute `ClosedTotal = len(closed)` BEFORE applying the limit slice in memory impl". Same applies to beads impl, but `closedCount` comes from a separate `bd count` call at lean_reads.go:76, so naturally independent.
+
+  **Q8 — iwvm.10 scope (NON-BLOCKING) → ACCEPT**
+  Retarget existing scale_parity_integration_test to pass `ClosedLimit` explicitly via `DashboardOptions` and drop the `t.Skipf` precondition. Do NOT delete the file in this epic — defer delete-vs-rename to a follow-up.
+
+  **Q9 — iwvm.4 depends on iwvm.2 AND iwvm.3, not just iwvm.1 (NON-BLOCKING) → ACCEPT**
+  The orchestrator will not pick up iwvm.4 until ALL of iwvm.1, iwvm.2, iwvm.3 are closed. (Will update deps below.)
+
+  **Status:** plan-review gate cleared. Proceed to execution.

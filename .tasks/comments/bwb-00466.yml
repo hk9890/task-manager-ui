@@ -1,0 +1,12 @@
+---
+id: pflph7sm
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:30Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q4 (use direct submitMutationCmd call, not Update plumbing) and Q5 (add errors.Is(err, sentinel) alongside the prefix assertion to catch %w→%v silent demotion). Description and acceptance criteria updated accordingly.
+---
+id: zo9v4yb9
+author: Hans Kohlreiter
+created: 2026-05-23T12:41:16Z
+body: |-
+  Added internal/app/mutation_errors_test.go with 5 tests (one per mutation kind: update/close/comment/status/priority). Each calls submitMutationCmd directly and asserts both the documented toast prefix and errors.Is(res.err, errInjected) to catch silent %w→%v regressions. Falsifiability verified on mutationStatus: demoting %w→%v fails the errors.Is assertion; removing the wrapper entirely fails the prefix assertion. Both temp edits restored. mise run test green (1101 tests, -race). No production code changed.

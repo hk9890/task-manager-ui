@@ -1,0 +1,6 @@
+---
+id: s6e7dvc7
+author: Hans Kohlreiter
+created: 2026-05-28T13:41:37Z
+body: |-
+  Implemented. PaginatedClosedFetch scenario added in parity_integration_test.go::runAllScenarios. All three factories pass via the test harness. Surfaced a production gap: bd 1.0.4 does not support --offset, so the beads impl in lean_reads.go (vtvb.2) currently emits an argv that bd would reject at runtime. The integration test masks this via WithCommandHook. Filing follow-up to add the same emulation in production beads.Repository before vtvb.6 wires the load-more dispatch.

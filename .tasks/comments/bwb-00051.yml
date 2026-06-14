@@ -1,0 +1,6 @@
+---
+id: 2upiry0q
+author: Hans Kohlreiter
+created: 2026-04-19T08:06:14Z
+body: |-
+  Root cause confirmed: renderMetadataPaneLines (details.go:354-357) unconditionally prepends '› Editable: Status, Priority' when focused=true, and renderMetadataRail (metadata.go:63-64) prefixes selected fields with '› ' inline. Both are ad-hoc — no shared selection component is used. Fix: (1) Delete lines 354-357 (the banner). (2) Replace the inline '› ' prefix in metadata.go:63-64 with the same issuerow.RenderReferenceCompact or shared selected-row style used in the dependencies pane — this means adding a padding/indent to ALL metadata rows and using a highlight color on the selected one, so alignment stays stable. Implementation is self-contained in these two files.

@@ -1,0 +1,6 @@
+---
+id: hk9p161m
+author: Hans Kohlreiter
+created: 2026-05-24T10:59:37Z
+body: |-
+  Done. Migrated all call sites from BeadsGateway/NewCLIGateway/NewFromGateway to lean repositorybeads.New(runner). AC grep passes (zero hits outside internal/repository/beads/). All 4 quality gates green (quality:fast, test:all, build, smoke). Fixed pre-existing SSOM-aware NotReady count comparison in count_parity test and bwb-smoke. Production wiring chain: CommandRunner → repositorybeads.New → repository.NewValidating → caching.New. Commit 4a514d1.

@@ -1,0 +1,6 @@
+---
+id: 7sy5vh70
+author: Hans Kohlreiter
+created: 2026-05-22T07:36:42Z
+body: |-
+  Fix already applied during the beads-workbench-ikoe work session (the change was needed to keep concurrent integration test runs green). Verified: mise run test:integration (1208 tests) PASS, mise run quality:fast PASS. Closing as done.

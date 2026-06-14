@@ -1,0 +1,6 @@
+---
+id: 802ln2r0
+author: Hans Kohlreiter
+created: 2026-05-24T13:24:07Z
+body: |-
+  Fixed in two commits: a65546b (in-memory cross-ref preservation via storedIssue.blockedByRefs/relatedRefs/parentRef/childrenRefs with nil-sentinel semantics) and 03851b1 (persistence gap closed — SnapshotIssue carries the refs, LoadWithManifest routes through new SeedFromSnapshot). 8ad17ae documented the gap before the follow-up landed. Tests: TestSeedDetail_PreservesCrossRefMetadata, TestSnapshotRoundTrip_PreservesCrossRefMetadata, TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution. quality:fast green (966 tests).

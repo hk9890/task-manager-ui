@@ -1,0 +1,22 @@
+---
+id: 2icmk6xu
+author: Hans Kohlreiter
+created: 2026-05-16T14:49:24Z
+body: |-
+  Acceptance verification complete. All criteria pass.
+
+  Build/test/vet: go test ./... PASS, go test -count=10 ./internal/app/... PASS (10 runs), go vet ./... PASS, go build PASS.
+
+  PTY captures (180x34 binary against embedded fixture):
+
+  BOARD cold start @ 200ms: all 4 column titles (Not Ready, Ready, In Progress, Done) + skeleton glyphs ░ + spinner ⠹ in header. No full-screen loading takeover.
+
+  SEARCH cold start: search panel (╭─ Search ─) + skeleton rows ░ visible immediately after toggle.
+
+  DETAIL cold start: bwf-2 issue id + Dependencies/Content/Metadata sections present immediately after ENTER.
+
+  BACKGROUND REFRESH Board→Search→Board: bwf-2, bwf-1 present in before-switch and after-switch without blanking. No data loss between switches.
+
+  HEADER SPINNER: ⠙ present during loading; Board tab at column 18 in both loading and idle headers (layout width invariant).
+
+  db0z.7 regression: TestScrollResetOnIssueSwitchViaApplyLoadedDetail PASS.

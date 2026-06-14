@@ -1,0 +1,6 @@
+---
+id: wn0ht2m9
+author: Hans Kohlreiter
+created: 2026-05-22T19:36:33Z
+body: |-
+  Acceptance review passed. bd contention cap (semaphore=2) and argv read cache (token = .beads/last-touched mtime, singleflight dedup) implemented and verified. Board retains 4-command refresh; ssom closed-count call intact. docs/MONITORING.md updated. 1078 tests pass; race-clean. x/sync promoted indirect->direct v0.17->v0.20, no API change.

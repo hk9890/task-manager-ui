@@ -1,0 +1,12 @@
+---
+id: 9dudytd7
+author: Hans Kohlreiter
+created: 2026-05-22T17:37:05Z
+body: |-
+  DISPOSITION (user, html-ask 2026-05-22): Reading (b) -- latent bug. Reorder so shellKeysPassThrough is checked before the KeyRunes capture in CapturesShellKey, so help/detail stay reachable while the query is focused. Treat this as an actionable fix.
+---
+id: 8lz1au36
+author: Hans Kohlreiter
+created: 2026-05-22T17:40:20Z
+body: |-
+  FIXED (commit 5f2e7ce): CapturesShellKey now checks shellKeysPassThrough before the KeyRunes early-return, so '?' and '3' pass through to the shell while the query is focused; ordinary runes still captured. Test TestCapturesShellKeyPassthroughWithDefaultBindings added, confirmed to fail on unfixed code. go build + go test ./internal/mode/search/... pass.

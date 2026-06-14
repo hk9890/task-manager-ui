@@ -1,0 +1,12 @@
+---
+id: mp7k6wgs
+author: Hans Kohlreiter
+created: 2026-05-22T20:14:40Z
+body: |-
+  Cross-mode inconsistency reinforcing this finding: search mode labels a truncated result list '25 capped' (explicit word), while the board Done column uses '75+'. The search-mode wording is unambiguous; the board '+' is not. Whatever fix is chosen for the Done badge, aligning it with search mode's 'capped'/'N of M' phrasing would also fix a board-vs-search consistency gap.
+---
+id: 8oafgymb
+author: Hans Kohlreiter
+created: 2026-05-22T22:24:04Z
+body: |-
+  Root cause confirmed: ui/board/board.go appended '+' to col.Total whenever the visible row list was capped (!TotalIsExact), conflating 'count approximate' with 'rows truncated' on an exact count. Fix: render 'N of M' (e.g. '50 of 75') when TotalIsExact=false so an exact total is never shown with lower-bound notation; exact counts render as a plain number. Aligns board with search mode's word-based labels. Added TestDoneColumnHeaderBadge (truncated + non-truncated sub-cases); updated stale 'N+' comments in composer/parity/smoke files. Commit f940bec; go test ./... = 1089 pass, quality:fast clean.

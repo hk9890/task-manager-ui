@@ -1,0 +1,30 @@
+---
+id: 5m3jzy23
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:51Z
+body: |-
+  F2 (Major) — '<15s wall time on this machine' is environment-specific and not binary-verifiable on CI. Use the baseline from i1th.9: assert relative drop (>80% reduction in unit-test wall time vs baseline median). The hard CI threshold lives in i1th.7's '<30s on GitHub-hosted runner' AC bullet.
+---
+id: zobrp5ty
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:51Z
+body: |-
+  F3 (Major) — 'failures grouped + highlighted' is escapable. Replace with: 'gotestsum exits non-zero on failure AND prints a final DONE line including a Failures: N section listing pkg+test for each failure'. This matches the pkgname-and-test-fails format output.
+---
+id: y16h7129
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:52Z
+body: |-
+  F4 (Minor) — Coverage-parity AC lacks the baseline number. Once i1th.9 lands, update this AC to: 'sum of test counts across mise run test + mise run test:integration equals the baseline count of N from docs/test-baseline-2026-05-16.md' (with the actual N filled in).
+---
+id: 8on4ycza
+author: Hans Kohlreiter
+created: 2026-05-16T06:39:32Z
+body: |-
+  Baseline (i1th.9) numbers locked: 445 tests pre-split, 93.4s median wall. AC bullets that referenced 'baseline' should compare against these values: (a) unit-test wall time must drop to <18.7s (80% reduction) on the baseline hardware, (b) sum of test counts across 'mise run test' + 'mise run test:integration' must equal 445.
+---
+id: 0wv872rm
+author: Hans Kohlreiter
+created: 2026-05-16T07:20:43Z
+body: |-
+  Acceptance review verification complete. All 10 AC bullets PASS with direct execution evidence. Highlights: unit suite 18.635s (within 18.7s threshold = 80.1% drop from 93.4s baseline); integration suite includes all 9 real-bd tests; mise run quality passes end-to-end; Makefile + stale make references gone everywhere (docs grep zero hits); CI uses jdx/mise-action@v2 with separate unit/integration steps. AC2 wall time was very close to threshold (margin ~65ms) but passes on this run.

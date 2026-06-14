@@ -1,0 +1,18 @@
+---
+id: ur1gr1rj
+author: Hans Kohlreiter
+created: 2026-04-11T13:16:47Z
+body: |-
+  Missing scope: compact detail path in search preview will also render markdown. What: spi.2 lists files to modify including details.go and mode/details/model.go, but the search preview at internal/ui/search/search.go lines 174-201 calls uidetails.Render with Compact: true. If markdown rendering changes the output of Render(), search preview changes implicitly. Why: the implementer needs to know that search preview is a consumer of the compact detail path and must verify its appearance after markdown integration. Suggested action: add a note in spi.2 instructions that search preview uses compact detail rendering and must be visually verified, or add internal/ui/search/search_test.go to the files-to-modify list.
+---
+id: 6etru2r5
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:05Z
+body: |-
+  Scroll cache invalidation concern. What: mode/details/model.go uses a content-based cache (cacheMatchesCurrentState with reflect.DeepEqual) to avoid re-rendering for scroll calculations. After markdown rendering, the same IssueDetail will produce different rendered output if the renderer is width-dependent or style-dependent. Why: the cache key is the raw domain data, not the rendered output. If glamour rendering introduces non-determinism (e.g., different terminal color capabilities) or if the width/style changes, the cached line count will be stale and scrolling will break. Suggested action: verify that the line-count cache invalidation still works correctly after markdown integration, and consider whether the cache key needs to include a renderer version or style hash.
+---
+id: 86dck4gz
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:47Z
+body: |-
+  Missing: comments rendering under markdown. What: instruction #3 says 'Keep comments and metadata readable even if they stay plain text for now' but this is ambiguous about whether comment bodies should also get markdown rendering. Comment bodies in beads often contain markdown-formatted text. Why: if comments are excluded from markdown rendering in spi.2 but included later, that is a separate task not tracked anywhere. If they should be included, the acceptance criteria need to cover it. Suggested action: make an explicit decision — either add 'comment bodies also render as markdown' to spi.2 scope, or create a follow-up task for it.

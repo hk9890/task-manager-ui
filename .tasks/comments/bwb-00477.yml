@@ -1,0 +1,18 @@
+---
+id: ip5awt55
+author: Hans Kohlreiter
+created: 2026-05-22T17:37:02Z
+body: |-
+  DISPOSITION (user, html-ask 2026-05-22): Fix the code. Validate key names against a real key-name set so a typo'd key name fails or warns; turn an unknown keybinding action into a hard error instead of a generic unknown-config-key warning.
+---
+id: gywo1gdk
+author: Hans Kohlreiter
+created: 2026-05-22T17:37:12Z
+body: |-
+  DISPOSITION (user, html-ask 2026-05-22): Fix the code. Validate key names against a real key-name set so a typo'd key name fails or warns; turn an unknown keybinding action into a hard error instead of a generic unknown-config-key warning.
+---
+id: lgv4tt4n
+author: Hans Kohlreiter
+created: 2026-05-22T17:47:53Z
+body: |-
+  FIXED (commit c480036): isValidKeyName replaced with a real validator (validSpecialKeyNames from bubbletea keyNames; single runes + alt+ accepted). filterBindingOverrideMap removed from sanitizeOverride so unknown actions hit buildContextBindings' allowed-action check; keybinding-context paths skipped in the warn pass to avoid a double diagnostic. --check-config now exits 1 for a typo'd key name and a typo'd action, exits 0 for valid config. Tests added in keybindings_test.go and load_test.go. go build + go test ./... + mise lint/vet all pass.

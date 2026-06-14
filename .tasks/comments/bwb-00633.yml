@@ -1,0 +1,46 @@
+---
+id: 5i0r62uf
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:35Z
+body: |-
+  Review: No guidance on how to assemble the 'user-facing changes since v0.1.0' list. What: Instructions step 1 asks to summarize changes since v0.1.0 but gives no command, format, or section template. Why: without 'git log v0.1.0..HEAD' (or equivalent) and a CHANGELOG section style (Keep a Changelog: Added/Changed/Fixed/Removed), the result will be inconsistent and easy to skip work on. Suggested action: add explicit commands ('git log v0.1.0..HEAD --oneline --no-merges', optionally filtered to 'internal/' and 'cmd/') and reference the existing CHANGELOG.md style as the template.
+---
+id: kqu4enva
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:39Z
+body: |-
+  Review: Task does not require pushing the changelog commit before tagging in yixr.3. What: step 4 says 'commit those changes before tagging' but the next task (yixr.3) is the one that pushes. Per docs/CHANGE-WORKFLOW.md 'Landing the plane', work is not done until git push succeeds. Why: if the changelog commit is committed locally but never pushed before yixr.3 pushes the tag, the tag may point to a SHA that is on origin but the changelog SHA is not — or worse, the operator pushes the tag for a local-only commit. Suggested action: add an explicit 'git push' of the changelog commit as the final step of yixr.2 (and an AC: 'Changelog commit is on origin/main before this task closes').
+---
+id: t2mczlau
+author: Hans Kohlreiter
+created: 2026-04-20T14:28:19Z
+body: |-
+  Prepared v0.2.0 changelog entry after reviewing `git log v0.1.0..HEAD --oneline`. Reviewed README.md and docs/RELEASING.md; no release-accuracy edits needed.
+
+  Draft GitHub release notes:
+  ## Summary
+  - Reworked detail/search UX with improved issue detail layout, wide related-issues context, and unified live preview behavior.
+  - Improved search ergonomics with query-first navigation and more predictable focus transitions.
+  - Stabilized active view freshness and detail metadata interactions; fixed release archive naming for installer/tool compatibility.
+
+  ## Highlights
+  ### Added
+  - Markdown inspector rendering in issue detail for richer, easier-to-scan descriptions.
+  - Wide related-issues rail in detail view for better dependency/context visibility.
+
+  ### Changed
+  - Refined issue detail layout with denser metadata and improved dependency presentation.
+  - Unified search/detail live preview and polished query-first search navigation.
+  - Focus-aware auto-refresh keeps board/search/detail views more current during navigation.
+
+  ### Fixed
+  - Release asset filenames now match installer auto-detection expectations (including `mise` compatibility).
+  - Detail metadata actions and selection behavior are more stable during interaction.
+
+  Ready for commit/push by publish flow; not closing here because commit/push AC remains pending.
+---
+id: mskd7jzh
+author: Hans Kohlreiter
+created: 2026-04-20T14:32:08Z
+body: |-
+  Documentation/release-note commit pushed on main as 937d5c541562d24e2f6973503630a56c289ea1b0 (`docs: prepare v0.2.0 release notes`). Verified exact-SHA CI success via run 24672208754 before tagging.

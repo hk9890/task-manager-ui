@@ -1,0 +1,30 @@
+---
+id: ff0c2wlw
+author: Hans Kohlreiter
+created: 2026-04-18T18:30:00Z
+body: |-
+  Acceptance task is well structured. AC covers the right gates: all tasks closed, manual focus-regain verification, scheduled refresh verification, context stability, tests pass, and defect capture. No changes needed.
+---
+id: 324euxdx
+author: Hans Kohlreiter
+created: 2026-04-19T09:41:39Z
+body: |-
+  Acceptance review started. All implementation tasks are closed. Running broad automated validation plus runtime capture checks for focus regain, scheduled refresh safety, and context stability before closing the acceptance task and epic.
+---
+id: ck67tocw
+author: Hans Kohlreiter
+created: 2026-04-19T09:58:23Z
+body: |-
+  Verifier rerun: BLOCKED. Broad tests passed, scheduled board refresh verified at ~60s, but real blur->focus does not refresh board/detail immediately unless the surface is already dirty or stale. Follow-up bug: beads-workbench-t7o.5. Acceptance task remains open pending a true focus-regain refresh fix or scope change.
+---
+id: xdu4kocm
+author: Hans Kohlreiter
+created: 2026-04-19T09:58:53Z
+body: |-
+  Verifier note: user-facing reload/help text is still manual-only. Filed follow-up bug beads-workbench-t7o.6 to document focus-regain + scheduled auto-refresh expectations before acceptance closure.
+---
+id: 2ofy715r
+author: Hans Kohlreiter
+created: 2026-04-19T10:21:43Z
+body: |-
+  Verifier rerun: PASS. Quality gates are green; live PTY verification confirmed immediate active-view refresh on real blur->focus for board/detail/search, scheduled board refresh after ~60s, preserved board/search/detail context, and updated user-facing auto-refresh docs. Closing acceptance review.

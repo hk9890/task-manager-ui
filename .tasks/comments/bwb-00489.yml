@@ -1,0 +1,6 @@
+---
+id: fhz2lvro
+author: Hans Kohlreiter
+created: 2026-05-19T15:49:27Z
+body: |-
+  Completed in commit fa88dc9. Package coverage 0% → 99.4%. Project total 71.8% → 74.3% (+2.5pp). All 18 validators covered; SpotCheckIndices has one unreachable defensive guard (not a bug). Test runtime 2ms.

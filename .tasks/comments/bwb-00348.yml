@@ -1,0 +1,29 @@
+---
+id: vs3t7w42
+author: Hans Kohlreiter
+created: 2026-05-17T09:54:12Z
+body: |-
+  TDD task complete — 3 RED regression tests committed on branch 5q6t-refresh-concurrency (commit 9ba9300).
+
+  **Board test 1 (TestBoardManualReloadIgnoredWhileInFlight):**
+      model_double_refresh_test.go:208: second reload: expected nil Cmd (no new gateway batch) while in-flight, got non-nil Cmd; 4 additional gateway calls recorded
+      --- FAIL: TestBoardManualReloadIgnoredWhileInFlight (0.00s)
+
+  **Board test 2 (TestBoardPendingResultsNeverGoesNegativeUnderKeySpam):**
+      model_double_refresh_test.go:270: expected 0 extra Cmds from 10 additional 'r' keypresses while in-flight, got 10 Cmds
+      model_double_refresh_test.go:289: extra batch: pendingResults went negative (was 0, now -1) ... (to -40)
+      model_double_refresh_test.go:296: after draining all batches: expected pendingResults=0, got -40
+      --- FAIL: TestBoardPendingResultsNeverGoesNegativeUnderKeySpam (0.00s)
+
+  **Search test 3 (TestSearchManualReloadIgnoredWhileInFlight):**
+      model_double_refresh_test.go:125: second reload: pendingSelectionAnchor was overwritten by second keypress
+      model_double_refresh_test.go:133: second reload: expected nil Cmd (no new gateway batch) while in-flight, got non-nil Cmd
+      --- FAIL: TestSearchManualReloadIgnoredWhileInFlight (0.00s)
+
+  **App test 4 (TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes):** PASS — regression guard for existing boardIsLoading() guard at app/model.go:1076.
+
+  quality:fast: 738 tests, 3 failures (exactly the 3 new RED tests), 0 regressions in pre-existing 735 tests.
+
+  Bug evidence is precise: 10 extra keypresses × 4 results each = 40 extra decrements → pendingResults=-40 confirms the underflow arithmetic exactly matches the analyzed root cause.
+
+  Tests will flip GREEN as 5q6t.1 (board guard), 5q6t.2 (search guard), and 5q6t.3 (defense-in-depth) land.

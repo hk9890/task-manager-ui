@@ -1,0 +1,36 @@
+---
+id: 1e15jacz
+author: Hans Kohlreiter
+created: 2026-04-05T18:55:39Z
+body: |-
+  ## Bug is confirmed by code inspection — the guard clause in ensureDetailForCurrentSelectionCmd is the exact cause
+
+  **What**: In the editIssueResultMsg handler (model.go line 165), m.detail.Loading is set to true, then ensureDetailForCurrentSelectionCmd() is called (line 169). Inside ensureDetailForCurrentSelectionCmd (line 320), the guard "if m.detail.Loading && m.detail.TargetID == selection.Issue.ID { return nil }" fires because: (a) Loading was just set to true on line 165, and (b) TargetID was set to the same issue ID during the original detail load. Result: the function returns nil, no gateway reload happens, and the detail view shows stale pre-edit data.
+
+  **Why**: The description correctly identifies the mechanism. The acceptance criteria are adequate: "re-requests the selected issue detail from the gateway" and "TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail passes."
+
+  **Suggested action**: The fix is straightforward: either (a) clear m.detail.TargetID before calling ensureDetailForCurrentSelectionCmd so the guard doesn't match, or (b) use loadDetailCmd directly instead of going through ensureDetailForCurrentSelectionCmd (which is designed for selection-change dedup, not forced reload). Option (b) is cleaner because ensureDetailForCurrentSelectionCmd's purpose is to avoid redundant loads — a post-edit reload is intentionally NOT redundant. The description and criteria are sufficient for implementation.
+---
+id: 39tdy3tr
+author: Hans Kohlreiter
+created: 2026-04-05T18:55:50Z
+body: |-
+  ## This bug is not independently verifiable until 9t8 is fixed
+
+  **What**: The acceptance criterion says "TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail passes." This test (model_test.go line 328) creates services via NewServices which constructs a real ProcessOpener. Although this specific test injects a FakeEditor at line 344-345 (bypassing the real opener), the test file shares the package with TestModelLaunchEditorActionUsesLauncherService which hangs. Running "go test ./internal/app/..." will timeout before reaching this test.
+
+  **Why**: Bug ybx cannot be verified in CI or local test runs until bug 9t8 is fixed. The two bugs have an implicit dependency that is not tracked.
+
+  **Suggested action**: Add a dependency: ybx depends-on 9t8 (or at minimum note that 9t8 must be fixed first). Alternatively, the test can be run in isolation with "go test -run TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail ./internal/app/" — but this is fragile and not how the quality gates work.
+---
+id: xye00lb7
+author: Hans Kohlreiter
+created: 2026-04-05T18:59:50Z
+body: |-
+  Reviewer/verifier confirmed this bug is real and precise, but it is effectively blocked for package-level verification until beads-workbench-9t8 is fixed because the launcher miswiring currently breaks/hangs internal/app tests.
+---
+id: dvzf40td
+author: Hans Kohlreiter
+created: 2026-04-06T09:04:28Z
+body: |-
+  Verifier PASS: after a successful editor update the shell now re-requests selected issue detail from the gateway, and TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail passes.

@@ -1,0 +1,78 @@
+---
+id: w21ayqzp
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:55Z
+body: |-
+  ## Dashboard "in-progress" view has no matching dedicated gateway method
+
+  **What**: The built-in dashboards are specified to cover "ready, in-progress, blocked, and recent work" (per this task and the product epic). Phase 1 gateway provides ReadyIssues and BlockedIssues as dedicated methods, but there is no "InProgressIssues" method. In-progress would need to be served by ListIssues with a status filter (e.g., `bd list --status in_progress --json`). Similarly, "recent work" has no dedicated method — it would require `bd list --sort updated --reverse --json` or similar.
+
+  **Why**: This isn't a blocker, but the task says "map each board section to supported gateway query types." An agent might interpret this as requiring a dedicated gateway method per dashboard section and find two of the four missing. The instructions should clarify that ListIssues with filters is the appropriate gateway query type for in-progress and recent views.
+
+  **Suggested action**: Add a note to the instructions: "In-progress and recent-work views should map to ListIssues with appropriate filter/sort parameters, not to dedicated gateway methods. Only ready and blocked have dedicated gateway methods because they have blocker-aware semantics beyond simple status filtering."
+---
+id: 34qzl6ai
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:44Z
+body: |-
+  ## "Assigned to current user" dashboard is in ARCHITECTURE.md but not in any task
+
+  **What**: ARCHITECTURE.md line 237 lists "assigned to current user" as a supported built-in queue type. The dashboard definitions task (yze.3.1) lists "ready, in-progress, blocked, and recent work" — no "my work" / assigned-to-me view. The product epic success criteria also list "ready, in-progress, blocked, and recent work views." The architecture doc includes it; the tasks don't.
+
+  **Why**: "My work" is one of the most useful dashboard views for a daily driver issue browser. Its omission from the task scope means the architecture doc promises something the implementation won't deliver. Either the architecture doc is aspirational and should be clarified, or this is a genuine gap in the task scope.
+
+  **Suggested action**: Add "assigned to current user" as a fifth built-in dashboard view in yze.3.1's scope and acceptance criteria. The gateway can serve this through ListIssues with `--assignee` set to the current user (the bd CLI supports `--assignee`). This is a minor scope addition with high product value.
+---
+id: 0otvelvj
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:59Z
+body: |-
+  ## [MEDIUM] DashboardDefinitionProvider interface not explicitly required in this task
+
+  **What**: ARCHITECTURE.md defines a `DashboardDefinitionProvider` interface (lines 213-215) and the separation between dashboard renderer and dashboard definition provider is a core architectural decision. This task says "Implement dashboard definition types and a built-in provider" but does not explicitly require a `DashboardDefinitionProvider` interface — only a built-in provider implementation.
+
+  **Why**: Without an explicit interface, the implementer may hardcode the built-in definitions directly into the board mode, bypassing the provider abstraction. This would merge rendering and definition loading, violating the architecture and making file-backed definitions harder to add later. CODING.md rule 4 states: "Dashboard renderer and dashboard provider are separate."
+
+  **Suggested action**: Add an acceptance criterion: "A `DashboardDefinitionProvider` interface exists as a separate contract from the board renderer." Add an instruction: "The built-in provider must implement a `DashboardDefinitionProvider` interface, not be inlined into the board rendering code."
+---
+id: atbra0ng
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:25Z
+body: |-
+  ## PASS: Dashboard renderer/provider separation is explicitly required
+
+  **What**: Task yze.3.1 now includes a `DashboardDefinitionProvider` interface requirement and the instruction to "Keep dashboard rendering separate from dashboard definition loading." The acceptance criteria require that "Dashboard definitions map to supported gateway query types only" and that "No BQL parser or arbitrary query execution is introduced."
+
+  **Why**: ARCHITECTURE.md rule 4 and CODING.md rule 4 both require this separation. The updated task enforces it structurally: the provider interface must exist as a separate contract, and the built-in definitions must map to gateway query types, not arbitrary strings. This prevents the board mode from becoming a BQL execution surface.
+
+  **Suggested action**: None. The dashboard separation is adequately protected.
+---
+id: ftms2iph
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:56Z
+body: |-
+  ## [MINOR] "Assigned-to-current-user" dashboard: implementer needs a hint on how to resolve current user
+
+  **What**: The updated acceptance criteria include: "Assigned-to-current-user is either implemented or explicitly documented as deferred with a reason." This is a good pattern — it acknowledges the ARCHITECTURE.md feature without mandating it. However, the task instructions don't mention how to determine the "current user" for filtering. The bd CLI may expose this through BEADS_ACTOR or equivalent.
+
+  **Why**: If the implementer decides to include the assigned-to-me view, they need to know how bd identifies the current user. Without this hint, they'll either guess or defer it without attempting discovery.
+
+  **Suggested action**: Add a note to instruction #3: "If implementing the assigned-to-current-user view, determine the current user identity from the beads environment (e.g., BEADS_ACTOR or equivalent) and pass it as a filter to ListIssues."
+---
+id: wtj4bvq1
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:59Z
+body: |-
+  ## yze.3.1 (dashboard definitions) "assigned to current user" view is now handled explicitly
+
+  **What**: `beads-workbench-yze.3.1` acceptance criteria now include "Assigned-to-current-user is either implemented or explicitly documented as deferred with a reason." This addresses the prior finding that ARCHITECTURE.md lists assigned-to-me as a queue type but the task didn't mention it.
+
+  **Why**: Making the decision explicit — implement or defer with documented rationale — prevents silent scope omission. The verifier has a clear check: either the feature exists, or a documented justification for deferral exists.
+
+  **Suggested action**: No change needed. The either/or criterion is an appropriate way to handle a feature that may or may not be feasible depending on `bd` CLI capabilities for assignee filtering.
+---
+id: ssvval7s
+author: Hans Kohlreiter
+created: 2026-04-05T15:37:27Z
+body: |-
+  Verifier PASS: dashboard provider contract, built-in definitions, supported query-type mapping, and assigned-to-current-user behavior were verified. go test ./internal/dashboard -cover, go test ./cmd/bwb -run TestArchitectureGuardrails, go build ./cmd/bwb, go vet ./..., and go test ./... all passed.

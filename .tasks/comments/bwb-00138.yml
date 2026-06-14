@@ -1,0 +1,6 @@
+---
+id: l7r2k59s
+author: Hans Kohlreiter
+created: 2026-05-16T13:07:25Z
+body: |-
+  Findings #1 (cmd/bwb global version) and #3 (markdown renderer global) fixed with mutex+getter pattern (mirrors 0ny3). Finding #2 (TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback flake) resolved as side effect of 0ny3 mutex fix — confirmed clean under -count=10. Tasker discovered a 4th race in internal/launcher reaperHook (introduced by xmqc during r1ou); orchestrator applied same mutex pattern (reaperHookMu + getReaperHook/setReaperHook). All packages now race-clean. mise run quality green with -race active.

@@ -1,0 +1,48 @@
+---
+id: n1rxw22y
+author: Hans Kohlreiter
+created: 2026-04-06T15:35:11Z
+body: |-
+  ## "Triage-meaningful groups" is undefined — instructions say what to avoid but not what to build
+
+  **What**: Instruction #2 says "prefer triage-meaningful groups (for example readiness/state-based groupings) over mechanically exposing every existing queue." This gives an example category but doesn't specify the target columns. The user explicitly wants 4 Perles-style columns. The current code has Ready/In Progress/Blocked/Recent Work (+ optional Assigned to Me). Is that the right set? Should "Recent Work" survive? Should "Done" appear (as in Perles)?
+
+  **Why**: The implementer is told to "revisit" the grouping but has no product spec to aim for. They'll either keep the status quo (wasting the task) or pick something creative that the user rejects. This is the highest-risk ambiguity in the entire epic.
+
+  **Suggested action**: The task description must specify the target columns or explicitly state: "Confirm or change the default 4 columns, document the choice in a comment before implementing." At minimum, the acceptance criteria should require the implementer to justify their column choice in writing.
+---
+id: 01arer3m
+author: Hans Kohlreiter
+created: 2026-04-06T15:35:21Z
+body: |-
+  ## Startup focus acceptance criteria lack a concrete test shape
+
+  **What**: Criteria say "Startup focus is deterministic and stable during async loads" and "Automated tests cover grouping/query mapping and startup focus behavior." But the existing test in mode/board/model_test.go (TestBoardModeSelectsEarliestNonEmptyColumnAsSectionsLoad) only tests the model-state side — it simulates sectionLoadedMsg delivery order and checks focusedColumn. There's no test that validates the rendered output shows a stable selection indicator during the async load sequence, and no PTY/runtime test for startup focus.
+
+  **Why**: The bug beads-workbench-3tm is about visible selection jumps in a real terminal. A model-state test can pass while the rendered output still jumps — for example if the View() method or the app shell mishandles the transition. The criteria need to require a render-level or PTY-level check, not just "automated tests."
+
+  **Suggested action**: Add a criterion: "Golden test captures the board View() output at each sectionLoadedMsg delivery and confirms the selection indicator lands on the intended column." Ideally, also require a teatest-based startup sequence test that validates final output stability.
+---
+id: 2k8fiyqz
+author: Hans Kohlreiter
+created: 2026-04-06T15:35:28Z
+body: |-
+  ## Task overlaps heavily with bug y3x — scope boundary is unclear
+
+  **What**: Bug y3x says "Revisit the default lane/group strategy; do not assume the current grouping is correct." Task 7qz says "Revisit the default lane/group strategy in internal/dashboard/ using Perles as a UX benchmark only." These are the same work. The task also covers startup focus, which overlaps with bug 3tm. Both the bug and this task touch internal/dashboard/ and internal/mode/board/model.go.
+
+  **Why**: An implementer claiming 7qz doesn't know whether y3x is separately assigned, already addressed by this task, or a prerequisite. Two people could work on conflicting changes to the same files. Or one person does the work and the other task/bug sits orphaned.
+
+  **Suggested action**: Either (a) explicitly close y3x as "folded into 7qz" before execution starts, with a comment on y3x pointing to 7qz, or (b) split the scope clearly: 7qz owns grouping/columns, y3x owns something else entirely. The current overlap is a coordination hazard.
+---
+id: c9qow8sb
+author: Hans Kohlreiter
+created: 2026-04-06T16:20:54Z
+body: |-
+  Cannot execute yet: ticket is stale/ambiguous based on unresolved comments. (1) Target 4-column triage layout is not explicitly specified (unclear whether to keep Ready/In Progress/Blocked/Recent Work, include Done, etc.). (2) Startup focus acceptance criteria do not define required render/runtime test shape for async-load stability, so implementation could pass model-state tests while still flickering visually. (3) Scope overlap with y3x (and folded 3tm) is unresolved, so ownership/boundary is unclear and risks conflicting changes. Please update the task description/AC to codify the exact 4 columns, required startup-focus verification level, and relationship to overlapping work.
+---
+id: qytgra38
+author: Hans Kohlreiter
+created: 2026-04-06T16:33:38Z
+body: |-
+  Verifier PASS: the default dashboard now explicitly implements the 4 columns in order Not Ready, Ready, In Progress, Done; all lanes are backed only by supported query types; startup focus is stable during async loads and settles by dashboard order; and render/runtime checks confirm the intended startup dashboard shape.

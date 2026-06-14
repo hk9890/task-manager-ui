@@ -1,0 +1,51 @@
+---
+id: yx8o484j
+author: Hans Kohlreiter
+created: 2026-05-17T22:48:36Z
+body: |-
+  -
+---
+id: 7w89zz8x
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:56Z
+body: |-
+  ## Audit report — Read-catalogs (StatusCatalog, TypeCatalog, LabelCatalog)
+
+  ### 1. Contract spec
+  Methods at interface.go:688,709,736. StatusCatalog: 7 built-ins (open/in_progress/blocked/deferred/closed/pinned/hooked); custom_statuses key omitted when none; category/icon ignored. TypeCatalog: 9 core (task/bug/feature/chore/epic/decision/spike/story/milestone); custom_types key omitted when none. LabelCatalog: strip whitespace, skip blanks; field name is "label" not "name"; closed-issue labels included; empty slice not error.
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.FlSIL1a0vh | Log: /tmp/beads-workbench-r1m3-audit.log
+
+  **StatusCatalog:** All 7 built-ins present in fresh workspace. custom_statuses omitted when none. Adding custom status puts it after built-ins. category/icon fields present but Go decoder silently ignores.
+
+  **TypeCatalog:**
+  - All 9 core types present in fresh workspace. custom_types omitted when none.
+  - PRODUCTION BUG (addressed via beads-workbench-puy3): Real bd 1.0.4 returns custom_types as JSON array of strings (`["widget","gadget"]`), NOT array of objects. Gateway payload `bdTypeCatalogPayload.CustomTypes []bdCatalogEntryPayload` expected objects → decode error. Any workspace with `bd config set types.custom` triggered ErrorCodeDecodeFailed. FIX: changed CustomTypes field to []string + adapted toTypeOption to construct TypeOption{Name: s}. New unit tests added.
+
+  **LabelCatalog:** Whitespace strip verified. Blank-skip verified. Alphabetical order. Empty slice when no labels. Field name "label" confirmed. Closed-issue labels INCLUDED in catalog.
+
+  ### 3. Test-coverage verification
+  - StatusCatalog/TypeCatalog argv shapes: COVERED.
+  - StatusCatalog built-ins: was 3/7, NOW 7/7 via beads-workbench-zthw.
+  - TypeCatalog core types: was 3/9, NOW 9/9 via zthw.
+  - TypeCatalog custom_types decode: NEW COVERAGE via puy3 (TestGatewayTypeCatalogDecodesCustomTypesAsStrings + TestGatewayTypeCatalogHandlesAbsentCustomTypes).
+  - LabelCatalog whitespace-strip + blank-skip: NEW COVERAGE via beads-workbench-kmfn (labels_whitespace.json fixture + TestGatewayCatalogStripsWhitespaceLabels).
+  - LabelCatalog closed-issue labels included: still gap (low-risk, not addressed in this epic).
+  - LabelCatalog field name "label" decode: COVERED by TestGatewayCatalogReads.
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/... -count=1 -v
+  - Result: PASS.
+  - StatusCatalog/TypeCatalog fake: now seeds full built-in/core sets (zthw).
+  - LabelCatalog: DIVERGES (FIXED via beads-workbench-fy7x): fake now returns non-nil empty slice when LabelCatalogResponse is nil.
+  - LabelCatalog whitespace-strip in fake: not implemented (acceptable stub — fake assumes pre-cleaned input).
+
+  ### Drift findings (all closed)
+  - puy3 (P2): TypeCatalog custom_types decode bug. CLOSED.
+  - zthw (P3): full catalog completeness assertions + fake seeding. CLOSED.
+  - kmfn (P3): LabelCatalog whitespace test + fixture. CLOSED.
+  - fy7x (P3): Fake LabelCatalog nil-not-empty. CLOSED.
+
+  ### Summary
+  - Total clauses: 16 | Verified: 14 | Drift: 1 (resolved) | Gaps: 4 (resolved) | Diverges: 2 (1 resolved + 1 acceptable stub)

@@ -1,0 +1,6 @@
+---
+id: c1upy43i
+author: Hans Kohlreiter
+created: 2026-05-16T16:08:41Z
+body: |-
+  Implemented internal/testing/datasets package with Dataset struct, Fixture/ThisRepo/AIConfigManager constructors (env-gated), NewGateway (ReadOnly-aware), and BdCount/BdList/BdReady/BdBlocked/BdSearch helpers. Added ReadOnly bool to RunnerConfig with unit tests. Verified: full quality gate green (658 unit + 698 integration tests, 3 expected skips when env gates off). Verified negative-write: ReadOnly: true gateway blocks CreateIssue with 'not allowed in read-only mode' error; bd --readonly create on AICM returns same. Mtime check excludes embeddeddolt/ noms files (Dolt updates them on reads for internal cache — logical writes still blocked).

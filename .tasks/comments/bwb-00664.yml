@@ -1,0 +1,18 @@
+---
+id: 2nebwfug
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:22Z
+body: |-
+  Replace '/tmp/pwned' in security-test guidance with t.TempDir() path — /tmp collides on CI and a crashed prior run could leave a real file. Apply to the AC bullet about firing Title: $(touch /tmp/pwned).
+---
+id: rmchzaei
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:22Z
+body: |-
+  The 'concurrent reads no longer serialize on a single mutex' AC criterion is already satisfied by au54/5b1k (RWMutex split landed). Mark as pre-existing and verify rather than re-implement.
+---
+id: dkyojlnf
+author: Hans Kohlreiter
+created: 2026-05-16T04:44:12Z
+body: |-
+  Acceptance review verification complete. Verifier (beads-tasks:verifier) ran 15 AC checks: 14 PASS with code/test evidence, 1 (runtime UI verification) deferred to manual phase. Two NEEDS-FIX items raised and resolved: (1) /tmp/pwned_* sentinel paths in service_security_test.go migrated to t.TempDir()-based paths (5 tests updated, all pass); (2) runtime UI verification completed via pyte capture per user preference — round-trip board→detail→board PASS, search→results-focus→ESC→board PASS (proves db0z.9 in real binary). Final quality gate: go vet clean, go build clean, go test ./... clean, golangci-lint 0 issues, architecture guardrails pass.

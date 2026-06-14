@@ -1,0 +1,30 @@
+---
+id: v3zd7wj5
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:20Z
+body: |-
+  Finding: --config + missing-file behavior is unspecified. Why: today config.Load silently returns defaults when XDG file is absent (load.go:84-87); with an explicit --config <path>, silently ignoring a typo'd path is a footgun — the operator named the file on purpose. The implementer will guess. Suggested action: add AC item: 'When --config is explicitly provided and the path does not exist or is not a regular file, exit non-zero with a clear error; the silent fallback only applies to the default XDG lookup.'
+---
+id: iq34lqus
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:24Z
+body: |-
+  Finding: --print-config output contract is under-specified. Why: validateResolved fills defaults (editor.command, default launcher definitions) so a YAML round-trip will always emit values the user never set; the plan does not say whether output is the resolved-with-defaults config or only the user override. Either is fine, but the implementer will pick arbitrarily and verifier cannot judge. Suggested action: add AC item: '--print-config emits the fully-resolved config (defaults merged with overrides) as YAML to stdout, with a leading comment line indicating the source path; nothing is written to stderr on success.'
+---
+id: 7vx99utk
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:30Z
+body: |-
+  Finding: Release-build version metadata is effectively untestable under current AC. Why: AC #2 only requires '--version prints a version string', which 'dev' satisfies; but the instruction also says 'wire release/build metadata so shipped binaries report a real version'. The .goreleaser.yaml ldflags change cannot be exercised by go test or by the implementer locally — only the tag-triggered release workflow proves it. Suggested action: split the goreleaser ldflags wiring into its own small task (s2d1.5) with a manual verification AC: 'Dry-run goreleaser locally (goreleaser build --snapshot --clean) and confirm the produced binary's --version output is non-dev and contains the snapshot version + commit.' Keep --version contract itself in s2d1.1.
+---
+id: drogrzke
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:34Z
+body: |-
+  Finding: Non-TTY guarantee has no test asserting it. Why: AC says '--help works without a TTY error' but there is no test exercising the non-interactive path with stdout/stderr piped (which is how operators actually invoke it from scripts/CI); a verifier doing manual testing in an interactive terminal will not catch a regression where the path accidentally calls tea.NewProgram. Suggested action: add AC item: 'A test exists that runs the compiled binary (or main equivalent) with --help, --version, --print-config, and --check-config under stdout/stderr redirection and asserts exit code + that no Bubble Tea init occurs.'
+---
+id: updsx7nz
+author: Hans Kohlreiter
+created: 2026-04-22T13:43:33Z
+body: |-
+  Implemented CLI bootstrap with stdlib flag aliases, non-interactive help/version/print-config/check-config exits, explicit --config load semantics, resolved YAML print output, and exit-code handling. Added cmd/bwb runtime-path tests plus config LoadWithOptions coverage. go test ./cmd/bwb ./internal/config passes; unrelated go test ./... failures tracked in beads-workbench-0myw.

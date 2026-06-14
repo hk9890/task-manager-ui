@@ -1,0 +1,6 @@
+---
+id: ner5i6av
+author: Hans Kohlreiter
+created: 2026-05-11T15:04:19Z
+body: |-
+  Implemented search session-state preservation: search mode now retains draft/applied query, full page metadata, and reload state; reload/error keep prior results visible; app shell/header/preview now read from that session state. Added focused search/app tests covering session transitions and preserved-context reload behavior.

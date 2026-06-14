@@ -1,0 +1,6 @@
+---
+id: k8sdzf2m
+author: Hans Kohlreiter
+created: 2026-04-07T12:35:35Z
+body: |-
+  Implemented dedicated detail-mode scrolling with viewport offset state and key handling (j/k, arrows, pgup/pgdn, home/end), plus scroll clamping on resize/content changes and reset on selection change. Added detail/app tests for long-content scrolling and verified with focused tests and full go test ./....

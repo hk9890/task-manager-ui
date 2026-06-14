@@ -1,0 +1,65 @@
+---
+id: 5elgl7ca
+author: Hans Kohlreiter
+created: 2026-04-05T17:31:17Z
+body: |-
+  Priority raised by user review: do not continue feature expansion until the broken browsing layout is fixed and verified in the real runtime. Quality first; use real runtime rendering checks in addition to automated tests.
+---
+id: 4p0v6d9u
+author: Hans Kohlreiter
+created: 2026-04-05T18:53:38Z
+body: |-
+  ## Bug description understates the severity — screenshot shows a fundamentally broken board layout
+
+  **What**: The description says "leaves large amounts of empty space" and "does not make the selected issue's detail context sufficiently visible." The actual screenshot (img.png) shows a worse problem: 5 dashboard columns (Ready, In Progress, Blocked, Recent Work, Assigned to Me) are crammed horizontally into a wide terminal with text truncated to near-unreadable widths. The columns are visually undifferentiated — you cannot tell what column is focused because the text is too small to read. The detail pane on the right is invisible in this layout because the board's left pane (at 56% width per model.go line 376) dedicates all its space to 5 tiny columns. Additionally, the board columns have no height constraint — columns with fewer issues leave huge dead space below them while columns with more issues get no scrolling.
+
+  **Why**: The current description will lead an implementer to tune padding and spacing. The actual problem is structural: the board renders N columns side-by-side regardless of terminal width, and 5 columns at any reasonable terminal width produces unreadable content. The fix requires layout logic changes (e.g., column limiting, horizontal scrolling, or responsive column count), not just cosmetic spacing adjustments.
+
+  **Suggested action**: Rewrite instructions to be specific about the structural layout problems:
+  1. Board column count must adapt to available width — 5 side-by-side columns is never readable
+  2. Column width must have a minimum that keeps issue IDs and titles readable (at least ~30 chars inner width)
+  3. The detail pane split ratio (currently hardcoded 56/44 at line 376) needs to account for the number of board columns
+  4. Columns need height management — either max-height with scroll or truncation with a count indicator
+---
+id: 0oorgrlk
+author: Hans Kohlreiter
+created: 2026-04-05T18:53:44Z
+body: |-
+  ## Acceptance criteria are too subjective to verify
+
+  **What**: All 5 criteria use qualitative language: "uses screen space effectively," "clearly visible," "materially reduced," "reviewable as a product surface." None of these have a measurable threshold. What does "effectively" mean? What does "clearly visible" mean for a detail pane?
+
+  **Why**: A tasker will implement something they think looks good; a verifier will reject it based on different subjective standards. This will cause rework cycles. The UX bugs are the hardest to close precisely because "good enough" is undefined.
+
+  **Suggested action**: Add concrete verifiable criteria, for example:
+  - At 120-col terminal width, board columns show at least 25 characters of issue title per row
+  - At 120-col terminal width, no more than 3 board columns render simultaneously (others are navigable)
+  - Selected issue detail pane shows at minimum: title, ID, status, priority, type, assignee, description first paragraph
+  - Golden tests capture the improved layout at 120x34 and 200x50 terminal sizes
+  - No board column renders narrower than 30 characters inner width
+---
+id: w61svtja
+author: Hans Kohlreiter
+created: 2026-04-05T18:53:56Z
+body: |-
+  ## Missing instruction: the 5-column default dashboard definition is itself a problem
+
+  **What**: The built-in dashboard (internal/dashboard/builtin_provider.go) defines 4 columns by default (Ready, In Progress, Blocked, Recent Work) plus a conditional 5th column (Assigned to Me) when BEADS_ACTOR is set. The board renderer (internal/ui/board/board.go) distributes available width evenly across ALL columns with no maximum column count. At the standard 120-col width, 5 columns get ~20 chars each inner width — too narrow for "beads-workbench-yze.4.3 · P1 · Implement launcher framework..." to be readable.
+
+  **Why**: The bug instructions say "improve the board shell layout" but don't mention the dashboard definition or column count as root causes. An implementer might try to make 5 narrow columns look better (impossible) instead of addressing the root cause: either limit visible columns, or reduce the default dashboard to 3 columns.
+
+  **Suggested action**: Add an instruction to either:
+  (a) Limit visible board columns to fit terminal width (e.g., max 3 at 120 cols, with h/l scrolling through column groups), OR
+  (b) Reduce the default dashboard to 3 sections (Ready, In Progress, Blocked) as the v1 default, deferring Recent Work and Assigned to Me to a second dashboard or tab
+---
+id: x3u49lpz
+author: Hans Kohlreiter
+created: 2026-04-06T09:23:05Z
+body: |-
+  Verifier FAIL after first pass: responsive column windowing and visible selected-issue pane are now in place, but the browsing screen is still not product-reviewable. Remaining gaps: (1) board row formatting still lets long issue IDs consume nearly all row width, hiding too much title text on real data, and (2) the header/help text still truncates/hurts presentation around 120 columns. Keep this bug open and fix these runtime readability issues before sign-off.
+---
+id: derirm5v
+author: Hans Kohlreiter
+created: 2026-04-06T09:37:06Z
+body: |-
+  Verifier PASS after second readability pass: the board now uses a responsive visible-column window, rows prioritize readable title text with compact metadata, the main browsing screen shows a visible selected-issue pane, header help adapts to representative widths, golden/render coverage was updated, and PTY/runtime re-checks at wide sizes now show a reviewable product surface.

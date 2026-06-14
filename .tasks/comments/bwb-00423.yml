@@ -1,0 +1,14 @@
+---
+id: 3nop49g7
+author: Hans Kohlreiter
+created: 2026-06-05T15:39:10Z
+body: |-
+  Implemented. Added pendingDialogGuard{active,kind} on Model: set at the 4 async dialog-open
+  dispatch sites (detail status, search status, create, update); cleared at a single choke
+  point (top of tea.KeyMsg branch, capturing hadPendingDialog); both catalog-loaded handlers
+  gate modal-open on guard active+kind; ESC during the load window uses hadPendingDialog to
+  cancel the pending open WITHOUT popping the mode. Keyed on kind (not issue ID) so create's
+  empty ID is handled.
+  Tests: TestPendingDialogGuardStatusRaceEscCancelsOpen, TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen
+  (create+update sub-tests) — assert no modal + active mode still Detail. Verified independently (PASS).
+  Gates: vet, lint (0 issues), guardrails, unit (1158), integration (1309, 15 skipped) — all PASS.
