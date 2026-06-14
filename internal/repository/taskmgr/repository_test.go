@@ -129,14 +129,16 @@ func TestDashboardSections(t *testing.T) {
 	}
 	// Dep-blocked: blocker open, dependent open but gated. Created via the SDK
 	// because the Repository create surface does not carry dependency edges.
-	blocker, err := store.Create(tasks.CreateInput{Title: "D blocker"})
+	blockerRes, err := store.Create(tasks.CreateInput{Title: "D blocker"})
 	if err != nil {
 		t.Fatalf("store.Create blocker: %v", err)
 	}
-	dep, err := store.Create(tasks.CreateInput{Title: "E dep", BlockedBy: []string{blocker.ID}})
+	blocker := blockerRes.Issue
+	depRes, err := store.Create(tasks.CreateInput{Title: "E dep", BlockedBy: []string{blocker.ID}})
 	if err != nil {
 		t.Fatalf("store.Create dep: %v", err)
 	}
+	dep := depRes.Issue
 
 	dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
 	if err != nil {

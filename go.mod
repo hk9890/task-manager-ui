@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20260330094520-2dce04b6f8a4
-	github.com/hk9890/task-manager/sdk v0.3.1
+	github.com/hk9890/task-manager/sdk v0.4.0
 	github.com/muesli/termenv v0.16.0
 	golang.org/x/tools v0.46.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
