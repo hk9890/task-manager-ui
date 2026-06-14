@@ -3,7 +3,7 @@ package dashboard
 import (
 	"sort"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // cardinalityThreshold is the population size above which a CardinanlityWarning

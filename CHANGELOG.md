@@ -9,7 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- **Repository backend replaced.** bwb now reads and writes issues in-process through the [task-manager](https://github.com/hk9890/task-manager) Go SDK (`github.com/hk9890/task-manager/sdk/tasks`) instead of shelling out to the `bd` (beads) CLI. The default `--repo` backend is now `taskmgr`. Issues live as Markdown files under a `.tasks/` directory; bwb expects a `.tasks/` store in the target project (create one with `taskmgr init`).
+- **Renamed the project to Task Manager UI.** Binary `bwb` → `taskmgr-ui`; Go module `github.com/hk9890/beads-workbench` → `github.com/hk9890/task-manager-ui`; repository → `task-manager-ui`. The launcher env-var prefix `BWB_*` → `TASKMGR_UI_*` (default config only; existing user configs define their own names). The `--version`/`--debug` program name, the log/state directory, and log filenames now use `taskmgr-ui`. The project no longer has any beads dependency.
+- **Repository backend replaced.** taskmgr-ui now reads and writes issues in-process through the [task-manager](https://github.com/hk9890/task-manager) Go SDK (`github.com/hk9890/task-manager/sdk/tasks`) instead of shelling out to the `bd` (beads) CLI. The default `--repo` backend is `taskmgr`. Issues live as Markdown files under a `.tasks/` directory; taskmgr-ui expects a `.tasks/` store in the target project (create one with `taskmgr init`).
 - `--debug` repository traces are now in-process; there is no external subprocess argv in the product path.
 
 ### Removed

@@ -48,13 +48,13 @@ This is the default quick proof for runtime behavior during implementation. See 
 Seed a throwaway `.tasks` store with the `taskmgr` CLI, then run the real app against it. `taskmgr` is the default `--repo` backend, so no flag is needed.
 
 ```bash
-go build -o /tmp/bwb ./cmd/bwb
+go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
 repoPath="$(mktemp -d)"
 ( cd "$repoPath" \
   && taskmgr init --prefix bwf \
   && taskmgr create --title "Ready issue" \
   && taskmgr create --title "In-progress issue" --type bug )
-(cd "$repoPath" && /tmp/bwb)
+(cd "$repoPath" && /tmp/taskmgr-ui)
 ```
 
 `taskmgr create --json` prints the new ID (e.g. `bwf-0001`) if you need to reference it in a later step.
@@ -65,10 +65,10 @@ Use this when you need agent-visible proof of runtime behavior without manually 
 
 ```bash
 python3 -m pip install --user pyte
-go build -o /tmp/bwb ./cmd/bwb
+go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
 ```
 
-#### PTY step toolkit (`scripts/capture_bwb_screen.py`)
+#### PTY step toolkit (`scripts/capture_taskmgr_ui_screen.py`)
 
 Prefer repeatable `--step` instructions over blind delay chains.
 
@@ -84,7 +84,7 @@ Legacy `--steps delay:key,...` still works, but `--step` wait-based flows are th
 ```bash
 repoPath="$(mktemp -d)"
 ( cd "$repoPath" && taskmgr init --prefix bwf && taskmgr create --title "Ready issue" )
-python3 scripts/capture_bwb_screen.py \
+python3 scripts/capture_taskmgr_ui_screen.py \
   --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 \
   --step 'wait-for-text:Ready:3000' \
   --step 'wait-for-text:Selected::3000' \
@@ -94,7 +94,7 @@ python3 scripts/capture_bwb_screen.py \
   --step 'send-key:ESC' \
   --step 'wait-for-text:Board:2000' \
   --step 'send-key:CTRL+Q' \
-  -- -- /tmp/bwb
+  -- -- /tmp/taskmgr-ui
 ```
 
 #### B) Mutation save check (before/after store assertion)
@@ -109,14 +109,14 @@ before="$( (cd "$repoPath" && taskmgr show bwf-0001 --json) )"
 
 # Insert the mode-specific edit + save keystrokes as extra --step lines
 # between opening Detail and returning to Board.
-python3 scripts/capture_bwb_screen.py \
+python3 scripts/capture_taskmgr_ui_screen.py \
   --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 \
   --step 'wait-for-text:Selected::3000' \
   --step 'send-key:ENTER' \
   --step 'wait-for-text:Detail::3000' \
   --step 'wait-for-text:Board:2000' \
   --step 'send-key:CTRL+Q' \
-  -- -- /tmp/bwb
+  -- -- /tmp/taskmgr-ui
 
 after="$( (cd "$repoPath" && taskmgr show bwf-0001 --json) )"
 [ "$before" != "$after" ] && echo "changed: true" || echo "changed: false"
@@ -132,7 +132,7 @@ Same recipe as B, but drive the cancel path (e.g. `ESC` out of the edit without 
 
 - `step <index> (...) timed out after <N>ms`: a specific wait step did not settle; inspect `steps[*].observed_excerpt` and `failure`.
 - `capture timed out after <Ns>`: global timeout was exceeded; increase `--timeout` for longer flows.
-- `missing command after --`: `capture_bwb_screen.py` did not receive the app command.
+- `missing command after --`: `capture_taskmgr_ui_screen.py` did not receive the app command.
 - `ModuleNotFoundError: No module named 'pyte'`: install `pyte` first (`python3 -m pip install --user pyte`).
 
 ## 3) What to verify in the manual run
@@ -164,19 +164,19 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 **Pre-conditions:**
 
-- A `.tasks` store with more than 200 closed issues. Seed one with the `taskmgr` CLI (`taskmgr init`, then create + `taskmgr close` enough issues), or point `bwb` at an existing store that already has a large closed total. `taskmgr` is the default backend, so no `--repo` flag is needed.
-- `bwb` is built and on `$PATH` or run via `mise run bwb`.
+- A `.tasks` store with more than 200 closed issues. Seed one with the `taskmgr` CLI (`taskmgr init`, then create + `taskmgr close` enough issues), or point `taskmgr-ui` at an existing store that already has a large closed total. `taskmgr` is the default backend, so no `--repo` flag is needed.
+- `taskmgr-ui` is built and on `$PATH` or run via `mise run taskmgr-ui`.
 
 **Procedure:**
 
 1. Open a terminal and resize it so the height is **40 rows**. Verify with `echo $LINES` or your terminal's title bar. Record the height as `H1`.
-2. Launch `bwb` against a qualifying store (run it from the store's directory, or pass `--cwd`):
+2. Launch `taskmgr-ui` against a qualifying store (run it from the store's directory, or pass `--cwd`):
    ```
-   (cd /path/to/store && mise run bwb)
+   (cd /path/to/store && mise run taskmgr-ui)
    ```
 3. On the board, locate the **Done** column header. It shows `N of M` where `N` is the number of rows loaded and `M` is the true closed total in the database.
 4. Confirm `N` equals `H1 - 3` (e.g. for a 40-row terminal, `N = 37`). `M` should be the real closed total, e.g. `37 of 679`. Record `N` as `N1` and `M` as `M1`.
-5. Keep `bwb` running. Resize the terminal **taller** — at least **200 rows** (e.g. drag the window to maximum height or `printf '\e[8;200;220t'` in a supporting terminal emulator). Record the new height as `H2`.
+5. Keep `taskmgr-ui` running. Resize the terminal **taller** — at least **200 rows** (e.g. drag the window to maximum height or `printf '\e[8;200;220t'` in a supporting terminal emulator). Record the new height as `H2`.
 6. Press **`r`** to refresh.
 7. Wait for the board to reload (the Done column header will update).
 8. Confirm `N` is now `H2 - 3` (e.g. for a 200-row terminal, `N = 197`). The exact value must match `height - 3`; what matters is that `N` increased proportionally to `H2`.
@@ -203,14 +203,14 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 **Pre-conditions:**
 
 - A `.tasks` store with more than 22 ready issues (so that 30 `j` presses push past the viewport at height=25). Seed one with `taskmgr init` + repeated `taskmgr create`.
-- `bwb` is built.
+- `taskmgr-ui` is built.
 
 **Procedure — board Ready column:**
 
 1. Open a terminal at height=25 (22 usable rows per column after borders).
-2. Launch `bwb` from a qualifying store directory:
+2. Launch `taskmgr-ui` from a qualifying store directory:
    ```
-   (cd /path/to/store && /tmp/bwb)
+   (cd /path/to/store && /tmp/taskmgr-ui)
    ```
 3. Move focus to the **Ready** column (press `l` or `h` until the Ready header is highlighted).
 4. Press `j` 30 times.
@@ -247,22 +247,22 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 **Pre-conditions:**
 
 - A `.tasks` store with roughly 89 closed issues — enough to span multiple pagination pages at small terminal heights. Seed one with the `taskmgr` CLI (`taskmgr init`, then create + `taskmgr close` ~89 issues). The examples below use 89 as the closed total `M`; substitute your store's actual closed count.
-- `bwb` is built: `mise run build` or `go build -o /tmp/bwb ./cmd/bwb`.
+- `taskmgr-ui` is built: `mise run build` or `go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui`.
 - Terminal height ≤ 30 rows (so the initial load is a small slice, not all 89). Verify with `echo $LINES`.
 
 **Procedure:**
 
-1. Build bwb:
+1. Build taskmgr-ui:
    ```bash
    mise run build
    ```
-   Or equivalently: `go build -o /tmp/bwb ./cmd/bwb`.
+   Or equivalently: `go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui`.
 
 2. Open a terminal at height ≤ 30 rows. Confirm with `echo $LINES`.
 
 3. Launch from the seeded store directory:
    ```bash
-   (cd /path/to/store && /tmp/bwb)
+   (cd /path/to/store && /tmp/taskmgr-ui)
    ```
 
 4. Observe the **Done** column header. It should read `N of 89` where `N ≈ height - 3` (e.g. `25 of 89` at height=28). This confirms the initial load is capped and pagination is active.
@@ -272,10 +272,10 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 6. Press `j` repeatedly past the loaded-slice boundary. Confirm:
    - The Done header N grows (e.g. `25 of 89` → `50 of 89` → `75 of 89`). M stays 89.
    - The `›` chevron remains visible in the Done column next to the selected issue at all times (b38b.4 scroll-window contract — see §6).
-   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[bwb-debug]` trace (these are now in-process repository traces, not bd subprocess argv):
+   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[taskmgr-ui-debug]` trace (these are now in-process repository traces, not bd subprocess argv):
      ```bash
-     (cd /path/to/store && /tmp/bwb --debug 2>/tmp/bwb-debug.log)
-     # in another terminal: tail -f /tmp/bwb-debug.log | grep loadMoreClosed
+     (cd /path/to/store && /tmp/taskmgr-ui --debug 2>/tmp/taskmgr-ui-debug.log)
+     # in another terminal: tail -f /tmp/taskmgr-ui-debug.log | grep loadMoreClosed
      ```
 
 7. Press `r` for manual reload. Confirm:

@@ -29,7 +29,7 @@ func TestIssueEditDocumentRenderParseRoundTrip(t *testing.T) {
 	}
 
 	rendered := RenderIssueEditDocument(issue)
-	if !strings.Contains(rendered, "# Beads Workbench Issue Edit") {
+	if !strings.Contains(rendered, "# Task Manager UI Issue Edit") {
 		t.Fatalf("expected issue edit heading, got:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "## Read-Only Context (ignored on save)") {

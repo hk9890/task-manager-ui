@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 )
 
 // EditorCall captures one PrepareDocument invocation.

@@ -38,9 +38,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // ---- DelayedFakeRepository ----

@@ -1,2 +1,2 @@
-// Package app contains the root Beads Workbench application shell.
+// Package app contains the root Task Manager UI application shell.
 package app

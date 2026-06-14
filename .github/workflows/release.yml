@@ -34,7 +34,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build ./cmd/bwb
+        run: go build ./cmd/taskmgr-ui
 
       - name: Vet
         run: go vet ./...

@@ -1,6 +1,6 @@
 package memory
 
-import "github.com/hk9890/beads-workbench/internal/domain"
+import "github.com/hk9890/task-manager-ui/internal/domain"
 
 // Forget removes an issue from the in-memory store. Used by callers that
 // know an external authority (e.g. bd) is the source of truth and want to

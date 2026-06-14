@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 func TestIssueEditorAppliesRepositoryUpdateFromEditedDocument(t *testing.T) {

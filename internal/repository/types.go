@@ -1,6 +1,6 @@
 package repository
 
-import "github.com/hk9890/beads-workbench/internal/domain"
+import "github.com/hk9890/task-manager-ui/internal/domain"
 
 // DashboardData is the composite board snapshot returned by Repository.Dashboard.
 // All per-issue fields use domain.* types directly; this struct is the only

@@ -3,7 +3,7 @@
 ## Current diagnostics surface
 
 Runtime diagnostics are now centralized through `internal/logging` and used by
-`cmd/bwb/main.go` plus the repository backend (the validating decorator in
+`cmd/taskmgr-ui/main.go` plus the repository backend (the validating decorator in
 `internal/repository/validating.go`).
 
 - `stdout` remains the success surface for non-interactive `--help`, `--version`,
@@ -14,7 +14,7 @@ Runtime diagnostics are now centralized through `internal/logging` and used by
   `--check-config`, also write diagnostics to the persistent JSON Lines log when
   the sink is available
 - `--debug` enables DEBUG/INFO diagnostic mirroring to `stderr` with the
-  compatibility prefix `[bwb-debug]`
+  compatibility prefix `[taskmgr-ui-debug]`
 
 ## Centralized logging contract
 
@@ -22,12 +22,12 @@ Runtime diagnostics are now centralized through `internal/logging` and used by
 
 Implemented behavior:
 
-- persistent JSON Lines log sink at `$XDG_STATE_HOME/bwb/bwb-<session_id>.log`
-  - fallback path: `~/.local/state/bwb/bwb-<session_id>.log`
-  - each BWB process writes to its own file named after its `session_id`, so
+- persistent JSON Lines log sink at `$XDG_STATE_HOME/taskmgr-ui/taskmgr-ui-<session_id>.log`
+  - fallback path: `~/.local/state/taskmgr-ui/taskmgr-ui-<session_id>.log`
+  - each taskmgr-ui process writes to its own file named after its `session_id`, so
     concurrent processes never share a file or its rotation state
   - this sink is user/machine scoped and the directory can contain log files
-    from multiple sessions, projects, and multiple BWB builds
+    from multiple sessions, projects, and multiple taskmgr-ui builds
 - per-run `session_id` attached to structured records
 - root provenance fields on every record:
   - `project_root`
@@ -37,7 +37,7 @@ Implemented behavior:
   - max backups: 5
   - max age: 30 days
   - compression enabled
-- on startup, stale `bwb-*.log` files older than the rotation max age (30 days)
+- on startup, stale `taskmgr-ui-*.log` files older than the rotation max age (30 days)
   are pruned from the state directory; the current session's file is never
   deleted regardless of age; errors from individual prune operations are
   silently ignored so that cleanup never aborts startup
@@ -64,7 +64,7 @@ both inherit those root attributes automatically.
 
 `--debug` mirrors machine-visible startup diagnostics to `stderr`:
 
-- startup resolution lines from `cmd/bwb/main.go` for both interactive and
+- startup resolution lines from `cmd/taskmgr-ui/main.go` for both interactive and
   non-interactive startup paths that load config
   - resolved config path
   - resolved cwd
@@ -102,8 +102,8 @@ interactive startup and startup-only commands such as `--check-config` and
 Use stderr capture when you need reproducible operator-facing evidence:
 
 ```bash
-bwb --cwd /path/to/project --debug 2> /tmp/bwb-debug.log
-bwb --cwd /path/to/project --debug --check-config 2> /tmp/bwb-debug-check.log
+taskmgr-ui --cwd /path/to/project --debug 2> /tmp/taskmgr-ui-debug.log
+taskmgr-ui --cwd /path/to/project --debug --check-config 2> /tmp/taskmgr-ui-debug-check.log
 ```
 
 Use the persistent JSON Lines log when you need durable machine-readable
@@ -111,22 +111,22 @@ diagnostics. Each process writes to its own file named after its `session_id`.
 To follow all active sessions at once, use a glob:
 
 ```bash
-tail -f ~/.local/state/bwb/bwb-*.log
+tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-*.log
 ```
 
 Or, if `XDG_STATE_HOME` is set:
 
 ```bash
-tail -f "$XDG_STATE_HOME/bwb/bwb-*.log"
+tail -f "$XDG_STATE_HOME/taskmgr-ui/taskmgr-ui-*.log"
 ```
 
 To follow a specific session by ID (the `session_id` is printed on `stderr`
 when `--debug` is set):
 
 ```bash
-tail -f "$XDG_STATE_HOME/bwb/bwb-<session_id>.log"
+tail -f "$XDG_STATE_HOME/taskmgr-ui/taskmgr-ui-<session_id>.log"
 # e.g.:
-tail -f ~/.local/state/bwb/bwb-deadbeef.log
+tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-deadbeef.log
 ```
 
 When inspecting multiple log files, do not assume adjacent records across files
@@ -143,7 +143,7 @@ Effective capture destinations therefore include:
 
 ## Relevant code paths
 
-- `cmd/bwb/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New` → `repository.NewValidating`)
+- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New` → `repository.NewValidating`)
 - `internal/repository/taskmgr/` — in-process task-manager backend (the production repository); behavior tests live alongside it
 - `internal/repository/validating.go` — validating decorator; emits `"repository contract violation"` WARN records under the `validating` component
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
@@ -154,7 +154,7 @@ Effective capture destinations therefore include:
 For user-visible runtime capture rather than stderr diagnostics, use the
 verification tooling documented in `docs/RUNTIME_UI_VERIFICATION.md`:
 
-- `scripts/capture_bwb_screen.py`
+- `scripts/capture_taskmgr_ui_screen.py`
 
 That script captures rendered TUI state; it is not part of the logging
 surface.
@@ -167,5 +167,5 @@ The active runtime path still does not provide:
 - metrics collection
 - tracing/span export
 
-Update this file when `internal/logging/`, `cmd/bwb/main.go`, or
+Update this file when `internal/logging/`, `cmd/taskmgr-ui/main.go`, or
 `internal/repository/validating.go` changes the diagnostics contract.

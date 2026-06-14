@@ -1,13 +1,13 @@
-# Beads Workbench
+# Task Manager UI
 
-[![CI](https://github.com/hk9890/beads-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/hk9890/beads-workbench/actions/workflows/ci.yml)
+[![CI](https://github.com/hk9890/task-manager-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/hk9890/task-manager-ui/actions/workflows/ci.yml)
 
 A standalone terminal UI for browsing and updating task-manager issues.
 
 ## Repository Identity
 
-- Module: `github.com/hk9890/beads-workbench`
-- Binary: `bwb`
+- Module: `github.com/hk9890/task-manager-ui`
+- Binary: `taskmgr-ui`
 
 ## Getting Started
 
@@ -16,20 +16,20 @@ A standalone terminal UI for browsing and updating task-manager issues.
 - [mise](https://mise.jdx.dev/) — provisions the pinned Go toolchain and dev
   tools from `.mise.toml`, so a separate Go install is not required.
 
-No external CLI is required at runtime. `bwb` reads and writes issues in-process
+No external CLI is required at runtime. `taskmgr-ui` reads and writes issues in-process
 via the [task-manager](https://github.com/hk9890/task-manager) Go SDK
 (`github.com/hk9890/task-manager/sdk/tasks`), pinned in `go.mod`.
 
 ### Build and run
 
 ```bash
-mise run build                    # build the bwb binary
-bwb --cwd /path/to/project        # run against a directory containing a .tasks/ store
+mise run build                    # build the taskmgr-ui binary
+taskmgr-ui --cwd /path/to/project        # run against a directory containing a .tasks/ store
 ```
 
 ## CLI Surface
 
-`bwb` is intentionally a **TUI-first** binary with a small startup CLI.
+`taskmgr-ui` is intentionally a **TUI-first** binary with a small startup CLI.
 
 For the full flag list, exit codes, config-path behavior, and debug contract, see
 `docs/CODING.md`.
@@ -37,9 +37,9 @@ For the full flag list, exit codes, config-path behavior, and debug contract, se
 Common examples:
 
 ```bash
-bwb --cwd /path/to/project
-bwb --config "$HOME/.config/bwb/config.yaml" --print-config
-bwb --check-config
+taskmgr-ui --cwd /path/to/project
+taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
+taskmgr-ui --check-config
 ```
 
 For exit codes, config details, and centralized debug/logging behavior, see

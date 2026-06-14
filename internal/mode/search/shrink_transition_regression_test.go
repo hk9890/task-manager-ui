@@ -34,7 +34,7 @@ package search
 //
 // The defect is NOT reproducible at the Go View() / frame-composition level.
 // The symptom (stale rows visible for ~1s) is a terminal-emulator repaint
-// artifact that occurs when the screen-capture tool (scripts/capture_bwb_screen.py)
+// artifact that occurs when the screen-capture tool (scripts/capture_taskmgr_ui_screen.py)
 // catches the terminal mid-repaint — i.e., after Bubble Tea has written the
 // first N rows of the new frame but before it has overwritten the remaining
 // rows. There is no Go code to fix.
@@ -57,8 +57,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // TestSearchShrinkTransition_NoStaleRowsInView is the primary regression pin for

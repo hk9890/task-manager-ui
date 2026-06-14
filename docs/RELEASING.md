@@ -7,8 +7,8 @@ GoReleaser.
 
 - CI provenance is available via GitHub Actions workflow `.github/workflows/ci.yml` (`CI` workflow), which on `push` and `pull_request` runs the full quality gate set — script syntax checks, format check, lint, build, vet, architecture guardrails, unit tests, and a `test:coverage` threshold gate — across an ubuntu/macos/windows matrix.
 - Release artifacts are published by `.github/workflows/release.yml` using `.goreleaser.yaml` whenever a `v*` tag is pushed.
-- Release/snapshot builds inject `bwb --version` metadata via GoReleaser ldflags into `github.com/hk9890/beads-workbench/internal/version` (`Version`, `Commit`, `Date`), while local developer builds keep the fallback `dev` / `unknown` values defined in `internal/version/version.go`. See `docs/CODING.md` Version/build metadata behavior for the full symbol list.
-- Release archives are intentionally named for installer compatibility, for example `bwb_0.2.0_linux_x64.tar.gz` and `bwb_0.2.0_macos_arm64.tar.gz`, so tools like `mise` can auto-detect the correct asset.
+- Release/snapshot builds inject `taskmgr-ui --version` metadata via GoReleaser ldflags into `github.com/hk9890/task-manager-ui/internal/version` (`Version`, `Commit`, `Date`), while local developer builds keep the fallback `dev` / `unknown` values defined in `internal/version/version.go`. See `docs/CODING.md` Version/build metadata behavior for the full symbol list.
+- Release archives are intentionally named for installer compatibility, for example `taskmgr-ui_0.2.0_linux_x64.tar.gz` and `taskmgr-ui_0.2.0_macos_arm64.tar.gz`, so tools like `mise` can auto-detect the correct asset.
 - Release verification should include both local operator checks and the corresponding successful CI workflow run(s) for the release commit.
 - Release visibility policy: this repository remains **private** and releases created here are **internal-only** unless a future maintainer decision explicitly changes that policy.
 
@@ -56,7 +56,7 @@ Run from the repository root.
 4. Create an annotated tag on the release commit:
 
    ```bash
-   git tag -a vX.Y.Z -m "bwb vX.Y.Z"
+   git tag -a vX.Y.Z -m "taskmgr-ui vX.Y.Z"
    ```
 
 5. Push the tag to origin to trigger the automated release workflow:
@@ -67,7 +67,7 @@ Run from the repository root.
 
 6. Watch the `Release` workflow complete successfully. It will:
 
-   - build `bwb` archives for supported platforms
+   - build `taskmgr-ui` archives for supported platforms
    - create or update the GitHub release for the tag
    - upload release assets and checksums
 
@@ -96,7 +96,7 @@ Procedure:
 2. Create and push the annotated tag:
 
    ```bash
-   git tag -a vX.Y.Z -m "bwb vX.Y.Z"
+   git tag -a vX.Y.Z -m "taskmgr-ui vX.Y.Z"
    git push origin vX.Y.Z
    ```
 
@@ -130,9 +130,9 @@ GitHub release page, then run:
 
 ```bash
 cosign verify-blob \
-  --signature bwb_<version>_checksums.txt.sig \
-  --certificate bwb_<version>_checksums.txt.pem \
-  bwb_<version>_checksums.txt
+  --signature taskmgr-ui_<version>_checksums.txt.sig \
+  --certificate taskmgr-ui_<version>_checksums.txt.pem \
+  taskmgr-ui_<version>_checksums.txt
 ```
 
 ## Backfilling or correcting release assets

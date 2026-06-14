@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/logging"
-	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
-	"github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/logging"
+	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
+	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // --- resolveAndValidateCWD tests ---
@@ -119,7 +119,7 @@ func TestRunCWDInaccessibleExitsWithCode1(t *testing.T) {
 
 // TestRunDebugWithHelpExitsZeroNoDebugLines asserts that --debug is silently
 // dropped in the non-interactive --help path: exit code is 0 and no
-// [bwb-debug] lines appear on stderr.  This encodes the decided contract:
+// [taskmgr-ui-debug] lines appear on stderr.  This encodes the decided contract:
 // the debug flag is not honoured before the logger is initialised, so
 // non-interactive flag paths (--help, --version) never emit debug output.
 func TestRunDebugWithHelpExitsZeroNoDebugLines(t *testing.T) {
@@ -138,8 +138,8 @@ func TestRunDebugWithHelpExitsZeroNoDebugLines(t *testing.T) {
 		t.Fatalf("expected exit code 0 for --debug --help, got %d (stderr: %q)", code, stderr.String())
 	}
 	for _, line := range strings.Split(stderr.String(), "\n") {
-		if strings.Contains(line, "[bwb-debug]") {
-			t.Fatalf("unexpected [bwb-debug] line on stderr for --debug --help: %q", line)
+		if strings.Contains(line, "[taskmgr-ui-debug]") {
+			t.Fatalf("unexpected [taskmgr-ui-debug] line on stderr for --debug --help: %q", line)
 		}
 	}
 }

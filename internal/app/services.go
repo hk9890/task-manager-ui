@@ -11,10 +11,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/launcher"
-	launchereditor "github.com/hk9890/beads-workbench/internal/launcher/editor"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/launcher"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // execCmdWrapper wraps an *exec.Cmd so it satisfies the tea.ExecCommand interface.
@@ -113,7 +113,7 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 	}, nil
 }
 
-// cleanStaleTempFiles removes bwb-issue-*.md files in os.TempDir() that are
+// cleanStaleTempFiles removes taskmgr-ui-issue-*.md files in os.TempDir() that are
 // older than 24 hours. These are leftover temp documents from editor sessions
 // that were interrupted by SIGKILL or a panic (the normal defer os.Remove path
 // only runs on clean exit).
@@ -122,13 +122,13 @@ func cleanStaleTempFiles(logger *slog.Logger) {
 }
 
 // cleanStaleTempFilesInDir is the testable core of cleanStaleTempFiles.
-// It scans dir for bwb-issue-*.md files older than 24h and removes them.
+// It scans dir for taskmgr-ui-issue-*.md files older than 24h and removes them.
 func cleanStaleTempFilesInDir(logger *slog.Logger, dir string) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	matches, err := filepath.Glob(filepath.Join(dir, "bwb-issue-*.md"))
+	matches, err := filepath.Glob(filepath.Join(dir, "taskmgr-ui-issue-*.md"))
 	if err != nil {
 		logger.Warn("temp cleanup: glob failed", "dir", dir, "error", err.Error())
 		return

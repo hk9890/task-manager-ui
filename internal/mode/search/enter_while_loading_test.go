@@ -23,10 +23,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	uisearch "github.com/hk9890/beads-workbench/internal/ui/search"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
 // recordingSearchRepo wraps a searchRepo and records all Search queries.

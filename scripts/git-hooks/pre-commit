@@ -28,7 +28,7 @@ xargs -0 -I{} git -C "$repo_root" add -u -- "{}" < "$staged_list_file"
 # Run goimports on staged files if available (mirrors the fmt:check CI task).
 # Falls back to go run (slower, no install required) when goimports is not in PATH.
 GOIMPORTS_VERSION_FILE="$repo_root/.goimports-version"
-GOIMPORTS_LOCAL="github.com/hk9890/beads-workbench"
+GOIMPORTS_LOCAL="github.com/hk9890/task-manager-ui"
 
 if command -v goimports >/dev/null 2>&1; then
     printf 'pre-commit: running goimports on staged Go files\n'

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // envEntryRe validates that an interpolated Env entry has the form

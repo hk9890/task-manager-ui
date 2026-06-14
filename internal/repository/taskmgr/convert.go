@@ -3,8 +3,8 @@ package taskmgr
 import (
 	"github.com/hk9890/task-manager/sdk/tasks"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 func cloneStrings(s []string) []string {
@@ -81,7 +81,7 @@ func toBlockedViews(items []tasks.BlockedIssue) []domain.BlockedIssueView {
 	return out
 }
 
-// toDetail projects a resolved SDK Detail onto the bwb detail read model. Notes
+// toDetail projects a resolved SDK Detail onto the taskmgr-ui detail read model. Notes
 // has no SDK counterpart (task-manager stores a single markdown body), so it is
 // left empty. ParentGroupBrowser.Parent is set from the resolved parent ref;
 // IssueDetail.Children comes from the SDK's derived children.

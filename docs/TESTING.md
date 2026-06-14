@@ -1,6 +1,6 @@
 # Testing Strategy
 
-This document defines the repository testing vocabulary, commands, and harness conventions for Beads Workbench.
+This document defines the repository testing vocabulary, commands, and harness conventions for Task Manager UI.
 
 **Automated tests are the primary proof of correctness.** For user-facing behavior, they must be complemented by a reproducible full-app verification run performed by the agent/operator. Do not rely on user confirmation for basic product validation that can be checked directly.
 
@@ -77,17 +77,17 @@ Use `docs/RUNTIME_UI_VERIFICATION.md` for the concrete, command-oriented workflo
 
 Use the real app when a change affects layout, navigation, startup behavior, or operator-facing workflows.
 
-Typical workflow — run the built binary against this project's own `.tasks` store via the `bwb` task:
+Typical workflow — run the built binary against this project's own `.tasks` store via the `taskmgr-ui` task:
 
 ```bash
-mise run bwb
+mise run taskmgr-ui
 ```
 
 For a disposable seeded board, run against the JSONL-backed `memory` backend instead:
 
 ```bash
-go build -o /tmp/bwb ./cmd/bwb
-/tmp/bwb --repo memory --repo-file path/to/seed.jsonl
+go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
+/tmp/taskmgr-ui --repo memory --repo-file path/to/seed.jsonl
 ```
 
 During the run, verify the changed behavior directly:
@@ -105,7 +105,7 @@ Notes:
   var is needed for a scripted/captured run.
 - Prefer the seeded `memory` backend for repeatable, disposable verification.
 - If terminal capture is needed, use a method that records the visible rendered screen. Alt-screen TUIs may not be proven by raw stdout/transcript output alone.
-- For a repo-local reproducible capture path, use `scripts/capture_bwb_screen.py` with `pyte`; see `docs/RUNTIME_UI_VERIFICATION.md`.
+- For a repo-local reproducible capture path, use `scripts/capture_taskmgr_ui_screen.py` with `pyte`; see `docs/RUNTIME_UI_VERIFICATION.md`.
 - Full-app verification complements automated tests; it does not replace them.
 
 ### Process-level capture policy

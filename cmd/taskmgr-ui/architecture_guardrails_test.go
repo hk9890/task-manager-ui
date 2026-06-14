@@ -14,16 +14,16 @@ import (
 	"golang.org/x/tools/go/packages"
 	"gopkg.in/yaml.v3"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/logging"
-	bwbversion "github.com/hk9890/beads-workbench/internal/version"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/logging"
+	appversion "github.com/hk9890/task-manager-ui/internal/version"
 )
 
 func TestArchitectureGuardrails(t *testing.T) {
 	t.Parallel()
 
 	modulePath := currentModulePath(t)
-	pkgs := listCmdBwbPackages(t)
+	pkgs := listCmdPackages(t)
 	firstPartyDeps := filterFirstPartyImportPaths(pkgs, modulePath)
 
 	t.Run("no direct SQL in active product path", func(t *testing.T) {
@@ -63,7 +63,7 @@ func currentModulePath(t *testing.T) string {
 		Mode: packages.NeedModule | packages.NeedName,
 		Dir:  moduleRoot,
 	}
-	pkgs, err := packages.Load(cfg, "./cmd/bwb")
+	pkgs, err := packages.Load(cfg, "./cmd/taskmgr-ui")
 	if err != nil {
 		t.Fatalf("resolving module path failed: %v", err)
 	}
@@ -79,7 +79,7 @@ func currentModulePath(t *testing.T) string {
 	return modulePath
 }
 
-func listCmdBwbPackages(t *testing.T) []listedPackage {
+func listCmdPackages(t *testing.T) []listedPackage {
 	t.Helper()
 
 	moduleRoot := moduleRootDir(t)
@@ -88,12 +88,12 @@ func listCmdBwbPackages(t *testing.T) []listedPackage {
 		Mode: packages.NeedDeps | packages.NeedImports | packages.NeedName,
 		Dir:  moduleRoot,
 	}
-	roots, err := packages.Load(cfg, "./cmd/bwb")
+	roots, err := packages.Load(cfg, "./cmd/taskmgr-ui")
 	if err != nil {
-		t.Fatalf("listing package metadata for ./cmd/bwb failed: %v", err)
+		t.Fatalf("listing package metadata for ./cmd/taskmgr-ui failed: %v", err)
 	}
 	if len(roots) == 0 {
-		t.Fatal("packages.Load returned no packages for ./cmd/bwb")
+		t.Fatal("packages.Load returned no packages for ./cmd/taskmgr-ui")
 	}
 
 	// Walk the full transitive dependency graph.
@@ -124,7 +124,7 @@ func listCmdBwbPackages(t *testing.T) []listedPackage {
 	}
 
 	if len(result) == 0 {
-		t.Fatal("packages.Load returned no package metadata for ./cmd/bwb")
+		t.Fatal("packages.Load returned no package metadata for ./cmd/taskmgr-ui")
 	}
 
 	return result
@@ -335,13 +335,13 @@ func TestRun_CheckConfigPrintsWarningsAndSuccess(t *testing.T) {
 	if !strings.Contains(stdout.String(), "config OK") {
 		t.Fatalf("expected success message, got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] session_id=") {
 		t.Fatalf("expected debug session line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] resolved config path") || !strings.Contains(stderr.String(), "path=/tmp/config.yaml") {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] resolved config path") || !strings.Contains(stderr.String(), "path=/tmp/config.yaml") {
 		t.Fatalf("expected config path debug output, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] resolved cwd") {
 		t.Fatalf("expected cwd debug output, got %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "warn: config warning") || !strings.Contains(stderr.String(), "warning=unknown key") {
@@ -374,17 +374,17 @@ func TestRun_NonInteractiveDebugCreatesPersistentStartupLogs(t *testing.T) {
 	if !strings.Contains(stdout.String(), "# source: /tmp/config.yaml\n") {
 		t.Fatalf("expected print-config output, got %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") || !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=true") {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] session_id=") || !strings.Contains(stderr.String(), "[taskmgr-ui-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=true") {
 		t.Fatalf("expected startup debug diagnostics, got %q", stderr.String())
 	}
 
-	// Log file is now per-process: bwb-<session_id>.log. Use a glob to find it.
-	matches, err := filepath.Glob(filepath.Join(stateDir, "bwb", "bwb-*.log"))
+	// Log file is now per-process: taskmgr-ui-<session_id>.log. Use a glob to find it.
+	matches, err := filepath.Glob(filepath.Join(stateDir, "taskmgr-ui", "taskmgr-ui-*.log"))
 	if err != nil {
 		t.Fatalf("Glob returned error: %v", err)
 	}
 	if len(matches) == 0 {
-		t.Fatalf("expected at least one bwb-*.log file in %s", filepath.Join(stateDir, "bwb"))
+		t.Fatalf("expected at least one taskmgr-ui-*.log file in %s", filepath.Join(stateDir, "taskmgr-ui"))
 	}
 	var logText string
 	for _, logPath := range matches {
@@ -416,11 +416,11 @@ func TestRun_VersionUsesFallback(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, bwbversion.Version) {
-		t.Fatalf("expected version output to contain %q, got %q", bwbversion.Version, got)
+	if !strings.Contains(got, appversion.Version) {
+		t.Fatalf("expected version output to contain %q, got %q", appversion.Version, got)
 	}
-	if !strings.HasPrefix(got, "bwb ") {
-		t.Fatalf("expected version output to start with %q, got %q", "bwb ", got)
+	if !strings.HasPrefix(got, "taskmgr-ui ") {
+		t.Fatalf("expected version output to start with %q, got %q", "taskmgr-ui ", got)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
@@ -534,22 +534,22 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	if seenLoggerOpts.ProjectRoot != projectDir {
 		t.Fatalf("expected logger project root %q, got %q", projectDir, seenLoggerOpts.ProjectRoot)
 	}
-	if seenLoggerOpts.BuildVersion != bwbversion.Version {
-		t.Fatalf("expected logger build version %q, got %q", bwbversion.Version, seenLoggerOpts.BuildVersion)
+	if seenLoggerOpts.BuildVersion != appversion.Version {
+		t.Fatalf("expected logger build version %q, got %q", appversion.Version, seenLoggerOpts.BuildVersion)
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] session_id=") {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] session_id=") {
 		t.Fatalf("expected debug session line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] resolved config path") || !strings.Contains(stderr.String(), "path="+filepath.Join(startDir, "cfg.yaml")) {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] resolved config path") || !strings.Contains(stderr.String(), "path="+filepath.Join(startDir, "cfg.yaml")) {
 		t.Fatalf("expected debug config path line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] resolved cwd") || !strings.Contains(stderr.String(), "cwd="+projectDir) {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] resolved cwd") || !strings.Contains(stderr.String(), "cwd="+projectDir) {
 		t.Fatalf("expected debug cwd line, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+bwbversion.Version) {
+	if !strings.Contains(stderr.String(), "project_root="+projectDir) || !strings.Contains(stderr.String(), "build_version="+appversion.Version) {
 		t.Fatalf("expected provenance in debug output, got %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "[bwb-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=false") {
+	if !strings.Contains(stderr.String(), "[taskmgr-ui-debug] auto-refresh") || !strings.Contains(stderr.String(), "enabled=false") {
 		t.Fatalf("expected debug auto-refresh line, got %q", stderr.String())
 	}
 }

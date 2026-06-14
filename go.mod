@@ -1,4 +1,4 @@
-module github.com/hk9890/beads-workbench
+module github.com/hk9890/task-manager-ui
 
 go 1.26.3
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/launcher"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/launcher"
 )
 
 // LauncherCall captures one launcher invocation.

@@ -1,5 +1,5 @@
 // Package repository defines the Repository interface and its associated
-// composite types. Implementations live in sub-packages (beads/, memory/);
+// composite types. Implementations live in sub-packages (memory/, taskmgr/);
 // this package contains only the interface, composite types, and error
 // sentinels.
 package repository
@@ -7,10 +7,10 @@ package repository
 import (
 	"context"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
-// Repository is the central read/write abstraction for beads issue data.
+// Repository is the central read/write abstraction for issue data.
 // Callers use this interface without knowing whether the backing store is a
 // live bd process, an in-memory fixture, or a file snapshot.
 //

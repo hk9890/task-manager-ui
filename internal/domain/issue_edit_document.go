@@ -8,23 +8,23 @@ import (
 )
 
 const (
-	issueEditMarkerEditableBegin = "<!-- BWB:EDITABLE:BEGIN -->"
-	issueEditMarkerEditableEnd   = "<!-- BWB:EDITABLE:END -->"
+	issueEditMarkerEditableBegin = "<!-- TASKMGRUI:EDITABLE:BEGIN -->"
+	issueEditMarkerEditableEnd   = "<!-- TASKMGRUI:EDITABLE:END -->"
 
-	issueEditFieldTitleBegin       = "<!-- BWB:FIELD:TITLE:BEGIN -->"
-	issueEditFieldTitleEnd         = "<!-- BWB:FIELD:TITLE:END -->"
-	issueEditFieldDescriptionBegin = "<!-- BWB:FIELD:DESCRIPTION:BEGIN -->"
-	issueEditFieldDescriptionEnd   = "<!-- BWB:FIELD:DESCRIPTION:END -->"
-	issueEditFieldStatusBegin      = "<!-- BWB:FIELD:STATUS:BEGIN -->"
-	issueEditFieldStatusEnd        = "<!-- BWB:FIELD:STATUS:END -->"
-	issueEditFieldTypeBegin        = "<!-- BWB:FIELD:TYPE:BEGIN -->"
-	issueEditFieldTypeEnd          = "<!-- BWB:FIELD:TYPE:END -->"
-	issueEditFieldPriorityBegin    = "<!-- BWB:FIELD:PRIORITY:BEGIN -->"
-	issueEditFieldPriorityEnd      = "<!-- BWB:FIELD:PRIORITY:END -->"
-	issueEditFieldAssigneeBegin    = "<!-- BWB:FIELD:ASSIGNEE:BEGIN -->"
-	issueEditFieldAssigneeEnd      = "<!-- BWB:FIELD:ASSIGNEE:END -->"
-	issueEditFieldLabelsBegin      = "<!-- BWB:FIELD:LABELS:BEGIN -->"
-	issueEditFieldLabelsEnd        = "<!-- BWB:FIELD:LABELS:END -->"
+	issueEditFieldTitleBegin       = "<!-- TASKMGRUI:FIELD:TITLE:BEGIN -->"
+	issueEditFieldTitleEnd         = "<!-- TASKMGRUI:FIELD:TITLE:END -->"
+	issueEditFieldDescriptionBegin = "<!-- TASKMGRUI:FIELD:DESCRIPTION:BEGIN -->"
+	issueEditFieldDescriptionEnd   = "<!-- TASKMGRUI:FIELD:DESCRIPTION:END -->"
+	issueEditFieldStatusBegin      = "<!-- TASKMGRUI:FIELD:STATUS:BEGIN -->"
+	issueEditFieldStatusEnd        = "<!-- TASKMGRUI:FIELD:STATUS:END -->"
+	issueEditFieldTypeBegin        = "<!-- TASKMGRUI:FIELD:TYPE:BEGIN -->"
+	issueEditFieldTypeEnd          = "<!-- TASKMGRUI:FIELD:TYPE:END -->"
+	issueEditFieldPriorityBegin    = "<!-- TASKMGRUI:FIELD:PRIORITY:BEGIN -->"
+	issueEditFieldPriorityEnd      = "<!-- TASKMGRUI:FIELD:PRIORITY:END -->"
+	issueEditFieldAssigneeBegin    = "<!-- TASKMGRUI:FIELD:ASSIGNEE:BEGIN -->"
+	issueEditFieldAssigneeEnd      = "<!-- TASKMGRUI:FIELD:ASSIGNEE:END -->"
+	issueEditFieldLabelsBegin      = "<!-- TASKMGRUI:FIELD:LABELS:BEGIN -->"
+	issueEditFieldLabelsEnd        = "<!-- TASKMGRUI:FIELD:LABELS:END -->"
 )
 
 // IssueEditDocument captures editable fields supported by repository update.
@@ -49,7 +49,7 @@ type IssueEditDocument struct {
 func RenderIssueEditDocument(issue IssueDetail) string {
 	labels := issueEditLabelsBlock(issue.Summary.Labels)
 
-	return strings.TrimSpace(fmt.Sprintf(`# Beads Workbench Issue Edit
+	return strings.TrimSpace(fmt.Sprintf(`# Task Manager UI Issue Edit
 
 Edit values in the editable field blocks below, then save and exit your editor.
 Keep section headings and marker comments unchanged.
@@ -138,7 +138,7 @@ Keep section headings and marker comments unchanged.
 // ParseIssueEditDocument parses the editable document content.
 func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 	if strings.Count(content, issueEditMarkerEditableEnd) > 1 {
-		return IssueEditDocument{}, fmt.Errorf("multiple %s markers found — description body must not contain BWB: marker tokens", issueEditMarkerEditableEnd)
+		return IssueEditDocument{}, fmt.Errorf("multiple %s markers found — description body must not contain TASKMGRUI: marker tokens", issueEditMarkerEditableEnd)
 	}
 
 	editable, err := issueEditExtractField(content, issueEditMarkerEditableBegin, issueEditMarkerEditableEnd)
@@ -285,8 +285,8 @@ func issueEditExtractField(content, beginMarker, endMarker string) (string, erro
 }
 
 func issueEditCheckDescriptionForMarkers(description string) error {
-	if strings.Contains(description, "BWB:") {
-		return fmt.Errorf("description body must not contain BWB: marker tokens (would corrupt edit round-trip)")
+	if strings.Contains(description, "TASKMGRUI:") {
+		return fmt.Errorf("description body must not contain TASKMGRUI: marker tokens (would corrupt edit round-trip)")
 	}
 	return nil
 }

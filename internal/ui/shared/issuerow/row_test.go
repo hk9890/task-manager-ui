@@ -8,9 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	"github.com/hk9890/beads-workbench/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func TestRenderCompactSelectionAndMetadata(t *testing.T) {

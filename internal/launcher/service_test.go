@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/launcher"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/launcher"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
@@ -24,11 +24,11 @@ func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
 			"--root", "{{project.root}}",
 		},
 		Env: []string{
-			"BWB_ISSUE_ID={{issue.id}}",
-			"BWB_ISSUE_TITLE={{issue.title}}",
-			"BWB_ISSUE_LABELS={{issue.labels}}",
-			"BWB_ISSUE_ASSIGNEE={{issue.assignee}}",
-			"BWB_PROJECT_ROOT={{project.root}}",
+			"TASKMGR_UI_ISSUE_ID={{issue.id}}",
+			"TASKMGR_UI_ISSUE_TITLE={{issue.title}}",
+			"TASKMGR_UI_ISSUE_LABELS={{issue.labels}}",
+			"TASKMGR_UI_ISSUE_ASSIGNEE={{issue.assignee}}",
+			"TASKMGR_UI_PROJECT_ROOT={{project.root}}",
 		},
 		WorkDir: "{{project.root}}",
 	}}, "/repo/root", runner)
@@ -67,7 +67,7 @@ func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
 	if len(call.Env) != 5 {
 		t.Fatalf("expected interpolated env entries, got %#v", call.Env)
 	}
-	if call.Env[0] != "BWB_ISSUE_ID=bw-77" || call.Env[4] != "BWB_PROJECT_ROOT=/repo/root" {
+	if call.Env[0] != "TASKMGR_UI_ISSUE_ID=bw-77" || call.Env[4] != "TASKMGR_UI_PROJECT_ROOT=/repo/root" {
 		t.Fatalf("unexpected interpolated env: %#v", call.Env)
 	}
 }

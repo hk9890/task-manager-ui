@@ -4,8 +4,8 @@ package toaster
 import (
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/ui/overlay"
-	"github.com/hk9890/beads-workbench/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/ui/overlay"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

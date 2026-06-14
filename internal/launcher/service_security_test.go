@@ -16,9 +16,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/launcher"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/launcher"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // shellCommandDefinition returns the positional-arg shell-command definition

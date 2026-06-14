@@ -15,13 +15,13 @@ import (
 	"github.com/hk9890/task-manager/sdk/tasks"
 	"gopkg.in/yaml.v3"
 
-	"github.com/hk9890/beads-workbench/internal/app"
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/logging"
-	"github.com/hk9890/beads-workbench/internal/repository"
-	"github.com/hk9890/beads-workbench/internal/repository/filestorage"
-	repositorytaskmgr "github.com/hk9890/beads-workbench/internal/repository/taskmgr"
-	bwbversion "github.com/hk9890/beads-workbench/internal/version"
+	"github.com/hk9890/task-manager-ui/internal/app"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/logging"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
+	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
+	appversion "github.com/hk9890/task-manager-ui/internal/version"
 )
 
 var configLoad = func(opts config.LoadOptions) (config.Result, error) {
@@ -34,7 +34,7 @@ type startupOptions struct {
 	autoRefresh bool
 	logManager  *logging.Manager
 	repoFlag    string // "taskmgr" (default) or "memory"
-	repoFile    string // resolved path; cache file for caching mode, source of truth for memory, informational for beads
+	repoFile    string // resolved path; source of truth for --repo memory, ignored by taskmgr
 }
 
 // constructRepository builds and wires the repository for startInteractive.
@@ -87,7 +87,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := program.Run(); err != nil {
-		return fmt.Errorf("bwb failed: %w", err)
+		return fmt.Errorf("taskmgr-ui failed: %w", err)
 	}
 
 	return nil
@@ -103,7 +103,7 @@ type cliOptions struct {
 	debug       bool
 	noAuto      bool
 	repo        string // "taskmgr" (default) or "memory"
-	repoFile    string // path to JSONL file; cache file for caching mode, required for memory, informational for beads
+	repoFile    string // path to JSONL file; required for --repo memory, ignored by taskmgr
 }
 
 func main() {
@@ -126,7 +126,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	if opts.showVersion {
-		_, _ = fmt.Fprintf(stdout, "bwb %s (commit %s, built %s)\n", bwbversion.Version, bwbversion.Commit, bwbversion.Date)
+		_, _ = fmt.Fprintf(stdout, "taskmgr-ui %s (commit %s, built %s)\n", appversion.Version, appversion.Commit, appversion.Date)
 		return 0
 	}
 
@@ -148,7 +148,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 			Debug:        opts.debug,
 			Stderr:       stderr,
 			ProjectRoot:  resolvedCWD,
-			BuildVersion: bwbversion.Version,
+			BuildVersion: appversion.Version,
 		})
 		if logManager != nil {
 			defer func() {
@@ -175,7 +175,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		if startupLogger != nil {
 			startupLogger.Warn("config warning", "warning", warning)
 		} else {
-			_, _ = fmt.Fprintf(stderr, "bwb config warning: %s\n", warning)
+			_, _ = fmt.Fprintf(stderr, "taskmgr-ui config warning: %s\n", warning)
 		}
 	}
 
@@ -265,13 +265,13 @@ func resolveAuthor() string {
 			return u
 		}
 	}
-	return "bwb"
+	return "taskmgr-ui"
 }
 
 func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	var opts cliOptions
 
-	fs := flag.NewFlagSet("bwb", flag.ContinueOnError)
+	fs := flag.NewFlagSet("taskmgr-ui", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
 		printUsage(stderr)
@@ -363,7 +363,7 @@ func resolveAndValidateCWD(startCWD, cwdOverride string) (string, error) {
 }
 
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "Usage: bwb [options]")
+	_, _ = fmt.Fprintln(w, "Usage: taskmgr-ui [options]")
 	_, _ = fmt.Fprintln(w, "")
 	_, _ = fmt.Fprintln(w, "Options:")
 	_, _ = fmt.Fprintln(w, "  -h, --help                 Show help")

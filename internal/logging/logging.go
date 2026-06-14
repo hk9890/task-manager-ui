@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	stateDirName         = "bwb"
-	logFilePrefix        = "bwb-"
+	stateDirName         = "taskmgr-ui"
+	logFilePrefix        = "taskmgr-ui-"
 	logFileSuffix        = ".log"
 	rotationMaxSizeMB    = 10
 	rotationMaxBackups   = 5
@@ -66,7 +66,7 @@ func New(opts Options) *Manager {
 	logPath, fileSink, err := buildPersistentSink(opts, sessionID)
 	var closer io.Closer
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "bwb logging warning: persistent log unavailable; continuing with stderr-only logging: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "taskmgr-ui logging warning: persistent log unavailable; continuing with stderr-only logging: %v\n", err)
 	} else {
 		safe := newFailsafeSink(fileSink, stderr)
 		handlers = append(handlers, newJSONFileHandler(safe, opts.Debug))
@@ -79,7 +79,7 @@ func New(opts Options) *Manager {
 		"build_version", strings.TrimSpace(opts.BuildVersion),
 	)
 	if opts.Debug {
-		_, _ = fmt.Fprintf(stderr, "[bwb-debug] session_id=%s\n", sessionID)
+		_, _ = fmt.Fprintf(stderr, "[taskmgr-ui-debug] session_id=%s\n", sessionID)
 	}
 
 	return &Manager{
@@ -163,7 +163,7 @@ func buildPersistentSink(opts Options, sessionID string) (string, *lumberjack.Lo
 
 	// Prune stale log files from previous sessions. lumberjack's MaxAge only
 	// ages out rotated backups of the current process's own file; it never
-	// touches other sessions' bwb-<session_id>.log files. Without an explicit
+	// touches other sessions' taskmgr-ui-<session_id>.log files. Without an explicit
 	// prune step they accumulate indefinitely.
 	pruneStaleLogFiles(filepath.Dir(path), path)
 
@@ -178,7 +178,7 @@ func buildPersistentSink(opts Options, sessionID string) (string, *lumberjack.Lo
 	return path, sink, nil
 }
 
-// pruneStaleLogFiles removes bwb-*.log files in stateDir whose modification
+// pruneStaleLogFiles removes taskmgr-ui-*.log files in stateDir whose modification
 // time is older than rotationMaxAgeDays. It never removes currentLogPath (the
 // active log for this session). Errors from individual stat/remove calls are
 // silently ignored so that a prune failure never aborts startup.
@@ -235,15 +235,15 @@ func (s *failsafeSink) Write(p []byte) (int, error) {
 		s.failed = true
 		if !s.warned {
 			s.warned = true
-			_, _ = fmt.Fprintf(s.fallback, "bwb logging warning: persistent sink write failed; switching to stderr-only logging: %v\n", err)
+			_, _ = fmt.Fprintf(s.fallback, "taskmgr-ui logging warning: persistent sink write failed; switching to stderr-only logging: %v\n", err)
 		}
 		return s.fallback.Write(p)
 	}
 	return n, nil
 }
 
-// resolveLogPath returns the per-process log file path inside the bwb state
-// directory. The filename is bwb-<sessionID>.log so that concurrent BWB
+// resolveLogPath returns the per-process log file path inside the taskmgr-ui state
+// directory. The filename is taskmgr-ui-<sessionID>.log so that concurrent taskmgr-ui
 // processes never share a log file or its lumberjack rotation state, which
 // would cause torn JSON Lines records across a rotation boundary.
 func resolveLogPath(stateDirOverride string, sessionID string) (string, error) {
@@ -256,9 +256,9 @@ func resolveLogPath(stateDirOverride string, sessionID string) (string, error) {
 		}
 	}
 
-	bwbStateDir := filepath.Join(stateDir, stateDirName)
-	if err := os.MkdirAll(bwbStateDir, defaultDirectoryMode); err != nil {
-		return "", fmt.Errorf("create state directory %q: %w", bwbStateDir, err)
+	appStateDir := filepath.Join(stateDir, stateDirName)
+	if err := os.MkdirAll(appStateDir, defaultDirectoryMode); err != nil {
+		return "", fmt.Errorf("create state directory %q: %w", appStateDir, err)
 	}
 
 	id := strings.TrimSpace(sessionID)
@@ -267,7 +267,7 @@ func resolveLogPath(stateDirOverride string, sessionID string) (string, error) {
 		id = fmt.Sprintf("pid%d", os.Getpid())
 	}
 	fileName := logFilePrefix + id + logFileSuffix
-	return filepath.Join(bwbStateDir, fileName), nil
+	return filepath.Join(appStateDir, fileName), nil
 }
 
 func defaultUserStateDir() (string, error) {
@@ -394,7 +394,7 @@ func (h *stderrHandler) Handle(_ context.Context, record slog.Record) error {
 	}
 	parts := make([]string, 0, 8)
 	if record.Level < slog.LevelWarn {
-		parts = append(parts, "[bwb-debug]", record.Message)
+		parts = append(parts, "[taskmgr-ui-debug]", record.Message)
 	} else {
 		parts = append(parts, strings.ToLower(record.Level.String())+":", record.Message)
 	}

@@ -27,10 +27,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/testing/fakes"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // editFlowTimeout is the per-assertion budget for WaitFor in the edit flow
@@ -73,8 +73,8 @@ func seedEditIssue(t *testing.T, gw *appTestRepository, issue domain.IssueDetail
 func editableDocWithTitle(issue domain.IssueDetail, newTitle string) string {
 	original := domain.RenderIssueEditDocument(issue)
 	// Replace the title content between TITLE markers.
-	begin := "<!-- BWB:FIELD:TITLE:BEGIN -->"
-	end := "<!-- BWB:FIELD:TITLE:END -->"
+	begin := "<!-- TASKMGRUI:FIELD:TITLE:BEGIN -->"
+	end := "<!-- TASKMGRUI:FIELD:TITLE:END -->"
 	startIdx := strings.Index(original, begin)
 	endIdx := strings.Index(original, end)
 	if startIdx < 0 || endIdx < 0 {

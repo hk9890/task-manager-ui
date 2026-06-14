@@ -5,7 +5,7 @@ import (
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // CreateIssue creates a new issue. The configured author is recorded as the

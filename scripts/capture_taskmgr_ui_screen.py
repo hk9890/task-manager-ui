@@ -426,7 +426,7 @@ def capture(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Capture the visible BWB alt-screen state via a PTY.")
+    parser = argparse.ArgumentParser(description="Capture the visible taskmgr-ui alt-screen state via a PTY.")
     parser.add_argument("--cwd", required=True)
     parser.add_argument("--width", type=int, default=120)
     parser.add_argument("--height", type=int, default=34)

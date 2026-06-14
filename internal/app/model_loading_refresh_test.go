@@ -10,13 +10,13 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hk9890/beads-workbench/internal/config"
-	"github.com/hk9890/beads-workbench/internal/domain"
-	"github.com/hk9890/beads-workbench/internal/mode"
-	memoryrepo "github.com/hk9890/beads-workbench/internal/repository/memory"
-	testui "github.com/hk9890/beads-workbench/internal/testing/ui"
-	"github.com/hk9890/beads-workbench/internal/ui/loading"
-	"github.com/hk9890/beads-workbench/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // extractIssueIDsFromView returns the set of issue IDs visible in a rendered

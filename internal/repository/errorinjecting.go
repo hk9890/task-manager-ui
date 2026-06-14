@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hk9890/beads-workbench/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // Method identifies a Repository interface method by name. Used with

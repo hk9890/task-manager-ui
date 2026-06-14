@@ -557,7 +557,7 @@ func setConfigHome(t *testing.T, configHome string) {
 }
 
 // writeConfig writes body to the platform-resolved config path
-// (<os.UserConfigDir>/bwb/config.yaml) so that Load() finds it regardless of
+// (<os.UserConfigDir>/taskmgr-ui/config.yaml) so that Load() finds it regardless of
 // platform (Linux XDG vs macOS Library/Application Support). HOME and
 // XDG_CONFIG_HOME must already be set via t.Setenv before calling this helper.
 func writeConfig(t *testing.T, _ string, body string) string {

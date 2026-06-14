@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/beads-workbench/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 )
 
 func TestAssertionHelpersCoverStartupErrorsSearchAndActions(t *testing.T) {

@@ -26,7 +26,7 @@
 // interface) so the serialiser can call Snapshot() directly rather than going
 // through the Search-based API. This keeps the surface small and avoids
 // coupling to the full Repository interface. The path is caller-supplied;
-// cache-directory derivation (~/.cache/bwb/<project-hash>/) is Epic 2's
+// cache-directory derivation (~/.cache/taskmgr-ui/<project-hash>/) is Epic 2's
 // concern.
 //
 // # Why a separate package
@@ -45,8 +45,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hk9890/beads-workbench/internal/repository"
-	"github.com/hk9890/beads-workbench/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
 // SchemaVersion is the JSONL schema version written by Save.
@@ -162,7 +162,7 @@ func SaveSnapshotV2WithHash(
 	// Write JSONL to a temp file in the same directory as the destination so
 	// that os.Rename never crosses a filesystem boundary (avoids EXDEV on
 	// Linux systems where /tmp is tmpfs and ~/.cache is on the root FS).
-	tmpJSONL, err := os.CreateTemp(filepath.Dir(path), "bwb-repo-*.jsonl")
+	tmpJSONL, err := os.CreateTemp(filepath.Dir(path), "taskmgr-ui-repo-*.jsonl")
 	if err != nil {
 		return fmt.Errorf("filestorage.Save: create temp jsonl: %w", err)
 	}
@@ -214,7 +214,7 @@ func SaveSnapshotV2WithHash(
 	}
 
 	manifestPath := path + ".manifest.json"
-	tmpManifest, err := os.CreateTemp(filepath.Dir(manifestPath), "bwb-manifest-*.json")
+	tmpManifest, err := os.CreateTemp(filepath.Dir(manifestPath), "taskmgr-ui-manifest-*.json")
 	if err != nil {
 		return fmt.Errorf("filestorage.Save: create temp manifest: %w", err)
 	}
