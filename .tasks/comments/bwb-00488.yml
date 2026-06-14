@@ -1,0 +1,6 @@
+---
+id: hb8u1gxp
+author: Hans Kohlreiter
+created: 2026-05-19T15:55:56Z
+body: |-
+  Completed in commit d750d37. All 10 target functions at 100%. Project total 74.3% → 75.1% (+0.8pp). Clears 75 gate; remaining gap to 76 is in cmd/bwb-smoke (out of scope per epic). Test runtime 8ms.

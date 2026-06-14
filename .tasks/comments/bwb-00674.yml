@@ -1,0 +1,6 @@
+---
+id: 1s33ytfy
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:14Z
+body: |-
+  Missing threshold definition: what is 'wide' vs 'narrow'? What: xxd.2 says 'wide terminals render a two column inspector' and 'narrow terminals fall back to single column' but doesn't define the breakpoint. Why: without a concrete threshold (e.g., 120 columns), the implementer will guess, and the verifier cannot check whether the breakpoint is correct. The existing search mode uses minLeftPaneWidth (34) + minRightPaneWidth (26) as its threshold logic. Suggested action: specify a concrete width threshold in the task or acceptance criteria (e.g., 'two-column layout activates above 100 columns').

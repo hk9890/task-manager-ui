@@ -1,0 +1,6 @@
+---
+id: bx24n7es
+author: Hans Kohlreiter
+created: 2026-05-16T13:24:30Z
+body: |-
+  release.yml gets id-token: write + cosign-installer@v3 + sbom-action download-syft@v0 steps before goreleaser. .goreleaser.yaml appended signs: (checksum, --output-certificate=) and sboms: (archive, spdx-json explicit) blocks per dtctl pattern. README has 'Verifying releases' section with cosign verify-blob example. goreleaser check passes. No COSIGN_EXPERIMENTAL anywhere. Quality green. Full snapshot verification (.sig/.pem/.sbom files) deferred to CI draft release per ticket allowance.

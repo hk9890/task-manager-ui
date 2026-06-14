@@ -1,0 +1,6 @@
+---
+id: kegw4lc3
+author: Hans Kohlreiter
+created: 2026-04-08T11:09:44Z
+body: |-
+  Verifier clarification: this bug is about acceptance-review task beads-workbench-2sh.4 still depending on merged task beads-workbench-2sh.2 and not explicitly requiring the runtime built-binary embedded-fixture verification from docs/TESTING.md and docs/RUNTIME_UI_VERIFICATION.md. Next: refresh 2sh.4 dependencies and acceptance instructions to match the current 3-bead plan.

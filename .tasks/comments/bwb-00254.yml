@@ -1,0 +1,6 @@
+---
+id: k8djibt9
+author: Hans Kohlreiter
+created: 2026-05-15T19:27:07Z
+body: |-
+  Replaced defaultSearchLimit=40 with searchItemCapacity() (formula: max(1, height-7) — chrome is 5-line query section + 2 result borders; fallback 20 before first WindowSizeMsg). Both call sites (Init and triggerSearchWithAnchor) updated; WindowSizeMsg still returns nil so resize does not re-query. Added unit tests for the capacity formula and the no-requery-on-resize invariant. go build/test pass.

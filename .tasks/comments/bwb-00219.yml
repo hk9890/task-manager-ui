@@ -1,0 +1,6 @@
+---
+id: 0qtp7kr4
+author: Hans Kohlreiter
+created: 2026-06-06T13:23:30Z
+body: |-
+  Done — commit 8cd04d9. Removed ParentGroupBrowserContext.Children from domain and pruned the dead sibling-resolution + snapshot plumbing in internal/repository/memory (repository.go resolution, forget.go SeedDetail/SeedFromSnapshot, storedIssue.childrenIDs/childrenRefs). Confirmed no production code read the field (only the fake round-tripped it); IssueDetail.Children (the live UI field) untouched. No behavioral change. Full quality gate green (1321 tests).

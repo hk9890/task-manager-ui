@@ -1,0 +1,6 @@
+---
+id: j597iybh
+author: Hans Kohlreiter
+created: 2026-05-17T09:51:47Z
+body: |-
+  Done. RunWriteContract with 9 invariants + 2 deliberate-break tooth tests. Added contractcheck validators (CreateIssueResult, WriteVisibility, CountIncrement). WritableTempFixture helper in datasets package. Fake suite uses writeAwareFake wrapper to make tests pass; plain FakeBeadsGateway still has documented gaps (= 9x70.3 backlog: title validation in CreateIssue, IssueID generation, existence check on UpdateIssue, dynamic CountIssues). 933 tests pass.

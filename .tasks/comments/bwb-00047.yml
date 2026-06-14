@@ -1,0 +1,12 @@
+---
+id: 9tluwb64
+author: Hans Kohlreiter
+created: 2026-04-19T18:48:56Z
+body: |-
+  Issue conflates two distinct problems. What: (1) field traversal order and (2) Priority edit UX are bundled in one bug. These have different resolution paths — order is a straightforward code fix, Priority UX needs a product decision. Why: mixing investigation-needed work with clear-fix work blocks the clear fix on the unclear one. Suggested action: split into two issues — one for traversal order (implementable now: verify and fix order in metadataGroups to Status-first-Priority-second or vice versa), one for the Priority edit UX product decision (dialog vs cycle). Alternatively, if you want to keep it as one issue, at minimum the acceptance criteria should mark criteria #3 (product decision) as a blocker for criteria #4 (Enter behavior consistency).
+---
+id: aoc716kz
+author: Hans Kohlreiter
+created: 2026-04-19T18:49:00Z
+body: |-
+  Current traversal order is determined by metadataGroups() field order in metadata.go:105-108: Type, Priority, Status. Only Priority and Status are editable, so actionable traversal is Priority→Status (top to bottom). What: if user expects Status first, the order is wrong. But the issue doesn't state what the expected order IS. Why: without specifying the target order, the implementer has to guess. Suggested action: state the intended order explicitly in acceptance criteria before implementation.

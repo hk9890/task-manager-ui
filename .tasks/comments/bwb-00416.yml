@@ -1,0 +1,93 @@
+---
+id: 1th7y799
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:40Z
+body: |-
+  ## Missing instruction: what YAML library to use
+
+  **What**: ni1.1 says "add YAML dependency if needed" but does not specify which library. go.mod currently has zero YAML dependencies. The Go ecosystem has at least `gopkg.in/yaml.v3`, `github.com/goccy/go-yaml`, and the `sigs.k8s.io` variants. Each has different struct tag conventions and error behavior.
+
+  **Why**: A tasker will pick one arbitrarily. If the choice is wrong (e.g., yaml.v2 which has known edge cases with Go struct embedding), it creates rework. The YAML library choice also affects how merge-over-defaults works — some libraries support custom unmarshalers for partial structs, others don't.
+
+  **Suggested action**: Add an explicit instruction: "Use `gopkg.in/yaml.v3` — it is the de facto standard, handles `yaml:"..."` struct tags, and supports `KnownFields(true)` for strict parsing that rejects unknown keys." Or pick your preferred library and state it.
+---
+id: ofhqgorf
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:50Z
+body: |-
+  ## Merge semantics for slices (launcher definitions) are unspecified
+
+  **What**: Instructions say "merge file-backed overrides on top of defaults" but don't define what happens with slice fields. Specifically: if the user defines one launcher in YAML, do the other 3 built-in launchers disappear or persist? If the user overrides `nvim` by action name, is it matched by slice index or by action key?
+
+  **Why**: This is the single hardest design question in the config system. The config.Model has `Launcher.Definitions []LauncherDefinition` — a naive YAML unmarshal will wholesale-replace the slice, killing all defaults. A merge-by-action-key strategy requires custom logic. Getting this wrong means the user either can't customize one launcher without redefining all four, or gets surprising duplicates.
+
+  **Suggested action**: Add explicit merge instructions:
+  - Launcher definitions merge by action key (the `Action` field is the identity)
+  - A user-defined launcher with a matching action key replaces that default entirely
+  - A user-defined launcher with a new action key is appended to the list
+  - To remove a built-in, user sets `enabled: false` (or define a simpler mechanism)
+  - Document this in the acceptance criteria as a testable scenario
+---
+id: 17ls2n68
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:57Z
+body: |-
+  ## XDG resolution strategy is incomplete
+
+  **What**: The task says "resolves the BWB config path from XDG config home" but doesn't specify: does it use `$XDG_CONFIG_HOME` directly? Does it fall back to `~/.config` when unset? Does it use an XDG library? Go has no stdlib XDG support.
+
+  **Why**: If the tasker hand-rolls `os.Getenv("XDG_CONFIG_HOME")` with a `~/.config` fallback, it will miss edge cases (e.g., `$HOME` unset, path with spaces). If they pull in a library like `github.com/adrg/xdg`, that's a new dependency with its own behaviors. Either way, the choice needs to be stated.
+
+  **Suggested action**: Either specify "use `os.UserConfigDir()` from stdlib (returns `$XDG_CONFIG_HOME` or `~/.config` on Linux, appropriate paths on macOS/Windows)" or specify a third-party XDG library. `os.UserConfigDir()` is likely sufficient and avoids a new dep.
+---
+id: mvdyjcwl
+author: Hans Kohlreiter
+created: 2026-04-07T17:16:05Z
+body: |-
+  ## Acceptance criterion for "unsupported config values" is vague — unknown key policy needed
+
+  **What**: Instruction #4 says "Return descriptive errors for... unsupported config values" but the acceptance criteria don't test this case. What counts as an unsupported value? An unknown YAML key? An integer where a string is expected? A valid YAML key that the current version doesn't recognize?
+
+  **Why**: Unknown-key rejection is a policy decision with real UX consequences. If you add a new config key in v2, users with old binaries and new config files will get errors. If you don't reject unknown keys, typos silently do nothing. This needs an explicit choice.
+
+  **Suggested action**: Add to acceptance criteria: "Unknown top-level or nested config keys cause a startup error naming the unrecognized key" (strict mode, catches typos) OR "Unknown keys are silently ignored" (forward-compatible, misses typos). Pick one and state it.
+---
+id: pt6akl12
+author: Hans Kohlreiter
+created: 2026-04-07T17:16:08Z
+body: |-
+  ## Missing: config file permission error handling
+
+  **What**: Instructions don't mention filesystem permission handling. What happens if `~/.config/bwb/config.yaml` exists but is not readable (e.g., mode 000)? What about a directory at that path instead of a file?
+
+  **Why**: "Missing config" vs "unreadable config" are different error classes — one should silently use defaults, the other should fail loudly (the user intended to have a config but something is broken).
+
+  **Suggested action**: Add to instructions: "Distinguish between file-not-found (use defaults silently) and file-exists-but-unreadable (fail startup with a clear permissions error). A directory at the config path should produce an error."
+---
+id: 510xje5o
+author: Hans Kohlreiter
+created: 2026-04-07T17:18:46Z
+body: |-
+  Marked for discussion after reviewer feedback. This task is currently the only executable task in the chain, but the review found missing design details (precedence, XDG behavior, unknown-key policy, launcher merge semantics) that should be incorporated before implementation starts.
+---
+id: x4tcbde8
+author: Hans Kohlreiter
+created: 2026-04-08T09:26:29Z
+body: |-
+  Discussion update:
+  - Config file values should take precedence over environment fallbacks.
+  - Unknown YAML keys should be ignored with warnings instead of causing startup failure.
+  - File-backed launcher config should merge with built-in defaults.
+
+  Task remains blocked while the plan/task breakdown is being refined.
+---
+id: 5xsg7ciq
+author: Hans Kohlreiter
+created: 2026-04-08T13:06:36Z
+body: |-
+  Implemented runtime config loading with `config.Load()`, XDG path resolution via `os.UserConfigDir()`, YAML parsing with `gopkg.in/yaml.v3`, warning collection for unknown keys, merge-over-defaults behavior for editor/launcher/UI, startup warning output in `cmd/bwb/main.go`, and docs/tests covering precedence and launcher merge semantics.
+
+  Validation run:
+  - `go build ./cmd/bwb`
+  - `go vet ./...`
+  - `go test ./...`

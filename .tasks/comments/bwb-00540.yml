@@ -1,0 +1,6 @@
+---
+id: 3eyiaftj
+author: Hans Kohlreiter
+created: 2026-05-17T09:42:20Z
+body: |-
+  Done. ARGV_CONTRACT.md created with 16 distinct verb-level argv shapes + 14-shape ppja.3 backlog. No argv inconsistencies vs interface.go found. Discipline yielded no bugs. NOTE: ARGV_CONTRACT.md may have stale routingExecutor refs (lines 102-103, 141) from drafting against pre-ppja.1 state; orchestrator will fix in cleanup.

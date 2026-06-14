@@ -1,0 +1,6 @@
+---
+id: 1sorxalu
+author: Hans Kohlreiter
+created: 2026-05-24T01:01:48Z
+body: |-
+  Done. BeadsGateway interface + CLIGateway + read/write impls + contract/contractcheck/testdata MOVED from internal/gateway/beads/ to internal/repository/beads/ (file move, not interface extension). FakeBeadsGateway + its 2 contract tests DELETED. internal/gateway/beads/ now contains runner/cache only (cache preserved for 8pxi.7). 9 consumer files updated with two-import pattern where they need both runner-level types (RunnerConfig/ExecResult) and gateway-level types. Docs updated: CODING.md, OVERVIEW.md, TESTING.md, fakes/doc.go, ARCHITECTURE.md. Build clean; mise run quality green (1298 tests; -66 from removal of duplicate fake contract tests, parity suite supersedes); fmt:check + scripts:check green. Zero live-code references to FakeBeadsGateway (remaining hits are documentation comments). scripts/analyze_dashboard_perf.py untouched (runner.go log strings unchanged).

@@ -1,0 +1,6 @@
+---
+id: bqtnlo3g
+author: Hans Kohlreiter
+created: 2026-05-27T21:53:07Z
+body: |-
+  Removed orphaned 'Fixture Rules' section from docs/TESTING.md. Content was a duplicate of the existing 'Embedded-Mode Fixture Repository' section. Option (b) (cross-ref from Tier 2) rejected — parity contract test does not use embeddedfixture. quality:fast passes (1070 tests, 0 lint).

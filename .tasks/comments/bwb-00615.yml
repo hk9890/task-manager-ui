@@ -1,0 +1,6 @@
+---
+id: cur076jk
+author: Hans Kohlreiter
+created: 2026-05-17T09:51:49Z
+body: |-
+  Done. SharedScaleFixtureRepoPath + datasets.ScaleFixture(t) added (opt-in via BWB_SCALE_FIXTURE=1, sync.Once cache). Parity matrix (count+sort+search) extended to scale fixture. scale_parity_integration_test.go adds DoneColumnCapEngagement (ssom regression class only testable at scale). bwb-smoke matrix extended with TestSmokeIntegrationScaleFixture. Dual-fixture policy documented in datasets.go package doc. 928 tests pass.

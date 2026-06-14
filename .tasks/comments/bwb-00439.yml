@@ -1,0 +1,6 @@
+---
+id: smppkbnh
+author: Hans Kohlreiter
+created: 2026-05-29T11:02:37Z
+body: |-
+  Implemented in cmd/bwb/cache_resolver.go: stale-schema session dirs are now pruned via os.RemoveAll (best-effort, errors ignored) after the winner is selected, replacing per-file WARN records with a single summary WARN. Live-session safety: (1) current-schema sessions never enter staleDirs, (2) winner dir guarded by path-equality check, (3) log files confirmed in state dir, not cache dir. Tests: 4 new/updated cases including a log-capture assertion that 5 stale dirs produce exactly 1 WARN (not 5). go test ./cmd/bwb/... PASS, gofmt clean; full suite + race + integration green. Known accepted limitation: a concurrent old-schema-binary process would have its session cache dir pruned (bounded to stale-schema sessions, acceptable under best-effort).

@@ -1,0 +1,85 @@
+---
+id: bmsbzl0x
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:02Z
+body: |-
+  ## Final feature acceptance has no docs gate — v1 ships with stale docs
+
+  **What**: This is the last feature acceptance review before the v1 acceptance (yze.1). It checks editor/launcher code and tests but not whether launcher configuration, editor handoff behavior, or context interpolation rules are documented anywhere a user or agent could find them.
+
+  **Why**: Launchers use issue-context interpolation (ID, title, labels, project root). Editor handoff has a specific temp-file flow. These are user-facing behaviors with configuration implications. If they are undocumented, users cannot configure launchers and future agents cannot extend them correctly.
+
+  **Suggested action**: Add an acceptance criterion: launcher configuration model and editor handoff flow are documented in `docs/CODING.md` or a dedicated `docs/LAUNCHERS.md` if the surface area warrants it.
+---
+id: gjhs5uaz
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:00Z
+body: |-
+  ## [PASS] Editor/launcher acceptance review includes docs gate
+
+  **What**: yze.4.6 now includes: "Documentation reflects the implemented editor/launcher behavior, config, and testing strategy." This is the last feature-level acceptance before the v1 product review.
+
+  **Why**: Editor handoff and launcher interpolation are user-facing behaviors with configuration. Requiring documentation at this gate prevents the v1 product acceptance from being the first time anyone checks if launchers are documented.
+
+  **Suggested action**: None. This is adequate.
+---
+id: prbxp7ox
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:07Z
+body: |-
+  ## [MAJOR] Acceptance review criteria still use human-verification language
+
+  **What**: Despite the updates, several acceptance reviews still contain criteria that an agent cannot execute:
+  - yze.2.5: "Top-level mode switching and selected-issue shell state work"
+  - yze.3.6: "Search works with text and structured filters and no BQL"
+  - yze.3.6: "Issue details render official-surface metadata and context"
+  - yze.4.6: "External editor handoff works for rich issue editing"
+  - yze.4.6: "Built-in launchers work with issue-context interpolation"
+  - yze.4.6: "Users can create, update, close, and comment on issues from the app"
+
+  **Why**: An agent verifier executing these acceptance reviews will encounter "X works" criteria and have no way to verify them except running `go test ./...` and hoping the tests cover the behavior. The criteria SHOULD reference the automated tests that prove the behavior. The verifier's job is to confirm the tests exist and pass, not to manually verify "works."
+
+  **Suggested action**: Rewrite "X works" criteria as "X is verified by passing automated tests" throughout:
+  - "Top-level mode switching and selected-issue shell state work" → "App-shell tests for mode switching and selection state pass"
+  - "Search works with text and structured filters" → "Search mode tests covering text search and each structured filter pass"
+  - "External editor handoff works" → "Editor flow tests using fake editor seam pass"
+  - "Built-in launchers work with issue-context interpolation" → "Launcher tests verifying command construction with interpolated context pass"
+  - "Users can create/update/close/comment" → "CRUD action tests using fake gateway pass"
+---
+id: r135m3my
+author: Hans Kohlreiter
+created: 2026-04-06T22:54:54Z
+body: |-
+  Acceptance review verification performed (2026-04-07):
+  - [PASS] All editor/launcher implementation tasks are closed. Verified with 'bd show beads-workbench-yze.4.6' and dependent task status checks for yze.4.1 through yze.4.5; all are CLOSED.
+  - [FAIL] External editor handoff works for rich issue editing. Code inspection showed internal/app/model.go handles key 'e' by calling launcher action 'editor' via launchActionCmd rather than editIssueCmd/services.Editor.EditIssue. Verified by passing tests 'go test ./internal/app -run TestModelLaunchEditorActionUsesLauncherService -v -count=1' and '...TestModelEditIssueActionUsesLauncherServiceFromDetailSelection...' which confirm 'e' launches the launcher service, not the rich editor flow. Bug filed: beads-workbench-ed6.
+  - [PASS] Users can create, update, close, and comment on issues from the app. Verified with 'go test ./internal/app -run TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue|TestModelUpdateCloseAndCommentFlowsUseGatewayWrites -v -count=1'; observed PASS and gateway write calls for create/update/close/comment.
+  - [PASS] Built-in launchers work with issue-context interpolation. Verified with 'go test ./internal/launcher/... -run TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner|TestServiceBuiltInDefinitionsForV1Actions -v -count=1'; observed PASS and interpolated command/args/env/workdir for opencode plus built-in actions nvim/opencode/shell-command.
+  - [PASS] go build ./cmd/bwb passes. Verified with 'go build ./cmd/bwb'; observed success (exit 0).
+  - [PASS] go vet ./... passes. Verified with 'go vet ./...'; observed success (exit 0).
+  - [PASS] Editor and launcher tests pass. Verified with 'go test ./internal/launcher/... ./internal/domain ./internal/app -run ... -count=1' and 'go test ./...' ; observed PASS.
+  - [FAIL] At least one embedded-mode editor/launcher smoke/e2e workflow passes. Verified by inspecting embedded-fixture app tests and running 'go test ./internal/app -run TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow -v -count=1'; observed only board/detail smoke coverage. No embedded-mode editor or launcher smoke/e2e test found. Bug filed: beads-workbench-p1q.
+  - [FAIL] Documentation reflects the implemented editor/launcher behavior, config, and testing strategy. Verified by reading docs/CODING.md and docs/TESTING.md and comparing to internal/config/model.go. Observed docs/CODING.md still says Launcher.Definitions defaults to one built-in editor action, but implementation now defines editor, nvim, opencode, and shell-command; launcher interpolation surface is not documented adequately. Bug filed: beads-workbench-52l.
+  Result: BLOCKED — acceptance criteria not fully met; leave beads-workbench-yze.4.6 open until bugs are fixed and re-verified.
+---
+id: 0ti8dq6m
+author: Hans Kohlreiter
+created: 2026-04-06T23:44:49Z
+body: |-
+  Acceptance blockers ed6, p1q, and 52l have now been implemented and reconciled in the current working tree: app edit hotkey uses rich editor service, embedded fixture smoke covers the edit hotkey flow, and docs/CODING.md matches current editor/launcher behavior. Sending yze.4.6 back through verification on the reconciled tree.
+---
+id: m9vnnt23
+author: Hans Kohlreiter
+created: 2026-04-06T23:47:14Z
+body: |-
+  Acceptance review re-verification performed (2026-04-07):
+  - [PASS] All editor/launcher implementation tasks are closed. Verified with 'bd show yze.4.6'; observed all dependencies yze.4.1-yze.4.5 and blocker fixes 52l, ed6, p1q marked closed.
+  - [PASS] External editor handoff works for rich issue editing. Verified by code inspection in internal/app/model.go (key 'e' routes to editIssueCmd -> services.Editor.EditIssue) and tests: 'go test ./internal/app -run TestModelEditHotkeyUsesEditorService|TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail|TestModelEditHotkeyInDetailModeUsesEditorService -v -count=1'; observed PASS and no launcher calls for edit hotkey.
+  - [PASS] Users can create, update, close, and comment on issues from the app. Verified with 'go test ./internal/app -run TestModelCreateIssueFlowUsesGatewayCatalogsAndCreateIssue|TestModelUpdateCloseAndCommentFlowsUseGatewayWrites -v -count=1'; observed PASS and gateway write calls for create/update/close/comment.
+  - [PASS] Built-in launchers work with issue-context interpolation. Verified with 'go test ./internal/launcher ./internal/config -run TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner|TestServiceBuiltInDefinitionsForV1Actions|TestDefault_UsesEditorEnvForEditorAndLauncher -v -count=1' and 'go test ./internal/app -run TestModelBuiltInLauncherHotkeysUseLauncherService -v -count=1'; observed PASS, interpolated command/args/env/workdir, and launcher hotkeys n/p/l dispatch nvim/opencode/shell-command.
+  - [PASS] go build ./cmd/bwb passes. Verified with 'go build ./cmd/bwb'; observed success (exit 0).
+  - [PASS] go vet ./... passes. Verified with 'go vet ./...'; observed success (exit 0).
+  - [PASS] Editor and launcher tests pass. Verified with focused app/launcher/config tests above and 'go test ./... -count=1'; observed full suite PASS.
+  - [PASS] At least one embedded-mode editor/launcher smoke/e2e workflow passes. Verified with 'go test ./internal/app -run TestModelEmbeddedFixtureDetailEditHotkeyUsesEditorService -v -count=1'; observed PASS against seeded embedded fixture repo and editor service invocation for fixture issue bwf-2.
+  - [PASS] Documentation reflects the implemented editor/launcher behavior, config, and testing strategy. Verified by reading docs/CODING.md against internal/config/model.go and internal/app/model.go; observed docs now describe e -> services.Editor rich edit flow, built-in launcher actions editor/nvim/opencode/shell-command, interpolation placeholders, and relevant test references.
+  Result: PASS — all acceptance criteria verified on current working tree.

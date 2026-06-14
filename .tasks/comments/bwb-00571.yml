@@ -1,0 +1,6 @@
+---
+id: jalzitph
+author: Hans Kohlreiter
+created: 2026-05-16T18:57:06Z
+body: |-
+  Done. Added 27 fixture-agnostic invariant sub-tests under Invariants/ in RunReadContract. Real gateway: all PASS. Fake gateway: 3 expected failures (Invariants/ShowIssue/CommentsNotNil, Invariants/ShowIssue/BlockedByNotNil, Invariants/Query/StatusFilterRespected) — these are the 8qw9.3 work backlog (real fake-fidelity gaps, NOT contract bugs). ssom cross-method invariant encoded as Invariants/CountIssuesGreaterThanOrEqualToListSize with deliberate-break tooth test TestSsomInvariantHasTooth (PASS). Zero fixture-ID references in new assertions. Files: contract.go, ssom_invariant_test.go.

@@ -1,0 +1,27 @@
+---
+id: ckm8gcws
+author: Hans Kohlreiter
+created: 2026-05-17T09:19:43Z
+body: |-
+  Pre-existing bug ticket beads-workbench-ule7 (same day, independent filing) contains concrete runtime log evidence from ~/.local/state/bwb/bwb.log session d3bad156: stacked 'bd ready --explain --json' invocations measuring 12495ms / 7120ms / 29043ms / 18271ms during the bug repro. Use this as the canonical reproduction signature when validating 5q6t.5 acceptance — the suppressed-refresh log entries should REPLACE this stacked-subprocess pattern after the fix lands. ule7 is now linked --type related and is blocked by 5q6t.5.
+---
+id: p3n81vpg
+author: Hans Kohlreiter
+created: 2026-05-17T09:41:09Z
+body: |-
+  **Worktree provisioned 2026-05-17**
+
+  All implementation work for this epic lives in its own worktree, isolated from the parallel in-progress work on epics 9x70, faif, and ppja:
+
+  - **Path:** `.claude/worktrees/5q6t` (relative to main repo root)
+  - **Branch:** `5q6t-refresh-concurrency` (off `bbcab0e`)
+  - **Base commit:** bbcab0e — the last clean commit before parallel agents began uncommitted work on main
+
+  **Workflow for whoever picks this up:**
+
+  - All code edits, builds, and tests run from inside the worktree: `cd .claude/worktrees/5q6t && <command>`.
+  - All `bd` tracker writes run from the main checkout: `cd /home/hans/dev/github/beads-workbench && bd <command>`. The embedded dolt database lives only in main's `.beads/` directory.
+  - Quality gates (`mise run quality:fast`, `mise run quality`) execute inside the worktree.
+  - Landing strategy: one PR at the end after 5q6t.5 passes. Push branch with `git push -u origin 5q6t-refresh-concurrency` from the worktree.
+
+  **Why isolated:** main's working tree currently has uncommitted in-progress work from 9x70.1 (interface.go), ppja.1/.2 (read_gateway_test.go + recording_executor_test.go + ARGV_CONTRACT.md), and faif.1 (scale-seed.json + smoke tests + scripts). Committing 5q6t directly on main would interleave with their work.

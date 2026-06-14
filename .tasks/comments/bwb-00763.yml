@@ -1,0 +1,6 @@
+---
+id: gooi0ox4
+author: Hans Kohlreiter
+created: 2026-04-05T13:45:34Z
+body: |-
+  Verifier found Phase 1 write-path gaps now tracked in beads-workbench-5d4 and beads-workbench-hbr. omd.5 remains in progress until those defects are fixed and re-verified.

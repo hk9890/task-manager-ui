@@ -1,0 +1,47 @@
+---
+id: 8a863afo
+author: Hans Kohlreiter
+created: 2026-05-17T22:48:17Z
+body: |-
+  -
+---
+id: 9eebwmu8
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:55Z
+body: |-
+  ## Audit report — Read-search (SearchIssues, 5 routing paths)
+
+  ### 1. Contract spec
+  Method at interface.go:451. Routing: empty text + no WorkState → bd list --all; empty text + status filter → bd list --status csv; WorkState=Ready → bd ready + in-memory filter; WorkState=Blocked → bd blocked + in-memory filter; non-empty text → bd search. Pre: ctx non-nil; PriorityMin<=PriorityMax. Post: Results never nil; Metadata.Source per-path; Metadata.Completeness MaybeMore vs Partial; Metadata.Notice for Ready/Blocked w/o text. Quirks: bd search requires query (carved out via list-routing); bd search --status single-token-only (INERT — multi-token returns empty); bd search default 50-cap.
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.Y7cvGzydXg | Log: /tmp/beads-workbench-vhp2-audit.log
+  Seeded 15 issues (11 open + 2 in_progress + 2 closed) + 1 dep chain.
+
+  - All 5 routing paths VERIFIED against real bd 1.0.4. No behavioral drift.
+  - Path 1: `bd list --json --all` → 15 items. `--limit 5` → 5 stdout items + stderr warning (clean parse).
+  - Path 2: `bd list --json --status open,in_progress` → 13 items (union worked).
+  - Path 3: `bd ready --json` → 10 open items, excluded in_progress/closed/dep-blocked.
+  - Path 4: `bd blocked --json` → 1 dep-blocked item (status=open, not status=blocked).
+  - Path 5: `bd search "Search" --json --status all` → 3 matches. Filters confirmed. CARVE OUT confirmed. INERT confirmed STILL INERT. 50-cap default confirmed via bd search --help.
+
+  ### 3. Test-coverage verification
+  - Every routing path has a TestSearchIssues*ArgvShape test pinning argv.
+  - All filter paths covered by gateway unit tests.
+  - PriorityMin>Max validation: COVERED.
+  - Results-never-nil: COVERED for real gateway via toSearchResults (make len=0).
+  - GAP: Path 5 INERT multi-status+text argv not pinned → addressed via beads-workbench-cnam (TestSearchIssuesInertMultiStatusTextArgvShape added, pins comma-join behavior with regression-warning docstring).
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/...
+  - Result: PASS (47 sub-tests).
+  - BUG/DIVERGES (FIXED via beads-workbench-ix3j): FakeBeadsGateway.SearchIssues cache-miss returned Results=nil. Fixed to return empty slice.
+  - DIVERGES (by design — stub): fake doesn't route by WorkState, doesn't apply structured filters in search path, doesn't populate Metadata.Source/Completeness/Notice in seeded responses. Documented stub limitations.
+
+  ### Drift findings (closed)
+  - ix3j (P2): Fake SearchIssues nil Results fix. CLOSED.
+  - cnam (P3): Pin INERT multi-status+text argv shape. CLOSED.
+
+  ### Summary
+  - Total clauses: 28 | Verified: 18 (real-bd) | Drift: 0 | Gaps: 2 (resolved) | Diverges: 1 fixed + 3 by-design stubs
+  - INERT multi-status+text quirk re-confirmed STILL INERT.

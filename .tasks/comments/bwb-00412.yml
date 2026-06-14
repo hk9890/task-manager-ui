@@ -1,0 +1,30 @@
+---
+id: 07iigtbq
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:14Z
+body: |-
+  Scope creep risk: 'introduce shared helpers or a dedicated UI helper' is vague enough to over-engineer. What: instruction #2 says to introduce a shared helper or dedicated issuebadge package. The donor's issuebadge package (perles/internal/ui/shared/issuebadge) is 140 lines with Config struct, readiness glyphs, pinned badges, and a RenderBadge + Render split. Importing this pattern wholesale would be over-engineered for BWB's current needs — BWB has exactly one call site (board.go:renderRowLine). Why: a tasker following the 'adapt donor patterns' instruction may build a full issuebadge package with Config, ShowSelection, ShowReadinessReason, etc., when BWB only needs colored type/priority/status tokens in renderRowLine. Suggested action: explicitly state that BWB does NOT need the full issuebadge package pattern. The goal is: (a) define color tokens for type/priority/status in styles/colors.go, (b) apply those colors in renderRowLine. No new package, no Config struct, no readiness glyphs. Keep the helper functions in renderhelpers/helpers.go and just make them return styled strings.
+---
+id: wxrh0hk5
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:24Z
+body: |-
+  Missing specification: what colors map to what. What: the task says 'define BWB-owned issue type/priority/status colors' but does not specify what those colors are. The donor has ~30 color definitions for types, priorities, and statuses (perles styles.go:107-154). BWB currently has no issue-specific colors at all — only generic UI colors. Why: the tasker will either copy the donor's full color palette (including types BWB does not use, like Molecule, Convoy, Agent, Decision, Story, Milestone) or have to decide on a subset. Either way, they are making undocumented design decisions. Suggested action: specify the minimum color set needed: types = bug (red), task (blue), feature (green), epic (purple), chore (gray); priorities = P0 (red/bold), P1 (orange), P2 (yellow), P3+ (gray); statuses = open (green), in_progress (blue), blocked (red), closed (gray). This matches what BWB's renderhelpers already handles.
+---
+id: 2ybpald6
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:27Z
+body: |-
+  Golden file testing will be harder with ANSI color codes. What: the current board_test.go uses assertGoldenNormalized which strips trailing whitespace but does NOT strip ANSI escape codes. Adding colors to renderRowLine means golden files will contain ANSI sequences, making them hard to read and maintain. Why: the existing golden comparison approach will produce unreadable golden files when colors are added. The tasker needs guidance on whether to (a) update goldens to include ANSI codes, (b) add an ANSI-stripping normalizer, or (c) test coloring separately from layout. Suggested action: add a note to instructions that board golden tests should strip ANSI codes before comparison (update the normalizer), and add separate assertions for color presence if needed.
+---
+id: dbvwbc7g
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:36Z
+body: |-
+  Task 3 has no dependency on tasks 1 or 2 — this is correct and good. The board coloring is independent of the header/footer changes. However, task 3 and task 1 both touch renderRowLine indirectly (task 1 changes footer and header but task 3 changes board rows). Since task 3 modifies board.go and task 1 modifies model.go, there should be no merge conflicts. This parallelism is well-structured.
+---
+id: oczvxjkh
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:40Z
+body: |-
+  AC says 'selected rows remain readable' but does not define selected-row styling. What: the current selected row uses '› ' prefix (board.go:204-206) with no color treatment. The donor uses a SelectionIndicatorStyle (bold white '>') and a SelectionBackgroundColor for the entire row. The task says 'improve selected-row emphasis' but does not say how. Why: the tasker may add a background highlight, change the prefix character, make the row bold, or do nothing — all are valid interpretations. Suggested action: specify selected-row treatment explicitly: e.g., bold white '›' prefix (matching donor's SelectionIndicatorStyle), no background fill, or add a subtle background highlight. Pick one.

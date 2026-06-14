@@ -1,0 +1,49 @@
+---
+id: hl7sfqx6
+author: Hans Kohlreiter
+created: 2026-05-17T22:48:25Z
+body: |-
+  -
+---
+id: 2c3w2zvj
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:56Z
+body: |-
+  ## Audit report — Read-counts (CountIssues)
+
+  ### 1. Contract spec
+  Method at interface.go:453-477. Pre: ctx non-nil. Post: Total = sum(Groups); Groups contains only non-zero count groups (bd omits zero-count); all statuses incl. closed by default — NO --all needed (unlike bd list); query.Statuses filters Groups; Status values are raw bd names. Errors: CommandFailed (non-zero exit), DecodeFailed (unparseable JSON).
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.077hwk7qQV | Log: /tmp/beads-workbench-048i-audit.log
+  Fixture: 6 issues (2 open, 1 in_progress, 1 blocked, 2 closed, 0 deferred).
+
+  - Total = sum invariant: VERIFIED — Total=6 = 1+2+1+2.
+  - Zero-count omitted: VERIFIED — deferred absent from no-filter output; --status deferred → groups:[].
+  - Closed included by default (no --all): VERIFIED.
+  - Raw status names: VERIFIED.
+  - Single-status filter: VERIFIED.
+  - DRIFT (addressed via beads-workbench-g2h5): Multi-status filter via `--status "open,in_progress"` returned `{"groups":[],"total":0}` because bd treats CSV as literal status name. Was latent — only production caller (board/model.go) passes single status. FIX: gateway now omits --status flag when len(Statuses)>1 and filters in-memory after fetching all groups. ARGV_CONTRACT.md updated with per-subcommand --status semantics table.
+
+  ### 3. Test-coverage verification
+  - argv no-filter: COVERED by TestCountIssuesNoStatusFilterArgvShape.
+  - argv with --status closed: COVERED by TestBoardInitRealGatewaySubprocessArgvCardinality.
+  - Single-status decode: COVERED by TestGatewayCountIssuesDecodesSingleGroup + TestGatewayCountIssuesPassesFilters.
+  - Total == sum invariant: COVERED by RunReadContract/Invariants/CountIssues/TotalEqualsSumOfGroups.
+  - Raw status names: COVERED by RunReadContract/CountIssues.
+  - Multi-status query: NEW COVERAGE via TestCountIssuesMultiStatusArgvOmitsStatusFlag + TestCountIssuesSingleStatusArgvIncludesStatusFlag (g2h5 fix).
+  - GAP: zero-count omission invariant → addressed via beads-workbench-j0o5 (NoZeroCountGroups invariant + sub-test added to contractcheck).
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/... -run TestFakeGateway*Contract
+  - Result: PASS (46 sub-tests).
+  - Live-count path (issueStore non-empty): Total recomputed from Groups (2026-05-17 drift fix verified).
+  - Static-stub path: returns CountIssuesResponse verbatim; filter not applied to static stub but no test exercises this divergence.
+  - All clauses FAKE MATCHES for current usage.
+
+  ### Drift findings (closed)
+  - g2h5 (P3): CountIssues multi-status filter encoding. CLOSED.
+  - j0o5 (P4): zero-count omission invariant. CLOSED.
+
+  ### Summary
+  - Total clauses: 7 | Verified: 6 + 1 fixed | Drift: 1 (resolved) | Gaps: 2 (resolved) | Diverges: 0

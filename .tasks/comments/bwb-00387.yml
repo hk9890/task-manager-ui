@@ -1,0 +1,24 @@
+---
+id: odvryz5w
+author: Hans Kohlreiter
+created: 2026-04-19T20:34:38Z
+body: |-
+  Triage note: keep separate from the search golden failures. The key suspicious detail is the dependency count changing from 3 to 6 in ; treat this as a possible data/dedup or aggregation regression, not just a generic layout drift, until proven otherwise.
+---
+id: 6wiq0l9r
+author: Hans Kohlreiter
+created: 2026-04-19T20:35:20Z
+body: |-
+  Correction to prior triage note: keep this separate from the search golden failures. The key suspicious detail is that TestRenderWideThreeColumnGolden changes the dependency count from 3 to 6; treat this as a possible data, aggregation, or dedup regression until proven to be only stale golden output.
+---
+id: 6adcdvfx
+author: Hans Kohlreiter
+created: 2026-04-20T15:06:57Z
+body: |-
+  Current main does not reproduce the triaged failure. `go test ./internal/ui/details -run TestRenderWideThreeColumnGolden -v` passes, `wide_three_column.golden` still expects a Dependencies header count of 3, and `countDependencyReferences` currently returns only blocked-by + blocks + related (not structure rows). This issue now looks stale/already fixed unless there is a missing repro outside the focused golden test.
+---
+id: opqw90mf
+author: Hans Kohlreiter
+created: 2026-04-20T15:10:00Z
+body: |-
+  Git history review: I could not find a committed regression where the Dependencies header changed from 3 to 6. `countDependencyReferences` was introduced in 6cfbd30 (`feat: rework issue detail dependencies layout and metadata actions`) and has always counted only blocked-by + blocks + related. The closest real fix is abf5977 (`fix: stabilize detail metadata interactions and verification tooling`), which added de-duplication in `dependencyGroups` so duplicate issue IDs do not render across visible groups. `dcc7873` introduced the original wide rail; `6cfbd30` added the Dependencies pane + Structure group; `abf5977` is the commit that most plausibly fixed the underlying duplication symptom. A literal header-count=6 regression does not appear in committed history, so the issue may have been filed from a transient local state or from interpreting Structure rows as dependency rows.

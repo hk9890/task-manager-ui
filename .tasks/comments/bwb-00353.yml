@@ -1,0 +1,12 @@
+---
+id: drph1u5i
+author: Hans Kohlreiter
+created: 2026-05-16T03:32:56Z
+body: |-
+  Update cite — current legacy reset is at app/model.go:758 (was :759). Note: app/model.go:541-545 (OpenRelatedIssueIntent path) already resets ContentScrollOffset+MetadataScrollOffset but MISSES DependenciesScrollOffset; ensure the unified fix in ApplyLoadedDetail covers both code paths and the OpenRelatedIssueIntent block becomes redundant.
+---
+id: hkm4x2q4
+author: Hans Kohlreiter
+created: 2026-05-16T03:58:57Z
+body: |-
+  Implemented. mode/details.ApplyLoadedDetail compares Detail.Summary.ID to new issueID; if different (or empty), zeros all three scroll offsets (Content/Metadata/Dependencies) plus the legacy ScrollOffset alias before syncBrowserPanel. app/model.go:541 OpenRelatedIssueIntent block now also resets DependenciesScrollOffset. Legacy ScrollOffset reset in ensureDetailForCurrentSelectionCmd (was :758) removed as redundant. TestApplyLoadedDetailResetsScrollOffsetOnIssueChange covers reset-on-switch, preserve-on-refresh, and reset-on-first-load.

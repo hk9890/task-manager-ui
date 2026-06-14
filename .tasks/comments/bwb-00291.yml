@@ -1,0 +1,8 @@
+---
+id: 2sy0vt3z
+author: Hans Kohlreiter
+created: 2026-05-20T18:54:11Z
+body: |-
+  Implemented (tasker, 2026-05-20): the bottom < 3 guard in splitResponsiveLayoutHeights is genuinely unreachable. Proof: in the total>6 branch, after the shift block content=max(3,total-6) so bottom=total-max(3,total-6)=min(total-3,6); for total>=7, total-3>=4 so bottom>=4. When the shift does not fire, bottom>=6. Either way bottom>=3 always. Exhaustive check over total in [7,200] confirms. Dead guard (4 lines) deleted from internal/ui/details/details.go; details package coverage rose 88.9% -> 91.2%.
+
+  Quality gate: build/vet/lint pass, race tests pass, coverage gate 75.1% > 75%. Verified within the combined 'mise run quality' run.

@@ -1,0 +1,6 @@
+---
+id: al5fzqno
+author: Hans Kohlreiter
+created: 2026-05-17T10:52:56Z
+body: |-
+  Verified. All implementation tasks closed (9x70.1, .2, .3 done; 9x70.4 won't-do per epic-review decision recorded 2026-05-16). RunWriteContract passes against both bare FakeBeadsGateway and real gateway; writeAwareFake deleted (grep 0 matches). Deliberate-break tested on both fake (CreateIssue ID removed → all 4 invariant sub-tests fail) AND validator (ValidateWriteVisibility stubbed → 3 sub-tests detect missing teeth). interface.go has full per-method contract + write quirks appendix. contractcheck has ValidateCreateIssueResult/ValidateWriteVisibility/ValidateCountIncrement. fakes/doc.go has 5 drift log entries dated 2026-05-17. Discipline bug ubav (ClearLabels silent no-op) closed-with-fix in same session — fix verified by independent quality run. All criteria satisfied.

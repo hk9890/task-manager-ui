@@ -1,0 +1,30 @@
+---
+id: rc8h5ft2
+author: Hans Kohlreiter
+created: 2026-04-18T19:41:44Z
+body: |-
+  Root cause is clear from code: renderContentPaneLines() builds content top-down (title, description, notes, comments) and returns a flat line slice. sliceWithOffset() then pads remaining lines with empty strings to fill innerHeight (line 371-373 of details.go). The content is top-aligned by construction — there is no mechanism to push comments toward the bottom or distribute vertical space between sections. The bug description correctly identifies the symptom but does not name this root cause. Suggested action: add a one-line root cause note to the bug description referencing the top-aligned padding in sliceWithOffset and the lack of vertical space distribution in renderContentPaneLines.
+---
+id: rp64agj4
+author: Hans Kohlreiter
+created: 2026-04-18T19:41:52Z
+body: |-
+  Fix direction: renderContentPaneLines should insert spacer lines between the notes section and the comments section so comments are pushed toward the bottom of the available height. Specifically: compute the total lines used by title+description+notes and by comments, then fill the gap with empty lines so comments anchor to the lower portion of innerHeight. This keeps rendering as a flat []string, preserves sliceWithOffset scroll semantics unchanged, and requires no new abstractions. Why this over alternatives: (1) bottom-aligning ALL content would look wrong when content is short, (2) a split-viewport approach would add complexity and break the single-scroll model, (3) spacer insertion is ~10 lines of code in one function.
+---
+id: hgo3m3lh
+author: Hans Kohlreiter
+created: 2026-04-18T19:41:59Z
+body: |-
+  Risk: spacer insertion must be height-aware, meaning renderContentPaneLines needs the available innerHeight as a parameter (it currently only takes detail and width). If the spacer is computed naively without clamping, short-content issues with many comments could produce zero or negative spacer — handle with max(0, ...). Also: when total content exceeds innerHeight (long description + many comments), spacer should be 0 and scroll should work normally. Test both cases.
+---
+id: nxdxuvoa
+author: Hans Kohlreiter
+created: 2026-04-18T19:42:06Z
+body: |-
+  Bug acceptance criteria are underspecified. The bug says 'distributes content more intentionally' which is not testable. Suggested acceptance language: (1) When total content lines < innerHeight, comments section starts no higher than 60% of innerHeight (i.e. lower portion). (2) When total content lines >= innerHeight, no spacer is inserted and scroll works as before. (3) Runtime captures at 120x34 and 160x34 show no blank region larger than 2 lines between the last notes line and the comments header. These three criteria let a tasker verify mechanically.
+---
+id: upeaeasb
+author: Hans Kohlreiter
+created: 2026-04-18T19:42:11Z
+body: |-
+  Anti-pattern warning: do NOT solve this by adding a second scrollable viewport or splitting Content into two Bubble Tea models. That would break the single-scroll-offset model already working in sliceWithOffset and add disproportionate complexity for a layout spacing fix. The fix belongs entirely in renderContentPaneLines (plus passing innerHeight into it).

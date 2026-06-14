@@ -1,0 +1,12 @@
+---
+id: zlvdq5cl
+author: Hans Kohlreiter
+created: 2026-04-12T14:05:58Z
+body: |-
+  Detail is not a mode.Controller — structural asymmetry the task should address explicitly. What: Board and search implement the mode.Controller interface (Init/Update/View/SetSize), but detail is a raw detailsmode.Model struct managed directly by the shell with ad-hoc sizing (detailViewportHeight(), width-8 content width, FormSection wrapping in renderBody). The shell's renderBody() applies completely different sizing logic for detail vs board/search. Why: A 'shared full-height workspace contract' that only standardizes the numbers but leaves the structural asymmetry (Controller vs raw struct) in place will be fragile. The shell will still have two different sizing paths. Suggested action: The instructions should explicitly call out that the detail sizing path in renderBody() and detailViewportHeight() must be unified with the board/search SetSize path, even if detail doesn't become a full Controller. At minimum, detail needs to receive the same (width, height) contract board/search get via SetSize rather than deriving dimensions ad-hoc.
+---
+id: jkhi6f6j
+author: Hans Kohlreiter
+created: 2026-04-12T14:06:07Z
+body: |-
+  Acceptance criteria need a concrete measurable for full-height. What: Criterion says 'Full available body height is used consistently' but does not define what 'full available body height' means numerically. Currently board/search get max(14, height-7) and detail gets max(1, max(14, height-7)-2), which are already different by 2 lines. Why: Without a concrete formula (e.g., 'body height = terminal height - header lines - footer lines, with no additional padding or wrapping'), a tasker may produce a new contract that is still inconsistent but in a different way. The verifier also cannot objectively check this criterion. Suggested action: Add an explicit acceptance criterion like 'All primary screens receive body dimensions as (termWidth - shellHorizontalChrome, termHeight - headerLines - footerLines) with no mode-specific adjustments to the body budget'.

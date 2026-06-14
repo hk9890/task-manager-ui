@@ -1,0 +1,13 @@
+---
+id: 1jwv0pqh
+author: Hans Kohlreiter
+created: 2026-04-20T12:52:03Z
+body: |-
+  Review (release context): This bug gates the v0.2.0 release epic beads-workbench-yixr. Why: it documents 'go test ./...' failures in internal/app under the full-suite run, which is exactly the gate yixr.1 must pass per docs/CODING.md. Suggested action: prioritize fix or formal waiver before yixr.1 can close; if waiving, document why these failures are deemed non-release-blocking.
+---
+id: vo67anxk
+author: Hans Kohlreiter
+created: 2026-04-20T13:45:46Z
+body: |-
+  Verified on 2026-04-20 while preparing v0.2.0 release readiness. Current reproduction attempts all passed:
+  - go test ./internal/app -run 'TestModelSearchTextEntryIsNotHijackedByShellHotkeys|TestModelSearchModeRendersRepresentativeErrorAndEmptyStates|TestModelFocusRegainInSearchReloadsWithoutMutatingQuery|TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping' -v\n- go test ./internal/ui/search ./internal/app -count=1 -v\n- make test\n- go test ./...\n- go test ./... -count=1\n\nThe previously reported internal/app full-suite failure is not reproducible on the current main branch. Closing as resolved/non-reproducible on current HEAD unless a future failure report captures a concrete reproducer or SHA.

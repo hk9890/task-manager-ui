@@ -1,0 +1,12 @@
+---
+id: r6ia64l2
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:14Z
+body: |-
+  Item 2 (temp cleanup): pick a concrete location — internal/app/services.go NewServices — rather than 'wherever startup runs once'.
+---
+id: qlqxq7hf
+author: Hans Kohlreiter
+created: 2026-05-16T04:32:00Z
+body: |-
+  Both items done. m6: shellSplit (single+double quote handling, embedded quotes, unclosed-quote errors) replaces strings.Fields in opener.go splitEditorCommand; 12-subtest table test covers known shapes + errors. m7: cleanStaleTempFilesInDir in services.go scans os.TempDir() for bwb-issue-*.md older than 24h, runs from NewServices in a goroutine, logs via slog.Default(); TestCleanStaleTempFiles using t.TempDir() verifies stale-removed + recent-kept + unrelated-untouched.

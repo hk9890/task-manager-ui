@@ -1,0 +1,6 @@
+---
+id: l0j1wxdh
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:50Z
+body: |-
+  F1 (Minor) — Success Criteria duplicates child-ticket AC text (Makefile removal, CI mise wiring). Defer to child ACs to avoid drift; keep only cross-cutting outcomes (wall-time reduction, coverage parity, single quality entry, mise as authoritative execution layer).

@@ -1,0 +1,6 @@
+---
+id: kvep96c9
+author: Hans Kohlreiter
+created: 2026-04-07T12:35:35Z
+body: |-
+  Clarified launcher UX contract and in-app messaging: launchers are explicit background fire-and-forget with no managed return flow, while e remains the round-trip edit/save path with detail reload. Updated docs/CODING.md, shell help/header text, success toast messaging, and added tests covering lifecycle guidance.

@@ -1,0 +1,6 @@
+---
+id: v8h3jcda
+author: Hans Kohlreiter
+created: 2026-04-11T12:15:40Z
+body: |-
+  Acceptance review verified: beads-workbench-j8m.1/.2/.3 are closed and each includes evidence comments. Release/doc follow-ups are tracked separately in beads-workbench-2ue, beads-workbench-vr5, and beads-workbench-2rj. During review I found one additional untracked release-process gap from j8m.1 (missing CI/provenance follow-up) and filed beads-workbench-f51. With that follow-up captured, the epic is an accurate retrospective record and can be safely closed.

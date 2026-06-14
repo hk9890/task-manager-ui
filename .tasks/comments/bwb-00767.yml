@@ -1,0 +1,6 @@
+---
+id: 1o9cqcdf
+author: Hans Kohlreiter
+created: 2026-05-16T12:41:46Z
+body: |-
+  Deleted setup_integration_test.go. Seed still has callers in mode/search/model_integration_test.go and contract/lifecycle_scenario_integration_test.go. hasExecutable was needed by fixture_integration_test.go (round-trip test from 163c) so moved there. Integration suite now 648 tests in 31.7s (was ~95s pre-epic, ~80s after just the contract additions). Quality green.

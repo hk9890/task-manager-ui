@@ -1,0 +1,6 @@
+---
+id: 3rjwm3m2
+author: Hans Kohlreiter
+created: 2026-05-16T11:41:57Z
+body: |-
+  Implementation complete. SharedFixtureRepoPath added with sync.Once-guarded seed cache; second call measured at 2.3ms vs 8s cold (~3500× speedup, well under 100ms target). Integration round-trip test added in fixture_integration_test.go. mise run quality green. Note: this bd version uses .beads/embeddeddolt/ instead of SQLite beads.db — Dolt-backed; cp -a snapshot semantics still apply.

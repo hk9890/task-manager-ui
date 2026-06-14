@@ -1,0 +1,60 @@
+---
+id: qw1awxlr
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:31Z
+body: |-
+  Missing acceptance criterion: configurable or constant-defined tick interval. What: instructions say 'periodic auto-refresh ticks' but no AC specifies the ~60s target or where this constant lives. Why: without this, the implementer may hardcode a magic number or pick an arbitrary interval with no test coverage of the cadence. Suggested action: add AC — 'Tick interval is defined as a named constant (not a magic number) and defaults to ~60s.'
+---
+id: 23asepze
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:32Z
+body: |-
+  Good: instruction 4 explicitly handles skip-while-loading and modal-open suppression. This prevents the most common auto-refresh footgun.
+---
+id: ht4q8a5k
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:34Z
+body: |-
+  Confirmed: current main.go creates the program with only tea.WithAltScreen(). Adding tea.WithFocusReporting() is the correct enablement path in Bubble Tea. No conflict with existing options.
+---
+id: si770171
+author: Hans Kohlreiter
+created: 2026-04-19T08:32:27Z
+body: |-
+  Execution started. Running this task first because it is ready and mostly isolated to cmd/bwb/main.go and internal/app/model.go. Current worktree has unrelated detail-ui modifications in progress; avoid touching those files while implementing this task.
+---
+id: 290q277y
+author: Hans Kohlreiter
+created: 2026-04-19T08:50:03Z
+body: |-
+  Search refresh uses synthetic KeyMsg injection which is fragile. What: refreshActiveSurfaceCmd for search mode (line 768-773) synthesizes a tea.KeyMsg to trigger reload, coupling refresh logic to the current keybinding configuration. Why: if keybindings change, or the search model's internal key handling evolves, this will silently break. It also bypasses the search model's public API. Suggested action: expose a Reload() tea.Cmd method on the search model (like board uses Init()) and call that directly.
+---
+id: di684sbi
+author: Hans Kohlreiter
+created: 2026-04-19T08:50:11Z
+body: |-
+  Board refresh re-uses Init() which may reset selection state. What: refreshActiveSurfaceCmd calls m.board.Init() (line 763) to refresh the board. Why: Init() typically performs full initialization including resetting internal state like cursor position and selection. If board.Init() reloads data AND resets the selection to the first item, users will lose their place after every 60s tick or focus-regain. Suggested action: verify board.Init() preserves selection, or add a dedicated Refresh() method that reloads data without resetting cursor.
+---
+id: 5f8db2em
+author: Hans Kohlreiter
+created: 2026-04-19T08:50:20Z
+body: |-
+  Tick reschedule on refreshTickMsg fires even when blurred. What: the refreshTickMsg handler (line 243) always reschedules the next tick and calls maybeAutoRefreshActiveSurfaceCmd. The maybeAutoRefreshActiveSurfaceCmd correctly suppresses the actual refresh when blurred, but the tick timer keeps spinning indefinitely regardless. Why: this is mostly fine — timers are cheap and the refresh is suppressed — but it means the app accumulates one pending timer per 60s while blurred. Not a bug, just slightly wasteful. No action needed unless you want to defer rescheduling until focus returns.
+---
+id: 8c23c099
+author: Hans Kohlreiter
+created: 2026-04-19T08:50:27Z
+body: |-
+  Focus/blur/tick logic is correct and well-tested for acceptance criteria. What: The implementation correctly handles (1) focus reporting via tea.WithReportFocus(), (2) blur->focus transitions triggering one refresh, (3) repeated focus msgs being no-ops via wasBlurred guard, (4) tick fallback when focusKnown is false, (5) modal and loading guards. Tests cover all these paths explicitly. The 60s constant is named and clear. No crashes from missing state. Verdict: implementation is solid for the stated scope.
+---
+id: j20jwipx
+author: Hans Kohlreiter
+created: 2026-04-19T08:50:35Z
+body: |-
+  Test gap: no test verifies detail-mode refresh on focus regain. What: TestModelRefreshTickReloadsOnlyActiveSearchSurface tests search, TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard tests board, but no test puts the model in detail mode and verifies focus-regain triggers a detail reload (the code path at lines 774-787). Why: this is the most complex refresh path (it mutates Loading/TargetID state) and an untested regression risk. Suggested action: add a test that enters detail mode, blurs, focuses, and asserts ShowIssue is called exactly once.
+---
+id: xu5jkhqv
+author: Hans Kohlreiter
+created: 2026-04-19T09:03:38Z
+body: |-
+  Verification found follow-up bug beads-workbench-87mc: search-mode auto-refresh uses synthetic rune injection and corrupts the query when query focus is active. Keeping t7o.1 closed per beads history rules; fixing via follow-up bug under the epic before acceptance review.

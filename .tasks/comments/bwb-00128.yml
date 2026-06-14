@@ -1,0 +1,6 @@
+---
+id: juwpdlsx
+author: Hans Kohlreiter
+created: 2026-05-16T13:59:43Z
+body: |-
+  Implementation complete. .gitattributes created (LF enforcement for *.golden/.go/.yaml/.yml/.toml/.sh/.md/.json/.jsonl). harness.go NormalizeOutput + AssertMatchesGolden strip CRLF before compare; board_test.go local normalize also patched (defense-in-depth). TestLoad_DirectoryAtConfigPathReturnsError fixed via MkdirAll(filepath.Dir(path)) before MkdirAll(path). TestRunCWDExecuteOnlyExitsWithCode1 + companion skipped on Windows (Unix execute-only chmod is no-op on Windows). Quality green: 624 unit + 652 integration. 90% confidence Windows golden tests resolve after push.

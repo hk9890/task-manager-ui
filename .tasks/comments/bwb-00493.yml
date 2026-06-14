@@ -1,0 +1,6 @@
+---
+id: rwuczpab
+author: Hans Kohlreiter
+created: 2026-05-19T15:31:43Z
+body: |-
+  Completed in commit 30a1c77. ensureMetadataSelection 0% → 100%; moveMetadataSelection 0% → 100%. Test runtime 7ms. quality:fast clean (860 tests).

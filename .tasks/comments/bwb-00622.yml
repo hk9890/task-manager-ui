@@ -1,0 +1,6 @@
+---
+id: cy5u3rhi
+author: Hans Kohlreiter
+created: 2026-05-16T13:18:23Z
+body: |-
+  fmt:check task added (uses .goimports-version v0.30.0 pin, matching .golangci-version / .gotestsum-version pattern). CI step 'Format check' added before Lint. Pre-commit hook extended to run goimports on staged files only (preserves existing staged-list scoping). Side effect: 29 Go files had their import groups normalized for -local grouping. Negative test verified: intentional violation triggers FAIL. Quality green.

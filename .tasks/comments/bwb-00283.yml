@@ -1,0 +1,6 @@
+---
+id: liaigdk9
+author: Hans Kohlreiter
+created: 2026-04-10T16:33:24Z
+body: |-
+  Scope clarification: The duplication also extends to the summaries-to-SearchResult mapping — both SearchIssues and searchIssuesFromList have identical loops converting []IssueSummary to []SearchResult (lines 268-271 and 324-327). A shared toSearchResultPage(summaries, total) helper would collapse both.

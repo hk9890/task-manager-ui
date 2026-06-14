@@ -1,0 +1,6 @@
+---
+id: y55eqgi2
+author: Hans Kohlreiter
+created: 2026-04-10T17:01:26Z
+body: |-
+  Priority should be P1, not P2. What: this bug means ANY new field bd adds to its JSON output hard-crashes the TUI. bd is actively developed and fields get added regularly. Why: the app will break on the next bd upgrade with zero user-actionable feedback (decode error). This is a ticking time bomb with real user impact — worse than the modal n-key bug (which requires a specific unusual key press). Suggested action: upgrade to P1.

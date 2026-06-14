@@ -1,0 +1,12 @@
+---
+id: 8p92imol
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:31Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q1 (al58.2's tests are //go:build integration and would not be executed by 'mise run test' alone, so the acceptance gate must require BOTH 'mise run test' AND 'mise run test:integration'). Acceptance criteria updated.
+---
+id: kpxv0fj9
+author: Hans Kohlreiter
+created: 2026-05-23T12:44:29Z
+body: |-
+  Verification complete. All 5 criteria PASS: (1) al58.1 and al58.2 both closed; (2) mise run test green (1101 tests, -race) with all 5 mutation-error tests present asserting documented prefix + errors.Is(errInjected); (3) mise run test:integration green (1239 tests) with both skip tests using canonical captured-*testing.T + Skipped() pattern and incorrect 'can't introspect' comment removed; (4) no unresolved critical defects (the one tasker-reported flake did not reproduce under -race -count=3 across 15 parallel executions); (5) no non-blocking gaps requiring follow-up. Quality:fast green (vet + lint + arch guardrails + unit).

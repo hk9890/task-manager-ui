@@ -1,0 +1,6 @@
+---
+id: hndh1kx6
+author: Hans Kohlreiter
+created: 2026-04-10T16:33:30Z
+body: |-
+  Design question: Is this mutex intentionally serializing writes to avoid Dolt commit races? If bd internally manages locking, this is pure overhead. If bd does NOT manage concurrent access to the same .beads/ database, then the mutex is necessary but should at minimum use an RWMutex — reads can be concurrent, only writes need exclusion.

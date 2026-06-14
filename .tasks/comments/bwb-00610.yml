@@ -1,0 +1,12 @@
+---
+id: z6dp10hh
+author: Hans Kohlreiter
+created: 2026-05-19T15:56:05Z
+body: |-
+  Pre-execution scope adjustment: the original AC of '>=76 with 1pt headroom' is unachievable given the epic's stated out-of-scope: cmd/bwb-smoke (13% covered, ~30 functions at 0%). After two scope-expansion tasks (xvar, d8d1) the in-scope reachable maximum is 75.1%. Recommending: keep the literal threshold=75 (matches epic AC line 2), drop the headroom-of-1 sub-criterion as un-meetable under epic scope. Will proceed with that interpretation; documenting here for transparency.
+---
+id: m5y5rn4y
+author: Hans Kohlreiter
+created: 2026-05-19T15:57:43Z
+body: |-
+  Completed in commit 14d1259. Threshold raised from 69 to 75 in both occurrences in .mise.toml. mise run test:coverage prints 'Total coverage: 75.1% (threshold: 75%)' and exits 0. quality:fast clean (1063 tests). Headroom-of-1 sub-criterion was dropped as documented above.

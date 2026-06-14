@@ -1,0 +1,12 @@
+---
+id: 0wheuzmh
+author: Hans Kohlreiter
+created: 2026-05-16T03:31:54Z
+body: |-
+  Scope reduced: Part 1 (HealthCheck → bd ping) was already implemented before this audit ticket was filed. Verified: read_gateway.go:46-48 uses 'bd ping --json' and TestGatewayHealthCheckIssuesPingJSON exists at read_gateway_test.go:955. Only Part 2 (parent-fetch deferral) remains; title and description updated to reflect this.
+---
+id: 00v0ap2d
+author: Hans Kohlreiter
+created: 2026-05-16T04:18:30Z
+body: |-
+  Implemented. Added sync.RWMutex + parentSiblingCache map to Gateway struct. parentChildSiblings checks cache before bd show; cache hit skips the call entirely. TestGatewayShowIssueChildIssueIssuesAtMostOneBdShowSynchronouslyOnCachedParent asserts at most 1 bd show on second detail load for same parent. All 16 ShowIssue tests pass.

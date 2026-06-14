@@ -1,0 +1,6 @@
+---
+id: w33bvija
+author: Hans Kohlreiter
+created: 2026-05-16T12:45:27Z
+body: |-
+  Docs updated. docs/TESTING.md fully restructured around the three-tier model (unit / read contract / mutating scenarios) with decision tree, fixture rules, and fake/real contract section. RUNTIME_UI_VERIFICATION.md updated for renamed test. CODING.md/AGENTS.md clean. test-baseline-2026-05-16.md preserved as historical artifact (explicitly pre-migration). Quality green.

@@ -1,0 +1,12 @@
+---
+id: nv1yhgh4
+author: Hans Kohlreiter
+created: 2026-04-19T18:49:04Z
+body: |-
+  Issue is well-scoped and ready to implement. What: acceptance criteria are clear and testable — Enter saves, Escape cancels. One gap: criteria don't specify behavior when Enter is pressed with no change (same value re-selected). Why: edge case matters because it determines whether a no-op save triggers a bd update call or silently closes. Suggested action: add criterion for no-change case (recommend: close dialog silently without issuing update).
+---
+id: p6hz685p
+author: Hans Kohlreiter
+created: 2026-04-19T18:49:07Z
+body: |-
+  Overlap with 8haw: 8haw criterion #4 ('Enter behavior for actionable metadata fields is consistent') is essentially a subset of this issue. What: if vvoe is implemented fully, 8haw's Enter-behavior criterion is satisfied. Why: implementing both independently risks conflicting fixes. Suggested action: implement vvoe first, then update 8haw to remove the Enter-behavior criterion and focus it purely on traversal order + Priority UX decision.

@@ -1,0 +1,6 @@
+---
+id: oc4tntu1
+author: Hans Kohlreiter
+created: 2026-05-24T13:27:28Z
+body: |-
+  creator field added to storedIssue + projected via toDetailLocked + round-tripped via SnapshotIssue/SeedFromSnapshot. Tests: TestSeedDetail_PreservesCreator, TestSnapshotRoundTrip_PreservesCreator. quality:fast green (968 tests). Commit 9e0b823.

@@ -1,0 +1,529 @@
+---
+id: ecpu6061
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:06Z
+body: |-
+  ## No Bubble Tea testing strategy is defined anywhere in the plan
+
+  **What**: The entire plan mentions "tests" repeatedly but never once specifies *how* Bubble Tea UI components will be tested programmatically. There is no mention of `teatest`, golden file testing, `tea.Model` unit testing via `Update`/`View` calls, or any other concrete TUI testing approach. The donor repo (`perles`) has 320+ uses of `teatest.RequireEqualOutput` with golden files — this proven pattern is completely absent from the new plan.
+
+  **Why**: This is the single biggest testability gap. An agent cannot verify that a board renders correctly, that mode switching works visually, that search results display properly, or that detail views show the right content — unless there is a concrete testing mechanism. Without specifying the testing approach, implementation tasks will either skip UI tests entirely (leaving verification to manual eyeballing) or each task will invent its own ad-hoc approach. Either outcome defeats the goal of agent-verifiable product quality.
+
+  **Suggested action**: Add a cross-cutting task (or expand the existing test tasks) that explicitly establishes:
+  1. `teatest` golden file testing as the standard for all View() output verification
+  2. `tea.Model` unit testing via Init/Update/View for state machine behavior
+  3. A `testdata/` golden file convention matching the donor repo's proven pattern
+  4. A helper package (e.g. `internal/testutil/`) for building test models with fake gateway data
+
+  This should be a prerequisite for `beads-workbench-yze.2.4` (app-shell tests) and `beads-workbench-yze.3.5` (browsing tests), not something each test task discovers independently.
+---
+id: 19ndjgb6
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:09Z
+body: |-
+  ## No fake/mock gateway is planned as shared test infrastructure
+
+  **What**: Every test task (beads-workbench-omd.6, beads-workbench-yze.2.4, beads-workbench-yze.3.5, beads-workbench-yze.4.5) needs to exercise UI or integration behavior against gateway data, but no task creates a shared fake/mock `BeadsGateway` implementation. The command runner gets test seams (omd.3), but the higher-level gateway interface — which every mode controller and every UI test will depend on — has no planned fake.
+
+  **Why**: Without a shared fake gateway, every test task will either: (a) build its own ad-hoc mock, creating inconsistency; (b) depend on a real `bd` CLI and a real beads repo, making tests non-deterministic and requiring environment setup an agent may not have; or (c) skip gateway-dependent tests entirely. This is a structural gap that makes the entire UI testing story fragile.
+
+  **Suggested action**: Add an explicit deliverable to `beads-workbench-omd.2` (or a new task in the foundation epic) that creates a `FakeBeadsGateway` implementing the full `BeadsGateway` interface with configurable return values and error injection. This becomes shared test infrastructure for all later epics.
+---
+id: 48d69a44
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:12Z
+body: |-
+  ## No embedded-mode beads test fixture is planned
+
+  **What**: The product acceptance review (beads-workbench-yze.1) requires "Embedded-mode beads compatibility is verified" but no task in the entire plan creates an embedded-mode beads test repository, explains how to bootstrap one for testing, or provides fixture data that represents a realistic beads workspace. The v1 product principle is "embedded-mode compatibility first."
+
+  **Why**: An agent verifying acceptance will need a real or realistic beads repo to run the gateway against. Without a planned fixture, the agent either creates one ad-hoc (unreliable), uses the current repo's own beads data (circular and non-deterministic), or skips the check (defeating the purpose). This is especially critical because the gateway shells out to `bd` — integration tests MUST have a beads repo to operate against.
+
+  **Suggested action**: Add a task (likely in the foundation epic or as a cross-cutting test infrastructure task) that creates a reproducible embedded-mode beads test fixture. This should include:
+  - A script or `TestMain` setup that initializes a temp beads repo with known issues, statuses, types, labels, comments, and dependencies
+  - Enough data to exercise all gateway read operations (list, ready, blocked, show)
+  - Enough data to exercise write operations (create, update, close, comment)
+  - Clear teardown so tests are isolated
+---
+id: 2u42dsnx
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:47Z
+body: |-
+  ## No documentation tasks anywhere in the v1 plan
+
+  **What**: The entire 30-issue plan contains zero tasks dedicated to creating or updating project documentation (`docs/TESTING.md`, `docs/CHANGE-WORKFLOW.md`, updating `docs/CODING.md` as code lands, populating `CLAUDE.md`). Documentation is not mentioned in any task scope, any acceptance criteria, or any acceptance review.
+
+  **Why**: This project will be built by AI agents working across sessions. Agents depend on `AGENTS.md` and `docs/` as their primary onboarding surface. If no task ever requires updating docs, the docs will be stale by the end of Phase 1 and dangerously wrong by v1. The "planned layout" in `CODING.md` will describe directories that don't exist alongside directories that do. New agents will make wrong assumptions. Rework follows.
+
+  **Suggested action**: Add a documentation concern to the plan. At minimum:
+  1. Add an acceptance criterion to `beads-workbench-omd.1` (bootstrap) requiring `docs/CODING.md` to be updated from "planned layout" to actual layout, and `CLAUDE.md` to be populated with real build/test commands and architecture overview (its current content is placeholder scaffolding).
+  2. Add a docs-update acceptance criterion to each acceptance review task (omd.7, yze.2.5, yze.3.6, yze.4.6) requiring that `docs/CODING.md` reflects the current code and any new docs needed for the phase are present.
+  3. Create `docs/TESTING.md` as part of the first test task (omd.6) — this is the right moment to document the test harness, fixtures approach, and running commands.
+---
+id: zglfx6fm
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:08Z
+body: |-
+  ## docs/CHANGE-WORKFLOW.md is not needed for v1 — intentional absence
+
+  **What**: The standard project docs model includes `docs/CHANGE-WORKFLOW.md` for release/change process documentation. This project currently has no release flow, no CI pipeline, no PR workflow documented or planned in the beads plan. The question is whether this doc should be planned.
+
+  **Why**: Beads Workbench is a private single-developer project using `bd` for issue tracking and direct-push git workflow. There is no multi-contributor PR process, no release tagging scheme, and no CI/CD pipeline in the plan. Creating a change workflow doc now would be documenting a process that doesn't exist.
+
+  **Suggested action**: Intentionally skip `docs/CHANGE-WORKFLOW.md` for v1. If a release flow or CI pipeline is added later, create the doc at that time. No beads change needed — this is a deliberate non-gap.
+---
+id: 3xn86u9w
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:24Z
+body: |-
+  ## No end-to-end workflow test exists in the plan — agent cannot verify the product works as a whole
+
+  **What**: The plan has unit-ish tests per layer (gateway tests in omd.6, app-shell tests in yze.2.4, browsing tests in yze.3.5, editor/launcher tests in yze.4.5) but there is no task that tests a complete user workflow end-to-end. For example: "start app → load board → select issue → view details → add comment → verify comment appears" or "start app → search by status → select result → open in editor → save changes → verify update applied."
+
+  **Why**: Layer-by-layer tests can all pass while the integrated product fails. The gateway can correctly decode JSON, the UI can correctly render data, and the mode controller can correctly transition state — but the wiring between them can still be broken. The product acceptance review (yze.1) says "The integrated app delivers the v1 workflows" but provides no automated way to prove this. An agent will be left with "all unit tests pass, I guess it works?"
+
+  **Suggested action**: Add a dedicated e2e/smoke test task in the top-level epic that:
+  1. Initializes a temp embedded-mode beads repo with fixture data
+  2. Constructs the full app model (real gateway, real `bd`, fixture repo)
+  3. Exercises at least these workflows programmatically via tea.Model Update sequences:
+     - Board browse → select issue → verify detail state
+     - Search → filter → verify result set
+     - Create issue → verify it appears in list
+     - Add comment → verify it appears in detail
+  4. Can run as `go test ./... -tags=e2e` or similar
+  5. Does NOT require a human to open the terminal
+---
+id: jt1ng3pl
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:53Z
+body: |-
+  ## Product epic success criteria reference "integration tests" but no task defines what integration means
+
+  **What**: The product epic says "Backend, UI, and integration tests pass." Three test tasks exist: omd.6 (gateway tests), yze.2.4 (app-shell tests), yze.3.5 (browsing tests), yze.4.5 (editor/launcher tests). But none of them define what "integration test" means in this context. Are these tests that run against a real bd CLI with a real beads database? Are they tests with mocked gateway calls? The term "integration" is used inconsistently — omd.6 says "use fixtures or test seams," while yze.3.5 says "integration-oriented tests" and yze.4.5 says "integration tests."
+
+  **Why**: If "integration test" means "uses a real beads database," those tests need CI infrastructure and a test beads project. If it means "tests multiple packages together with mocked boundaries," that's a different thing entirely. Agents will interpret this differently, leading to inconsistent test strategies across epics.
+
+  **Suggested action**: Define the testing vocabulary in one place (CODING.md or the product epic description): "Unit tests mock the gateway. Integration tests exercise multiple packages together with test seams. End-to-end tests (if any) run against a real bd CLI." Then update the test task acceptance criteria to use the defined terms consistently.
+---
+id: 98rjeeho
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:02Z
+body: |-
+  ## STRENGTH: Separate test tasks per epic ensure test coverage is not optional
+
+  **What**: Every epic has a dedicated test task (omd.6 for gateway, yze.2.4 for app shell, yze.3.5 for browsing, yze.4.5 for editor/launcher) that blocks the acceptance review. This structural decision means an agent cannot close an epic without passing through the test task gate.
+
+  **Why**: Many plans treat testing as a "stretch goal" or fold it into implementation tasks where it can be quietly skipped. Having explicit blocking test tasks with acceptance reviews that depend on them is a strong structural guarantee. The weakness is in specificity (noted in other comments), not in structure.
+
+  **Suggested action**: Keep this pattern. When strengthening the test tasks per other review comments, preserve the blocking dependency chain: implementation → test task → acceptance review.
+---
+id: 0phhyuiq
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:13Z
+body: |-
+  ## Donor migration guidance is appropriate and well-bounded
+
+  **What**: Every task that references the donor repo (`/home/hans/dev/github/perles`) gives specific absolute paths to inspect, explicit forbidden paths, and clear instructions to "copy or adapt only" isolated pieces. The forbidden-donor list (orchestration, bql, infrastructure, old app.go) is consistent across all tasks. The "inspect for patterns, don't blindly copy" tone is maintained throughout.
+
+  **Why**: This is positive confirmation. The donor guidance is the area most likely to cause architecture drift (copying old SQL/BQL assumptions into the new codebase), and the plan handles it well. Each task that touches donor code has both an allow-list and a deny-list.
+
+  **Suggested action**: No change needed. The donor migration guidance is sound.
+---
+id: zpgk19ko
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:20Z
+body: |-
+  ## Dependency chain is sound and executable in realistic order
+
+  **What**: The dependency graph across all four epics follows a clean linear spine with appropriate parallelism: omd.1 → omd.2 → omd.3 → [omd.4 || omd.5] → omd.6 → omd.7 → [yze.2.1 || yze.2.2] → yze.2.3 → yze.2.4 → yze.2.5 → [yze.3.1 || yze.3.3 || yze.3.4] → yze.3.2 || yze.3.5 → yze.3.6 → [yze.4.1 || yze.4.2 || yze.4.3] → yze.4.4 → yze.4.5 → yze.4.6 → yze.1. No circular dependencies. The acceptance reviews correctly depend on all their epic's implementation tasks. Cross-epic dependencies flow through acceptance reviews as gates.
+
+  **Why**: Positive confirmation. The dependency structure is the backbone of execution soundness. This graph would allow 2-3 agents to work in parallel at several points without stepping on each other.
+
+  **Suggested action**: No change needed to the dependency structure (though the false dependency on yze.2.2 noted separately should be fixed to improve parallelism further).
+---
+id: srnkbn4p
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:14Z
+body: |-
+  ## STRENGTH: Dependency chain prevents skipping test phases
+
+  **What**: The dependency chain is well-structured: implementation tasks → test tasks → acceptance review → next epic. For example, yze.3.2/3.3/3.4 (implementation) → yze.3.5 (tests) → yze.3.6 (acceptance) → yze.4.x (editor/launcher). This means an agent cannot proceed to the editor/launcher epic without the browsing tests passing acceptance.
+
+  **Why**: This is exactly the right structure for agent-driven execution. The agent cannot skip testing because the next epic's tasks depend on the acceptance review. Combined with the gateway seam architecture, this creates a strong pipeline where each phase is verifiable before the next begins.
+
+  **Suggested action**: No change needed to the dependency structure. The improvements needed are all in the *content* of the test and acceptance tasks, not their ordering.
+---
+id: oaocacd8
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:25Z
+body: |-
+  ## [MEDIUM] No task covers configuration model — v1 config scope undefined
+
+  **What**: ARCHITECTURE.md (lines 329-340) and PRODUCT.md both describe v1 configuration areas: editor command / $EDITOR fallback, launcher definitions, basic UI preferences. No task in the plan addresses configuration loading, config file format, or config discovery. The editor task (beads-workbench-yze.4.1) mentions `$EDITOR` but not a config model. The launcher task (beads-workbench-yze.4.3) mentions issue-context interpolation but not how launcher definitions are configured.
+
+  **Why**: Without a configuration task, each feature will invent its own config approach: the editor flow will read `$EDITOR` directly, launchers will hardcode definitions, and UI preferences will be compile-time constants. This creates inconsistency and makes it harder to add a unified config later. More critically, launcher definitions need to be user-configurable to be useful — built-in launchers for `nvim`/`opencode`/`tmux` won't cover every user's workflow.
+
+  **Suggested action**: Add a task in the app shell epic or as a cross-cutting task: "Implement minimal v1 configuration model" covering: config file discovery, editor command resolution, launcher definition loading, and basic UI preferences. This doesn't need to be complex — even a simple TOML/YAML file with a documented schema would prevent ad-hoc config sprawl.
+---
+id: g0trn0ny
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:29Z
+body: |-
+  ## [LOW] Extension points correctly deferred — positive finding
+
+  **What**: The EXECUTION-PLAN.md recommends a Phase 5 epic for extension points: file-backed dashboard definitions, optional caching, federated read mode, small local filter language. The current beads plan correctly stops at Phase 4 (editor/launcher) and does not include Phase 5 tasks.
+
+  **Why**: This is architecturally correct. Including extension point tasks in v1 would create pressure to implement them prematurely. The plan's omission of Phase 5 is a strength, not a gap.
+
+  **Suggested action**: None. This is a positive finding. The plan correctly defers extension points.
+---
+id: 6v64p8sl
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:33Z
+body: |-
+  ## [HIGH] No go vet / build gate in any acceptance review task
+
+  **What**: Every acceptance review task (beads-workbench-omd.7, beads-workbench-yze.2.5, beads-workbench-yze.3.6, beads-workbench-yze.4.6, beads-workbench-yze.1) mentions "tests pass" but none require `go vet ./...` or `go build ./cmd/bwb` as explicit acceptance steps. CODING.md defines both as standard quality gates.
+
+  **Why**: `go test ./...` does not catch all vet violations, and a passing test suite doesn't guarantee the binary builds cleanly. An acceptance reviewer could approve a phase where `go vet` reports issues or the binary entrypoint has compilation errors outside test scope. These are the project's own documented quality gates in CODING.md.
+
+  **Suggested action**: Add to every acceptance review task's criteria: "`go build ./cmd/bwb` succeeds" and "`go vet ./...` reports no issues." These are already in CODING.md — the acceptance reviews should enforce them.
+---
+id: sme0rwdr
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:50Z
+body: |-
+  ## [HIGH] Plan has no automated architectural enforcement — each task bans SQL/BQL but nothing prevents imports
+
+  **What**: Every task says "do not introduce SQL/BQL/orchestration." But there is no task for a build-time or CI-time check that would catch a forbidden import. If an implementer adds `database/sql` or copies donor code that transitively imports `bql`, there is no automated gate. The only protection is human review in acceptance tasks.
+
+  **Why**: Implementation agents working on later tasks (board mode, search mode, detail mode) will be adapting heavily BQL-coupled donor code. The donor's board.go imports bql directly, the donor's details.go imports bql directly, and every mode controller imports bql through the services container. A single uncaught transitive import reintroduces the forbidden dependency. Human-only enforcement is insufficient when the donor code is this coupled.
+
+  **Suggested action**: Add a task (or add to an existing test task) that creates a build-time architecture test: a Go test that inspects import paths across `internal/` and fails if any package imports `database/sql`, any `bql` package, or any `orchestration` package. This is cheap to implement and catches regression automatically. Example approach: `go list -json ./internal/... | jq` or a Go test using `go/build` to inspect imports. Place this in the gateway tests task (beads-workbench-omd.6) or as a new cross-cutting task.
+---
+id: oauk9htf
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:51Z
+body: |-
+  ## Summary: Plan needs a cross-cutting "Test Infrastructure" task to close the biggest gaps
+
+  **What**: The review identified a consistent pattern across all epics: the architecture enables testability, the dependency chains enforce test ordering, but the individual test tasks lack the specificity and shared infrastructure to actually deliver agent-verifiable coverage. The gaps cluster around:
+  1. No TUI testing technique specified (teatest/golden files)
+  2. No shared fake gateway
+  3. No embedded-mode fixture repo
+  4. No subprocess seams for editor/launcher
+  5. No e2e workflow tests
+  6. Acceptance criteria use human-verification language
+
+  **Why**: Each gap on its own is addressable. Together, they create a plan where every test task will underdeliver because the test infrastructure doesn't exist yet when the test tasks start. The implementing agent will spend test-task time building infrastructure instead of writing coverage.
+
+  **Suggested action**: Add a single cross-cutting task (in the foundation epic or as a new test-infrastructure task early in yze.2) that delivers:
+  - `internal/testutil/fakegateway.go` — configurable `FakeBeadsGateway`
+  - `internal/testutil/fixtures.go` — representative issue/dashboard/comment fixture data builders
+  - `internal/testutil/teatest.go` — helpers for golden file test setup (if needed beyond stock teatest)
+  - A documented convention: "all UI tests use teatest golden files; all mode tests use FakeBeadsGateway; all subprocess tests use injectable interfaces"
+  - An embedded-mode beads fixture bootstrap script for integration tests
+
+  This task should block all test tasks (yze.2.4, yze.3.5, yze.4.5).
+---
+id: j31xanwa
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:58Z
+body: |-
+  ## PASS: Cross-epic gating through acceptance reviews is well-structured
+
+  **What**: The dependency flow between epics is: omd.7 (Phase 1 acceptance) → yze.2.1 (app shell start); yze.2.5 (app shell acceptance) → [yze.3.1, yze.3.3, yze.3.4] (browsing start); yze.3.6 (browsing acceptance) → [yze.4.1, yze.4.2, yze.4.3] (editor/launcher start); yze.4.6 (editor/launcher acceptance) → yze.1 (product acceptance). Every epic-to-epic transition flows through an acceptance review gate.
+
+  **Why**: This means no later epic can begin until the prior epic passes formal verification. An agent cannot start building the board renderer until the app shell is accepted. Cannot start the editor flow until browsing is accepted. This is the strongest structural protection in the plan against half-baked foundations.
+
+  **Suggested action**: No change needed. This pattern is correct and should be preserved.
+---
+id: gw3zcwq4
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:02Z
+body: |-
+  ## PASS: Donor references are now safe and specific
+
+  **What**: Every task that references the donor repo uses absolute paths to specific files, gives explicit forbidden-path lists, and maintains the "inspect for rendering patterns only, do not copy architecture" framing. The forbidden-donor list (orchestration, bql, infrastructure, old app.go) is consistent across all tasks. Safe donor targets (modal, toaster, styles, external_editor.go, issue_markdown.go) have been verified to have zero BQL/SQL/orchestration imports.
+
+  **Why**: Donor migration is the highest-risk vector for architecture regression. The plan handles it correctly: each task has an allow-list and a deny-list, the high-risk donors (board.go, details.go) are explicitly flagged as "rendering reference only" with warnings about their BQL coupling, and the low-risk donors (UI primitives, editor helpers) are correctly identified as clean transplant targets.
+
+  **Suggested action**: None. Donor reference safety is now adequate across the plan.
+---
+id: 2fhpc33p
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:13Z
+body: |-
+  ## PASS: Test tasks block acceptance reviews — testing is not optional
+
+  **What**: Every acceptance review depends on its epic's test task: omd.7 depends on omd.6; yze.2.5 depends on yze.2.4; yze.3.6 depends on yze.3.5; yze.4.6 depends on yze.4.5. Additionally, all UI test tasks (yze.2.4, yze.3.5, yze.4.5) depend on yze.5 (shared test harness). This creates a double gate: test infrastructure must exist before test tasks run, and test tasks must pass before acceptance reviews close.
+
+  **Why**: This is the correct structure for agent-driven development where testing cannot be skipped. The dependency chain makes test coverage a hard prerequisite for forward progress, not a "nice to have."
+
+  **Suggested action**: No change needed. This two-layer test gating pattern (harness → tests → acceptance) is sound.
+---
+id: 29temnnx
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:02Z
+body: |-
+  ## PASS: Acceptance reviews include documentation verification criteria
+
+  **What**: All acceptance review tasks (omd.7, yze.2.5, yze.3.6, yze.4.6, yze.1) now include documentation criteria: omd.7 requires `docs/CODING.md` and `docs/TESTING.md` to match the foundation; yze.2.5 requires docs to reflect shell architecture and config model; yze.3.6 requires docs to reflect browsing architecture; yze.4.6 requires documentation of editor/launcher behavior; yze.1 requires all docs to match the implemented product. This addresses the prior review finding about missing documentation gates.
+
+  **Why**: Documentation checks at acceptance gates ensure docs stay current as each phase lands. Agents in later phases will have accurate onboarding docs. This was a gap identified in the previous review and has been properly addressed.
+
+  **Suggested action**: No change needed. The documentation gates are now in place across all acceptance reviews.
+---
+id: uwo6v8jr
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:13Z
+body: |-
+  ## [MINOR] No task requires updating AGENTS.md during implementation — only v1 acceptance checks it
+
+  **What**: AGENTS.md is the top-level agent onboarding surface. It currently contains: project identity, a pointer to docs/CODING.md, session completion protocol, and beads integration. During implementation, new conventions will emerge (e.g., test commands, mode patterns, config conventions) that agents need. However, no implementation task or mid-phase acceptance review includes an AGENTS.md update requirement. Only the final v1 acceptance (yze.1) verifies AGENTS.md matches the implemented product.
+
+  **Why**: AGENTS.md is less likely to drift than CODING.md because it's structural rather than content-heavy — it mainly points to other docs. The real agent onboarding content lives in docs/CODING.md and docs/TESTING.md, both of which now have per-phase gates. However, if AGENTS.md needs to evolve (e.g., adding a pointer to docs/TESTING.md, adding a "Testing" section parallel to the "Coding" section), that update won't happen until v1 acceptance.
+
+  **Suggested action**: This is borderline acceptable. AGENTS.md is thin by design and delegates to docs/. If the plan keeps AGENTS.md as a pointer document (which it currently is), the v1 backstop is sufficient. Consider adding "AGENTS.md references docs/TESTING.md" as a criterion to omd.7 or yze.2.5 — the first acceptance review where TESTING.md exists. This is minor because the downstream docs are well-gated.
+---
+id: 8rjaxru7
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:18Z
+body: |-
+  ## [PASS] docs/CHANGE-WORKFLOW.md correctly absent — previous review finding confirmed
+
+  **What**: The prior review noted that docs/CHANGE-WORKFLOW.md is not needed for v1 and its absence is intentional. The updated plan does not add it, which is correct. There is no multi-contributor PR process, no release tagging scheme, and no CI/CD pipeline that would warrant this document.
+
+  **Why**: Confirming this is still a deliberate non-gap in the updated plan. No action needed.
+
+  **Suggested action**: None. Intentional absence is correct.
+---
+id: 7yxs2zab
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:19Z
+body: |-
+  ## [PASS] Plan structure is sound and execution-ready at the macro level
+
+  **What**: The updated plan addresses the major structural gaps from the first review round. The plan now has: (1) a cross-cutting TUI/e2e test harness task (yze.5) that blocks all UI test tasks, (2) an architecture guardrails task (omd.8) that enforces forbidden imports at build time, (3) a configuration model task (yze.2.6) that prevents ad-hoc config sprawl, (4) acceptance reviews with explicit `go build`/`go vet`/docs gates, and (5) documentation requirements threaded through acceptance reviews. The dependency graph is clean: foundation → app shell → browsing → editor/launcher, with cross-cutting test infrastructure available early.
+
+  **Why**: The first review's blockers — no testing strategy, no fake gateway, no embedded-mode fixtures, no architecture enforcement, no docs gates — have all been addressed by new tasks or updated acceptance criteria. The plan now has 33 issues organized across 5 epics with a coherent execution spine.
+
+  **Suggested action**: None for the macro structure. The remaining findings below are all MINOR-level refinements, not structural blockers.
+---
+id: y6jliv6o
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:42Z
+body: |-
+  ## Follow-up review summary: Plan is now execution-ready with minor remaining gaps
+
+  **What**: This is a follow-up architecture review after the plan was updated with guardrails task (omd.8), configuration task (yze.2.6), TUI test harness task (yze.5), updated donor instructions, tighter acceptance criteria, and explicit BQL-transplant warnings. The five focus areas were re-evaluated.
+
+  **Why**: The prior review identified structural gaps. This review verifies whether the updates closed them.
+
+  **Findings**:
+
+  ### PASS areas (8):
+  - Gateway-first architecture: Protected by omd.8 automated guardrails + per-task forbidden imports + acceptance gates. Defense in depth.
+  - Donor references: Specific absolute paths, allow/deny lists, "rendering reference only" framing for BQL-coupled donors. Adequate.
+  - Board transplant safety: BQL-coupled board code explicitly prohibited. Rendering-only reference. Adequate.
+  - Detail transplant safety: BQL-coupled detail code explicitly prohibited. Rendering-only reference. Adequate.
+  - Search routing: No-shell-out criterion + gateway-only access rule. Adequate.
+  - Launcher thinness: Fire-and-forget boundary, no coordination/polling/lifecycle. Adequate.
+  - Dashboard renderer/provider separation: Interface required, gateway-query-only definitions. Adequate.
+  - Config model: New task (yze.2.6) prevents ad-hoc config sprawl. Adequate.
+  - TUI test harness: New task (yze.5) centralizes test infrastructure before UI tests. Adequate.
+
+  ### MAJOR (1):
+  - **yze.2.1**: Services container still says "inspect donor app.go for reference" — this file is listed as forbidden in IMPLEMENTATION.md. The instruction contradicts the plan's own guidance and is the single most likely vector for reintroducing orchestration/BQL service fields. Fix: remove or invert the instruction.
+
+  ### MINOR (5):
+  - **omd.8**: No dependency on omd.1 — guardrails task could be picked up before repo exists. Fix: add dependency.
+  - **omd.4**: Acceptance criteria don't name SearchIssues or catalog methods specifically despite instructions requiring them. Fix: add specific checkboxes.
+  - **yze.5**: No dependency — could be picked up before gateway interface exists. Fix: add dependency on omd.7.
+  - **yze.2.6**: No dependency — config task could run before app model exists. Fix: add dependency on yze.2.1.
+  - **yze.2.3**: Detail pane-vs-mode decision has no documentation handoff point. Fix: add criterion requiring the decision to be documented.
+
+  ### Overall assessment:
+  No remaining BLOCKERs. One MAJOR that should be fixed before implementation begins (yze.2.1 donor reference). Five MINORs that are dependency hygiene and criteria specificity — worth fixing but not blocking. The plan is execution-ready once the MAJOR is resolved.
+
+  **Suggested action**: Fix the yze.2.1 donor reference instruction. Address the dependency gaps in omd.8, yze.5, and yze.2.6. Then begin Phase 1 implementation.
+---
+id: eaup4z5a
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:45Z
+body: |-
+  ## [PASS] docs/CODING.md is likely to stay accurate under current acceptance gates
+
+  **What**: The updated plan creates a multi-layered defense for docs/CODING.md accuracy:
+  1. omd.8 requires updating CODING.md with guardrails and quality gates documentation
+  2. omd.7 verifies CODING.md matches the implemented foundation architecture
+  3. yze.2.5 verifies CODING.md reflects the shell architecture and config model
+  4. yze.2.6 requires documenting config model in CODING.md
+  5. yze.3.6 verifies CODING.md reflects browsing architecture
+  6. yze.4.6 verifies documentation reflects editor/launcher behavior
+  7. yze.1 verifies CODING.md matches the final implemented product
+
+  This is four verification gates plus three implementation tasks that directly update CODING.md. The document cannot fall more than one phase behind before an acceptance review catches it.
+
+  **Why**: CODING.md is the primary agent reference for build commands, package layout, and architectural rules. Having it verified at every phase gate means drift is caught within one epic's worth of work. This is the right granularity — per-task verification would be excessive, per-product verification would be too late.
+
+  **Suggested action**: None. The gate structure is sound.
+---
+id: t68d5743
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:07Z
+body: |-
+  ## [PASS] Plan adequately requires docs creation/update as implementation progresses — summary assessment
+
+  **What**: Reviewing the full updated plan for documentation readiness across all 33 issues, the docs lifecycle is now:
+
+  **Creation points:**
+  - docs/TESTING.md: created in omd.6 (gateway test docs) and/or yze.5 (full testing strategy)
+  - docs/CODING.md: already exists; updated in omd.8 (guardrails), yze.2.6 (config model)
+
+  **Verification gates (4 phase gates + 1 product gate):**
+  - omd.7: CODING.md matches foundation, TESTING.md documents test strategy
+  - yze.2.5: CODING.md reflects shell architecture + config, TESTING.md reflects app-shell testing
+  - yze.3.6: CODING.md + TESTING.md reflect browsing
+  - yze.4.6: Documentation reflects editor/launcher behavior + config + testing
+  - yze.1: CODING.md + TESTING.md + AGENTS.md match implemented product
+
+  **Why**: This is a substantial improvement over the original plan (which had zero documentation tasks or gates). Every acceptance review now has at least one docs-verification criterion. The two most important docs (CODING.md and TESTING.md) are checked at every phase boundary. AGENTS.md is checked at v1 acceptance as a backstop.
+
+  **Suggested action**: The remaining minor gaps (omd.1 not owning its own CODING.md update, TESTING.md creation race between omd.6 and yze.5, AGENTS.md update timing) are individually commented. None are blockers. The overall docs readiness is adequate for execution.
+---
+id: u8if2q80
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:39Z
+body: |-
+  ## Execution-readiness verdict: READY — begin execution with minor dependency fixes
+
+  **What**: The updated plan is execution-ready. All BLOCKER and MAJOR findings from the first review round have been addressed through new tasks (omd.8 guardrails, yze.2.6 config, yze.5 test harness), updated acceptance criteria, and strengthened instructions. The remaining findings are 4 MINOR items — all dependency scheduling refinements, not content gaps.
+
+  **Why**: The plan now has:
+  - 33 issues across 5 epics with clean dependency ordering
+  - Cross-cutting test infrastructure (yze.5) blocking all UI test tasks
+  - Automated architecture enforcement (omd.8) blocking gateway acceptance
+  - Configuration model (yze.2.6) preventing ad-hoc config sprawl
+  - Quality gates (go build/go vet) in every acceptance review
+  - Documentation requirements in every acceptance review
+  - Embedded-mode verification in browsing and editor/launcher test tasks
+  - Explicit subprocess seams for editor and launcher testability
+  - Testability requirements in implementation tasks, not just test tasks
+  - Donor transplant guardrails with both instructional and automated enforcement
+
+  **Remaining MINOR items** (fix before or during first sprint):
+  1. Add dependency: yze.5 DEPENDS ON omd.7 — test harness needs gateway interfaces to exist
+  2. Add dependency: yze.2.6 DEPENDS ON yze.2.1 — config needs services container context
+  3. Add dependency: omd.8 DEPENDS ON omd.1 — guardrails need package layout to exist
+  4. Optional: add gateway-fallback guidance to yze.3.3 search task
+
+  **Suggested action**: Apply the 3 dependency fixes (30 seconds each), then start execution with omd.1.
+---
+id: tzsjd7gv
+author: Hans Kohlreiter
+created: 2026-04-05T11:32:04Z
+body: |-
+  ## Dependency graph summary: plan is ready for phased execution with 3 fixes
+
+  **What**: The overall dependency graph is sound for sequential phased execution with parallelism within each phase. The critical path is: omd.1 → omd.2 → omd.3 → omd.4/omd.5 → omd.6 → omd.7 → yze.2.1 → yze.2.3 → yze.2.4 → yze.2.5 → yze.3.x → yze.3.5 → yze.3.6 → yze.4.x → yze.4.5 → yze.4.6 → yze.1. No circular dependencies. Three false-ready issues need dependency additions before execution begins (omd.8, yze.2.6, yze.5).
+
+  **Why**: With those 3 dependency fixes applied, the plan has: (1) no tasks that can be prematurely claimed, (2) correct parallelism opportunities at 4+ points in the graph, (3) acceptance review gates between every epic, (4) test infrastructure as a hard prerequisite for test tasks, and (5) documentation verification at every gate. This is ready for phased agent execution.
+
+  **Suggested action**: Apply the three dependency additions:
+  1. `bd dep add beads-workbench-omd.8 beads-workbench-omd.1`
+  2. `bd dep add beads-workbench-yze.2.6 beads-workbench-yze.2.1`
+  3. `bd dep add beads-workbench-yze.5 beads-workbench-omd.7` (or omd.2 for earlier start)
+
+  After those additions, the plan is ready for execution without re-planning mid-flight.
+---
+id: upsgyhri
+author: Hans Kohlreiter
+created: 2026-04-05T11:32:16Z
+body: |-
+  ## [PASS] Dependency chain overall is sound for agent-sequential execution
+
+  **What**: The updated dependency graph correctly gates all work:
+  - Phase 1: omd.1 → omd.2 → omd.3 → [omd.4 || omd.5] → omd.8 → omd.6 → omd.7
+  - Phase 2: omd.7 → yze.2.1 || [omd.1 → yze.2.2] → yze.2.3 → yze.2.4 → yze.2.5
+  - Phase 3: yze.2.5 → [yze.3.1 || yze.3.3 || yze.3.4] → yze.3.2 → yze.3.5 → yze.3.6
+  - Phase 4: yze.3.6 → [yze.4.1 || yze.4.2 || yze.4.3] → yze.4.4 → yze.4.5 → yze.4.6
+  - Cross-cutting: yze.5 → [yze.2.4, yze.3.5, yze.4.5]; yze.2.6 → yze.2.5
+  - Final: [omd.7, yze.2.5, yze.2.6, yze.3.6, yze.4.6, yze.5] → yze.1
+
+  No circular dependencies. Acceptance reviews correctly gate subsequent phases. Test tasks depend on both implementation tasks and the shared harness (yze.5). The first-pass positive finding on dependency structure is reinforced.
+
+  **Suggested action**: No structural change needed. The dependency issues noted in separate comments (yze.5 missing dep on omd.7, yze.2.6 missing dep on yze.2.1) are refinements, not structural problems.
+---
+id: nmt7wyf5
+author: Hans Kohlreiter
+created: 2026-04-05T11:32:23Z
+body: |-
+  ## [PASS] Fake seams are now correctly distributed: created during implementation, standardized in harness, consumed by test tasks
+
+  **What**: The updated plan follows a consistent pattern for testability seams:
+  - Command runner seam: created in omd.3, used by omd.4/omd.5 tests
+  - Editor opener seam: created in yze.4.1, standardized fake in yze.5, tested in yze.4.5
+  - Launcher process seam: created in yze.4.3, standardized fake in yze.5, tested in yze.4.5
+  - Fake gateway: created in yze.5, consumed by yze.2.4/yze.3.5/yze.4.5
+
+  This "implement seam → standardize fake → consume in tests" pattern is coherent and the first-pass review's recommendation is now partially implemented.
+
+  **Why**: Each external dependency (bd CLI, $EDITOR, launcher tools) has a planned seam that makes it testable without the real tool. This is the foundation of agent-verifiable execution.
+
+  **Suggested action**: No structural change needed. The remaining gap (error injection in fakes) is noted separately.
+---
+id: 11azo9p2
+author: Hans Kohlreiter
+created: 2026-04-05T11:32:54Z
+body: |-
+  ## Second-Pass Review Summary: Testability and Agent-Verifiable Execution Readiness
+
+  ### Overall Assessment
+
+  The updated plan is substantially stronger than the first pass. The addition of yze.5 (TUI/e2e harness), omd.8 (architecture guardrails), yze.2.6 (config model), inline test requirements in implementation tasks, embedded-mode smoke requirements, and docs gates in acceptance reviews collectively address the major structural gaps from the first review. The plan is now architecturally testable — the seams exist, the fakes are planned, the dependency ordering prevents test-skipping.
+
+  The remaining gaps are specification-level, not structural.
+
+  ### Findings by Severity
+
+  **BLOCKER**: None.
+
+  **MAJOR (4)**:
+  1. `yze.5`: No dependency on omd.7 — can start before gateway interface exists, making FakeBeadsGateway impossible to implement correctly
+  2. `yze.5`: TUI test technique still presented as a menu of options instead of a decision — risks inadequate View() output verification downstream
+  3. `yze.4.6` (and other acceptance reviews): Six acceptance criteria still use "X works" human-verification language instead of "X is verified by automated tests"
+  4. `yze.1`: No cross-surface e2e workflow test exists anywhere — per-surface smoke tests can all pass while the integrated product is broken
+  5. `yze.5`: FakeBeadsGateway scope says "deterministic" but doesn't require error injection capability — downstream error-path UI tests impossible without it
+  6. `yze.3.5`: No task requires testing the board→detail cross-mode navigation flow — the primary user workflow
+
+  **MINOR (5)**:
+  1. `yze.2.6`: Config task has no dependencies — can start before app model exists
+  2. `omd.6`: Still overlaps with omd.3/4/5 test scope — should be narrowed to cross-cutting concerns
+  3. `yze.3.5`: Browsing test task covers three UI surfaces in one task — risk of under-coverage on later surfaces
+  4. `yze.4.5`: Missing explicit dependency on yze.4.3 (launcher framework seam)
+  5. `yze.3.5`/`yze.3.2`/`yze.3.4`/`yze.4.2`: Error-path UI rendering has no test requirement anywhere except search empty states
+
+  **PASS (9)**:
+  1. `yze.5`: TUI test harness task addresses the primary first-pass gap — correct scope and blocking position
+  2. `omd.8`: Architecture guardrails close the automated enforcement gap
+  3. `yze.2.6`: Config model closes ad-hoc config sprawl gap
+  4. `omd.7` (all acceptance reviews): Now include docs gates and go build/go vet quality commands
+  5. `yze.3.5`/`yze.4.5`: Embedded-mode smoke requirements now in browsing and editor test tasks
+  6. `yze.3.2`/`yze.3.3`/`yze.3.4`/`yze.4.1`/`yze.4.2`/`yze.4.3`/`yze.4.4`: Implementation tasks now require inline tests with testability seams
+  7. `yze.4.1`: Editor flow requires replaceable seam — agent-testable
+  8. `yze.4.3`: Launcher framework requires replaceable process seam — agent-testable
+  9. `yze.4.4`: Built-in launcher scope reduced to testable minimum
+  10. Overall dependency chain is sound
+  11. Fake seam distribution follows correct implement→standardize→consume pattern
+  12. docs/TESTING.md lifecycle is planned correctly
+
+  ### Remaining Workflows Requiring Manual UI Verification
+
+  After the MAJOR findings are addressed, the only remaining area that partially resists pure automation is **visual rendering correctness beyond golden file matching** — if a golden file is wrong (approved with bad output), no automated test catches it. This is inherent to golden file testing and acceptable for v1. All functional behavior (state transitions, data correctness, error handling, command construction) can be fully agent-verified.
+---
+id: xjufotoq
+author: Hans Kohlreiter
+created: 2026-04-05T13:05:07Z
+body: |-
+  Fresh-session handoff summary: as of this comment, the current ticket descriptions and dependencies are considered execution-ready for a new implementation session. Start with , then follow the Phase 1 dependency chain through , , /, , , and . Earlier review comments on child issues may describe concerns that have since been incorporated into updated ticket descriptions; when comments conflict with the current issue body, treat the current issue body and dependency graph as the source of truth.

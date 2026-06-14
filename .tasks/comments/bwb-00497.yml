@@ -1,0 +1,61 @@
+---
+id: g79yru7d
+author: Hans Kohlreiter
+created: 2026-05-17T22:48:50Z
+body: |-
+  -
+---
+id: sm3vvlw9
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:57Z
+body: |-
+  ## Audit report — Write (CreateIssue, UpdateIssue, CloseIssue, AddComment)
+
+  ### 1. Contract spec
+  Methods at interface.go:523,571,616,662. Standard pre/post per method. All writes hold runMu exclusive (IsWrite=true). BEADS_ACTOR stripped by filterEnvToAllowlist; writes use git user.name. Read-after-write consistent (dolt auto-commit). Two active workarounds: (a) CloseIssue idempotency over upstream #4025; (b) UpdateIssue ClearLabels over --set-labels "" silent-fail bug.
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.Pa5XMRiuJB | Log: /tmp/beads-workbench-ibif-audit.log
+
+  **Workaround status (CRITICAL):**
+  - CloseIssue idempotency bug (upstream gastownhall/beads#4025): STILL PRESENT. Stress test confirmed alternating 0/1 on rapid re-close.
+  - UpdateIssue --set-labels "" bug: STILL PRESENT. Exits 0 but labels unchanged.
+
+  **CreateIssue:** All clauses VERIFIED.
+
+  **UpdateIssue:** Most clauses VERIFIED.
+  - CRITICAL DRIFT (P1 PRODUCTION BUG — FIXED via beads-workbench-py38): ClearLabels workaround at writes.go:122 emitted `bd update <id> --remove-labels <csv>` (plural). bd 1.0.4 does NOT have a `--remove-labels` flag. Correct flag is `--remove-label` (singular, takes comma-separated value). CLEARING LABELS VIA THE UI WAS SILENTLY BROKEN IN PRODUCTION. The stub-only test asserted the WRONG flag, masking the bug. FIX: writes.go:122 now emits `--remove-label`; integration test added via beads-workbench-5toe.
+
+  **CloseIssue:** All clauses VERIFIED. close_reason="Closed" literal default, "fixed" custom; status=closed, closed_at set; idempotency-bug stress test confirmed; truly-missing surfaces error correctly; BD_NON_INTERACTIVE always set; stdout discarded.
+
+  **AddComment:** All clauses VERIFIED — append, read-after-write, author=git user.name, not idempotent, empty body → CommandFailed, 1000-char accepted, markdown verbatim, works on closed issues, updated_at NOT advanced, stdout discarded.
+
+  **DRIFT 2 (doc only, FIXED via beads-workbench-b4gn):** interface.go:97-104 named BD_ACTOR; bd 1.0.4 reads BEADS_ACTOR. Doc corrected.
+
+  ### 3. Test-coverage verification
+  - Argv shapes: COVERED for all 4 methods via TestGateway*MapsCommandArgs.
+  - CreateIssue: empty-ID rejection, invalid JSON, RequiredFields covered. GAPS labels-absent + BEADS_ACTOR-stripped → addressed via beads-workbench-wgz0 (new tests in writes_test.go + runner_test.go with envCapturingExecutor helper).
+  - UpdateIssue: all-fields, NonExistent, ClearLabels covered. GAPS all-nil no-op, started_at, integration ClearLabels → addressed via wgz0 + beads-workbench-5toe (real-bd integration test for ClearLabels).
+  - CloseIssue: idempotency workaround covered (3 unit tests + RunWriteContract/Idempotency). GAP close_reason="Closed" default test → addressed via wgz0.
+  - AddComment: argv + HappyPath covered. GAPS edge cases → addressed via wgz0 (empty-body argv, long-body argv, markdown argv).
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/...
+  - Result: PASS (11 + new ClearLabels sub-test).
+  - CreateIssue/UpdateIssue: 2026-05-17 drift fixes verified.
+  - DIVERGES (all FIXED): CloseIssue did NOT set closed_at → jsxd. AddComment did NOT set Author → n63l. CloseIssue did NOT set CloseReason → eifk. UpdateIssue did NOT model label mutations → 5toe (fake CreateIssue + UpdateIssue label round-trip fix added).
+
+  ### Drift findings (all closed)
+  - py38 (P1): ClearLabels --remove-label (singular) flag fix. CLOSED.
+  - 5toe (P2): Integration test for ClearLabels. CLOSED.
+  - jsxd (P3): Fake CloseIssue ClosedAt. CLOSED.
+  - n63l (P3): Fake AddComment Author. CLOSED.
+  - eifk (P2): Fake CloseIssue CloseReason. CLOSED (also referenced in aww9 audit).
+  - b4gn (P3): BD_ACTOR → BEADS_ACTOR doc fix. CLOSED.
+  - wgz0 (P3): 10 write-method test gaps. CLOSED.
+
+  **Workarounds removable: 0 of 2.** Both bd 1.0.4 bugs STILL PRESENT.
+
+  ### Summary
+  - Total clauses: 46 | Verified: 39 | Drift: 2 (resolved) | Gaps: 8 (resolved) | Diverges: 3 (resolved)
+  - Critical P1 production bug found and fixed (ClearLabels --remove-label flag).

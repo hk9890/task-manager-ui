@@ -1,0 +1,41 @@
+---
+id: mkmagnmz
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:10Z
+body: |-
+  ## Task .1 acceptance criteria don't address the timeout/hang risk
+
+  **What**: Task .1 says "Harness can launch `bwb` against embedded fixture data" and "Harness can capture the visible rendered screen from a real terminal session." The acceptance criteria don't mention: timeouts, cleanup on failure, what happens if the app hangs during startup, or how the harness knows the app is "ready" before capturing.
+
+  **Why**: A Bubble Tea app using alt-screen mode doesn't write to stdout in a way that's easy to capture from outside. If the harness launches the binary as a subprocess and tries to read its output, it will get nothing (alt-screen). If it uses a pty, it needs to wait for the app to render, but there's no reliable signal for "first render complete" from outside the process. This creates a real risk of either (a) capturing too early (blank screen), (b) waiting too long (timeout), or (c) hanging forever if the app blocks on terminal setup.
+
+  The existing in-process approach (`NewModel` + `Init` + `applyMessages`) avoids all of these problems because it controls the message loop directly.
+
+  **Suggested action**: Task .1 needs acceptance criteria for:
+  - Maximum time budget for harness startup-to-capture (e.g., <2s)
+  - Explicit timeout behavior: what happens if the app doesn't render within the budget
+  - Cleanup guarantee: harness must not leave zombie processes on failure
+  - Readiness signal: how the harness knows the app has finished its first render
+---
+id: ywf1tflc
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:20Z
+body: |-
+  ## Task .1 should evaluate whether in-process testing with real gateway is sufficient before building a process-level harness
+
+  **What**: The existing `TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow` already does exactly what this task describes — it seeds a fixture repo, creates a real gateway, builds the real model, sends key messages, and inspects `View()` output. It runs in ~1-2 seconds and is deterministic. Task .1 wants to build a new harness that launches the *binary* instead.
+
+  **Why**: Launching the binary as a separate process adds massive complexity (pty management, alt-screen capture, process lifecycle, readiness detection, timeout handling) for a narrow benefit: verifying that the binary entrypoint wiring matches the test wiring. The existing in-process tests already use the real `bd` CLI, real gateway, real model, real View() — the only thing they skip is the `cmd/bwb/main.go` entrypoint, which is typically <20 lines of wiring.
+
+  **Suggested action**: Add a decision gate to task .1: first evaluate whether extending the existing in-process embedded-fixture tests (adding more scenarios, more terminal sizes, more key sequences) closes the verification gap. Only build a process-level harness if there's a concrete bug class that in-process testing cannot catch. Document that bug class.
+---
+id: kezqd7k0
+author: Hans Kohlreiter
+created: 2026-04-07T15:49:21Z
+body: |-
+  Status: completed analysis.
+  Outcome: current coverage is already strongest in in-process embedded-fixture tests plus teatest/golden harnesses; that should remain the primary UI verification strategy. Concrete covered paths include board startup/layout, board→detail round-trip, search runtime behavior, embedded-fixture gateway wiring, and launcher/editor seams via internal/app/model_test.go, internal/mode/board/model_test.go, internal/mode/search/model_test.go, and internal/testing/ui/harness.go.
+  Gap analysis: current tests still under-cover combined shell workflows spanning board/search/detail/external-tool flows in one deterministic path, broader structured assertion helpers, and the binary entrypoint/terminal lifecycle boundary.
+  Decision: only add process-level capture for a narrow justified gap that in-process tests cannot catch (for example binary entrypoint or terminal boot/capture regressions). Any such path must define readiness signal, <2s startup-to-capture budget, hard timeout/failure behavior, and guaranteed child-process cleanup.
+  Local feasibility: existing embedded-fixture tests are fast/deterministic; naive alt-screen transcript capture is not sufficient; local tmux/vhs availability is not guaranteed.
+  Next step: unblock gyg.2 to extend deterministic in-process scenarios first, then revisit whether a minimal process-level check is still needed.

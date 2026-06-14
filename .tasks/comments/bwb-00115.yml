@@ -1,0 +1,22 @@
+---
+id: ha6ywcqs
+author: Hans Kohlreiter
+created: 2026-05-20T18:39:56Z
+body: |-
+  Approach decision (orchestrator + user, 2026-05-20): use candidate approach 1 — per-process log filename. The persistent sink will write to a process-unique path (bwb-<session_id>.log preferred since session_id is already a log field; bwb-<pid>.log as fallback if session_id is not available at sink-construction time), eliminating the cross-process rotation race entirely. The flock approach is rejected. The 'tail -f bwb.log' capture command in docs/MONITORING.md must be updated to a glob (e.g. 'tail -f ~/.local/state/bwb/bwb-*.log' or equivalent). Reproducer is still expected to confirm the rotation-race mechanism before/after the fix.
+---
+id: w0rzkevt
+author: Hans Kohlreiter
+created: 2026-05-20T18:54:10Z
+body: |-
+  Implemented (tasker, 2026-05-20): per-process log filename. Persistent sink now writes bwb-<session_id>.log (session_id is generated before sink construction, always available; bwb-pid<N>.log fallback if empty). Each process has an independent lumberjack.Logger — the cross-process rotation race is structurally eliminated.
+
+  Reproducer in internal/logging/logging_test.go TestConcurrentWritersProduceNoTornRecords:
+  - PerProcessFiles_NoTornRecords (gating): 3 sessions x 250 x ~5KB records, MaxSize=1MB to force rotation -> 0 torn records, deterministic pass.
+  - SharedFile_TornRecordReproducer (documentary): same load against one shared file -> torn record observed 1/5 runs, confirming the original race.
+
+  Rotation defaults (10MB/5/30d/compress) preserved. docs/MONITORING.md JSON Lines guarantee + tail -f capture command updated to bwb-*.log glob; CODING.md and ARGV_CONTRACT.md log-path references updated.
+
+  Quality gate: full 'mise run quality' passes on combined tree (build/vet/lint/guardrails, 1068 unit + 1206 integration tests, coverage 75.1%).
+
+  Follow-up filed: beads-workbench-5bdc (P4) — prune stale per-process log files; lumberjack MaxAge does not clean other sessions' files.

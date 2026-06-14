@@ -1,0 +1,6 @@
+---
+id: ly8n1qel
+author: Hans Kohlreiter
+created: 2026-05-24T13:59:58Z
+body: |-
+  Option A: SeedDetail call removed from CreateIssue; next Issue(newID) fetches real backing detail. dashboardDirty still set. Existing TestCreateIssue_Success_DashboardDirty rewritten (it had encoded the bug by asserting cache hit); new TestCreateIssue_DoesNotFabricateSeedValues asserts backing Status/Priority/Type/CreatedAt are returned. quality:fast green (975 tests). Commit 0c332cf.

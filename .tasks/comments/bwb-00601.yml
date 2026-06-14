@@ -1,0 +1,20 @@
+---
+id: i0d6wzve
+author: Hans Kohlreiter
+created: 2026-06-04T12:22:35Z
+body: |-
+  Acceptance review: PASS (verifier-confirmed, independent re-run).
+
+  All 6 criteria satisfied:
+  - Child impl task beads-workbench-6oa1 closed.
+  - Gates re-run by verifier: vet, lint (0 issues), guardrails, fmt:check,
+    test (1154), quality (1305, 15 skipped) — all PASS.
+  - No critical defects; no follow-ups required.
+  - With-deps drill keeps focus on Dependencies rail (model + app tests).
+  - Leaf drill moves focus to Content (model + app tests).
+  - Placeholder phase does not flip focus early (guarded in clearBrowserPanel).
+  Edge cases checked: rapid re-drill (counter reset + stale-load discard),
+  Parent-only rail (stays on Dependencies), metadata-focus unreachable for drill,
+  no regression to board/search selection loads or cold-start skeleton.
+
+  Note: code changes are in the working tree but NOT yet git-committed.

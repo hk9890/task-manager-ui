@@ -1,0 +1,93 @@
+---
+id: xu3ylfua
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:03Z
+body: |-
+  ## Board mode task doesn't specify how issue selection feeds into the detail mode
+
+  **What**: The board mode renders columns/sections with issue lists. The detail mode (yze.3.4) renders a selected issue. But neither task specifies how selection in the board triggers detail loading, or how the board-to-detail navigation works in the shell. The app shell task (yze.2.3) creates "selected-issue state" but the board and detail tasks don't reference how they plug into that shared state.
+
+  **Why**: Board → detail navigation is the primary user flow in the product. If the board task builds its own selection model and the detail task builds its own loading model, they may not compose through the app shell's shared state. This integration point is implicit rather than explicit. The risk is that the board works standalone, the detail works standalone, but they don't talk to each other correctly through the shell.
+
+  **Suggested action**: Add integration guidance to this task's instructions: "When a user selects an issue in the board, update the app shell's selected-issue state. The detail mode should render from the shell's selected-issue state, not from its own independent selection." Alternatively, add a brief integration task between the board/search/detail tasks and the app shell.
+---
+id: 1jale5i0
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:11Z
+body: |-
+  ## Board rendering (yze.3.2) has no testability criteria — "Users can browse" is manual-only
+
+  **What**: Task beads-workbench-yze.3.2 (board dashboard mode) has acceptance criteria: "Users can browse the common work queues from the board mode." This can only be verified by a human opening the app and browsing. There is no mention of View() output testing, golden files, or asserting that board columns render the correct issue data from the gateway.
+
+  **Why**: The board is the primary landing screen of the product. If an agent cannot verify it renders correctly, the most visible feature of the app has zero automated verification. The donor repo has extensive board golden tests (`perles/internal/ui/board/board_test.go` uses `teatest.RequireEqualOutput`) — so the pattern exists and has been proven. Not requiring it in the new plan is a regression.
+
+  **Suggested action**: Add to yze.3.2 acceptance criteria:
+  - "Board mode has at least one golden file test verifying View() output with representative gateway data"
+  - "Board column content matches the expected gateway query results"
+  - Change "Users can browse" to "Board mode renders gateway-backed columns and test coverage verifies the rendered output"
+---
+id: 3xe8wkf4
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:30Z
+body: |-
+  ## [HIGH] Donor board renderer is deeply BQL-coupled — task underestimates transplant risk
+
+  **What**: The instruction "Copy or adapt only the board-rendering pieces that fit the new gateway-backed architecture" implies selective copying from `/home/hans/dev/github/perles/internal/ui/board/board.go`. Inspection of the donor shows 44 BQL/SQL references across `board.go`, `column.go`, and `tree_column.go`. The `Column` type embeds a `bql.BQLExecutor` directly. The `Board` model constructor is `NewFromViews(viewConfigs []config.ViewConfig, executor bql.BQLExecutor, clock shared.Clock)`. There is no clean separation between rendering and data loading in the donor code.
+
+  **Why**: An implementing agent told to "use donor board renderer as reference" will discover the donor's board/column types are structurally inseparable from BQL. Two likely failure modes: (1) the agent copies and guts the BQL, creating a fragile shell that preserves the old shape but not the old behavior, or (2) the agent gives up on reuse and rewrites from scratch, which is fine but the task doesn't anticipate or budget for it.
+
+  **Suggested action**: Add an explicit instruction warning that the donor `board.go` and `column.go` are BQL-coupled and should NOT be copied as-is. State that the implementer should extract rendering patterns (list layout, column widths, scroll behavior, issue item rendering) but must create new column/board models that accept gateway query results, not BQL executors. Consider referencing `column.go:NewColumnWithExecutor` and `board.go:NewFromViews` as examples of what NOT to carry forward.
+---
+id: ryp6t7c0
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:49Z
+body: |-
+  ## PASS: Board mode now has explicit BQL-transplant guardrail
+
+  **What**: Task instructions say "Do not copy BQL-coupled board types, constructors, or query abstractions from the donor implementation" and frame the donor as "a rendering-pattern reference, not as a direct transplant source, because the donor board implementation is deeply coupled to legacy query infrastructure." The acceptance criterion "No donor BQL-coupled board code is copied into the standalone app path" is specific and verifiable.
+
+  **Why**: The donor `board.go` has 44+ BQL/SQL references and embeds a `bql.BQLExecutor` directly into the Column type. The updated task instructions correctly frame this as "rendering ideas only." Combined with the omd.8 automated guardrails that will catch forbidden imports, the board transplant risk is now well-mitigated.
+
+  **Suggested action**: None. This is adequate protection.
+---
+id: gxrek8mu
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:32Z
+body: |-
+  ## [PASS] Implementation tasks now require inline test coverage with testability seams
+
+  **What**: Tasks yze.3.2 (board mode), yze.3.3 (search mode), yze.3.4 (detail mode), yze.4.1 (editor flow), yze.4.2 (CRUD actions), yze.4.3 (launcher framework), and yze.4.4 (built-in launchers) now include acceptance criteria requiring automated tests and testable seams as part of implementation. Examples: yze.3.2 requires "Automated board tests pass without manual UI inspection"; yze.4.1 requires "Editor launch behavior is behind a replaceable seam for automated tests"; yze.4.3 requires "Process launching is behind a replaceable seam for automated tests"; yze.4.4 requires "Automated tests verify launcher command construction without real interactive process execution."
+
+  **Why**: This addresses the first-pass concern that test coverage was deferred entirely to separate test tasks. Implementation tasks now carry test responsibilities inline, so the later integration test tasks (yze.3.5, yze.4.5) can focus on cross-surface integration rather than rebuilding basic coverage.
+
+  **Suggested action**: No structural change needed. The dual responsibility (implementation tests + integration tests) is the right pattern.
+---
+id: guoxfkx8
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:01Z
+body: |-
+  ## [PASS] Board task now has proper donor transplant guardrails
+
+  **What**: The updated task instruction #2 explicitly states: "Do not copy BQL-coupled board types, constructors, or query abstractions from the donor implementation." The acceptance criterion includes: "No donor BQL-coupled board code is copied into the standalone app path." Combined with omd.8's automated import checks, this creates a two-layer defense against architectural regression.
+
+  **Why**: The donor board.go has 44 BQL references — the first review correctly flagged this as the highest-risk transplant. The updated task now has both instructional and automated guardrails.
+
+  **Suggested action**: None. The transplant risk is adequately mitigated.
+---
+id: kl5cntki
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:12Z
+body: |-
+  ## PASS: yze.3.2 and yze.3.4 now include automated test criteria for board and detail rendering
+
+  **What**: `beads-workbench-yze.3.2` (board mode) now includes "Add automated board rendering/navigation tests using the repo's TUI test harness" and acceptance criterion "Automated board tests pass without manual UI inspection." `beads-workbench-yze.3.4` (detail mode) similarly includes "Add automated detail rendering tests for representative minimal, full, comments, and dependency-rich states" with criterion "Automated detail tests cover representative rendering states without manual UI inspection."
+
+  **Why**: The prior review identified that board and detail tasks had only human-verification criteria ("users can browse"). These have been strengthened to require automated verification using the TUI test harness. Combined with yze.5 providing the harness infrastructure, this closes the testability gap for the two most visible UI surfaces.
+
+  **Suggested action**: No change needed. The automated test criteria are appropriately specified.
+---
+id: 4cuz2w8x
+author: Hans Kohlreiter
+created: 2026-04-05T16:00:46Z
+body: |-
+  Post-close verification found the original implementation had not been wired into the active app runtime. Follow-up bug beads-workbench-2x9 fixed the integration by wiring the real board controller into internal/app, and verifier then confirmed the board task's intended runtime behavior now holds in the shipped app path.

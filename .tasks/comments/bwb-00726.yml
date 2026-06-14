@@ -1,0 +1,12 @@
+---
+id: 835kxvru
+author: Hans Kohlreiter
+created: 2026-04-11T14:19:30Z
+body: |-
+  Verifier: BLOCKED. Wide right-rail layout, scroll, and narrow fallback pass, but the rail shows owner instead of assignee for real issue data. Bug: beads-workbench-xxd.4. Artifacts: /tmp/beads-workbench-xxd3-verify-svu9yiic/artifacts. Next: fix assignee decoding and rerun acceptance.
+---
+id: 94zmo08f
+author: Hans Kohlreiter
+created: 2026-04-11T14:23:43Z
+body: |-
+  Verifier rerun: PASS. Wide right-rail layout, scroll behavior, narrow fallback, and assignee rendering all verified. Artifacts: /tmp/beads-workbench-xxd3-reverify-j72wbjqu/artifacts. Next: epic beads-workbench-xxd is ready to close.

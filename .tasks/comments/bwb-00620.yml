@@ -1,0 +1,6 @@
+---
+id: u56h4qqw
+author: Hans Kohlreiter
+created: 2026-05-16T13:15:35Z
+body: |-
+  Coverage gate added at 71% threshold (76.5% combined baseline). New mise task test:coverage runs combined unit+integration tests with -race + coverage profile. CI workflow replaces 'Integration tests' step with 'Tests + coverage gate' (same suite, plus gate, saves ~30s). Documented threshold env var inline for future ratcheting. Verified: pass at 71%, FAIL at 99%. Quality green.

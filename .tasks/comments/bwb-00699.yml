@@ -1,0 +1,6 @@
+---
+id: iauq1yec
+author: Hans Kohlreiter
+created: 2026-05-16T14:43:47Z
+body: |-
+  Implemented. New test TestNonBlockingRefreshBoardSearchBoardFlow in internal/app/model_loading_refresh_test.go. Covers all 5 acceptance criteria: cold-start board rows present without spinner; in-flight reload preserves stale rows; spinner glyph from SpinnerFrames appears after TickMsg; spinner absent at idle; Board→Search→Board round-trip preserves the original issue ids. Both withRefreshTickScheduler and withSpinnerTickScheduler installed for determinism. go test -count=10 ./internal/app/... green; full suite clean. No production files modified.

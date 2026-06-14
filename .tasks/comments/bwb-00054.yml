@@ -1,0 +1,6 @@
+---
+id: mu0i8sl6
+author: Hans Kohlreiter
+created: 2026-04-18T20:18:11Z
+body: |-
+  Review: Actionable and trivial — flip Styled:false to Styled:true in renderReferenceRow (details.go:531). However, this is the same code site as beads-workbench-59z (Selected:false at line 529). What: these two bugs touch the same function call with the same root cause — renderReferenceRow doesn't pass through real state. Why: implementing them separately risks merge conflicts and duplicated test updates for no benefit. Suggested action: merge beads-workbench-2a6 into beads-workbench-59z as a single fix that wires both Selected and Styled through renderReferenceRow.

@@ -1,0 +1,6 @@
+---
+id: hpitfh9f
+author: Hans Kohlreiter
+created: 2026-05-23T21:40:58Z
+body: |-
+  Implemented. Files: internal/repository/memory/repository.go (857 LOC) + repository_test.go (46 tests) + options.go (WithClock, WithIDGenerator). All 9 methods with real semantics, -race clean. Key correctness: ReadyExplain.Ready gates on status=='open' only (per interface.go:262-265 and contract test bwf-5), not status!='closed'. Mutations (UpdateIssue/CloseIssue/AddComment) on unknown ID return GatewayError{ErrorCodeCommandFailed} matching beads impl (parity scenario 9). Acknowledged divergences for hhho.4 parity suite: (1) Issue() unknown ID returns ErrIssueNotFound (local-state carve-out per interface godoc); (2) Search results sorted by ID for determinism (real bd unordered — parity uses set-comparison); (3) Completeness=Exact for memory (full set in-memory); the ticket's 'complete' was informal — domain enum only has exact/maybe_more/partial. mise run quality green.

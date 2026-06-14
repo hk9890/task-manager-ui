@@ -1,0 +1,12 @@
+---
+id: 7o7uv1ex
+author: Hans Kohlreiter
+created: 2026-05-22T10:23:51Z
+body: |-
+  Review (2026-05-22): VERIFIED — model.go:339 hardcodes q/ctrl+c for the fatal-error screen while the documented quit key (keybindings.go:105, key-bindings.md:11) is ctrl+q. Real but minor: the on-screen hint is honest and ctrl+c always works, so no user is stranded. RE-PRIORITIZED P2->P3. Keep the fix (also honor the configured ShellActionQuit binding on the fatal-error screen, so customized quit keys work too) — consistency papercut, not P2-urgent.
+---
+id: da268oha
+author: Hans Kohlreiter
+created: 2026-05-22T11:01:20Z
+body: |-
+  Fixed & verified (acceptance review 2026-05-22). app/model.go:339 fatal-error key handler now uses keys.Match(ShellActionQuit) (honors configured ctrl+q + rebindings) plus unconditional ctrl+c; bare q removed. fatalerror.View() hint built from DisplayLabel so it self-documents rebindings. 4-case behavioral test added. Verifier: PASS — ctrl+q quits, ctrl+c quits, q does not, hint matches. Full quality suite green.

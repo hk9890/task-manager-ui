@@ -1,0 +1,48 @@
+---
+id: ttjiqwk8
+author: Hans Kohlreiter
+created: 2026-04-12T11:06:42Z
+body: |-
+  Per package planning decision: create refactor tasks for internal/app, internal/mode, internal/gateway/beads, internal/dashboard, and docs only. Keep cmd/bwb, internal/config, internal/launcher, and internal/ui stable unless follow on implementation reveals coupling that the review did not surface.
+---
+id: 3s040u5h
+author: Hans Kohlreiter
+created: 2026-04-12T11:06:59Z
+body: |-
+  Planning note: acceptance is modeled as child task beads-workbench-wz9.6 because bd epics cannot depend on tasks. The acceptance review task is the blocking gate for epic closure after implementation tasks finish.
+---
+id: l186nf9o
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:08Z
+body: |-
+  Review finding — dual selection sync is real and clearly visible. What: model.go lines 159-161 show syncSelectionFromControllers() polling via type assertion (lines 489-515), AND lines 302-310 handle SelectionChangedMsg from controllers. These are two independent sync paths for the same state. Both board and search emit SelectionChangedMsg AND expose CurrentSelection() via type-asserted interface. Why: wz9.2 is correctly scoped to address this — confirmed the problem is not hypothetical. No action needed on epic.
+---
+id: 3vcr3dmq
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:13Z
+body: |-
+  Review finding — scope boundary is correct but tight. What: epic comment says cmd/bwb, internal/config, internal/launcher, internal/ui should stay stable. This is true today but wz9.1 will change the mode.Controller interface which board/model.go and search/model.go both implement (var _ mode.Controller = (*Model)(nil)). The board also imports dashboard and gateway packages. Why: the file lists on child tasks already cover these, so no scope hole here. Just flagging that the epic comment slightly understates the blast radius — wz9.1 touches mode/board and mode/search, not just app and mode/contracts. Suggested action: none, child tasks already capture this correctly.
+---
+id: q54udk01
+author: Hans Kohlreiter
+created: 2026-04-12T11:14:25Z
+body: |-
+  Review finding — wz9.3 and wz9.4 are correctly independent of wz9.1/wz9.2. This is good — it means gateway decoding and dashboard contract work can proceed in parallel with the app/mode refactoring. The parallelism is real and reduces critical path length. Three parallel tracks: (1) wz9.1 → wz9.2 (serial, app/mode), (2) wz9.3 (independent, gateway), (3) wz9.4 (independent, dashboard). All three converge at wz9.5 (docs) → wz9.6 (acceptance). This is well-structured.
+---
+id: 4segogzy
+author: Hans Kohlreiter
+created: 2026-04-12T11:14:33Z
+body: |-
+  Review finding — simplification opportunity: could wz9.1 and wz9.2 be one task? What: wz9.1 removes mode.Controller storage and type assertions. wz9.2 removes the dual selection sync that relied on those type assertions. After wz9.1, the polling-based syncSelectionFromControllers cannot exist in its current form (the type assertion through mode.Controller is gone). So wz9.2's primary target is partially destroyed by wz9.1. Why: splitting closely coupled work into two tasks creates a false checkpoint — wz9.1 cannot be 'done' without also addressing the selection sync path that depends on the removed interface. A tasker completing wz9.1 would need to either break the polling path or convert it, which is wz9.2's job. Suggested action: consider merging wz9.1 and wz9.2 into one task. The combined scope is still manageable (one file cluster, one conceptual change: 'flatten shell ownership and pick one selection sync mechanism'). If you want to keep them separate for review granularity, explicitly document that wz9.1 may leave syncSelectionFromControllers in a temporarily broken/stubbed state until wz9.2 lands.
+---
+id: 28fnjtz3
+author: Hans Kohlreiter
+created: 2026-04-12T11:34:42Z
+body: |-
+  Reviewer feedback incorporated. Tightened wz9.1 around concrete Update return wiring, forwarding, and the full shell type-assertion inventory; tightened wz9.2 to keep  as the single selection path and remove polling; tightened wz9.4 to require standalone dashboard validation with enumerated invalid states; added minor docs and acceptance clarifications in wz9.5 and wz9.6. Kept wz9.1 and wz9.2 separate and ordered because both heavily touch  and the concrete ownership refactor is the intended foundation before selection-flow cleanup.
+---
+id: 18gcvte1
+author: Hans Kohlreiter
+created: 2026-04-12T11:34:58Z
+body: |-
+  Correction to prior planning note: reviewer feedback incorporated. Tightened wz9.1 around concrete Update return wiring, message forwarding, and the full shell type-assertion inventory. Tightened wz9.2 to keep SelectionChangedMsg as the single selection path and remove polling via syncSelectionFromControllers. Tightened wz9.4 to require standalone dashboard validation with enumerated invalid states. Added minor clarifications in wz9.5 (conditional docs/TESTING.md update) and wz9.6 (explicit architecture guardrail test). Kept wz9.1 and wz9.2 separate and ordered because both heavily touch internal/app/model.go and the concrete ownership refactor is the intended foundation before selection-flow cleanup.

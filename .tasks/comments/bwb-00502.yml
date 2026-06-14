@@ -1,0 +1,47 @@
+---
+id: smyx4df0
+author: Hans Kohlreiter
+created: 2026-05-17T22:47:56Z
+body: |-
+  -
+---
+id: 5rho2le4
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:51Z
+body: |-
+  ## Audit report — Read-explain (ReadyExplain)
+
+  ### 1. Contract spec
+  Method at interface.go:321-361. Pre: ctx non-nil; opts.Limit forwarded as --limit. Post: enriched BlockedBy objects (ID/Title/Priority/Status — richer than BlockedIssues), TotalReady=len(Ready), TotalBlocked, CycleCount, blocked Issue.Status typically "open". Quirks: top-level JSON object (not array), schema_version ignored, --explain ignores default 100-item cap.
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.8EzVzcSMjX | Log: /tmp/beads-workbench-u53a-audit.log
+  Seeded 13 issues (10 ready, 3 dep-blocked), expanded to 118 (115 ready, 3 blocked).
+
+  - All 12 clauses VERIFIED against real bd 1.0.4.
+  - BlockedBy enrichment: confirmed — ID/Title/Priority/Status all populated (not bare strings).
+  - TotalReady==len(Ready): MATCH on every run (10, 115).
+  - Top-level JSON object: VERIFIED (dict, not list).
+  - schema_version: present (value 1), decoder ignores.
+  - faif.5 100-cap behavior: CONFIRMED STILL PRESENT — at 115 ready, --explain returns all 115 while plain `bd ready --json` returns only 100.
+  - NEW FINDING (doc gap, addressed via beads-workbench-v2uv): --limit flag is forwarded to bd correctly but bd 1.0.4 silently IGNORES it in --explain mode (for both ready and blocked lists). Doc updated.
+
+  ### 3. Test-coverage verification
+  - argv no-limit + limit boundaries: COVERED via TestBoardInitRealGatewaySubprocessArgvCardinality + TestReadyExplainArgvBoundaryLimits.
+  - Enriched BlockedBy fields: only ID asserted in RunReadContract pre-audit — addressed via v2uv (BlockedByEnriched invariant added to contractcheck).
+  - TotalBlocked==len(Blocked): GAP — addressed via v2uv (TotalBlockedMatchesLenBlocked invariant added).
+  - CycleCount non-zero path: GAP — addressed via v2uv (TestGatewayReadyExplainDecodesNonZeroCycleCount added).
+  - schema_version tolerance: GAP — addressed via v2uv (TestGatewayReadyExplainToleratesSchemaVersionField added).
+  - faif.5 100-cap behavior: GAP retained (no test verifies --explain ignores the cap; known limitation, low-risk).
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/...
+  - Result: PASS (all 46 sub-tests).
+  - All clauses FAKE MATCHES. primeFakeFromFixtureSpec correctly constructs enriched BlockedBy via richBlockers; TotalReady seeded from len(); TotalBlocked seeded from len(); CycleCount hardcoded 0.
+  - No ReadyExplain entries in fake drift log.
+
+  ### Drift findings (resolved)
+  - v2uv (P3): TotalBlocked + BlockedByEnriched invariants, --limit doc, CycleCount + schema_version tolerance tests. ALL CLOSED.
+
+  ### Summary
+  - Total clauses: 12 | Verified: 12 | Drift: 0 | Gaps: 5 (4 closed via v2uv; 1 known-limitation retained) | Diverges: 0

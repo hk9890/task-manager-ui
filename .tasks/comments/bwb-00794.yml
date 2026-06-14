@@ -1,0 +1,56 @@
+---
+id: 6nscgr03
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:25Z
+body: |-
+  ## Issue detail rendering (yze.3.4) lists many fields but no verification mechanism
+
+  **What**: Task beads-workbench-yze.3.4 says "Render title, ID, status, priority, type, assignee, labels, description/notes, comments, and dependency/related-work context." Acceptance criteria say "Issue details render the required metadata and content" and "Comments and dependency/related context are displayed when available." These are visual claims with no testing mechanism.
+
+  **Why**: The detail view is the most content-rich screen and the one most likely to have rendering bugs (missing fields, wrong formatting, truncated comments). The donor repo has extensive detail golden tests — 16+ `teatest.RequireEqualOutput` calls in `perles/internal/ui/details/details_test.go`. Without requiring similar coverage in the new plan, an agent verifier will have no way to confirm the detail view actually renders all 10+ fields correctly.
+
+  **Suggested action**: Add to yze.3.4 acceptance criteria:
+  - "Detail view has golden file tests covering: minimal issue (few fields), full issue (all fields), issue with comments, issue with dependencies"
+  - "Each rendered field (title, ID, status, priority, type, assignee, labels, description, notes, comments, dependencies) is verified present in at least one golden test"
+---
+id: vqv525q6
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:36Z
+body: |-
+  ## Detail mode is missing navigation context: how does the user get back?
+
+  **What**: This task renders a selected issue's details. It specifies what content to show but not how the user navigates: back to the board, back to search results, or to the next/previous issue. The app shell (yze.2.3) defines "mode switching" but the detail view is described as both a "mode" and a "pane" in different places (ARCHITECTURE.md says "issue details pane" on line 259, while the task titles say "detail mode").
+
+  **Why**: Is the detail view a full-screen mode (replacing the board) or a side pane (visible alongside the board)? This affects layout, navigation, and keyboard handling. If it's a mode, the user needs explicit navigation back. If it's a pane, the user needs split-view layout support. The answer changes the app shell's layout requirements.
+
+  **Suggested action**: Clarify in this task or in the app shell task (yze.2.3): "The issue detail view is a [full-screen mode / side pane] that [replaces / accompanies] the board/search view. Navigation back to the previous view is triggered by [key/action]." Pick one model for v1. A side pane is more useful but harder to implement; a full-screen mode is simpler but less convenient.
+---
+id: 8dcopdl7
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:38Z
+body: |-
+  ## [HIGH] Donor detail renderer has direct BQL dependency — task needs transplant guardrail
+
+  **What**: The instruction says "Inspect `/home/hans/dev/github/perles/internal/ui/details/details.go` for reusable rendering patterns." That file imports `bql` directly (line 12), its `Model` struct embeds a `bql.BQLExecutor` (line 122), its constructor requires one (`func New(issue beads.Issue, executor bql.BQLExecutor, ...)`), and dependency resolution uses `bql.BuildIDQuery()` (line 1127).
+
+  **Why**: An implementing agent will open this file and find BQL woven into the dependency-loading path. The rendering parts (metadata layout, markdown content, comment formatting) are salvageable, but the data-loading parts are not. Without an explicit warning, the agent may copy the whole model and try to stub out the BQL, creating a hidden coupling that reappears when dependency navigation is built.
+
+  **Suggested action**: Add an instruction line: "The donor `details.go` constructor requires a `bql.BQLExecutor` — do NOT preserve this parameter. Extract only the rendering/view logic. The new detail mode must load all issue data through the gateway's `ShowIssue` return model, not through executor calls."
+---
+id: q61f7qtt
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:51Z
+body: |-
+  ## PASS: Detail mode now has explicit BQL-transplant guardrail
+
+  **What**: Task instructions say "Do not copy BQL-coupled detail constructors or dependency-query logic from the donor implementation" and frame the donor as "a rendering-pattern reference, not as a direct transplant source." The acceptance criterion "No donor BQL-coupled detail code is copied into the standalone app path" is verifiable.
+
+  **Why**: The donor `details.go` imports `bql` directly, embeds a `bql.BQLExecutor` in its Model struct, and uses `bql.BuildIDQuery()` for dependency resolution. The updated instructions correctly warn against this. Combined with omd.8 automated import checks, the detail transplant risk is adequately guarded.
+
+  **Suggested action**: None. This is adequate protection.
+---
+id: 1sfmaua1
+author: Hans Kohlreiter
+created: 2026-04-05T16:43:17Z
+body: |-
+  Verifier PASS: standalone detail experience is active in the app runtime; required metadata/content plus comments and dependency/related context render correctly; no donor BQL-coupled detail code was copied into the standalone path; representative minimal/full/comments/dependency-rich rendering tests pass; go build ./cmd/bwb, go vet ./..., and go test ./... all pass.

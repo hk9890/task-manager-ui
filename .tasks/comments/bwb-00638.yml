@@ -1,0 +1,36 @@
+---
+id: kueg8jxi
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:53Z
+body: |-
+  Scope concern: instruction 4 says 'update user-facing guidance or docs if auto-refresh changes reload expectations' and files-to-modify lists docs/CODING.md and key-bindings.md. What: docs updates are filler in a technical task and will either be skipped or done perfunctorily. Why: docs changes should follow implementation, not be bundled into the integration task. Suggested action: drop docs from t7o.3's files-to-modify and AC, and handle docs as part of the acceptance review (t7o.4) or a separate micro-task if needed.
+---
+id: i1sth921
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:55Z
+body: |-
+  Good: AC bullet 3 correctly limits refresh to the active surface only. This prevents the background-polling-all-views antipattern.
+---
+id: 12bp7tp5
+author: Hans Kohlreiter
+created: 2026-04-19T09:25:52Z
+body: |-
+  Execution started. Foundation tasks t7o.1 and t7o.2 are verified. This integration step will add dirty/stale tracking on top of the new safe active-surface refresh APIs without expanding scope into unrelated views.
+---
+id: tm3fmhpl
+author: Hans Kohlreiter
+created: 2026-04-19T09:34:02Z
+body: |-
+  Review verdict: PASS. Implementation is correct, minimal, and well-tested. The dirty/stale/lastRefresh tracking in surfaceRefreshState is clean. Active-surface-only refresh is properly enforced via maybeAutoRefreshActiveSurfaceCmd checking only m.active. Immediate detail reload after writes is preserved (loadDetailCmd in all mutationResultMsg cases). markBrowseSurfacesDirty correctly marks both board+search without touching detail. The 60s stale cadence is test-covered with time mocking via modelNow. No hidden bugs found; the guard conditions (modal open, terminal blurred, already loading) are all correctly gated.
+---
+id: jxnvm2h1
+author: Hans Kohlreiter
+created: 2026-04-19T09:34:05Z
+body: |-
+  Minor observation: shouldRefreshSurface uses >= for the stale comparison (line 861), meaning at exactly 60s the surface is considered stale. This is fine but means the effective cadence can be slightly less than 60s if the tick fires at exactly the threshold. Not a bug — just noting the boundary is inclusive.
+---
+id: sosl5cqg
+author: Hans Kohlreiter
+created: 2026-04-19T09:34:10Z
+body: |-
+  Test coverage is thorough: dirty marking after writes (TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface), stale cadence (TestModelRefreshTickHonorsStaleCadenceForActiveSurface), active-surface-only (TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces), modal suppression (TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading), focus regain (TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus). No test gaps identified for the stated acceptance criteria.

@@ -1,0 +1,12 @@
+---
+id: cl9t9zhx
+author: Hans Kohlreiter
+created: 2026-04-12T11:34:03Z
+body: |-
+  Verifier rerun: BLOCKED. Focused tests + repo quality gates pass, but real runtime verification against /tmp/tmp.68EmxXufy0 shows a bd --type related link is dropped from IssueDetail.Related, so the wide left rail does not render the Related group from actual CLI output. Tracked in beads-workbench-syf.7. Next: fix gateway show parsing for real related-link JSON shape, then rerun acceptance.
+---
+id: 5knnnqzz
+author: Hans Kohlreiter
+created: 2026-04-12T12:02:41Z
+body: |-
+  Verifier rerun: PASS. Wide-rail breakpoint/fallback, dense grouped rows, no wide inline duplication, rail navigation/open, and non-interactive search preview verified. Focused tests + go build/vet/test passed. Artifact: /tmp/beads-workbench-syf2-runtime-wva40ex6

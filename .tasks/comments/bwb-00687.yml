@@ -1,0 +1,18 @@
+---
+id: ymj8b1qe
+author: Hans Kohlreiter
+created: 2026-05-29T08:59:58Z
+body: |-
+  Acceptance review PASSED (verifier) — recommend CLOSE.
+
+  Required checks: (a) 44rr.1 and 44rr.2 both CLOSED; (b) tests independently re-run by the verifier — `go clean -testcache && mise run test` → 1140 pass with -race; `mise run quality` (vet, golangci-lint, guardrails) → 0 issues; `mise run test:integration` → 1290 pass, 15 skip (opt-in scale/external); (c) discovered defects tracked (0mj1, p7zs — both P4, non-blocking); (d) scope outcome matches epic Success Criteria.
+
+  Runtime UI verification (docs/RUNTIME_UI_VERIFICATION.md, contention-free capture in /tmp/rr44rr):
+  - Children group renders for epic 44rr as "Children (3)" listing 44rr.1/.2/.3, in Q3 order (Blocked by, Blocks, Related, Children — no Structure on a top-level epic). Header count = 3 (includes children).
+  - Arrow ↓ in the Dependencies pane moves the highlight only; Content/Metadata stay on the subject (no reload) across multiple presses.
+  - Enter after one ↓ navigated to 44rr.2 (the highlighted target, not the start row) with content/metadata reloaded — Enter-gating confirmed.
+  - Esc returns to Board mode; Search-mode goldens unchanged.
+
+  Q4/Q8 two-marker spec: (a) cursor/pending row background highlight verified by golden cursor_row_background.golden + DependencyCursorStyle constant (pyte cannot extract cell bg, so verified by golden/style not text); (b) subject-in-list `›` chevron verified by text-level assertion in TestRenderSubjectRowInListUsesChevronGolden; (c) subject-not-in-list no-marker verified by TestRenderSubjectNotInListNoSubjectMarkerGolden. Q8 "concrete markers, not 'looks distinct'" satisfied.
+
+  Note: an intermittent "Children (0)" during captures was traced to embeddeddolt single-writer lock contention from a concurrent bwb process, not a feature regression — no defect filed. No new bugs found.

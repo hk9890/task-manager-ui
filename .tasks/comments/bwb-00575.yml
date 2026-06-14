@@ -1,0 +1,6 @@
+---
+id: 9g35scbl
+author: Hans Kohlreiter
+created: 2026-05-16T16:47:02Z
+body: |-
+  Done. PASS on all 3 datasets × all columns × ClosedAtDescPreservedOnRealData diagnostic. Diagnostic finding: this-repo has 49/50 positions diverging between updated_at and closed_at orders — this is the empirical evidence that kh54's UpdatedAt proxy was unreliable. AICM .beads mtimes unchanged.

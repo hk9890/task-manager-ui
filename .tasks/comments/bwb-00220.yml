@@ -1,0 +1,6 @@
+---
+id: veszhaem
+author: Hans Kohlreiter
+created: 2026-06-06T13:23:28Z
+body: |-
+  Done — commit 2791391. Hoisted the catalogs-cache restore out of the `!dirty && dashboardHydrated` branch in Hydrate; now gated only on `!dirty && v2Header.CatalogsCache != nil`. Dashboard hydration behavior unchanged. Added regression test TestHydrate_ValidCatalogsWithEmptyDashboard (valid catalogs + empty dashboard -> catalogs served, dashboard still re-fetches). Full quality gate green (1321 tests).

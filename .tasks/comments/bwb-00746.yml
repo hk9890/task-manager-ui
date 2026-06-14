@@ -1,0 +1,6 @@
+---
+id: r5y832c5
+author: Hans Kohlreiter
+created: 2026-05-28T14:10:56Z
+body: |-
+  Implemented. §7 added to docs/RUNTIME_UI_VERIFICATION.md targeting dtctl-test. 8-step procedure + pass/fail table + diagnostics referencing vtvb.6/.7/.8 and §6 for chevron-visibility. scripts:check + quality:fast green.

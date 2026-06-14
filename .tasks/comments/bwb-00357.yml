@@ -1,0 +1,18 @@
+---
+id: 7ug1w89y
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:04Z
+body: |-
+  Pin platform detail explicitly: Linux/macOS need syscall.SysProcAttr{Setsid: true} for detach. Windows has no Setsid — either skip detach there or document the asymmetry. Without this taskers will guess.
+---
+id: 4tnxlgwm
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:05Z
+body: |-
+  Tighten AC bullet 2: require an actual test (not 'comment is acceptable'). Test should record process state of N spawned helpers after parent ctx cancel.
+---
+id: vy5l6i0t
+author: Hans Kohlreiter
+created: 2026-05-16T03:58:54Z
+body: |-
+  Implemented. process_runner.go now uses exec.Command (not CommandContext) with platform-split setSysProcAttr — Linux/macOS Setsid:true via process_runner_unix.go; Windows no-op with documented asymmetry via process_runner_windows.go. Reaper goroutine added after cmd.Start. process_runner_contract_test.go covers reap + ctx-cancel-survives-child. CODING.md updated with detach contract.

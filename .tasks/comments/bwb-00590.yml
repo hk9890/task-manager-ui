@@ -1,0 +1,36 @@
+---
+id: okwfex9x
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:28Z
+body: |-
+  Epic scope gap: no implementation tasks after research. What: the epic has only two children — syf.1 (research) and syf.2 (acceptance review). There are zero implementation tasks. Why: after the research task resolves the design questions, someone still needs to create implementation tasks. The epic's success criteria say 'follow up implementation tasks can be created without ambiguity' but this is a success criterion for the research task, not the epic. The epic's own success criteria don't describe a working left rail, only a research output. Suggested action: clarify whether this epic is intentionally research-only (in which case rename it to reflect that) or whether implementation tasks will be added after syf.1 completes (in which case add an explicit note that the epic will be expanded after research approval).
+---
+id: c1g15bea
+author: Hans Kohlreiter
+created: 2026-04-12T09:33:35Z
+body: |-
+  Research complete in beads-workbench-syf.1. Outcome: recommend a 3-column detail layout at about >=140 cols with a 22-28 col left rail; v1 groups are Blocked by / Blocks / Related; children stay out of v1 until gateway/domain preserve parent-child dependency_type. Next: create implementation tasks after design approval.
+---
+id: qpuqqqd8
+author: Hans Kohlreiter
+created: 2026-04-12T10:57:01Z
+body: |-
+  Implementation planning created from approved research. Added row-renderer, layout, and navigation tasks for v1 left rail. Children remain out of scope for v1 until gateway/domain preserve parent-child relationship types. Reviewer requested on new task set.
+---
+id: xx5h2l0c
+author: Hans Kohlreiter
+created: 2026-04-12T10:59:11Z
+body: |-
+  Missing prerequisite: IssueReference enrichment. What: the implementation plan assumes rail rows will show type, priority, and status (from research syf.1 row content spec), but domain.IssueReference only carries ID and Title. The gateway already receives these fields from bd show --json but discards them. None of the three implementation tasks include gateway or domain model changes in their files-to-modify lists. Why: this is a blocking gap — syf.3 cannot render the specified row format without data that doesn't exist in the model. Suggested action: add a prerequisite task (before syf.3) to enrich IssueReference with Type/Status/Priority fields and update the gateway parser, or descope the row renderer to ID+title only.
+---
+id: dkeugunt
+author: Hans Kohlreiter
+created: 2026-04-12T11:00:49Z
+body: |-
+  Reviewer findings incorporated: added prerequisite task beads-workbench-syf.6 for IssueReference metadata enrichment and clarified syf.3, syf.4, and syf.5 to resolve row-data, duplication, focus, and Enter-dispatch ambiguities before execution.
+---
+id: xsq1z9yg
+author: Hans Kohlreiter
+created: 2026-04-12T13:07:46Z
+body: |-
+  Post-implementation UX feedback changed direction: the left issue browser should become a true side panel rather than a nested focusable area inside issue detail. Desired model is closer to dashboard browsing where selection updates adjacent detail. Also noted: focus behavior should be consistent app-wide, metadata fields could become Enter-editable (status/priority are good candidates), and the current layout under-uses full screen width.

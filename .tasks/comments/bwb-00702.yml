@@ -1,0 +1,37 @@
+---
+id: yw3jwxjx
+author: Hans Kohlreiter
+created: 2026-04-19T19:22:03Z
+body: |-
+  Note: This is an acceptance review gate task. Not reviewing content — just noting it correctly depends on .2 and .3, and has need:review label. Structure is fine.
+---
+id: mpt0ew7d
+author: Hans Kohlreiter
+created: 2026-04-19T20:07:43Z
+body: |-
+  Verifier rerun: BLOCKED.
+  - Read-only flow passed; cancel/no-save wrapper passed
+  - Direct close-flow capture + before/after diff proved persisted change
+  - Wrapper presets still have defects: ypab, lsbv, g2jw
+  - Exploratory UI found create/update modal failure: lgih
+  - Unrelated full quality gate failure tracked: aqps
+  Artifacts: /home/hans/.local/share/opencode/tool-output/tool_da752b7dc0018wbV2dynyQKET5 ; /home/hans/.local/share/opencode/tool-output/tool_da754dcd9001DJqlv6qjRO7mXK
+  Next: fix linked toolkit bugs, rerun acceptance review, then consider closing ay5j.4/ay5j.
+---
+id: 8l5p464t
+author: Hans Kohlreiter
+created: 2026-04-19T20:08:38Z
+body: |-
+  Verifier addendum: docs gap tracked in beads-workbench-wd3a. Current runbook still shows legacy --steps recipes and does not document the new --step wait syntax / wrapper path the epic introduced.
+---
+id: ul1qhnia
+author: Hans Kohlreiter
+created: 2026-04-19T20:10:13Z
+body: |-
+  Review verdict: 4 blockers must be fixed before this acceptance task can pass (ypab, lsbv, g2jw, wd3a). Two other bugs (lgih, aqps) are not epic blockers — track separately. See per-issue comments for wording suggestions on ypab and lsbv acceptance criteria. Recommended execution order: (1) g2jw — trivial help-text fix, (2) ypab — add readiness wait to presets, (3) lsbv — add post-submit settlement wait (depends on ypab since you need working presets to test save), (4) wd3a — update docs last since it should document the final working behavior. After all four: rerun ay5j.4 acceptance review.
+---
+id: tqr7g34q
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:19Z
+body: |-
+  Verifier rerun: PASS. Wait-based --step PTY flow passed; timeout reporting identified failing step/index cleanly; wrapper proved save changed=true and cancel changed=false with before/after bd show JSON; docs now match the implemented helper surface. Non-blocking follow-ups tracked separately: aqps, lgih, kq87.

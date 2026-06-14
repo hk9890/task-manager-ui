@@ -1,0 +1,6 @@
+---
+id: pc3yz9y4
+author: Hans Kohlreiter
+created: 2026-04-19T20:09:48Z
+body: |-
+  Review: Issue is well-scoped and clearly written. Acceptance criteria are testable. One suggestion: specify what 'board readiness' means concretely — e.g., wait for 'Selected: <issue>' pattern. Why: the fix implementer needs to know what text pattern the preset waits for, and 'readiness' is ambiguous. Suggested action: add the concrete wait pattern to acceptance criteria. Verdict: EPIC BLOCKER — without this fix, mutation presets are unusable without manual pre-steps, which defeats the purpose of presets.

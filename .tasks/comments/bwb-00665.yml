@@ -1,0 +1,6 @@
+---
+id: 485295y9
+author: Hans Kohlreiter
+created: 2026-05-15T09:44:37Z
+body: |-
+  Release workflow succeeded. Run: 25911165573 (https://github.com/hk9890/beads-workbench/actions/runs/25911165573). GitHub release v0.4.0 published at https://github.com/hk9890/beads-workbench/releases/tag/v0.4.0 with assets: bwb_0.4.0_linux_x64.tar.gz, bwb_0.4.0_linux_arm64.tar.gz, bwb_0.4.0_macos_x64.tar.gz, bwb_0.4.0_macos_arm64.tar.gz, bwb_0.4.0_checksums.txt. Tag v0.4.0 on commit facd998655973a9889cda6ccce8af029959e1eb1.

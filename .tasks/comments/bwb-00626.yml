@@ -1,0 +1,6 @@
+---
+id: mtms3f9w
+author: Hans Kohlreiter
+created: 2026-05-16T14:39:21Z
+body: |-
+  Implemented. Removed full-screen loading short-circuit from search Render(); cold start now shows search input + 6 skeleton rows via skeleton.SkeletonRow; refresh path keeps stale rows unchanged; m.loading setters untouched in the reload path (header spinner wiring intact). 5 new tests added: cold start, refresh, idle regression, m.loading-during-reload persistence, typing-while-loading. Scoped + full test suites pass.

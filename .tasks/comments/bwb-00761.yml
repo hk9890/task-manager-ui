@@ -1,0 +1,12 @@
+---
+id: aje9ek9k
+author: Hans Kohlreiter
+created: 2026-04-12T10:59:02Z
+body: |-
+  Left/right focus bindings not in scope but needed. What: this task adds the 3-column layout and says 'extend the detail renderer input state only as needed to show focused-pane and selected-row styling.' But left/right arrow keys are not currently bound in the detail context (they are only in board and modal). The task does not mention adding new detail keybinding actions. syf.5 handles keyboard navigation but depends on syf.4, meaning syf.4 will ship a layout with focus styling but no way to actually change focus. Why: the acceptance criteria for syf.4 say 'Golden coverage captures the left-rail layout' but those goldens will need to show focus states that cannot be triggered by keyboard in syf.4 alone. This is fine if syf.4 is understood as purely rendering, but the 'focused-pane styling' instruction creates ambiguity. Suggested action: clarify in syf.4 that focused-pane styling is driven by input state props (not by keyboard handling) and that focus is hardcoded to content pane until syf.5 wires navigation.
+---
+id: vl9r9a7u
+author: Hans Kohlreiter
+created: 2026-04-12T10:59:15Z
+body: |-
+  Related Work duplication. What: the current detail renderer already shows related work inline in the content sections (renderContentSections calls renderReferences for Blocked by, Blocks, Related at lines 156-158 of details.go). When the wide-screen left rail is active, the same references will appear twice — once in the left rail and once inline in the content body. Why: users will see duplicate information, wasting screen real estate and creating confusion. Suggested action: add an instruction to suppress or collapse the inline Related Work section in renderContentSections when the wide-screen left rail is active.

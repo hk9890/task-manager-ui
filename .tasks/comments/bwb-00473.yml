@@ -1,0 +1,18 @@
+---
+id: 1nvb60hw
+author: Hans Kohlreiter
+created: 2026-05-22T13:24:57Z
+body: |-
+  Corroboration from iteration 8: the help overlay body (shellKeyHelp, internal/app/model.go:1300) renders the line '<key> = toggle help' using keys.DisplayLabel(ShellContext, ShellActionHelp) -- i.e. the CONFIGURED help key. So after rebinding toggle_help to e.g. 't', the help overlay itself displays 't = toggle help', which is false: 't' opens but does not close. The misleading on-screen label makes the bug worse for the operator.
+---
+id: yxiswd2u
+author: Hans Kohlreiter
+created: 2026-05-22T17:37:05Z
+body: |-
+  DISPOSITION (user, html-ask 2026-05-22): Fix the close path. Make the help-overlay close check use keys.Match(ShellContext, ShellActionHelp, msg) so the configured key toggles both open and close.
+---
+id: z0r1kq28
+author: Hans Kohlreiter
+created: 2026-05-22T17:51:24Z
+body: |-
+  FIXED (commit 929ee5c): close path at model.go:376 changed from hardcoded k.String()=="?" to m.keys.Match(config.ShellContext, config.ShellActionHelp, k), so the configured toggle_help key both opens and closes the overlay. esc close path unchanged. Tests TestModelToggleHelpReboundKeyClosesBothDirections (incl. a regression guard that hardcoded '?' no longer closes) and TestModelToggleHelpDefaultKeyStillToggles added. mise quality:fast clean.

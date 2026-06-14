@@ -1,0 +1,41 @@
+---
+id: x7u1qldj
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:45Z
+body: |-
+  Review: No recovery path if the Release workflow fails after tag push. What: step 4 says 'capture the failure and track any required follow-up work before retrying' — but doesn't say HOW to retry. Why: with tag-triggered GoReleaser, a failed run leaves a published tag; you cannot reuse it cleanly. Two real options: (a) delete tag locally and on origin then re-push (only safe if no asset was published), or (b) bump to v0.2.1. The task gives no decision rule. docs/RELEASING.md only documents the 'gh release upload --clobber' backfill case for missing assets. Suggested action: add an explicit recovery subsection: 'If the workflow fails before any asset is published: git tag -d v0.2.0 && git push origin :refs/tags/v0.2.0, fix, retry. If any asset was published: do not reuse the tag — open a new release task for v0.2.1.'
+---
+id: cts677gs
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:48Z
+body: |-
+  Review: Missing CI-green re-check on the exact tagged SHA. What: step 1 only checks the tag does not exist and HEAD is the intended commit; CI provenance is implicitly inherited from yixr.1. Why: yixr.2 commits a changelog after yixr.1 ran, so HEAD at tag time is a different SHA than the one yixr.1 verified green. Suggested action: add a step before 'git tag -a' to re-verify CI is green for the exact HEAD SHA (gh run list --branch main --commit 2a52a95a14c5974e60cf46ca639cc3447cbd6b43 or equivalent), and make it an AC.
+---
+id: ufn9muxb
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:53Z
+body: |-
+  Review: Asset verification is too loose. What: AC says 'includes expected bwb archives plus checksums' but doesn't enumerate them. docs/RELEASING.md names specific archive patterns ('bwb_0.2.0_linux_x64.tar.gz', 'bwb_0.2.0_macos_arm64.tar.gz') for installer (mise) compatibility. Why: if .goreleaser.yaml drifts from the documented naming, mise auto-detection breaks silently. Suggested action: change the AC to require explicit verification that the published assets include the documented installer-compatibility names (linux_x64, macos_arm64, plus checksums file), and that the version segment is '0.2.0' (not 'v0.2.0' — tag has v prefix, archive naming may not).
+---
+id: boqc2o3k
+author: Hans Kohlreiter
+created: 2026-04-20T14:35:43Z
+body: |-
+  Publish complete for v0.2.0.
+
+  Evidence:
+  - Tagged release commit: 937d5c541562d24e2f6973503630a56c289ea1b0
+  - Annotated tag pushed: v0.2.0
+  - Exact tagged SHA had green CI provenance before tag push (run 24672208754)
+  - Release workflow succeeded: gh run 24672383866
+  - GitHub release URL: https://github.com/hk9890/beads-workbench/releases/tag/v0.2.0
+  - Remote tag verified via git ls-remote
+
+  Verified assets:
+  - bwb_0.2.0_linux_x64.tar.gz
+  - bwb_0.2.0_linux_arm64.tar.gz
+  - bwb_0.2.0_macos_x64.tar.gz
+  - bwb_0.2.0_macos_arm64.tar.gz
+  - bwb_0.2.0_checksums.txt
+
+  Applied prepared release notes to the GitHub release body after publication.

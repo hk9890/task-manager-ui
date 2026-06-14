@@ -1,0 +1,6 @@
+---
+id: 228y8m9b
+author: Hans Kohlreiter
+created: 2026-05-16T13:22:04Z
+body: |-
+  ci.yml converted to matrix [ubuntu, macos, windows] with fail-fast: false. Gating: scripts/fmt:check skip windows (bash heredocs); lint/guardrails/test:coverage ubuntu-only. jdx/mise-action bumped @v2 → @v4 preemptively (Windows shim fix landed after v2 tagged — verified release dates). Local mise run quality green. Actual cross-OS verification deferred to first push.

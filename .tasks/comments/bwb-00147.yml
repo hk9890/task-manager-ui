@@ -1,0 +1,6 @@
+---
+id: ycd3149u
+author: Hans Kohlreiter
+created: 2026-05-15T18:38:04Z
+body: |-
+  Implemented CountIssues on BeadsGateway with IssueCountQuery/IssueCountResult/IssueStatusCount types, bd count --by-status --json decoding (multi-group, single-group, empty), fake gateway support, and 4 unit tests. go build ./... and go test ./... pass.

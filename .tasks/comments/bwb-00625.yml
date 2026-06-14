@@ -1,0 +1,6 @@
+---
+id: v39tevx9
+author: Hans Kohlreiter
+created: 2026-05-16T14:39:26Z
+body: |-
+  Implementation complete. Detail View() cold-start renders skeleton via skeleton.SkeletonRow; refresh (same or different previously-loaded issue) keeps stale content visible. loadingPreviewDetail renamed to PlaceholderDetail (exported) and used by both preview and cold-start paths. Synchronous m.detail.ApplyLoadedDetail(newID, PlaceholderDetail(...)) added in ensureDetailForCurrentSelectionCmd before m.detail.Loading=true so scroll offsets reset immediately on selection change — preserves beads-workbench-db0z.7. Inline comment added on m.detail.Loading=true warning future readers not to remove. 5 new tests added including TestScrollResetOnIssueSwitchViaApplyLoadedDetail (db0z.7 regression). Full suite green.

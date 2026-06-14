@@ -1,0 +1,18 @@
+---
+id: htg1ezex
+author: Hans Kohlreiter
+created: 2026-05-16T20:02:25Z
+body: |-
+  **Epic-review 2026-05-16 (descope)**
+
+  Reviewed by orchestrator + independent reviewer before activation. Outcome:
+
+  1. **Collapse faif.1 + faif.2 + faif.3 into faif.1.** The 3-layer abstraction (recipe.yaml → generator.go → invariants.yaml + verifier) is over-built for what is effectively a stable JSON artifact. A scale fixture *engineered for specific bug-class triggers* should be stable, not regenerated. The recipe-driven generator only earns its keep if the fixture changes frequently — which it shouldn't.
+
+  2. **Sharp issue with faif.3 invariants**: examples like `bd count --status closed >= 75` re-derive what the recipe declared — they catch *generator* bugs, not gateway/composer bugs. Invariants should encode **observable bwb behavior** ("Done +badge appears when closed > cap (kh54 regression guard)", "cardinality warning fires at 500 (composer threshold)", "sort tie-breaks stable across equal `updated_at`"), not generator counts.
+
+  3. **Faif.1 (new merged scope)**: author `scale-seed.json` directly (committed artifact, ~600 issues handcrafted or via one-shot script — pick whichever is faster to author once) + add a Go smoke test (`scale_fixture_smoke_test.go`) with 8-12 product-behavior invariant assertions. No YAML recipe, no separate generator binary, no YAML invariants manifest, no verifier program. One file you can edit by hand; one test file enforcing what matters.
+
+  4. **Keep faif.4 and faif.5 as-is** — dual-fixture API and "run suites against scale fixture, file bugs per discipline" both have real product value.
+
+  5. **Priority note**: P1 bugs ule7 and 5q6t (refresh-concurrency, user-facing UI corruption) take precedence over this P2 infrastructure work.

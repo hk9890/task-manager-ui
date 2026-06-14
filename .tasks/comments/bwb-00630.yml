@@ -1,0 +1,6 @@
+---
+id: l4cpd8bp
+author: Hans Kohlreiter
+created: 2026-05-15T19:18:00Z
+body: |-
+  Verification complete. All 12 acceptance criteria pass. Code paths confirmed: SortFieldClosedAt wired through domain→gateway→provider; sectionItemCapacity() returns 20 for h=0 else max(1,h-3); Limit:0 on all provider sections, stamped before dispatch; TopRight shows empty string until CountLoaded==true; counts invalidated on AutoRefresh and BoardActionReload; dispatchCountCmds fires after pendingLoads==0. go build/vet/test all clean; search, detail, and mutation flows unaffected.

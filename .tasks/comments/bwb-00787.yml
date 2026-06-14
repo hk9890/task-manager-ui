@@ -1,0 +1,144 @@
+---
+id: 664jsdeh
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:42Z
+body: |-
+  ## yze.5 (test harness) has no upstream dependency — but it needs the repo and gateway interface to exist
+
+  **What**: `beads-workbench-yze.5` (TUI and e2e test harness) is listed as ready with zero dependencies. It must create a `FakeBeadsGateway` implementing the `BeadsGateway` interface, create an embedded-mode beads fixture repo, and establish the teatest/golden file harness. None of this is possible until the gateway interface (omd.2) exists and the repo is bootstrapped (omd.1).
+
+  **Why**: An agent starting yze.5 right now has no `BeadsGateway` interface to implement a fake for, no `internal/` tree for the test harness packages, and no `go.mod` to add test dependencies to. The task will fail immediately. This is the most dangerous false-ready issue because yze.5 blocks all three downstream test tasks (yze.2.4, yze.3.5, yze.4.5).
+
+  **Suggested action**: Add dependency: `yze.5 depends-on omd.7` (Phase 1 acceptance). The test harness needs the full gateway interface (finalized in Phase 1) to create the fake gateway. This also ensures the gateway test strategy from omd.6 is established before the TUI harness layers on top of it. Alternative: `yze.5 depends-on omd.2` if you want it to start earlier, but the fake gateway won't be stable until the interface is accepted.
+---
+id: 2kosmbr8
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:06Z
+body: |-
+  ## [PASS] TUI test harness task addresses the primary first-pass gap
+
+  **What**: beads-workbench-yze.5 directly addresses the biggest testability gap from the first review: the missing automated TUI testing strategy. It requires a standard Bubble Tea test harness, shared FakeBeadsGateway, fake editor/launcher seams, embedded-mode beads fixture, docs/TESTING.md, and explicit vocabulary for test categories. The task blocks all three downstream test tasks (yze.2.4, yze.3.5, yze.4.5).
+
+  **Why**: This is now the keystone of agent-verifiable execution. The dependency wiring is correct — no test task can proceed without the harness existing. The scope covers the five infrastructure items the first review identified as missing (teatest approach, fake gateway, fake editor/launcher seams, embedded fixture, test vocabulary).
+
+  **Suggested action**: No structural change needed. This task is well-scoped and correctly positioned. Specific content gaps in this task are addressed in separate findings.
+---
+id: 9yxfwmzm
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:15Z
+body: |-
+  ## [PASS] docs/TESTING.md is now properly planned with comprehensive scope
+
+  **What**: Task yze.5 ("Establish automated TUI and end-to-end test harness") explicitly creates docs/TESTING.md and specifies its content: test commands, test categories, Bubble Tea UI testing strategy, fake gateway/editor/launcher seams, and embedded-mode fixture usage. Additionally, omd.6 says "Create or update docs/TESTING.md if gateway-specific harness/fixture usage needs to be documented there." The acceptance review omd.7 verifies TESTING.md exists and documents the gateway test strategy.
+
+  **Why**: The original plan had zero mention of TESTING.md anywhere. The updated plan has it as a deliverable in yze.5, a conditional update in omd.6, and a verification criterion in every acceptance review. The docs/TESTING.md lifecycle is now: created in yze.5 (or omd.6 for gateway-specific content), verified at each acceptance gate, confirmed accurate at v1 acceptance. This is a complete documentation lifecycle.
+
+  **Suggested action**: None. This is well-planned.
+---
+id: etihh85z
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:32Z
+body: |-
+  ## PASS: TUI test harness is now a cross-cutting task with correct dependencies
+
+  **What**: Task beads-workbench-yze.5 ("Establish automated TUI and end-to-end test harness") now exists as a dedicated cross-cutting task. It requires: a standard Bubble Tea test approach, a shared FakeBeadsGateway, fake editor/launcher seams, a reproducible embedded-mode fixture repo, test vocabulary definition, and docs/TESTING.md creation. It correctly blocks all three UI test tasks (yze.2.4, yze.3.5, yze.4.5) and the v1 acceptance review.
+
+  **Why**: This was the single biggest testability gap in the original plan — no shared test infrastructure existed, and every test task would have needed to build its own. The new task centralizes test infrastructure decisions before any UI test task runs, ensuring consistency.
+
+  **Suggested action**: None. This is a strong structural improvement.
+---
+id: yfmizj7j
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:47Z
+body: |-
+  ## [MAJOR] yze.5 has no dependency on the gateway foundation — it cannot build the embedded-mode fixture
+
+  **What**: beads-workbench-yze.5 creates the shared test harness including "A reproducible embedded-mode beads fixture repository with known issues, comments, labels, and dependencies for integration/e2e testing." To create this fixture, yze.5 needs the gateway interfaces (from omd.2) and possibly the gateway implementation (from omd.4/omd.5) to generate fixture data. But yze.5 has ZERO dependencies — it depends on nothing and blocks yze.1, yze.2.4, yze.3.5, and yze.4.5.
+
+  **Why**: Without a dependency on at least omd.7 (Phase 1 acceptance), an agent could start yze.5 before the gateway even exists. The FakeBeadsGateway it creates must implement the BeadsGateway interface — which doesn't exist yet if omd.2 hasn't run. The embedded-mode fixture needs `bd` commands that the gateway implementation validates — those commands aren't proven to work until omd.4/omd.5/omd.6 complete. An agent working on yze.5 in parallel with Phase 1 will be building fakes against an interface that hasn't been defined yet.
+
+  **Suggested action**: Add a dependency: yze.5 depends on omd.7 (Phase 1 gateway acceptance). This ensures the gateway interface, implementation, and command runner are all proven before the test harness builds fakes against them. This does not change the critical path — yze.2.4 already depends on yze.2.3 which depends on yze.2.1 which depends on omd.7, so yze.5 is already effectively serialized after Phase 1 through its downstream consumers.
+---
+id: 3r1om762
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:57Z
+body: |-
+  ## [MAJOR] yze.5 does not specify what the TUI test harness technique actually IS
+
+  **What**: The task says "Establish the standard Bubble Tea test approach for this repo (for example: teatest, golden output tests, model-level message driving, or an equivalent fully automated harness)." This is a menu of options, not a decision. The first-pass review specifically called out the missing teatest/golden-file convention as the #1 testability gap. The updated task acknowledges it needs to be decided but leaves it to the implementer.
+
+  **Why**: The whole point of this task is to establish a convention BEFORE the test tasks run. If the implementer picks "model-level message driving" without golden files, then yze.3.2's "Automated board tests pass without manual UI inspection" becomes a state assertion that proves the model is correct but not that View() renders correctly. If they pick golden files without model assertions, state machine bugs pass through. The donor repo uses teatest with golden files extensively — this proven pattern should be the default, not one option among several.
+
+  **Suggested action**: Replace the parenthetical menu with a decision: "Establish `teatest` golden file testing as the standard View() output verification technique, combined with model-level Init/Update/View state machine tests for behavior verification. Create a `testdata/` golden file convention consistent with standard Go test patterns. If teatest is unsuitable for a specific case, document the exception and alternative."
+---
+id: 1c2kvyo3
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:07Z
+body: |-
+  ## MINOR: yze.5 (test harness) has no explicit dependency — could be picked up before any implementation exists
+
+  **What**: Task yze.5 (establish TUI and e2e test harness) has no DEPENDS ON entries. It blocks yze.2.4, yze.3.5, yze.4.5, and yze.1. But it should depend on at least the gateway foundation being accepted (omd.7), because the FakeBeadsGateway it creates needs the real BeadsGateway interface to implement, and the embedded-mode fixture repo needs the gateway to test against.
+
+  **Why**: Without a dependency, yze.5 shows as ready work immediately, before the BeadsGateway interface even exists. An agent picking it up would have nothing to implement the fake against. The test harness inherently depends on the interfaces it doubles.
+
+  **Suggested action**: Add dependency: yze.5 depends on omd.7 (Phase 1 gateway foundation acceptance). This ensures the gateway interface exists before the fake gateway is built.
+---
+id: n170lnxe
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:28Z
+body: |-
+  ## [MINOR] Test harness task (yze.5) has no explicit dependency — execution timing is ambiguous
+
+  **What**: yze.5 "Establish automated TUI and end-to-end test harness" blocks yze.2.4, yze.3.5, yze.4.5, and yze.1. But it has no DEPENDS ON relationship itself. This means it could theoretically be started before the foundation epic (omd) is complete — before the gateway interface, domain models, or command runner exist. The fake gateway, fake editor seam, and fixture repo all depend on the real interfaces existing first.
+
+  **Why**: An agent picking up yze.5 before omd.2 (gateway interface) is closed would be designing test doubles against a non-existent interface. The FakeBeadsGateway can't be built before BeadsGateway is defined. The embedded-mode fixture can't be validated before the gateway read operations exist to test against it. This isn't a blocker because a reasonable agent would wait, but the explicit dependency is missing.
+
+  **Suggested action**: Add a dependency: yze.5 DEPENDS ON omd.7 (Phase 1 gateway acceptance). This ensures the gateway interface, domain models, and command runner all exist before test infrastructure is built against them. It still allows yze.5 to run in parallel with yze.2.1-yze.2.3 (app shell implementation), which is the right timing.
+---
+id: gs8pkg7k
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:32Z
+body: |-
+  ## [MAJOR] No task requires documenting the test vocabulary before tests are written
+
+  **What**: The prior review (comment on yze product epic) flagged that "integration test" is used inconsistently across the plan. Task yze.5 now addresses this: instruction 5 says "Define the test vocabulary for this repo: unit, integration, and end-to-end/smoke tests." However, yze.5 does NOT block omd.6 (gateway tests). omd.6 will be executed during Phase 1, before yze.5 runs. This means the first batch of tests will be written without a defined test vocabulary, and the omd.7 acceptance review will verify tests using undefined terms.
+
+  **Why**: The gateway tests in omd.6 are the foundation that all later test tasks build on. If the gateway test task writes tests without the vocabulary definition (because yze.5 hasn't run yet), the patterns established in Phase 1 may conflict with the vocabulary defined later in yze.5. Then either yze.5 has to retroactively align with whatever omd.6 did, or the gateway tests become inconsistent with the documented vocabulary. The test vocabulary definition needs to exist before the first real tests are written.
+
+  **Suggested action**: Either: (a) move the test vocabulary definition from yze.5 into omd.6 or omd.8 (so it's defined during Phase 1), or (b) add a dependency: omd.6 depends on yze.5 (but this is structurally awkward since yze.5 is in the product-level epic). Option (a) is cleaner — add to omd.6 or omd.8: "Define and document the test vocabulary (unit/integration/e2e) in docs/TESTING.md." Then yze.5 expands the vocabulary with TUI-specific testing strategy rather than defining it from scratch.
+---
+id: j6q9lgzt
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:48Z
+body: |-
+  ## PASS: yze.5 (test harness) correctly blocks all downstream test tasks
+
+  **What**: `beads-workbench-yze.5` (TUI and e2e test harness) blocks yze.2.4 (app shell tests), yze.3.5 (browsing tests), and yze.4.5 (editor/launcher tests). This means the shared test infrastructure — fake gateway, teatest harness, embedded-mode fixture, editor/launcher seams — must be established before any UI test task can proceed.
+
+  **Why**: This was the most critical infrastructure gap identified in the prior review: test tasks had no shared infrastructure to build on. By creating yze.5 as a cross-cutting dependency, the plan ensures consistent test patterns across all epics. The fake gateway, golden file conventions, and fixture data will be defined once and used everywhere.
+
+  **Suggested action**: No change needed to the blocking relationships. The only issue is yze.5's own missing upstream dependency (noted separately) — it needs omd.7 or at minimum omd.2 before it can create the fake gateway implementation.
+---
+id: 0xu9ljy2
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:06Z
+body: |-
+  ## [MAJOR] yze.5 FakeBeadsGateway scope doesn't mention error injection — only "deterministic" returns
+
+  **What**: yze.5 requires "A shared FakeBeadsGateway or equivalent deterministic gateway test double for UI-level tests." The word "deterministic" implies fixed return values, but doesn't explicitly require error injection capability. Every test task downstream needs to test error paths (gateway unavailable, command failed, parse failure) — but if the fake only supports happy-path returns, error testing requires each test task to build its own error-injecting wrapper.
+
+  **Why**: Error injection is the primary reason a fake gateway exists for UI tests. Happy-path testing can be done with any static data. The value of a SHARED fake is that it provides consistent error injection across all UI test tasks. Without explicit error injection support, the fake is underspecified.
+
+  **Suggested action**: Add to yze.5 acceptance criteria: "The fake gateway supports configurable error injection (per-method error returns) so downstream test tasks can exercise error-path UI rendering without building custom test doubles."
+---
+id: vcqn2wj7
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:36Z
+body: |-
+  ## [PASS] docs/TESTING.md is now planned at the right moment and verified at every gate
+
+  **What**: yze.5 creates docs/TESTING.md with test commands, categories, TUI strategy, seams, and fixture usage. omd.6 also references docs/TESTING.md creation for gateway-specific guidance. Every acceptance review from omd.7 onward verifies docs/TESTING.md reflects the current state. The v1 acceptance (yze.1) checks "docs/CODING.md, docs/TESTING.md, and AGENTS.md match the implemented product."
+
+  **Why**: This addresses the first-pass documentation gap. Testing documentation is created when the harness is built and verified at every subsequent gate.
+
+  **Suggested action**: No change needed.

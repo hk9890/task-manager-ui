@@ -1,0 +1,6 @@
+---
+id: ez4eqv16
+author: Hans Kohlreiter
+created: 2026-05-28T14:10:51Z
+body: |-
+  Implemented. Audit confirmed all three reload entry points (r key, focus regain, periodic tick) route through startReload() which already resets doneLoadedCount=0 and doneLoadInFlight=false (vtvb.6). No production change; three regression tests added: TestDoneLoadMore_ManualReloadResetsToPage1, FocusRegainResetsToPage1, ForceFreshResetsState. quality:fast green.

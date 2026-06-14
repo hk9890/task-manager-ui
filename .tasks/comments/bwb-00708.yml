@@ -1,0 +1,6 @@
+---
+id: v972q4zx
+author: Hans Kohlreiter
+created: 2026-05-28T14:00:36Z
+body: |-
+  Implemented in commit $(git log -1 --format=%h). State (doneLoadedCount, doneLoadInFlight, doneClosedTotal) added; closedPageSize() = max(2*viewport, 50); threshold trigger + '>' key; loadMoreClosedDoneMsg routes through composer's PriorClosed merge. Tests TestDoneLoadMore_{DispatchesOnThreshold,NoDispatchAtSliceEnd,MergesIncomingPage,ExplicitKey}. quality:fast green (1126).

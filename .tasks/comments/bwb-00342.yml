@@ -1,0 +1,6 @@
+---
+id: wzh4y0j8
+author: Hans Kohlreiter
+created: 2026-05-22T22:37:38Z
+body: |-
+  Acceptance verification complete (verifier) — all 5 criteria PASS. All three child bugs closed with correct root-cause fixes: 2ev4.2 (7d6944b — 5th Query(status=blocked) board call), 2ev4.3 (f940bec — 'N of M' badge), 2ev4.4 (f39be5d — stale banner + dimmed rows + ·stale badge + docs). Each regression test was confirmed to FAIL against pre-fix code and pass now (TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn, TestDoneColumnHeaderBadge truncated sub-case, TestSearchModeStaleDraftIndicatorAppearsAndClears + 4 UI-layer stale-draft tests). go test ./... = 1096 pass; quality:fast clean. No critical defects; no follow-ups needed. One non-blocking hygiene note: commit f39be5d bundled a pre-existing unstaged CONFIGURATION.md edit — additive and correct.

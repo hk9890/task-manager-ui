@@ -1,0 +1,80 @@
+---
+id: 5cz3gtg8
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:16Z
+body: |-
+  ## Epic success criteria #3 is vague and untestable
+
+  **What**: Success criterion "Shell, board, search, detail, and modal keybindings are centralized and configurable" — this is not verifiable. What does "centralized" mean in acceptance terms? Zero remaining literal key strings in Update handlers? A specific package boundary? What does "configurable" mean — every binding or a defined subset?
+
+  **Why**: A verifier cannot mark this done/not-done without interpreting intent. This will cause disagreement at acceptance time or rubber-stamp approvals.
+
+  **Suggested action**: Replace with specific criteria like:
+  - All keybindings consumed by shell, board, search, detail, and modal Update handlers resolve through a central keymap lookup — no literal key strings in switch cases
+  - The YAML `keybindings` section supports overriding at least: mode-switch, quit, help-toggle, board-navigation, search-navigation, detail-scroll, and launcher-trigger actions
+  - Invalid or duplicate bindings within the same context fail startup with an error naming the conflicting keys
+---
+id: n1gx7g9s
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:22Z
+body: |-
+  ## Epic success criterion #4 is scope-creepy — "user-facing docs" is undefined
+
+  **What**: "User-facing docs describe the config path and schema" — what docs? A README section? A man page? A `bwb --help` flag? The project has `docs/CODING.md` as internal dev guidance and no user-facing doc surface today.
+
+  **Why**: This is vague enough that a tasker could spend a half-session building a user guide, or do nothing and argue the CODING.md update counts. Neither is what you want.
+
+  **Suggested action**: Be explicit: "docs/CODING.md Runtime Configuration section is updated with config file path, full YAML schema reference, and at least one complete example config." That's the only doc surface this project has.
+---
+id: oqqlpjtz
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:25Z
+body: |-
+  ## Simplification opportunity: merge ni1.1 and ni1.2 into one task
+
+  **What**: ni1.1 and ni1.2 substantially overlap. Both modify the same files (`internal/config/model.go`, `internal/config/*.go`, `docs/CODING.md`). ni1.1 builds the config loader and merge engine; ni1.2 "extends" it for editor/launcher — but those fields already exist in `config.Model`. The editor and launcher config surface IS the config surface in this app.
+
+  **Why**: Having these as separate sequential tasks creates artificial boundaries. ni1.1 can't be meaningfully tested without config fields to load, and ni1.2 can't be started without ni1.1. A tasker doing ni1.1 will build the YAML schema with editor/launcher fields because those are the only fields worth testing (aside from `UI.ShowModeSwitcherHelp` which is trivial). Then ni1.2 becomes a no-op.
+
+  **Suggested action**: Merge into one task: "Load optional XDG YAML config with editor, launcher, and UI overrides merged over defaults." This simplifies the epic to 3 tasks (config loading, keybinding refactor, acceptance) which is the natural decomposition. If ni1.3 is split per the other comment, the epic becomes 4 tasks total which is still clean.
+---
+id: gywtc48a
+author: Hans Kohlreiter
+created: 2026-04-07T17:15:28Z
+body: |-
+  ## Missing risk: $EDITOR env var interaction with config file editor.command
+
+  **What**: Currently `config.Default()` reads `$EDITOR` at startup and falls back to `vi`. If a user sets `editor.command: nano` in config.yaml, what wins — the config file or `$EDITOR`? The epic and tasks don't specify precedence.
+
+  **Why**: This is a real usability decision. Most Unix tools use env var > config file > default. If BWB does config file > env var > default, users who set `$EDITOR` system-wide will be confused when BWB ignores it after they create a config file. If BWB does env var > config file, users who set the config will be confused when it's ignored.
+
+  **Suggested action**: Define precedence explicitly: config file > `$EDITOR` > built-in default (`vi`). The reasoning: if someone takes the trouble to create a BWB-specific config file and set `editor.command`, that's the most specific intent. Add this to ni1.1 (or merged ni1.1+ni1.2) instructions and acceptance criteria.
+---
+id: cgyt0kjh
+author: Hans Kohlreiter
+created: 2026-04-07T17:18:45Z
+body: |-
+  Reviewer assessment: plan needs changes before execution.
+
+  Key findings:
+  - Clarify config precedence, especially `editor.command` vs `$EDITOR` fallback.
+  - Specify XDG resolution details, unknown-key policy, YAML library, and launcher merge semantics.
+  - Current keybinding task is too large and should likely be split; search `CapturesShellKey` behavior is a specific risk.
+  - Acceptance review needs concrete verification steps.
+
+  Recommended restructuring:
+  - Merge `beads-workbench-ni1.1` and `beads-workbench-ni1.2` into one config-loading + launcher/editor task.
+  - Split `beads-workbench-ni1.3` into at least two tasks: central keymap foundation, then search/detail/modal integration.
+
+  Holding execution until the plan is revised/approved.
+---
+id: ybnu1jz8
+author: Hans Kohlreiter
+created: 2026-04-08T09:26:28Z
+body: |-
+  Discussion update from user:
+  - Config precedence: explicit config file values win; environment values like `$EDITOR` act as fallback only when the config omits the field.
+  - Unknown YAML keys: do not fail startup; ignore them but emit a visible warning/log message.
+  - Launcher merge semantics: merge user launcher overrides with built-in defaults rather than replacing the full launcher list.
+
+  Open discussion item still pending: whether to restructure tasks by merging config-loading/editor-launcher work and splitting the large keybinding task.

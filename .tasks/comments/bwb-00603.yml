@@ -1,0 +1,14 @@
+---
+id: 2zxbqafz
+author: Hans Kohlreiter
+created: 2026-05-29T08:34:47Z
+body: |-
+  Implemented (tasker). Arrow/Enter decoupled in the Dependencies pane: arrows move the cursor only (return nil intent — no reload); the existing hardcoded Enter stub now emits OpenRelatedIssueIntent{selected} so the shell handler does the reload + scroll reset + focus move (Q5 — no new config action added).
+
+  Two-marker visual distinction (Q4): added DependencyCursorBgColor/DependencyCursorStyle in internal/ui/styles; added SubjectIssueID to uidetails.State. Cursor/pending row → background highlight; subject row when in-list (e.g. Structure group) → `›` chevron; subject not in-list (Children group has no self; top-level epic has no Structure) → no marker (documented in renderReferenceRow). renderRelationshipGroups now takes cursorIssueID + subjectIssueID. Three Q4 goldens added (cursor_row_background, subject_row_in_list_chevron, subject_not_in_list_no_marker).
+
+  Q6 tests added (flow was previously uncovered): (a) arrow → BrowserSelectedIndex moves, nil intent; (b) Enter → OpenRelatedIssueIntent{selected}; (c) app handler still performs reload + focus move + scroll reset. Two pre-existing app tests updated for the new behavior.
+
+  Verification: `mise run test` → 1140 pass with -race; lint 0 issues; vet clean. Runtime capture (scripts/capture_bwb_screen.py): focusing the Dependencies pane and pressing ↓ leaves the Content pane unchanged — decoupling confirmed live. Esc/Search preview unaffected.
+
+  fmt:check shows 3 PRE-EXISTING unformatted files in loadgen/fakes (not touched by this task) — filed as a separate P4 follow-up. Code committed by the orchestrator at epic close, not per-task.

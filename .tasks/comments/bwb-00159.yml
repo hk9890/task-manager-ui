@@ -1,0 +1,19 @@
+---
+id: kfvwry61
+author: Hans Kohlreiter
+created: 2026-04-20T12:52:01Z
+body: |-
+  Review (release context): This bug gates the v0.2.0 release epic beads-workbench-yixr. Why: docs/CODING.md mandates 'go test ./...' as a release readiness gate, and this bug documents a current failure in that gate. Suggested action: prioritize fix or formal waiver before yixr.1 can close. If waived, record the rationale and the file path / golden mismatch nature on this bug.
+---
+id: imjdcbjb
+author: Hans Kohlreiter
+created: 2026-04-20T13:45:45Z
+body: |-
+  Verified on 2026-04-20 while preparing v0.2.0 release readiness. Current reproduction attempts all passed:
+  - go test ./internal/ui/search -run TestRenderGoldens -v
+  - go test ./internal/ui/search ./internal/app -count=1 -v
+  - make test
+  - go test ./...
+  - go test ./... -count=1
+
+  The previously reported search golden mismatch is not reproducible on the current main branch. Closing as resolved/non-reproducible on current HEAD unless a future failure report captures a concrete reproducer or SHA.

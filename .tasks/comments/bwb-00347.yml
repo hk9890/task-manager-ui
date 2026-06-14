@@ -1,0 +1,6 @@
+---
+id: 2i6iei33
+author: Hans Kohlreiter
+created: 2026-05-22T19:19:47Z
+body: |-
+  Implemented. Bounded semaphore cap=2 added to CommandRunner in runner.go; acquire/release wraps executor.Run inside existing RWMutex blocks; context cancellation returns promptly via select. Two new tests: TestConcurrencyCapBurst (asserts peak <= cap under 10-goroutine burst) and TestConcurrencyCapContextCancelWhileWaiting (asserts cancelled waiter returns immediately without executing). TestRWMutexParallelReadOverlap updated to 2xcap goroutines. All 1070 tests pass; quality:fast gate clean.

@@ -1,0 +1,18 @@
+---
+id: b3vpu4md
+author: Hans Kohlreiter
+created: 2026-05-11T05:23:18Z
+body: |-
+  Review finding: this bug is valid and implementation-ready. Recommended implementation path: add project/build provenance as root logger attributes so every log record carries them automatically. Concretely, thread version and project root into logging.Options from cmd/bwb/main.go, include them on the root logger in internal/logging/logging.go, and update docs/MONITORING.md plus logging/startup tests. Existing main.version already distinguishes trunk/dev from release builds, so no new build-tag mechanism is required.
+---
+id: 0t77m38w
+author: Hans Kohlreiter
+created: 2026-05-11T05:28:57Z
+body: |-
+  Implemented provenance attribution for the shared persistent log. Root logger now attaches project_root and build_version to every structured record, main threads resolved cwd + version into logging.Options, startup/debug coverage asserts the new fields, and docs now explain that ~/.local/state/bwb/bwb.log is a shared sink that should be attributed via session_id + project_root + build_version. Verified with go test ./internal/logging ./cmd/bwb, go test ./..., and a direct built-binary log check showing the new fields in stderr + bwb.log.
+---
+id: zsdpuqol
+author: Hans Kohlreiter
+created: 2026-05-11T05:29:00Z
+body: |-
+  Verifier: PASS. All three acceptance criteria satisfied. Every JSON log record now carries project_root and build_version as root attributes, docs/MONITORING.md documents the shared sink and attribution guidance, and tests cover provenance fields end-to-end. Full test suite passed. Recommend closing beads-workbench-ov2r.

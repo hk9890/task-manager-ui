@@ -1,0 +1,24 @@
+---
+id: wq6qcgbz
+author: Hans Kohlreiter
+created: 2026-05-22T09:58:18Z
+body: |-
+  Acknowledging the existing rationale at internal/gateway/beads/read_gateway.go:538-541: the gateway intentionally never claims Exact because bd ready/blocked apply their own upstream caps, so completeness can't be proven for those sources even when the local post-filter count is under the limit. The underlying logic is deliberate and correct — this finding is NOT about that. It is purely the user-facing LABEL: 'partial' renders as '2 partial' even when all matches ARE shown, which reads as 'incomplete'. Suggested fix stays label-only: rename/clarify the badge (e.g. drop it when the result set is small and fully displayed, or word it as a cap hint rather than 'partial'), and remove whichever of the Exact enum value / 'exact' UI branch remains genuinely unreachable.
+---
+id: 8avevsvz
+author: Hans Kohlreiter
+created: 2026-05-22T10:23:51Z
+body: |-
+  Review (2026-05-22): VERIFIED both sub-claims. 'partial' is assigned exactly when the result set did NOT hit a cap (read_gateway.go:555-557/567-570), so a complete set renders 'N partial' (inverted semantics). SearchResultCompletenessExact is referenced only by its const decl and the search.go:361 switch case; the gateway never produces it (interface.go:443-446 documents only MaybeMore/Partial) — confirmed dead. RE-PRIORITIZED P2->P3 (cosmetic badge metadata, no functional break). RECOMMEND SPLIT into two issues: (1) remove the dead Exact enum value + UI branch — trivial, mergeable now; (2) relabel the 'partial' badge — needs a UX decision (rename, or suppress when the full set is displayed). Splitting unblocks the dead-code cleanup from the design call.
+---
+id: dids0628
+author: Hans Kohlreiter
+created: 2026-05-22T10:47:15Z
+body: |-
+  Decision (2026-05-22, /beads-work): proceed with suggested-fix Option A — suppress the completeness badge when the full result set is displayed; keep a badge ('capped') only for the MaybeMore/cap-hit case. Remove the dead SearchResultCompletenessExact enum value and its 'exact' UI branch. Single task — the review's recommended split is not needed since the badge decision is now made.
+---
+id: qbtpg6e0
+author: Hans Kohlreiter
+created: 2026-05-22T11:01:22Z
+body: |-
+  Fixed & verified (acceptance review 2026-05-22). Option A: resultCompletenessBadge() suppresses the badge for the complete (Partial) case — count only — and keeps 'capped' for MaybeMore. Dead SearchResultCompletenessExact enum + 'exact' UI branch removed (grep-confirmed absent repo-wide). 5 golden files regenerated ('N exact' -> 'N'). New unit tests TestResultCompletenessBadge / TestResultCountTitle. Verifier: PASS. Full quality suite green.

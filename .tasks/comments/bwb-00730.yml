@@ -1,0 +1,21 @@
+---
+id: tgfsboy2
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:43Z
+body: |-
+  ## Task .4 "fast entrypoints" is vague — what's the user story?
+
+  **What**: Task .4 says "provide fast commands or scripts" and "short commands for common scenarios." The acceptance criteria say "there are quick entrypoints for common UI verification scenarios" and "agents can run a basic layout/search/detail review in a small number of commands." This doesn't specify what form these take: Go test functions with `-run` patterns? Shell scripts? A `make` target? A custom CLI subcommand?
+
+  **Why**: The existing testing docs already provide fast entrypoints: `go test ./internal/app -run TestModelEmbeddedFixture... -v` runs the embedded-fixture smoke tests. The full-app verification workflow in TESTING.md is a 3-line shell sequence. If task .4 just produces another layer of aliases for these existing commands, it's not adding value.
+
+  **Suggested action**: Define the concrete form factor. The most useful version is probably a single `go test` invocation that runs all runtime UI verification scenarios with clear pass/fail output and readable failure diffs. If that's what this task produces, say so. If it's something else, explain why `go test -run` isn't sufficient.
+---
+id: 8kr84dev
+author: Hans Kohlreiter
+created: 2026-04-07T17:26:53Z
+body: |-
+  Status: completed by explicit narrow decision.
+  Outcome: no new default process-level harness was added because current in-process embedded-fixture + teatest + assertion/golden coverage already covers the main runtime risk surface; built-binary full-app verification remains the manual process-level check.
+  Artifacts: docs/TESTING.md process-level capture policy section.
+  Verification: go test ./internal/testing/ui ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v\nNext step: document the full workflow clearly in gyg.5 and verify the final workflow in gyg.6.

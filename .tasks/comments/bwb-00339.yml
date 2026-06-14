@@ -1,0 +1,10 @@
+---
+id: 18tmjtsd
+author: Hans Kohlreiter
+created: 2026-05-24T10:09:42Z
+body: |-
+  Done. Commit 2b4a384.
+
+  New lean Repository (lean.go, lean_payloads.go, lean_reads.go, lean_writes.go) implements all 9 repository.Repository methods directly on *CommandRunner. Legacy struct renamed to legacyRepository; NewFromGateway replaces the old New(gw) constructor. beads_lean variant added to the parity-contract suite — 12/13 scenarios pass.
+
+  Scenario 10 (PartialDashboardFailure) is skipped for beads_lean: there is no executor-level error-injection seam on the lean struct. A follow-up chore is filed and blocks E4.4 (gateway deletion).

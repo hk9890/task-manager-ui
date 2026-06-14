@@ -1,0 +1,6 @@
+---
+id: zdqwfl9o
+author: Hans Kohlreiter
+created: 2026-05-28T14:10:55Z
+body: |-
+  Implemented. Renderer now disambiguates load-more state via (Loading && len(Rows)>0 && ScrollOffset>0): rows render normally with a skeleton row appended at the window bottom; header shows 'N of M' from real progress. Goldens done_loading_more.golden + done_deep_navigation.golden cover both states. Tests TestRenderDoneLoadingMore + TestRenderDoneDeepNavigation. quality:fast green.

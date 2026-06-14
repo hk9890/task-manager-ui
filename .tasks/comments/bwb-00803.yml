@@ -1,0 +1,62 @@
+---
+id: d14z8cz0
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:24Z
+body: |-
+  ## Built-in launcher definitions are over-specified for v1 — risk of scope bloat
+
+  **What**: The instructions list four built-in launcher types: nvim, opencode, tmux new window/session, and shell/terminal-tab launch. Each of these has different terminal integration requirements. tmux integration requires detecting whether tmux is running, selecting target sessions/windows, and handling non-tmux environments. Terminal-tab launching is platform/terminal-emulator specific. This is at least 4 distinct subprocess integration patterns.
+
+  **Why**: The product principle is "opinionated over infinitely flexible" and "launchers should stay intentionally thin." Four distinct launcher types with different shell/terminal integration requirements is not thin — it's a launcher framework test suite. If each launcher needs error handling, fallback behavior, and environment detection, this single task balloons. The real v1 need is: open in editor and run a command with issue context. tmux and terminal-tab integration are power-user features that can follow.
+
+  **Suggested action**: Reduce v1 built-in launchers to: (1) editor launch (nvim/$EDITOR) and (2) generic shell command with issue-context interpolation. This covers the opencode use case too (it's just a command). Defer tmux-aware and terminal-tab-aware launchers to a follow-up. The launcher framework (yze.4.3) will support them when they're added — no architectural change needed.
+---
+id: aaiv8pat
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:53Z
+body: |-
+  ## Built-in launcher actions (yze.4.4) are untestable as specified — tests would need to spawn nvim/tmux
+
+  **What**: Task beads-workbench-yze.4.4 implements "built-in launcher definitions for `nvim`, `opencode`, `tmux` new window/session workflows, shell or terminal-tab launch commands." The task's acceptance criteria say "Built-in launchers receive structured issue context" and "Launcher integration is available from the app UI."
+
+  **Why**: These launchers produce real subprocess commands. Without the seam discussed in yze.4.3 being explicitly carried through to yze.4.4, the built-in launcher tests would need to actually execute `nvim`, `opencode`, or `tmux`. An agent test environment likely does not have these installed, and even if it did, spawning them would create uncontrollable side effects. The task needs to be clear that tests verify command construction, not execution.
+
+  **Suggested action**: Add to yze.4.4 acceptance criteria:
+  - "Each built-in launcher has a test verifying the constructed command (binary path, args, env vars, working directory) matches expected values for a given issue context"
+  - "Tests use the command-recording seam from yze.4.3 — no real process execution"
+---
+id: hrqnm4kn
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:14Z
+body: |-
+  ## [PASS] Built-in launchers scope is now right-sized with explicit deferral
+
+  **What**: The updated yze.4.4 reduces v1 scope to nvim, opencode, and generic shell-command. tmux/terminal-tab launchers are explicitly deferred unless they can be added without platform complexity. Tests verify command construction via the seam, not real process execution.
+
+  **Why**: The first review flagged 4 launcher types as scope bloat. The updated task is focused and testable.
+
+  **Suggested action**: None.
+---
+id: utgem2el
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:40Z
+body: |-
+  ## yze.4.4 (built-in launchers) scope is now appropriately reduced — tmux deferred
+
+  **What**: `beads-workbench-yze.4.4` now scopes built-in launchers to `nvim`, `opencode`, and a generic shell-command workflow. The task explicitly defers tmux and terminal-tab launchers: "Defer tmux and terminal-tab specific launchers unless they can be added without platform-specific complexity and without weakening testability." Acceptance criteria require automated tests "via the launcher seam rather than spawning real tools."
+
+  **Why**: The prior review flagged that four distinct launcher types (nvim, opencode, tmux, terminal-tab) was scope bloat for a single task. The scope has been appropriately narrowed to three launchers with the most complex ones deferred. The test criteria explicitly prohibit real process execution, using the seam from yze.4.3 instead.
+
+  **Suggested action**: No change needed. The launcher scope is now right-sized for v1.
+---
+id: ej5zwoth
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:54Z
+body: |-
+  ## [PASS] Built-in launcher scope reduced to testable minimum
+
+  **What**: yze.4.4 now scopes built-in launchers to nvim, opencode, and a generic shell-command workflow, with tmux and terminal-tab launchers explicitly deferred unless they can be added without platform-specific complexity. This addresses the first-pass concern about over-specified launcher scope creating untestable platform dependencies.
+
+  **Why**: Three launcher types (two specific tools + one generic) is a testable scope. Each can be verified by asserting constructed command shape via the process seam. Platform-specific launchers (tmux session detection, terminal emulator APIs) are correctly deferred.
+
+  **Suggested action**: No change needed.

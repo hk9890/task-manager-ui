@@ -1,0 +1,12 @@
+---
+id: ez1uhphe
+author: Hans Kohlreiter
+created: 2026-04-19T18:49:13Z
+body: |-
+  Confirmed view/model mismatch causing the skip. What: browserItemsFromDependencies() (model.go:427-459) deduplicates IDs across all groups. But renderDependenciesPaneLines() (details.go:269-271) renders the original detail.BlockedBy/Blocks/Related refs which may contain the same ID in multiple groups. The render uses selectedMatched=first-match-only (line 300), so if issue X appears in both 'Blocked by' and 'Related' visually, BrowserItems has it once, selection highlights only the first visual occurrence, and the second visual row is never selectable — appearing as a 'skip'. Why: this is a real bug, not just a user perception issue. The render list and the selectable list are built from different sources. Suggested action: either (a) render only what's in BrowserItems per group (filter each group's refs to the deduped set), or (b) render duplicates but make each occurrence independently selectable. Option (a) is simpler — show each issue exactly once in its first-appearing group.
+---
+id: 9fdkoz25
+author: Hans Kohlreiter
+created: 2026-04-19T18:49:16Z
+body: |-
+  Investigation-first framing is unnecessary given the code analysis. What: the issue is written as 'investigate whether this is real' but the code clearly shows the view/model mismatch. The acceptance criteria are investigation-oriented rather than fix-oriented. Why: this adds an unnecessary investigation phase before implementation. Suggested action: update acceptance criteria to: (1) dependency pane renders each issue ID exactly once in its first-appearing group, (2) every visible issue row is reachable by one-at-a-time traversal, (3) test covers an issue appearing in multiple dependency groups.

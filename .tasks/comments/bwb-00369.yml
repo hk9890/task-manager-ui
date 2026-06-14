@@ -1,0 +1,12 @@
+---
+id: 3daescqm
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:14Z
+body: |-
+  Step 1 (--debug --help) needs a pre-decided contract. Pick now: debug flag IS silently dropped in non-interactive paths. Encode that as the assertion. Drop 'document the decision' from AC — it's escapable.
+---
+id: q22g84xq
+author: Hans Kohlreiter
+created: 2026-05-16T04:37:50Z
+body: |-
+  Implemented. (1) TestRunDebugWithHelpExitsZeroNoDebugLines pins the contract: --debug --help silently drops debug, exits 0, no [bwb-debug] on stderr. (2) TestResolveAndValidateCWDRejectsExecuteOnlyDir + TestRunCWDExecuteOnlyExitsWithCode1 cover EACCES via 0o111 dir (.17 covered 0o000; this adds the --x permission case). (3) TestLoadWithOptions_RelativePathResolvesAgainstProcessCWD documents that callers must absolutize before LoadWithOptions; non-existent relative path returns clear error.

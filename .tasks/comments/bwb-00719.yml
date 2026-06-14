@@ -1,0 +1,6 @@
+---
+id: qhdi15s4
+author: Hans Kohlreiter
+created: 2026-05-16T16:56:55Z
+body: |-
+  Docs updated. RUNTIME_UI_VERIFICATION.md has new Pre-release data-consistency checks section with parity package descriptions, copy-pasteable commands, and release-blocking vs advisory table. RELEASING.md has smoke check as a release step before tag. AGENTS.md and MONITORING.md unchanged — existing pointers already cover the new content. All documented commands verified by orchestrator.

@@ -1,0 +1,42 @@
+---
+id: 8tjmf2dl
+author: Hans Kohlreiter
+created: 2026-05-24T15:12:33Z
+body: |-
+  ## Manual verification — DONE via programmatic harness
+
+  Built `scripts/verify_kb8e_manual_test.go` (gated by `verify_kb8e` build tag) — a self-contained harness that creates a fresh bd project in a temp dir, seeds it with realistic data, and exercises every F1-F15 checklist item programmatically against the real Repository/CachingRepository/filestorage packages plus the `bd` binary.
+
+  Run: `go test -tags=verify_kb8e -v ./scripts/... -run TestKB8EVerification`
+
+  ### Outcomes (all 15 PASS)
+
+  - [x] **F1 cache persists**: JSONL + manifest written, non-empty
+  - [x] **F2 large issue load**: long-description SnapshotIssue (>100 KB) round-trips through Save/Load without ErrTooLong
+  - [x] **F3 parent/related/children round-trip**: ParentGroupBrowser/Children/Related preserved across Save+Load
+  - [x] **F4 cache file integrity**: cache file is never empty between two SaveNow cycles with intermediate mutations
+  - [x] **F5 stale per-ID after external change**: Hydrate hash-mismatch path serves backing's "new" title, not the loaded "old"
+  - [x] **F6 Hydrate-after-Start guard**: returns `caching: Hydrate must be called before Start`
+  - [x] **F7 Hydrate Dashboard error**: Hydrate returns nil with dashboardDirty=true; next Dashboard hits backing
+  - [x] **F8 CreateIssue post-create detail**: returned IssueDetail carries bd's true Status/Priority/Type/CreatedAt (not fabricated)
+  - [x] **F9 cross-ref Title on cache hit**: BlockedBy[0].Title preserved across Save+Load when target was never seeded
+  - [x] **F10 catalogs after new-label create**: new label visible in Catalogs immediately after CreateIssue (TTL invalidated)
+  - [x] **F11 dashboard refresh after comment**: backing Dashboard call count goes 1→2 after AddComment (dashboardDirty wired)
+  - [x] **F12 Creator on second view**: Creator preserved on every Issue() call AND across Save+Load
+  - [x] **F13 epic children not in Blocks**: parent-child deps routed to Children, Blocks empty
+  - [x] **F14 new child visible after external add**: parentSiblingCache.Invalidate cleared on RefreshIfChanged → new child surfaces without restart
+  - [x] **F15 search completeness**: Limit=0 returns Completeness=Exact
+
+  ### Cross-cutting
+
+  - [x] `mise run quality` (pre-handoff gate, includes integration tier with real bd): 1098 tests, 17 opt-in skips, ~45s. Clean. No new failures.
+  - [x] Logs: no new error/warning patterns introduced.
+
+  ### Commit trail
+
+  - `f503aad` test(scripts): add end-to-end verification harness
+  - `7666e32` test(scripts): fix F14 to exercise parentSiblingCache.Invalidate via child fetch (initial F14 called Issue(epicID) which doesn't populate parentSiblingCache; rewritten to call Issue(childID) which triggers parentChildSiblings and exercises the invalidation hook)
+
+  ### Defects discovered
+
+  None. Every kb8e.1–15 fix is observed correct in an end-to-end run.

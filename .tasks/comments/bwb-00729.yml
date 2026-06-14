@@ -1,0 +1,23 @@
+---
+id: x4obuvik
+author: Hans Kohlreiter
+created: 2026-04-07T17:17:13Z
+body: |-
+  ## Acceptance review lacks specific verification steps — currently not executable by a verifier
+
+  **What**: ni1.4 acceptance criteria say "a representative config file successfully overrides editor, launcher, and keybinding settings" — but there's no definition of what "representative" means, no specific config file content to test, and no expected observable behavior to verify.
+
+  **Why**: A verifier needs concrete scenarios. "It works with a config file" is not acceptance testing — it's vibes-based approval. The whole point of an acceptance review task is to be specific enough that a different person can verify without guessing.
+
+  **Suggested action**: Replace with concrete verification steps:
+  1. Create a test config that overrides `editor.command` to `nano`, adds a custom launcher action, remaps `q` to `ctrl+q` for quit, and remaps board navigation from `h/l` to `left/right` only
+  2. Start BWB with this config and verify: editor opens nano, custom launcher appears, original `q` no longer quits but `ctrl+q` does, `h/l` no longer navigate board columns but arrow keys still do
+  3. Create a config with duplicate bindings (`j` mapped to two actions in board context) and verify startup fails with an error message naming the conflict
+  4. Delete the config file and verify BWB starts with all defaults working normally
+  5. Quality gates: `go build ./cmd/bwb`, `go vet ./...`, `go test ./...` all pass
+---
+id: ncvbmptm
+author: Hans Kohlreiter
+created: 2026-04-10T13:19:32Z
+body: |-
+  Verifier PASS. Checked epic tasks closed (ni1.1, ni1.2 superseded/closed, ni1.3, ni1.5), re-ran focused config/keybinding verification plus quality gates, and validated startup warning/error paths with built binary. Artifact: /tmp/ni14-verify-GtinQu

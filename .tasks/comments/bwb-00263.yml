@@ -1,0 +1,6 @@
+---
+id: u21iq35m
+author: Hans Kohlreiter
+created: 2026-04-10T16:37:41Z
+body: |-
+  Trivial fix: add 'var _ launcher.ProcessRunner = (*FakeProcessRunner)(nil)' after the struct declaration at line 22 of process_runner.go. Also add the launcher import. Should take under 2 minutes.

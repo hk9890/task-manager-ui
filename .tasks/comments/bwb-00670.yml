@@ -1,0 +1,24 @@
+---
+id: zqy8j7np
+author: Hans Kohlreiter
+created: 2026-04-22T19:45:56Z
+body: |-
+  External user report shows the epic detail view still renders badly at normal widths when the comments section contains long pasted output. Filed beads-workbench-2shr.6 as a follow-up blocker; acceptance review remains blocked on real-terminal verification.
+---
+id: fb13jzgf
+author: Hans Kohlreiter
+created: 2026-04-23T07:33:00Z
+body: |-
+  Direct manual verification after closing beads-workbench-2shr.6 shows the detail view is still not good enough. The worst overflow seems reduced, but the comment-heavy area remains unreadable/ugly in practice. Filed beads-workbench-2shr.7 as a new blocker for acceptance review.
+---
+id: ndxcwdba
+author: Hans Kohlreiter
+created: 2026-04-23T07:36:50Z
+body: |-
+  Review of beads-workbench-2shr.7 found an unresolved decision that affects the implementation strategy: whether very long pasted-output comments may be elided/collapsed inline for readability. Keeping acceptance review blocked until this is resolved.
+---
+id: 0kxaxjbp
+author: Hans Kohlreiter
+created: 2026-04-23T08:01:59Z
+body: |-
+  Acceptance review passed. Evidence: all child implementation bugs are closed; go test ./internal/ui/details -run TestRenderWideThreeColumnGolden -v passed; go test ./internal/ui/search passed; go test ./... passed; built-binary PTY verification passed for read-only detail navigation plus create/update/comment modal flows via scripts/capture_bwb_screen.py; runtime comment modal capture also confirmed the add-comment action/help path; follow-up defects remain tracked as closed bugs beads-workbench-2shr.6 and beads-workbench-2shr.7.

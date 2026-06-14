@@ -1,0 +1,44 @@
+---
+id: 124niy6j
+author: Hans Kohlreiter
+created: 2026-04-19T19:21:28Z
+body: |-
+  Overall verdict: The plan direction is sound — extending the existing PTY script rather than building a framework is correct. But the current capture script has a reliability hole that will bite you in multi-step flows, and the task breakdown front-loads design without enough constraint on what design produces. See per-task comments for specifics.
+---
+id: 5qbf07uf
+author: Hans Kohlreiter
+created: 2026-04-19T19:21:33Z
+body: |-
+  Reliability concern — settle_wait break logic is fragile for multi-step flows. What: The current capture loop (line 108-122) breaks after settle_wait seconds of silence ONLY after all steps are sent. But for multi-step flows, there is no mechanism to confirm the UI actually processed a keystroke before sending the next one. A 0.2s delay between steps is just a guess — if the app is slow to render, the next key hits the wrong screen. Why: This is the number one thing that will make the tool unreliable. Blind timing between steps means flaky results on slow machines or under load. Suggested action: The extended script needs wait-for-text between steps, not just fixed delays. Steps should be expressible as send KEY then wait until PATTERN appears rather than send KEY after Ns.
+---
+id: 02bp6cij
+author: Hans Kohlreiter
+created: 2026-04-19T19:21:34Z
+body: |-
+  Reliability concern — no per-step timeout. What: The current timeout is global only. If wait-for-text is added, each wait needs its own timeout so you get a clear error like timed out waiting for text X after step 3 instead of generic capture timed out after 10s. Why: Debugging failures without knowing WHICH step hung is painful. Suggested action: Each wait-for-text step should have a per-step timeout defaulting to ~5s, global timeout remains as safety net.
+---
+id: ihcbkci0
+author: Hans Kohlreiter
+created: 2026-04-19T19:21:36Z
+body: |-
+  Reliability concern — polling frequency. What: When adding wait-for-text, the polling loop needs ~50ms select timeout to check the pyte screen frequently. The current settle_wait of 0.25s is fine for final capture but too slow for condition polling. Why: Slow polling means slow tests. Suggested action: Use ~50ms select timeout during wait-for-text phases, only use longer settle_wait for final capture.
+---
+id: 84h7zvjd
+author: Hans Kohlreiter
+created: 2026-04-19T20:07:43Z
+body: |-
+  Epic verification: NOT VERIFIED/CLOSED.
+  Acceptance review found wrapper-flow defects (ypab, lsbv, g2jw) and exploratory create/update modal failure (lgih). Unrelated repository test failure also tracked in aqps.
+  Next: resolve blockers, rerun ay5j.4, then re-check epic closure.
+---
+id: bv0d7khv
+author: Hans Kohlreiter
+created: 2026-04-19T20:10:16Z
+body: |-
+  Review of blocker set: 4 of 6 reported bugs are epic blockers (ypab, lsbv, g2jw, wd3a). They cover wrapper preset reliability and doc alignment — both are core epic deliverables. 2 bugs (lgih, aqps) are unrelated and should be tracked separately. The epic cannot close until all 4 blockers are resolved and ay5j.4 is re-verified. Note: task .3 (docs) was closed prematurely given wd3a — consider whether .3 needs reopening or whether wd3a alone is sufficient to track the gap.
+---
+id: gk9pdwv6
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:20Z
+body: |-
+  Acceptance review rerun passed via beads-workbench-ay5j.4. Toolkit stays small/script-oriented (static steps, waits, checkpoints, before/after wrapper) without framework branching/retries. Separate follow-up bugs remain tracked: aqps, lgih, kq87.

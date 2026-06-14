@@ -1,0 +1,6 @@
+---
+id: dkkrxsf1
+author: Hans Kohlreiter
+created: 2026-04-10T12:55:21Z
+body: |-
+  Implemented remaining configurable keymaps for search/detail/modal. Fixed search query typing so configured shell-pass-through keys no longer suppress normal query text entry, and updated modal bindings to honor configured space/enter aliases. Added config docs/examples for all keybinding contexts. Quality gates pass: go build ./cmd/bwb, go vet ./..., go test ./....

@@ -1,0 +1,20 @@
+---
+id: b20tpok5
+author: Hans Kohlreiter
+created: 2026-04-07T13:34:24Z
+body: |-
+  Implemented fix verification for beads-workbench-no6 and beads-workbench-flr.
+
+  Summary:
+  - no6: SearchIssues now uses bd list --json fallback when query text is empty and WorkState=any, avoiding illegal empty bd search invocation.
+  - flr: CommandRunner now serializes bd CLI execution (mutex) to prevent concurrent embedded backend lock collisions during startup board/search/detail loads.
+
+  Verification performed:
+  - Focused tests: internal/gateway/beads, internal/mode/search, internal/app (fixture-backed tests included).
+  - Broad tests: go test ./... (pass).
+  - Quality gates: go build ./cmd/bwb and go vet ./... (pass).
+  - Runtime checks:
+    * Manual fixture CLI check confirms empty bd search fails with "search query is required" while list/ready/blocked work.
+    * Built /tmp/bwb-verify run against seeded fixture confirms board loads real issues and no startup section error strings (no Error: blocked/ready/list, no exclusive lock).
+
+  Note: scripted terminal input did not reliably switch to search mode in captured alt-screen transcript, so runtime proof for empty-query search path is covered via fixture-backed integration test TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback plus gateway fallback tests.

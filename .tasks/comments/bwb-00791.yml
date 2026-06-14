@@ -1,0 +1,36 @@
+---
+id: ai5ek49d
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:28Z
+body: |-
+  ## No task addresses keyboard bindings, help system, or navigation UX conventions
+
+  **What**: The app shell and browsing tasks specify modes and layout but no task defines the keyboard interaction model — what keys switch modes, what keys navigate lists, what keys trigger actions, whether there's a help overlay or command palette. For a TUI product, the keybinding model is a core UX decision that affects every mode.
+
+  **Why**: Without defined conventions, each mode task will invent its own keybindings. The board might use j/k for navigation while search uses arrow keys. Mode switching might use different keys depending on which agent implemented which task. The product will feel inconsistent. Bubble Tea apps need an explicit keymap strategy.
+
+  **Suggested action**: Add keybinding/navigation conventions to the app shell task (yze.2.3) or create a brief sub-task: "Define keybinding conventions for navigation, mode switching, and action triggers. Document in CODING.md or a shared keymap module." This doesn't need to be exhaustive — just consistent foundations (vim-style nav? arrow keys? both? how do you access actions on the selected issue?).
+---
+id: vd8ew8dx
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:21Z
+body: |-
+  ## MINOR: Detail mode still has ambiguous presentation model — "mode" vs "pane" unresolved
+
+  **What**: The app shell task (yze.2.3) instruction 3 says "Define whether the issue details experience in v1 is a persistent detail pane, a dedicated detail mode, or a hybrid pattern." This is good — it asks the implementer to decide. But then the detail task (yze.3.4) says "Implement the standalone detail presentation model chosen in the app-shell epic" without being able to verify what was chosen, since the decision is made during implementation of another task with no documented output format for the decision.
+
+  **Why**: The board→detail navigation flow is the product's primary user path. If the app shell agent chooses "pane" but documents it poorly, and the detail agent assumes "mode," the two implementations won't compose. The decision needs to be surfaced in a way both agents can reference — code contracts, CODING.md, or an explicit acceptance criterion that names the chosen model.
+
+  **Suggested action**: Add to yze.2.3 acceptance criteria: "The v1 detail presentation model (pane vs. mode vs. hybrid) is documented in code or docs so the detail implementation task (yze.3.4) can reference the decision." This is a documentation handoff, not a design change.
+---
+id: wwkrxh1j
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:05Z
+body: |-
+  ## [PASS] Shell layout task now addresses keybinding conventions and detail presentation model
+
+  **What**: The updated yze.2.3 includes: (1) explicit requirement to choose the detail presentation model (pane vs mode vs hybrid), (2) baseline keybinding/navigation conventions, (3) acceptance criteria requiring the detail model is "explicit and implemented consistently" and keybindings are "implemented and documented."
+
+  **Why**: The first review flagged both the detail-mode ambiguity and the missing keybinding conventions. Both are now explicitly required as decisions in the app shell task.
+
+  **Suggested action**: None. These critical UX decisions are now properly scoped.

@@ -1,0 +1,12 @@
+---
+id: klynbvtj
+author: Hans Kohlreiter
+created: 2026-05-16T06:18:43Z
+body: |-
+  Body rewritten (reviewer F10/F11/F12): version-pin convention now matches existing .golangci-version (leading v); invocation uses $(cat .gotestsum-version) with no literal v prefix; doc-update paragraph removed (owned by i1th.6); AC bound to concrete signals (exit code, DONE line, Failures section).
+---
+id: 21gv7luu
+author: Hans Kohlreiter
+created: 2026-05-16T06:39:31Z
+body: |-
+  .gotestsum-version created at v1.13.0 (2025-09-11 stable, leading-v matches .golangci-version convention). Focused run exits 0 with DONE summary; deliberate failure exits 1 with === Failed listing. go.mod/go.sum clean (go run, not imported). File pending bundle-commit.

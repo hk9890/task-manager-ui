@@ -1,0 +1,6 @@
+---
+id: gpwl6fr7
+author: Hans Kohlreiter
+created: 2026-05-16T16:08:42Z
+body: |-
+  Fixed. Wired CountIssues(status=closed) as 4th parallel gateway call on board Init/reload; added ClosedTotal to dashboard.Inputs; composer now sets Done.Total=ClosedTotal with TotalIsExact reflecting whether visible list covers the full population. End-to-end verified against this repo: Done.Total=452 Done.Issues=50 TotalIsExact=false (real bd count --status closed = 452). Full quality gate clean (658 unit + 698 integration, 0 lint).

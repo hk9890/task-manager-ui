@@ -1,0 +1,34 @@
+---
+id: gx889o4v
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:13Z
+body: |-
+  ## App-shell tests (yze.2.4) mention "mode switching" and "toast behavior" but don't specify how to test them without a terminal
+
+  **What**: Task beads-workbench-yze.2.4 says "Add tests for top-level mode switching" and "Add tests for loading/error/toast behavior." These are visual behaviors. The task says "Keep tests deterministic and independent from fragile terminal-only integration where possible" — which is the right instinct but gives no concrete technique.
+
+  **Why**: Mode switching and toast behavior are Bubble Tea state transitions that produce View() output. Without specifying the technique (construct model → send key messages → assert on state + View output), an implementer may try to test these by running the binary and scraping output, or skip the visual verification entirely. The phrase "where possible" is a hedge that permits exactly the gap we're trying to avoid.
+
+  **Suggested action**: Replace "where possible" with concrete direction:
+  - Mode switching tests: construct root model, send mode-switch key, assert model state reflects new mode AND View() output matches golden file
+  - Toast/error tests: inject error from fake gateway, assert toast message appears in View() output
+  - Loading tests: assert loading indicator appears in View() when gateway returns are pending (use channel-based fake)
+  - Remove the hedge — these tests MUST be terminal-independent, not "where possible"
+---
+id: ikfaybmg
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:45Z
+body: |-
+  ## [MINOR] Task still says "for example: teatest, golden output tests, model-level message driving" — punt risk on technique
+
+  **What**: The task's instruction 1 presents the TUI testing approach as a choice: "for example: teatest, golden output tests, model-level message driving, or an equivalent fully automated harness." This non-committal language in a task whose entire purpose is to ESTABLISH the standard creates a risk that the implementer picks a minimal approach (e.g., model-level assertions only, no golden files) that satisfies the letter of the task but leaves View() output unverified.
+
+  **Why**: The downstream tasks (yze.2.4, yze.3.5, yze.4.5) say things like "Automated board tests pass without manual UI inspection" and "Automated detail tests cover representative rendering states without manual UI inspection." If the harness doesn't include golden file comparison, these criteria can be satisfied with model state assertions alone — which proves the state machine works but NOT that the rendered output is correct. The board could render garbage and the tests would pass.
+
+  **Suggested action**: Already raised as a separate comment on this task. Reinforcing here: the technique must include View() output verification (golden files or equivalent), not just model state assertions.
+---
+id: am72y1h4
+author: Hans Kohlreiter
+created: 2026-04-05T15:28:47Z
+body: |-
+  Verifier PASS: app-shell coverage now uses the shared TUI harness plus golden View() verification for startup, mode switching, selected-issue transitions, and loading/error/toast behavior. Verified with go test ./internal/app -count=1 -v and go test ./... -count=1.

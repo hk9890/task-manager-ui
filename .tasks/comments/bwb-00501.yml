@@ -1,0 +1,42 @@
+---
+id: jd7jc7jb
+author: Hans Kohlreiter
+created: 2026-05-17T22:48:06Z
+body: |-
+  -
+---
+id: 8tfw2nfh
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:52Z
+body: |-
+  ## Audit report — Read-detail (ShowIssue)
+
+  ### 1. Contract spec
+  Method at interface.go:363-405. Pre: ctx non-nil; IssueID non-empty/whitespace → ValidationFailed before bd. Post: Summary non-empty fields; Description may be ""; ClosedAt zero when not closed; CloseReason "" when not closed, "Closed" literal when closed without --reason; BlockedBy/Blocks from Dependencies/Dependents with type=blocks; Related merged from related/relates-to in Dependencies+Dependents+top-level; ParentGroupBrowser populated via second bd show (cached per gateway); Comments populated; Comments/BlockedBy never nil (empty slice). Errors: ValidationFailed, CommandFailed (unknown ID), DecodeFailed. Quirks: bd show omits "description" when unset; unknown ID exits 1; bd show --json wraps single issue in JSON array.
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.RUZGudlBHh | Log: /tmp/beads-workbench-aww9-audit.log
+  13 issues seeded covering all postcondition variants.
+
+  - All clauses VERIFIED except top-level "related" merge — see DRIFT below.
+  - Array-wrapping confirmed; description-key omission confirmed; close_reason="Closed" literal confirmed; close_reason="fixed" preserved; BlockedBy from Dependencies type=blocks confirmed; Blocks from Dependents type=blocks confirmed; Related merged from Dependencies+Dependents type=related confirmed; parent-sibling fetch direction confirmed; Comments populated; unknown ID → exit 1 → CommandFailed; Comments/BlockedBy never nil (make with len=0).
+  - DRIFT (addressed via beads-workbench-8k27): Across all 13 bd show outputs, no top-level "related" key ever appeared. The bdIssuePayload.Related field is structurally present in decoder but never populated by bd 1.0.4. Defensive code handles empty input correctly. interface.go clause clarified to note defensive-only nature.
+
+  ### 3. Test-coverage verification
+  - Most clauses COVERED: empty IssueID validation, description-absent, close_reason populated when set, close_reason="" when not closed, BlockedBy from Dependencies, Blocks from Dependents, Related merged from all three sources, ParentGroupBrowser, argv primary + parent-sibling, parent-sibling caching, unknown ID → CommandFailed, Comments/BlockedBy never nil.
+  - GAP: close_reason="Closed" literal default (bd default when no --reason) — addressed via beads-workbench-82lm (TestGatewayShowIssueDecodesDefaultCloseReason + new fixture show_closed_default_reason.json added).
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/...
+  - Result: PASS.
+  - Comments/BlockedBy initialized as empty slices (not nil): FAKE MATCHES (post 2026-05-16 drift fix).
+  - Most clauses FAKE MATCHES.
+  - DIVERGES (FIXED via beads-workbench-eifk): FakeBeadsGateway.CloseIssue did NOT set CloseReason. Fix: fake now sets CloseReason to input.Reason or "Closed" default.
+
+  ### Drift findings (all closed)
+  - 82lm (P3): ShowIssue close_reason="Closed" test case. CLOSED.
+  - eifk (P2): FakeBeadsGateway.CloseIssue CloseReason. CLOSED.
+  - 8k27 (P3): top-level Related contract clause clarified as defensive-only. CLOSED.
+
+  ### Summary
+  - Total clauses: 16 | Verified: 13 | Drift: 1 (resolved) | Gaps: 1 (resolved) | Diverges: 1 (resolved)

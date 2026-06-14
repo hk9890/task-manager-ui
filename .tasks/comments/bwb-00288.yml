@@ -1,0 +1,6 @@
+---
+id: 5exreutd
+author: Hans Kohlreiter
+created: 2026-05-28T10:43:27Z
+body: |-
+  Fixed. Updated internal/bd/doc.go lines 37-39: stale warning named the wrong package (`internal/repository/beads`). Real constraint: `fakes` imports `internal/bd` itself, so only package-internal (`package bd`) test files are blocked from importing fakes — external (`package bd_test`) files are fine. Also fixed stale `package beads` reference to `package bd` on line 37. mise run quality:fast passes.

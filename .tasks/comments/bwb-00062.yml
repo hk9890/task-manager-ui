@@ -1,0 +1,6 @@
+---
+id: o8s23uqn
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:43Z
+body: |-
+  Simplification question: could spi.1 and spi.2 be a single task? What: spi.1 creates the renderer package, spi.2 wires it into the detail view. These are the only two implementation tasks and they will almost certainly be done by the same person in the same session. Why: splitting renderer creation from renderer integration adds coordination overhead (acceptance review sees partial integration), and the renderer API cannot be validated without a consumer. A renderer that is only tested in isolation might have the wrong API shape. Suggested action: consider merging spi.1 and spi.2 into a single task 'Add markdown rendering to issue detail viewing' that delivers both the package and the integration. The acceptance review stays separate.

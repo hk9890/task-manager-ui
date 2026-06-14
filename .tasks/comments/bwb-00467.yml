@@ -1,0 +1,6 @@
+---
+id: 9ych374p
+author: Hans Kohlreiter
+created: 2026-05-23T12:23:16Z
+body: |-
+  Closing as won't-do (per user direction 2026-05-23). We will not file an upstream issue against gastownhall/beads for the ReadyExplain stored-blocked-no-dep exclusion. The downstream workaround (parallel status=blocked query + mergeNotReadyIssues cross-dedup in internal/mode/board/model.go) is accepted as-is. F1's concern (undocumented workaround) remains technically open but is being deferred — there is no plan to revisit it locally either.

@@ -1,0 +1,6 @@
+---
+id: ueac0czf
+author: Hans Kohlreiter
+created: 2026-05-24T08:14:41Z
+body: |-
+  Done. Added 'Caching backend diagnostics' section to docs/MONITORING.md documenting all 6 caching log lines: 4 startup/shutdown (cmd/bwb/main.go) + 2 cache resolver (cache_resolver.go from kxci.8 — orchestrator missed these in original spec, found and documented). 3 silent-by-design conditions also noted (Hydrate ErrSchemaMismatch/ErrNotExist, tick vcStatusFunc errors, periodic SaveNow errors — both with in-code TODOs for future logging). Purely additive. fmt:check goimports drift on cache_resolver.go (pre-existing from kxci.8) fixed in orchestrator pass.

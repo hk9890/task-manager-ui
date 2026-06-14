@@ -1,0 +1,6 @@
+---
+id: 053fn6xn
+author: Hans Kohlreiter
+created: 2026-05-24T01:24:53Z
+body: |-
+  Argv cache deleted. internal/gateway/beads/cache.go (182 lines) + cache_test.go (482 lines) removed. runner.go cache plumbing stripped (cache field, bootstrap, fast-path, logCacheHit, set/invalidate). TestCommandRunnerLogsCacheHit removed. docs/MONITORING.md + scripts/analyze_dashboard_perf.py updated to document the removal (hit-tracking code retained for backward compat with pre-8pxi.7 logs). Perf cold-load: 8pxi.5 baseline 3.31s → post-deletion 3.20s/3.22s (two runs) — ~3% improvement; cache was NOT load-bearing on cold-load (all initial calls were misses anyway, fast-path added overhead). Within ≤5.0s tolerance. mise run quality green (1123 unit + 1296 integration tests, 0 lint), fmt:check + scripts:check green.

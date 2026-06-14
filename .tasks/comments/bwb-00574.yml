@@ -1,0 +1,6 @@
+---
+id: s3qu22vs
+author: Hans Kohlreiter
+created: 2026-05-16T16:47:03Z
+body: |-
+  Done. 8-query matrix × 3 datasets, all pass. No count or order divergence between gateway SearchIssues and bd search/ready/blocked. Note: WorkStateReady/WorkStateBlocked queries route through bd ready/blocked with in-memory filtering (correct design). AICM .beads mtimes unchanged.

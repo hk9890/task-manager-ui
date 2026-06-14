@@ -1,0 +1,54 @@
+---
+id: 484zxy0q
+author: Hans Kohlreiter
+created: 2026-05-17T22:47:48Z
+body: |-
+  -
+---
+id: du9ev0im
+author: Hans Kohlreiter
+created: 2026-05-17T23:19:51Z
+body: |-
+  ## Audit report — Read-lists (ListIssues, ReadyIssues, BlockedIssues, Query)
+
+  ### 1. Contract spec
+  Methods at interface.go:235,257,287,319. Standard sort-direction translation (DESC default, --reverse for ASC), closed-exclude default for ListIssues, dependency-blocked vs stored-blocked distinction for BlockedIssues, ReadyIssues "ready" = no dep blockers (graph-defined), Query empty-expr → ErrorCodeValidationFailed before bd call. KNOWN LIMITATION: ReadyIssues silently capped at 100 items without --limit (faif.5 audit).
+
+  ### 2. Real-bd verification (bd 1.0.4)
+  Tmp workspace: /tmp/tmp.YxiJqI6tmt | Log: /tmp/beads-workbench-oyb2-audit.log
+  Seed: 5 issues spanning open/in_progress/blocked/closed/pinned + dep chain (audit-1gf blocks audit-9bc).
+
+  **ListIssues:** All clauses VERIFIED — closed-exclude default, --status csv, sort DESC default, --reverse for ASC, --limit caps + stderr-only warning, labels=null (NoneType) when absent, no deps/desc fields populated. Assignee→owner fallback VERIFIED structurally via toIssueSummary.
+
+  **ReadyIssues:**
+  - DRIFT (now resolved via beads-workbench-uij1): Contract (interface.go:247-249) claimed in_progress issues with no blockers appear in bd ready. Real bd 1.0.4 EXCLUDES in_progress. `bd ready --help`: "Show ready work (open issues with no active blockers). Excludes in_progress, blocked, deferred, and hooked issues." Confirmed: audit-5ze (in_progress, no deps) ABSENT. Doc fix landed.
+  - Other clauses VERIFIED.
+  - 100-cap CONFIRMED STILL PRESENT (known limitation, not refiled).
+
+  **BlockedIssues:** All clauses VERIFIED — dep-blocked only (not stored=blocked), blocked_by as []string of bare IDs, non-empty IDs.
+
+  **Query:** All clauses VERIFIED — empty-expr validation, IncludeClosed -a redundant for explicit status=closed, sort-direction translation.
+
+  ### 3. Test-coverage verification
+  - ListIssues sort-direction translation: COVERED by TestGatewaySortDirectionDescendingEmitsNoReverseFlag.
+  - ReadyIssues in_progress-included: GAP (and DRIFTED) → resolved via uij1.
+  - 100-cap: GAP (no test) — known limitation, not addressed.
+  - Labels nil-not-empty for unlabeled: GAP → addressed in beads-workbench-68xv.
+  - BlockedIssues stored-blocked-no-dep absent: GAP → addressed in beads-workbench-68xv.
+  - Most other clauses COVERED via RunReadContract + targeted unit tests.
+
+  ### 4. Fake parity verification
+  - Command: go test ./internal/gateway/beads/contract/...
+  - Result: PASS (all 46 sub-tests).
+  - ListIssues: sort-direction NOT simulated (fake returns insertion order) — doc added via beads-workbench-4xum; assignee→owner fallback NOT implemented in fake (acceptable stub).
+  - ReadyIssues fake INCIDENTALLY MATCHES REAL BD (seeds only open) — contract doc was the drifted source.
+  - Query fake DIVERGES on empty-expr validation → FIXED via beads-workbench-tkgq; does not implement sort or IncludeClosed (acceptable stub).
+
+  ### Drift findings (all closed)
+  - uij1 (P2): ReadyIssues contract doc — bd ready EXCLUDES in_progress. FIXED.
+  - 68xv (P3): Labels-nil contract test + stored-blocked-no-dep fixture. FIXED.
+  - tkgq (P3): Fake Query empty-expr validation. FIXED.
+  - 4xum (P4): Doc fake sort-direction not simulated. FIXED.
+
+  ### Summary
+  - Total clauses: 21 | Verified: 17 | Drift: 1 (resolved) | Gaps: 4 (resolved) | Diverges: 3 (resolved + acceptable stubs)

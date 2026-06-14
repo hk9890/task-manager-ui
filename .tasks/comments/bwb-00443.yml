@@ -1,0 +1,6 @@
+---
+id: 4tknz2ks
+author: Hans Kohlreiter
+created: 2026-05-29T11:12:53Z
+body: |-
+  Implemented option (a): renamed the Metadata-pane UI label "Creator" -> "Owner" in internal/ui/details/metadata.go so the label matches bd's `owner` semantics (the value was always the owner email, never created_by). Updated metadata_test.go field-order assertion. Regenerated goldens full.golden + compact_closed_duration.golden — diffs are label-only. Domain model and lean_reads.go untouched (no created_by field added). go test ./internal/ui/details/... passes; full suite + quality:fast green.

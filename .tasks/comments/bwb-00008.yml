@@ -1,0 +1,101 @@
+---
+id: c73wijx9
+author: Hans Kohlreiter
+created: 2026-04-06T14:50:37Z
+body: |-
+  Planned execution scope under this epic:\n- beads-workbench-7qz — Define triage-oriented dashboard grouping and startup focus behavior\n- beads-workbench-u5s — Redesign board rows and metadata for compact scanability\n- beads-workbench-j34 — Rebalance board and detail pane for triage-first browsing\n- beads-workbench-y3x — Broad dashboard redesign bug folded into this epic\n- beads-workbench-3tm — Startup focus stability bug folded into this epic\n- beads-workbench-9oo — Acceptance Review: Dashboard UX redesign\n\nNote: bd does not allow this epic to depend directly on tasks/bugs, so the relationship is documented here and enforced through the acceptance review task dependencies.
+---
+id: 0vrzllj5
+author: Hans Kohlreiter
+created: 2026-04-06T15:34:53Z
+body: |-
+  ## Epic scope does not address the user's #1 priority: 4-column Perles-style dashboard as the startup screen
+
+  **What**: The user explicitly stated that on opening the app they should see a "proper dashboard immediately" with "the 4 columns of the Perles-style dashboard." The epic's goals mention "make the board the primary high-value browsing surface" and "revisit default lane/group strategy" — but nothing in the epic or its children specifies what those 4 columns actually are or commits to a specific information architecture. The current built-in provider has Ready/In Progress/Blocked/Recent Work — is that the right 4? The epic doesn't say.
+
+  **Why**: An implementer reading this epic will redesign row density and pane balance without knowing whether they're building the right dashboard in the first place. The column definitions are the product decision — everything else (density, pane balance, row rendering) is styling on top. Getting the styling right on the wrong columns wastes the entire effort.
+
+  **Suggested action**: Add an explicit success criterion to the epic: "The default dashboard shows exactly N columns with [specific semantics], matching the user's stated Perles-style layout priorities." If the exact 4 columns aren't decided yet, make that a blocking decision before implementation starts — don't let the implementer guess.
+---
+id: kjy9ck9v
+author: Hans Kohlreiter
+created: 2026-04-06T15:34:56Z
+body: |-
+  ## The detail pane requirement is ambiguously specified — "small summary" vs "no pane" vs "enter-only" needs a decision
+
+  **What**: The user said: "Full detail belongs behind an explicit enter/detail action; any selected summary on the main screen should be very small (2-3 lines max) if it exists at all." The epic says "rebalance board vs detail presentation." Task j34 says "reduce or simplify the persistent detail pane if it harms board density." None of these commit to one of the three possible designs: (A) no persistent pane at all on the main screen, (B) a 2-3 line inline summary beneath the board, or (C) a narrow sidebar. The current code allocates 32% width to a persistent detail sidebar (browseBoardRatio = 0.68). The user seems to want something radically different from that.
+
+  **Why**: The implementer for j34 will have to pick a design with no explicit product direction. If they pick (C) with a smaller sidebar, the user will likely reject it — the user said "if it exists at all." This ambiguity will cause rework.
+
+  **Suggested action**: Before j34 starts, the epic should commit to a concrete answer: Is the persistent detail sidebar eliminated, replaced with a 2-3 line inline snippet, or merely reduced? Encode that decision as a specific acceptance criterion.
+---
+id: 12dahtrp
+author: Hans Kohlreiter
+created: 2026-04-06T15:34:59Z
+body: |-
+  ## Epic success criteria are subjective and un-checkable
+
+  **What**: The success criteria are: "Child tasks complete," "Existing UI bugs are resolved or folded," and "Acceptance review passes with real PTY/runtime validation." The first two are mechanical checks. The third defers all quality judgment to the acceptance review task (9oo), which itself has subjective criteria like "feels polished and intentional" and "materially closer to Perles-level triage usability."
+
+  **Why**: These criteria don't provide a measurable pass/fail bar. "Materially closer" and "feels polished" are impossible for an automated or independent reviewer to evaluate consistently. The acceptance reviewer will have to invent their own standards.
+
+  **Suggested action**: Add at least two concrete measurable criteria to the epic:
+  1. A specific issues-per-screen density target (e.g., "at 120x34, the default board shows at least N visible issue rows across all columns combined")
+  2. A specific layout assertion (e.g., "the board occupies at least 90% of terminal width when detail is not open," or "no persistent sidebar in browse mode")
+---
+id: ri1ew2f8
+author: Hans Kohlreiter
+created: 2026-04-06T15:37:26Z
+body: |-
+  ## Recommended task execution order and simplification
+
+  **What**: The current plan has 3 implementation tasks + 2 bugs + 1 acceptance review, all with overlapping scope and no explicit ordering among the implementation tasks. Here's the recommended execution order and simplification:
+
+  **Execution order:**
+  1. **7qz first** (grouping + startup focus) — This defines WHAT the dashboard shows. Everything else is how it looks. Also subsumes bug 3tm entirely.
+  2. **j34 second** (remove sidebar, full-width board) — This defines the LAYOUT. Must happen before row density work because row density depends on knowing the available column width (full-width board vs sidebar-reduced board).
+  3. **u5s third** (row rendering) — This refines the PRESENTATION within the layout established by j34. Depends on knowing the Row struct needs Type/Status (discovered during j34/7qz work).
+  4. **9oo last** (acceptance) — Already correctly positioned.
+
+  **Simplification:** Close bugs y3x and 3tm as folded into the tasks. This reduces 6 items to 4 (3 tasks + 1 acceptance). Every finding in the bugs is explicitly covered by a task.
+
+  **Why**: Without explicit ordering, an implementer might start with u5s (row rendering), optimize for 2/3-width columns, then discover that j34 removes the sidebar and invalidates all their density work. The ordering prevents rework.
+
+  **Suggested action**: Document this order in the epic description or as a blocking dependency chain: 7qz → j34 → u5s → 9oo.
+---
+id: bod9cbe2
+author: Hans Kohlreiter
+created: 2026-04-06T15:37:36Z
+body: |-
+  ## Missing: a testing infrastructure task for multi-width golden validation
+
+  **What**: Multiple tasks (u5s, j34, 9oo) require golden tests at representative terminal sizes and PTY/runtime validation. But the current test infrastructure doesn't have:
+  1. A parameterized golden test helper that runs the same board state at multiple widths (80, 120, 180)
+  2. An embedded-fixture-backed board golden test (the existing e2e test only checks string presence, not layout)
+  3. A density assertion helper (e.g., "count visible issue rows in rendered output")
+
+  The user explicitly said: "The implementation plan must ensure strong testing, including real runtime/render/layout validation — not only model-state tests."
+
+  **Why**: Without this infrastructure, each task implementer will either skip the multi-width/PTY tests (because there's no pattern to follow), or each will reinvent their own ad-hoc approach (creating inconsistent test quality). The user specifically called this out because they don't trust model-state-only tests.
+
+  **Suggested action**: Either (a) add a prerequisite task before u5s that builds the multi-width golden test harness and embedded-fixture board golden test, or (b) add this infrastructure work as an explicit instruction in u5s (since u5s is where golden tests are most heavily exercised). I recommend (a) — a small focused task that establishes the test pattern, so u5s/j34/9oo can all use it consistently.
+---
+id: eve04m55
+author: Hans Kohlreiter
+created: 2026-04-06T15:37:45Z
+body: |-
+  ## No task addresses the header/footer chrome that steals vertical space from the board
+
+  **What**: Looking at the current app model.go View(), the rendered output includes: a title line, a tab line, 1-2 help lines, a blank line, the body, a blank line, a footer with selection text + loading state + optional narrow-view hint. That's ~6-8 lines of chrome before and after the board. At 34 rows terminal height, that leaves only ~26 rows for the board — and the user wants maximum density.
+
+  The user said they want to "see a proper dashboard immediately" and use "the full terminal size effectively." None of the tasks address reducing the header/footer overhead.
+
+  **Why**: You can optimize row density all you want (u5s), but if 20% of vertical space is consumed by chrome, the dashboard still won't feel like Perles. This is a gap in the plan.
+
+  **Suggested action**: Either fold this into j34 (since j34 owns the overall layout balance) with an explicit instruction: "Review and minimize header/footer vertical footprint — the board body should get maximum vertical space," or create a small additional task for it.
+---
+id: rc7wehjl
+author: Hans Kohlreiter
+created: 2026-04-06T15:39:25Z
+body: |-
+  Reviewer-driven execution order:\n1. beads-workbench-1ri — build multi-width dashboard UX test harness and runtime checks\n2. beads-workbench-7qz — define explicit 4-column triage grouping and stable startup focus (folding beads-workbench-3tm)\n3. beads-workbench-j34 — remove large main-screen selected sidebar and rebalance board/detail\n4. beads-workbench-u5s — redesign rows/metadata for compact scanability\n5. beads-workbench-9oo — acceptance review\n\nUser-priority constraints:\n- opening the app must immediately show a proper 4-column dashboard\n- the board should use the full terminal effectively\n- full detail belongs behind enter/detail mode\n- any main-screen selected summary must be at most a short 2-3 line summary

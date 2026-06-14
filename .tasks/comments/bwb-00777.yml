@@ -1,0 +1,86 @@
+---
+id: l4315u5i
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:53Z
+body: |-
+  ## Missing docs/TESTING.md — test strategy lives nowhere persistent
+
+  **What**: This task creates the first real test infrastructure (fixtures, seams, failure-case coverage) and acceptance criterion 4 says "Any known command-surface limitations are documented." But there is no mention of creating `docs/TESTING.md` or documenting the test harness, fixture approach, or running conventions anywhere agents can find them later.
+
+  **Why**: After this task, the project will have a non-trivial test setup: fixture files in `testdata/`, command runner test seams, JSON decoding tests. Three more test tasks follow (yze.2.4, yze.3.5, yze.4.5), each adding different test flavors. Without a central testing doc, every future agent will reverse-engineer the test approach from code. Worse, they may introduce inconsistent patterns because nothing documents the intended approach.
+
+  **Suggested action**: Add an acceptance criterion: "A `docs/TESTING.md` exists documenting the test harness design, fixture conventions, how to run tests, and the intended approach for gateway vs. UI vs. integration tests." This is the natural moment — the person writing the first tests knows the design choices.
+---
+id: d3x7i4ri
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:13Z
+body: |-
+  ## Task 6 (test verification) substantially overlaps with Tasks 3, 4, and 5 test scope
+
+  **What**: Tasks 3 (command runner), 4 (read ops), and 5 (write ops) all include `*_test.go` in their "Files to Modify" and have test-related acceptance criteria. Task 6 then adds another pass of "test command building, test JSON decoding, test failure cases, test representative read and write flows." The scope of task 6 is almost entirely a re-statement of the test expectations already distributed across tasks 3-5.
+
+  **Why**: An agent implementing task 4 will add tests for read operations (its acceptance criteria require it). Then an agent implementing task 6 will re-examine the same code and either (a) find the tests already exist and have nothing meaningful to add, or (b) add redundant tests that duplicate coverage. Task 6's unique contribution — "document known limitations" — is a single deliverable buried in a full test-task wrapper.
+
+  **Suggested action**: Simplify task 6 to focus on what tasks 3-5 explicitly don't cover: (1) cross-cutting failure mode tests (e.g., bd binary not found, permission errors, network timeouts), (2) documenting known command-surface limitations, and (3) a verification pass that confirms test coverage from tasks 3-5 meets the epic's acceptance bar. Alternatively, remove task 6 entirely and distribute its unique items (limitation docs, cross-cutting failure tests) into tasks 3-5. This reduces the epic from 7 tasks to 6 without losing coverage.
+---
+id: tu9i4hgs
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:37Z
+body: |-
+  ## Gateway test task (omd.6) is a good idea but comes too late — tests should be required in implementation tasks
+
+  **What**: Task beads-workbench-omd.6 ("Verify gateway behavior with tests and fixture coverage") is a standalone test task that runs after omd.4 (reads) and omd.5 (writes). However, omd.4 and omd.5 each say tests should exist ("create/update tests" in Files to Modify) but their acceptance criteria don't require passing tests. The test burden is deferred to omd.6.
+
+  **Why**: Deferring all test coverage to a single task after implementation creates a risky pattern: the implementing agent closes omd.4 and omd.5 with "tests exist" (files were created) but the tests may be incomplete, trivial, or wrong. Then omd.6 becomes "verify and fill gaps" which is actually "write most of the tests." This is a common planning antipattern where test tasks become afterthoughts. In practice, omd.6 will likely just run `go test ./...` and confirm the tests from omd.4/omd.5 pass.
+
+  **Suggested action**: Strengthen omd.4 and omd.5 acceptance criteria to include:
+  - "Tests for command construction, JSON decoding, and failure handling for each implemented operation pass"
+  - Then reframe omd.6 as focused on cross-cutting concerns: fixture data, edge cases, known-limitation documentation, and integration-level gateway tests that exercise the real `bd` CLI against a fixture repo
+---
+id: tesj4b27
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:58Z
+body: |-
+  ## [MINOR] docs/TESTING.md creation timing has a potential race between omd.6 and yze.5
+
+  **What**: Task omd.6 says "Create or update docs/TESTING.md if gateway-specific harness/fixture usage needs to be documented there." Task yze.5 says "Create docs/TESTING.md" as a primary deliverable. The dependency graph shows omd.6 does NOT depend on yze.5, and yze.5 does NOT depend on omd.6. They are independent in the dependency chain. omd.7 (Phase 1 acceptance) depends on omd.6 and requires "docs/TESTING.md documents the implemented foundation test strategy." But yze.5 blocks yze.2.4, yze.3.5, and yze.4.5 — not omd.6 or omd.7.
+
+  **Why**: This creates an ambiguous ownership question: does omd.6 create the initial TESTING.md (since omd.7 verifies it exists), or does yze.5 create it? If an agent executes omd.6 before yze.5, they will create a minimal TESTING.md to satisfy omd.7's acceptance gate. Then yze.5 will either need to merge into or overwrite it. Conversely, if yze.5 runs first, omd.6's "create or update" is fine. The execution order is unspecified.
+
+  **Suggested action**: Clarify one of two approaches: (a) Make omd.6 the initial creator of docs/TESTING.md for gateway-specific content, and yze.5 the task that expands it with TUI testing strategy. This is the most natural flow since omd is earlier in the logical execution order. Or (b) add a dependency: omd.6 depends on yze.5, ensuring the TESTING.md framework exists before gateway test docs are added. Option (a) is simpler — just clarify in yze.5 that it should "create or expand" docs/TESTING.md rather than "create" (implying from scratch).
+---
+id: lujd9xkh
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:28Z
+body: |-
+  ## [MINOR] omd.6 still overlaps substantially with omd.3/omd.4/omd.5 test scope
+
+  **What**: The first-pass review noted that omd.6 (gateway test verification) overlaps with the test deliverables already required by omd.3, omd.4, and omd.5. The updated plan strengthened inline test requirements in those tasks but did not narrow omd.6's scope. omd.6 still says "Add focused automated tests for command construction across representative read and write flows" and "Add decoding tests for representative payloads" — work that omd.3/omd.4/omd.5 already require. Meanwhile, omd.6 now depends on omd.8 (architecture guardrails), which is new and correct.
+
+  **Why**: The overlap creates ambiguity about where the "real" test coverage lives. If omd.4 writes read-operation tests (as its criteria require), then omd.6 either finds those tests already exist (making it a verification-only pass) or adds redundant tests. The task should be reframed to focus on what the implementation tasks explicitly DON'T cover.
+
+  **Suggested action**: Narrow omd.6's scope to: (1) cross-cutting verification that `go test ./...` passes for the entire gateway, (2) architecture guardrail tests are running and passing, (3) cross-cutting failure modes not covered by individual tasks (bd binary missing, permission errors), (4) known-limitation documentation, (5) docs/TESTING.md creation. Remove the redundant "command construction" and "decoding" scope that omd.3/omd.4/omd.5 already own.
+---
+id: hxy4vf8q
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:31Z
+body: |-
+  ## PASS: omd.6 depends on omd.8 — guardrails exist before test verification
+
+  **What**: `beads-workbench-omd.6` (gateway tests) depends on `beads-workbench-omd.8` (architecture guardrails). This means the automated import-checking guardrails will be in place before the test verification task runs.
+
+  **Why**: This is a strong ordering choice. The test verification task can then include the guardrail checks as part of its verification — confirming that no forbidden imports snuck through during omd.3/omd.4/omd.5 implementation. The guardrails become part of the test suite, not a separate manual step.
+
+  **Suggested action**: No change needed. This is correctly structured. The guardrail task should be made to depend on omd.1 (noted separately) but its position as a blocker for omd.6 is correct.
+---
+id: i2jyhehk
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:32Z
+body: |-
+  ## [MINOR] omd.6 still overlaps with omd.3/4/5 test scope but has enough unique deliverables
+
+  **What**: omd.6 (gateway test verification) still includes instructions that overlap with omd.3, omd.4, and omd.5 test requirements. However, the updated task now focuses on "cross-cutting gateway verification not already required by the implementation tasks" and has unique deliverables: docs/TESTING.md creation, known-limitations documentation, and dependency on omd.8 (guardrails).
+
+  **Why**: This is MINOR because: (1) the "cross-cutting" framing differentiates it enough, (2) docs/TESTING.md is a concrete unique output, and (3) a reasonable implementer will focus on gaps rather than duplicating prior work.
+
+  **Suggested action**: Acceptable as-is. No change needed for execution readiness.

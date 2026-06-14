@@ -1,0 +1,6 @@
+---
+id: fi5phyvd
+author: Hans Kohlreiter
+created: 2026-04-19T20:09:55Z
+body: |-
+  Review: Straightforward doc/parser mismatch. Acceptance criteria are fine — fix either the help text or the parser, not both. Verdict: EPIC BLOCKER but trivial — a 1-line fix. Should take <5 minutes. Fix it alongside ypab/lsbv since you'll be in the same files.

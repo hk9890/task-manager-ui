@@ -1,0 +1,6 @@
+---
+id: ydlqmuwk
+author: Hans Kohlreiter
+created: 2026-05-16T13:27:04Z
+body: |-
+  Verifier report: 22 PASS / 0 FAIL / 3 DEFERRED. All locally-testable ACs pass: bwb --version shows v0.4.0-36-gd9f662c-dirty (commit + date), Go 1.26.3, -race active in all 4 test tasks, fmt:check + coverage gate verified pass/fail, CI matrix correctly configured + mise-action@v4, .goreleaser.yaml validated by goreleaser check, signs/sboms blocks correct, no COSIGN_EXPERIMENTAL, README has verify-blob example. Deferred: (D1) cross-OS CI run needs push, (D2) cosign+syft snapshot needs those tools installed, (D3) signed tag release needs tag push. All deferred items are infrastructure-gated, not implementation gaps.

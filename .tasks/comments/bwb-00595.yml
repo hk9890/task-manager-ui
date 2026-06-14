@@ -1,0 +1,24 @@
+---
+id: h1d2a0go
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:50Z
+body: |-
+  Acceptance review task is well-structured. The dependency chain (depends on all three implementation tasks) is correct. The inspection file list covers the right files. One gap: the acceptance review should also inspect renderhelpers/helpers.go and any new files in styles/ since task 3 explicitly modifies those. Suggested action: add internal/ui/shared/renderhelpers/helpers.go to 'Files to Inspect'.
+---
+id: d794euno
+author: Hans Kohlreiter
+created: 2026-04-08T10:59:53Z
+body: |-
+  AC 'Board issue row color hierarchy improves scanability without overflow regressions' is not testable without a baseline. What: the verifier needs to compare before/after board rendering to assess 'improvement'. How does the verifier judge that scanability improved? Why: 'improves scanability' is subjective. The verifier can check that colors are present and that truncation still works, but cannot measure improvement. Suggested action: replace with concrete criteria: (a) type, priority, and status tokens render with distinct foreground colors, (b) issue IDs render in muted foreground, (c) board golden tests pass with no truncation regressions at w80, w120, w180.
+---
+id: ilmq2y94
+author: Hans Kohlreiter
+created: 2026-04-08T11:09:09Z
+body: |-
+  Verifier pre-implementation check: MOSTLY READY. Tasks .1 and .3 are concrete, but acceptance review is still stale after the merge. Remaining gaps tracked in beads-workbench-lxv: drop the closed .2 dependency and require runtime full-app verification alongside go test/go build/go vet. Next: refresh .4 metadata/instructions before final execution/acceptance.
+---
+id: rjvieqez
+author: Hans Kohlreiter
+created: 2026-04-08T18:23:27Z
+body: |-
+  Verifier PASS. Focused shell/board acceptance tests, built-binary embedded-fixture runtime review, and full go test/build/vet all passed. Artifacts: /tmp/beads-workbench-2sh.4-review/runtime_capture.log, /tmp/beads-workbench-2sh.4-review/runtime_shift_tab.log, /tmp/beads-workbench-2sh.4-review/startup.typescript. Note: beads-workbench-cja no longer reproduces; go test ./... passes.

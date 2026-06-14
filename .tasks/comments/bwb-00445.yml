@@ -1,0 +1,6 @@
+---
+id: xyidxtpp
+author: Hans Kohlreiter
+created: 2026-05-25T19:30:58Z
+body: |-
+  Worktree branch: worktree-agent-a034b2fd82e4207f9, commits 11dd766 + 6c4a76c. Created lean_writes_test.go (package beads_test, 6 tests) covering both bd-1.0.4 workaround branches; fixed stale doc-comment at lean_writes.go:84. CSV ordering: byte-exact with documented ordering source plus belt-and-suspenders set-equality check. Filed beads-workbench-99bs.2 as follow-up for stale fakes/doc.go import-cycle warning.

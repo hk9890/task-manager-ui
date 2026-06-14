@@ -1,0 +1,6 @@
+---
+id: 8s7fua9z
+author: Hans Kohlreiter
+created: 2026-04-06T23:04:30Z
+body: |-
+  Implemented embedded-mode launcher smoke coverage in internal/app/model_test.go via TestModelEmbeddedFixtureDetailEditHotkeyLaunchesEditorAction. Workflow seeds embedded fixture repo, boots app with real bd gateway, enters Detail mode from board selection, triggers edit hotkey, and asserts launcher action=editor for fixture issue bwf-2. Focused verification passed: go test ./internal/app -run 'TestModelEmbeddedFixture(BoardToDetailSmokeWorkflow|DetailEditHotkeyLaunchesEditorAction|FullBoardCaptureGolden)$' -v and go test ./internal/app -run 'TestModelEditIssueActionUsesLauncherServiceFromDetailSelection|TestModelLaunchEditorActionUsesLauncherService' -v. Also attempted broader go test ./internal/app twice; timed out in this environment (120s and 300s).

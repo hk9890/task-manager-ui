@@ -1,0 +1,18 @@
+---
+id: c3k0lpql
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:07Z
+body: |-
+  Finding: Flag-parsing library is undecided and will drive implementer improvisation. Why: stdlib flag does not cleanly support both -h and --help, short-flag clustering, or rejecting -version-as-double-dash; choosing pflag/cobra mid-task is a dependency decision that belongs in planning. Suggested action: pick the library now (recommend stdlib flag with manual -h/--help + -v/--version aliasing to avoid a new dep, OR explicitly adopt spf13/pflag) and record the choice in the epic Decisions section before s2d1.1 starts.
+---
+id: 2hnidmdj
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:11Z
+body: |-
+  Finding: Exit-code contract is unspecified across flags. Why: --help/--version/--check-config/--print-config and unknown-flag handling have GNU/POSIX conventions that will be inconsistently applied without a single contract; verifier in s2d1.4 cannot check codes that were never specified. Suggested action: add a Decisions bullet to the epic stating: success paths exit 0; --check-config validation failure exits 1; unknown flag / bad usage exits 2; missing required flag arg exits 2.
+---
+id: schg7ih8
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:13Z
+body: |-
+  Finding: --cwd rationale is recorded but the revisit trigger is not. Why: future readers will not know when to reconsider --beads-dir; today projectRoot drives both gateway WorkDir and launcher interpolation, but if BWB ever supports a beads tracker decoupled from repo root the decision must flip. Suggested action: append to Decisions: 'Revisit --beads-dir if BWB ever needs to target a beads tracker that is not co-located with the project root.'

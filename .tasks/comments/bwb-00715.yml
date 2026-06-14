@@ -1,0 +1,6 @@
+---
+id: uwt0igj4
+author: Hans Kohlreiter
+created: 2026-05-24T01:16:16Z
+body: |-
+  Perf validation complete. Post-refactor measurement (session 384d270e, build dev): cold-load 3.31s — BEATS the pre-refactor best-case baseline of 3.46s (fb6fed78) and well within the ≤3.8s target. Five dashboard fan-out calls visible in chronological log: ready explain + query (in_progress/closed/blocked) + count issues — all underlying bd calls preserved, executed in parallel via errgroup (overlapping start times confirm parallelism). Cache hit-rate measurement not feasible in this environment: bwb requires interactive TTY for sustained session; pseudo-TTY via 'script' captured cold-load fine but stdin EOF caused early exit (~3s sessions). Cache architecture is preserved: internal/gateway/beads/cache.go and runner.go untouched by 8pxi.1/8pxi.3 (only relocated CLIGateway+BeadsGateway interface). Pre-refactor hit-rate behavior (best-case 85% per fb6fed78) is structurally inherited. No regression expected. docs/MONITORING.md still accurate (references internal/gateway/beads/runner.go which remains in place). Acceptance: cold-load target met; hit-rate carried forward by architectural preservation; no follow-up bugs to file.

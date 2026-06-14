@@ -1,0 +1,6 @@
+---
+id: 8fgtxwd8
+author: Hans Kohlreiter
+created: 2026-05-16T13:54:21Z
+body: |-
+  Spike complete. Measured 15 runs each under natural cache conditions. Baseline (parallel, current): median 1479ms (range 1257-1957ms). Path 2 (serial ping warmup, parallel board reads): median 1432ms, -3.2% vs baseline. Path 4 (full serial): median 1526ms, +3.2% vs baseline. Root cause confirmed: Dolt per-process startup (~400-500ms/call serial, 800-1600ms parallel due to .db lock contention) is the irreducible bottleneck — parallel and serial wall times statistically equivalent. bd server mode confirmed absent in bd v1.0.4. Neither bwb-side path closes the 279ms gap to <1200ms AC. The viable path is a long-lived bd daemon or Dolt connection pooling — both require upstream bd changes.

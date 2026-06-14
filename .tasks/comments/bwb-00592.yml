@@ -1,0 +1,24 @@
+---
+id: uwunuk4n
+author: Hans Kohlreiter
+created: 2026-04-10T16:58:49Z
+body: |-
+  Inaccurate instruction #11: task says 'Delete BottomLeft() and Top() functions' but they are Position constants (iota values), not functions. The actual dead code is the BottomLeft and Top enum values plus their case branches in calculatePosition(). Why: a tasker following these instructions literally will look for functions that don't exist and get confused. Suggested action: reword to 'Remove unused BottomLeft and Top position constants from the iota block and their corresponding case branches in calculatePosition.'
+---
+id: 5nuftmyv
+author: Hans Kohlreiter
+created: 2026-04-10T16:59:51Z
+body: |-
+  Scope risk: this is the riskiest task in the epic. It touches 13 files across 7 packages in a single task. A mistake in any one deletion breaks the build for all subsequent tasks. Why: a single monolithic dead-code-removal task means if the tasker misidentifies something as dead (e.g. SharedUIState.UI field is used in services.go constructor calls), the whole chain stalls. Suggested action: not splitting (that would be over-engineering), but the tasker should compile after EACH removal group (app, config, dashboard, ui, gateway, launcher) as the instructions already say. Emphasize this is mandatory, not optional — the acceptance criteria should include 'incremental build verification after each package group.'
+---
+id: nqrdh94a
+author: Hans Kohlreiter
+created: 2026-04-10T17:00:00Z
+body: |-
+  Potential false positive on SharedUIState: instruction #3 says 'Delete SharedUIState struct and all its allocations (allocated everywhere, read nowhere)'. I checked — SharedUIState is defined in services.go:13, has a UI field in Services struct (line 33), and is allocated in constructors (lines 68, 91). But the struct body needs checking — what fields does SharedUIState have, and are ANY of them read anywhere? If even one field is read transitively through services.UI.SomeField, deleting the whole struct is a breaking change. Why: 'allocated but never read' is a strong claim that needs verification at field level. Suggested action: tasker should grep for 'services.UI.' or '.UI.' references in app/ before deleting.
+---
+id: 4egge2c5
+author: Hans Kohlreiter
+created: 2026-04-10T17:00:23Z
+body: |-
+  Correction to my previous SharedUIState concern: verified that services.UI (SharedUIState) is indeed never read — its only field ToastMessage appears only in the struct definition. The '.UI.' references in model.go are services.Config.UI (the config model), not services.UI (SharedUIState). The deletion is safe. No action needed on this point.

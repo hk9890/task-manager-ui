@@ -1,0 +1,19 @@
+---
+id: 58vp9ymi
+author: Hans Kohlreiter
+created: 2026-06-05T16:07:58Z
+body: |-
+  Acceptance review: PASS (verifier CLOSE + orchestrator real-app capture verification).
+
+  Verifier (independent): all 4 bugs closed; per-bug criteria PASS; mise run quality PASS
+  (vet, lint 0 issues, guardrails, unit 1166, integration 1317/15 skipped); full go test ./... PASS;
+  dzom+6zvr coexist in details.go; no scope creep; uwmi no-code-fix judged LEGITIMATE.
+
+  Real-app verification (scripts/capture_bwb_screen.py, rebuilt /tmp/bwb + embedded fixture) —
+  closes the gap the read-only verifier could not run:
+  - dzom: search no-match Content preview now shows clean "No selected result." with NO "? P0 (NO (none)" meta row. CONFIRMED.
+  - j14c: reproduced the original race (open detail -> focus Metadata -> Enter Status -> immediate ESC). App now STAYS in "Detail: bwf-2" with NO orphaned Update Status modal (previously popped to Board + orphaned modal). CONFIRMED FIXED.
+  - 6zvr: detail-load skeleton window is sub-90ms on the fast embedded fixture (not catchable live), but verified via the deterministic loading-state render golden search_results_loading_stub_w120.golden (Content pane renders prose ░ bars, not "X XX XXX" board-rows) + TestContentBodySkeletonIsProseNotBoardRows + layout-stability test. CONFIRMED.
+  - uwmi: no code defect (terminal mid-repaint artifact); behavior pinned by TestSearchShrinkTransition_*.
+
+  All AR criteria satisfied.

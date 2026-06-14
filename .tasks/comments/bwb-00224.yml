@@ -1,0 +1,6 @@
+---
+id: nnh89h7x
+author: Hans Kohlreiter
+created: 2026-05-27T21:55:39Z
+body: |-
+  Dead guard removed. `if m.ActualEdges < 0` block (5 lines including in-block comment + 'non-negative' qualifier on the section header) deleted from generate_test.go around line 387; substantive `!= expectedEdges` assertion untouched at line 388. quality:fast passes (1070 tests, 0 lint); test:integration ./internal/testing/loadgen/... passes.

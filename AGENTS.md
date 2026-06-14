@@ -34,6 +34,6 @@ Read `docs/RELEASING.md` for the tag-triggered GitHub release flow backed by `.g
 
 Read `docs/CHANGE-WORKFLOW.md` for tracker usage, quality gates, session completion, and push requirements.
 
-## Beads Issue Tracker
+## Issue Tracker (task-manager)
 
-This project uses **bd (beads)** for issue tracking. Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists. Run `bd prime` for the full command reference and session-close protocol; see `docs/CHANGE-WORKFLOW.md` for the tracker-first rule and quick reference.
+This project tracks its own dev work with **task-manager** (`taskmgr`), the file-based tracker whose store lives in `.tasks/` (issue IDs are prefixed `bwb-`). Use `taskmgr` for ALL task tracking — do NOT use TodoWrite or ad-hoc markdown TODO lists. Run `taskmgr commands` for the full machine-readable command catalog, and see `docs/CHANGE-WORKFLOW.md` for the tracker-first rule and session-close protocol.

@@ -1,0 +1,20 @@
+---
+id: ddwc6y8j
+author: Hans Kohlreiter
+created: 2026-05-24T18:14:40Z
+body: |-
+  Fixed in commit 4f5fa4e.
+
+  Threaded `skeleton bool` through the details render stack. During the load window (state.Skeleton == true):
+  - Counts group renders `░░` instead of `0` for Comments/Blocked by/Blocks/Related
+  - Dependencies pane renders skeleton rows instead of `(none)`
+  - Content-pane header renders `░░ comments` instead of `0 comments`
+
+  Three regression tests added in `internal/ui/details/details_test.go` (run: `go test ./internal/ui/details/... -run TestSkeleton`):
+  - TestSkeletonRenderDoesNotShowLiteralZeroOrNoneInCountsAndDeps (width=180)
+  - TestSkeletonRenderAtTwoColumnWidthDoesNotShowLiteralZeroOrNone (width=110)
+  - TestSkeletonFalseStillShowsRealCountsAndDeps (asserts real data visible when not skeleton)
+
+  Three search golden files regenerated to reflect the new skeleton output.
+
+  All 1012 tests pass; lint and fmt clean.

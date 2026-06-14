@@ -1,0 +1,6 @@
+---
+id: gl1i09lw
+author: Hans Kohlreiter
+created: 2026-05-16T19:06:28Z
+body: |-
+  Done. Fake fidelity gaps closed: ShowIssue Comments/BlockedBy now empty slices (was nil), Query now respects expr via QueryResponsesByExpr map. TestFakeGatewayReadContract 47/47 sub-tests pass. No consumer regressions; backward compat preserved via QueryResponse fallback. Drift log seeded in beads_gateway.go package comment (2 entries with surfacing-invariant refs). No new bugs filed under discipline (one observed test simplification was intentional/documented). 849 integration tests pass.

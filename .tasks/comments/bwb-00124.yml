@@ -1,0 +1,16 @@
+---
+id: 69yi2stw
+author: Hans Kohlreiter
+created: 2026-05-16T20:01:35Z
+body: |-
+  **Epic-review 2026-05-16 (descope)**
+
+  Reviewed by orchestrator + independent reviewer before activation. Outcome:
+
+  1. **Drop task 9x70.4** (validatingGateway write extension). The task acknowledges dolt batch-commit will produce false positives; all three proposed mitigations (skip-in-batch / wait / advisory) gut the value. Write-then-read across a subprocess + dolt-batch boundary is fundamentally noisy — running this validator risks eroding trust in the slog.Warn signal that 8qw9 just established on the read side. Revisit only if a real consumer bug surfaces that this would have caught.
+
+  2. **Re-shape 9x70.3** (fake fidelity) — gate it on 9x70.2 actually surfacing gaps rather than pre-allocating closure work. 8qw9.3 had real fake gaps because reads have richer surface; writes may not.
+
+  3. **Tighten 9x70.1 AC** — add evidence floor: "audit log records at least N real bd invocations per write method" so the audit can't pass as desk research.
+
+  4. **Priority note**: P1 bugs ule7 and 5q6t (refresh-concurrency, user-facing UI corruption) take precedence over this P2 infrastructure work.

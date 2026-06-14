@@ -1,0 +1,6 @@
+---
+id: zypr5hdi
+author: Hans Kohlreiter
+created: 2026-05-17T09:42:17Z
+body: |-
+  Done. scale-seed.json (590 issues, 75 closed, 515 active, 13 deps, prefix bws) + 6 pure unit smoke tests + 2 opt-in integration tests + Python generator. Quality green (874 tests, 11 expected skips including the new opt-in scale fixture smoke). Deliberate-break verified: removing closed issues fires TestScaleFixtureInvariant_DoneColumnBadgeWhenCapped.

@@ -1,0 +1,6 @@
+---
+id: 2iukzi71
+author: Hans Kohlreiter
+created: 2026-05-16T16:47:01Z
+body: |-
+  Done. Test passes on all 3 datasets (fixture, this-repo, ai-config-manager). Done column results: this-repo bwb=454 bd=454, AICM bwb=622 bd=622 — ssom fix confirmed against real data. NotReady uses bd blocked (blocked is a readiness state not a status field). AICM .beads mtimes unchanged after full run.

@@ -1,0 +1,12 @@
+---
+id: bdcc5g2z
+author: Hans Kohlreiter
+created: 2026-05-16T06:19:03Z
+body: |-
+  Body rewritten (reviewer F24/F25/F26/F27): removed actions/setup-go (mise installs Go via [tools] per i1th.4); included full replacement YAML with checkout as first step; pinned jdx/mise-action@v2 explicitly; dropped 'act' suggestion (not in repo toolset).
+---
+id: 4etqeojt
+author: Hans Kohlreiter
+created: 2026-05-16T07:08:57Z
+body: |-
+  Replaced .github/workflows/ci.yml. Removed actions/setup-go@v5; added jdx/mise-action@v2 as second step; all 7 subsequent steps delegate to mise run <task>. YAML structure matches ticket spec exactly. Final AC item (Unit tests <30s on GitHub runner) requires push to verify — CI will confirm on next PR.

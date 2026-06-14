@@ -1,0 +1,18 @@
+---
+id: yxwlrsmr
+author: Hans Kohlreiter
+created: 2026-04-10T16:58:41Z
+body: |-
+  Duplicate scope with 0jc: both this task and 0jc instruction #4 claim the buildFilterArgs extraction from read_gateway.go. Why: two tasks with the same deliverable creates confusion and wasted effort. Suggested action: confirm this task is the sole owner of all read_gateway.go deduplication (buildFilterArgs, toSearchResults, constructor consolidation) and remove the overlapping item from 0jc.
+---
+id: insk3orx
+author: Hans Kohlreiter
+created: 2026-04-10T17:01:18Z
+body: |-
+  Instruction #3 says 'NewCLIGateway and NewGateway — one is a trivial wrapper of the other. Keep NewGateway (shorter, clearer), remove NewCLIGateway.' But the actual code shows the OPPOSITE dependency: NewGateway calls NewCLIGateway (line 40), and NewCLIGateway has the nil-guard logic (line 31-33). All external callers use NewGateway (from model_test.go, search/model_test.go etc.) while internal callers use NewCLIGateway. Why: if the tasker follows instructions literally and removes NewCLIGateway, they lose the nil-guard. If they keep NewGateway, they need to move the nil-guard into it. Suggested action: specify that the nil-guard logic must be preserved in whichever constructor survives. Also note that the nil-guard itself is flagged for removal in 2t4 item #14 (writes.go nil-guard) — verify these are different nil-guards before removing either.
+---
+id: t06j65nm
+author: Hans Kohlreiter
+created: 2026-04-10T17:32:32Z
+body: |-
+  Execution paused: ticket appears stale/ambiguous. (1) Scope overlaps with task 0jc for buildFilterArgs extraction; ownership needs confirmation to avoid duplicate work. (2) Constructor instruction conflicts with current code: NewGateway delegates to NewCLIGateway, which contains nil-guard logic. Please clarify which constructor should own/preserve nil-guard behavior before implementation.

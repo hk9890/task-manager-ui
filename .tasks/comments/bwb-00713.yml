@@ -1,0 +1,6 @@
+---
+id: lg7bujvg
+author: Hans Kohlreiter
+created: 2026-05-24T11:12:55Z
+body: |-
+  Done. Commit 8d5db0c. Added WithCommandHook option + r.run chokepoint to lean Repository. Scenario 10 (PartialDashboardFailure) now PASSES for beads (memory still skips — no external failure path). Default production behaviour unchanged. All 3 quality gates green. Unblocks k4g4.4.

@@ -1,7 +1,7 @@
 # Key Bindings
 
-This document describes the current default keyboard shortcuts used by Beads
-Workbench.
+This document describes the current default keyboard shortcuts used by Task
+Manager UI.
 
 These defaults are defined in `internal/config/keybindings.go` and can be
 overridden through runtime config.

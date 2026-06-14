@@ -1,0 +1,6 @@
+---
+id: 78kbgoc9
+author: Hans Kohlreiter
+created: 2026-04-10T17:00:33Z
+body: |-
+  This task is phrased as 'investigate and decide' but acceptance criteria only require a comment or mutex removal. The risk: a tasker removes the mutex, concurrent bd calls hit Dolt locking issues in production, and there's no way to detect this in tests (tests use fake executors). Why: Dolt's local database uses file-level locking; concurrent writes will fail, and concurrent reads MIGHT fail depending on the Dolt version and working set state. The safe decision is almost certainly 'document and keep the mutex.' Suggested action: bias the instructions toward documenting the mutex rather than removing it. If removal is desired, require a real-world test with actual bd CLI calls, not just race-detector passing on fakes.

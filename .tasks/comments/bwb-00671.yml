@@ -1,0 +1,12 @@
+---
+id: 9rphseme
+author: Hans Kohlreiter
+created: 2026-04-12T14:06:37Z
+body: |-
+  Missing dependency on .1 and .2. What: Task .3 has no dependency on .1 or .2, but the metadata panel editing interaction will need to operate within the panel layout those tasks produce. The right metadata panel's sizing, focus model, and key handling all depend on the shared layout contract (.1) and the panel interaction model (.2). Why: If .3 is implemented before .1/.2, the metadata editing UI will be built against the current ad-hoc layout and will need to be reworked when the panel model lands. Suggested action: Add beads-workbench-9dn.1 and beads-workbench-9dn.2 as dependencies for .3.
+---
+id: qogavbl1
+author: Hans Kohlreiter
+created: 2026-04-12T14:06:46Z
+body: |-
+  User already resolved the primary open question. What: The open questions ask 'Which fields are editable in v1' and 'Does Enter open an inline picker, a compact modal, or a command-style chooser?' The user explicitly stated: 'status editing definitely desired first; priority may be a later extension, but status is the minimum useful workflow.' The interaction style (inline picker vs modal) is still open. Why: Half of this discussion task's blocking questions are already answered, making it partially executable. The remaining interaction-style question is genuinely open and should not block defining the scope. Suggested action: Update instructions to reflect that v1 scope is status-only, note that the interaction-style question (inline picker vs modal vs command chooser) is the sole remaining design decision, and unblock the task for implementation once the .1/.2 layout contract is landed.

@@ -1,0 +1,12 @@
+---
+id: 2em7duep
+author: Hans Kohlreiter
+created: 2026-05-16T03:32:57Z
+body: |-
+  Update cites: toStatusOption→read_payloads.go:268, toTypeOption→:282. Finding still valid.
+---
+id: ieal3hfc
+author: Hans Kohlreiter
+created: 2026-05-16T04:09:17Z
+body: |-
+  Implemented. toStatusOption/toTypeOption now decode description via optionalString (was requiredString). 5 new fixtures added: statuses_null_description.json, types_null_description.json, labels_null_list.json, show_issue_null_comment_text.json, plus show_issue_production_noise.json (null labels + unknown top-level field + multi-paragraph description). 5 new tests assert decode + consumer behavior.

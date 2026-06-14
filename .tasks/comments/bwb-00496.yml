@@ -1,0 +1,6 @@
+---
+id: kqlpmlhk
+author: Hans Kohlreiter
+created: 2026-05-19T15:26:31Z
+body: |-
+  Completed in commit d14e074. All 5 dead functions removed; mise run quality:fast clean (853 tests pass); all 5 grep checks confirm zero remaining references. Incidentally removed an unused issuerow import from ui/details/metadata.go.

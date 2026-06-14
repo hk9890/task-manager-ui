@@ -1,0 +1,12 @@
+---
+id: u5k8laop
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:04Z
+body: |-
+  AC grep is too coarse — fixture payloads in service_security_test.go will use 'sh -lc {{...}}' as test data and trip it. Tighten AC to: grep -RE 'sh +-l?c.*\{\{' internal/ --exclude='*_test.go' returns no matches.
+---
+id: je6aqccy
+author: Hans Kohlreiter
+created: 2026-05-16T03:48:08Z
+body: |-
+  All AC met. Default shell-command action uses positional args ($0..$3) for issue fields; security tests in service_security_test.go cover 5 injection payloads ($(touch), ";rm -rf /;", backticks, &&/||, newline-in-assignee); CODING.md documents the rule. Quality gate green (modulo pre-existing flake in mode/search — see comment on beads-workbench-0ny3).

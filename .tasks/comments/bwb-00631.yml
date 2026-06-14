@@ -1,0 +1,24 @@
+---
+id: b6m2bszl
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:45Z
+body: |-
+  Finding: --cwd semantics are dangerously under-specified. Why: the instruction says 'use it as the effective project root / gateway working directory' but does not answer (a) does it os.Chdir or only thread an in-memory value, (b) is a relative --config resolved against the original cwd or --cwd, (c) what happens when --cwd does not exist or is not a directory, (d) does it affect launcher WorkDir interpolation. Each is a footgun. Suggested action: add Decisions to the task: '--cwd does NOT call os.Chdir; it sets projectRoot and RunnerConfig.WorkDir only. Relative --config is resolved against the process start cwd, not --cwd. A non-existent or non-directory --cwd exits non-zero before TUI startup. Launcher definitions inherit the resolved --cwd as their default WorkDir when none is specified.' Then mirror these as ACs.
+---
+id: kl6w4454
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:48Z
+body: |-
+  Finding: --debug output is unspecified, inviting improvisation. Why: 'lightweight stderr diagnostics for startup/CLI resolution and bd command execution summaries' is not a contract — implementer will pick fields, formats, and verbosity arbitrarily, and verifier cannot check. Suggested action: enumerate the diagnostics in the AC, e.g. 'When --debug is set, BWB emits to stderr: (1) resolved config path, (2) resolved --cwd, (3) auto-refresh enabled/disabled, (4) one line per bd invocation containing argv and exit code (no stdout/stderr capture). All --debug lines are prefixed with [bwb-debug] so they are greppable and distinguishable from config warnings.'
+---
+id: q0zcnf55
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:53Z
+body: |-
+  Finding: --no-auto-refresh AC risks gutting the FocusMsg handler. Why: model.go FocusMsg handling at line 247 likely does more than schedule a refresh (it is a generic focus regain hook); the AC 'disables scheduled/focus-regain auto-refresh' could be read as 'short-circuit FocusMsg entirely'. Suggested action: tighten AC to 'When --no-auto-refresh is set, the periodic tea.Tick at refreshTickInterval is not scheduled and the focus-regain branch suppresses the auto-refresh side effect only; non-refresh FocusMsg processing (if any) and manual user-triggered refresh keybindings remain unaffected.'
+---
+id: sdlfro6i
+author: Hans Kohlreiter
+created: 2026-04-20T15:34:57Z
+body: |-
+  Finding: Bundling --debug and --no-auto-refresh with --cwd is borderline-cohesive. Why: the three flags share zero implementation surface — --cwd touches main+services+gateway, --debug touches main+gateway runner, --no-auto-refresh touches only model.go. One PR will sprawl across packages with no internal cohesion, and a partial revert becomes painful. Not blocking but worth flagging. Suggested action: keep bundled if implementer estimates < ~150 LOC total; otherwise split --no-auto-refresh into a small follow-up task. Decide before claiming the task.

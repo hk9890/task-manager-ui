@@ -1,0 +1,6 @@
+---
+id: 8zc2p0s1
+author: Hans Kohlreiter
+created: 2026-05-17T09:42:18Z
+body: |-
+  Done. 54 routingExecutor callsites migrated to a package-internal testRecordingExecutor (fakes.RecordingExecutor cannot be imported from package beads due to cycle). routingExecutor + routeResponse + argsKey deleted. grep returns zero matches. Quality green (757 unit + 851 integration).

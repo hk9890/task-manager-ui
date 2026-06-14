@@ -1,0 +1,29 @@
+---
+id: 13qcm58n
+author: Hans Kohlreiter
+created: 2026-05-17T10:35:06Z
+body: |-
+  **Acceptance review PASS** — independent verification by verifier subagent.
+
+  **Overall: PASS · Recommendation: CLOSE epic 5q6t + ule7**
+
+  Verifier ran mise run quality (854 tests, 0 failures, 0 lint, vet clean, guardrails pass) and mise run verify:refresh independently 3 times — consistent PASS with 19 board suppressed-refresh entries + 1 search suppressed-refresh entry per run, no panic, no negative pendingResults, UI intact across all runs.
+
+  **Skeptical findings (all SAFE):**
+  1. inflight cleared on error paths — every result handler decrements pendingResults and calls maybeCompose unconditionally, even when msg.err != nil. Errors cannot leave inflight=true permanently.
+  2. maybeCompose guards on pendingResults > 0 — inflight cleared exactly once when composition runs.
+  3. Init() cold-start — inflight=false at construction, guard passes, refresh proceeds.
+  4. Search defense-in-depth — confirmed present at search/model.go:318-323 inside triggerSearchWithAnchor.
+  5. All callers of startReload / triggerSearchWithAnchor enumerated and confirmed covered (6 call sites total across both files; all guarded).
+  6. Tests genuinely exercise the bug class — verified RED output in 5q6t.4 comment proves the bug was reproducible before the fix; the capture-Cmd-without-draining pattern correctly simulates in-flight state.
+  7. Slow bd wrapper in scripts/verify_refresh_concurrency.py is honest test infrastructure — 4-line bash script in tempdir, PATH-injected only into bwb child process, cleaned up after run, does not modify product code.
+
+  **One pre-existing cosmetic anomaly noted (not blocking):** duplicate 'component' JSON key in suppressed-refresh log entries ('component':'dashboard','component':'board'). Already tracked separately as bug beads-workbench-xm6u.
+
+  **ule7 acceptance:**
+  - 'Ctrl+R stacked → not stacked': PASS (19/20 keypresses suppressed)
+  - 'pendingResults cannot go negative': PASS (regression test asserts ≥0)
+  - 'Selection not gratuitously reset': PASS — first manual refresh's selection reset is pre-existing behavior; the bug being fixed (rapid-press storm wiping selection N times) is gone. Auto-refresh anchor reuse for manual reload was explicitly out of scope per epic.
+  - '10 presses → at most one batch': PASS (20 presses → 1 batch in runtime verification)
+
+  Ready to close 5q6t.1-.5 (already closed), 5q6t.6 (this AR task), 5q6t (epic), and ule7.

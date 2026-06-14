@@ -1,0 +1,6 @@
+---
+id: 0uk7h0xp
+author: hans
+created: 2026-06-14T11:03:33Z
+body: |-
+  Cutover complete: removed bd from .mise.toml (added taskmgr@0.4.0); retargeted CI attestation workaround; git rm -r .beads; committed .tasks (+ scoped .tasks/.gitignore); cleaned .gitignore; rewrote tracker docs. Build/vet/guardrails green.

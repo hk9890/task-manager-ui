@@ -1,0 +1,6 @@
+---
+id: negbsgv8
+author: Hans Kohlreiter
+created: 2026-05-16T19:15:32Z
+body: |-
+  Verified. All implementation tasks closed (8qw9.1, 8qw9.2, 8qw9.3, 8qw9.4, 8qw9.5). All 3 audit-discovered bugs resolved (zhef closed-with-fix, 781a closed-with-fix, 4fgn closed-as-not-a-bug-with-rationale). mise run quality green (734 unit + 849 integration, 0 lint). Verifier's 3 deliberate-break checks all fired with specific failure messages and restored cleanly. Doc-drift finding fixed inline (interface.go sort+description references updated post-zhef/post-781a; 4fgn carve-out now reflects INERT status). End-to-end persistent-log verification: throwaway program initialized logging.Manager and emitted slog.Warn with the exact attr shape validatingGateway.warn() uses; log file /home/hans/.local/state/bwb/bwb.log received: {"timestamp":"...","level":"WARN","message":"gateway contract violation","session_id":"3d72c1dc","component":"gateway","method":"ListIssues","rule":"NonEmptyID","sample":"issue #0 has empty ID; title=violation-test"}. The persistent-log path is wired and the validatingGateway unit tests prove the attrs match. Acceptance review complete.

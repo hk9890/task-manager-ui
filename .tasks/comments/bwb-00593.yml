@@ -1,0 +1,6 @@
+---
+id: wn5b92cq
+author: Hans Kohlreiter
+created: 2026-04-10T17:00:51Z
+body: |-
+  Missing coverage item: the original review identified 'issue edit edge cases: missing (ClearLabels, priority boundaries, assignee clearing)' as a test gap. This is not covered by 9uk or any other task in the epic. Why: these are write-path edge cases in the gateway that could silently corrupt issue data. Clearing labels vs setting empty labels, priority boundary validation, and assignee clearing are distinct behaviors that deserve test coverage. Suggested action: either add a sub-item to this task for issue edit edge case tests, or create a separate task. At minimum, acknowledge the deferral.

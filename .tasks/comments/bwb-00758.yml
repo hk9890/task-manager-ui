@@ -1,0 +1,13 @@
+---
+id: h8io8ty7
+author: Hans Kohlreiter
+created: 2026-05-15T09:46:17Z
+body: |-
+  Acceptance review complete. All criteria verified:
+  - Children .1–.4: all CLOSED
+  - Quality gates (lint, vet, tests, architecture guardrails, runtime UI PTY): passed per .1 comment; commit facd998655973a9889cda6ccce8af029959e1eb1
+  - CI provenance: run 25911098370 conclusion=success for facd998; HEAD SHA matches
+  - Tag v0.4.0 present on remote (c29ae175e250a0fd0b9da64df2afeac930705ec1); 5 assets published (linux_x64, linux_arm64, macos_x64, macos_arm64, checksums)
+  - Release notes: curated content with Highlights and What's Changed sections
+  - CHANGELOG.md: [v0.4.0] section present
+  No blocking gaps found.

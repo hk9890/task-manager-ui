@@ -1,0 +1,6 @@
+---
+id: p1p0yzbs
+author: Hans Kohlreiter
+created: 2026-05-16T14:29:35Z
+body: |-
+  Implementation complete. Added SpinnerFrames (10 pinned braille frames), NextFrame/Glyph pure helpers, TickMsg + SpinnerTickCmd in internal/ui/loading/loading.go. Wired scheduleSpinnerTickCmd seam (mirrors scheduleRefreshTickCmd, guarded by schedulerMu), spinnerFrame on Model, Init/Update tick handling, and headerSpinnerCell() helper used by renderHeader(). New tests: TestHeaderSpinnerCellWidthInvariance and TestHeaderSpinnerCellContainsGlyphWhenLoading. go test -count=10 ./internal/app/... green (no ticker-induced flakes; no regression of beads-workbench-0ny3). go build/vet/test ./... all clean. Header width invariant — existing golden files required no update. Note: TickMsg exported (not package-private as ticket described) so internal/app can type-assert.

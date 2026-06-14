@@ -1,0 +1,25 @@
+---
+id: kcqm3wv4
+author: Hans Kohlreiter
+created: 2026-04-06T15:37:06Z
+body: |-
+  ## This bug is entirely redundant with the epic's implementation tasks — should be closed as folded
+
+  **What**: Every instruction in y3x maps 1:1 to an implementation task:
+  - "Redesign default board/dashboard for triage density" → task 7qz
+  - "Revisit default lane/group strategy" → task 7qz
+  - "Rework row presentation for compact signals" → task u5s
+  - "Rebalance or reduce persistent detail pane" → task j34
+  - "Validate with golden tests plus real PTY/runtime review" → all tasks + 9oo
+
+  The acceptance criteria are also duplicates of the corresponding task criteria.
+
+  **Why**: Leaving this bug open creates confusion about ownership. An implementer might think y3x requires separate work beyond the three tasks. The acceptance reviewer (9oo) depends on y3x and must verify it — but there's nothing to verify that isn't already covered by 7qz + u5s + j34.
+
+  **Suggested action**: Close y3x with a comment: "All findings addressed by epic child tasks: 7qz (grouping), u5s (row density), j34 (pane balance). Verification via 9oo acceptance review." Remove y3x as a dependency of 9oo.
+---
+id: 3xuvggs5
+author: Hans Kohlreiter
+created: 2026-04-06T17:31:07Z
+body: |-
+  All findings from this broad redesign bug were addressed by the dashboard UX redesign effort: beads-workbench-7qz (4-column grouping + startup focus), beads-workbench-j34 (board-first layout and sidebar removal), beads-workbench-u5s (dense compact row rendering), with runtime/render verification established by beads-workbench-1ri and acceptance review in beads-workbench-9oo.

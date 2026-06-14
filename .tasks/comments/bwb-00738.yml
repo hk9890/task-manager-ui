@@ -1,0 +1,6 @@
+---
+id: 7jcxsdoz
+author: Hans Kohlreiter
+created: 2026-05-16T07:08:58Z
+body: |-
+  hooks:install mise task added to .mise.toml. Matches Makefile exactly (single 'git config core.hooksPath scripts/git-hooks' command; no chmod needed — hook already executable). Verified: task runs clean and 'git config core.hooksPath' returns 'scripts/git-hooks'. Doc update for CHANGE-WORKFLOW.md intentionally deferred to i1th.6.

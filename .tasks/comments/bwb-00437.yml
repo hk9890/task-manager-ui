@@ -1,0 +1,9 @@
+---
+id: 9binze7t
+author: Hans Kohlreiter
+created: 2026-05-29T11:02:58Z
+body: |-
+  Root cause: t_offset_s is a completion timestamp; old gap = next.t_offset - (prev.t_offset + duration) overshot prev_end by ~1 duration, turning every ~950ms inter-call gap negative, so the burst never broke at the startup->browse transition -> 53s collapse.
+  Fix (scripts/analyze_dashboard_perf.py): gap = difference of consecutive completion timestamps; burst end = last_in_burst.t_offset_s. Keeps the >1.5s-gap definition intact.
+  Evidence: session 695efa80 cold-load 53.49s -> 3.09s; --project beads-workbench p50=3.09s, max=7.72s, n=58.
+  Residual (documented, not a bug): metric is time-to-first-idle-gap by design — a session browsing from t=0 with no idle pause (e.g. a53d2d17 -> 21.18s) still reports the full leading window. Docstring + docs/MONITORING.md updated to label the metric explicitly as activity-inclusive and to state gap = between completion timestamps. No Go changes; no Python tests exist for the script. Full Go suite + race + integration still green.

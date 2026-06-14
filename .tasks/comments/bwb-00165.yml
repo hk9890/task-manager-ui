@@ -1,0 +1,6 @@
+---
+id: jiwih2ia
+author: Hans Kohlreiter
+created: 2026-04-19T20:10:02Z
+body: |-
+  Review: Real product bug, clearly written, good repro steps. Note the link to beads-workbench-9lze — check if that's a dupe or if 9lze covers only comment flow while this covers create/update. Verdict: NOT AN EPIC BLOCKER for ay5j. This is a product bug in modal/catalog loading, not in the verification toolkit. The toolkit correctly surfaced it, which is actually evidence the toolkit works. Track separately.

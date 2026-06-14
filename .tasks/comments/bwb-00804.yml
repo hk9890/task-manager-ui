@@ -1,0 +1,24 @@
+---
+id: 2bo6jobi
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:44Z
+body: |-
+  ## yze.4.5 (editor/launcher tests) does not depend on yze.4.3 (launcher framework) — missing dependency
+
+  **What**: `beads-workbench-yze.4.5` (editor and launcher integration tests) depends on yze.4.1 (editor flow), yze.4.2 (CRUD actions), yze.4.4 (built-in launchers), and yze.5 (test harness). It does NOT depend on yze.4.3 (launcher framework). However, yze.4.5's instructions say "Add tests for launcher context interpolation and launcher invocation behavior" — the launcher framework IS what provides context interpolation and invocation behavior.
+
+  **Why**: Technically, yze.4.4 depends on yze.4.3, so yze.4.5 transitively depends on yze.4.3 through yze.4.4. The dependency is satisfied indirectly. This is not a blocker — just a missing explicit dependency that could cause confusion if yze.4.4's dependency on yze.4.3 were ever removed.
+
+  **Suggested action**: No change strictly necessary — the transitive dependency through yze.4.4 covers it. This is a MINOR structural observation, not a blocker.
+---
+id: 3lv6442p
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:17Z
+body: |-
+  ## [MINOR] yze.4.5 depends on yze.4.4 but not yze.4.3 directly — launcher framework seam may not be available
+
+  **What**: yze.4.5 (editor/launcher integration tests) depends on yze.4.1, yze.4.2, yze.4.4, and yze.5. It does NOT directly depend on yze.4.3 (launcher framework). Since yze.4.4 depends on yze.4.3, the transitive dependency exists. However, the launcher process seam is created in yze.4.3, and yze.4.5 needs to use it explicitly.
+
+  **Why**: This is not a functional blocker (transitive deps cover it) but it obscures the intent. Someone reading yze.4.5's dependencies won't see that the launcher seam from yze.4.3 is a critical prerequisite. If the dependency graph were ever refactored, removing yze.4.4 would silently break the chain to yze.4.3.
+
+  **Suggested action**: Add explicit dependency: yze.4.5 depends on yze.4.3. This makes the seam dependency visible and resilient to future refactoring.

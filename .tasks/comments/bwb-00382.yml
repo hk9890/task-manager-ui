@@ -1,0 +1,6 @@
+---
+id: 05fg4rki
+author: Hans Kohlreiter
+created: 2026-04-20T15:57:51Z
+body: |-
+  Implemented the responsive detail fallback in internal/ui/details so widths below the legacy breakpoint render content first with Dependencies and Metadata below. Verified with go test ./internal/ui/details -v and built-binary captures of beads-workbench-2shr at 100x30 and 80x24 showing the readable content-first layout.

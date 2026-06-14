@@ -22,7 +22,7 @@ git config --get core.hooksPath
 
 ## Local change loop
 
-1. Confirm the issue or follow-up work is tracked in `bd`.
+1. Confirm the issue or follow-up work is tracked in `taskmgr`.
 2. Make the change.
 3. Run the right verification depth for the change:
    - Docs-only changes: verify touched paths, commands, routes, and links directly.
@@ -30,9 +30,9 @@ git config --get core.hooksPath
    - Diagnostics/logging changes: also update and cross-check `docs/MONITORING.md`.
    - Runtime UI changes: also run `docs/RUNTIME_UI_VERIFICATION.md`.
 4. Update tracker state before handoff:
-   - close finished work with `bd close <id>`
-   - create follow-up issues for remaining work
-   - keep issue descriptions/statuses aligned with reality
+   - close finished work with `taskmgr close <id>`
+   - create follow-up issues for remaining work with `taskmgr create`
+   - keep issue descriptions/statuses aligned with reality (`taskmgr update <id>`)
 
 ### Code-change verification sequence
 
@@ -59,27 +59,27 @@ Before ending a work session:
 
 ```bash
 git status
-git add <files>
+git add <files> .tasks
 git commit -m "..."
 git pull --rebase
-bd dolt push
 git push
 git status
 ```
 
-`bd dolt push` syncs the beads issue database (a Dolt-backed store under
-`.beads/`) to its remote; it is separate from the source `git push`. Both must
-succeed for the session to be complete.
+The task-manager store lives in `.tasks/` and is versioned in git, so tracker
+state ships with the source commit — there is no separate tracker-sync step.
+Stage `.tasks` alongside your code changes so issue updates land in the same
+push.
 
 If `git pull --rebase` changes the commit or requires conflict resolution,
 rerun the relevant verification before pushing.
 
 Completion bar:
 
-- follow-up work is tracked in `bd`
+- follow-up work is tracked in `taskmgr`
 - verification is complete for the touched surface
 - finished issues are closed or updated
-- `bd dolt push` succeeds
+- `.tasks/` changes are staged and committed alongside the code
 - `git push` succeeds
 - final `git status` shows the branch is up to date with `origin`
 

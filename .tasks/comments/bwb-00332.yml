@@ -1,0 +1,6 @@
+---
+id: 73p3opus
+author: Hans Kohlreiter
+created: 2026-05-24T14:06:39Z
+body: |-
+  AddComment now sets dashboardDirty=true; godoc updated. Pre-existing TestAddComment_Success_IssueDropped_DashboardUntouched encoded the bug (asserted no re-fetch) — renamed to _DashboardDirty and inverted. New TestAddComment_MarksDashboardDirty asserts re-fetch via UpdatedAt timestamp change. quality:fast green (977 tests). Commit bfd7848.

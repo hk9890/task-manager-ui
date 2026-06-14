@@ -1,0 +1,84 @@
+---
+id: 9uah1rf6
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:28Z
+body: |-
+  ## yze.2.6 has no upstream dependency — can be claimed immediately, but requires gateway and app context to design against
+
+  **What**: `beads-workbench-yze.2.6` (configuration model) is listed as ready with zero dependencies. It needs to define editor command config, launcher defaults, and UI preferences. However, the configuration model should be informed by the gateway interface shape (omd.2), the app shell structure (yze.2.1), and ideally the editor/launcher task specs. Designing config in a vacuum risks a model that doesn't match the consuming code.
+
+  **Why**: An agent claiming this task right now would design a configuration model before the gateway interface, app container, or launcher framework exist. The config model could define fields that don't map to actual runtime needs, or miss fields that later tasks require. This creates rework when the editor (yze.4.1) or launcher (yze.4.3) tasks discover the config model doesn't fit.
+
+  **Suggested action**: Add dependency: `yze.2.6 depends-on yze.2.1` (root app model). This ensures the config model is designed after the services container exists and can be integrated immediately. It does not need to wait for the full editor/launcher epic — but it should at least wait for the app shell to know what config consumers look like.
+---
+id: smxs5i4e
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:10Z
+body: |-
+  ## [PASS] Configuration model task closes the ad-hoc config sprawl gap
+
+  **What**: beads-workbench-yze.2.6 addresses the first-pass finding about missing configuration coverage. It defines the config model for editor command/$EDITOR fallback, launcher defaults, and basic UI preferences. It blocks the app shell acceptance review, ensuring config exists before features consume it.
+
+  **Why**: This prevents the editor task from reading $EDITOR directly and the launcher task from hardcoding definitions independently. A unified config model means all features pull from one place.
+
+  **Suggested action**: No structural change needed. One concern about dependency ordering is noted separately.
+---
+id: n0r5vxov
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:20Z
+body: |-
+  ## PASS: Configuration model is now explicitly planned
+
+  **What**: Task beads-workbench-yze.2.6 ("Implement configuration model for editor launcher and UI preferences") now exists in the app shell epic. It covers editor command/$EDITOR fallback, launcher defaults, basic UI preferences, and documentation. It blocks the app shell acceptance review (yze.2.5) and the v1 acceptance review (yze.1).
+
+  **Why**: This was a gap in the original plan — the architecture doc specified v1 config areas but no task delivered them. Without it, editor and launcher tasks would each invent ad-hoc config approaches. The new task prevents config sprawl and establishes a unified configuration home.
+
+  **Suggested action**: None. This adequately addresses the configuration gap.
+---
+id: i8r7ejv0
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:47Z
+body: |-
+  ## [PASS] Configuration model task requires documentation
+
+  **What**: Task yze.2.6 ("Implement configuration model") includes the instruction "Document the configuration model and defaults in docs/CODING.md or docs/TESTING.md where appropriate" and the acceptance criterion "Documentation reflects the configuration model and defaults." The app shell acceptance review (yze.2.5) then verifies "docs/CODING.md reflects the implemented shell architecture and config model."
+
+  **Why**: Configuration is one of the areas most likely to cause documentation drift — users need to know what can be configured, what the defaults are, and where the config file lives. Having documentation as an explicit deliverable of the config task, verified by the acceptance review, ensures this doesn't fall through the cracks.
+
+  **Suggested action**: None. This is adequate.
+---
+id: cywsclfk
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:12Z
+body: |-
+  ## MINOR: yze.2.6 (config model) has no dependency — could be picked up before the app shell or gateway exists
+
+  **What**: Task yze.2.6 (implement configuration model) has no DEPENDS ON entries. The config model needs to integrate with the app services container (yze.2.1) and should reference the gateway's capabilities to know what editor/launcher config fields are needed. But it's currently a free-floating task that could be picked up in any order.
+
+  **Why**: Without a dependency on at least the app model (yze.2.1), the config task could be built without knowing what the services container looks like, leading to misaligned integration. Config is a supporting concern that should follow the core app structure, not precede it.
+
+  **Suggested action**: Add dependency: yze.2.6 depends on yze.2.1 (root app model). This ensures the config model is shaped to fit the actual services container rather than being designed in isolation.
+---
+id: 82rc1j6w
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:18Z
+body: |-
+  ## [MINOR] Config task has no dependencies — it can start before the gateway or app shell exist
+
+  **What**: beads-workbench-yze.2.6 has no DEPENDS ON entries. It blocks yze.1 (v1 acceptance) and yze.2.5 (app shell acceptance), but it doesn't depend on any prior task. An agent could start implementing the config model before omd.7 (gateway foundation) or yze.2.1 (root app model) completes.
+
+  **Why**: The config model needs to integrate with the services container (yze.2.1) and know the gateway interface shape (omd.2) to define launcher and editor config that aligns with the actual implementation. Starting config before the app model exists risks creating a config structure that doesn't fit the services container. This is a minor ordering concern — the implementer would likely wait anyway — but explicit dependencies prevent execution mistakes.
+
+  **Suggested action**: Add dependency: yze.2.6 depends on yze.2.1 (root app model). The config model needs to know the services container shape to integrate properly.
+---
+id: y43zgmja
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:34Z
+body: |-
+  ## [MINOR] Config task has no dependency — could be started before anything exists
+
+  **What**: yze.2.6 "Implement configuration model" has no DEPENDS ON relationship. It blocks yze.2.5 (app shell acceptance) and yze.1 (product acceptance). But it could be picked up before the repository is bootstrapped (omd.1) or before the app shell exists (yze.2.1).
+
+  **Why**: Config loading needs the package layout to exist (omd.1) and should align with the services container (yze.2.1). Building config in a vacuum means the implementer won't know what the services container expects. This is minor because the blocking direction is correct (it blocks acceptance), but the "can start anytime" scheduling is misleading.
+
+  **Suggested action**: Add dependency: yze.2.6 DEPENDS ON yze.2.1 (root app model). The config model should be built after the services container exists so they can be integrated coherently.

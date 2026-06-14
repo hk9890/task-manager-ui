@@ -1,0 +1,24 @@
+---
+id: l5t2ijzr
+author: Hans Kohlreiter
+created: 2026-05-22T09:58:17Z
+body: |-
+  Priority raised P2->P1. The vulnerability class matches the P0 shell-injection bug db0z.1 (arbitrary code execution); held one notch below P0 only because exploitation is multi-step — it requires nvim to be the configured launcher (it is the default) AND the operator to press 'n' on an attacker-controlled issue. Maintainer should re-triage to P0 if shared/untrusted beads DBs are in the threat model.
+---
+id: wx2lb3up
+author: Hans Kohlreiter
+created: 2026-05-22T10:24:05Z
+body: |-
+  Review (2026-05-22): VERIFIED end-to-end. Default nvim launcher (model.go:63) ships '+call append(0,[...{{issue.title}}...])'; Interpolate() (service.go:113-127) substitutes unescaped (stripC0 removes only control chars, not "/]/|). process_runner.go:60 uses exec.Command (no shell) — so this is NOT shell injection, but nvim executes the '+'-arg as a vimscript Ex command, so a crafted title breaks out and chains arbitrary Ex commands. Trigger chain confirmed: n key -> keybindings.go:120 ShellActionLaunchNvim -> app/model.go:771/779 -> launchActionCmd("nvim"). Same vulnerability CLASS as P0 db0z.1, different mechanism; threat model is the project's own (Rule 6). KEEP P1 (P0 only if shared/untrusted beads DBs are explicitly in-scope). RECOMMEND SPLIT: (1) P1 code fix — harden the default nvim template (temp-file context, vimscript-safe escaper, or non-executing arg path); (2) separate doc follow-up — generalize CODING.md Rule 6 from 'sh -c/-lc' to the principle 'untrusted fields never embedded where a launched tool re-parses them as code'. Note: the opencode launcher passes fields as discrete argv/env values and is NOT affected.
+---
+id: n8i0sgle
+author: Hans Kohlreiter
+created: 2026-05-22T10:47:16Z
+body: |-
+  Decision (2026-05-22, /beads-work): the code fix AND the doc follow-up are done in this one task — no split. Scope: (1) harden the default nvim launcher so untrusted issue fields cannot be re-parsed as vimscript; (2) generalize docs/CODING.md Rule 6 from the sh-specific wording to the principle 'untrusted fields must never be embedded where a launched tool re-parses them as code'.
+---
+id: kn842ohx
+author: Hans Kohlreiter
+created: 2026-05-22T11:01:24Z
+body: |-
+  Fixed & verified (acceptance review 2026-05-22). Default nvim launcher hardened via fix option (b): the +call append(...) Ex-command vector removed; nvim Args are now static strings only (+normal! gg / +setlocal nomodifiable / +file [Issue]) and issue fields travel as discrete BWB_ISSUE_* env-var values (non-executing path, matches the opencode launcher). Security test uses the exact injection payload and proves the title cannot execute. docs/CODING.md Rule 6 generalized from sh-specific wording to the principle 'untrusted fields must never be embedded where a launched tool re-parses them as code', with sh and nvim as concrete instances. Verifier: PASS. Full quality suite green. UX note recorded by tasker: operator no longer sees issue context inline on nvim open (access via $BWB_ISSUE_* env vars) — file a P3 follow-up only if visible-on-open context is wanted.

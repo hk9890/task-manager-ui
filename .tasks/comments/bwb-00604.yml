@@ -1,0 +1,18 @@
+---
+id: yqo95ogg
+author: Hans Kohlreiter
+created: 2026-05-29T11:19:50Z
+body: |-
+  ACCEPTANCE REVIEW PASSED (verifier, 2026-05-29). All acceptance criteria met.
+
+  Per-child verdicts (verified by direct evidence — code read + targeted tests + build + log analysis):
+  - d2oj.1 PASS — leanDepsFromPayload initializes blockedBy/related; regression test passes; 0 BlockedByNotNil violations in 5 post-fix session logs.
+  - d2oj.2 PASS — runner.go returns ExitError for ExitCode=-1; logExecution attaches "error"; 2 tests pass. (In-the-wild signal-kill recurrence not re-triggerable — rare 8/127, covered by pinning tests.)
+  - d2oj.3 PASS — explicit ACCEPT decision recorded with rationale (no code).
+  - d2oj.4 PASS — single summary WARN confirmed in post-fix session (count:20, one record); no per-file wrong-schema WARNs; winner/live dirs guarded; 3 tests pass.
+  - d2oj.5 PASS — ./bwb --version -> v0.6.0-118-g08fced2-dirty; post-fix sessions log git-describe build_version, not bare "dev".
+  - d2oj.6 PASS — session 695efa80 cold-load 53.49s -> 3.09s; script + docs/MONITORING.md consistent.
+
+  Independent gate: mise run test (1147) + mise run quality (1297 incl. integration, 15 expected opt-in skips) green; vet clean; lint 0 issues.
+  Log signals re-checked: BlockedByNotNil noise GONE, wrong-schema cache WARN spam GONE, bare build_version=dev GONE.
+  New defects: none (one pre-existing "error" vs "err" log-field naming inconsistency noted in d2oj.2, already acknowledged as a doc-chore candidate).

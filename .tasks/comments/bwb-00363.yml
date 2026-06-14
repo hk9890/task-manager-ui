@@ -1,0 +1,6 @@
+---
+id: 3vovc5g8
+author: Hans Kohlreiter
+created: 2026-05-16T03:31:41Z
+body: |-
+  Closing as superseded. Verified during audit-ticket review: ValidateQuery was refactored away (replaced by ValidateDefinitions in dashboard/definition.go:63). Query field is now a backward-compat shim per lgln. Cardinality warning logic already exists in dashboard/composer.go:91-109 with threshold 500 for Ready/Blocked/InProgress active groups — that addresses the underlying unbounded-query concern from this ticket. If a residual risk remains in the new board-side query layer (mode/board/model.go ~:372), file a fresh standalone ticket against that surface.

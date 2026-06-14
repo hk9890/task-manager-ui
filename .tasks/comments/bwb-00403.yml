@@ -1,0 +1,6 @@
+---
+id: 2zzy6v7w
+author: Hans Kohlreiter
+created: 2026-04-10T16:58:53Z
+body: |-
+  Conflict with 2t4: this task says 'test all exported functions' and names 'Place, BottomRight, etc.' but 2t4 plans to delete the BottomLeft and Top position constants as dead code. The only exported function is Place() — the rest are Config fields and Position constants. Why: if 2t4 runs first (or concurrently), the tasker will try to test deleted code. If xcp runs first, tests will be written for code that's about to be removed. Suggested action: (1) explicitly state the only exported function to test is Place() with various Config.Position values, and (2) clarify ordering — xcp should run BEFORE 2t4 deletes the unused positions, or xcp should only test the surviving positions (Center, Bottom).

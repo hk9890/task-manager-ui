@@ -1,0 +1,6 @@
+---
+id: eshepq2o
+author: Hans Kohlreiter
+created: 2026-05-29T11:03:00Z
+body: |-
+  Done. Removed the stale "SKIPPED / Remove the t.Skip below" sentences from both doc comments (help_modal_render_test.go, fatal_error_quit_test.go) and rewrote the surviving text as live regression-guard language ("Regression guard for znri.5/.7"). No test logic changed — there was no t.Skip to remove; the bodies already run. go test ./internal/app/... passes; full suite + race + integration green.

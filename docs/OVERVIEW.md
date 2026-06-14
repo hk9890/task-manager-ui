@@ -65,12 +65,12 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 | `internal/testing/*` | Repository fakes and UI test harnesses |
 | `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
 | `project-plan/` | Deeper product, architecture, and implementation planning docs |
-| `.beads/` | On-disk beads issue database (Dolt-backed; the project's own `bd` tracker store — not a product data backend) |
+| `.tasks/` | On-disk task-manager store for the project's own dev issue tracking (file-based, managed by `taskmgr`; not a product data backend) |
 | `ai.package.yaml` | AI tooling package manifest — declares AI packages/skills used with this repo |
 
 ## Architectural boundaries
 
-- Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and wrapped in `repository.NewValidating` by default. There is no `bd` subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
+- Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and wrapped in `repository.NewValidating` by default. There is no tracker-CLI subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
 - No direct SQL, no `internal/bql`, and no orchestration/control-plane dependencies in the active `./cmd/taskmgr-ui` path; see `cmd/taskmgr-ui/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
@@ -101,7 +101,7 @@ Rendering components live under `internal/ui/`:
 - `docs/TESTING.md` — test policy, fixtures, and required verification depth
 - `docs/MONITORING.md` — centralized logging contract, capture points, and evidence guidance
 - `docs/RUNTIME_UI_VERIFICATION.md` — runtime UI runbook for built-binary checks
-- `docs/CHANGE-WORKFLOW.md` — beads-first change landing and session completion workflow
+- `docs/CHANGE-WORKFLOW.md` — task-manager-first change landing and session completion workflow
 - `docs/RELEASING.md` — tag-triggered release process via GitHub Actions + GoReleaser
 - `docs/user-guide/key-bindings.md` — default operator keybindings
 - `project-plan/*.md` — deeper product/architecture/implementation intent kept as planning docs, not operator runbooks

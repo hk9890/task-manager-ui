@@ -1,0 +1,94 @@
+---
+id: videvjlr
+author: Hans Kohlreiter
+created: 2026-04-19T20:25:59Z
+body: |-
+  Review verdict: Implementation-ready, with small wording tightening recommended below. Diagnosis is accurate — current renderMetadataRail only prefixes editable+interactive rows (metadata.go L83-90), so group titles, non-editable fields (Type, Assignee, Created, Counts), labels and the divider currently render with no gutter at all. Mockup target is therefore not just about selected-row indentation, it requires uniformly prefixing every line emitted by renderMetadataRail.
+---
+id: 1u34if37
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:06Z
+body: |-
+  Likely clean implementation: (1) compute prefix once per rendered line in renderMetadataRail — selected row gets selectedPrefix, every other line (titles, non-editable rows, labels, divider, even when nothing is selected/non-interactive) gets idlePrefix; (2) apply prefix BEFORE truncation and pass width-2 to inner truncation so the gutter never gets eaten on narrow widths; (3) reuse the existing styled-marker helper. The shared-source requirement is already partly met: issuerow/row.go has selectedPrefixText/idlePrefixText + styles.SelectionIndicatorStyle.Render("›"). Easiest path: extract a tiny helper styles.SelectionPrefix(selected, styled) returning (plain, styled) and call it from issuerow.RenderCompact, RenderReferenceCompact, and metadata.go. No new component/package needed.
+---
+id: zqg9bdtt
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:10Z
+body: |-
+  Scoping concern on "shared selection component/helper": Why: phrased as written, a reader could build a new package or RowSelectionRenderer abstraction. That would be over-engineering — there are only three call sites (issuerow row, issuerow reference row, metadata) and they all want the same 2-char gutter with one styled glyph. Suggested action: reword the AC to require a shared constant+styling helper (e.g. a single function in internal/ui/styles) rather than a shared component, and explicitly forbid introducing a new package or renderer struct.
+---
+id: 5l4xj1fs
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:17Z
+body: |-
+  Edge case: non-interactive metadata pane (selectedField == MetadataFieldNone, e.g. unfocused detail). What: today renderMetadataFieldLine returns the bare line with no gutter when interactive=false, so the pane shifts left by 2 cols when focus leaves Metadata. Why: violates the "all lines reserve the gutter" rule and causes layout jitter on focus changes. Suggested action: gutter must be reserved unconditionally — idle prefix is applied even when no row is selected and even for non-editable rows; only the styled '›' glyph is conditional on selection.
+---
+id: 3zqkoeee
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:20Z
+body: |-
+  Edge case: divider line. What: divider is currently strings.Repeat("-", width) (metadata.go L52). If a 2-char gutter is reserved, the divider must render as '  ' + strings.Repeat('-', width-2) (or similar) so its left edge matches the content column instead of starting at col 0. Why: mockup shows the divider visually offset to match content; without explicit handling the divider will break the single clean left edge. Suggested action: include divider in AC and specify it uses idle gutter + (width-2) dashes.
+---
+id: rwd008h2
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:25Z
+body: |-
+  Edge case: labels group lines. What: renderLabelLines emits '• label' strings rendered via styles.TruncateString("• "+label, width) at L75. With the new rule these must also be prefixed with the idle gutter so the bullet aligns with field labels. Why: mockup only shows Core/Ownership; labels group is a real surface that will silently regress. Suggested action: explicitly include label-group lines in AC #2 ("group titles, editable rows, read-only rows, dividers, AND label-group bullet lines all align").
+---
+id: u2g4qi2s
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:31Z
+body: |-
+  Edge case: truncation + ANSI width. What: prefix must be added BEFORE TruncateString, and TruncateString must see styled '›' (which has ANSI escapes so byte-len ≠ display-width). Existing TruncateString in styles needs to be lipgloss.Width-aware for the styled glyph; current code at L92-97 truncates the plain prefix+line then re-styles only the leading '›' which is fragile if truncation shaves the trailing space. Why: previous misalignment bug (3lhw's predecessor s4f7) was rooted exactly in this plain-vs-styled width mismatch. Suggested action: add an explicit AC item that truncation must operate on display-width, and add a unit test asserting display-width of every metadata line equals min(width, naturalWidth).
+---
+id: hayc4grf
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:34Z
+body: |-
+  Edge case: very narrow width (width <= 2). What: if width is 2 or less, reserving a gutter leaves zero columns for content. Current code has no explicit floor for the metadata pane. Why: edge case that can produce empty/garbled output rather than graceful degradation. Suggested action: define behavior — either (a) skip rendering the pane below a minimum width, or (b) drop the gutter and render content-only below threshold. Either is fine, but pick one and add it to AC.
+---
+id: lia4bt0x
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:37Z
+body: |-
+  Wording change: AC #5 says "sourced from a shared component/helper". What: the word "component" invites a new package/struct. Why: see scoping comment — only a constant+style helper is needed. Suggested action: rewrite to: "The selection marker glyph and its styling are sourced from a single shared helper in internal/ui/styles (already used by issuerow); no new package, struct, or renderer abstraction is introduced."
+---
+id: u6quawl9
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:39Z
+body: |-
+  Wording change: AC #2 is incomplete. What: lists "group titles, editable rows, read-only rows, and dividers" but omits label-group bullet lines (• label). Why: silent regression risk on issues with labels. Suggested action: add "label-group bullet lines" to AC #2.
+---
+id: 9hx3fs2k
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:43Z
+body: |-
+  Wording change: add explicit AC for unfocused state. What: nothing in current ACs forces gutter to be reserved when the pane is unfocused (selectedField=MetadataFieldNone). Why: easy for an implementer to keep the existing 'interactive==false → no prefix' branch and still satisfy the literal mockups. Suggested action: add AC: "The 2-char gutter is reserved regardless of focus state; switching focus into/out of the Metadata pane does not shift any line horizontally."
+---
+id: 0k6rd1fx
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:47Z
+body: |-
+  Wording change: add testing AC. What: AC #6 only requires "Real-app review". Why: per project testing policy this kind of layout change should also have an automated golden/unit guard. Predecessor bug s4f7 already added a focused selection-movement alignment test — the same harness should cover the unfocused/focused × selected/non-selected × labels-present matrix. Suggested action: add AC: "Unit/golden tests cover (a) gutter reserved on every line type when unfocused, (b) selected '›' appears only on the selected row when focused, (c) label-group rows aligned with field rows, (d) divider aligned with content column."
+---
+id: 36m0ozrd
+author: Hans Kohlreiter
+created: 2026-04-19T20:26:52Z
+body: |-
+  Note on existing related-issues rail consistency. What: renderRelatedIssuesRail (metadata.go L220) currently renders group titles like "Blocked by (3)" and reference rows via issuerow.RenderReferenceCompact, which already has its own '› '/'  ' gutter. Group title "Blocked by (3)" however is emitted with no gutter, so reference rail has the same misalignment class as metadata. Why: out of strict scope of 3lhw (Metadata pane), but if shared selection helper is introduced cleanly it should be reused here too in a follow-up to avoid the same bug class. Suggested action: leave 3lhw scoped to Metadata, but file a follow-up task once 3lhw lands to align the related-issues rail group titles with their reference rows using the same helper.
+---
+id: ud2nclss
+author: Hans Kohlreiter
+created: 2026-04-19T20:39:59Z
+body: |-
+  Verifier: PASS with follow-up.
+
+  All metadata rail AC verified:
+  - styles.SelectionPrefix helper exists and tested (TestSelectionPrefix: pass)
+  - All 10 TestRenderMetadataRail* tests pass: unfocused gutter, selected marker, label alignment, divider alignment, narrow widths
+  - Runtime capture confirms: all metadata lines show `  ` idle gutter (group titles, fields, dividers, label bullets) when metadata is unfocused
+  - Build: clean
+
+  Unrelated failure found → filed beads-workbench-fbu2: search preview metadata goldens are stale (3 golden files still expect old no-gutter format; the new gutter output is correct).
+
+  Task criteria fully met. Follow-up: beads-workbench-fbu2.

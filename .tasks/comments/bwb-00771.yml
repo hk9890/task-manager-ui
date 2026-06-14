@@ -1,0 +1,6 @@
+---
+id: 9coaejh3
+author: Hans Kohlreiter
+created: 2026-05-24T01:29:40Z
+body: |-
+  Acceptance review complete 2026-05-24. All 8 epic criteria pass: (1) All app reads via Repository; BeadsGateway interface relocated to internal/repository/beads/interface.go; zero non-repository/beads usages in app/mode. (2) FakeBeadsGateway deleted (testing/fakes/ contains only editor/launcher/process_runner/recording_executor). (3) internal/gateway/beads/ reduced to runner-only (runner.go + tests + doc.go + ARGV_CONTRACT.md). (4) go build ./... green; mise run quality: 1123 unit + 1296 integration, 0 failures, 0 lint. (5) fmt:check + scripts:check green. (6) bwb --repo memory exits 2 without --repo-file (verified); TestRunRepoMemoryLoadsFromFile in cmd/bwb/main_test.go passes. (7) Perf 8pxi.5 cold-load 3.31s (beats 3.46s baseline; ≤3.8s target met). (8) Perf 8pxi.7 cold-load 3.20s/3.22s post-cache-deletion (no regression; cache was not load-bearing). kxci unblocked upon epic closure.

@@ -1,0 +1,6 @@
+---
+id: uyd87pty
+author: Hans Kohlreiter
+created: 2026-05-29T11:49:57Z
+body: |-
+  Fixed. Added a "Children" row (len(detail.Children)) after "Related" in both the skeleton and real branches of the Counts group in internal/ui/details/metadata.go, mirroring the 0mj1 fix. Always shown (Children: 0 included). Added TestRenderMetadataRailWithChildrenGolden (children=3) + new golden metadata_with_children.golden showing "Children : 3" after "Related". Regenerated affected goldens across internal/ui/details/testdata and internal/ui/search/testdata. Verified: go test ./internal/ui/... green; mise run quality:fast green (1149 tests, 0 lint). Changes uncommitted in working tree.

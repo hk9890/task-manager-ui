@@ -1,0 +1,18 @@
+---
+id: uqd9h40x
+author: Hans Kohlreiter
+created: 2026-04-18T20:18:18Z
+body: |-
+  Review: This is a feature request, not a bug — current behavior is as designed (status-only editing). Reclassify as type:task or type:enhancement. Hidden complexity: adding field selection requires (1) defining which metadata fields are editable vs read-only, (2) an edit interaction model per field type (priority is numeric, owner is text/selector, labels are multi-value), (3) rendering selected-field highlighting in metadata pane. What: the description says 'up/down field selection and Enter-based editing' but doesn't specify which fields or what the edit UX looks like for non-status fields. Why: without scoping which fields are editable and how, this will balloon into an open-ended design task. Suggested action: constrain to status + priority only as v1, with explicit edit interaction for each (status=dialog, priority=cycle or dialog). Defer labels/owner editing.
+---
+id: gulq6j00
+author: Hans Kohlreiter
+created: 2026-04-18T20:23:52Z
+body: |-
+  Set review — scope constraint is good but edit UX still undefined. What: the description says 'enter triggers the correct edit action' and scope constraint says 'status and priority only', but it doesn't specify what the edit interaction IS for priority. Status already has a dialog — what does priority editing look like? Cycle through P0-P5? A dialog? Inline text entry? Why: without specifying the interaction model, this will stall during implementation. The field navigation part (up/down between status and priority) is trivial; the edit UX is where the real work lives. Suggested action: specify 'priority edit = cycle P0→P1→P2→P3→P4→P5→P0 on Enter' or similar concrete interaction. Also: the existing metadataField struct already has an editable bool — add editable:true to Priority in metadataGroups and add MetadataFieldPriority constant. This is the only new feature in the set; defer it to last.
+---
+id: j8eqw62i
+author: Hans Kohlreiter
+created: 2026-04-18T22:37:25Z
+body: |-
+  Verifier rerun: PASS. Focused tests passed; live embedded-fixture run confirmed metadata selection only toggles Status/Priority, Enter on Status opens Update Status modal, and Enter on Priority updates bwf-2 from P0 to P1. Follow-up bug filed for capture harness timeout on open modal: beads-workbench-nh66.

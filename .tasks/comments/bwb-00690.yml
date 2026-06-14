@@ -1,0 +1,15 @@
+---
+id: toblrpw7
+author: Hans Kohlreiter
+created: 2026-05-19T16:03:05Z
+body: |-
+  Verifier report (rigorous, no shortcuts):
+  - A. All 5 deleted dead functions: grep clean (4 named + SessionID method gone, field intact)
+  - B. mise run test:coverage: 75.1% >= 75 threshold, exit 0
+  - C. mise run quality (FULL gate): 1063 unit + 1201 integration tests, 0 failures, exit 0
+  - D. .mise.toml: both :-75 occurrences present, no :-69 remains
+  - E. All 10 new/modified test files exist, run green, all <500ms
+  - F. Commit history: 10 commits, every ticket ID accounted for, no reverts, working tree clean
+  - G. Per-function coverage: all epic targets covered (most at 100%, layout helpers >=72.7% with dy5u tracking residual)
+  - H. dy5u filed as discovered-from on 5s67, open as P4 non-blocking
+  - 10/10 implementation tasks closed, 0c8f the only open child

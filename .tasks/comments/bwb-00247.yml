@@ -1,0 +1,12 @@
+---
+id: jid4vmr0
+author: Hans Kohlreiter
+created: 2026-05-17T21:41:40Z
+body: |-
+  Implemented `Dim bool` + `Phase int` on `RenderConfig`. `RenderCompact` applies `skeletonColor(phase)` foreground to content when `Dim&&Styled`; selection prefix is left unwrapped (selection-conflict rule satisfied). Three new unit tests cover dim-false regression, dim-true foreground presence per phase, and dim+selected conflict rule. `mise run quality:fast` + `mise run test` both pass (824 tests).
+
+  Files:
+  - `internal/ui/shared/issuerow/row.go` lines 112-128, 131-172
+  - `internal/ui/shared/issuerow/row_test.go` (3 new tests)
+
+  Verifier spawned. Awaiting accept/reject. Unblocks 9qpm.2 (49nh).

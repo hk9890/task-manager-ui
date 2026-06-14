@@ -1,0 +1,6 @@
+---
+id: k1hfreyf
+author: Hans Kohlreiter
+created: 2026-04-06T23:10:15Z
+body: |-
+  Updated docs/CODING.md to match implemented behavior: documented four built-in launcher defaults (editor/nvim/opencode/shell-command), interpolation placeholders/scope (command/args/env/workdir), shell hotkey behavior (e/n/p/l), and test references for config, launcher interpolation, app hotkey wiring, and editor service seam. Validation run: go test ./internal/config ./internal/launcher, go test ./internal/app -run '^(TestModelBuiltInLauncherHotkeysUseLauncherService|TestModelEditHotkeyUsesEditorService|TestModelEditHotkeyInDetailModeUsesEditorService|TestNewServicesBuildsLauncherFromConfigDefinitions)$', and go test ./cmd/bwb -run TestArchitectureGuardrails.

@@ -1,0 +1,133 @@
+---
+id: rwikkqbd
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:05Z
+body: |-
+  ## Browsing integration tests (yze.3.5) are vaguely scoped — no specifics on what "integration" means for TUI modes
+
+  **What**: Task beads-workbench-yze.3.5 says "Add integration-oriented tests for board/dashboard loading and navigation" and "Add tests for search mode interactions and structured filtering" — but does not define what "integration-oriented" means in practice. Is this testing tea.Model Update/View with a fake gateway? Is this testing rendered output against golden files? Is this running the full app binary against a fixture repo and checking stdout? The task leaves this entirely to the implementer's imagination.
+
+  **Why**: "Integration test" means wildly different things. For a TUI, the most useful integration test is: construct the model with a fake gateway, send a sequence of tea.Msg/tea.KeyMsg inputs, and assert on the resulting View() output (via golden files) and Model state. But the task never says this. An implementer could write integration tests that only verify the gateway is called correctly (unit-level, not integration), or tests that require running the full binary interactively (untestable by agents). The ambiguity makes it likely these tests will not actually prove the product works.
+
+  **Suggested action**: Rewrite the task to explicitly specify:
+  1. Tests should construct mode controllers with a `FakeBeadsGateway`
+  2. Tests should send sequences of `tea.KeyMsg` to exercise navigation, selection, filtering
+  3. Tests should use `teatest` golden file comparison for View() output
+  4. Tests should assert on model state (selected issue, active filter, visible items)
+  5. Specific scenarios: board loads 4 columns from gateway → golden output matches; search with status filter → filtered results appear; issue selection → detail pane shows correct data
+---
+id: l3fov3of
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:08Z
+body: |-
+  ## Plan has 24 tasks but only 4 test tasks — test-to-implementation ratio is too low for agent verification
+
+  **What**: Across all epics, there are ~20 implementation/acceptance tasks and only 4 explicit test tasks (omd.6, yze.2.4, yze.3.5, yze.4.5). The test tasks are each expected to cover an entire epic's worth of behavior. For example, yze.3.5 must cover board browsing, search with 7 structured filters, AND issue detail rendering — three completely different UI surfaces in a single task.
+
+  **Why**: Overstuffed test tasks get under-implemented. When a single task says "test board AND search AND details," the implementer will write enough tests to feel confident and move on. The later, more tedious tests (search filter edge cases, detail view field coverage) will be skimmed. More importantly, each test task's acceptance criteria are non-specific — they say "X is covered by tests" but don't define what "covered" means.
+
+  **Suggested action**: Consider splitting yze.3.5 into three tasks:
+  - Board rendering tests (golden files, column content verification)
+  - Search mode tests (text search, each structured filter, filter combination)
+  - Detail view tests (golden files for various issue shapes, field completeness)
+
+  This makes each test task's scope concrete enough to be verifiable. Alternatively, keep the single task but add specific test count or scenario count minimums to the acceptance criteria.
+---
+id: e4vieubi
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:41Z
+body: |-
+  ## No task addresses error-path UI rendering — only happy paths are testable as planned
+
+  **What**: The plan covers read operations, write operations, and rendering — but no task requires testing or implementing error-path UI rendering. What does the board look like when the gateway returns an error? What does the detail view show when `bd show` fails? What happens when a create operation fails? The architecture doc mentions "error normalization" (good) but no UI task requires rendering those errors.
+
+  **Why**: Error paths are where manual testing is most commonly relied upon ("I'll just try breaking it and see what happens"). Without automated error-path tests, these flows will only be discovered when a user hits them in production. An agent verifier cannot test error rendering if no test exists for it.
+
+  **Suggested action**: Add error-path test requirements to browsing tests (yze.3.5) and CRUD tests (yze.4.5):
+  - "Board mode displays an error notification when gateway returns an error (verified by test with error-returning fake gateway)"
+  - "Detail view shows appropriate error when `ShowIssue` fails (verified by test)"
+  - "Create/update/close/comment actions show failure feedback when gateway returns an error (verified by test)"
+---
+id: 8zp5haea
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:25Z
+body: |-
+  ## [PASS] Embedded-mode smoke/e2e requirements now appear in browsing and editor test tasks
+
+  **What**: Tasks yze.3.5 and yze.4.5 now include "Add at least one embedded-mode smoke/e2e browsing workflow against the fixture repo" and "Add at least one embedded-mode smoke/e2e workflow covering an editing or launcher path." The yze.5 harness task creates the reproducible embedded-mode fixture. Acceptance reviews yze.3.6 and yze.4.6 include "At least one embedded-mode ... smoke/e2e workflow passes."
+
+  **Why**: This closes the first-pass finding that embedded-mode compatibility was asserted in the product acceptance but no task produced the verification. The fixture flows through yze.5 → yze.3.5/yze.4.5 → acceptance reviews.
+
+  **Suggested action**: No structural change needed.
+---
+id: elwgqrdm
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:37Z
+body: |-
+  ## [MAJOR] No task tests the board→detail navigation flow end-to-end
+
+  **What**: Board browsing (yze.3.2) populates columns and enables selection. Issue detail (yze.3.4) renders a selected issue. The app shell (yze.2.3) manages selected-issue state. But no task — not the implementation tasks, not yze.3.5 (browsing integration tests), not yze.5 (harness) — explicitly requires testing the cross-mode flow: user selects issue in board → shell updates selected-issue state → detail mode renders the selected issue's data from the gateway.
+
+  **Why**: This is the single most important user workflow in the product. Each piece can work in isolation while the integration is broken: the board can update selection state to a value the detail mode doesn't read, or the detail mode can load from a different source than the shell's selected-issue state. The first-pass review flagged the missing e2e workflow tests. The updated plan added embedded-mode smoke requirements but still doesn't specify cross-mode navigation as a required test scenario.
+
+  **Suggested action**: Add to yze.3.5 acceptance criteria: "At least one integration test exercises the board→detail flow: construct app model with fake gateway → navigate to board → select issue → verify detail state shows the selected issue's data from the gateway." This is the minimum viable cross-mode test.
+---
+id: koyuhczx
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:49Z
+body: |-
+  ## [MINOR] Error-path UI rendering still has no test requirement anywhere in the plan
+
+  **What**: The first-pass review flagged that no task requires testing error-path UI rendering (what does the board show when the gateway returns an error? what happens when create fails?). The updated plan added fake gateway seams (yze.5) which ENABLE error injection, but no test task REQUIRES error-path scenarios. yze.3.5 says "representative error/empty states" in its instructions but the acceptance criteria only say "Board browsing flow is covered by automated tests" and "Search flow is covered by automated tests, including representative error/empty states."
+
+  **Why**: "Including representative error/empty states" for search is good but it's the only place error states appear in any acceptance criteria across the entire plan. Board, detail, editor, and CRUD error paths have no test requirements. Error rendering is the most commonly skipped test category. The fake gateway exists to enable it — the plan just needs to require it.
+
+  **Suggested action**: Add error-path test requirements to:
+  - yze.3.2 (board): "Board mode displays error feedback when gateway returns an error (verified by test)"
+  - yze.3.4 (detail): "Detail mode displays error feedback when ShowIssue fails (verified by test)"
+  - yze.4.2 (CRUD): "Each write action surfaces error feedback when the gateway returns an error (verified by test)"
+---
+id: eg9ltl55
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:53Z
+body: |-
+  ## yze.3.5 and yze.4.5 include embedded-mode smoke/e2e criteria — prior gap addressed
+
+  **What**: `beads-workbench-yze.3.5` now includes "Add at least one embedded-mode smoke/e2e browsing workflow against the fixture repo" in its instructions and acceptance criteria. `beads-workbench-yze.4.5` similarly includes "Add at least one embedded-mode smoke/e2e workflow covering an editing or launcher path." The browsing and editor/launcher acceptance reviews (yze.3.6, yze.4.6) also include embedded-mode verification criteria.
+
+  **Why**: The prior review identified that no task produced embedded-mode verification despite the product acceptance (yze.1) requiring it. This is now addressed at both the implementation and acceptance levels. The embedded-mode fixture repo from yze.5 provides the infrastructure, and the test tasks specify the workflows to exercise against it.
+
+  **Suggested action**: No change needed. The embedded-mode testing gap is closed by the combination of yze.5 (fixture creation) and the test task criteria.
+---
+id: 5gwv02ko
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:58Z
+body: |-
+  ## [MINOR] Browsing integration test task is still overstuffed — three UI surfaces in one task
+
+  **What**: yze.3.5 covers board integration tests, search integration tests, AND detail integration tests. Each of these is a distinct UI surface with different gateway interactions, different rendering, and different state management. The first-pass review suggested splitting or adding scenario minimums. The updated plan did not change the scope.
+
+  **Why**: When a single test task covers three surfaces, the implementer will naturally prioritize the first surface (board) and shortcut the later ones (search edge cases, detail field coverage). This is human/agent nature, not malice. The acceptance criteria are still broad: "Board browsing flow is covered by automated tests" doesn't define how many scenarios or what aspects. An agent can write one board test and one search test and technically satisfy "covered."
+
+  **Suggested action**: Either split into three tasks (board tests, search tests, detail tests) or add scenario minimums to the acceptance criteria:
+  - Board: at least one golden file test for rendered column output, at least one selection/navigation test
+  - Search: at least one test per structured filter type, one text search test, one empty-results test
+  - Detail: at least one golden file test for full issue rendering, one for minimal issue, one with comments
+---
+id: tev379ul
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:25Z
+body: |-
+  ## [PASS] Browsing integration tests now have embedded-mode requirement and proper harness dependency
+
+  **What**: The updated yze.3.5 includes instruction #5: "Add at least one embedded-mode smoke/e2e browsing workflow against the fixture repo." The task depends on yze.5 (test harness) which provides the fixture repo and test doubles. Individual implementation tasks (yze.3.2, yze.3.3, yze.3.4) now carry their own automated test requirements, so yze.3.5 is a true integration layer.
+
+  **Why**: The first review flagged missing embedded-mode verification and overly broad test scope. The updated structure addresses both: embedded-mode is required, and the integration test task is additive to per-task unit tests rather than the sole test gate.
+
+  **Suggested action**: None. Acceptable as-is.
+---
+id: dqtd1w75
+author: Hans Kohlreiter
+created: 2026-04-05T16:50:00Z
+body: |-
+  Verifier PASS: cross-surface browsing coverage now includes board browsing, search integration with representative error/empty states, issue detail flow, and an embedded-mode board-to-detail smoke/e2e workflow against the fixture repo. go test ./... passes.

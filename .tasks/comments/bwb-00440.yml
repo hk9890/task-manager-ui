@@ -1,0 +1,6 @@
+---
+id: b2jwnnmz
+author: Hans Kohlreiter
+created: 2026-05-29T11:02:20Z
+body: |-
+  Fixed in internal/repository/beads/lean_payloads.go: added `blockedBy = make([]domain.IssueReference, 0, len(records))` and `related = make(...)` at the top of leanDepsFromPayload, mirroring the pattern already used at lean_reads.go:318. Regression test TestLeanDepsFromPayload_NoDepsBlockedByNotNil added and passing. Full package passes; gofmt clean; full suite (1146 tests) + race + integration green.

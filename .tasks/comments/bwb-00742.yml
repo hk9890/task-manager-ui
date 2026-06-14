@@ -1,0 +1,18 @@
+---
+id: a4swdc15
+author: Hans Kohlreiter
+created: 2026-04-20T12:51:58Z
+body: |-
+  Review: Acceptance review task adds little beyond yixr.3's own verification. What: yixr.3 already verifies tag, workflow success, and assets; yixr.4 just re-checks the same things plus 'follow-ups tracked'. Why: the acceptance-review pattern is most valuable when implementation and verification are done by different parties; here it duplicates yixr.3 work. Suggested action: either (a) collapse yixr.4 into a yixr.3 closure checklist and delete this task, or (b) keep yixr.4 but narrow its scope to ONLY the cross-task review (epic completeness, follow-up issue creation, post-release announcement if any) and remove the duplicated tag/asset re-verification from its ACs.
+---
+id: x14xkl5z
+author: Hans Kohlreiter
+created: 2026-04-20T14:36:41Z
+body: |-
+  Verifier: PASS. All acceptance criteria satisfied.
+  - yixr.1 CLOSED: quality gates, GoReleaser check+snapshot, CI provenance (SHA 937d5c5), runtime verification all pass; blockers 72vc and yumi closed non-reproducible.
+  - yixr.2 CLOSED: CHANGELOG.md updated, release notes drafted and committed, pushed to origin before tagging.
+  - yixr.3 CLOSED: annotated tag v0.2.0 pushed; Release workflow run 24672383866 completed/success; all 5 expected assets published (linux_x64, linux_arm64, macos_x64, macos_arm64, checksums.txt).
+  - No open release-blocking defects remain.
+  - Non-blocking review comments on epic/tasks are informational only; no unresolved blockers found.
+  Closing this task.

@@ -1,0 +1,48 @@
+---
+id: zqdkg46u
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:38Z
+body: |-
+  ## Donor UI primitives don't actually need Phase 1 gateway acceptance to start
+
+  **What**: This task depends on `beads-workbench-omd.7` (Phase 1 gateway acceptance review). But the work is purely about copying/adapting isolated UI rendering primitives — modal, toaster, styles — from the donor Perles repo. These components have zero dependency on the gateway. They're rendering building blocks.
+
+  **Why**: This false dependency means the UI primitives task is blocked until the entire gateway foundation is accepted. An agent could start adapting styles and modal components the moment the repository bootstrap (omd.1) is done, since those are purely UI concerns. The gateway acceptance gate artificially serializes work that could overlap.
+
+  **Suggested action**: Change the dependency from `beads-workbench-omd.7` (gateway acceptance) to `beads-workbench-omd.1` (repository bootstrap). The bootstrap creates the package layout including `internal/ui/` — that's all this task needs. This enables parallel execution: gateway implementation and UI primitive adaptation can happen simultaneously.
+---
+id: hfjlioky
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:12Z
+body: |-
+  ## Donor-migration rules exist only in project-plan/ — no living developer doc
+
+  **What**: The donor/reference codebase rules (what to reuse, what to avoid, forbidden paths) are documented in `project-plan/IMPLEMENTATION.md` and `project-plan/EXECUTION-PLAN.md`. These are planning docs. There is no equivalent section in `docs/CODING.md` that captures the living rules for the codebase — for example, the "no direct SQL" rule is in `CODING.md` but the donor-reuse boundaries and forbidden-path list are not.
+
+  **Why**: Four tasks explicitly reference donor paths (yze.2.1, yze.2.2, yze.3.2, yze.3.4). Each links to `project-plan/` for guidance. But once Phase 1 is complete and donor migration is active, agents need the migration rules in the developer doc they actually read (`docs/CODING.md`), not buried in a planning document. Planning docs describe intent; coding docs describe the rules you follow while coding.
+
+  **Suggested action**: When the first donor-migration task lands (yze.2.1 or yze.2.2), add a "Donor Migration Rules" section to `docs/CODING.md` that captures: forbidden donor paths, acceptable donor paths, and the adaptation requirements (strip SQL/BQL/orchestration assumptions). This doesn't need its own beads task — it can be an acceptance criterion on yze.2.2 (which is the first heavy donor-adaptation task).
+---
+id: 5ocrrmmj
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:52Z
+body: |-
+  ## [LOW] UI primitives task correctly targets clean donors — positive finding
+
+  **What**: The donor paths referenced (modal, toaster, styles) have zero BQL/SQL/orchestration imports. Inspection confirms these are genuinely isolated UI primitives.
+
+  **Why**: These are safe transplant targets. The task's scope is architecturally sound.
+
+  **Suggested action**: None.
+---
+id: wmjxt95e
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:04Z
+body: |-
+  ## PASS: yze.2.2 dependency on omd.1 (not omd.7) correctly enables early parallelism
+
+  **What**: `beads-workbench-yze.2.2` (UI primitives adaptation) depends on `beads-workbench-omd.1` (repo bootstrap), NOT on `beads-workbench-omd.7` (Phase 1 acceptance). This means UI primitive work can start as soon as the repo layout exists, running in parallel with the entire gateway implementation (omd.2 through omd.7).
+
+  **Why**: This was flagged as a false dependency in a prior review and has been correctly fixed. UI primitives (modal, toaster, styles) have zero gateway dependency — they are pure rendering components. Allowing them to run in parallel with gateway work is a significant schedule improvement: approximately 5 tasks' worth of gateway work can proceed alongside UI primitive adaptation.
+
+  **Suggested action**: No change needed. This is correctly optimized.

@@ -1,0 +1,6 @@
+---
+id: 4mjxqb1g
+author: Hans Kohlreiter
+created: 2026-05-17T10:45:45Z
+body: |-
+  Closed as inert for bwb production. Verified by reading ARGV_CONTRACT.md: the production dashboard uses ReadyExplain (bd ready --explain --json) which is uncapped; bwb consumers do not call ReadyIssues→bd ready --json at runtime (it's exposed on the interface but unused by current UI per ppja.2 inventory item 14). Real-user impact: zero. Test impact: already worked around in faif.5 (--limit 0 in parity tests + smoke). Upstream bug should be filed against bd; not bwb's responsibility to fix.

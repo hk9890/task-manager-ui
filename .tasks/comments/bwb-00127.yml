@@ -1,0 +1,6 @@
+---
+id: 3pt4s5p2
+author: Hans Kohlreiter
+created: 2026-05-16T14:12:42Z
+body: |-
+  macOS: EvalSymlinks both sides of path compare in TestRun_CWDAndConfigResolutionAndStartOptions (canonicalizes /var → /private/var). Windows: setConfigHome helper now also sets APPDATA so os.UserConfigDir resolves to test temp dir; TestRunCWDInaccessibleExitsWithCode1 skipped (chmod 0o000 no-op on Windows, was causing cascading panic); TestRWMutexParallelReadOverlap threshold loosened 100ms → 200ms (Windows observed 135ms; 200ms still catches serial which would be ~2s). Quality green locally. High confidence per fix.

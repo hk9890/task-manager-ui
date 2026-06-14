@@ -1,0 +1,12 @@
+---
+id: nhknqvtr
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:34Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q6 — replaced 'eyeball the diff' with a concrete list of test:line edits (delete search_test.go:592-594 badge assertion; keep banner assertions at :589 and :619; regenerate search_results_stale_draft_w120.golden; grep for Dim:true / 'stale' before starting). Acceptance criterion added that no 'stale' or dim=true assertion remains.
+---
+id: x37ejc4n
+author: Hans Kohlreiter
+created: 2026-05-23T12:50:24Z
+body: |-
+  Implemented. Removed '· stale' suffix from resultCountTitle and stale-draft arm from renderResultRows dim. Renamed TestRenderStaleDraftShowsBannerAndBadge → TestRenderStaleDraftShowsBanner, deleted badge assertion at :592–594, kept banner assertions at :589/:619 and the two 'stale absent' guards at :645 and :679. Regenerated search_results_stale_draft_w120.golden (only golden affected). Tasker's bug-draft about TestBoardModeNotReadyBothErrorSourcesSurface was a false positive — caused by bfoj being mid-write during parallel execution; combined-tree quality:fast green (1102 unit tests).

@@ -1,0 +1,45 @@
+---
+id: 99t8zjoo
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:43Z
+body: |-
+  ## Acceptance review task lacks a layout validation methodology — "real PTY/runtime review" is not a test
+
+  **What**: Criterion: "Real PTY/runtime review confirms the UI is reviewable enough to resume feature work." This is the most important criterion in the entire epic, and it has no methodology. What does the reviewer run? What terminal size? What data? What do they compare against? The project's TESTING.md explicitly says "We do not rely on manual human terminal inspection to prove correctness."
+
+  **Why**: If the acceptance reviewer just eyeballs the output in their terminal, they're violating the project's own testing policy. If they run the existing teatest goldens, those only cover fixed fake data — not "realistic repo data." There's a gap between the project's stated testing philosophy and what this criterion actually asks for.
+
+  **Suggested action**: The acceptance review should require:
+  1. Running the embedded-fixture e2e smoke test and verifying the golden output matches at 80, 120, and 180+ column widths.
+  2. A new acceptance-specific golden test using the embedded fixture that captures the full startup board at representative sizes.
+  3. If manual PTY review is still needed, document it as an explicit exception with specific steps: "run bwb against the embedded fixture repo, verify at 120x34 that N issues are visible."
+---
+id: wl0gjy6s
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:50Z
+body: |-
+  ## Acceptance review depends on y3x but y3x scope is entirely covered by the three implementation tasks
+
+  **What**: Task 9oo depends on bug y3x. But y3x's instructions are: redesign grouping (→ covered by 7qz), rework row presentation (→ covered by u5s), rebalance detail pane (→ covered by j34), and validate with golden tests + PTY review (→ covered by all three tasks). Bug y3x is an umbrella bug whose every instruction is duplicated in a specific task.
+
+  **Why**: If y3x remains open as a dependency, the acceptance reviewer must verify it separately from the tasks — but there's nothing separate to verify. This creates confusion: does y3x need its own implementation pass? If not, it should be closed as "addressed by 7qz + u5s + j34" before the acceptance review.
+
+  **Suggested action**: Close y3x as "folded into epic child tasks" with a comment listing which task addresses which y3x finding. Then remove y3x as a dependency of 9oo (since its child tasks are already dependencies). This eliminates redundant verification work.
+---
+id: w47tolhi
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:55Z
+body: |-
+  ## Acceptance criteria don't verify the board→detail→board round-trip UX
+
+  **What**: The user's core flow is: open app → see dashboard → select issue → press enter for detail → press esc to return to dashboard. The acceptance criteria check board density, grouping, row metadata, and balance — but no criterion verifies that entering and exiting detail mode works correctly and returns to the correct board position.
+
+  **Why**: The layout redesign (removing/reducing the sidebar per j34) fundamentally changes how detail mode is entered and exited. If the round-trip is broken or loses board position, the triage workflow is broken regardless of how good the dashboard looks.
+
+  **Suggested action**: Add an acceptance criterion: "Navigating from board to detail mode (enter) and back (esc) preserves the previously focused column and row. Verified by automated test."
+---
+id: 22qcbvx3
+author: Hans Kohlreiter
+created: 2026-04-06T17:40:36Z
+body: |-
+  Verifier PASS: the dashboard redesign now delivers a proper 4-column startup dashboard, full-width triage-first browsing, no large main-screen selected sidebar, compact/glanceable row metadata, dense actionable board rendering, and passing build/vet/test/runtime checks. UI quality is now sufficient to resume feature work.

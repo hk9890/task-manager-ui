@@ -1,0 +1,18 @@
+---
+id: osdck97d
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:43Z
+body: |-
+  Review pass with one concern: README merge conflict risk. What: Both vr5 and 2ue modify README.md to add links. If they land independently, the second one to merge will need to account for the first's changes. Why: Without explicit ordering, two agents working these in parallel will produce conflicting README edits. Suggested action: Either (a) add a soft dependency so 2ue lands after vr5 (since vr5 is P1 and 2ue is P2, this is natural), or (b) specify the exact README section where the changelog link should go so there is no ambiguity even if vr5 has already modified the file.
+---
+id: 5dd690le
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:46Z
+body: |-
+  Priority and type are correct. P2 task for documentation backfill is appropriate — this is not urgent and does not block other work. The issue is well-scoped: source of truth for v0.1.0 content is explicitly the published GitHub release body, which prevents scope creep. AC is testable. Instructions are clear.
+---
+id: tdupimf7
+author: Hans Kohlreiter
+created: 2026-04-11T12:38:00Z
+body: |-
+  Completed docs-only update: added root CHANGELOG.md in Keep a Changelog format with v0.1.0 backfilled from published GitHub release notes; updated README docs links to include CHANGELOG.md. Verified by reviewing file contents and git diff for docs-only scope.

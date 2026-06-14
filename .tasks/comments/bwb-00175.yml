@@ -1,0 +1,66 @@
+---
+id: h354vwc8
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:26Z
+body: |-
+  UX gap: No height parameter in State/Render. What: The current Render function receives State.Width but no Height. The epic requires 'full available terminal height' and '~20% for comments', but the renderer has no way to know the terminal height. Why: Without height, the layout cannot split vertical space between Dependencies, Issue details, and Comments — the core layout promise of this epic is unimplementable. Suggested action: Add Height to details.State and thread it through the column renderers. Task .1 instructions should explicitly call this out as step 0.
+---
+id: k41c7oif
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:30Z
+body: |-
+  UX gap: No scrolling behavior defined. What: The epic says Dependencies and Issue details use 'full available vertical span' but says nothing about what happens when content overflows the box. Does the description scroll? Do dependencies scroll independently? Is there a viewport per pane? Why: Bubble Tea full-height boxes that overflow need explicit viewport management. Without this, the implementer will either clip content silently or invent scroll behavior that may conflict with the existing FocusPane keyboard model. Suggested action: Add explicit overflow/scroll rules to the epic for each of the three boxed areas (Dependencies, Issue details, Comments). At minimum: 'content that overflows the box is scrollable within its pane when focused.'
+---
+id: e8qr03jd
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:35Z
+body: |-
+  UX gap: Keyboard navigation between panes is undefined. What: The existing code has FocusPane with Content/Browser/Metadata, but the new layout adds a Comments pane and renames Browser to Dependencies. The epic does not specify how the user moves focus between the four regions (Dependencies, Issue details, Comments, Metadata rail), nor what keys do it. Why: Without this, the implementer will guess the focus model, and the verifier cannot test it. The current 3-pane focus model needs to become a 4-pane model (or Comments shares focus with Content). Suggested action: Explicitly define the focus cycle order and the key(s) that move between panes. Decide whether Comments is a separate focus target or a sub-region of Content.
+---
+id: 5jfs4gvo
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:40Z
+body: |-
+  UX gap: Dependency row interaction undefined. What: The ASCII mockup shows dependency rows but doesn't say whether they're navigable/selectable. The epic mentions 'if dependency navigation is supported' — this conditional must be resolved before implementation. Why: If yes, the dependency list needs cursor state, selection rendering, and an 'open dependency' action. If no, they're static text and much simpler. This is a binary design decision that changes implementation scope significantly. Suggested action: Decide now: are dependency rows navigable in this epic, or is that follow-up work? If navigable, add acceptance criteria for cursor movement and the action to open a dependency.
+---
+id: xkwnqfev
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:43Z
+body: |-
+  Technical reuse: FormSection is ready, but needs Height threading. What: styles.FormSection already supports Height for fixed-height boxes — good, direct reuse works. However, the current detail renderer never passes Height because it doesn't know terminal height (see height comment). Why: The reuse path is sound but blocked on the same Height gap. No new component needed for bordered sections. Suggested action: Task .1 should say 'reuse styles.FormSection with Height parameter' not just 'reuse the dashboard section border treatment.'
+---
+id: bqo3mpgn
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:48Z
+body: |-
+  Technical reuse: issuerow.RenderReferenceCompact is the right component for dependency rows. What: The shared/issuerow package already has RenderReferenceCompact that takes domain.IssueReference — exactly the type used by detail.BlockedBy/Blocks/Related. Why: Task .1 says 'reuse shared issue-row rendering where practical' but the current renderReferences() in details.go builds its own 'id · title' strings instead. The path is clear: replace renderReferences with calls to issuerow.RenderReferenceCompact. Suggested action: Task .1 instruction 3 should explicitly say 'replace renderReferences() with issuerow.RenderReferenceCompact calls' rather than the vague 'reuse where practical.'
+---
+id: ml6msqhe
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:52Z
+body: |-
+  Technical reuse: markdown renderer is already shared and used for descriptions. What: The details.go already uses shared/markdown for description rendering (renderMarkdownMultiline calls readOnlyMarkdown.RenderReadOnly). However, renderComments() on line 471 calls renderMultiline() — the plain text path — not renderMarkdownMultiline(). Why: The fix is trivial: change renderComments to call renderMarkdownMultiline instead of renderMultiline. No new component needed. Suggested action: Task .1 should say 'change renderComments to use renderMarkdownMultiline' — this is a one-line change, not a 'introduce or normalize' effort.
+---
+id: wkgu7xz9
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:58Z
+body: |-
+  Complexity concern: Three-column → three-column refactor is less work than the epic implies. What: The existing renderThreeColumn already does left/content/metadata with the same conceptual layout (browser rail, content, metadata). The redesign is essentially: (1) move dependencies from content into the left rail, (2) add Comments as a sub-section of center, (3) wrap sections in FormSection boxes, (4) use issuerow for deps. Why: The epic reads like a from-scratch redesign, but it's really a restructuring of the existing three-column renderer. Framing it as a rewrite risks the implementer throwing away working layout math. Suggested action: Task .1 should say 'refactor renderThreeColumn' not 'rework the main detail renderer.' Preserve the existing width-splitting logic and column-merging approach.
+---
+id: gvd6g3ye
+author: Hans Kohlreiter
+created: 2026-04-18T18:30:02Z
+body: |-
+  Simplification: The vertical divider for the right rail is trivial — don't over-specify. What: The epic and mockup show a vertical line separating the metadata rail. This is just a borderVertical character in the column merge loop — the same approach already used by FormSection. Why: Task .1 mentions 'a visible vertical rule' as if it's a distinct rendering concern. It's one character per line in the merge loop. Suggested action: Don't create a separate component or abstraction for the vertical divider. A comment in task .1 saying 'add borderVertical in the merge loop' is sufficient.
+---
+id: znfm24c6
+author: Hans Kohlreiter
+created: 2026-04-18T18:30:06Z
+body: |-
+  Scope concern: Two-column and single-column responsive fallback undefined. What: The existing code has three rendering paths: single-column, two-column, three-column based on width breakpoints. The epic only defines the three-column layout. What happens below InspectorThreeColumnMinWidth? Does the two-column layout also change? Does single-column? Why: If only the wide layout changes, the implementer needs to know that explicitly. If all three change, the scope is 3x what's described. Suggested action: Epic should state whether two-column and single-column layouts are in-scope or explicitly out-of-scope for this work.
+---
+id: snot5obd
+author: Hans Kohlreiter
+created: 2026-04-18T18:52:21Z
+body: |-
+  Accepted reviewer follow-up: comments remain part of the center/content pane for this pass; implement height-aware dense layout, explicit overflow behavior, and a 3-pane focus model. Dependency rows reuse shared issue rendering visually but direct dependency-row navigation is out of scope for this pass unless trivially free.

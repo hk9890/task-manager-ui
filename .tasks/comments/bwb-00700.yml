@@ -1,0 +1,18 @@
+---
+id: takpmzyb
+author: Hans Kohlreiter
+created: 2026-04-20T15:35:05Z
+body: |-
+  Finding: Files-to-modify list is missing AGENTS.md and docs/OVERVIEW.md. Why: AGENTS.md and OVERVIEW.md describe the runtime/startup flow and currently imply BWB launches the TUI directly with no preflight; if they are not updated, the new CLI surface is invisible to AI agents and new contributors who follow the documented entry points. Suggested action: add AGENTS.md and docs/OVERVIEW.md to the Files to Modify list, and add an AC item: 'AGENTS.md and docs/OVERVIEW.md describe the pre-TUI CLI layer and which flag paths exit before Bubble Tea starts.'
+---
+id: 51usps9g
+author: Hans Kohlreiter
+created: 2026-04-20T15:35:08Z
+body: |-
+  Finding: Docs task does not require documenting exit codes or --debug output format. Why: operators scripting around bwb (e.g. CI gates using --check-config) need exit-code semantics; --debug consumers need to know the line prefix to grep for. Without doc coverage these become reverse-engineered tribal knowledge. Suggested action: add AC items: 'Docs include the exit-code table for each non-interactive flag' and 'Docs describe --debug output line prefix and which events are emitted'.
+---
+id: gzzbkayr
+author: Hans Kohlreiter
+created: 2026-04-22T14:14:06Z
+body: |-
+  Completed docs update for CLI startup contract. Updated README.md, AGENTS.md, docs/OVERVIEW.md, docs/CODING.md, and docs/RELEASING.md with: shipped flags (-h/-v/-c/--cwd/-d/--no-auto-refresh/--print-config/--check-config), non-interactive pre-TUI exits, concrete examples, version metadata behavior (dev fallback + GoReleaser ldflags), non-interactive exit-code table, and [bwb-debug] event categories. Validation: go run ./cmd/bwb --help; --version (bwb dev); --check-config (config OK); --print-config (resolved YAML).

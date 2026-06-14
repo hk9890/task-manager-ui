@@ -1,0 +1,6 @@
+---
+id: fjcatpi6
+author: Hans Kohlreiter
+created: 2026-05-24T07:42:30Z
+body: |-
+  Done. Option A chosen (non-breaking): SaveWithHash + LoadWithManifest added; Save/Load preserved as thin wrappers. Manifest exported as public type. Caching.SaveNow reads vcStatusFunc (with 2s timeout) and passes hash to SaveWithHash; on vcStatusFunc error, hash stays empty and save still proceeds. Caching.Hydrate: refactored to do vcStatusFunc call OUTSIDE c.mu lock; compares persisted+current hash; equal+non-empty → dashboardDirty=false + seeds lastHash. SPEC GAP CAUGHT (advisor-style review): when dashboardDirty=false, fast-path returns dashboardCache (NOT memory), so without pre-computation Dashboard would return zero struct. Fix: Hydrate pre-computes dashboardCache from loaded.Dashboard() on hash-match (lock-free; memory's own lock). Test TestHydrateMatchingHashSkipsDashboardRefetch asserts both zero backing calls AND non-empty ReadyExplain. Wire-format note: SyncedAt now RFC3339Nano (was bare RFC3339); old files still parse (RFC3339 subset). All ACs pass: round-trip via new APIs; matching hash skips refetch; mismatched/empty/error → safe-default dirty=true; existing Save/Load preserved. mise run quality green (1188 unit / 1361 integration, 0 lint, -race clean).

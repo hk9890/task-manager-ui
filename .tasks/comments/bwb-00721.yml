@@ -1,0 +1,6 @@
+---
+id: zb60bo97
+author: Hans Kohlreiter
+created: 2026-05-11T15:20:16Z
+body: |-
+  Acceptance review: PASS. All implementation tasks closed (47v0.3–47v0.5). Gateway/domain contract introduces explicit SearchResultMetadata (`exact`/`maybe_more`/`partial`, `returned_count`, `requested_limit`, `source`, `notice`) across all search paths. Search mode now preserves draft/applied query, page metadata, and reload state with prior results retained during refresh/error. The search UI renders honest completeness badges and inline reload progress while distinguishing no-search-yet, no-match, and error states. Verification passed: targeted task tests, `go test ./...`, and `go build ./cmd/bwb`. No unresolved gaps found within this epic scope.

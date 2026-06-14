@@ -1,0 +1,12 @@
+---
+id: k86694xs
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:20Z
+body: |-
+  Cluster verified; all three cites match current source. Dead-branch claim confirmed: SetSelectedDetail (search/model.go:573) is the only delivery path; tea.Msg branch at :131 unreachable.
+---
+id: kn8gow4p
+author: Hans Kohlreiter
+created: 2026-05-16T04:31:59Z
+body: |-
+  All three items done. (1) Search ui/search.go State now carries QuickActions; View() in mode/search/model.go wires resolved labels via m.keys.DisplayLabel(...) mirroring details mode. Golden files refreshed via BWB_UPDATE_GOLDEN=1 (default Add-comment label is 'a', not the old hardcoded 'c'). (2) Dead 'case domain.IssueDetail:' branch removed (SetSelectedDetail is the only delivery path). (3) Local min in ui/details/details.go removed; no other ^func min in internal/.

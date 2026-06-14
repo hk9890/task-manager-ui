@@ -1,0 +1,26 @@
+---
+id: eyhl01fb
+author: Hans Kohlreiter
+created: 2026-06-04T12:17:42Z
+body: |-
+  Implemented. Focus now follows the loaded issue's rail on Enter-drill.
+
+  Approach: a drill-from-Dependencies sequence is marked before the optimistic
+  placeholder is applied; clearBrowserPanel no longer flips focus during the
+  in-flight window, and the focus decision is made when the real detail loads —
+  Dependencies if the rail is non-empty, Content if empty. The pending state is
+  cleared on load error and when a board/search selection supersedes the drill.
+
+  Files: internal/app/model.go (drill handler ordering, error-path + selection-change
+  clears), internal/mode/details/model.go (SetDrillFromDepsFocus/ClearDrillFocus,
+  ApplyLoadedDetail focus decision, clearBrowserPanel guard).
+
+  Tests added: app TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail,
+  TestAppHandlerDrillIntoLeafDepMovesFocusToContent; details
+  TestDrillFromDepsFocusRetainedOnRealLoadWithDeps,
+  TestDrillFromDepsFocusMovesToContentOnLeafLoad,
+  TestDrillFromDepsFocusClearDrillFocusCancels.
+
+  Gates (verified by orchestrator): vet, lint (0 issues), guardrails, fmt:check,
+  test (1154), quality incl. integration (1305, 15 expected skips) — all PASS.
+  New tests re-run independently: all PASS.

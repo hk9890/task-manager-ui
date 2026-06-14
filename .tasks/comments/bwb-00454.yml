@@ -1,0 +1,17 @@
+---
+id: 0qbxzw45
+author: Hans Kohlreiter
+created: 2026-05-24T18:31:19Z
+body: |-
+  Resolved as policy-document + label tweak (commit b407e88).
+
+  Decision (per user): keep newest-first as policy; document it.
+
+  Changes:
+  1. `internal/ui/details/details.go:585` — section header now reads "Comments (N · newest first)" instead of "Comments (N)". Makes the ordering obvious to the reader without needing extra UI primitives.
+  2. `docs/CODING.md` — added a "UI Rendering Conventions" subsection documenting the policy and noting the intentional divergence from `bd comments` default order.
+  3. Test + goldens updated: `internal/ui/details/details_test.go` assertion, `testdata/comments.golden`, `testdata/full.golden`.
+
+  The underlying sort logic in `renderComments()` (CreatedAt desc, ID desc as tiebreaker) is unchanged — that's the intended behaviour.
+
+  All 1013 unit tests pass; lint/vet/fmt clean.

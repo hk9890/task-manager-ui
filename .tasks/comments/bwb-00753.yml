@@ -1,0 +1,6 @@
+---
+id: fwj7c944
+author: Hans Kohlreiter
+created: 2026-05-24T07:07:46Z
+body: |-
+  Done. CachingRepository.Start(ctx)/Stop()/RefreshIfChanged(ctx) added; tickLoop polls vcStatusFunc on configurable interval (default 60s). First observation is baseline (no invalidation). Hash change → dashboardDirty=true + memory.Reset() (added to forget.go alongside existing Forget). vcStatusFunc=nil → Start is no-op (lets non-app callers use the cache without polling). WithRefreshInterval(d) + WithVCStatusFunc(fn) options added. Test seam: exported RefreshIfChanged for deterministic tests; real-timer tests use 1-50ms intervals where timer behavior is the assertion target. 8 new tick tests + Stop-during-tick + concurrent-reads-during-tick all pass -race clean. mise run quality green (1158 unit / 1331 integration, 0 lint, fmt:check + scripts:check clean).

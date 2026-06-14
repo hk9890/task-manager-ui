@@ -1,0 +1,24 @@
+---
+id: xvnpj3u0
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:00Z
+body: |-
+  Review finding: acceptance criterion is missing a specific consistency definition. What: 'Search results render the same metadata hierarchy as board' is not testable without defining what 'same' means. The actual differences I found in code: (1) board uses styled tokens (CompactIssueTypeStyled etc) while search uses plain tokens (CompactIssueType etc), (2) board uses SelectionIndicatorStyle for '›' while search uses a plain string '› ', (3) board caps idWidth at minInt(12, ...) while search has no upper cap. The criterion does not specify which of these are bugs vs intentional. Why: a tasker will have to guess whether 'same metadata hierarchy' means identical ANSI output or just identical token ordering. Suggested action: replace the criterion with: 'Board and search both use the shared row renderer for selection indicator, type/priority/status/ID token assembly, and width-aware truncation. Any intentional rendering difference (e.g. styled vs plain) is documented as a parameter of the shared renderer, not a separate code path.'
+---
+id: 9xxl27r4
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:11Z
+body: |-
+  Review finding: the input type mismatch is the real extraction risk. What: board feeds board.Row (a local struct with typed Priority int), while search feeds domain.IssueSummary directly. The shared row renderer will need to accept either a common interface/struct or require callers to map into it. board.Row exists because the mode controller (mode/board/model.go) maps domain.IssueSummary → board.Row before rendering. Search skips this step and passes domain.IssueSummary straight to the renderer. Why: the task instructions say 'create a shared component under internal/ui/shared/' but do not address the input type question. If the shared renderer accepts board.Row, search needs a mapping step. If it accepts domain.IssueSummary, board.Row becomes redundant. If it introduces a new RowInput type, that is a third struct for the same data. Suggested action: add an instruction step: 'Decide whether the shared renderer accepts domain.IssueSummary directly or defines its own input struct. If a new struct, document why domain.IssueSummary is insufficient. Eliminate board.Row if it becomes redundant.'
+---
+id: 88gjy6et
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:19Z
+body: |-
+  Review finding: idWidth cap inconsistency should be called out explicitly. What: board uses minInt(12, renderhelpers.MaxInt(7, maxWidth/5)) for ID width, search uses renderhelpers.MaxInt(7, width/5) with no upper cap. This means at large widths, search gives IDs more space than board does. This looks like an accidental omission, not a design choice. Why: the shared renderer should resolve this, but the task does not call it out as a known discrepancy. Making it explicit prevents the tasker from accidentally preserving the search behavior. Suggested action: add a note under instructions that the idWidth cap logic should be unified to the board's minInt(12, ...) formula unless there is a documented reason for search to differ.
+---
+id: hzc61sq0
+author: Hans Kohlreiter
+created: 2026-04-09T17:44:43Z
+body: |-
+  Implemented shared compact row renderer at internal/ui/shared/issuerow using domain.IssueSummary; board/search now both call it with styled=true and shared bounded ID width (min(12,max(7,width/5))). Added shared renderer tests + board/search integration coverage; updated docs/CODING.md responsibility boundaries.

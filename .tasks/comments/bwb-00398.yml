@@ -1,0 +1,6 @@
+---
+id: w3vofp3u
+author: Hans Kohlreiter
+created: 2026-04-11T12:11:29Z
+body: |-
+  Audit complete: README and repo docs reviewed; confirmed no CHANGELOG.md and no docs/RELEASING.md. GitHub release v0.1.0 body is clear and feature-complete enough for a first release, but release communication/process docs are thin at repo level. Created follow-ups: beads-workbench-2ue (add changelog + v0.1.0 entry) and beads-workbench-vr5 (add releasing guide/checklist).

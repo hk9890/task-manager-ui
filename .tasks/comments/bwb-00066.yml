@@ -1,0 +1,36 @@
+---
+id: o33xzzop
+author: Hans Kohlreiter
+created: 2026-04-10T16:59:40Z
+body: |-
+  Merge conflict risk in Wave 1: tasks eb3 (process_runner.go) and xcp (overlay tests) are safe, but 2t4 (dead code removal) touches 13 files including app/model.go, config/keybindings.go, overlay/overlay.go. Meanwhile xcp creates overlay_test.go to test overlay functions that 2t4 is deleting (BottomLeft, Top positions). If a tasker runs xcp and 2t4 concurrently, xcp might write tests for code 2t4 removes. Why: the plan declares all Wave 1 tasks as 'independent and parallel' but xcp and 2t4 conflict on the overlay package. Suggested action: either add a dependency (xcp blocked by 2t4, or vice versa) or explicitly note in both tasks that overlay.BottomLeft and overlay.Top are being deleted and tests should only cover surviving positions (Center, Bottom).
+---
+id: 7x4x5jc3
+author: Hans Kohlreiter
+created: 2026-04-10T17:00:59Z
+body: |-
+  Missing finding from code review: 'issue edit edge cases: missing (ClearLabels, priority boundaries, assignee clearing)' was identified as a test gap but no task covers it. ClearLabels IS implemented in the production code (domain/mutations.go:28, writes.go:106, app/model.go:1229) and has one basic test in writes_test.go:141, but priority boundary validation and assignee clearing have zero test coverage. Why: these are write-path behaviors that affect data integrity. Suggested action: add this to 9uk's scope, or create a dedicated task. It's small — 3-5 test cases in writes_test.go and issue_edit_document_test.go.
+---
+id: f41mhp72
+author: Hans Kohlreiter
+created: 2026-04-10T17:01:54Z
+body: |-
+  Dependency chain question: why does qyz (extract test helpers) depend on 2t4 (remove dead code)? The test helpers being extracted (hasGatewayCall, controllerAdapter, ansiEscapePattern, FakeProcessRunner) are not dead code — they're live duplicated code in test files. Dead code removal doesn't touch test helper files. Why: this artificial dependency means qyz can't start until the entire 13-file dead code removal completes, delaying Wave 2 by the duration of 2t4. Suggested action: verify whether qyz actually depends on 2t4. If the dependency is 'dead code removal might change test files that qyz modifies' — that's a merge conflict concern, not a logical dependency. If there's no real dependency, remove it and move qyz to Wave 1.
+---
+id: wai37ugf
+author: Hans Kohlreiter
+created: 2026-04-10T17:02:14Z
+body: |-
+  Follow-up on qyz→2t4 dependency: verified that 2t4's test file modifications (builtin_provider_test.go, format_test.go) do NOT overlap with qyz's test files (model_test.go in app/mode/search/board, service_test.go in launcher, row_test.go, etc.). There is no file-level conflict. The dependency appears unnecessary. Removing it would let qyz run in Wave 1, which would also unblock 9uk sooner (Wave 2 instead of Wave 3). Net effect: the 4-wave plan could collapse to 3 waves.
+---
+id: 43rjst5d
+author: Hans Kohlreiter
+created: 2026-04-10T17:02:30Z
+body: |-
+  Simplification opportunity: 14 tasks can be reduced to 11-12. (1) Merge ia6 (gateway dedup) and 0jc instruction #4 (buildFilterArgs) — they're the same work. Remove instruction #4 from 0jc. (2) If qyz→2t4 dependency is removed, the 4-wave structure collapses to 3 waves, reducing total elapsed time. (3) Consider merging 0jc instruction #2 (containsString→slices.Contains in read_gateway.go) into ia6 since it's the same file. This leaves 0jc focused on maxInt, normalizeToken, and MergeKeyBindings — cleaner scope.
+---
+id: igayqbz3
+author: Hans Kohlreiter
+created: 2026-04-10T17:03:34Z
+body: |-
+  Overall assessment: the plan is solid and well-structured for a code review cleanup. The breakdown is logical, priorities are mostly right, and task descriptions are detailed enough for agent execution. Main issues found: (1) ia6/0jc have duplicate scope on buildFilterArgs, (2) xcp/2t4 conflict on overlay package, (3) qyz→2t4 dependency appears spurious and adds an unnecessary wave, (4) rit has wrong field names in code sample, (5) 2t4 has wrong terminology (calls constants 'functions'), (6) 0jc references a file (renderhelpers) that doesn't have the code it claims, (7) ehq should be P1 not P2, (8) issue edit edge case test coverage is missing from the plan. None of these are plan-killers — they're fixable with task description updates before execution begins.

@@ -1,0 +1,30 @@
+---
+id: 3gof6yw2
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:27Z
+body: |-
+  Review finding: the blocked status and discussion framing are correct. What: making ekp.3 blocked on ekp.2 and P2 with needs:discussion is the right call. The question 'does list-level duplication remain after row extraction?' genuinely cannot be answered until ekp.2 lands. Why: this avoids speculative abstraction. The open questions are well-formed and answerable after ekp.2. No change needed here.
+---
+id: z2l1z3p5
+author: Hans Kohlreiter
+created: 2026-04-09T14:04:35Z
+body: |-
+  Review finding: ekp.3 should have an explicit dependency on ekp.2. What: ekp.3 is status BLOCKED and says 'Re-evaluate board and search after the shared row component is implemented', but it does not have a formal blocks/depends-on relationship with ekp.2 in beads metadata — only ekp.4 depends on ekp.3. Why: without the explicit dependency, the blocked status is a comment convention rather than a tracked constraint. A future session could unblock ekp.3 without realizing ekp.2 hasn't landed. Suggested action: add ekp.2 as a dependency of ekp.3 (ekp.3 depends-on ekp.2).
+---
+id: jly3zz2q
+author: Hans Kohlreiter
+created: 2026-04-09T17:30:03Z
+body: |-
+  Discussion resolved: user wants the full row/list architecture work implemented now. Proceed with ekp.2 first, then evaluate list-level duplication and either implement the minimal shared list component or document why row-level sharing is sufficient.
+---
+id: mlznaijd
+author: Hans Kohlreiter
+created: 2026-04-09T17:30:36Z
+body: |-
+  Execution blocked: this task still contains an unresolved Open Questions section, while a later comment says the discussion is resolved and implementation should proceed now. Please update the task description/instructions to reflect the resolved decision points (or remove/resolve Open Questions) so acceptance criteria match current intent.
+---
+id: augjhwdn
+author: Hans Kohlreiter
+created: 2026-04-09T17:44:47Z
+body: |-
+  Post-ekp.2 evaluation: meaningful duplication remains at row level only. Board and search list containers still differ in layout and behavior (board multi-column sections vs search query/results/preview panes), so no shared list component introduced. Documented explicit rationale in docs/CODING.md.

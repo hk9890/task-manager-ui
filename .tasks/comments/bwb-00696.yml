@@ -1,0 +1,6 @@
+---
+id: u9vn2q2g
+author: Hans Kohlreiter
+created: 2026-05-16T12:28:22Z
+body: |-
+  All 12 read methods + sub-cases (16 subtests) green in both fake and real. One real fake/real drift discovered and fixed: ShowIssue(nonexistent) returns ErrorCodeCommandFailed (real bd exits 1), not ErrorCodeNotFound (fake was wrong). Fake gained ShowIssuesByID + SearchResultsByText opt-in maps and Statuses filtering in ListIssues. Tasker flagged that the ErrorCodeNotFound branch in read_gateway.go:241 is unreachable dead code — filed as separate bug. Quality green.

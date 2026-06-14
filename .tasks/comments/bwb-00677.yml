@@ -1,0 +1,6 @@
+---
+id: frr76ve0
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:24Z
+body: |-
+  Domain model gap: children and parent-child relationships not parsed by gateway. What: syf.1 open questions include 'which groups must appear in the rail: blocked by, blocks, children, related'. However, the current domain model (IssueDetail) has BlockedBy, Blocks, and Related — but no Children or Parent fields. The bd show JSON does expose children via the dependents array with dependency_type='parent-child', but the gateway flattens all dependents into Blocks without distinguishing parent-child from blocks relationships. Why: the research task needs to know this constraint exists. Any left-rail design that shows children as a separate group will require gateway and domain model changes first. Suggested action: add this data model limitation as a known constraint in the research task so the recommendation accounts for it.

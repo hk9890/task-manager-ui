@@ -1,0 +1,74 @@
+---
+id: 0hxvm76e
+author: Hans Kohlreiter
+created: 2026-04-19T21:23:08Z
+body: |-
+  User wants to tackle search more broadly than the original golden mismatch: search should reuse the same content + metadata components and pane flow as dedicated detail mode, with search replacing dependencies as the left rail and staying somewhat wider for triage.
+---
+id: 32gh62w3
+author: Hans Kohlreiter
+created: 2026-04-19T21:52:36Z
+body: |-
+  User clarified two additional decisions: search should support both wide and small responsive layouts, and dedicated detail dependency browsing should behave like search results by auto-updating content and metadata on Up/Down without requiring Enter. Created follow-up beads-workbench-2shr.2 for the detail dependency-browser behavior change.
+---
+id: 51re4ppw
+author: Hans Kohlreiter
+created: 2026-04-20T06:36:24Z
+body: |-
+  User reported the freshly shipped search UX as broken. New approved direction: query-first search flow where typing edits only, Enter executes search, and Up/Down vertically connects query with results while keeping live preview on result movement. Created beads-workbench-2shr.3.
+---
+id: 7shp9uye
+author: Hans Kohlreiter
+created: 2026-04-20T12:41:06Z
+body: |-
+  Completed the remaining search UX landing work under beads-workbench-2shr.4. Query-first search behavior now matches the approved design in code, focused tests, and goldens; full ok  	github.com/hk9890/beads-workbench/cmd/bwb	0.186s
+  ok  	github.com/hk9890/beads-workbench/internal/app	46.500s
+  ok  	github.com/hk9890/beads-workbench/internal/config	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/dashboard	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/domain	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/gateway/beads	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/launcher	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/launcher/editor	(cached)
+  ?   	github.com/hk9890/beads-workbench/internal/mode	[no test files]
+  ok  	github.com/hk9890/beads-workbench/internal/mode/board	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/mode/details	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/mode/search	3.846s
+  ok  	github.com/hk9890/beads-workbench/internal/testing/e2e/embeddedfixture	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/testing/fakes	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/testing/ui	(cached)
+  ?   	github.com/hk9890/beads-workbench/internal/ui	[no test files]
+  ok  	github.com/hk9890/beads-workbench/internal/ui/board	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/details	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/loading	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/modal	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/overlay	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/search	0.039s
+  ok  	github.com/hk9890/beads-workbench/internal/ui/shared/issuerow	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/shared/markdown	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/shared/renderhelpers	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/styles	(cached)
+  ok  	github.com/hk9890/beads-workbench/internal/ui/toaster	(cached) passes.
+---
+id: 6f711dap
+author: Hans Kohlreiter
+created: 2026-04-20T15:13:53Z
+body: |-
+  Runtime capture analysis: startup board looks normal, but opening this epic in detail mode shows a responsive-layout bug. At 100x30 the content pane is already cramped; at 80x24 the detail view still forces Dependencies + Content + Metadata and becomes hard to read. Evidence captured with scripts/capture_bwb_screen.py against the built /tmp/bwb binary. Filed follow-up beads-workbench-2shr.5 to track the unreadable narrow-width detail layout and blocked acceptance review on it.
+---
+id: jyysa1e1
+author: Hans Kohlreiter
+created: 2026-04-22T19:45:56Z
+body: |-
+  User report clarified the remaining defect is not limited to narrow layouts: the epic detail viewer can still look broken at normal widths because comment-heavy content overflows horizontally. Filed beads-workbench-2shr.6 to track the real-terminal comment overflow regression.
+---
+id: hdf2np62
+author: Hans Kohlreiter
+created: 2026-04-23T07:33:00Z
+body: |-
+  Manual runtime verification shows the comment-heavy detail view still looks bad after beads-workbench-2shr.6: partial technical fix, but not acceptable human-readable rendering yet. Filed beads-workbench-2shr.7 to track the remaining quality issue.
+---
+id: 6w7juq26
+author: Hans Kohlreiter
+created: 2026-04-23T08:02:01Z
+body: |-
+  Acceptance review beads-workbench-2shr.1 is now closed. Epic success criteria are satisfied by closed child bugs, green details/search/full test coverage, modal runtime verification, capture-script verification, and direct runtime confirmation that the comment-heavy detail view is now readable.

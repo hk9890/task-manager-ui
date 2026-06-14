@@ -1,0 +1,48 @@
+---
+id: ohth03zn
+author: Hans Kohlreiter
+created: 2026-06-05T12:27:42Z
+body: |-
+  ## Exploration wrap-up — 2026-06-05
+
+  Drove the built app (/tmp/bwb) against a throwaway enriched embedded-fixture repo
+  (~29 issues across all columns: open 16 / in_progress 2 / blocked 2 / closed 9) via
+  scripts/capture_bwb_screen.py. 10 iterations on dashboard, detail, and search.
+
+  ### Actions tried
+  1. Board: page to the off-screen Done column (cols 1-3/4 -> 2-4/4) — works; Done shows 9 closed.
+  2. Detail: new content header (meta row + title + rule) renders in real app — works; filed 6zvr.
+  3. Detail: Dependencies-rail Enter-drill focus retention (6oa1) — VALIDATED in real app (rail-Enter round-trip).
+  4. Search: multi-match query "auth" — filed uwmi (transient stale rows during async swap).
+  5. Search: no-results zero-state — good "No matches… try broader terms"; filed dzom (junk preview row).
+  6. Search: special/regex chars (a"b%*[\]) — robust, escaped in message, 0 results, no crash.
+  7. Search: Tab focus (historical "Tab double-fires -> mode switch" bug) — stays fixed (no mode bounce).
+  8. Detail: Status dialog open + cancel — filed j14c (async-open race).
+  9. Search -> open result -> Detail -> Esc — clean; returns to Search with query+selection preserved.
+  10. Narrow width (80): responsive detail layout + new header render cleanly.
+
+  ### Tasks filed (all explore:finding, children of this epic)
+  - j14c (bug, P2): Race — ESC during async Status-dialog open pops Detail->Board, leaving an orphaned "Update Status" modal over the Board. Control proves the non-raced path cancels cleanly.
+  - uwmi (bug, P3): Search results pane briefly shows stale rows (incl. non-matching issues) below the new results during the async results swap; self-heals after ~1s. Possible gap in the search frame-stacking guard.
+  - dzom (bug, P3): Search "no selection" Content preview renders a junk meta row "? P0 (NO (none)" for the empty placeholder (consequence of the kxon header change).
+  - 6zvr (bug, P3): Detail content-pane LOADING skeleton renders as board issue-row shapes ("X XX XXX ░░░ ░░░") instead of prose paragraphs (matches the earlier "item #2" concern; not previously tracked).
+
+  No question tasks filed.
+
+  ### Coverage and limits (NOT explored, and why)
+  - Mutation SAVE paths: only opened/cancelled dialogs; did not commit create/update/close/comment. The verify_bwb_state_flow.py mutation-save/cancel wrapper was not run.
+  - Launchers (n/p/l) and editor handoff (e): not exercised.
+  - Detail-mode refresh 'r' bug discussed earlier this session (item #3) — still UNTRACKED; not re-verified here.
+  - Done-column load-more pagination on deep scroll; large-dataset/load testing — not run.
+  - Pane-FOCUS highlight (border color) not directly verified — pyte capture is colorless; focus inferred behaviorally.
+  - Resize-while-running (capture uses fixed size); multi-width golden sweep beyond one 80-col pass.
+
+  Scratch env: /tmp/bwb-explore-repo (throwaway; safe to delete). Findings remain open for triage.
+---
+id: aly4ij09
+author: Hans Kohlreiter
+created: 2026-06-05T14:48:20Z
+body: |-
+  Exploration session complete. The 4 findings were promoted to actionable, execution-ready
+  bugs and re-parented under the fix epic beads-workbench-k5vr (with AR gate wjq1). This
+  session epic is closed as a record; the wrap-up summary above stands.

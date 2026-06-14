@@ -1,0 +1,6 @@
+---
+id: x56ug2lz
+author: Hans Kohlreiter
+created: 2026-04-10T16:37:49Z
+body: |-
+  Counterpoint: TESTING.md (line 12) explicitly lists internal/testing/fakes/*_test.go as unit test examples. Deleting them would require updating the testing strategy doc. The tests do serve as executable documentation of the fake API. This is P4/backlog — the cost of keeping them is low (they're small and never fail spuriously), the cleanup value is marginal.

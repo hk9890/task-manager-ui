@@ -1,0 +1,24 @@
+---
+id: 0kh0ql5p
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:09Z
+body: |-
+  ## [MEDIUM] Services container needs explicit exclusion list, not just "inspect donor for reference"
+
+  **What**: This task's instruction 1 says "Inspect `/home/hans/dev/github/perles/internal/app/app.go` only for high-level structural reference." The donor `app.go` imports 35+ packages including `bql`, `orchestration/controlplane`, `orchestration/session`, `orchestration/v2`, `orchestration/workflow`, `infrastructure/sqlite`, `cachemanager`, `pubsub`, `watcher`, and `registry`. The donor `Model` struct embeds a `controlPlane controlplane.ControlPlane` field. The services container (`mode.Services`) includes `Executor bql.BQLExecutor` as a field.
+
+  **Why**: "Inspect for high-level structural reference" is dangerously ambiguous when the donor's structure IS the old architecture. An implementing agent will see the services pattern and naturally replicate its shape, potentially adding fields for subsystems that should not exist in the new architecture. The donor's `mode.Services` struct is the single biggest vector for architectural regression.
+
+  **Suggested action**: Replace "Inspect ... for high-level structural reference" with: "The donor `app.go` is listed in IMPLEMENTATION.md as a forbidden starting point. Do NOT replicate its services shape. The new services container must contain only: the BeadsGateway interface, a launcher service, and shared UI state. It must NOT contain a BQL executor, orchestration control plane, cache manager, pub/sub, or watcher." Add acceptance criterion: "The services container does not expose BQL, orchestration, SQL, pub/sub, caching, or watcher services."
+---
+id: acct08gd
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:46Z
+body: |-
+  ## MAJOR: Services container task still says "inspect donor app.go for reference" — this is the #1 regression vector
+
+  **What**: Instruction 1 still says "Inspect `/home/hans/dev/github/perles/internal/app/app.go` only for high-level structural reference." But IMPLEMENTATION.md line 328 lists this exact file as a forbidden starting point: "Important donor paths to avoid as starting points: `/home/hans/dev/github/perles/internal/app/app.go`". The task contradicts the implementation guidance.
+
+  **Why**: The donor `app.go` is not a safe reference at any level. Its Model struct embeds `controlPlane controlplane.ControlPlane`. Its services container includes `Executor bql.BQLExecutor`. It imports 35+ packages including orchestration, BQL, SQL infrastructure, cache, pubsub, and watcher subsystems. An implementing agent told to "inspect for high-level structural reference" will see these shapes and unconsciously replicate them. This is not a theoretical risk — it is the exact mechanism by which the old architecture propagates into new code.
+
+  **Suggested action**: Remove instruction 1 entirely or replace it with: "Do NOT inspect the donor `app.go` — it is listed as a forbidden starting point in IMPLEMENTATION.md. Build the new services container from the architecture doc's specification: BeadsGateway, config model, launcher service, and shared UI state only." Add acceptance criterion: "The services container does not reference or structurally resemble the donor app.go's service fields."

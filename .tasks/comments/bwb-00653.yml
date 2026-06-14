@@ -1,0 +1,6 @@
+---
+id: inu85mbj
+author: Hans Kohlreiter
+created: 2026-05-24T08:10:34Z
+body: |-
+  Done. Hydrate(path) → Hydrate(loadPath, writePath) — separate load and write paths preserves Q4 per-session writes while enabling cross-session warm cache. Added filestorage.LoadManifest (efficient manifest-only read; doesn't parse full JSONL). New cmd/bwb/cache_resolver.go: findLatestProjectCacheFile globs ~/.cache/bwb/<projectHash>-*/repo.jsonl.manifest.json, picks newest by SyncedAt, filters wrong schema version + corrupt files. constructRepository wires own-session writePath (defaultRepoFilePath result) and prior-session loadPath (resolver result). Smoke test confirms mechanism: cold session = 10 bd calls (list + per-issue show); warm session = 3 bd calls (hash poll only, dashboard served from memory). 7 resolver tests + LoadManifest tests + TestHydrateSeparateLoadAndWritePaths + TestConstructRepositoryCachingFindsPriorSession. mise run quality green (1200 unit / 1373 integration, -race clean).

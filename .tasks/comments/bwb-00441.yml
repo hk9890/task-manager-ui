@@ -1,0 +1,59 @@
+---
+id: geotracl
+author: Hans Kohlreiter
+created: 2026-05-28T10:37:13Z
+body: |-
+  Scope extension per user feedback: the same selection-vs-viewport divergence exists in the **details page panes**. Filing as part of this finding rather than a sibling because the fix shape is identical.
+
+  ## Details-page locations affected
+
+  1. **Dependencies pane** (`internal/ui/details/details.go:242` / `:314`)
+     - Renderer: `sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, ...)`
+     - Selection mover: `internal/mode/details/model.go:366 moveRelatedSelection(delta)`
+     - Bug: moves `BrowserSelectedIndex` but does NOT update `DependenciesScrollOffset`. If an issue has more Blocked-by / Blocks / Related / Children rows than fit in the pane, j/k advances selection invisibly off-screen.
+
+  2. **Metadata pane** (`internal/ui/details/details.go:393`)
+     - Renderer: `sliceWithOffset(metadata, state.MetadataScrollOffset, innerHeight, ...)`
+     - Selection mover: `internal/mode/details/model.go:309 moveMetadataSelection(delta)`
+     - Bug: moves `MetadataSelectedField` but does NOT update `MetadataScrollOffset`. The Metadata pane has ~20 lines on a moderate-content issue (Core 3 + Ownership 3 + Time 4 + Labels 1+N + Counts 4 + Quick actions 6); at height ≤ 22 the editable field (Status/Priority) the user is "selecting" can be off-screen.
+
+  3. **Headers**: Dependencies pane shows just `%d` (`details.go:246`, `:310`) — no "N of M" hint. Comments rail header is `"%d comments"` — also no "of M" if the rendered Content window shows only the first K comments. Same UX gap.
+
+  ## What is NOT affected
+
+  - **Content pane scroll path** (`internal/ui/details/details.go:364`): no selection — just `applyScrollAction` on the user's explicit j/k. Already correct; the user moves the offset themselves.
+
+  ## Required fix (shared with the board fix in this ticket)
+
+  Wherever a list is rendered through `sliceWithOffset` while a separate selection index exists, the selection mover must keep selection inside the window:
+
+  ```go
+  func ensureVisible(offset, sel, windowSize int) int {
+      if sel < offset { return sel }
+      if sel >= offset + windowSize { return sel - windowSize + 1 }
+      return offset
+  }
+  ```
+
+  Call sites that need it:
+  - `internal/mode/board/model.go` selection movers → adjust per-column scroll offset (new state, doesn't exist yet) before passing to the renderer.
+  - `internal/mode/details/model.go:366 moveRelatedSelection` → after updating `BrowserSelectedIndex`, call `ensureVisible` on `DependenciesScrollOffset`.
+  - `internal/mode/details/model.go:309 moveMetadataSelection` → after updating `MetadataSelectedField`, locate the field's line index and call `ensureVisible` on `MetadataScrollOffset`.
+
+  The `windowSize` is what each renderer passes as `innerHeight` to `sliceWithOffset` — that value needs to be reachable from the mode model (either by mirroring the `height - 2` arithmetic or by emitting it from the renderer after layout).
+
+  ## Separate problem flagged for the Done column
+
+  The Done column has the same visible-selection bug pattern but is structurally different: only viewport-sized rows are loaded from the repository (via `opts.ClosedLimit`), so the fix above is not enough — there is nothing to scroll into. A pagination/"load more" path needs to exist before client-side scrolling can work for Done. Filed separately as a new epic.
+---
+id: ph9kjeme
+author: Hans Kohlreiter
+created: 2026-05-28T13:17:48Z
+body: |-
+  Implemented in commit $(git log --grep="b38b.4" --oneline -1 | cut -d' ' -f1).
+
+  EnsureVisible helper at internal/ui/scroll/window.go; per-column scroll offsets in board.Model with scrollOffset map keyed by section index; selection movers call EnsureVisible(window=sectionItemCapacity()); reload resets offsets. Renderer slices rows[offset:offset+innerHeight] and flips header to "N of M" whenever visible<len(rows). Details Dependencies + Metadata panes wired the same way via moveRelatedSelection/moveMetadataSelection threading viewportHeight + line-index helpers exported from internal/ui/details. quality:fast green (1099 tests).
+
+  Note: TestBoardModeScrollTeatestChevronVisible was rewritten to use InitializeController + ApplyControllerKeySequence (synchronous) instead of raw teatest after the original showed async flakiness — same coverage, deterministic.
+
+  Manual runbook verification against dtctl-test will land as part of vtvb.12 (the acceptance review).

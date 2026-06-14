@@ -1,0 +1,6 @@
+---
+id: xirh50pt
+author: Hans Kohlreiter
+created: 2026-05-15T18:44:54Z
+body: |-
+  Implemented dynamic section limits from terminal height: removed defaultSectionLimit=25 constant, provider sections now carry Limit:0 (caller-set contract), board model computes sectionItemCapacity() (fallback 20 when height=0, else max(1, height-3)) and stamps it onto queries before dispatch. Resize does not re-issue queries — confirmed by reading the WindowSizeMsg handler. All tests pass.

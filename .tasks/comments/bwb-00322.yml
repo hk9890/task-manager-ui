@@ -1,0 +1,42 @@
+---
+id: d6g6bl9e
+author: Hans Kohlreiter
+created: 2026-05-25T09:10:10Z
+body: |-
+  ## Plan-review decisions (grill sheet resolved, all 10 questions)
+
+  **Q1 — fbea.1 parity test goes in the contract suite (BLOCKING) → ACCEPT**
+  Add to `internal/repository/contract/parity_integration_test.go` so it runs against memory AND caching automatically. The invariant "after `r.Dashboard(opts)` returns N closed issues, `r.Issue(id)` for each MUST NOT cause a backing call" must be structural, not caching-decorator-local.
+
+  **Q2 — no singleflight needed (NON-BLOCKING) → ACCEPT**
+  Caching.go has no singleflight today; do not add one. ForceFresh always skips the fast-path. Add one-line code comment in fbea.4: "two concurrent ForceFresh reloads each fan out to backing; acceptable because manual reload is keystroke-driven and idempotent".
+
+  **Q3 — v1 migration DISCARDS memory snapshot (BLOCKING) → ACCEPT**
+  When reading a v1 file in fbea.2 migration:
+  - Discard the v1 memory snapshot. v1 files are click-trail-tainted (the very bug we are fixing).
+  - Mark `dashboardDirty=true` so next Dashboard() fans out to backing.
+  - Apply the existing `confirmedMismatch` rule: even with matching hash, v1 files are treated as degenerate.
+  Do NOT load v1 memory into c.memory. fbea.2 acceptance criteria must include this.
+
+  **Q4 — `ForceFresh` threaded through signature, not closure state (BLOCKING) → ACCEPT**
+  fbea.4 changes `loadDashboardCmd(repo)` to `loadDashboardCmd(repo, opts repository.DashboardOptions)`. `startReload(refreshMode)` builds opts (forceFresh=true when refreshModeManual) and passes them in. Do NOT read model state inside the returned `tea.Cmd` closure — Bubble Tea runs Cmds outside the Update loop, that's a race smell.
+
+  **Q5 — fbea.5 injects fake `vcStatusFunc` (BLOCKING) → ACCEPT**
+  The test for known-bad fixture passes a `vcStatusFunc` that returns the manifest's recorded hash verbatim. Do NOT shell out to git or `bd`. The bug is reproducible iff `vcStatusFunc(ctx) == manifest.BDCommitHash` — make that trivially true via test injection. Confirm `caching.New(...)` / `Hydrate(...)` accept an injectable `vcStatusFunc`; if not, add the injection point as part of fbea.5.
+
+  **Q6 — cold_start_test.go has no file-present-degenerate test today (NON-BLOCKING) → CONFIRMED**
+  Existing tests cover only file-missing path. fbea.6 fills a real gap.
+
+  **Q7 — fbea.7 audit scope (NON-BLOCKING) → ACCEPT**
+  Audit output: (a) comment on fbea.7 with the field-by-field verdict; (b) inline doc-comments on each cache field in caching.go. No new markdown file. Clarification: "per-issue cache" IS `c.memory` (via SeedDetail); there is no separate per-issue map. Implementer should not go looking for one.
+
+  **Q8 — cache key boundary: ForceFresh does NOT change keying (BLOCKING) → ACCEPT**
+  fbea.3 caches the result keyed only by "current DashboardOptions snapshot" — i.e. just one entry, same as today. ForceFresh is a request modifier, not a key. ClosedLimit keying is iwvm's concern; fbea.3 stays out of it. Keeps the two epics independent as designed.
+
+  **Q9 — single-process, no concurrency concerns (NON-BLOCKING) → CONFIRMED**
+  bwb is single-process TUI; no flock/lock-file machinery in filestorage.go. Do not add concurrency safety to fbea.2.
+
+  **Q10 — fbea.1 BLOCKS fbea.3, TDD order (NON-BLOCKING) → CONFIRMED**
+  Already in dep graph. Test must fail on main before candidate (b) lands.
+
+  **Status:** plan-review gate cleared. Proceed to execution.

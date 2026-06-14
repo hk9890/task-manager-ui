@@ -1,0 +1,24 @@
+---
+id: i2srs8wm
+author: Hans Kohlreiter
+created: 2026-04-19T20:34:36Z
+body: |-
+  Triage note: keep separate from beads-workbench-9lze. The primary defect here is a detail-view hotkey/help mismatch ( is advertised for add-comment but routes elsewhere, while  currently opens the comment modal). The mutation-catalog toast is only a secondary symptom of the wrong route.
+---
+id: a8l0g8o8
+author: Hans Kohlreiter
+created: 2026-04-19T20:35:20Z
+body: |-
+  Correction to prior triage note: keep this separate from beads-workbench-9lze. Primary defect: the detail-view add-comment hotkey/help is mismatched. The UI advertises "c Add comment", but "c" routes elsewhere while "a" currently opens the comment modal. The mutation-catalog toast is only a secondary symptom of the wrong route.
+---
+id: czb4x9wz
+author: Hans Kohlreiter
+created: 2026-04-22T18:55:59Z
+body: |-
+  Reproduced on 2026-04-22 against the current workspace build. In detail view, the quick-actions rail still renders "c Add comment" while the actual shell binding remains "a" (`ShellActionCommentIssue`). PTY verification with scripts/capture_bwb_screen.py confirmed pressing a opens the "Comment on <issue>" modal, so the mismatch is still present and this bug remains relevant.
+---
+id: c7vstavw
+author: Hans Kohlreiter
+created: 2026-04-22T20:04:25Z
+body: |-
+  Fixed on 2026-04-22. Detail metadata quick actions now render from resolved shell keybindings instead of a hard-coded add-comment label, and the app initializes detail mode with the resolved key map. Verified with focused tests and a rebuilt-binary PTY run: the detail rail shows "a Add comment" on the seeded fixture and pressing a opens the comment modal.

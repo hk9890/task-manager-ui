@@ -1,0 +1,36 @@
+---
+id: 2cug2un9
+author: Hans Kohlreiter
+created: 2026-04-19T20:37:39Z
+body: |-
+  Overall verdict: Task is well-scoped and grounded in real feedback. The anti-framework guardrail is good. Three findings follow as separate comments.
+---
+id: dsdmcn1e
+author: Hans Kohlreiter
+created: 2026-04-19T20:37:49Z
+body: |-
+  AC#1 is too vague to verify. What: 'explicit field-targeted state verification for representative mutation checks' doesn't specify which fields, what assertion syntax, or what happens on mismatch. The implementer has to invent the API. Why: The current shallow_diff in verify_bwb_state_flow.py (line 90) only reports changed keys — extending it to per-field assertions is straightforward, but the AC doesn't constrain HOW (CLI flags? flow-spec additions? inline dict?). This will cause review churn. Suggested action: Replace AC#1 with something like 'FlowSpec gains an optional expect_fields dict (e.g. {"status": "closed"}) checked against the after snapshot; mismatches appear in the JSON output with before/after values. mutation-save flow uses it for at least status and closed_at.'
+---
+id: 4nexcpb3
+author: Hans Kohlreiter
+created: 2026-04-19T20:37:57Z
+body: |-
+  AC#2 readiness improvement is underspecified. What: 'at least one small but meaningful readiness/ephemeral-message improvement' — three different directions are listed (modal title, text-appears-once, settled-screen) with no guidance on which one. Why: These are very different in complexity. A settled-screen helper (detecting when screen stops changing) is meaningfully harder and more fragile than a wait-for-text-once helper. An implementer choosing settled-screen could easily blow the 'keep it small' constraint. Suggested action: Pick ONE. Recommendation: add a wait-for-text-once step type (wait until text appears, then return immediately without requiring it to persist). It's the simplest, directly addresses ephemeral flash messages, and fits the existing step parser with minimal change.
+---
+id: ekokm9f5
+author: Hans Kohlreiter
+created: 2026-04-19T20:38:05Z
+body: |-
+  AC#3 failure evidence is already partially there — scope it tighter. What: capture_bwb_screen.py already emits observed_excerpt (20 lines) and checkpoint screens on failure. The description says 'larger or more useful observed excerpts' and 'recent raw-output tail' but doesn't say what's actually missing today. Why: Without a concrete gap statement, the implementer may add noise (e.g. dumping raw bytes by default) that makes output harder to read, not easier. Suggested action: Rewrite AC#3 to: 'On failure, the JSON output includes the last checkpoint screen (if any) and the raw-output tail (last 2KB) automatically, without requiring --dump-raw. The failure object includes observed_excerpt expanded to 30 lines.' This is concrete and small.
+---
+id: 1rwo61vo
+author: Hans Kohlreiter
+created: 2026-04-19T20:38:13Z
+body: |-
+  Simplification opportunity: items 1-3 could be two tasks, not one. What: Field assertions (wrapper change) and readiness/failure-evidence (PTY helper changes) touch different files with no dependency. Why: Bundling them means partial completion is hard to land, and review scope is wider. Suggested action: Consider splitting into two tasks — one for wrapper field assertions, one for PTY readiness+failure improvements. But this is optional; the current scope is small enough (~100 lines of change total) that a single task is defensible if the ACs are tightened per the comments above.
+---
+id: 87wwipog
+author: Hans Kohlreiter
+created: 2026-04-19T20:38:19Z
+body: |-
+  AC#5 'Real-app verification confirms the improved scripts are still practical' is not testable as written. What: No definition of what 'practical' means or what constitutes real-app verification. Why: This will either be rubber-stamped or argued about. Suggested action: Replace with 'The mutation-save flow passes with the new field assertions against a fixture beads project, and the improved failure output is demonstrated by intentionally failing one step.'

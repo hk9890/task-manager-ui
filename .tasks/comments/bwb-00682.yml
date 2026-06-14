@@ -1,0 +1,21 @@
+---
+id: hew9z0d4
+author: Hans Kohlreiter
+created: 2026-04-07T15:21:35Z
+body: |-
+  ## Task .3 assertion scope overlaps heavily with existing test helpers
+
+  **What**: Task .3 asks for "assertions for visible mode/layout state," "assertions for selection/result presence," "assertions that search typing and filtering behave correctly," and "assertions for absence of runtime error panels." The existing test suite already has: `WaitForOutputContainsAll`, `AssertMatchesGolden`, `AssertMatchesGoldenNormalized`, and the embedded-fixture tests already assert on selection IDs, view content, error absence, and mode state.
+
+  **Why**: Without a clear distinction between what exists and what's new, task .3 risks producing helpers that duplicate existing coverage. The existing tests in `model_test.go` already verify: startup selection sync, board lane presence, error absence, detail content, search result count, and mode transitions.
+
+  **Suggested action**: Rewrite task .3 acceptance criteria to explicitly state what NEW assertion capabilities are needed beyond what already exists. For example: "assertions that work on captured terminal output (with ANSI codes)" would be genuinely new. "Assertions for selection presence" already exists in `firstSelectionID()` and similar test helpers. If the new assertions are just wrappers around existing string matching, this task may not need to exist separately.
+---
+id: f63svpba
+author: Hans Kohlreiter
+created: 2026-04-07T17:24:23Z
+body: |-
+  Status: implemented.
+  Outcome: added shared assertion helpers for startup/layout sanity, obvious runtime error absence, search query assertions, and action request assertions; wired scenario tests to use them and documented a fast deterministic go test path.
+  Artifacts: internal/testing/ui/assertions.go, internal/testing/ui/assertions_test.go, internal/app/scenario_workflow_test.go, internal/app/model_test.go, internal/mode/search/model_test.go, docs/TESTING.md.
+  Verification: go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v; go test ./internal/testing/ui ./internal/mode/search ./internal/app\nNext step: decide whether any concrete remaining gap justifies optional process-level coverage in gyg.4.

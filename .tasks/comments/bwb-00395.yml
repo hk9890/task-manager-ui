@@ -1,0 +1,18 @@
+---
+id: ixw75yar
+author: Hans Kohlreiter
+created: 2026-04-11T13:17:34Z
+body: |-
+  Epic dependency: markdown epic changes the rendering surface that xxd will refactor. What: xxd depends on spi completing first. After spi, the detail renderer (details.go) will produce ANSI-styled markdown output instead of plain text. xxd.1 will then extract metadata from a view that has already changed shape. Why: this is fine as a dependency chain, but the xxd tasks reference current file contents and current rendering behavior. After spi lands, the details.go baseline will be different from what xxd.1/xxd.2 describe today. Suggested action: this is acceptable as-is because the dependency chain ensures spi lands first, but the implementer of xxd should re-read the detail rendering code after spi closes rather than relying on the file lists in xxd.1/xxd.2.
+---
+id: eys8n3s0
+author: Hans Kohlreiter
+created: 2026-04-11T14:19:40Z
+body: |-
+  Verifier: epic acceptance is BLOCKED by beads-workbench-xxd.4. Layout/scroll/fallback checks passed, but the detail rail renders owner instead of assignee. Artifact: /tmp/beads-workbench-xxd3-verify-svu9yiic/artifacts.
+---
+id: 6nrz0hkb
+author: Hans Kohlreiter
+created: 2026-04-11T14:23:43Z
+body: |-
+  Verifier rerun: PASS. Acceptance criteria verified after beads-workbench-xxd.4 fix. Artifact: /tmp/beads-workbench-xxd3-reverify-j72wbjqu/artifacts. Acceptance task beads-workbench-xxd.3 can close; epic is ready to close.

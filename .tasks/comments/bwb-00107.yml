@@ -1,0 +1,50 @@
+---
+id: sjyuklqz
+author: Hans Kohlreiter
+created: 2026-05-22T20:23:24Z
+body: |-
+  Findings from this session collected into work epic beads-workbench-jxm6 ('Browsing/navigation findings — explore session 2026-05-22'). The three finding bugs (2ev4.2/.3/.4 — IDs unchanged) were reparented under jxm6 for triage.
+---
+id: lvsfan7i
+author: Hans Kohlreiter
+created: 2026-05-22T20:24:17Z
+body: |-
+  ## Exploration session wrap-up — 2026-05-22
+
+  Focus: issue browsing / navigation. Driven via the built bwb binary against the embedded seed (5-issue) and scale (590-issue) fixtures, using scripts/capture_bwb_screen.py.
+
+  ### Actions tried (10 iterations)
+  1. Board column composition + count parity (seed fixture)
+  2. Board column caps + count parity (590-issue scale fixture)
+  3. Search mode basics — type query, results, completeness label
+  4. Tab key in search mode (6hh regression check)
+  5. Search no-results / draft-query state
+  6. Board to detail to board navigation + focus integrity
+  7. Detail mode scroll boundaries (home/end/pgup/pgdown)
+  8. Board navigation edges (column boundaries, single-item column, wrap)
+  9. Extreme input — narrow terminals (40x20, 20x12)
+  10. Zero-state — bwb against a non-beads directory
+
+  ### Tasks filed (3 findings, all reparented under work epic beads-workbench-jxm6)
+  - 2ev4.2 — Board silently drops issues with status=blocked and no dependency blocker. A real open issue (bwf-5) appears in no board column.
+  - 2ev4.3 — Done column 'N+' badge makes an exact closed-count read as a lower bound (low severity; board-vs-search inconsistency).
+  - 2ev4.4 — Search shows stale results under an unsubmitted draft query; Enter-to-search is undocumented in key-bindings.md (medium severity).
+
+  No questions filed — all ambiguities resolved against source.
+
+  ### Verified working (no finding)
+  - Tab in search mode no longer mode-switches (6hh fix holds).
+  - Board to detail to board: selection round-trips, no focus loss/stuck state.
+  - Board nav edges clamp correctly (no wrap, no crash).
+  - Search works correctly on Enter (0-result query -> '0 partial / No matches').
+  - Narrow-terminal rendering: clean truncation, no crash/garbage.
+  - Non-beads directory: clean, actionable fatal error screen.
+
+  ### Coverage and limits — NOT explored
+  - Mutating flows (create c / update u / close x / comment a / editor e) — out of scope (browsing/navigation focus); the documented embedded-fixture path was prepared but unused.
+  - Launchers (n/p/l external tools) — out of scope.
+  - Deep detail scrolling — fixture issue content too short to scroll; boundary clamping confirmed but not mid-content scroll.
+  - Search pane focus cycling — confirmed Tab does not mode-switch, but did not visually verify the focused-pane border advances.
+  - Auto-refresh on focus regain / background poll — not exercised.
+  - The active perf branch's own concern (bd subprocess latency / change-token caching, wcgy) — not load-tested or benchmarked.
+  - Real (non-fixture) repositories — only embedded fixtures used.

@@ -1,0 +1,80 @@
+---
+id: nn4xs1r8
+author: Hans Kohlreiter
+created: 2026-05-17T23:20:34Z
+body: |-
+  ## Epic complete — BeadsGateway contract verification (2026-05-18)
+
+  ### Scope
+
+  8 method groups audited across the full BeadsGateway interface:
+  - Health (HealthCheck) — ya4q
+  - Read-lists (ListIssues, ReadyIssues, BlockedIssues, Query) — oyb2
+  - Read-explain (ReadyExplain) — u53a
+  - Read-detail (ShowIssue + parent-sibling fetch) — aww9
+  - Read-search (SearchIssues, 5 routing paths) — vhp2
+  - Read-counts (CountIssues) — 048i
+  - Read-catalogs (StatusCatalog, TypeCatalog, LabelCatalog) — r1m3
+  - Writes (CreateIssue, UpdateIssue, CloseIssue, AddComment) — ibif
+
+  Each group was audited against: (a) real bd 1.0.4 on a fresh temp workspace, (b) FakeBeadsGateway, (c) argv-cardinality pinning tests, (d) RunReadContract / RunWriteContract integration suites.
+
+  ### Drift findings: 23 tickets filed, ALL CLOSED
+
+  Priority breakdown: **P1=1, P2=5, P3=14, P4=3**.
+
+  **P1 — production bug:**
+  - `py38` — UpdateIssue ClearLabels workaround emitted `--remove-labels` (plural, invalid bd flag). bd silently exited 1; labels were never cleared via the UI. Masked by a stub-only test that asserted the wrong flag. **Fixed** in writes.go:122 → `--remove-label` (singular). Integration test (`5toe`) added to prevent recurrence.
+
+  **P2 — high impact:**
+  - `5toe` — Integration test for ClearLabels (RunWriteContract sub-test); also discovered fake CreateIssue/UpdateIssue label-mutation gaps and fixed them.
+  - `eifk` — FakeBeadsGateway.CloseIssue did not set CloseReason.
+  - `ix3j` — FakeBeadsGateway.SearchIssues returned nil Results on cache miss (postcondition violation).
+  - `puy3` — TypeCatalog decoder failed when bd had custom types configured (bd returns `[]string`, decoder expected `[]object`).
+  - `uij1` — ReadyIssues contract doc claimed in_progress issues are included; real bd 1.0.4 excludes them.
+
+  **P3 (14):** 68xv, 82lm, 8k27, b4gn, cnam, fy7x, g2h5, jsxd, kmfn, n63l, tkgq, v2uv, wgz0, zthw.
+
+  **P4 (3):** 4xum, j0o5, wz3u.
+
+  ### Workaround status (both still needed)
+
+  1. **CloseIssue idempotency** (upstream `gastownhall/beads#4025`): bd 1.0.4 still emits "issue not found" on re-close within the same wall-clock second (RowsAffected==0 due to DATETIME second-resolution). Workaround retained in writes.go.
+  2. **UpdateIssue --set-labels "" silent fail:** bd 1.0.4 still ignores empty `--set-labels`. Workaround (ShowIssue + per-label `--remove-label` enumeration) retained in writes.go. The workaround itself had a wrong-flag bug (py38) — now fixed.
+
+  ### Fake parity improvements
+
+  8+ fake fixes landed (2026-05-18 entries in `internal/testing/fakes/doc.go`):
+  - `ix3j` — SearchIssues cache-miss returns empty slice (not nil).
+  - `eifk` — CloseIssue sets CloseReason.
+  - `jsxd` — CloseIssue sets ClosedAt.
+  - `n63l` — AddComment sets Author.
+  - `tkgq` — Query validates empty/whitespace expressions.
+  - `fy7x` — LabelCatalog returns non-nil empty slice when unconfigured.
+  - `5toe` — CreateIssue stores Labels; UpdateIssue applies Labels and ClearLabels mutations.
+
+  ### Contract doc fixes
+
+  - `interface.go` ReadyIssues postcondition rewritten — bd ready returns ONLY status=open with no dep blockers (uij1).
+  - BD_ACTOR → BEADS_ACTOR throughout package-level Write quirks (b4gn).
+  - Top-level Related clause clarified as defensive-only (8k27).
+  - ReadyExplain --limit clause clarified (bd ignores --limit in --explain mode) (v2uv).
+  - TypeCatalog quirk expanded to document custom_types `[]string` shape (puy3).
+  - UpdateIssue ClearLabels quirk text updated to reference `--remove-label` singular (py38).
+  - Package-level "Re-verification 2026-05-18" note added documenting this audit's outcomes.
+  - ARGV_CONTRACT.md extended with per-subcommand `--status` semantics table (g2h5).
+
+  ### Test coverage improvements
+
+  - New invariants in contractcheck: TotalBlockedMatchesLenBlocked, BlockedByEnriched (ReadyExplain); NoZeroCountGroups (CountIssues); LabelsAfterClear (UpdateIssue write visibility).
+  - New unit tests: TestGatewayHealthCheckCommandFailed; TestGatewayShowIssueDecodesDefaultCloseReason; TestGatewayCatalogStripsWhitespaceLabels; TestGatewayReadyExplainDecodesNonZeroCycleCount; TestGatewayReadyExplainToleratesSchemaVersionField; TestSearchIssuesInertMultiStatusTextArgvShape; TestCountIssuesMultiStatusArgvOmitsStatusFlag + Single variant; TestGatewayTypeCatalogDecodesCustomTypesAsStrings + HandlesAbsentCustomTypes; 10 write-method test gaps closed via writes_test.go and runner_test.go (BEADS_ACTOR stripping).
+  - New fixtures: `show_closed_default_reason.json`, `labels_whitespace.json`. seed.json extended with bwf-4 (unlabeled) and bwf-5 (stored-blocked-no-dep).
+  - Catalog completeness: StatusCatalog now asserts all 7 built-ins (was 3); TypeCatalog asserts all 9 core types (was 3); fake seeding extended to match.
+
+  ### Test suite
+
+  Final state:
+  - `go build ./...`: PASS
+  - `go vet ./...`: PASS
+  - `go test ./... -count=1`: PASS (32 packages, 0 failures)
+  - `go test -tags integration ./internal/gateway/beads/contract/... -timeout 120s`: PASS (real bd 1.0.4 tier)

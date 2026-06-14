@@ -1,0 +1,12 @@
+---
+id: veonjorh
+author: Hans Kohlreiter
+created: 2026-04-19T09:04:38Z
+body: |-
+  Root cause confirmed: model.go:768-773 synthesizes a tea.KeyMsg rune and calls m.search.Update() directly. search/model.go:123 unconditionally appends any KeyRunes to query when FocusQuery is active — this fires BEFORE the reload keybind match at line 161 because the FocusQuery branch is a separate earlier case. The synthetic rune is indistinguishable from user typing. Fix: search mode should expose an explicit exported method (e.g. Reload() tea.Cmd) or accept a dedicated RefreshMsg type that bypasses the Update key-dispatch entirely. The shell calls search.Reload() instead of injecting synthetic keys. This is architecturally correct: shell owns orchestration timing, mode owns its own reload logic without coupling to keybind config. Edge cases: (1) typing state — if m.typing is true during reload, debounce timer may conflict; Reload() should not set m.typing. (2) selection preservation — triggerSearch() resets results; Reload() should preserve selectedIdx or restore it post-fetch. (3) shell key capture — CapturesShellKey at line 334 is irrelevant here since shell bypasses Update entirely. (4) loading guard — shell already checks searchIsLoading() so double-fire is safe but Reload() should still be idempotent. Required tests: (a) unit test calling Reload() with FocusQuery active confirms query unchanged, (b) unit test confirming selection index preserved across reload, (c) integration test that focus-regain in search mode does not mutate query. Verdict: straightforward — the fix is a 10-line method + 3-line call-site change.
+---
+id: 6lnv1n1u
+author: Hans Kohlreiter
+created: 2026-04-19T09:05:17Z
+body: |-
+  Reviewer analysis: root cause is synthetic KeyMsg rune injection from internal/app/model.go into search.Update(), which is interpreted as user typing before reload key matching when query focus is active. Recommended fix: expose an explicit search reload API (for example Reload() tea.Cmd calling triggerSearch()) and have shell orchestration call that instead of synthesizing a key event.

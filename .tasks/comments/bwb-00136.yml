@@ -1,0 +1,6 @@
+---
+id: oqmq36wh
+author: Hans Kohlreiter
+created: 2026-05-16T13:32:12Z
+body: |-
+  Root cause: typed-nil-as-interface gotcha. (*lumberjack.Logger)(nil) assigned to io.Closer interface — interface holds a non-nil typed-nil pointer, so m.closer != nil check passes but calling Close() dereferences nil receiver. Fix: in logging.New, use local 'var closer io.Closer' and only assign on success path; ensures the interface is true-nil on failure. Regression test in logging_test.go fails without fix, passes with. mise run quality green. Reproduction now exits cleanly (code 1, no panic). Tasker flagged 8hx6 again as known separate flake.

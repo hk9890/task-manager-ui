@@ -1,0 +1,6 @@
+---
+id: ydmiozqk
+author: Hans Kohlreiter
+created: 2026-05-16T13:10:14Z
+body: |-
+  Implementation complete. New internal/version package with Version/Commit/Date (defaults dev/unknown). bwb --version after mise run build: 'bwb v0.4.0-36-gd9f662c-dirty (commit d9f662c, built 2026-05-16T13:09:45Z)'. Default build shows 'bwb dev (commit unknown, built unknown)' — no failure. .goreleaser.yaml + .mise.toml both inject the three fields. Tests updated to use bwbversion.Version (removed versionMu since the var is now in a package that tests don't mutate). Quality green.

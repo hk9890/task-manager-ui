@@ -1,0 +1,42 @@
+---
+id: as9pthuu
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:16Z
+body: |-
+  ## Task j34 doesn't commit to removing the persistent sidebar — but the user's intent is clear
+
+  **What**: The current code in model.go shows a persistent detail sidebar consuming ~32% of width on terminals ≥110 cols (dualPaneMinWidth=110, browseBoardRatio=0.68). The user said: "The current selected-issue panel in the main board screen is wrong" and "Full detail belongs behind an explicit enter/detail action; any selected summary on the main screen should be very small (2-3 lines max) if it exists at all." Task j34 says "Reduce or simplify the persistent detail pane IF it harms board density" (emphasis mine — conditional language).
+
+  **Why**: The user is not asking for a conditional reduction. They're saying the sidebar is wrong. An implementer reading "if it harms board density" might conclude that a smaller sidebar is fine. That will fail the user's review.
+
+  **Suggested action**: Change the instruction from conditional ("if it harms board density") to directive: "Remove the persistent detail sidebar from browse mode. The board should occupy the full terminal width. If any selected-issue summary is shown, it must be at most 2-3 lines and must not reduce the board's column width." This aligns with the user's stated requirements.
+---
+id: n726t7rb
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:22Z
+body: |-
+  ## Missing test for the "open detail from dashboard" user flow
+
+  **What**: The user said: "Full detail belongs behind an explicit enter/detail action." Task j34 must preserve the enter→detail flow after removing/reducing the sidebar. But j34's acceptance criteria say nothing about testing the board→detail transition. The existing test (TestModelBoardNavigationUpdatesShellSelectionAndDetailState) tests the current sidebar-based flow. If j34 removes the sidebar, that test needs to be updated, and a new golden test should verify the transition from full-width board to dedicated detail mode.
+
+  **Why**: The board→detail transition is the primary navigation pattern in the redesigned UX. If it breaks or looks wrong after the layout change, the whole redesign fails. There's no criterion that requires testing it.
+
+  **Suggested action**: Add an acceptance criterion: "Golden test captures the full board view (no sidebar) and the subsequent detail mode view after pressing enter, verifying both states at representative terminal sizes."
+---
+id: a63zwwwi
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:29Z
+body: |-
+  ## Task j34 lists internal/ui/details/ in Files to Modify — but the real work is in internal/app/model.go layout logic
+
+  **What**: The heavy lifting for this task is in model.go's renderBody() function (lines 431-471), which contains the dual-pane layout logic, the browsePaneWidths() function, and the dualPaneMinWidth constant. The details/ package is a rendering component that probably doesn't change much — the layout decision lives entirely in the app shell. The task should emphasize that the core change is rewriting renderBody(), not tweaking the details renderer.
+
+  **Why**: If the implementer focuses on internal/ui/details/, they'll optimize the wrong thing. The sidebar exists because renderBody() always renders it when width ≥ 110. The fix is in renderBody()'s layout logic, not in the detail renderer.
+
+  **Suggested action**: Reorder/emphasize Files to Modify: primary changes are in internal/app/model.go (renderBody, browsePaneWidths, dualPaneMinWidth constants). internal/ui/details/ may need a compact-summary mode, but that's secondary.
+---
+id: p54i4uke
+author: Hans Kohlreiter
+created: 2026-04-06T16:52:26Z
+body: |-
+  Verifier PASS: the large selected-issue sidebar is gone from the main board screen; the board now uses the full browse surface; only a compact footer selection summary remains in browse mode; dedicated detail mode still provides full inspection via enter/detail; golden coverage and PTY board→detail→board checks all pass.

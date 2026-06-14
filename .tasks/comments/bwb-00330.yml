@@ -1,0 +1,6 @@
+---
+id: rxy8fsgk
+author: Hans Kohlreiter
+created: 2026-05-24T14:11:04Z
+body: |-
+  leanDependentsFromPayload signature extended to (blocks, related, children, err); explicit parent-child case routes to children. domain.IssueDetail extended with Children []IssueReference field. First unit test in internal/repository/beads/. quality:fast green (978 tests). Commit 89e24e9.

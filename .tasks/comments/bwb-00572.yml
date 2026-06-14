@@ -1,0 +1,6 @@
+---
+id: fil4ovuu
+author: Hans Kohlreiter
+created: 2026-05-16T18:51:21Z
+body: |-
+  Not a bug — closing per the discipline's 'inert behavior' carve-out. Investigation: grep across internal/mode/search/ and internal/ui/search/ shows zero usage of SearchIssuesQuery.Statuses field. The search UI does not currently expose multi-status filtering, so the silent-empty-result behavior is unreachable from any user-facing path. Additionally, interface.go (post-audit) documents this as CARVE OUT — the gateway already passes --status all and post-filters in-memory for the multi-status case. If multi-status filtering is later added to the search UI, this bug becomes reachable and should be re-opened. Rationale: app verification not required because there is no UI path to verify against.

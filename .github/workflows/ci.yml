@@ -14,10 +14,10 @@ on:
 # Gate sits a couple of points below current to absorb minor fluctuation.
 env:
   COVERAGE_THRESHOLD: 69
-  # Disable mise's GitHub artifact-attestation verification for the `bd` install
-  # (`github:gastownhall/beads` backend). The verification path calls
+  # Disable mise's GitHub artifact-attestation verification for the `taskmgr`
+  # install (`github:hk9890/task-manager` backend). The verification path calls
   # api.github.com/orgs/<org>/attestations/<digest>, which 401s against a
-  # different org with this workflow's GITHUB_TOKEN. Since gastownhall/beads
+  # different org with this workflow's GITHUB_TOKEN. Since hk9890/task-manager
   # publishes no attestations, the check has nothing to assert in the first
   # place — we are explicitly returning to the trust posture that existed
   # before mise added verification.

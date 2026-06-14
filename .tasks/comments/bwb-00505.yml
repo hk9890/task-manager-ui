@@ -1,0 +1,23 @@
+---
+id: in9lgevy
+author: Hans Kohlreiter
+created: 2026-05-17T18:25:31Z
+body: |-
+  ## Tasker complete (commit f1395a8)
+
+  Tasker (beads-tasks:tasker) implemented per spec. `mise run quality:fast` green (807 tests pass, 0 lint).
+
+  **Verification:**
+  - `internal/ui/shared/issuerow/row.go` exports `RenderCompactSkeleton`, `RenderReferenceCompactSkeleton`, `SkeletonGlyph = "▓"`.
+  - `internal/ui/skeleton/` package deleted.
+  - Three callers routed: `board.skeletonRows`, `search.renderSkeletonRows`, `details.renderColdStartSkeleton`.
+  - Test assertions updated in row_test.go, search_test.go, mode/details/model_test.go, mode/board/model_test.go.
+
+  **Tests added:**
+  - `TestRenderCompactSkeletonWidth` — lipgloss.Width == opts.Width across w ∈ {30, 50, 80, 120, 200}.
+  - `TestRenderCompactSkeletonFiveRuns` + `TestRenderCompactSkeletonStyledFiveRuns` — 5 contiguous ▓ runs separated by single spaces.
+  - `TestRenderCompactSkeletonSixDistinctTitleFills` — 6 distinct title-fill widths from the normative table.
+
+  **PlaceholderDetail finding (carry-over for T2):** `internal/mode/details/model.go:PlaceholderDetail` uses `Styled: false` because its skeleton output goes through `renderMarkdownMultiline`, which corrupts ANSI escape sequences. Plain `▓` characters survive intact; styled output does not. Documented separately on [[h2xu.2]].
+
+  **scripts/verify_refresh_concurrency.py:422:** the `░` ref is a comment, not a live assertion. Left as-is.

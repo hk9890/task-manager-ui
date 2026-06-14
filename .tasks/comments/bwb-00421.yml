@@ -1,0 +1,12 @@
+---
+id: m6abqjf7
+author: Hans Kohlreiter
+created: 2026-04-05T11:10:02Z
+body: |-
+  ## Configuration loading is not covered by any task
+
+  **What**: The architecture doc (ARCHITECTURE.md lines 329-341) specifies v1 configuration areas: editor command / $EDITOR fallback, launcher definitions, basic UI preferences. No task in any epic covers configuration loading, parsing, or storage. The app shell task (yze.2.1) creates a "services container" but doesn't mention config. The launcher framework task (yze.4.3) doesn't mention how launcher definitions are configured. The editor task (yze.4.1) references $EDITOR but doesn't address how the editor command is configured beyond the environment variable.
+
+  **Why**: Configuration is cross-cutting. Without a task that establishes the config model, each feature task will invent its own: the editor task will read $EDITOR directly, the launcher task will hardcode definitions, and there'll be no unified config file. This is technically fine for v1 if the product is purely env-var and hardcoded defaults, but the architecture doc implies more. If config is intentionally deferred to hardcoded defaults + env vars, that decision should be explicit.
+
+  **Suggested action**: Either (1) add a small config task in the app shell epic that establishes minimal config loading (editor command, basic preferences, optional config file path), or (2) add explicit notes to the editor and launcher tasks saying "v1 uses $EDITOR env var and hardcoded launcher definitions — no config file." Option 2 is simpler and probably sufficient for v1.

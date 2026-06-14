@@ -1,0 +1,24 @@
+---
+id: 365xn1b6
+author: Hans Kohlreiter
+created: 2026-04-24T15:11:16Z
+body: |-
+  Docs lifecycle review note:
+  - Canonical baseline was missing `docs/MONITORING.md`; created it because the repo has real local diagnostics guidance anchored in `cmd/bwb/main.go`, `internal/gateway/beads/runner.go`, and runtime-capture scripts.
+  - Consolidated duplicated diagnostics prose out of `README.md` and `AGENTS.md` so they route to canonical docs instead of repeating handbook content.
+  - Found stale planning reference risk: `project-plan/monitoring-plan.md` has been removed in the working tree while logging tracker task `beads-workbench-oynk.4` still referenced it. Updated that task to make `docs/MONITORING.md` the canonical destination.
+  - Retained `project-plan/*.md` as scoped planning docs; no broader project-plan consolidation was applied in this pass.
+---
+id: lrcbs4p4
+author: Hans Kohlreiter
+created: 2026-04-24T15:26:19Z
+body: |-
+  Docs lifecycle final report:
+  - Active docs mode/path: team mode using `AGENTS.md` and `docs/`
+  - Phases executed: inspect, bootstrap/setup (created missing canonical `docs/MONITORING.md`), refresh/update, review/verification loop, audit/repair, slim/consolidate, AGENTS refresh, final verification
+  - Updated docs: `README.md`, `AGENTS.md`, `docs/OVERVIEW.md`, `docs/CODING.md`, `docs/CHANGE-WORKFLOW.md`, `docs/MONITORING.md`
+  - Created docs: `docs/MONITORING.md`
+  - Inspected but left unchanged: `docs/TESTING.md`, `docs/RELEASING.md`, `docs/RUNTIME_UI_VERIFICATION.md`, `docs/user-guide/key-bindings.md`, `project-plan/*.md`
+  - Consolidation outcome: moved duplicated CLI/debug/landing guidance out of routing docs into canonical docs; retained `docs/RUNTIME_UI_VERIFICATION.md` and `docs/user-guide/key-bindings.md` as justified scoped non-standard docs; retained `project-plan/` as planning-only docs
+  - Verification outcome: reviewer and verifier final passes both reported PASS with no remaining blocker/major/minor findings
+  - Tracker repair applied during the pass: updated `beads-workbench-oynk.4` so centralized logging docs point at canonical `docs/MONITORING.md` instead of deleted `project-plan/monitoring-plan.md`

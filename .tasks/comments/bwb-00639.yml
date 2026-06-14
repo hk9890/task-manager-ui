@@ -1,0 +1,12 @@
+---
+id: smwiaoaa
+author: Hans Kohlreiter
+created: 2026-04-18T19:26:14Z
+body: |-
+  Verifier rerun: BLOCKED. Focused tests pass (internal/ui/details, internal/mode/details, internal/app, internal/ui/search) and built-binary fixture review confirms the 3-pane model, but runtime captures at 120x34/140x34/160x34 show the Content pane still leaves a large lower blank region so vertical space is not used strongly and comments are not anchored as a lower subsection. Follow-up: beads-workbench-b14. Next: rebalance content-pane vertical allocation, then rerun runtime capture.
+---
+id: 8cn2q3b3
+author: Hans Kohlreiter
+created: 2026-04-18T19:57:30Z
+body: |-
+  Verifier rerun: PASS. Focused detail/app tests pass, and built-binary fixture captures at 120x34/140x34/160x34 show the Content pane now uses spare height well: comments anchor as a lower secondary subsection, center content remains dominant, and the accepted 3-pane model still holds. Artifacts: /tmp/bwb-verify-90w2-rerun-XWcbyH and /tmp/bwb-verify-markdown-hUIRhb/detail-120x34-markdown-comment-hotkey3.json

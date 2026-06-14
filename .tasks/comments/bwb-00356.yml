@@ -1,0 +1,12 @@
+---
+id: e81bkqgp
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:05Z
+body: |-
+  Pin env allowlist exactly: PATH, HOME, USER, LANG, LC_ALL, LC_CTYPE, LC_MESSAGES, TERM. Plus any var explicitly prefixed BWB_ that the launcher service emits (verify via grep). Otherwise the tasker invents the list.
+---
+id: dymo7gzw
+author: Hans Kohlreiter
+created: 2026-05-16T03:58:55Z
+body: |-
+  Implemented. runner.go: envAllowlist (PATH, HOME, USER, LANG, LC_ALL, LC_CTYPE, LC_MESSAGES, TERM) + BWB_ prefix passthrough via filterEnvToAllowlist; applied at both NewCommandRunner construction and per-request resolveEnv. resolveWorkDir unconditionally returns bound defaultWorkDir (CommandRequest.WorkDir field retained for callers but ignored). runner_binding_test.go covers WorkDir-ignored + BD_DB_PATH-stripped + PATH/HOME-pass. BWB_ vars (BWB_ISSUE_*, BWB_PROJECT_ROOT) flow to launcher children, not bd runner — passthrough rule covers the general case.

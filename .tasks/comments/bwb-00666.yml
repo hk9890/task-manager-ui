@@ -1,0 +1,6 @@
+---
+id: 1m2lp355
+author: Hans Kohlreiter
+created: 2026-05-11T15:18:28Z
+body: |-
+  Implemented search-state rendering updates in `ui/search`: query pane now shows status + next-action hints, results pane shows completeness/capped messaging from existing search metadata, and reload/error refresh stays inline while preserving stale results. Refreshed renderer tests/goldens for no-search-yet, no-matches, reload, and updated shell/search expectations. Verification: `BWB_UPDATE_GOLDEN=1 go test ./internal/ui/search -run TestRenderGoldens`, `go test ./internal/ui/search ./internal/mode/search ./internal/app`, `go build ./cmd/bwb`.

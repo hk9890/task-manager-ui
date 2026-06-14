@@ -1,0 +1,6 @@
+---
+id: 9qmy8unc
+author: Hans Kohlreiter
+created: 2026-04-05T16:31:26Z
+body: |-
+  Verifier PASS: search init no longer errors on empty query in the active runtime path; search text entry is no longer hijacked by shell hotkeys; search remains gateway-only; regression tests cover both failures; go build ./cmd/bwb, go vet ./..., and go test ./... all pass.

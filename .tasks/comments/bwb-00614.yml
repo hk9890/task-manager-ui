@@ -1,0 +1,6 @@
+---
+id: sc0bgr2c
+author: Hans Kohlreiter
+created: 2026-05-17T10:52:54Z
+body: |-
+  Fixed by pre-fetch + --remove-labels workaround in writes.go ClearLabels branch. New tests: TestGatewayUpdateIssueClearLabelsEmitsRemoveLabels (asserts fetch + remove sequence), TestGatewayUpdateIssueClearLabelsNoOpWhenNoLabels (asserts skip when nothing to remove). interface.go updated: package quirks appendix + UpdateIssue method comment now say WORKAROUND LANDED instead of FILE UPSTREAM. mise run quality green (806 unit + 940 integration).

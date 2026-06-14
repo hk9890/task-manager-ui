@@ -1,0 +1,67 @@
+---
+id: 5869w7p4
+author: Hans Kohlreiter
+created: 2026-05-22T09:56:51Z
+body: |-
+  ## Exploration session summary — 2026-05-22
+
+  ### Actions tried (7 iterations, one action each)
+  1. CLI startup contract — exit codes for --help/-h/--version/-v/--check-config/--print-config/--bogus-flag/positional-arg.
+  2. Non-beads-directory startup — fatal-error screen via bd ping health check.
+  3. Core navigation — board -> detail -> board round-trip against the embedded fixture.
+  4. Search mode — empty/draft query, Enter-committed query (match + no-match), clear/restore.
+  5. --cwd unhappy paths — non-existent path, file-instead-of-directory, relative-path resolution.
+  5b. --config malformed inputs — invalid YAML, wrong-schema YAML, empty file, unknown keys, missing path.
+  6. Launcher security — verified default sh/opencode/nvim launcher definitions against the shell-injection rule (CODING.md rule 6) plus the interpolation code.
+
+  ### Findings filed (4 — all bugs, label explore:finding)
+  - mfzq.2 (low) — Fatal-error screen ignores ctrl+q (the documented quit key) and accepts bare q instead, inverting the app keymap.
+  - mfzq.3 (low) — Search 'partial' completeness badge is misleading (shown when results ARE complete); SearchResultCompletenessExact enum + 'exact' UI branch are unreachable dead code.
+  - mfzq.4 (low-med) — Empty 0-byte --config file fails startup with cryptic 'decode yaml: EOF', inconsistent with missing and whitespace-only configs which both fall back to defaults.
+  - mfzq.5 (medium) — Default nvim launcher embeds untrusted issue fields unescaped into a vimscript +call Ex-command; arbitrary code execution via a crafted issue title. Same class as P0 db0z.1; rule 6's sh-only wording left this vector uncovered.
+
+  No question tasks filed — nothing reached unresolvable ambiguity.
+
+  ### Coverage and limits — NOT explored
+  - Mutating flows: create (c), update (u), comment (a), close (x) issues — not exercised; no write actions were run.
+  - Editor handoff (e): the rich marker-based $EDITOR round-trip was not driven.
+  - Launchers verified by code/config inspection only — n/p/l were NOT triggered live (would spawn interactive nvim/opencode and hang the PTY capture). mfzq.5 is inspection-confirmed, not a live exploit.
+  - Help overlay (?), mode-cycle keys (f13-f16), keybinding customization, dashboard widths/resize, large-scale data (scale-seed.json), and the bwb-smoke / parity test paths were not exercised.
+  - Concurrency surfaces (rapid 'r' refresh, parent-sibling bd show dedupe) were not stress-tested.
+  - All runs used the deterministic embedded fixture (5 issues); no live/external beads DB.
+---
+id: 8x5shb5a
+author: Hans Kohlreiter
+created: 2026-05-22T10:24:17Z
+body: |-
+  ## Findings review — 2026-05-22 (independent reviewer)
+
+  All four exploration findings were independently verified against source. None closed wontfix — all describe real, verifiable defects. Outcomes applied:
+
+  - mfzq.2 — VERIFIED. RE-PRIORITIZED P2 -> P3 (consistency papercut; ctrl+c always works).
+  - mfzq.3 — VERIFIED (both sub-claims). RE-PRIORITIZED P2 -> P3. Recommend SPLIT: dead-code removal (trivial) vs. badge relabel (needs UX decision).
+  - mfzq.4 — core bug VERIFIED; original description premise was empirically WRONG (whitespace/comment-only configs also fail, not just 0-byte). Title + description CORRECTED. Stays P2; now execution-ready.
+  - mfzq.5 — VERIFIED end-to-end. Stays P1 (real arbitrary code execution via default nvim launcher template). Recommend SPLIT: P1 code fix vs. separate CODING.md Rule 6 doc generalization.
+
+  Recommended fix order by impact: mfzq.5, mfzq.4, mfzq.3, mfzq.2.
+  No fix work has been started — this run was review-only.
+---
+id: bimg4bj6
+author: Hans Kohlreiter
+created: 2026-05-22T10:47:14Z
+body: |-
+  ## Execution plan — fix all 4 finding bugs (2026-05-22)
+
+  User confirmed via /beads-work: fix mfzq.2, mfzq.3, mfzq.4, mfzq.5. Each was independently reviewed/VERIFIED against source (see per-bug comments) — plan-review gate satisfied by that existing review evidence.
+
+  Delegation: 4 parallel taskers (disjoint files), then a verifier runs acceptance review against each bug's repro + quality gates before closure.
+
+  Resolved decisions:
+  - mfzq.3: Option A — suppress the completeness badge when the result set is complete; remove dead Exact enum + UI branch. No split (one task).
+  - mfzq.5: code fix + CODING.md Rule 6 doc generalization done together in one task. No split.
+---
+id: so3h82x1
+author: Hans Kohlreiter
+created: 2026-05-22T11:01:25Z
+body: |-
+  All 4 finding bugs (mfzq.2-.5) implemented, independently acceptance-reviewed (all PASS), and closed. Full quality suite green (1085 unit + 1223 integration tests, vet/lint/guardrails/fmt all clean). Epic 5/5 complete — closing.

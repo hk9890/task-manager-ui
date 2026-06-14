@@ -1,0 +1,54 @@
+---
+id: 96jr6pbc
+author: Hans Kohlreiter
+created: 2026-04-05T10:55:33Z
+body: |-
+  Plan coverage audit: current beads plan covers only Phase 1 (repository bootstrap + BeadsGateway foundation). It does NOT yet cover the full v1 product described in project-plan/. Missing planned follow-up epics include: (1) minimal Bubble Tea app shell, (2) browsing experience with built-in dashboards/search/details, (3) editor and launcher flows, and (4) broader UI/integration acceptance coverage beyond gateway tests. Full product execution should not be considered fully planned until those follow-up epics/tasks are created.
+---
+id: bo3xc2tm
+author: Hans Kohlreiter
+created: 2026-04-05T11:09:53Z
+body: |-
+  ## STRENGTH: Gateway seam architecture is inherently testable
+
+  **What**: The plan's core architectural decision — a `BeadsGateway` interface as the single data boundary between UI and beads — is excellent for testability. Every mode controller and every UI component can be tested against a fake gateway without needing `bd` or a beads repo. The command runner test seams (omd.3) add another clean boundary below the gateway.
+
+  **Why**: This two-layer testability boundary (fake gateway for UI tests, fake command runner for gateway tests) means the plan already has the right seams in the architecture. The problem is not architectural — it's that the test tasks don't leverage these seams explicitly. The architecture enables agent-verifiable testing; the test tasks just need to specify it.
+
+  **Suggested action**: No architectural change needed. This is the plan's strongest testability feature. The fix is to ensure all test tasks explicitly reference and depend on these seams.
+---
+id: wk7aaarf
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:32Z
+body: |-
+  ## STRENGTH: Architecture docs clearly separate renderer from provider, gateway from UI — all testable seams
+
+  **What**: The architecture doc and plan consistently separate: dashboard renderer from dashboard definition provider, gateway interface from CLI implementation, launcher interface from subprocess execution, editor interface from editor binary. These are all clean testable seams.
+
+  **Why**: Each separation point is a testing boundary. You can test the dashboard renderer with fake definitions. You can test the CLI adapter with a fake command runner. You can test the launcher framework with a command recorder. You can test the editor flow with a fake editor opener. The architecture was designed (intentionally or not) to support dependency injection at every major boundary.
+
+  **Suggested action**: The plan should explicitly call out these seams as the testing strategy in a cross-cutting "testing approach" section or task. Right now the architecture enables testability but the test tasks don't leverage it explicitly.
+---
+id: b99p2rav
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:40Z
+body: |-
+  ## [LOW] Gateway epic dependency chain is correctly strict — positive finding
+
+  **What**: The dependency chain within the gateway epic is well-structured: bootstrap → interfaces → runner → reads/writes (parallel) → tests → acceptance review. Each task blocks the next appropriately, and the acceptance review depends on all implementation tasks.
+
+  **Why**: This prevents an implementer from jumping ahead to read/write operations before the interface and runner foundations exist. The parallel structure of reads and writes after the runner is also correct — they share the runner but don't depend on each other.
+
+  **Suggested action**: None. This is a strong structural protection.
+---
+id: 6kd2hta0
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:49Z
+body: |-
+  ## PASS: Phase 1 internal dependency chain is correctly strict and properly sequenced
+
+  **What**: Within the gateway epic, the dependency chain is: omd.1 → omd.2 → omd.3 → [omd.4 ‖ omd.5] → omd.6 → omd.7. Each step correctly requires the prior step's deliverables: bootstrap before interfaces, interfaces before runner, runner before read/write ops (parallel), ops before tests, tests before acceptance. The omd.8 (guardrails) → omd.6 dependency is also correct — guardrails should exist before the test verification pass runs.
+
+  **Why**: This is the backbone of the plan. An agent cannot skip to gateway implementation without the interface, cannot test without the implementation, cannot accept without tests. The parallel branch for reads and writes after the runner is good — they share the runner but don't depend on each other.
+
+  **Suggested action**: No change needed. This is a strong structural protection. The only gap is omd.8's missing dependency on omd.1 (noted separately).

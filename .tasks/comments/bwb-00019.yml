@@ -1,0 +1,36 @@
+---
+id: iub374qr
+author: Hans Kohlreiter
+created: 2026-05-25T09:10:08Z
+body: |-
+  ## Plan-review decisions (grill sheet resolved, all 6 questions)
+
+  **Q1 — call-site enumeration is incomplete and contains a phantom (BLOCKING) → ACCEPT**
+  s4r7.1 must re-derive the list via `grep -rn '\.Dashboard(' --include='*.go' .` against `internal/`, `cmd/`, `scripts/`. The epic body's list is missing at minimum:
+  - `internal/repository/caching/cold_start_test.go:48`
+  - `internal/mode/board/model_double_refresh_test.go`
+  - `cmd/bwb/main_test.go:617` (countingRepository stub)
+  - ~16 stub Dashboard methods in `internal/repository/validating_test.go`
+  - stubRepository at `internal/repository/caching/caching_test.go:58`
+  And contains a phantom (`internal/testing/e2e/embeddedfixture/fixture_integration_test.go` — does not exist). The epic body list is INDICATIVE not AUTHORITATIVE.
+
+  **Q2 — s4r7.2/.3/.4 must land in one atomic commit (BLOCKING) → ACCEPT**
+  The signature change at s4r7.2 breaks the build until impls (s4r7.3) AND call sites (s4r7.4) are updated. These must be ONE COMMIT. Children remain as separate tickets for clarity, but the tasker MUST land s4r7.2 + s4r7.3 + s4r7.4 + s4r7.5 in a single commit. Closes happen serially in bd but reference the same SHA.
+
+  **Q3 — preserve `context.Background()` smell at model.go:554 (NON-BLOCKING) → ACCEPT**
+  This refactor is zero-behavior. Do NOT "clean up" `context.Background()` → `ctx` in this epic. If you want to fix it, file a follow-up bug. Out-of-scope rule applies.
+
+  **Q4 — `ClosedLimit<=0` semantics (NON-BLOCKING) → ACCEPT**
+  Document in `repository.go` interface comment: "ClosedLimit <= 0 means use implementation default". Negative values also fall back to default. This locks in the contract before iwvm or fbea diverges.
+
+  **Q5 — s4r7.6 acceptance review needs CI-verifiable signature check (BLOCKING) → ACCEPT**
+  s4r7.6 AC must include:
+  - (a) `grep -rn '\.Dashboard(ctx)' --include='*.go' .` returns ZERO matches in internal/, cmd/, scripts/
+  - (b) `mise run quality` green including parity contract suite
+  - (c) `go test -race ./...` green
+  Without (a) a stub repo never converted to `repository.Repository` could silently survive (Go interface satisfaction is checked only at conversion sites).
+
+  **Q6 — collapse s4r7.5 doc into s4r7.2 (NON-BLOCKING) → ACCEPT (interpretation)**
+  Doc lives at the signature. s4r7.2 includes the interface doc comment update inline; s4r7.5 becomes a thin verification ticket ("doc comment exists and matches contract") that the same commit closes.
+
+  **Status:** plan-review gate cleared. Proceed to execution.

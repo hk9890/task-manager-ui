@@ -1,0 +1,6 @@
+---
+id: 4f95aunw
+author: Hans Kohlreiter
+created: 2026-05-16T06:39:30Z
+body: |-
+  Baseline captured and committed (3a70d5a). 445 tests, 93.4s median (cold cache, 3 runs: 96.2/92.3/93.4 s). Top-3 slowest: TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow 13.7s, TestSearchModeEmbeddedFixtureInitUsesEmptyQueryFallback 13.4s, TestModelEmbeddedFixtureFullBoardCaptureGolden 13.2s. All slow tests are embedded-fixture (bd subprocess) tests in internal/app and internal/mode/search. i1th.2 '80% drop' target = below ~18.7s.

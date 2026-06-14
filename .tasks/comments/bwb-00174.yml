@@ -1,0 +1,18 @@
+---
+id: x2yvgh51
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:20Z
+body: |-
+  Plan review: dependency structure is correct. t7o.1 and t7o.2 are independent and parallelizable, t7o.3 integrates both, t7o.4 gates closure. The 3-task + acceptance breakdown is right-sized for this scope — no need to split or merge.
+---
+id: snxp1qbz
+author: Hans Kohlreiter
+created: 2026-04-18T18:29:24Z
+body: |-
+  Risk: epic success criteria bullet 3 says 'existing mutation-triggered refresh behavior remains intact and is integrated with dirty/stale tracking.' This conflates a regression guard (keep existing behavior) with new feature work (dirty/stale integration). Why: the tasker may treat 'integrated' as mandatory scope creep vs a nice-to-have. Suggested action: split into two criteria — one for regression safety ('mutation-triggered detail refresh still works'), one for the new dirty-marking behavior ('writes mark board/search dirty').
+---
+id: mlv8bbi8
+author: Hans Kohlreiter
+created: 2026-04-18T18:31:27Z
+body: |-
+  Reviewer verdict: good enough with minor changes. Updated epic and child tasks to clarify the named ~60s tick constant, focus-reporting fallback behavior, non-destructive board auto-refresh, detail-state stability expectations, and to move docs verification into acceptance review.

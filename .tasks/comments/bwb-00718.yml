@@ -1,0 +1,6 @@
+---
+id: 823pbw9d
+author: Hans Kohlreiter
+created: 2026-05-16T19:09:03Z
+body: |-
+  Done. Created internal/testing/fakes/doc.go with fake-update discipline (3-step protocol: update fake → strengthen invariant → record drift) and drift log seeded with 2 entries from 8qw9.3 (ShowIssue nil-slice, Query expr-ignore). Removed duplicate inline log from beads_gateway.go — single source of truth. AGENTS.md updated with pointer in Testing section. mise run quality green (734 unit + 849 integration, 0 lint).

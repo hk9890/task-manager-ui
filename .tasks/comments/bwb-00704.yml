@@ -1,0 +1,6 @@
+---
+id: 3b684gwz
+author: Hans Kohlreiter
+created: 2026-04-18T19:57:55Z
+body: |-
+  Acceptance review: PASS. Tasks .1 and .2 are closed; focused detail/app tests pass; built-binary fixture captures at 120x34/140x34/160x34 plus markdown-comment runtime review confirm shared dependency styling, markdown-aware polished comments, grouped metadata rail with vertical separator, and no new polish gaps. Artifacts: /tmp/bwb-verify-90w2-rerun-XWcbyH and /tmp/bwb-verify-markdown-hUIRhb/detail-120x34-markdown-comment-hotkey3.json

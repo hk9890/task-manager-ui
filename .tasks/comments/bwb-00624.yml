@@ -1,0 +1,12 @@
+---
+id: 3v5g0dsc
+author: Hans Kohlreiter
+created: 2026-05-16T06:18:34Z
+body: |-
+  Body rewritten (reviewer F5/F6/F7/F8/F9): fixed 4→5 files count; pre-resolved setup_test.go and helper-move decisions (hasExecutable + runBDInRepo move to integration file); added launcher helper safety check; AC now uses relative 80% reduction vs baseline ticket i1th.8.
+---
+id: 7qyj6ie2
+author: Hans Kohlreiter
+created: 2026-05-16T07:03:29Z
+body: |-
+  Implemented across 5 packages. 9 real-bd tests + their helpers (hasExecutable, runBDInRepo) moved to sibling *_integration_test.go files with //go:build integration headers. Files: model_integration_test.go (app + search), runner_integration_test.go (gateway), process_runner_integration_test.go (launcher), setup_integration_test.go (embeddedfixture). Orchestrator fix-up: removed dangling hasExecutable from mode/search/model_test.go (left by an earlier tasker run, would fail unit build). Measured: unit=18.3s (80.4% drop from 93.4s baseline, AC met), integration=1:45 (all 9 tests pass). Both modes build clean (go vet, go build, go build -tags=integration).

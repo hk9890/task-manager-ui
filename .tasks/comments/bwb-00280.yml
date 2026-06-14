@@ -1,0 +1,6 @@
+---
+id: ep8hfvlz
+author: Hans Kohlreiter
+created: 2026-04-10T16:33:27Z
+body: |-
+  Additional gap: TestParseIssueEditDocumentRejectsMissingMarkers (line 83-90) only tests a completely invalid document. It does not test partially valid documents — e.g. a document with the editable block but missing one field marker. This matters because a user could accidentally delete one field's markers while editing.

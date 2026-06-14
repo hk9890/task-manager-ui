@@ -1,0 +1,6 @@
+---
+id: lqz749z1
+author: Hans Kohlreiter
+created: 2026-05-23T22:08:02Z
+body: |-
+  Verified 2026-05-24. All 7 criteria pass: (1) Package builds; interface + domain types defined. (2) Both impls pass TestRepositoryContract (memory 12P/1SK, beads 13P) — 19.8s. (3) memory Search: full-text Title+Desc+Notes; beads: title-only — both documented, parity uses per-impl assertions. (4) Save/Load round-trips with schema_version + synced_at + bd_commit_hash manifest; ErrSchemaMismatch on version mismatch confirmed. (5) mise run quality green: 1197 unit / 1370 integration tests, 0 lint issues, vet clean (-race via canonical gate). (6) No app/mode/cmd code touched; go.mod adds only golang.org/x/sync (permitted direct dep promotion). (7) Interface godoc: all 5 contract sections present (concurrency, cancellation, partial-failure, error codes, catalog freshness). Divergences (Issue not-found code, Search order, Completeness, body scope) documented in interface godoc and parity test commentary.

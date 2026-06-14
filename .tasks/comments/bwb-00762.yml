@@ -1,0 +1,21 @@
+---
+id: 2w5a4sy5
+author: Hans Kohlreiter
+created: 2026-04-07T15:22:00Z
+body: |-
+  ## Task .5 documentation scope is reasonable but depends on knowing the final shape
+
+  **What**: Task .5 is straightforward — update TESTING.md and possibly add a dedicated doc. Its dependency on .3 and .4 is correct.
+
+  **Why**: No major concern here. The only risk is that if the epic scope changes significantly (e.g., collapsing tasks or deciding that in-process testing is sufficient), the documentation task needs to reflect the actual outcome, not the original plan.
+
+  **Suggested action**: This task is fine as-is. Minor suggestion: the acceptance criterion "docs are concise enough for regular agent/operator use" is subjective. Add a concrete length target like "the runtime verification section is <50 lines" or "a new operator can run a full verification in <3 commands after reading the docs."
+---
+id: 3rljyqg2
+author: Hans Kohlreiter
+created: 2026-04-07T17:28:00Z
+body: |-
+  Status: implemented.
+  Outcome: kept docs/TESTING.md as policy/strategy and added a dedicated operator runbook at docs/RUNTIME_UI_VERIFICATION.md with concrete automated/manual UI verification commands plus checklist coverage for layout, navigation, search, and external-tool flows.
+  Artifacts: docs/TESTING.md, docs/RUNTIME_UI_VERIFICATION.md.
+  Verification: go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelEmbeddedFixtureStartupLoadsBoardWithoutGatewaySectionErrors' -v\nNext step: acceptance review in gyg.6 can validate docs linkage, workflow coverage, speed, and stability.

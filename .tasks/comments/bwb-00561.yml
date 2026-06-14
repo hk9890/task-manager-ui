@@ -1,0 +1,6 @@
+---
+id: 1eboin4r
+author: Hans Kohlreiter
+created: 2026-05-23T21:40:52Z
+body: |-
+  Implemented. Files: internal/repository/beads/repository.go (9-method translator, errgroup fan-out for Dashboard + Catalogs) + internal/repository/beads/repository_test.go (19 unit tests). Closed-list default: defaultClosedLimit=50 (floor of board.closedLimit; documented in pkg comment). New direct dep: golang.org/x/sync v0.20.0 (promoted from indirect). All 9 methods translate purely; partial-failure via errgroup first-error; errors bubble with original domain.ErrorCode (verified via errors.As). mise run quality green (1331 tests after hhho.3 also landed).

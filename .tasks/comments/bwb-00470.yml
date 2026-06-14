@@ -1,0 +1,12 @@
+---
+id: 2resa6vz
+author: Hans Kohlreiter
+created: 2026-05-23T12:31:32Z
+body: |-
+  Plan-grill resolved (2026-05-23): adopted reviewer Q3 — stripped the F1-conditional 'if [[f568]] relocates the merge then this folds away' branch from Description and Instructions step 1. F1 is declined per [[f568]] close; this task proceeds unconditionally with errors.Join.
+---
+id: xa6g6lqz
+author: Hans Kohlreiter
+created: 2026-05-23T12:50:27Z
+body: |-
+  Implemented. notReadyErr now uses errors.Join(readyExplainErr, storedBlockedErr) in internal/mode/board/model.go (errors stdlib import added). New TestBoardModeNotReadyBothErrorSourcesSurface in internal/mode/board/model_test.go injects sentinels on both ReadyExplain and storedBlocked, asserts both substring match AND errors.Is for each sentinel. Falsifiability verified: reverting to first-non-nil pattern fails both assertions. mise run test, mise run quality:fast, and mise run fmt:check all green.

@@ -1,0 +1,6 @@
+---
+id: jl2fw6pj
+author: Hans Kohlreiter
+created: 2026-04-06T23:18:41Z
+body: |-
+  Implemented fix: app hotkey 'e' now dispatches editIssueCmd(selectedIssueID) instead of launchActionCmd('editor', issueContext), wiring to services.Editor.EditIssue rich flow. Updated app tests to assert editor service path and no launcher invocation for 'e' (including detail mode), plus error-toast expectations for editor failures and reload-after-update behavior via hotkey path. Focused tests passed: go test ./internal/app -run 'TestModel(EditHotkeyUsesEditorService|EditHotkeyShowsErrorToastWhenEditorFails|EditIssueActionUsesEditorServiceAndUpdatesDetail|EditHotkeyInDetailModeUsesEditorService|BuiltInLauncherHotkeysUseLauncherService)$'; go test ./internal/launcher/editor ./internal/launcher; go test ./cmd/bwb -run TestArchitectureGuardrails.

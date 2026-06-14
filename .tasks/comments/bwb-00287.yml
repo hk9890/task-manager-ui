@@ -1,0 +1,8 @@
+---
+id: xspk769f
+author: Hans Kohlreiter
+created: 2026-05-29T11:12:55Z
+body: |-
+  Fixed: added `Children: %d` (len(detail.Children)) to summarizeReferences() in the renderCompact path of internal/ui/details/details.go, after the existing Blocked by/Blocks/Related sequence. Zero-children is shown ("Children: 0") to match the existing always-show-all-counts behavior of the other relationship counts in compact mode. Added TestRenderCompactWithChildrenGolden (children=3) to pin correct wiring. Goldens: compact.golden, compact_closed_duration.golden updated; compact_with_children.golden added. go test ./internal/ui/details/... passes; full suite + quality:fast green.
+
+  Discovered follow-up filed separately: the renderMetadataRail Counts block (metadata.go) has the same omission (Children not in the Counts group).

@@ -1,0 +1,6 @@
+---
+id: k5yjgv08
+author: Hans Kohlreiter
+created: 2026-05-17T10:56:30Z
+body: |-
+  Verified. All 5 implementation tasks closed (faif.1 absorbed .2 and .3 per epic-review 2026-05-16). 940 tests pass on clean cache (16 expected env-gated skips). Scale-seed.json (590 issues, 75 closed, 515 active) committed in 4ad4cee. datasets.ScaleFixture(t) opt-in via BWB_SCALE_FIXTURE=1. Parity matrix extended; scale_parity_integration_test.go has DoneColumnCapEngagement (ssom regression class only testable at scale). bwb-smoke matrix extended with TestSmokeIntegrationScaleFixture. Deliberate-break verified by faif.1 tasker (removing closed issues fires TestScaleFixtureInvariant_DoneColumnBadgeWhenCapped). Discipline bug n7cd closed as bwb-inert (production uses ReadyExplain, not bd ready --json). All committed and pushed (4ad4cee + cbba503).

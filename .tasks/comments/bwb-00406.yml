@@ -1,0 +1,6 @@
+---
+id: c9rlpvfu
+author: Hans Kohlreiter
+created: 2026-04-10T16:59:21Z
+body: |-
+  Task description says 'uidetails.Render() is called in both HandleKey and ClampScroll' — confirmed accurate. However, the instructions propose adding a cachedLineCount field, but this is trickier than it looks: the render depends on maxWidth (a method parameter), not just issue data. The cache must be keyed on (issue data + dimensions), and ClampScroll and HandleKey receive viewportHeight but not maxWidth. Currently the full render in HandleKey/ClampScroll uses hardcoded Compact:false but the maxWidth comes from... nowhere — it re-renders at 0 width. Why: the caching strategy in the instructions doesn't account for the width dependency. The real fix might be simpler: compute and store total line count in View() (which already renders), then reuse it in HandleKey/ClampScroll. Suggested action: study View() and check whether it's always called before HandleKey/ClampScroll in the Bubble Tea update cycle — if so, cache line count in View() instead of adding a separate cache invalidation mechanism.

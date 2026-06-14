@@ -1,0 +1,6 @@
+---
+id: l6ss7ffp
+author: Hans Kohlreiter
+created: 2026-05-28T13:24:06Z
+body: |-
+  Implemented in commit e0bfea3. Pass-through on ClosedOffset>0, merge via mergeClosedIntoCache (dedup by id, latest wins). Tests: TestDashboard_ClosedOffset_PassThrough + DeduplicatesOnOverlap + BackingError_NoMutation. quality:fast green.

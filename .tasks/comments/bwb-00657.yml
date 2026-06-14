@@ -1,0 +1,6 @@
+---
+id: g2z3znzv
+author: Hans Kohlreiter
+created: 2026-05-24T08:14:36Z
+body: |-
+  Done. 3 tests added at caching_test.go:1972, 2023, 2073: TestUpdateIssue/CloseIssue/AddComment_DoesNotBustUnrelatedIssue. Each primes both X and Y in cache, mutates X, asserts stub.issueCalls increments to 3 on Issue(X) re-read (busted) but stays at 3 on Issue(Y) re-read (preserved). Uses existing stubRepository fake; no testify imports. mise run quality green (1203 unit / 1376 integration, -race clean).

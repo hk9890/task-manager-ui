@@ -1,0 +1,18 @@
+---
+id: 56pmir0d
+author: Hans Kohlreiter
+created: 2026-04-10T16:59:30Z
+body: |-
+  The task says TrimSpace is applied 'around line 153' per-line. Confirmed: line 153 does clean := strings.TrimSpace(line). However, the description misses that line 146 also applies strings.TrimSpace(text) to the ENTIRE text block before splitting. This strips leading/trailing blank lines from descriptions/notes — which may be intentional (removing trailing newlines) or harmful (removing leading blank line separators). Why: the tasker might only fix line 153 and miss line 146, or might remove line 146 and introduce trailing whitespace regression. Suggested action: specify that line 146 TrimSpace should be replaced with strings.TrimRight to strip only trailing newlines while preserving internal structure.
+---
+id: fgetpuzj
+author: Hans Kohlreiter
+created: 2026-04-10T17:32:25Z
+body: |-
+  Ticket appears stale: existing comment identifies additional whole-block TrimSpace behavior at line ~146 and expected replacement strategy, but description/instructions still focus on per-line TrimSpace near ~153. Please fold that clarification into ticket body/acceptance criteria before execution.
+---
+id: wd1e35l0
+author: Hans Kohlreiter
+created: 2026-04-10T17:38:08Z
+body: |-
+  Blocking execution: ticket body is stale vs comments. Comments identify additional whole-block TrimSpace at line ~146 and replacement strategy, but description/instructions still only mention per-line TrimSpace near ~153. Please update ticket body/acceptance to include both line 146 and 153 behavior so scope is canonical.

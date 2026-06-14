@@ -1,0 +1,6 @@
+---
+id: ee2z0pqd
+author: Hans Kohlreiter
+created: 2026-05-15T09:40:24Z
+body: |-
+  Release candidate committed and pushed. Candidate SHA: facd998655973a9889cda6ccce8af029959e1eb1. All quality gates passed (lint, vet, unit tests, architecture guardrails). Runtime UI verification passed via PTY check (board/detail/search navigation OK at 120×34). Changelog entry for v0.4.0 added.

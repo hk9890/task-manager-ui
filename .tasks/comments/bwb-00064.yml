@@ -1,0 +1,18 @@
+---
+id: 367qa7yz
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:30Z
+body: |-
+  Review pass: well-formed and executable. What: Instructions are specific, reference concrete existing docs, list exact files to create/modify, and AC checkboxes are testable. The conditional dependency on f51 is handled gracefully (instruction #5 says to note CI absence rather than block). This is the strongest issue of the four.
+---
+id: rmzvuur5
+author: Hans Kohlreiter
+created: 2026-04-11T12:32:36Z
+body: |-
+  Missing ordering dependency on 2rj (visibility decision). What: Instruction #4 says to document the 'gh release' flow, and the releasing guide should presumably address whether releases are public or internal. But 2rj (visibility policy) is blocked on discussion and has no resolution yet. If vr5 lands first, it will either have to dodge the visibility question or document an incomplete release flow. Why: The releasing guide will be immediately stale or incomplete on the visibility dimension. Suggested action: Add a placeholder instruction acknowledging that release visibility policy is pending (2rj), and add an AC checkbox that the doc explicitly states the visibility model is TBD pending 2rj resolution. This way vr5 is not blocked but is honest.
+---
+id: 1z92brgk
+author: Hans Kohlreiter
+created: 2026-04-11T12:37:06Z
+body: |-
+  Implemented release docs task: added docs/RELEASING.md with repo-specific manual git/gh flow, exact quality gates, runtime verification links, explicit no-CI note, and pending visibility policy note (beads-workbench-2rj). Updated README.md to link the new guide. Verification: go test ./... (pass).

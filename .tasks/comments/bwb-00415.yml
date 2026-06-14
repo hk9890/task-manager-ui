@@ -1,0 +1,12 @@
+---
+id: ceyhnen1
+author: Hans Kohlreiter
+created: 2026-04-07T17:16:27Z
+body: |-
+  ## ni1.2 is almost entirely redundant with ni1.1 — recommend merging
+
+  **What**: ni1.2 says "extend the config model so editor.command and launcher definitions can be read from YAML and merged with defaults." But ni1.1 already requires: building the YAML parser, loading config, merging with defaults, and modifying `cmd/bwb/main.go` to use the loader. The config model (`config.Model`) already has `Editor` and `Launcher` fields. If ni1.1 implements YAML loading correctly, those fields are already loadable.
+
+  **Why**: As written, either ni1.1 builds the full config model (making ni1.2 a no-op) or ni1.1 builds a partial config model that can't be tested end-to-end (making ni1.1 incomplete). The overlap in "Files to Modify" confirms this — both touch `internal/config/model.go`, `internal/config/*.go`, and docs.
+
+  **Suggested action**: Merge ni1.2 into ni1.1. "Load optional XDG YAML config, merge with defaults, and support editor/launcher/UI overrides" is one cohesive unit. The split creates artificial task boundaries that add overhead without reducing risk. See also the comment on the epic about this.

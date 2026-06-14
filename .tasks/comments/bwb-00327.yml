@@ -1,0 +1,6 @@
+---
+id: z7qhrc0c
+author: Hans Kohlreiter
+created: 2026-05-24T13:02:47Z
+body: |-
+  Scanner buffer raised to 16 MiB; TestLoad_LargeIssueLine round-trips a 200_000-byte description. quality:fast green (962 tests, lint 0, guardrails ok). Commit 4b30af5.

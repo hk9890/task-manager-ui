@@ -1,0 +1,12 @@
+---
+id: wczwsl4x
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:15Z
+body: |-
+  Step 2: pre-decide. bd create --silent emits just the ID and stable bd has --json. Pick MIGRATE TO --json (safer, smaller surface). Remove the 'accept this with a test' option.
+---
+id: h0iulqig
+author: Hans Kohlreiter
+created: 2026-05-16T04:37:52Z
+body: |-
+  Implemented. m6: TestDecodeJSONIntoRejectsNDJSON + doc note on DecodeJSONInto stating NDJSON is unsupported. m7: writes.go CreateIssue migrated to bd create --json + RunJSON[createIssuePayload]; --silent removed; all 3 existing tests updated; added TestGatewayCreateIssueRejectsInvalidJSON. m11: errors_test.go gained TestGatewayErrorUnwrapPropagatesSentinel + TestGatewayErrorUnwrapPropagatesThroughMultipleLayers (GatewayError.Unwrap() was already present).

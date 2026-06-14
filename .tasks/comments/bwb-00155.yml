@@ -1,0 +1,6 @@
+---
+id: lgnu47ap
+author: Hans Kohlreiter
+created: 2026-04-22T18:55:59Z
+body: |-
+  Reproduced review on 2026-04-22 shows this is the same underlying failure already tracked by beads-workbench-0myw: `TestModelDetailModeSupportsScrollingLongContent` still fails because End no longer reaches the expected bottom description content. Keeping both open would duplicate the same scrolling regression.

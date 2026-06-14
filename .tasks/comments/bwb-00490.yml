@@ -1,0 +1,6 @@
+---
+id: 75e41t6s
+author: Hans Kohlreiter
+created: 2026-05-19T15:41:31Z
+body: |-
+  Completed in commit 8696896. mapListSortField 42.9% → 100%. All 936 tests pass.

@@ -1,0 +1,12 @@
+---
+id: h7pua0n2
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:21Z
+body: |-
+  Cites verified — merge logic is at load.go:236-247. No changes.
+---
+id: tuqlgfq4
+author: Hans Kohlreiter
+created: 2026-05-16T04:39:44Z
+body: |-
+  Implemented. Four tests in load_test.go cover all AC scenarios: empty args clears built-in; absent args preserves; absent command preserves; new action appends. Genuine ambiguity surfaced and documented in docs/CODING.md (~:216-219): nil-sentinel preserves built-in value while non-nil empty slice replaces. Quality gate green.

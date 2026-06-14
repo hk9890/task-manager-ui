@@ -1,0 +1,18 @@
+---
+id: iwxcrkiv
+author: Hans Kohlreiter
+created: 2026-05-16T03:32:58Z
+body: |-
+  Cite fixes: mergeContextBindings is in keybindings.go:185 (NOT load.go); resolveAndValidateCWD is at cmd/bwb/main.go:239-257 (was :90-100); generateSessionID :199-205 unchanged.
+---
+id: r7w5mpgi
+author: Hans Kohlreiter
+created: 2026-05-16T03:33:13Z
+body: |-
+  Consider splitting: BS5 (CWD EACCES — real user-facing startup hang) has its own test surface and would naturally pair with .22's EACCES coverage. BS3 and BS-minor are smaller hardening items. Recommend splitting BS5 out into its own ticket.
+---
+id: om67twjg
+author: Hans Kohlreiter
+created: 2026-05-16T04:18:31Z
+body: |-
+  All three items implemented. BS3: mergeContextBindings renamed to mergeContextBindingsInPlace with doc comment + non-mutation test. BS5: cmd/bwb/main.go resolveAndValidateCWD now os.Open-probes the dir; TestRunCWDInaccessibleExitsWithCode1 asserts exit code 1 + clear error. BS-minor: generateSessionID falls back to time.Now().UnixNano() hex on rand.Read error via injectable randReader; TestGenerateSessionIDFallsBackToTimestampOnRandError covers it.

@@ -1,0 +1,6 @@
+---
+id: 98sjt5qh
+author: Hans Kohlreiter
+created: 2026-05-15T19:15:01Z
+body: |-
+  Implemented true total counts in section headers: added sectionCounts/readyCount/blockedCount to board model. Count queries fire via tea.Batch after pendingLoads==0 (off startup critical path). Counts invalidate on auto-refresh tick, manual reload keybind, and post-mutation reload (AutoRefresh called by all mutation handlers). Empty string shown while loading via CountLoaded flag on Column struct. All goldens updated; go build ./... and go test ./... pass.

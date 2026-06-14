@@ -1,0 +1,6 @@
+---
+id: uba8jyed
+author: Hans Kohlreiter
+created: 2026-05-24T00:20:07Z
+body: |-
+  Migration complete. Production-side: services.Repo (was Gateway), cmd/bwb/main.go wires repositorybeads.New(beads.NewCLIGateway(...)). All app/mode/launcher call sites use the new Repository methods. Test-side: introduced appTestGateway helper in internal/app/test_gateway_test.go that bundles memoryrepo.Repository with repository.NewErrorInjecting (decorator from hhho.1) — NOT a shim around FakeBeadsGateway. All 14 test files migrated to memory-backed test gateway. Board model_test.go restructured to assert single Dashboard call (arch-aligned with the 5→1 fan-out collapse). memoryrepo extended to project Related/BlocksIDs/Parent/Children fields. FakeBeadsGateway STILL EXISTS (the 2 contract tests in internal/gateway/beads/contract/ still need it; 8pxi.3 deletes it). Zero references to fakes.FakeBeadsGateway/NewFakeBeadsGateway/NewFakeRepo from app/mode/launcher/e2e code. mise run quality green (1192 unit + 1364 integration tests, 0 lint, vet clean, guardrails pass). go build ./... clean.

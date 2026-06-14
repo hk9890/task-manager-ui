@@ -1,0 +1,315 @@
+---
+id: 06a7ns0z
+author: Hans Kohlreiter
+created: 2026-04-19T20:10:04Z
+body: |-
+  Review: Clearly unrelated to the verification toolkit epic. The golden test diffs (Status before Priority) suggest a rendering order change was made somewhere without regenerating goldens. Acceptance criteria are fine. Verdict: NOT AN EPIC BLOCKER for ay5j. Fix independently. Suggested action: regenerate goldens with 'go test ./internal/ui/search -update' (or equivalent) after confirming the new order is intentional.
+---
+id: z5mcaaq6
+author: Hans Kohlreiter
+created: 2026-04-19T20:34:37Z
+body: |-
+  Triage merged duplicate beads-workbench-nyp3 into this issue. Preserved focused repro: === RUN   TestRenderGoldens
+  === PAUSE TestRenderGoldens
+  === CONT  TestRenderGoldens
+  === RUN   TestRenderGoldens/results_with_preview_w120
+      search_test.go:195: output mismatch for search_results_preview_w120.golden
+          --- want ---
+          ╭─ Search ─────────────────────────────────── live ─╮  ╭─ Preview ─────────────────────────────────────────────────────╮
+          │gateway                                            │  │Gateway search result                                          │
+          ╰───────────────────────────────────────────────────╯  │bw-1 · open                                                    │
+          ╭─ Results ───────────────────────────────────── 2 ─╮  │                                                               │
+          │› T P1 OPN bw-1 Gateway search result              │  │Metadata                                                       │
+          │  B P0 IP bw-2 Another result                      │  │Core                                                           │
+          │                                                   │  │Type    : task                                                 │
+          │                                                   │  │Priority: P1                                                   │
+          │                                                   │  │Status  : open                                                 │
+          │                                                   │  │---------------------------------------------------------------│
+          │                                                   │  │Ownership                                                      │
+          │                                                   │  │Assignee: hans                                                 │
+          │                                                   │  │---------------------------------------------------------------│
+          │                                                   │  │Labels                                                         │
+          │                                                   │  │• ui                                                           │
+          │                                                   │  │---------------------------------------------------------------│
+          │                                                   │  │Counts                                                         │
+          │                                                   │  │Comments  : 0                                                  │
+          │                                                   │  │Blocked by: 0                                                  │
+          │                                                   │  │Blocks    : 0                                                  │
+          │                                                   │  │Related   : 0                                                  │
+          │                                                   │  │                                                               │
+          │                                                   │  │Description                                                    │
+          │                                                   │  │Search preview description                                     │
+          │                                                   │  │                                                               │
+          │                                                   │  │Comments: 0                                                    │
+          ╰───────────────────────────────────────────────────╯  │Blocked by: 0  Blocks: 0  Related: 0                           │
+                                                                 ╰───────────────────────────────────────────────────────────────╯
+          --- got ---
+          ╭─ Search ─────────────────────────────────── live ─╮  ╭─ Preview ─────────────────────────────────────────────────────╮
+          │gateway                                            │  │Gateway search result                                          │
+          ╰───────────────────────────────────────────────────╯  │bw-1 · open                                                    │
+          ╭─ Results ───────────────────────────────────── 2 ─╮  │                                                               │
+          │› T P1 OPN bw-1 Gateway search result              │  │Metadata                                                       │
+          │  B P0 IP bw-2 Another result                      │  │  Core                                                         │
+          │                                                   │  │  Type    : task                                               │
+          │                                                   │  │  Status  : open                                               │
+          │                                                   │  │  Priority: P1                                                 │
+          │                                                   │  │  -------------------------------------------------------------│
+          │                                                   │  │  Ownership                                                    │
+          │                                                   │  │  Assignee: hans                                               │
+          │                                                   │  │  -------------------------------------------------------------│
+          │                                                   │  │  Labels                                                       │
+          │                                                   │  │  • ui                                                         │
+          │                                                   │  │  -------------------------------------------------------------│
+          │                                                   │  │  Counts                                                       │
+          │                                                   │  │  Comments  : 0                                                │
+          │                                                   │  │  Blocked by: 0                                                │
+          │                                                   │  │  Blocks    : 0                                                │
+          │                                                   │  │  Related   : 0                                                │
+          │                                                   │  │                                                               │
+          │                                                   │  │Description                                                    │
+          │                                                   │  │Search preview description                                     │
+          │                                                   │  │                                                               │
+          │                                                   │  │Comments: 0                                                    │
+          ╰───────────────────────────────────────────────────╯  │Blocked by: 0  Blocks: 0  Related: 0                           │
+                                                                 ╰───────────────────────────────────────────────────────────────╯
+  === RUN   TestRenderGoldens/empty_results_w120
+  === RUN   TestRenderGoldens/results_narrow_w80
+      search_test.go:223: output mismatch for search_results_narrow_w80.golden
+          --- want ---
+          ╭─ Search ───────────────── live ─╮  ╭─ Preview ───────────────────────────────╮
+          │gateway                          │  │Implement create update close and comm...│
+          ╰─────────────────────────────────╯  │beads-workbench-yze.4.2 · open           │
+          ╭─ Results ─────────────────── 2 ─╮  │                                         │
+          │› T P1 OPN yze.4.2 Implement c...│  │Metadata                                 │
+          │  T P1 IP yze.4.3 Implement la...│  │Core                                     │
+          │                                 │  │Type    : task                           │
+          │                                 │  │Priority: P1                             │
+          │                                 │  │Status  : open                           │
+          │                                 │  │-----------------------------------------│
+          │                                 │  │Counts                                   │
+          │                                 │  │Comments  : 0                            │
+          │                                 │  │Blocked by: 0                            │
+          │                                 │  │Blocks    : 0                            │
+          │                                 │  │Related   : 0                            │
+          │                                 │  │                                         │
+          │                                 │  │Description                              │
+          │                                 │  │(no description)                         │
+          │                                 │  │                                         │
+          │                                 │  │Comments: 0                              │
+          │                                 │  │Blocked by: 0  Blocks: 0  Related: 0     │
+          │                                 │  │                                         │
+          ╰─────────────────────────────────╯  │                                         │
+                                               ╰─────────────────────────────────────────╯
+          --- got ---
+          ╭─ Search ───────────────── live ─╮  ╭─ Preview ───────────────────────────────╮
+          │gateway                          │  │Implement create update close and comm...│
+          ╰─────────────────────────────────╯  │beads-workbench-yze.4.2 · open           │
+          ╭─ Results ─────────────────── 2 ─╮  │                                         │
+          │› T P1 OPN yze.4.2 Implement c...│  │Metadata                                 │
+          │  T P1 IP yze.4.3 Implement la...│  │  Core                                   │
+          │                                 │  │  Type    : task                         │
+          │                                 │  │  Status  : open                         │
+          │                                 │  │  Priority: P1                           │
+          │                                 │  │  ---------------------------------------│
+          │                                 │  │  Counts                                 │
+          │                                 │  │  Comments  : 0                          │
+          │                                 │  │  Blocked by: 0                          │
+          │                                 │  │  Blocks    : 0                          │
+          │                                 │  │  Related   : 0                          │
+          │                                 │  │                                         │
+          │                                 │  │Description                              │
+          │                                 │  │(no description)                         │
+          │                                 │  │                                         │
+          │                                 │  │Comments: 0                              │
+          │                                 │  │Blocked by: 0  Blocks: 0  Related: 0     │
+          │                                 │  │                                         │
+          ╰─────────────────────────────────╯  │                                         │
+                                               ╰─────────────────────────────────────────╯
+  === RUN   TestRenderGoldens/default_all_results_w120
+      search_test.go:239: output mismatch for search_default_all_results_w120.golden
+          --- want ---
+          ╭─ Search ─────────────────────────────────── text ─╮  ╭─ Preview ─────────────────────────────────────────────────────╮
+          │Type to search issues…                             │  │Default all result                                             │
+          ╰───────────────────────────────────────────────────╯  │bw-1 · open                                                    │
+          ╭─ Results ───────────────────────────────────── 2 ─╮  │                                                               │
+          │› T P1 OPN bw-1 Default all result                 │  │Metadata                                                       │
+          │  B P0 IP bw-2 Second default                      │  │Core                                                           │
+          │                                                   │  │Type    : task                                                 │
+          │                                                   │  │Priority: P1                                                   │
+          │                                                   │  │Status  : open                                                 │
+          │                                                   │  │---------------------------------------------------------------│
+          │                                                   │  │Ownership                                                      │
+          │                                                   │  │Assignee: hans                                                 │
+          │                                                   │  │---------------------------------------------------------------│
+          │                                                   │  │Labels                                                         │
+          │                                                   │  │• ui                                                           │
+          │                                                   │  │---------------------------------------------------------------│
+          │                                                   │  │Counts                                                         │
+          │                                                   │  │Comments  : 0                                                  │
+          │                                                   │  │Blocked by: 0                                                  │
+          │                                                   │  │Blocks    : 0                                                  │
+          │                                                   │  │Related   : 0                                                  │
+          │                                                   │  │                                                               │
+          │                                                   │  │Description                                                    │
+          │                                                   │  │Default preview description                                    │
+          │                                                   │  │                                                               │
+          │                                                   │  │Comments: 0                                                    │
+          ╰───────────────────────────────────────────────────╯  │Blocked by: 0  Blocks: 0  Related: 0                           │
+                                                                 ╰───────────────────────────────────────────────────────────────╯
+          --- got ---
+          ╭─ Search ─────────────────────────────────── text ─╮  ╭─ Preview ─────────────────────────────────────────────────────╮
+          │Type to search issues…                             │  │Default all result                                             │
+          ╰───────────────────────────────────────────────────╯  │bw-1 · open                                                    │
+          ╭─ Results ───────────────────────────────────── 2 ─╮  │                                                               │
+          │› T P1 OPN bw-1 Default all result                 │  │Metadata                                                       │
+          │  B P0 IP bw-2 Second default                      │  │  Core                                                         │
+          │                                                   │  │  Type    : task                                               │
+          │                                                   │  │  Status  : open                                               │
+          │                                                   │  │  Priority: P1                                                 │
+          │                                                   │  │  -------------------------------------------------------------│
+          │                                                   │  │  Ownership                                                    │
+          │                                                   │  │  Assignee: hans                                               │
+          │                                                   │  │  -------------------------------------------------------------│
+          │                                                   │  │  Labels                                                       │
+          │                                                   │  │  • ui                                                         │
+          │                                                   │  │  -------------------------------------------------------------│
+          │                                                   │  │  Counts                                                       │
+          │                                                   │  │  Comments  : 0                                                │
+          │                                                   │  │  Blocked by: 0                                                │
+          │                                                   │  │  Blocks    : 0                                                │
+          │                                                   │  │  Related   : 0                                                │
+          │                                                   │  │                                                               │
+          │                                                   │  │Description                                                    │
+          │                                                   │  │Default preview description                                    │
+          │                                                   │  │                                                               │
+          │                                                   │  │Comments: 0                                                    │
+          ╰───────────────────────────────────────────────────╯  │Blocked by: 0  Blocks: 0  Related: 0                           │
+                                                                 ╰───────────────────────────────────────────────────────────────╯
+  --- FAIL: TestRenderGoldens (0.00s)
+      --- FAIL: TestRenderGoldens/results_with_preview_w120 (0.00s)
+      --- PASS: TestRenderGoldens/empty_results_w120 (0.00s)
+      --- FAIL: TestRenderGoldens/results_narrow_w80 (0.00s)
+      --- FAIL: TestRenderGoldens/default_all_results_w120 (0.00s)
+  FAIL
+  FAIL	github.com/hk9890/beads-workbench/internal/ui/search	0.021s
+  FAIL. Both issues describe the same three failing search golden cases and will be fixed by the same rendering-order decision or golden regeneration.
+---
+id: updrcqe7
+author: Hans Kohlreiter
+created: 2026-04-19T21:42:17Z
+body: |-
+  Architectural finding: True component reuse is structurally feasible but requires a small refactor first. What: ui/details exposes only Render(State) publicly; the genuinely reusable units (renderContentPaneLines, renderMetadataPaneLines, renderMetadataRail, splitThreePaneWidths, sliceWithOffset, MaxScrollOffsets per-pane) are package-private. uidetails.Render with Compact:true does not produce the same boxed Content/Metadata panes detail mode shows. Why: 'reuse the same renderer' as written in the issue is misleading — search would either (a) duplicate the FormSection wrapping logic or (b) we extract small public helpers like RenderContentPane(detail, width, height, focused, scrollOffset) string and RenderMetadataPane(detail, width, height, focused, scrollOffset, selectedField) string. Suggested action: before any UI work, add an acceptance criterion that ui/details exposes per-pane render helpers that BOTH detail mode and search mode call, and rewrite renderThreePane to consume those same helpers so divergence is impossible by construction.
+---
+id: odiq86yj
+author: Hans Kohlreiter
+created: 2026-04-19T21:42:27Z
+body: |-
+  Shell architecture finding: detail-on-selection already works, but search must NOT own its own detail loader. What: app/model.go already runs ensureDetailForCurrentSelectionCmd() on every mode.SelectionChangedMsg from board OR search (line 387-395), and m.detail is shell-owned. Search currently throws this loaded detail away and renders only its in-memory IssueSummary via uidetails.Render(Compact:true). Why: this means the data plumbing for 'arrow keys update content+metadata' is already in place — search just isn't reading from it. The cleanest implementation is for search.View to receive m.detail (the loaded IssueDetail) from the shell and pass it to the shared content/metadata helpers. Suggested action: change search.Render's State to accept a fully loaded domain.IssueDetail (provided by the shell from m.detail.Detail when m.detail.SelectionID == search's selected ID); do NOT add a second detail loader inside the search mode.
+---
+id: icpwzjoe
+author: Hans Kohlreiter
+created: 2026-04-19T21:42:36Z
+body: |-
+  Risk finding: stale-detail flicker during search typing. What: when the user types a new query, results change rapidly and the previously-loaded m.detail.Detail will not match the new top selection until the next loadDetailCmd resolves. If search renders the heavy content/metadata panes from m.detail, they will briefly show the previous issue's content alongside the new highlighted row in the rail. Why: today's compact preview hides this because it falls back to rendering from the in-memory IssueSummary (search.go lines 182-193). Suggested action: define explicit behavior — when SelectionID != m.detail.Detail.Summary.ID (or m.detail.Loading), render content/metadata panes from the IssueSummary stub plus a 'Loading…' affordance, mirroring the existing loading.View path. Add this as an acceptance criterion and a golden case.
+---
+id: 4svaq9wd
+author: Hans Kohlreiter
+created: 2026-04-19T21:42:46Z
+body: |-
+  Navigation finding: focus-cycle semantics in search mode have a real conflict with the rail being a query+results stack. What: detail mode treats Left/Right as a flat 3-pane traversal (Dependencies <-> Content <-> Metadata). The proposal says search should mirror this with rail<->Content<->Metadata, but the search 'rail' is itself two stacked sub-panes (Query and Results) and today distinguishes FocusQuery from FocusResults so up/down means 'edit query' vs 'move selection'. Why: collapsing both into a single 'rail' focus state breaks query editing; keeping them separate makes search a 4-state focus (Query, Results, Content, Metadata) which does NOT mirror detail mode and complicates 'left from Content goes to ???'. Suggested action: pick one explicitly in the issue — either (a) Left from Content -> Results, and Query is reachable only via the dedicated focus-query keybinding (recommended, preserves typing UX), or (b) Left from Content -> Results, Left from Results -> Query. Document the chosen rule in acceptance criteria with a key-by-key walkthrough.
+---
+id: qyf5jh2b
+author: Hans Kohlreiter
+created: 2026-04-19T21:42:55Z
+body: |-
+  Width finding: three full-height boxed panes will not fit at the w80 narrow golden. What: detail mode's splitThreePaneWidths reserves metadataRailWidth=34, leftRailMin=24, content min=20, plus 2x detailColumnGap=4 -> minimum ~82 chars before truncation kicks in hard. Search currently has a separate w80 narrow golden (search_results_narrow_w80.golden) that today fits because preview is a single right pane. Why: forcing three boxed panes at 80 cols will produce illegible output and probably break/regenerate the narrow golden in an ugly way. Suggested action: define the responsive rule explicitly — at widths below ~110, fall back to the current 2-pane layout (rail + combined preview) or hide the metadata pane. Add this as an acceptance criterion and provide both narrow and wide goldens.
+---
+id: znfu5iij
+author: Hans Kohlreiter
+created: 2026-04-19T21:43:04Z
+body: |-
+  Scope finding: original bug (golden mismatch from metadata indentation/order change) is being inflated into a redesign. What: the failing goldens in the description show only two regressions — Status/Priority order swap and a leading two-space indent in the metadata block. These come from a metadata renderer change in detail mode bleeding into search's compact preview. The redesign to three shared panes is a separate, larger user-driven scope (captured in epic 2shr comment). Why: bundling them risks the redesign blocking on cosmetic golden churn and vice versa. Suggested action: split into two issues — keep aqps narrowly as 'regenerate search goldens after metadata renderer change' (small, can land today), and create a new task 'Search mode three-pane redesign with shared content/metadata components' that owns the architectural work and the new acceptance criteria. The redesign should depend on the helper-extraction refactor recommended in earlier comment, not on this golden fix.
+---
+id: e83q85d0
+author: Hans Kohlreiter
+created: 2026-04-19T21:43:13Z
+body: |-
+  Acceptance criteria gaps. What: the current AC says 'left/right pane navigation matches detail-mode semantics' and 'changing selected search result automatically refreshes content and metadata without Enter' but does not specify: (1) the responsive fallback below ~110 cols, (2) the loading/stale-detail rendering rule when m.detail.SelectionID lags the search highlight, (3) the exact 4-state vs 3-state focus model for search (Query/Results/Content/Metadata), (4) whether the existing 'Preview' box title is replaced by 'Content'/'Metadata' titles to match detail mode (goldens will need this), (5) which detail-mode keys carry over (page-up/down, home/end on Content pane?), (6) whether dependencies are silently omitted or whether a one-line summary 'Blocked by: N · Blocks: N · Related: N' is shown on the rail. Why: without these spelled out, the implementer will guess and the verifier can't deterministically pass/fail. Suggested action: add each item above as an explicit acceptance bullet before starting implementation.
+---
+id: q8hyybtb
+author: Hans Kohlreiter
+created: 2026-04-19T21:43:23Z
+body: |-
+  Simpler alternative worth considering. What: rather than bringing the full three-pane detail layout into search, achieve 95% of the user's intent by (a) extracting RenderContentPane and RenderMetadataPane public helpers, (b) replacing search's current single right-side 'Preview' box with two stacked boxes on the right ('Content' on top, 'Metadata' below) both rendered via those shared helpers, (c) keeping today's left rail untouched (Search + Results), (d) keeping today's left/right and cycle key behavior with the third focus state being 'Metadata' added at the end. Why: this avoids the responsive layout problem (still 2 columns), preserves the existing query+results focus split, still gives true component reuse of content+metadata, and is a much smaller diff than re-doing the whole layout as 3 columns. Suggested action: ask the user explicitly whether they need 3 horizontal columns or whether a 2-column layout with stacked Content+Metadata on the right satisfies the 'shared rendering' goal. If 3 columns is non-negotiable, proceed with the full redesign and the responsive fallback above.
+---
+id: jo430ojq
+author: Hans Kohlreiter
+created: 2026-04-19T21:43:33Z
+body: |-
+  Maintenance risk: detail mode owns dialogs/intents (status, priority, dependency Enter-to-open) on its metadata and dependencies panes. What: details.Model.HandleKey produces OpenRelatedIssueIntent and pendingOpenStatus/PriorityDialog when those panes are focused. If search's Metadata pane is genuinely 'the same' component, users will reasonably expect Enter on Status to open the status dialog from search too. Why: either we wire those intents through the search mode (extra complexity and tests) or we silently disable them in search (surprises users — 'why does Enter work in detail but not search?'). Suggested action: pick one explicitly. Recommended: enable the same Enter-on-metadata-field behavior in search by routing through the existing m.detail intents at the shell level (m.detail.SelectionID is already kept in sync). Add this as an acceptance criterion or explicitly defer with 'metadata fields are read-only in search mode' in the AC.
+---
+id: qjuyt7v8
+author: Hans Kohlreiter
+created: 2026-04-19T21:52:37Z
+body: |-
+  Responsive fallback is now explicitly in scope for search. Detail-mode dependency/browser live-preview semantics are tracked separately in beads-workbench-2shr.2 so aqps stays search-focused.
+---
+id: yn87rei7
+author: Hans Kohlreiter
+created: 2026-04-19T21:56:56Z
+body: |-
+  User approved the search direction: wide layout plus small-width fallback, shared detail content/metadata renderers, and reviewer requested before implementation.
+---
+id: y35s916u
+author: Hans Kohlreiter
+created: 2026-04-19T21:57:40Z
+body: |-
+  Verdict on approved direction: SOUND but order-of-operations matters. What: the approved 3-pane wide layout + small-width fallback + shared content/metadata renderers is the right shape, and earlier comments already enumerated the helper extraction needed. Why: without doing the helper extraction FIRST as its own commit, the implementer will inevitably either (a) duplicate FormSection wrapping or (b) inline-copy renderContentPaneLines/renderMetadataPaneLines into search.go and the two surfaces will drift again within a release. Suggested action: add an explicit acceptance criterion 'ui/details exposes RenderContentPane(detail, width, height, focused, scrollOffset) string and RenderMetadataPane(detail, width, height, focused, scrollOffset, selectedField) string, and detail mode's renderThreePane is rewritten to consume those same exported helpers' as the FIRST item, before any search-layout work.
+---
+id: 2pcoetp9
+author: Hans Kohlreiter
+created: 2026-04-19T21:57:45Z
+body: |-
+  Coupling finding with 2shr.2: aqps and 2shr.2 share the EXACT SAME prerequisite (exported per-pane render helpers) and the SAME stale-detail loading rule. What: both issues need (a) RenderContentPane/RenderMetadataPane public helpers and (b) a deterministic 'SelectionID does not match m.detail.Detail.Summary.ID -> render from IssueSummary stub with loading affordance' rule. Why: if aqps lands first and defines this rule one way, 2shr.2 inherits it for free; if they're built independently the loading affordances will diverge between search and detail-dependency live preview. Suggested action: keep the issues split (different layouts, different focus models) but mark 2shr.2 as 'blocked-by aqps' and call out in aqps that its helper extraction and stale-detail rule MUST be reusable by detail-mode dependency browsing.
+---
+id: gn4mq85d
+author: Hans Kohlreiter
+created: 2026-04-19T21:57:52Z
+body: |-
+  Shell finding: do NOT add a search-owned detail loader. What: app/model.go:387-395 already runs ensureDetailForCurrentSelectionCmd on every SelectionChangedMsg from search; m.detail.Detail is the canonical loaded detail. The mode/search/model.go View() currently throws this away and only renders from in-memory IssueSummary via uidetails.Render(Compact:true). Why: any second loader would race the shell's loader and create double-fetches. Suggested action: change uisearch.State to accept a LoadedDetail domain.IssueDetail field; the shell (app.Model.renderBody) constructs the State and passes m.detail.Detail when m.detail.SelectionID == search's selected ID and m.detail.Loading == false, otherwise passes the IssueSummary stub. Add this as an explicit acceptance criterion: 'mode/search must not call gateway.ShowIssue; preview pane data is supplied by the shell.'
+---
+id: cfldnaq1
+author: Hans Kohlreiter
+created: 2026-04-19T21:57:59Z
+body: |-
+  Stale-preview rule (acceptance criterion missing): What: when m.detail.SelectionID != m.detail.Detail.Summary.ID OR m.detail.Loading is true, the search Content+Metadata panes must render a deterministic placeholder, not stale prior-issue data. Why: today's compact preview hides this by falling back to the IssueSummary, but full Content+Metadata panes will visibly flash the previous issue's description/comments when the user arrows down a row faster than gateway.ShowIssue resolves. Suggested action: add AC bullet 'while highlighted result has not been loaded yet, Content pane shows title/ID/status from IssueSummary plus a single Loading… line; Metadata pane shows only the Core group from IssueSummary (Type/Status/Priority); both panes show the same loading affordance the dedicated detail loading.View uses.' Add a golden case for this state.
+---
+id: r20mw85y
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:06Z
+body: |-
+  Responsive fallback rule (acceptance criterion still under-specified). What: detail mode's splitThreePaneWidths reserves metadataRailWidth=34 + leftRailMin=24 + minContent=20 + 2x detailColumnGap=4 = ~82 chars before truncation kicks in hard, and search rail wants to be WIDER than detail's left rail. The current narrow golden is at w80. Why: 'small/narrow fallback layout' is too vague — implementer + verifier need a number. Suggested action: pick an explicit threshold and document it: e.g., 'at width >= 110, render Search rail | Content | Metadata; at width < 110, render Search rail | (Content stacked over Metadata) in a single right column; below ~70 fall back to results-only'. Goldens should exist for at minimum w80 (narrow), w110 (boundary), w140 (wide). Add the breakpoint number to AC, not just 'small fallback'.
+---
+id: 2i8ubnil
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:12Z
+body: |-
+  Focus-model gap (still): What: with FocusQuery + FocusResults + new Content + new Metadata, search has 4 focus states while detail has 3. Approved direction did not pick a key-by-key rule. Why: ambiguous Left-from-Content behavior breaks both implementer and tests. Suggested action (recommended): treat the search rail as a single 'rail' for Left/Right traversal — Left from Content -> Results (NOT Query); Query is reachable only via the dedicated focus-query keybinding (config.SearchActionFocusQuery, today '/'). Up/Down inside Results is the live-preview driver; typing while Query is focused still triggers triggerSearch. Document this exact rule as an AC bullet and add a focused mode test asserting the focus transitions for {Left, Right, Tab, Shift-Tab, /}.
+---
+id: 4fu9vqdj
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:18Z
+body: |-
+  Metadata interactivity decision still missing. What: detail mode's metadata pane reacts to Enter on Status/Priority by emitting pendingOpenStatusDialog/pendingOpenPriorityDialog, which the shell turns into modals (app/model.go:425-453). If search's Metadata pane is the same component, users will reasonably expect those keys to work. Why: silently disabling them in search will surprise users; enabling them requires routing the same intents from search through the shell. Suggested action: pick one explicitly. Recommended: enable Enter-on-Status/Priority in search by promoting ConsumeOpenStatusDialogIntent/ConsumeOpenPriorityDialogIntent to a shared intent path that the shell checks regardless of active mode (search OR detail). Add the chosen rule to AC and add a search-mode test that Enter on metadata Status with FocusMetadata produces a status modal request.
+---
+id: grumzz62
+author: Hans Kohlreiter
+created: 2026-04-19T21:58:24Z
+body: |-
+  Tests/goldens essential before merge. What: (1) wide layout golden Search|Content|Metadata at w140 with selection loaded; (2) wide golden when SelectionID != Detail.Summary.ID (loading affordance); (3) narrow fallback golden at w80; (4) boundary golden at the chosen breakpoint (e.g., w110); (5) empty-results wide golden (no Content/Metadata, just placeholders); (6) focused mode test asserting m.search does not call gateway.ShowIssue when arrowing through results; (7) focused app/model_test asserting SelectionChangedMsg from search still triggers ensureDetailForCurrentSelectionCmd; (8) focused detail render tests must keep passing UNCHANGED after helper extraction (proves the refactor was a no-op for detail mode). Suggested action: add this test list as an AC checklist so the implementer cannot skip the loading/breakpoint cases.
+---
+id: fce7heun
+author: Hans Kohlreiter
+created: 2026-04-20T05:55:24Z
+body: |-
+  Implementation decisions locked for execution: extract shared detail RenderContentPane/RenderMetadataPane helpers first; search uses shell-owned loaded detail state (no search-owned ShowIssue loader); stale preview rule is shared with detail live preview; width >= 110 uses Search | Content | Metadata and width < 110 uses a narrow fallback; left from Content returns to Results while query remains reachable via the focus-query binding; metadata enter actions should remain interactive in search using the same intent path as detail mode.

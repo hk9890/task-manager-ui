@@ -1,0 +1,18 @@
+---
+id: nt94p6mr
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:58Z
+body: |-
+  ## [PASS] Browsing acceptance review includes docs gate
+
+  **What**: yze.3.6 now includes the criterion: "docs/CODING.md and docs/TESTING.md reflect the implemented browsing architecture and test strategy." This ensures the browsing experience doesn't ship without documentation updates.
+
+  **Why**: The browsing phase introduces three new mode controllers (board, search, detail), each with their own patterns. Having a docs gate before editor/launcher work begins ensures Phase 4 agents understand the mode patterns they need to follow.
+
+  **Suggested action**: None. This is adequate.
+---
+id: gp961682
+author: Hans Kohlreiter
+created: 2026-04-05T16:54:02Z
+body: |-
+  Verifier PASS: all browsing implementation tasks are closed; built-in dashboards cover ready/in-progress/blocked/recent work; search works with text and structured filters without BQL; detail rendering shows official-surface metadata and context; browsing tests and embedded-mode smoke/e2e workflow pass; docs/CODING.md and docs/TESTING.md match the implemented browsing architecture and test strategy; go build ./cmd/bwb, go vet ./..., and go test ./... all pass.

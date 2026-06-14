@@ -1,0 +1,75 @@
+---
+id: yppi5fp9
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:49Z
+body: |-
+  ## Launcher tests will implicitly require real subprocess execution
+
+  **What**: Task beads-workbench-yze.4.3 (launcher framework) says "produce subprocess launches" and task beads-workbench-yze.4.5 says "Add tests for launcher context interpolation and launcher invocation behavior." But neither task specifies how launcher invocation is tested without actually executing `nvim`, `opencode`, `tmux`, or shell commands. There is no mention of a subprocess seam, a command-recording adapter, or a dry-run mode for launchers.
+
+  **Why**: An agent running `go test ./...` cannot and should not launch real `nvim` or `tmux` processes. Without a planned seam, launcher tests will either: (a) actually spawn processes (flaky, environment-dependent, potentially destructive), (b) only test interpolation but not invocation (incomplete), or (c) be skipped. The plan says "Launcher behavior stays thin and subprocess-oriented" but thin does not mean testable unless there is an explicit boundary.
+
+  **Suggested action**: Add to beads-workbench-yze.4.3 acceptance criteria:
+  - "Launcher execution is behind a replaceable `CommandRunner` or `ProcessStarter` interface"
+  - "Tests can record the constructed command (binary, args, env, workdir) without executing it"
+  - This enables launcher tests to assert "launching nvim for issue X produces command `nvim /tmp/bwb-XXXX.md` with env `BWB_ISSUE_ID=...`" without actually running nvim
+---
+id: ahgeu8ch
+author: Hans Kohlreiter
+created: 2026-04-05T11:11:19Z
+body: |-
+  ## [MEDIUM] Launcher thinness criterion needs a measurable boundary, not just "stay thin"
+
+  **What**: Instruction 3 says "Keep launcher behavior thin: produce subprocess launches only, not orchestration logic." Acceptance criterion 3 says "Launcher behavior stays thin and subprocess-oriented." ARCHITECTURE.md says "They should not become a hidden orchestration engine" (line 315). But there is no measurable definition of what "thin" means or what specifically would violate it.
+
+  **Why**: The biggest risk for launchers is not that someone adds an obvious orchestration engine — it is that they add "just a little" coordination: wait for subprocess completion, parse output, trigger a gateway update based on results, poll for state changes. Each addition is individually reasonable but collectively recreates orchestration. Without a bright line, reviewers cannot enforce thinness.
+
+  **Suggested action**: Add a concrete constraint to the instructions: "Launchers must fire-and-forget. A launcher starts a subprocess and returns. It must NOT: wait for subprocess completion to trigger gateway operations, parse subprocess output, maintain subprocess lifecycle state, or coordinate multiple subprocesses. If a workflow needs post-launch coordination, it belongs outside Beads Workbench."
+---
+id: yhoomr03
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:16Z
+body: |-
+  ## PASS: Launcher thinness is now well-defined with measurable boundaries
+
+  **What**: Task yze.4.3 instructions now say "Keep launcher behavior thin: fire-and-forget subprocess launches only. Do not add workflow coordination, polling, or orchestration behavior." The acceptance criterion states "Launcher behavior is explicitly limited to fire-and-forget subprocess launches." Task yze.4.4 further scopes built-in launchers to nvim, opencode, and a generic shell command, deferring tmux/terminal-tab complexity.
+
+  **Why**: The original plan had vague "stay thin" language. The updated instructions draw a concrete line: fire-and-forget only, no coordination, no polling, no lifecycle management. This is a testable constraint — a code reviewer can verify whether a launcher waits for subprocess completion or parses output. The scope reduction from 4 launchers to 3 (with tmux deferred) is also appropriate.
+
+  **Suggested action**: None. Launcher thinness is adequately protected.
+---
+id: coxhrtge
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:12Z
+body: |-
+  ## [PASS] Launcher framework has process seam and fire-and-forget constraint
+
+  **What**: The updated yze.4.3 includes: (1) process launching behind a replaceable seam, (2) explicit fire-and-forget definition, (3) acceptance criteria for both. The "thin" requirement is now measurable: "fire-and-forget subprocess launches only. Do not add workflow coordination, polling, or orchestration behavior."
+
+  **Why**: The first review flagged both the missing test seam and the vague "thin" definition. Both are now concrete.
+
+  **Suggested action**: None.
+---
+id: vjbb60sl
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:27Z
+body: |-
+  ## [PASS] Launcher framework now requires replaceable process seam — agent-testable without real tools
+
+  **What**: yze.4.3 now includes "Process launching is behind a replaceable seam for automated tests" and yze.4.4 requires "Automated tests verify launcher command construction without real interactive process execution." This addresses the first-pass finding about launcher tests requiring real subprocess execution.
+
+  **Why**: The seam pattern is correct: yze.4.3 creates the interface, yze.4.4 tests command construction through it, yze.4.5 adds cross-cutting coverage. An agent can verify launcher correctness by asserting on constructed commands (binary, args, env, workdir) without spawning nvim/opencode/tmux.
+
+  **Suggested action**: No change needed.
+---
+id: jh73dnau
+author: Hans Kohlreiter
+created: 2026-04-05T11:31:45Z
+body: |-
+  ## yze.4.3 launcher "thinness" now has a concrete constraint: fire-and-forget only
+
+  **What**: `beads-workbench-yze.4.3` acceptance criterion now says "Launcher behavior is explicitly limited to fire-and-forget subprocess launches." This replaces the prior vague "stays thin and subprocess-oriented" language.
+
+  **Why**: "Fire-and-forget" is a measurable constraint that a verifier can check: does the launcher return immediately after starting the process, or does it wait/poll/coordinate? This is the bright line that prevents launchers from becoming a hidden orchestration engine. Combined with ARCHITECTURE.md's guidance, this gives both implementers and reviewers a concrete boundary.
+
+  **Suggested action**: No change needed. The fire-and-forget constraint is appropriately specific.

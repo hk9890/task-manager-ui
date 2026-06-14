@@ -1,0 +1,18 @@
+---
+id: v9g2lsus
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:25Z
+body: |-
+  Review finding — Update signature change not addressed. What: board.Model.Update() returns (mode.Controller, tea.Cmd) at line 96 and search.Model.Update() returns (mode.Controller, tea.Cmd) at line 76. If wz9.1 removes mode.Controller, these return types must change. The task instructions say 'update board and search constructors, message flows, and tests' but do not explicitly call out the Update() return type change. Why: the tasker needs to know that removing mode.Controller means choosing a new return convention for board/search Update methods. Returning concrete *board.Model/*search.Model is the obvious answer, but the shell then needs to store and call them differently (no more polymorphic Update). This is the core mechanical challenge of wz9.1 and the instructions should be explicit. Suggested action: add to instructions: 'Update board.Model.Update() and search.Model.Update() to return concrete types instead of mode.Controller. Update shell message forwarding in model.go accordingly.'
+---
+id: g5e6pb3i
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:30Z
+body: |-
+  Review finding — type assertion inventory is incomplete. What: the task says 'shell code no longer uses type assertions to recover board or search capabilities'. The actual type assertions in model.go are: (1) selectionProvider at line 494-496, (2) searchShellKeyCapture at line 329-331, (3) loadingReporter at lines 674-676 and 690-692, (4) resultCounter at lines 708-710. That is four distinct ad-hoc interfaces being type-asserted through mode.Controller. Why: the tasker needs to know the full inventory to verify the acceptance criterion. If even one is missed, the acceptance review will fail. Suggested action: list these four type assertions explicitly in the instructions or files-to-modify section so the tasker has a checklist.
+---
+id: d162fjmy
+author: Hans Kohlreiter
+created: 2026-04-12T11:12:35Z
+body: |-
+  Review finding — forwardBoardMessage/forwardSearchMessage will need structural change. What: lines 726-744 forward messages to m.board and m.search through mode.Controller interface (m.board.Update(msg) returns (Controller, tea.Cmd) and reassigns m.board). With concrete types, this forwarding must change to call board/search-specific Update methods and handle concrete return types. Why: this is load-bearing shell wiring, not just cosmetic. The forwarding pattern plus shouldForwardToBoard/shouldForwardToSearch is where the rubber meets the road. Suggested action: explicitly note in instructions that message forwarding in model.go must be refactored alongside the storage change.

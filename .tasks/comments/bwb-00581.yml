@@ -1,0 +1,6 @@
+---
+id: eyta7r49
+author: Hans Kohlreiter
+created: 2026-04-23T08:06:23Z
+body: |-
+  Changelog entry for v0.3.0 and release-tracker setup landed in commit 61f7fce on main. Git push succeeded. Final GitHub release notes remain pending until the tag-triggered release exists.

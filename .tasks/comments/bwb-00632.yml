@@ -1,0 +1,6 @@
+---
+id: 0zwbq72q
+author: Hans Kohlreiter
+created: 2026-04-22T14:07:30Z
+body: |-
+  Implemented .goreleaser.yaml ldflags wiring: -X main.version={{ .Version }} (kept default var version="dev" fallback in cmd/bwb/main.go unchanged). Verification: goreleaser build --snapshot --clean produced ./dist/bwb_linux_amd64_v1/bwb; '--version' => 'bwb 0.2.0-SNAPSHOT-7795431' (non-dev). Local plain go build check: '/tmp/bwb-dev --version' => 'bwb dev'. Focused tests: go test ./cmd/bwb passed.

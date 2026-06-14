@@ -1,0 +1,6 @@
+---
+id: oez3xkcm
+author: Hans Kohlreiter
+created: 2026-05-24T13:31:53Z
+body: |-
+  Confirmed-mismatch path now starts cold (no memory swap); lastHash anchored in both match and confirmed-mismatch cases via the always-set seedHash. Test: TestHydrate_HashMismatch_NoStalePerID asserts the next Issue() call returns backing's new title, not stale old. quality:fast green (969 tests). Commit 3893c59.

@@ -1,0 +1,6 @@
+---
+id: 0n2qb98g
+author: Hans Kohlreiter
+created: 2026-05-16T11:41:59Z
+body: |-
+  Implementation complete. Root cause was actually toaster.ScheduleDismiss(3s) blocking runBatch synchronously — not scheduleRefreshTickCmd (already neutralized in TestMain). Tasker added a parallel scheduleToastDismissCmd test seam in model.go (same pattern as the existing refresh-tick seam) and neutralized it in TestMain. All 5 named tests now complete in <10ms each. Unit suite: 0.179s wall. mise run quality green.

@@ -1,0 +1,6 @@
+---
+id: e4dauu2s
+author: Hans Kohlreiter
+created: 2026-05-24T09:11:20Z
+body: |-
+  AR complete 2026-05-24. All 9 implementation subtasks closed; mise run quality green (1376 tests, 0 failures, lint clean, -race clean, fmt:check + scripts:check pass). Compile-time Repository assertion verified. Hash-match warm-path (kxci.7) verified via TestHydrateMatchingHashSkipsDashboardRefetch — precomputed dashboard populated from hydrated memory, backing skipped on hash match. Separate load/write paths (kxci.8) via TestHydrateSeparateLoadAndWritePaths. Per-ID isolation (kxci.9) via TestUpdate/Close/AddComment_DoesNotBustUnrelatedIssue (both halves asserted). 60s VC hash tick (kxci.3) via RefreshIfChanged tests. No mtime reads in caching layer. docs/MONITORING.md carries 6 log lines + 3 silent-by-design conditions (kxci.10); docs/CODING.md and --help reflect caching as default. Manual verification: all 3 backends boot under pseudo-TTY (--repo beads/memory/caching); --repo memory without --repo-file exits 2; caching mode writes cache file + manifest with bd_commit_hash. Known follow-up (documented): per-ID memory cache only populates on Issue(id) calls; dashboardCache is not persisted, so warm-restart benefit depends on prior session navigation density — mechanism correct, population strategy is incomplete and tracked as future work.

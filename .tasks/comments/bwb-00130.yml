@@ -1,0 +1,6 @@
+---
+id: l5zd2voa
+author: Hans Kohlreiter
+created: 2026-05-16T13:38:23Z
+body: |-
+  Migrated from 'go run pkg@$(cat ver)' to mise [tools] entries (gotestsum 1.13.0, goimports 0.30.0, golangci-lint 2.1.6). Deleted 3 version files. Build step gated to non-Windows in ci.yml (bash ldflags expansion is bash-only; Windows still runs full test suite). Quality green locally. Awaiting CI verification on next push.

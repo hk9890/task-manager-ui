@@ -1,0 +1,18 @@
+---
+id: dmxoq7ez
+author: Hans Kohlreiter
+created: 2026-05-25T11:23:28Z
+body: |-
+  ## Scope expanded after tasker investigation
+
+  The "single-line swap" framing was wrong. `board.Model` has no ctx field and `NewModel(repo, logger, resolved...)` does not accept one (verified `internal/mode/board/model.go:59-109`). Same gap exists in `internal/mode/search/model.go:567`.
+
+  Production call sites that will need updating:
+  - `internal/app/model.go:263` (board)
+  - `internal/app/model.go:264` (search)
+  - `cmd/bwb-smoke/main.go:485`
+  - Tests under `internal/mode/board/`, `internal/mode/search/`, `internal/testing/e2e/embeddedfixture/scale_fixture_smoke_test.go:321`
+
+  **Decision (orchestrator, executing under "implement everything" goal):** thread the app ctx through `NewModel` for both board and search; replace `context.Background()` in `loadDashboardCmd` and the search equivalent with the stored `m.ctx`. Keep the existing `m.inflight` guard untouched — the cancel-and-supersede redesign is out of scope and would be a separate epic.
+
+  Scope of this task is therefore expanded to cover both board and search to keep the fix consistent.

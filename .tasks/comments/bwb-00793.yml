@@ -1,0 +1,48 @@
+---
+id: jb2kik3p
+author: Hans Kohlreiter
+created: 2026-04-05T11:08:59Z
+body: |-
+  ## App shell acceptance review has no docs check
+
+  **What**: This acceptance review checks code, tests, and architecture but not documentation. Phase 2 introduces the Bubble Tea app shell, mode switching, and shared UI primitives — all new architectural surface area. Nothing requires `docs/CODING.md` to be updated with the new packages, key bindings, or mode-switching conventions that agents will need.
+
+  **Why**: The app shell is where user-visible interaction patterns are established. Future agents implementing board, search, and detail modes need to understand mode contracts, message routing, and service container usage. If these aren't documented at this gate, Phase 3 agents will make inconsistent assumptions.
+
+  **Suggested action**: Add an acceptance criterion: `docs/CODING.md` is updated to reflect any new packages, architectural patterns, or mode contracts introduced by the app shell epic.
+---
+id: rpgrqkng
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:56Z
+body: |-
+  ## [PASS] App shell acceptance review now includes docs gates
+
+  **What**: yze.2.5 now requires `docs/CODING.md` to reflect the implemented shell architecture and config model, AND `docs/TESTING.md` to reflect the implemented app-shell testing approach. These are explicit acceptance criteria, not suggestions.
+
+  **Why**: The app shell introduces significant new architectural surface area (mode switching, services container, UI primitives, config model). Without docs gates at this checkpoint, Phase 3 agents would be working blind. The updated plan prevents this.
+
+  **Suggested action**: None. This is adequate.
+---
+id: cfdef4s1
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:20Z
+body: |-
+  ## yze.2.5 and yze.3.6 acceptance reviews lack explicit go build and go vet criteria
+
+  **What**: `beads-workbench-omd.7` and `beads-workbench-yze.1` both explicitly require `go build ./cmd/bwb` and `go vet ./...`. However, `beads-workbench-yze.2.5` (app shell acceptance) and `beads-workbench-yze.3.6` (browsing acceptance) do not include these as explicit criteria. They mention "tests pass" and "no orchestration or BQL wiring" but not the build/vet quality gates documented in CODING.md.
+
+  **Why**: The app shell and browsing phases introduce significant new code. A regression that breaks the build or introduces vet warnings could pass acceptance if the verifier only runs `go test ./...` (which only compiles test-referenced code, not necessarily the full binary). The quality gates should be consistent across all acceptance reviews.
+
+  **Suggested action**: Add to `beads-workbench-yze.2.5` and `beads-workbench-yze.3.6` acceptance criteria: "`go build ./cmd/bwb` passes" and "`go vet ./...` passes." These are trivial additions that ensure consistency with omd.7 and yze.1.
+---
+id: gf3bfh2r
+author: Hans Kohlreiter
+created: 2026-04-05T14:50:27Z
+body: |-
+  Verification follow-up completed: added shared loading primitive under internal/ui/loading, updated internal/app/model.go to use it for board/search/detail loading feedback, added app-shell tests, and confirmed go build ./cmd/bwb, go vet ./..., and go test ./... all pass.
+---
+id: h5d7kkig
+author: Hans Kohlreiter
+created: 2026-04-05T15:31:21Z
+body: |-
+  Verifier PASS: all app-shell implementation tasks are closed; cmd/bwb starts; shared UI primitives are integrated; mode switching and selected-issue shell state work; go build ./cmd/bwb, go vet ./..., go test ./..., and architecture guardrail checks all pass; docs/CODING.md and docs/TESTING.md match the implemented shell.

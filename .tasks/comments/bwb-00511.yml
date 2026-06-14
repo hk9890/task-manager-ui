@@ -1,0 +1,6 @@
+---
+id: um84ytsk
+author: Hans Kohlreiter
+created: 2026-05-16T11:45:27Z
+body: |-
+  Implementation complete. Replaced 2s sleep with additive reaperHook channel (nil in production, set to a buffered chan in the test with t.Cleanup nil-out). Test wall <2ms; 100-run stability passes. Sanity check confirmed: removing the reaper causes the test to fail with timeout — regression detection intact. mise run quality green.

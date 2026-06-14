@@ -1,0 +1,6 @@
+---
+id: 63l3anvl
+author: Hans Kohlreiter
+created: 2026-05-22T09:26:28Z
+body: |-
+  Done. Tree already conformed to the subsystem-only rule (13 doc.go files, all in subsystem packages; no leaf had one). Added '## doc.go Convention' section to docs/CODING.md with package table and rule. go vet + build pass.

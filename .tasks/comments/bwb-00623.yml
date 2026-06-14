@@ -1,0 +1,12 @@
+---
+id: fka8dneo
+author: Hans Kohlreiter
+created: 2026-05-16T12:56:40Z
+body: |-
+  .mise.toml changes correct (added -race + CGO_ENABLED=1 task overrides to all 4 test tasks). Verification revealed 3 pre-existing races, all already tracked: Race A in cmd/bwb (zgvc #1, global main.version), Race B in internal/app (0ny3, withRefreshTickScheduler global), Race C in internal/ui/shared/markdown (zgvc #3, renderer global). Closing ug82.2 deferred until 0ny3 + zgvc are fixed. Working tree retains the .mise.toml change.
+---
+id: aizc36d5
+author: Hans Kohlreiter
+created: 2026-05-16T13:07:27Z
+body: |-
+  Unblocked by 0ny3 + zgvc fixes. Verified: mise run test cold 2.2s with -race, mise run test:integration cold 29.3s with -race. Both within targets (<10s / <30s). Quality green.

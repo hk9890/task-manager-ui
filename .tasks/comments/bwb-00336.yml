@@ -1,0 +1,6 @@
+---
+id: 5mjjbr8f
+author: Hans Kohlreiter
+created: 2026-05-24T13:57:07Z
+body: |-
+  Hydrate now takes ctx; vcStatusFunc and loaded.Dashboard both receive it. On Dashboard error: dashboardCache assignment is skipped so dashboardDirty stays true and next Dashboard() routes to backing. Hydrate still returns nil — graceful degradation. Test TestHydrate_DashboardError_FallsBackToBackingFetch uses a vcStatusFunc that cancels ctx after returning the matching hash. 29 call sites updated (1 prod + 28 test). quality:fast green (974 tests). Commit 832fc86.

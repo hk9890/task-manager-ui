@@ -1,0 +1,72 @@
+---
+id: copvabws
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:25Z
+body: |-
+  ## omd.8 has no upstream dependency — can execute in parallel with omd.1, but SHOULD depend on omd.1
+
+  **What**: `beads-workbench-omd.8` (architecture guardrails) is currently ready to work with zero dependencies. It blocks omd.6 and omd.7. However, the guardrails task needs to enforce import constraints across `internal/` and run `go build ./cmd/bwb` — neither of which is meaningful until the repository bootstrap (omd.1) creates the module, the package layout, and the binary entrypoint.
+
+  **Why**: If an agent claims omd.8 before omd.1 completes, there is no `go.mod`, no `internal/` tree, and no `cmd/bwb` to build. The task will either fail or produce guardrail scripts that target a nonexistent codebase. The task is structurally independent but practically requires omd.1.
+
+  **Suggested action**: Add dependency: `omd.8 depends-on omd.1`. This does not change the critical path (omd.8 already blocks omd.6 which depends on omd.4/omd.5 which depend on omd.3 which depends on omd.2 which depends on omd.1), but it prevents a premature claim.
+---
+id: w6d3nf4b
+author: Hans Kohlreiter
+created: 2026-04-05T11:28:47Z
+body: |-
+  ## PASS: Gateway-first architecture is now protected by automated guardrails task
+
+  **What**: Task beads-workbench-omd.8 ("Add architecture guardrails and quality gates") explicitly requires automated checks that fail when forbidden SQL/BQL/orchestration dependencies are introduced. It requires documenting these guardrails in `docs/CODING.md`. It blocks the test verification task (omd.6) and the acceptance review (omd.7), meaning no gateway work can be accepted without these guardrails in place.
+
+  **Why**: This was the single biggest structural gap in the original plan — every task said "no SQL" but nothing enforced it. The guardrails task closes that gap. Combined with the existing per-task forbidden-path lists and the acceptance review checks, the gateway-first architecture now has defense in depth: task-level instructions (human-readable), automated import checks (machine-enforceable), and acceptance review gates (verification checkpoints).
+
+  **Suggested action**: None. This is a strong protection. The guardrails task is well-placed in the dependency chain and has clear acceptance criteria.
+---
+id: sweqk04m
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:09Z
+body: |-
+  ## [PASS] Architecture guardrails task closes the automated enforcement gap
+
+  **What**: beads-workbench-omd.8 directly addresses the first-pass finding about no automated architectural enforcement. It requires automated checks that fail on forbidden SQL/BQL/orchestration imports, and adds go build/go vet as standard quality gates. It correctly blocks omd.6 (gateway tests) so the guardrails exist before the test verification pass.
+
+  **Why**: This converts the repeated "no SQL, no BQL" instructions from prose conventions into build-time enforcement. Agent verifiers can now run the guardrail checks as part of `go test ./...` rather than manually inspecting imports.
+
+  **Suggested action**: No structural change needed. The task is correctly scoped and positioned.
+---
+id: jbzc2c2m
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:38Z
+body: |-
+  ## [MINOR] CODING.md guardrails documentation is now planned but only in omd.8 — not in any acceptance review criterion
+
+  **What**: Task omd.8 ("Add architecture guardrails and quality gates") correctly requires: "docs/CODING.md documents the enforced architecture guardrails and quality gates." However, the Phase 1 acceptance review (omd.7) says "docs/CODING.md matches the implemented foundation architecture" — which is generic enough that a reviewer might not specifically check whether the guardrails enforcement mechanism is documented in CODING.md.
+
+  **Why**: omd.8 is a new task that introduces an important new capability: automated import-path enforcement. If CODING.md documents only the package layout and build commands but doesn't explain that forbidden-import guardrails exist and how they work, a future agent could inadvertently add code that bypasses the guardrails (e.g., a new test file that imports database/sql for "legitimate test reasons" and trips the enforcement). The guardrails are only useful if agents know they exist.
+
+  **Suggested action**: This is adequately covered as-is — omd.8's own acceptance criteria require the CODING.md update, and omd.7 depends on omd.8 being closed. The dependency chain ensures the guardrails documentation lands before acceptance. No change needed, but flagging for awareness.
+---
+id: t761w6v1
+author: Hans Kohlreiter
+created: 2026-04-05T11:29:53Z
+body: |-
+  ## MINOR: omd.8 has no dependency on omd.1 — guardrails could theoretically be built before the repo exists
+
+  **What**: Task omd.8 (architecture guardrails) has no explicit dependency on any prior task. It blocks omd.6 and omd.7 but doesn't depend on omd.1 (bootstrap) or omd.2 (interfaces). In theory an agent could attempt to create guardrail checks before the repo is bootstrapped or before the package layout exists.
+
+  **Why**: In practice this is unlikely to cause problems because the guardrails need Go packages to scan and those won't exist until after bootstrap. But the missing dependency means the task could be picked up as "ready" work prematurely. The dependency chain should reflect that guardrails need the codebase to exist first.
+
+  **Suggested action**: Add a dependency: omd.8 depends on omd.1 (bootstrap). This prevents premature pickup and makes the execution order explicit.
+---
+id: 9tloo9of
+author: Hans Kohlreiter
+created: 2026-04-05T11:30:39Z
+body: |-
+  ## [MINOR] Architecture guardrails task has no dependency — could start before package layout exists
+
+  **What**: omd.8 "Add architecture guardrails and quality gates" has no DEPENDS ON relationship. It blocks omd.6 and omd.7. But the guardrails check import paths across `internal/` — those packages don't exist until omd.1 (bootstrap) creates them.
+
+  **Why**: An agent starting omd.8 before omd.1 would be writing import-path checks against empty directories. The checks need actual code to validate against. This is minor because omd.8 blocks omd.6 which depends on omd.4/omd.5, so in practice the code will exist by the time it matters. But the missing dependency creates confusing scheduling.
+
+  **Suggested action**: Add dependency: omd.8 DEPENDS ON omd.1 (bootstrap). The guardrails need the package layout to exist.

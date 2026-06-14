@@ -1,0 +1,83 @@
+---
+id: p51fibp4
+author: Hans Kohlreiter
+created: 2026-05-24T17:42:51Z
+body: |-
+  ## Root-cause analysis (post-filing)
+
+  ### Where the bug lives — NOT the repository layer
+
+  **Repository is correct.** `repository.Search(ctx, query)` in `internal/repository/beads/lean_reads.go` correctly:
+  - routes empty-text → `bd list --all`, text-only → `bd search <text> --status all`, etc. (per the routing table documented in `internal/mode/search/parity/search_parity_integration_test.go:11-21`),
+  - returns `Completeness=Exact` when `Limit==0 || len(results) < Limit` (kb8e.15 fix at `lean_reads.go:540-542`),
+  - matches `bd <verb>` output on both the embedded fixture and this repo's real .beads/ — `TestSearchParityFixture` and `TestSearchParityThisRepo` (the latter under `BWB_PARITY_THIS_REPO=1`) both pass.
+
+  ### The bug lives in `internal/mode/search/model.go` — three pieces conspire
+
+  **(1) `Init()` (line 101)** fires an empty-text search on entering search mode:
+  ```go
+  return loadSearchCmd(m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
+  ```
+  Empty text → repository routes to `bd list --all` → returns every issue including closed. That's intentional at the repo layer; it becomes harmful when it lingers as the visible result set under a user-typed draft.
+
+  **(2) `triggerSearchWithAnchor()` (line 313-322)** has a silent re-entry guard:
+  ```go
+  if m.loading {
+      m.logger.Debug("triggerSearchWithAnchor re-entry suppressed; search already in flight", "query", queryText)
+      return nil   // <-- Enter is swallowed; the user gets no feedback
+  }
+  ```
+  The comment claims this is "defense in depth" because `Reload()` is the primary guard (line 397). But the same path is reached by explicit user-Enter at line 186-187 (`tea.KeyEnter && m.focus == uisearch.FocusQuery → triggerSearch()`) — when the user presses Enter, the guard treats them as a re-entrant caller and silently discards the keystroke.
+
+  **(3) Race window:** the user types `t`,`a`,`s`,`k`,ENTER in <500 ms after opening search mode. Meanwhile the Init() empty-text load is still in flight (bd subprocess latency). Every Enter that arrives during that load hits the guard, returns nil, and disappears. When Init eventually resolves, `m.loading=false` and `appliedQuery=""` — but the typed draft is never re-applied, no further trigger fires. The user sees:
+  - the auto-init's `bd list --all` results (5 rows including closed bwf-3 in fixture; the full-DB list on real repos),
+  - the `draft` badge (because `draft="task" != appliedQuery=""`),
+  - the "Results below are stale. Press Enter to search …" overlay — which is now actively misleading: Enter still does nothing new because, in normal cases, the user is no longer typing fast enough to race, but the badge calculation `hasDraftChanges(state)` (`internal/ui/search/search.go:390`) keeps flagging it.
+
+  ### Why no existing test catches this
+
+  `internal/mode/search/model_test.go` uses the `pressAndResolve(m, …)` helper at line 602, which delegates to `testui.ApplyControllerKeySequence`. That helper **drains every command synchronously** before sending the next message. So in the unit tests, by the time the next key arrives, `m.loading` is always `false` — the race cannot occur. The repository-layer parity tests bypass the controller entirely and call `repo.Search(query)` directly.
+
+  There is no test in the repo that simulates the live `tea.Program` cmd cadence with overlapping async commands. The bug class — controller key handling vs. in-flight async commands — is unreachable by the existing harness.
+
+  ### Direction (sketch — implementer's call)
+
+  Three options, listed lowest-risk first:
+
+  1. **Drop the re-entry guard for the user-Enter path** and rely on the existing `Reload()` call-site guard. The comment at line 314 says the guard exists "for future callers that may not check m.loading at the call site"; the explicit user-Enter handler is a known, intentional caller — defend it differently.
+  2. **Queue the pending submit.** When Enter arrives while loading, record `pendingDraft = draft`; in the `searchLoadedMsg` handler, if `pendingDraft != "" && pendingDraft != appliedQuery`, re-fire `triggerSearchWithAnchor(pendingDraft, nil)`.
+  3. **Show feedback in the View.** If Enter is intentionally dropped, render something like "queued — waiting for current search to finish" so the user knows their key was not lost.
+
+  Option (2) is probably what users expect; option (3) is the cheapest fix if (2) is judged risky.
+
+  ### Test gap (filed separately)
+
+  A controller-level async contract test is needed to lock this behavior in. Spec'd in a sibling task — see the new task filed alongside this comment.
+---
+id: uipzokhq
+author: Hans Kohlreiter
+created: 2026-05-24T18:27:20Z
+body: |-
+  Fixed in commit 2d60d94.
+
+  Root cause: two distinct bugs in the search-mode controller.
+
+  1. Enter swallowed during in-flight search. `triggerSearchWithAnchor` returned nil when `m.loading` was true (typically during the Init empty-query load). Pressing Enter dropped the keystroke; results stayed on the prior auto-search and the input retained its `(draft)` tag.
+
+     Fix: added `pendingDraft *string` on the Model. When Enter fires while loading, store the trimmed draft and return nil. When `searchLoadedMsg` resolves, consume `pendingDraft` and re-fire `triggerSearchWithAnchor` if the pending query differs from `appliedQuery`.
+
+  2. Closed-issue leak. `lean_reads.go` forced `filterStatuses = []string{"all"}` when `query.Statuses` was empty, overriding `bd search`'s own default which excludes closed. The UI showed bwf-3 in every text search.
+
+     Fix: pass `query.Statuses` through as-is; `leanBuildFilterArgs` omits `--status` entirely when empty, letting bd's default apply. Callers wanting closed must set `Statuses` explicitly.
+
+  Tests added:
+  - `internal/mode/search/enter_while_loading_test.go`: pending-draft queue + auto-fire on resolution (4 cases).
+  - `internal/mode/search/argv_cardinality_test.go`: pins argv shapes (default = no `--status`, explicit closed = `--status closed`).
+  - `internal/mode/search/parity/search_parity_integration_test.go`: updated to skip `--status` when `Statuses` is empty; added `text=task` to the matrix.
+  - `internal/bd/ARGV_CONTRACT.md`: split the text-search row.
+
+  PTY repro from the ticket passes:
+  - `want-3-results` checkpoint hits: header `3 results`, rows bwf-1 / bwf-5 / bwf-4, input shows `shown` (not `draft`), no stale banner.
+  - `no-bwf-3-confirmed`: bwf-3 absent from screen.
+
+  All `go test ./internal/mode/search/...` green; pre-commit hooks clean.

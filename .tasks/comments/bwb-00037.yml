@@ -1,0 +1,6 @@
+---
+id: bv08cv8b
+author: Hans Kohlreiter
+created: 2026-05-11T06:08:38Z
+body: |-
+  Created from the design discussion that supersedes beads-workbench-36a8. This epic owns the ground-up analysis of search/result completeness and any required data-access interface changes.

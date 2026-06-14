@@ -1,0 +1,66 @@
+---
+id: xz7usi2v
+author: Hans Kohlreiter
+created: 2026-04-06T15:35:41Z
+body: |-
+  ## Row struct is missing type and status fields — the user wants type/priority/state/ID/title in a compact row
+
+  **What**: The user and bug y3x both say: "Perles rows encode issue type, priority, readiness state, and ID in a compact, scannable prefix." The current Row struct is `{ID, Title, Priority, Selected}`. There is no Type field and no Status field. The renderRowLines function only renders title + ID + priority. The mode/board model.go maps issues to rows and only passes ID/Title/Priority/Selected.
+
+  **Why**: An implementer following u5s instruction #2 ("Make type/priority/state/ID/title signals compact") will discover they can't render type or status because the data isn't in the Row struct. They'll need to change the Row struct, update the mode-to-renderer mapping in mode/board/model.go, and update all existing golden files. This isn't mentioned in the task's "Files to Modify" or instructions.
+
+  **Suggested action**: Add explicit instructions: "Extend the ui/board.Row struct to include Type and Status fields. Update the board mode model's View() mapping to populate them. This is a prerequisite for rendering the compact metadata prefix." Also add internal/mode/board/model.go to the "Files to Modify" list.
+---
+id: kwhqt9e2
+author: Hans Kohlreiter
+created: 2026-04-06T15:35:47Z
+body: |-
+  ## "Materially denser" is not a testable criterion — needs a measurable density target
+
+  **What**: Acceptance criteria #1 says "Row rendering is materially denser than the current two-line-row design." The current design uses exactly 2 lines per row (title line + meta line). The golden files confirm this. "Materially denser" could mean 1 line per row, 1.5 lines, or just slightly shorter padding. There's no target.
+
+  **Why**: An implementer could achieve "materially denser" by reducing padding by 1 character and claim success. Or they could achieve a compact single-line row that truncates too aggressively. Without a target, the acceptance reviewer has to make a subjective call.
+
+  **Suggested action**: Replace "materially denser" with a concrete target: "At 120 columns wide with 4 visible sections, the board renders at least N issue rows per column in a 30-line viewport." Even a rough target (e.g., "each row occupies at most 1 rendered line") is better than a subjective adjective.
+---
+id: 28arkznr
+author: Hans Kohlreiter
+created: 2026-04-06T15:35:54Z
+body: |-
+  ## Golden tests need terminal-size-parameterized cases, not just one width
+
+  **What**: Criteria #4 says "Golden tests cover representative dense board rendering cases." The current board golden tests only cover two widths: 100 and 120. There are no tests at common narrow widths (80 cols) or very wide widths (160+, 200+). The user cares about "full terminal size" usage, which varies wildly.
+
+  **Why**: A density improvement that works at 120 cols might break horribly at 80 (truncation destroys readability) or look wrong at 200 (wasted space). Golden tests at a single width give false confidence about the redesign.
+
+  **Suggested action**: Require golden test coverage at minimum 3 representative widths: 80 (narrow), 120 (standard), and 180+ (ultrawide). Each golden should show the full board state including column windowing behavior. The TESTING.md already supports this pattern — it just needs to be exercised.
+---
+id: x2c51pcv
+author: Hans Kohlreiter
+created: 2026-04-06T15:36:03Z
+body: |-
+  ## PTY/runtime check is listed as a criterion but there's no test pattern for it — implementer will skip it
+
+  **What**: Criteria #5 says "PTY/runtime review shows improved scanability on realistic repo data." But there's no existing test or helper that does a PTY-based render check against embedded fixture data for the board specifically. The existing teatest usage in mode/board/model_test.go runs a teatest program but only checks for substring presence, not layout or density. The app-level e2e test (TestModelEmbeddedFixtureBoardToDetailSmokeWorkflow) checks string presence but doesn't validate layout.
+
+  **Why**: Without a concrete test pattern or helper, "PTY/runtime review" will be interpreted as "I looked at it in my terminal and it seemed fine" — which is exactly the manual inspection that TESTING.md says the project does not rely on ("Product verification must be automated").
+
+  **Suggested action**: Either (a) require a new teatest-based golden test using embedded fixture data that captures the full board output at the target terminal size, or (b) explicitly document that this one criterion is a manual-review exception (and explain why the automated golden tests are insufficient). Option (a) is strongly preferred given TESTING.md policy.
+---
+id: u43lrhvl
+author: Hans Kohlreiter
+created: 2026-04-06T16:53:19Z
+body: |-
+  Cannot execute yet: ticket is stale/underspecified relative to its own comments. Missing explicit prerequisite to add Type and Status to ui/board.Row and populate them from mode/board mapping (likely requires internal/mode/board/model.go changes beyond listed files). Acceptance criterion 'materially denser' is not measurable/testable (needs concrete density target, e.g., max 1 rendered line per row and/or rows-per-viewport target at 120 cols). PTY/runtime criterion is not operationalized against project policy preferring automated verification (needs required teatest/golden runtime pattern or explicit documented manual exception). Please fold these decisions into description/instructions/AC before implementation.
+---
+id: 2x9kw6un
+author: Hans Kohlreiter
+created: 2026-04-06T17:08:35Z
+body: |-
+  Verifier FAIL: compact single-line rows are in place and scanability is improved, but wide app layout still truncates titles too aggressively in runtime board rendering (for example only 'Implement crea...' / 'Implement launc...' at 160 cols). Follow-up required: relax wide-board column packing or allocate more title width so realistic titles remain more readable while preserving density.
+---
+id: t69f574a
+author: Hans Kohlreiter
+created: 2026-04-06T17:16:23Z
+body: |-
+  Verifier PASS: board rows now render as compact single-line entries across representative widths; density is higher than the old two-line design; type/priority/state/ID/title signals are glanceable; wide-layout title readability was rebalanced without regressing density; golden/runtime tests at 80/120/180 plus app-level render checks all pass.

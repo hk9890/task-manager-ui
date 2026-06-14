@@ -1,0 +1,8 @@
+---
+id: wer2kq2z
+author: Hans Kohlreiter
+created: 2026-05-25T19:43:55Z
+body: |-
+  Worktree branch: worktree-agent-a3add753c3d8997b5, commit 24d6121. Extracted bdCommander interface (generate.go) and measureWith seam (measure.go). 4 E2E tests converted to fake-runner unit tests. 1 real-bd smoke retained (12.77s; asserts bd-version capture in both Generate and Measure paths). Integration package wall time 131s -> 14.093s (89% reduction). Zero <0 assertions remain. P50<=P95<=P99<=Max + exact SampleCount formula asserted. quality:fast green (1064 tests). Filed beads-workbench-99bs.3 as follow-up.
+
+  NOTE FOR j5bg VERIFIER: 43th modified non-_test.go production code (generate.go, measure.go) but the changes are entirely within internal/testing/loadgen/ which is test infrastructure, NOT in the bwb runtime path. The conditional j5bg UI-smoke clause is NOT triggered by these changes (c4la's Services hook IS the trigger, separately recorded on c4la).

@@ -1,0 +1,6 @@
+---
+id: s2enk37l
+author: Hans Kohlreiter
+created: 2026-05-24T14:19:31Z
+body: |-
+  beads.Repository.Invalidate() added; CachingRepository.RefreshIfChanged calls it via narrow type assertion (interface{Invalidate()}) immediately after c.memory.Reset() on hash change. White-box test in package beads + caching-side test using invalidatingStub. quality:fast green (992 tests). Commit cd1b3bb.

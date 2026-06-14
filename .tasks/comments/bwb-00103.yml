@@ -1,0 +1,75 @@
+---
+id: 89lppm9l
+author: Hans Kohlreiter
+created: 2026-05-24T14:53:38Z
+body: |-
+  ## Wrap-up — 10-iteration UI-vs-bd data-correctness exploration
+
+  ### Focus
+
+  Per Phase 0 scoping: verify that what the bwb TUI shows on screen matches what `bd` reports — column counts, row ordering, detail fields, search results.
+
+  ### Actions tried (10 iterations)
+
+  Built bwb (commit ccdf0c4); exercised both the embedded fixture (5 issues, bwf-1..bwf-5) and this repo's real .beads/ (686 issues) via `scripts/capture_bwb_screen.py` with `--repo beads` + `BD_NON_INTERACTIVE=1`.
+
+  1. Ran existing parity suite (`internal/dashboard/parity` + `internal/mode/search/parity`) against fixture: all green; baseline expected dashboard NotReady=2, Ready=2, InProgress=0, Done=1.
+  2. Captured live board at 140x40 against fixture — UI shows NotReady=2 (bwf-2, bwf-5), Ready=2 (bwf-1, bwf-4), InProgress=0, Done=1 (bwf-3). Position-by-position match with `bd list` / `bd count`.
+  3. Compared row ORDER vs `bd ready` (bwf-1, bwf-4) and `bd blocked` (bwf-2 dep-blocked; bwf-5 stored-blocked appended). UI ordering matches the documented dep-then-stored composition.
+  4. Captured detail view for bwf-2. With sufficient wait, all fields match `bd show --json` + `bd comments` exactly: Blocked by (1)→bwf-1, Counts.Comments=2, Counts.Blocked by=1, labels=[blocking,fixture], assignee=bob, creator correct. Found two issues during load:
+     - Filed czkq.2 (P2 finding): the brief load window between 'Detail:' header appearing and data arriving shows literal '0' for all Counts and '(none)' for all dep lists — looks identical to real data, while the Description column DOES use a clear skeleton pattern.
+     - Filed czkq.3 (P2 question): comments are rendered in reverse-bd order ([1/2]=newest); bd's natural order is oldest-first. Likely intentional newest-first UX but undocumented divergence.
+  5. Searched 'task' on fixture (bd returns 3: bwf-1, bwf-5, bwf-4). UI shows '5 exact' results including the closed bwf-3. Re-tested with '/', triple-Enter, 15s waits, query 'bwf' (bd returns 4, UI shows 5). Filed czkq.4 (P1 finding): Enter does not submit the typed query; results stay stuck on a stale auto-search that ignores text and includes closed. More severe sibling of znri.6 (which only described label staleness; the underlying RESULT staleness was masked by znri's choice of 'bwf' as the test query because 'bwf' happens to be a substring of all 5 IDs). Repository-level `Search()` returns correct data — search/parity passes — so the bug lives in the search-mode controller wiring.
+  6. Ran opt-in parity gate `BWB_PARITY_THIS_REPO=1 mise test:integration` against this repo. Dashboard count parity: NotReady=1, Ready=12, InProgress=1, Done=672 — all match bd. Search parity all green (~7s).
+  7. Captured live board on this repo at 200x45. UI matches bd 1:1: NotReady=1 (kb8e.17), Ready=12 (order exactly = `bd ready`: znri.2, czkq.4, znri.7, kb8e, czkq.3, czkq.2, czkq, znri.6, znri.5, znri.4, kb8e.16, znri), InProgress=1 (znri.8), Done shows "50 of 672" — the ssom-shape fix is correctly distinguishing slice from DB total.
+  8. Verified kb8e.13 fix on real repo. kb8e.17 has bd deps: kb8e (parent-child) + kb8e.16 (blocks). UI detail correctly shows Blocked by (1)→kb8e.16, Blocks (0)/(none), and a separate Structure (17) panel containing the parent kb8e and 16 siblings. Parent-child does NOT leak into Blocks. ✓
+  9. Verified kb8e.15 fix at code + parity layer. `internal/repository/beads/lean_reads.go:540-542` correctly reports Completeness=Exact unless Limit>0 AND results>=Limit. UI search-mode passes a positive limit (capacity), so 'Exact' appears whenever results fit; observed '5 exact' label in iteration-5 captures.
+  10. Verified Done column slice ordering on real repo. UI Done top 12 = kb8e.4, kb8e.5, kb8e.3, kb8e.2, kb8e.1, k4g4, mdqk, k4g4.5, k4g4.4, k4g4.3, k4g4.2, k4g4.1. bd `list --status closed` re-sorted by closed_at desc yields the same 12 in the same positions. The advisory `ClosedAtDescPreservedOnRealData` test diagnostic confirms this invariant holds against the real DB.
+
+  ### Tasks filed (2 findings, 1 question)
+
+  - **czkq.4 (P1 finding) — Search Enter never submits draft; wrong result count/content; closed issues leak in.** Most material new finding. Repository-level parity passes but the controller layer drops the keystroke and leaves results stuck on the prior auto-search. Sibling of znri.6 with a deeper symptom that znri's test query 'bwf' happened to mask.
+  - **czkq.2 (P2 finding) — Detail view shows literal '0' counts and '(none)' dep lists during the load window after pressing Enter.** Internally-inconsistent skeleton: description column visibly placeholders with 'X XX XXX ░░░' but counts/deps render zero/none in the same load window, identical to real data. Risk of misinforming on slower repos.
+  - **czkq.3 (P2 question) — Detail view renders comments in reverse-bd order.** Likely intentional newest-first UX but contradicts bd's natural order and is undocumented; [N/M] indices may also drift relative to bd if order is non-stable.
+
+  ### Positive verifications (no findings)
+
+  - Dashboard count parity holds on both fixture and real repo (the recently-closed ssom 'Done=cap vs total' bug stays fixed — UI says '50 of 672' correctly).
+  - Ready/Done column row ORDER matches bd at position level on the real repo.
+  - kb8e.13 (Blocks bucket excludes parent-child) holds end-to-end in the UI.
+  - kb8e.15 (Search Exact when no limit) holds at the repository layer.
+  - Detail-view field-by-field match with `bd show` once the data has fully loaded (cross-ref Creator/Labels/deps all correct).
+
+  ### Coverage and limits
+
+  Focus per Phase 0 user direction: **data correctness — UI vs bd.**
+
+  **Tested (UI vs bd parity)**: dashboard column counts and row order on both fixture and this repo; detail-view fields (title, status, priority, type, assignee, creator, labels, dep counts, dep members, comments) for bwf-2 and kb8e.17; search result count and members for queries 'task', 'bwf', 't', plus repository-level parity for the standard test corpus; kb8e.13 + kb8e.15 fix verification; ssom-shape fix verification ('N of M' rendering for Done); Done column slice ordering by closed_at desc on the real repo.
+
+  **NOT explored** (out of session scope or blocked):
+  - Mutation-then-render parity: closing/commenting on an issue and verifying the dashboard reflects the new state immediately (kb8e.11 fix verification — verified at code level via the commit log but not via the UI mutation flow).
+  - Caching backend (`--repo caching`) data parity on a hydrated repo — only `--repo beads` used for clean parity reads because znri.2 still blocks meaningful first-run testing of the default backend.
+  - Memory backend (`--repo memory`) — requires `--repo-file`; not exercised.
+  - The kb8e.14 cache-hash invalidation invariant — would need an external bd mutation in a separate session.
+  - Scale fixture (`BWB_SCALE_FIXTURE=1`, ~590 issues) — skipped per its 'several minutes' cost.
+  - External-repo path (`BWB_PARITY_EXTERNAL_PATH=...`) — no external repo configured.
+  - Sort parity on this-repo (the existing TestSortParity has only `/fixture` subtests; this-repo sort parity is not asserted by the gate, only the advisory ClosedAtDescPreservedOnRealData and the manual position-by-position check in iteration 10).
+  - Narrow-width layouts (<120 cols) and the multi-width board layout goldens against real-repo data.
+---
+id: n322p7d1
+author: Hans Kohlreiter
+created: 2026-05-25T07:40:32Z
+body: |-
+  ## Acceptance review — PASS
+
+  Verifier ran 7 checks against the 5 closed children. All PASS, no defects.
+
+  Summary of session outcomes:
+  - czkq.2 — Detail view skeleton (commit 4f5fa4e). Counts/deps panes now use ░░ glyphs during load instead of literal 0/(none).
+  - czkq.3 — Comment ordering policy (commit b407e88). Newest-first kept; documented in docs/CODING.md and section header reads "Comments (N · newest first)".
+  - czkq.4 — Search Enter drop + closed-issue leak (commit 2d60d94). Pending-draft queue + removed forced --status all.
+  - czkq.5 — Async contract tests (commits ddf01c6, 9176896). DelayedFakeRepository + 5 subtests + docs/TESTING.md paragraph.
+
+  Quality gates: 1019 tests pass (2 pre-existing skips pinning znri.5 + znri.7), lint 0 issues, vet clean, fmt clean. No regression markers left behind.
+
+  Test count trajectory: 1012 baseline → 1013 (czkq.2) → 1013 (czkq.3) → 1019 (czkq.4 + czkq.5). +7 tests for the session.

@@ -1,0 +1,6 @@
+---
+id: z36emf5v
+author: Hans Kohlreiter
+created: 2026-05-30T15:26:00Z
+body: |-
+  Plan review (reviewer a2db89): verdict NEEDS REVISION on two tasks, now applied (vudi fix flipped, 42hk premise corrected). Decomposition (4 tasks + AR) judged appropriate. Priority note: 42hk is the largest single suite cost (~202s) but P3, while doc-only zgv4 is P2 — kept 42hk at P3 because its yield as scoped is lower than first implied (init is only ~15% of cost). Conscious value call; revisit if 42hk proves higher-leverage during execution.

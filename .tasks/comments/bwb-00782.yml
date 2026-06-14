@@ -1,0 +1,43 @@
+---
+id: vm6zlgts
+author: Hans Kohlreiter
+created: 2026-05-24T11:41:39Z
+body: |-
+  AR verification complete. All 6 epic ACs pass with evidence:
+
+  1. grep "BeadsGateway|NewCLIGateway|validatingGateway" — 0 hits (PASS)
+  2. grep "beads gateway|17-method" in docs/AGENTS.md/project-plan/ — 0 hits (PASS)
+  3. go build ./... — exit 0 (PASS)
+  4. mise run test + mise run test:integration — 960 unit + 1066 integration tests green; 17 skips are opt-in gates, all expected (PASS)
+  5. mise run smoke — count/sort/search/render all PASS; integration scenarios cover create/update/comment/close round-trips (PASS)
+  6. LOC internal/repository/beads/: 1,554 — well under 2,500 target, down from ≈6,300 (PASS)
+
+  No dead code. No unused exports. go vet clean. All child tasks k4g4.1–k4g4.6 CLOSED.
+
+  Verifier flagged 4 stale doc comments (errors.go, lean_payloads.go, gateway/beads/doc.go, bwb-smoke/main.go) referencing deleted files; fixed inline in commit a0c154e — no follow-up needed.
+
+  Recommendation: CLOSE.
+---
+id: q3y0s693
+author: Hans Kohlreiter
+created: 2026-05-24T11:59:43Z
+body: |-
+  Second-pass verification after full gateway purge (commit ff591f4):
+
+  Final state evidence:
+  - grep -rni gateway . (excluding .git/.claude/.beads): 0 hits
+  - grep BeadsGateway|NewCLIGateway|validatingGateway: 0 hits
+  - internal/gateway/ directory: absent (moved to internal/bd/)
+  - mise run quality (full gate): 960 unit + 1066 integration PASS; 17 opt-in skips
+  - mise run smoke: count/sort/search/render all PASS
+  - ./bwb --version, --print-config, --check-config: all run cleanly against this repo
+
+  What changed since the premature first close:
+  - moved internal/gateway/beads/ → internal/bd/ (package beads → bd)
+  - renamed domain.GatewayError → domain.RepositoryError (107+ sites)
+  - renamed newGatewayError, assertGatewayErrorCode, appTestGateway, newTestGateway, searchGateway, newSearchGateway, countBoardGatewayCalls
+  - renamed 13 Test*Gateway* functions
+  - renamed logger Component("gateway") → Component("repository")
+  - swept all comments + docs + testdata + scripts + golden files
+
+  Recommendation: CLOSE.

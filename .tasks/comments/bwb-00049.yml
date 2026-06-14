@@ -1,0 +1,6 @@
+---
+id: ht6zpwr7
+author: Hans Kohlreiter
+created: 2026-04-19T18:48:51Z
+body: |-
+  Alignment bug root cause is clear in metadata.go:78-89. What: when interactive=true, selected rows get '› ' (2 chars) prefix and non-selected get '  ' (2 chars), but the '›' is styled via SelectionIndicatorStyle which likely has different rendered width than a plain space. The line content itself (label:value) stays the same, so the alignment issue is purely in the prefix rendering width. Why: lipgloss styled characters can have different terminal widths than their plain equivalents depending on style attributes. Suggested action: verify lipgloss.Width of the styled prefix matches the plain prefix width; if not, pad to equal rendered width. This is a straightforward fix — ready to implement without product decisions.

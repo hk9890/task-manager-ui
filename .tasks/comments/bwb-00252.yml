@@ -1,0 +1,6 @@
+---
+id: t0r618jn
+author: Hans Kohlreiter
+created: 2026-05-16T13:48:06Z
+body: |-
+  Search.Init deferred from app.Model.Init startup batch to first mode transition (via lazySearchInitCmd called at all 4 transition sites). searchInitDone bool flag ensures idempotency. Two new unit tests: TestModelInitDoesNotPreloadSearch (no SearchIssues at startup), TestModelFirstSearchModeSwitchTriggersSearchInit (first switch fires, subsequent switches don't re-fire). Combined with 5dhj's board cardinality test, the 4-call cold startup (ping + 3 board) is now asserted in tests. Quality green.
