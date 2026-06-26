@@ -107,6 +107,12 @@ jobs:
       - name: Generate SLSA build provenance for release archives
         # Produces a signed attestation linking each released archive's digest
         # to this workflow + commit. Verifiable with `gh attestation verify`.
+        # Non-fatal: actions/attest-build-provenance is unavailable on
+        # user-owned PRIVATE repos ("Feature not available for user-owned
+        # private repositories"). The release (binaries + cosign sig/cert +
+        # SBOMs) is already published by the GoReleaser step above; provenance
+        # is best-effort and starts working if the repo goes public or org-owned.
+        continue-on-error: true
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |

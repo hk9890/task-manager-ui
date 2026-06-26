@@ -36,9 +36,18 @@ archives:
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
 
+release:
+  # Allow re-running the release workflow against an existing tag/release
+  # without manually deleting assets first.
+  replace_existing_artifacts: true
+
 signs:
   - cmd: cosign
     artifacts: checksum
+    # Track the keyless certificate as an uploadable artifact so ${certificate}
+    # is defined and the .pem ships alongside the .sig — required to verify the
+    # signature (see docs/RELEASING.md `cosign verify-blob`).
+    certificate: "${artifact}.pem"
     args:
       - sign-blob
       - --yes
