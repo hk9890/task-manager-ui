@@ -22,6 +22,11 @@ jobs:
       contents: write       # write release notes + upload assets
       id-token: write       # cosign keyless signing + SLSA attestation OIDC
       attestations: write   # actions/attest-build-provenance writes attestations
+    env:
+      # The product depends on the PRIVATE module github.com/hk9890/task-manager/sdk.
+      # GOPRIVATE bypasses the module proxy + checksum DB for it; the "Authenticate
+      # private module access" step below supplies the credential git needs to fetch it.
+      GOPRIVATE: github.com/hk9890/task-manager
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -32,6 +37,21 @@ jobs:
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
+
+      - name: Authenticate private module access
+        # The default GITHUB_TOKEN cannot read the separate private repo
+        # hk9890/task-manager, so rewrite HTTPS git auth to use a PAT secret
+        # (Contents:Read on that repo) for every subsequent go module fetch.
+        env:
+          TASKMGR_SDK_TOKEN: ${{ secrets.TASKMGR_SDK_TOKEN }}
+        run: |
+          if [ -z "${TASKMGR_SDK_TOKEN}" ]; then
+            echo "::error::TASKMGR_SDK_TOKEN secret is not set; cannot fetch the private task-manager SDK." >&2
+            exit 1
+          fi
+          git config --global \
+            url."https://x-access-token:${TASKMGR_SDK_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
 
       - name: Build
         run: go build ./cmd/taskmgr-ui
