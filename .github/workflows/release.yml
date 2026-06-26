@@ -61,12 +61,15 @@ jobs:
           git config --global "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${auth}"
           # Probe the private SDK repo so this step fails fast with a clear
           # diagnostic instead of an opaque `go build` error downstream.
+          # Write the probe's stderr OUTSIDE the repo workspace so it cannot
+          # dirty the git tree (goreleaser refuses to release on a dirty tree).
+          probe_err="${RUNNER_TEMP:-/tmp}/sdk-probe.err"
           echo "Probing read access to hk9890/task-manager ..."
-          if git ls-remote https://github.com/hk9890/task-manager HEAD >/dev/null 2>probe.err; then
+          if git ls-remote https://github.com/hk9890/task-manager HEAD >/dev/null 2>"${probe_err}"; then
             echo "OK: PAT can read hk9890/task-manager"
           else
             echo "::error::PAT cannot read hk9890/task-manager:" >&2
-            sed 's/^/  /' probe.err >&2
+            sed 's/^/  /' "${probe_err}" >&2
             echo "::error::Fix TASKMGR_SDK_TOKEN: a fine-grained PAT, owner hk9890, repo hk9890/task-manager selected, Contents:Read, not expired." >&2
             exit 1
           fi
