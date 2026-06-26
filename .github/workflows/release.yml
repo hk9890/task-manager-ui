@@ -85,6 +85,12 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # Pin to latest v2.x: cosign v3 defaults to --new-bundle-format, which
+          # deprecates/ignores the --output-signature/--output-certificate flags
+          # in .goreleaser.yaml and then aborts ("create bundle file"). v2.x keeps
+          # the documented .sig/.pem signing flow (docs/RELEASING.md verification).
+          cosign-release: 'v2.6.3'
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
