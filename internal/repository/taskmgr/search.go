@@ -76,14 +76,21 @@ func emptySearchPage(limit int) domain.SearchResultPage {
 // buildCriteria translates a SearchIssuesQuery into a tasks.Criteria plus the
 // presentation FindOptions. Label matching defaults to LabelMatchAll.
 //
+// Free-text matching uses TextAllWords (AND-of-words): every whitespace-separated
+// word in Text must appear (order-independent, per-word substring), matching the
+// task-manager CLI `search` command and SDK SearchExpr so the UI and CLI search
+// identically. The SDK leaves the zero value at TextPhrase, so this must be set
+// explicitly.
+//
 // Per the Repository.Search contract, unrecognized filter values are forwarded
 // without validation rather than surfaced as errors: unknown status/type tokens
 // and negative priority bounds (which Criteria.Build would reject) are dropped so
 // a search never hard-fails on an odd filter.
 func buildCriteria(q domain.SearchIssuesQuery) (tasks.Criteria, tasks.FindOptions) {
 	criteria := tasks.Criteria{
-		Text:     q.Text,
-		Assignee: q.Assignee,
+		Text:      q.Text,
+		TextMatch: tasks.TextAllWords,
+		Assignee:  q.Assignee,
 	}
 	if q.PriorityMin != nil && *q.PriorityMin >= 0 {
 		criteria.PriorityMin = q.PriorityMin

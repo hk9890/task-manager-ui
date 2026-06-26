@@ -154,6 +154,54 @@ func TestEmptyStore_Search(t *testing.T) {
 	}
 }
 
+// TestSearch_AllWordsAndSemantics verifies the memory backend matches free text
+// with AND-of-words: every whitespace-separated word must appear (order-independent,
+// per-word substring, across Title/Description/Notes), mirroring the taskmgr backend
+// and the task-manager CLI.
+func TestSearch_AllWordsAndSemantics(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "m-1", Title: "Widget redesign", Description: "new chassis layout"})
+	r.Seed(memory.Issue{ID: "m-2", Title: "Widget cleanup", Notes: "tidy imports"})
+
+	cases := []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{"both words present", "widget redesign", []string{"m-1"}},
+		{"order independent", "redesign widget", []string{"m-1"}},
+		{"words span title and description", "widget chassis", []string{"m-1"}},
+		{"word in notes counts", "widget tidy", []string{"m-2"}},
+		{"one word absent excludes all", "widget absent", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := r.Search(context.Background(), domain.SearchIssuesQuery{Text: tc.query})
+			if err != nil {
+				t.Fatalf("Search(%q): %v", tc.query, err)
+			}
+			got := make([]string, 0, len(page.Results))
+			for _, res := range page.Results {
+				got = append(got, res.Issue.ID)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("Search(%q) = %v, want %v", tc.query, got, tc.want)
+			}
+			for _, w := range tc.want {
+				found := false
+				for _, id := range got {
+					if id == w {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("Search(%q) = %v, missing %s", tc.query, got, w)
+				}
+			}
+		})
+	}
+}
+
 func TestEmptyStore_Issue_NotFound(t *testing.T) {
 	r := memory.New()
 	_, err := r.Issue(context.Background(), "nonexistent")

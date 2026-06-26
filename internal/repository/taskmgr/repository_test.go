@@ -202,6 +202,47 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+// TestSearchAllWordsAndSemantics verifies the taskmgr backend matches free text
+// with AND-of-words (TextAllWords): every whitespace-separated word must appear,
+// order-independent and across fields — matching the task-manager CLI `search`.
+func TestSearchAllWordsAndSemantics(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	// "redesign" is in the title, "chassis" only in the description: an
+	// AND-of-words match must be able to span both fields.
+	hit := mustCreate(t, r, domain.CreateIssueInput{Title: "Widget redesign", Description: "new chassis layout"})
+	_ = mustCreate(t, r, domain.CreateIssueInput{Title: "Widget cleanup", Description: "tidy imports"})
+
+	cases := []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{"both words present", "widget redesign", []string{hit}},
+		{"order independent", "redesign widget", []string{hit}},
+		{"words span title and description", "widget chassis", []string{hit}},
+		{"one word absent excludes all", "widget absent", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := r.Search(ctx, domain.SearchIssuesQuery{Text: tc.query})
+			if err != nil {
+				t.Fatalf("Search(%q): %v", tc.query, err)
+			}
+			ids := searchIDs(page.Results)
+			if len(ids) != len(tc.want) {
+				t.Fatalf("Search(%q) = %v, want %v", tc.query, ids, tc.want)
+			}
+			for _, w := range tc.want {
+				if !containsID(ids, w) {
+					t.Errorf("Search(%q) = %v, missing %s", tc.query, ids, w)
+				}
+			}
+		})
+	}
+}
+
 func TestUpdateReopenLandsOnRequestedStatus(t *testing.T) {
 	r, _ := newTestRepo(t)
 	ctx := context.Background()

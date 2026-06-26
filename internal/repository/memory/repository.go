@@ -446,7 +446,9 @@ func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, 
 
 // Search implements repository.Repository.
 //
-// Text is matched case-insensitively across Title, Description, and Notes.
+// Text is matched case-insensitively across Title, Description, and Notes using
+// AND-of-words: every whitespace-separated word must appear (order-independent,
+// per-word substring), matching the taskmgr backend and the task-manager CLI.
 // Statuses, Types, Labels, and Assignee are intersection filters (AND
 // semantics across fields; OR semantics within Labels). PriorityMin/Max bound
 // priority (nil = unbounded). WorkState=ready and WorkState=blocked derive
@@ -1043,13 +1045,22 @@ func (r *Repository) depStateLocked(dependsOn []string) (allClosed bool, openDep
 // matchesSearchLocked reports whether si matches the given SearchIssuesQuery.
 // Caller must hold at least RLock.
 func (r *Repository) matchesSearchLocked(si *storedIssue, q domain.SearchIssuesQuery) bool {
-	// Text filter: case-insensitive substring across Title, Description, Notes.
+	// Text filter: case-insensitive AND-of-words across Title, Description, Notes.
+	// Every whitespace-separated word in q.Text must appear as a substring in at
+	// least one of the fields; words may match different fields (order-independent).
+	// This mirrors the task-manager SDK's TextAllWords semantics so search behaves
+	// identically across the memory and taskmgr backends and the CLI. A
+	// whitespace-only query imposes no constraint (strings.Fields yields no words).
 	if q.Text != "" {
-		needle := strings.ToLower(q.Text)
-		if !strings.Contains(strings.ToLower(si.title), needle) &&
-			!strings.Contains(strings.ToLower(si.description), needle) &&
-			!strings.Contains(strings.ToLower(si.notes), needle) {
-			return false
+		title := strings.ToLower(si.title)
+		desc := strings.ToLower(si.description)
+		notes := strings.ToLower(si.notes)
+		for _, word := range strings.Fields(strings.ToLower(q.Text)) {
+			if !strings.Contains(title, word) &&
+				!strings.Contains(desc, word) &&
+				!strings.Contains(notes, word) {
+				return false
+			}
 		}
 	}
 
