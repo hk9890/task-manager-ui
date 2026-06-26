@@ -7,6 +7,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [v0.11.0]
+
+### Changed
+
+- **Search now matches all query words (AND-of-words)** instead of treating the whole query as a single phrase, so multi-word searches behave like the `taskmgr` CLI. Matching is order-independent and spans fields. Bumps the task-manager SDK to v0.6.0 to use its first-class `TextMatch`/`SearchExpr` support; both the `taskmgr` and in-memory backends share the semantics.
+
+### Fixed
+
+- Search query box no longer drops the space key, so multi-word queries are typeable (Bubble Tea delivers a lone space as `KeySpace`, which the focused-query handler previously ignored).
+
+## [v0.10.0]
+
 ### Changed
 
 - **Renamed the project to Task Manager UI.** Binary `bwb` → `taskmgr-ui`; Go module `github.com/hk9890/beads-workbench` → `github.com/hk9890/task-manager-ui`; repository → `task-manager-ui`. The launcher env-var prefix `BWB_*` → `TASKMGR_UI_*` (default config only; existing user configs define their own names). The `--version`/`--debug` program name, the log/state directory, and log filenames now use `taskmgr-ui`. The project no longer has any beads dependency.

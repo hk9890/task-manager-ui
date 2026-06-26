@@ -3,12 +3,12 @@ id: bwb-y0c2id
 title: 'Search quality on task-manager backend: phrase-only multi-word, no ranking (rely on backend; decide upstream asks)'
 status: open
 type: bug
-priority: 2
+priority: 1
 creator: hans
 labels:
   - needs:discussion
 created: 2026-06-14T14:22:21Z
-updated: 2026-06-14T14:22:21Z
+updated: 2026-06-26T19:12:58Z
 ---
 
 ## Summary
