@@ -40,18 +40,31 @@ jobs:
 
       - name: Authenticate private module access
         # The default GITHUB_TOKEN cannot read the separate private repo
-        # hk9890/task-manager, so rewrite HTTPS git auth to use a PAT secret
-        # (Contents:Read on that repo) for every subsequent go module fetch.
+        # hk9890/task-manager. Configure an explicit Authorization header with
+        # the PAT secret (Contents:Read on that repo) so every subsequent go
+        # module fetch authenticates as the PAT. An explicit extraheader takes
+        # precedence over actions/checkout's persisted default-token header.
         env:
           TASKMGR_SDK_TOKEN: ${{ secrets.TASKMGR_SDK_TOKEN }}
         run: |
+          set -uo pipefail
           if [ -z "${TASKMGR_SDK_TOKEN}" ]; then
             echo "::error::TASKMGR_SDK_TOKEN secret is not set; cannot fetch the private task-manager SDK." >&2
             exit 1
           fi
-          git config --global \
-            url."https://x-access-token:${TASKMGR_SDK_TOKEN}@github.com/".insteadOf \
-            "https://github.com/"
+          auth=$(printf 'x-access-token:%s' "${TASKMGR_SDK_TOKEN}" | base64 -w0)
+          git config --global "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${auth}"
+          # Probe the private SDK repo so this step fails fast with a clear
+          # diagnostic instead of an opaque `go build` error downstream.
+          echo "Probing read access to hk9890/task-manager ..."
+          if git ls-remote https://github.com/hk9890/task-manager HEAD >/dev/null 2>probe.err; then
+            echo "OK: PAT can read hk9890/task-manager"
+          else
+            echo "::error::PAT cannot read hk9890/task-manager:" >&2
+            sed 's/^/  /' probe.err >&2
+            echo "::error::Fix TASKMGR_SDK_TOKEN: a fine-grained PAT, owner hk9890, repo hk9890/task-manager selected, Contents:Read, not expired." >&2
+            exit 1
+          fi
 
       - name: Build
         run: go build ./cmd/taskmgr-ui
