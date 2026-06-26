@@ -1,0 +1,16 @@
+---
+id: irs6qfga
+author: hans
+created: 2026-06-26T18:22:42Z
+body: |
+  Finding #1 (AND-of-words) RESOLVED in branch chore/bump-task-manager-sdk-v0.6.0.
+
+  task-manager v0.6.0 landed the upstream ask this issue identified: `Criteria.TextMatch` (`TextPhrase` / `TextAllWords`) plus `SearchExpr`. The UI now sets `TextMatch = tasks.TextAllWords` in `internal/repository/taskmgr/search.go` — a thin adapter over the backend's new first-class capability, consistent with this issue's decision (no hand-rolled tokenization in the taskmgr adapter). The in-repo `memory` fixture backend mirrors the same AND-of-words semantics for parity.
+
+  En route, found and fixed a blocker (tracked as bwb-krbmtn): the search box dropped the space key — Bubble Tea delivers a lone space as `tea.KeySpace`, which the query handler ignored — so multi-word queries were untypeable. Verified at runtime: reversed-order `delta gamma` now matches `gamma delta combined`.
+
+  REMAINING open scope on this issue, unaddressed by that PR:
+  - Finding #2: no relevance ranking (title should weight over description).
+  - Finding #3: closed-issue dominance (search includes closed; closed >> open).
+
+  Both remain backend/UX decisions.

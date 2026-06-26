@@ -43,6 +43,29 @@ func hasSearchCall(calls []repository.Call) bool {
 	return countSearchCalls(calls) > 0
 }
 
+// TestSearchQueryAcceptsSpaceForMultiWord guards the query box against dropping
+// spaces. Bubble Tea delivers a lone space as tea.KeySpace (not tea.KeyRunes), so
+// the query handler must accept KeySpace too; otherwise multi-word (AND-of-words)
+// queries could never be typed and the backend's AND-of-words semantics would be
+// unreachable from the UI.
+func TestSearchQueryAcceptsSpaceForMultiWord(t *testing.T) {
+	gw := newSearchRepo()
+	m := NewModel(context.Background(), gw, nil)
+	m.SetSize(120, 30)
+
+	for _, r := range "delta gamma" {
+		if r == ' ' {
+			_ = m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+			continue
+		}
+		_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	if m.draftQuery != "delta gamma" {
+		t.Fatalf("draftQuery = %q, want %q (space dropped?)", m.draftQuery, "delta gamma")
+	}
+}
+
 func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	t.Parallel()
 

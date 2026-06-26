@@ -203,7 +203,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	switch {
-	case msg.Type == tea.KeyRunes && m.focus == uisearch.FocusQuery:
+	case (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) && m.focus == uisearch.FocusQuery:
+		// Bubble Tea delivers a lone space as KeySpace (not KeyRunes) with
+		// Runes==[]rune{' '}; without accepting it the query box would silently
+		// drop spaces, making multi-word (AND-of-words) search impossible to type.
 		m.draftQuery += string(msg.Runes)
 		m.typing = true
 		return nil
