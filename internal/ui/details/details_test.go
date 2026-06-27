@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 func assertGolden(t *testing.T, output []byte, name string) {
@@ -414,7 +415,7 @@ func TestSplitThreePaneWidthsTargetsQuarterLeftRailAtCommonTerminalSizes(t *test
 		t.Run(tc.name, func(t *testing.T) {
 			left, _, metadata := splitThreePaneWidths(tc.total)
 			available := tc.total - (detailColumnGap * 2)
-			expected := clamp(available/4, leftRailMinWidth, leftRailMaxWidth)
+			expected := textutil.Clamp(available/4, leftRailMinWidth, leftRailMaxWidth)
 			if left != expected {
 				t.Fatalf("expected left rail %d for total=%d, got %d", expected, tc.total, left)
 			}

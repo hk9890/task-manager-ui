@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 // Section titles for the fixed four-column layout.
@@ -531,9 +532,9 @@ func (m *Model) restoreFromAnchor(anchor *refreshAnchor) {
 		}
 	}
 
-	m.focusedColumn = clamp(anchor.focusedColumn, 0, len(m.columns)-1)
+	m.focusedColumn = textutil.Clamp(anchor.focusedColumn, 0, len(m.columns)-1)
 	if len(m.columns[m.focusedColumn].issues) > 0 {
-		m.selectedRow[m.focusedColumn] = clamp(anchor.focusedRow, 0, len(m.columns[m.focusedColumn].issues)-1)
+		m.selectedRow[m.focusedColumn] = textutil.Clamp(anchor.focusedRow, 0, len(m.columns[m.focusedColumn].issues)-1)
 		m.normalizeSelectionForFocusedColumn()
 		return
 	}
@@ -551,16 +552,6 @@ func (m *Model) findIssue(issueID string) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
-}
-
-func clamp(value, low, high int) int {
-	if value < low {
-		return low
-	}
-	if value > high {
-		return high
-	}
-	return value
 }
 
 func (m *Model) selectEarliestNonEmptyColumn() {
