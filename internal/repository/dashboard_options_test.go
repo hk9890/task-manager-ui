@@ -8,8 +8,7 @@ import (
 
 // TestDashboardOptionsClosedOffsetField verifies that DashboardOptions has a
 // ClosedOffset int field and that its zero value is 0 (first page, existing
-// behavior). All implementations currently ignore the field; future work will add
-// support.
+// behavior). Both backends honor the field.
 func TestDashboardOptionsClosedOffsetField(t *testing.T) {
 	// Zero value must be 0.
 	var opts repository.DashboardOptions
@@ -25,7 +24,7 @@ func TestDashboardOptionsClosedOffsetField(t *testing.T) {
 
 	// Named-field construction used by callers is non-breaking: existing
 	// literal forms compile and still default ClosedOffset to 0.
-	byName := repository.DashboardOptions{ClosedLimit: 5, ForceFresh: false}
+	byName := repository.DashboardOptions{ClosedLimit: 5}
 	if byName.ClosedOffset != 0 {
 		t.Fatalf("named-field literal DashboardOptions.ClosedOffset = %d, want 0", byName.ClosedOffset)
 	}

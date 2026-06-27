@@ -239,7 +239,7 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	m := newSettledBoardModel(t, repo)
 
 	// === First direct startReload call — must succeed and set inflight=true ===
-	firstCmd := m.startReload(refreshModeManual)
+	firstCmd := m.startReload(refreshModeReload)
 	if firstCmd == nil {
 		t.Fatalf("first startReload: expected non-nil Cmd")
 	}
@@ -254,7 +254,7 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	}
 
 	// === Second direct startReload call — must be suppressed by the internal guard ===
-	secondCmd := m.startReload(refreshModeManual)
+	secondCmd := m.startReload(refreshModeReload)
 
 	// Assert 1: second call returned nil (internal guard fired).
 	if secondCmd != nil {

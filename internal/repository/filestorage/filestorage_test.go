@@ -2,6 +2,7 @@ package filestorage_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -243,12 +244,15 @@ func TestSaveEmptyRepository(t *testing.T) {
 	}
 }
 
-// ---- SaveWithHash / LoadWithManifest tests ----
+// ---- Manifest tests ----
 
-func TestSaveWithHashRoundTrip(t *testing.T) {
+// TestSaveWritesManifest verifies that Save writes a sibling manifest with the
+// current SchemaVersion and a non-zero SyncedAt timestamp, and that it round-trips
+// back through Load.
+func TestSaveWritesManifest(t *testing.T) {
 	r := memory.New()
 	r.Seed(memory.Issue{
-		ID:     "hash-1",
+		ID:     "manifest-1",
 		Title:  "test issue",
 		Status: "open",
 		Type:   "task",
@@ -257,90 +261,17 @@ func TestSaveWithHashRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "repo.jsonl")
 
-	const wantHash = "abc123def456"
-	if err := filestorage.SaveWithHash(r, path, wantHash); err != nil {
-		t.Fatalf("SaveWithHash: unexpected error: %v", err)
-	}
-
-	loaded, manifest, _, err := filestorage.LoadWithManifest(path)
-	if err != nil {
-		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
-	}
-	if manifest.BDCommitHash != wantHash {
-		t.Errorf("BDCommitHash: got %q, want %q", manifest.BDCommitHash, wantHash)
-	}
-	if manifest.SchemaVersion != filestorage.SchemaVersion {
-		t.Errorf("SchemaVersion: got %d, want %d", manifest.SchemaVersion, filestorage.SchemaVersion)
-	}
-	if manifest.SyncedAt.IsZero() {
-		t.Error("SyncedAt should not be zero")
-	}
-	snap := loaded.Snapshot()
-	if len(snap) != 1 {
-		t.Fatalf("expected 1 issue, got %d", len(snap))
-	}
-	if snap[0].ID != "hash-1" {
-		t.Errorf("issue ID: got %q, want hash-1", snap[0].ID)
-	}
-}
-
-func TestLoadWithManifestNoHash(t *testing.T) {
-	// Save via old API (no hash) → LoadWithManifest returns BDCommitHash == "".
-	r := memory.New()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "repo.jsonl")
-
 	if err := filestorage.Save(r, path); err != nil {
 		t.Fatalf("Save: unexpected error: %v", err)
 	}
 
-	_, manifest, _, err := filestorage.LoadWithManifest(path)
+	mBytes, err := os.ReadFile(path + ".manifest.json")
 	if err != nil {
-		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
+		t.Fatalf("read manifest: %v", err)
 	}
-	if manifest.BDCommitHash != "" {
-		t.Errorf("BDCommitHash: got %q, want empty string", manifest.BDCommitHash)
-	}
-}
-
-func TestSaveWithHashEmptyHash(t *testing.T) {
-	// SaveWithHash with empty hash behaves like Save.
-	r := memory.New()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "repo.jsonl")
-
-	if err := filestorage.SaveWithHash(r, path, ""); err != nil {
-		t.Fatalf("SaveWithHash(\"\", \"\"): unexpected error: %v", err)
-	}
-
-	_, manifest, _, err := filestorage.LoadWithManifest(path)
-	if err != nil {
-		t.Fatalf("LoadWithManifest: unexpected error: %v", err)
-	}
-	if manifest.BDCommitHash != "" {
-		t.Errorf("BDCommitHash: got %q, want empty string", manifest.BDCommitHash)
-	}
-}
-
-// ---- LoadManifest tests ----
-
-func TestLoadManifestSuccess(t *testing.T) {
-	r := memory.New()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "repo.jsonl")
-	const wantHash = "abc123"
-
-	if err := filestorage.SaveWithHash(r, path, wantHash); err != nil {
-		t.Fatalf("SaveWithHash: %v", err)
-	}
-
-	manifestPath := path + ".manifest.json"
-	m, err := filestorage.LoadManifest(manifestPath)
-	if err != nil {
-		t.Fatalf("LoadManifest: unexpected error: %v", err)
-	}
-	if m.BDCommitHash != wantHash {
-		t.Errorf("BDCommitHash: got %q, want %q", m.BDCommitHash, wantHash)
+	var m filestorage.Manifest
+	if err := json.Unmarshal(mBytes, &m); err != nil {
+		t.Fatalf("decode manifest: %v", err)
 	}
 	if m.SchemaVersion != filestorage.SchemaVersion {
 		t.Errorf("SchemaVersion: got %d, want %d", m.SchemaVersion, filestorage.SchemaVersion)
@@ -348,45 +279,49 @@ func TestLoadManifestSuccess(t *testing.T) {
 	if m.SyncedAt.IsZero() {
 		t.Error("SyncedAt should not be zero")
 	}
+
+	loaded, err := filestorage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: unexpected error: %v", err)
+	}
+	snap := loaded.Snapshot()
+	if len(snap) != 1 || snap[0].ID != "manifest-1" {
+		t.Fatalf("expected 1 issue manifest-1, got %v", snap)
+	}
 }
 
-func TestLoadManifestMissing(t *testing.T) {
+// TestLoadCorruptManifest verifies that Load returns an error when the manifest
+// file is present but not valid JSON.
+func TestLoadCorruptManifest(t *testing.T) {
 	dir := t.TempDir()
-	manifestPath := filepath.Join(dir, "does-not-exist.manifest.json")
+	path := filepath.Join(dir, "repo.jsonl")
+	if err := os.WriteFile(path, []byte{}, 0o644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+	if err := os.WriteFile(path+".manifest.json", []byte("not-valid-json"), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
 
-	_, err := filestorage.LoadManifest(manifestPath)
+	_, err := filestorage.Load(path)
 	if err == nil {
-		t.Fatal("LoadManifest with missing file: expected error, got nil")
+		t.Fatal("Load with corrupt manifest: expected error, got nil")
 	}
 }
 
-func TestLoadManifestCorrupt(t *testing.T) {
-	dir := t.TempDir()
-	manifestPath := filepath.Join(dir, "bad.manifest.json")
-	if err := os.WriteFile(manifestPath, []byte("not-valid-json"), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	_, err := filestorage.LoadManifest(manifestPath)
-	if err == nil {
-		t.Fatal("LoadManifest with corrupt file: expected error, got nil")
-	}
-}
-
-// TestSaveWithHash_TempInDestinationDir verifies that SaveWithHash creates temp
-// files in the same directory as the destination path rather than in $TMPDIR.
-// When $TMPDIR is a non-existent path, any os.CreateTemp("", ...) call returns
-// an error; the fix — os.CreateTemp(filepath.Dir(path), ...) — is unaffected
-// and the call succeeds.
-func TestSaveWithHash_TempInDestinationDir(t *testing.T) {
+// TestSave_TempInDestinationDir verifies that Save creates temp files in the
+// same directory as the destination path rather than in $TMPDIR. When $TMPDIR is
+// a non-existent path, any os.CreateTemp("", ...) call returns an error; the
+// implementation — os.CreateTemp(filepath.Dir(path), ...) — is unaffected and
+// the call succeeds.
+func TestSave_TempInDestinationDir(t *testing.T) {
 	// Allocate the temp dir BEFORE clobbering TMPDIR — t.TempDir() itself
 	// calls os.MkdirTemp which honors TMPDIR and would fail otherwise.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "repo.jsonl")
 
 	// Now point TMPDIR at a path that does not exist.  Any remaining call to
-	// os.CreateTemp("", ...) in SaveWithHash will return an error and fail
-	// the test; the fix (filepath.Dir(path)) ignores TMPDIR entirely.
+	// os.CreateTemp("", ...) in Save will return an error and fail the test;
+	// the implementation (filepath.Dir(path)) ignores TMPDIR entirely.
 	t.Setenv("TMPDIR", "/nonexistent/tmpdir-should-not-be-used")
 
 	r := memory.New()
@@ -397,8 +332,8 @@ func TestSaveWithHash_TempInDestinationDir(t *testing.T) {
 		Type:   "task",
 	})
 
-	if err := filestorage.SaveWithHash(r, path, "testhash"); err != nil {
-		t.Fatalf("SaveWithHash: unexpected error (TMPDIR was overridden to non-existent path — check that both CreateTemp calls use filepath.Dir): %v", err)
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: unexpected error (TMPDIR was overridden to non-existent path — check that both CreateTemp calls use filepath.Dir): %v", err)
 	}
 
 	// Destination file and manifest must exist.
@@ -449,44 +384,36 @@ func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 	}
 }
 
-// TestLoad_LargeIssueLine verifies that Load succeeds when a SnapshotIssue JSON
-// line exceeds the bufio.Scanner default 64 KiB token limit. Before the fix,
-// scanner.Scan returned false with bufio.ErrTooLong and Load failed wholesale.
 // TestSnapshotRoundTrip_PreservesCrossRefMetadata verifies that cross-reference
 // metadata (Title, Status, Type, Priority on BlockedBy, Related, and
-// ParentGroupBrowser) survives a full Save→Load cycle. Before the fix, Load
-// called Seed (not SeedFromSnapshot), so the storedIssue ref fields were nil
-// and toDetailLocked re-resolved against the memory map — yielding bare-ID
-// references for any cross-ref that was never separately seeded (the original
-// cache-hit bare-ID bug resurfacing after restart).
+// ParentGroupBrowser) survives a full Save→Load cycle even when the referenced
+// issues were never independently seeded — Load uses SeedFromSnapshot, which
+// restores the verbatim ref fields so toDetailLocked returns them without
+// re-resolving against the memory map.
 func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
 	r := memory.New()
 
-	// Seed ONLY issue A via SeedDetail — do NOT seed B, R, or P.
-	// This reproduces the real cache path where only the looked-up issue is in
-	// memory; its cross-refs were fetched from the backing store and stored as
-	// full IssueReferences but never independently seeded.
-	detail := domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:       "A",
-			Title:    "Issue A",
-			Status:   "open",
-			Type:     "task",
-			Priority: 0,
-		},
-		BlockedBy: []domain.IssueReference{
+	// Seed ONLY issue A, carrying verbatim cross-ref metadata; do NOT seed B,
+	// R, or P. This reproduces the path where only the looked-up issue is in
+	// memory and its cross-refs were stored as full IssueReferences.
+	pRef := domain.IssueReference{ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2}
+	r.SeedFromSnapshot(memory.SnapshotIssue{
+		ID:        "A",
+		Title:     "Issue A",
+		Status:    "open",
+		Type:      "task",
+		Priority:  0,
+		DependsOn: []string{"B"},
+		Related:   []string{"R"},
+		ParentID:  "P",
+		BlockedByRefs: []domain.IssueReference{
 			{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1},
 		},
-		Related: []domain.IssueReference{
+		RelatedRefs: []domain.IssueReference{
 			{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0},
 		},
-		ParentGroupBrowser: domain.ParentGroupBrowserContext{
-			Parent: domain.IssueReference{
-				ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2,
-			},
-		},
-	}
-	r.SeedDetail(detail)
+		ParentRef: &pRef,
+	})
 
 	// Save to disk.
 	dir := t.TempDir()
@@ -539,14 +466,14 @@ func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
 }
 
 // TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution verifies backward
-// compatibility: an issue seeded via Seed (not SeedDetail) has nil ref fields,
+// compatibility: an issue seeded via Seed (no verbatim refs) has nil ref fields,
 // those nil fields survive Snapshot→JSON→Snapshot→Load, and Load produces a
 // repository where toDetailLocked re-resolves references from the memory map
 // (the original behavior — no regression).
 func TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution(t *testing.T) {
 	r := memory.New()
 
-	// Seed two issues the old-fashioned way (Seed, not SeedDetail).
+	// Seed two issues with plain Seed (no verbatim refs).
 	// B is a dependency; A references B via DependsOn.
 	r.Seed(memory.Issue{
 		ID:        "A",

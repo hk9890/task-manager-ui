@@ -39,11 +39,9 @@ jobs:
           version: 2026.5.15
 
       - name: Scripts syntax
-        if: matrix.os != 'windows-latest'
         run: mise run scripts:check
 
       - name: Format check
-        if: matrix.os != 'windows-latest'
         run: mise run fmt:check
 
       - name: Lint
@@ -51,7 +49,6 @@ jobs:
         run: mise run lint
 
       - name: Build
-        if: matrix.os != 'windows-latest'
         run: mise run build
 
       - name: Vet

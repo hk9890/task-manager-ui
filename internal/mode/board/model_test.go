@@ -31,8 +31,9 @@ func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 }
 
 // optsCaptureRepo is a minimal recording stub that captures the DashboardOptions
-// passed to each Dashboard call. Used by ForceFresh wiring tests where
-// ErrorInjectingRepository (which records only Method, not args) is insufficient.
+// passed to each Dashboard call. Used by tests that assert the ClosedLimit /
+// ClosedOffset windowing, where ErrorInjectingRepository (which records only
+// Method, not args) is insufficient.
 type optsCaptureRepo struct {
 	mu            sync.Mutex
 	dashboardOpts []repository.DashboardOptions
@@ -992,78 +993,33 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 	}
 }
 
-// --- AC: manual reload (r) passes ForceFresh:true; Init and AutoRefresh do not ---
+// --- AC: reload and auto-refresh dispatch a Dashboard call with a ClosedLimit ---
 
-// TestStartReloadManual_ForceFreshTrue verifies that startReload(refreshModeManual)
-// passes DashboardOptions{ForceFresh:true} to the repository. This is the
-// direct unit test for the r-key wiring.
-func TestStartReloadManual_ForceFreshTrue(t *testing.T) {
+// TestStartReload_PassesClosedLimit verifies that startReload builds
+// DashboardOptions with a positive ClosedLimit (the section item capacity) and
+// dispatches exactly one Dashboard call, for both the full-reset reload mode
+// and the background auto mode.
+func TestStartReload_PassesClosedLimit(t *testing.T) {
 	t.Parallel()
 
-	stub := &optsCaptureRepo{}
-	m := newBoardModel(stub, resolvedBoardKeys(t))
+	for _, mode := range []refreshMode{refreshModeReload, refreshModeAuto} {
+		stub := &optsCaptureRepo{}
+		m := newBoardModel(stub, resolvedBoardKeys(t))
 
-	// Simulate manual reload as triggered by the r key.
-	cmd := m.startReload(refreshModeManual)
-	if cmd == nil {
-		t.Fatal("startReload(refreshModeManual) must return a non-nil command")
-	}
-	// Execute the command so it calls stub.Dashboard.
-	_ = cmd()
+		cmd := m.startReload(mode)
+		if cmd == nil {
+			t.Fatalf("startReload(%v) must return a non-nil command", mode)
+		}
+		// Execute the command so it calls stub.Dashboard.
+		_ = cmd()
 
-	opts := stub.capturedOpts()
-	if len(opts) != 1 {
-		t.Fatalf("expected exactly 1 Dashboard call from manual reload, got %d", len(opts))
-	}
-	if !opts[0].ForceFresh {
-		t.Errorf("manual reload: expected DashboardOptions.ForceFresh=true, got false")
-	}
-}
-
-// TestStartReloadInit_ForceFreshFalse verifies that startReload(refreshModeInit)
-// (used by Init) does NOT set ForceFresh, so the caching layer can serve a
-// hydrated Dashboard on cold start.
-func TestStartReloadInit_ForceFreshFalse(t *testing.T) {
-	t.Parallel()
-
-	stub := &optsCaptureRepo{}
-	m := newBoardModel(stub, resolvedBoardKeys(t))
-
-	cmd := m.startReload(refreshModeInit)
-	if cmd == nil {
-		t.Fatal("startReload(refreshModeInit) must return a non-nil command")
-	}
-	_ = cmd()
-
-	opts := stub.capturedOpts()
-	if len(opts) != 1 {
-		t.Fatalf("expected exactly 1 Dashboard call from init reload, got %d", len(opts))
-	}
-	if opts[0].ForceFresh {
-		t.Errorf("init reload: expected DashboardOptions.ForceFresh=false, got true")
-	}
-}
-
-// TestStartReloadAuto_ForceFreshFalse verifies that AutoRefresh does NOT set
-// ForceFresh so the caching layer can serve cached data on background refresh.
-func TestStartReloadAuto_ForceFreshFalse(t *testing.T) {
-	t.Parallel()
-
-	stub := &optsCaptureRepo{}
-	m := newBoardModel(stub, resolvedBoardKeys(t))
-
-	cmd := m.startReload(refreshModeAuto)
-	if cmd == nil {
-		t.Fatal("startReload(refreshModeAuto) must return a non-nil command")
-	}
-	_ = cmd()
-
-	opts := stub.capturedOpts()
-	if len(opts) != 1 {
-		t.Fatalf("expected exactly 1 Dashboard call from auto reload, got %d", len(opts))
-	}
-	if opts[0].ForceFresh {
-		t.Errorf("auto reload: expected DashboardOptions.ForceFresh=false, got true")
+		opts := stub.capturedOpts()
+		if len(opts) != 1 {
+			t.Fatalf("startReload(%v): expected exactly 1 Dashboard call, got %d", mode, len(opts))
+		}
+		if opts[0].ClosedLimit <= 0 {
+			t.Errorf("startReload(%v): expected positive ClosedLimit, got %d", mode, opts[0].ClosedLimit)
+		}
 	}
 }
 
@@ -1540,7 +1496,7 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 // resulting dashboard response arrives, doneLoadedCount reflects only the new
 // page (not the stale 85).
 //
-// Audit note: the r key handler calls startReload(refreshModeManual) which
+// Audit note: the r key handler calls startReload(refreshModeReload) which
 // already resets doneLoadedCount=0 and doneLoadInFlight=false (lines 383-384
 // of model.go). This test is the explicit regression guard for that
 // path.
@@ -1614,10 +1570,6 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	wantLimit := m.sectionItemCapacity()
 	if opts[0].ClosedLimit != wantLimit {
 		t.Errorf("expected ClosedLimit=%d on reload, got %d", wantLimit, opts[0].ClosedLimit)
-	}
-	// AC: ForceFresh=true for manual reload.
-	if !opts[0].ForceFresh {
-		t.Errorf("expected ForceFresh=true on manual reload, got false")
 	}
 
 	// Feed the dashboard result back so compose() runs and sets doneLoadedCount.
@@ -1701,10 +1653,6 @@ func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
 	if opts[0].ClosedLimit != wantLimit {
 		t.Errorf("expected ClosedLimit=%d on focus-regain reload, got %d", wantLimit, opts[0].ClosedLimit)
 	}
-	// AC: ForceFresh=false for auto-refresh.
-	if opts[0].ForceFresh {
-		t.Errorf("expected ForceFresh=false on auto-refresh, got true")
-	}
 
 	// Feed the dashboard result so compose() runs.
 	loaded, ok := msg.(dashboardLoadedMsg)
@@ -1719,15 +1667,14 @@ func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
 	}
 }
 
-// TestDoneLoadMore_ForceFreshResetsState verifies that the ForceFresh path
-// (manual reload, r key) resets doneLoadedCount and doneLoadInFlight to zero
-// and dispatches with ClosedOffset=0 — the composite ForceFresh+ClosedOffset=0
-// contract that governs full cache-bypass + page-1 reload.
+// TestDoneLoadMore_ReloadResetsState verifies that a manual reload (r key)
+// resets doneLoadedCount and doneLoadInFlight to zero and dispatches with
+// ClosedOffset=0 — the page-1 reload contract.
 //
 // This test is complementary to TestDoneLoadMore_ManualReloadResetsToPage1 and
-// focuses specifically on the ForceFresh+reset interaction rather than the
-// post-compose doneLoadedCount value.
-func TestDoneLoadMore_ForceFreshResetsState(t *testing.T) {
+// focuses specifically on the reset interaction rather than the post-compose
+// doneLoadedCount value.
+func TestDoneLoadMore_ReloadResetsState(t *testing.T) {
 	t.Parallel()
 
 	stub := &loadMoreCapture{}
@@ -1744,19 +1691,19 @@ func TestDoneLoadMore_ForceFreshResetsState(t *testing.T) {
 	// itself guards on m.inflight (not doneLoadInFlight), so this matches the
 	// real code path where doneLoadInFlight is left over from a prior session.
 	m.inflight = false
-	cmd := m.startReload(refreshModeManual)
+	cmd := m.startReload(refreshModeReload)
 	if cmd == nil {
-		t.Fatal("expected non-nil Cmd from startReload(refreshModeManual)")
+		t.Fatal("expected non-nil Cmd from startReload(refreshModeReload)")
 	}
 
 	// AC 1: doneLoadedCount reset to 0 synchronously.
 	if m.doneLoadedCount != 0 {
-		t.Errorf("expected doneLoadedCount=0 after startReload(Manual), got %d", m.doneLoadedCount)
+		t.Errorf("expected doneLoadedCount=0 after startReload(Reload), got %d", m.doneLoadedCount)
 	}
 
 	// AC 2: doneLoadInFlight cleared (stale flag reset).
 	if m.doneLoadInFlight {
-		t.Error("expected doneLoadInFlight=false after startReload(Manual) reset")
+		t.Error("expected doneLoadInFlight=false after startReload(Reload) reset")
 	}
 
 	// Execute cmd and capture opts.
@@ -1769,12 +1716,7 @@ func TestDoneLoadMore_ForceFreshResetsState(t *testing.T) {
 
 	// AC 3: ClosedOffset=0 (no leftover offset from previous load-more pages).
 	if opts[0].ClosedOffset != 0 {
-		t.Errorf("expected ClosedOffset=0 (ForceFresh+page1), got %d", opts[0].ClosedOffset)
-	}
-
-	// AC 4: ForceFresh=true (cache-bypass contract).
-	if !opts[0].ForceFresh {
-		t.Errorf("expected ForceFresh=true on manual reload, got false")
+		t.Errorf("expected ClosedOffset=0 (page-1 reset), got %d", opts[0].ClosedOffset)
 	}
 }
 

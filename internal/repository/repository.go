@@ -52,11 +52,6 @@ type DashboardOptions struct {
 	// [offset, offset+limit). Default 0 = first page (existing behavior).
 	// Honored by both the taskmgr and memory backends.
 	ClosedOffset int
-
-	// ForceFresh, when true, bypasses any cache fast-path and forces a
-	// full backing call. Currently ignored by all implementations; reserved
-	// for a future caching layer.
-	ForceFresh bool
 }
 
 type Repository interface {
@@ -74,10 +69,7 @@ type Repository interface {
 	//
 	// opts.ClosedLimit <= 0 means use the implementation default.
 	// opts.ClosedOffset is the page start index (0 = first page).
-	// opts.ForceFresh = true bypasses any cache fast-path and forces a
-	// backing call. Note: ClosedLimit and ClosedOffset are honored by all
-	// current implementations; ForceFresh is currently ignored and reserved
-	// for a future caching layer.
+	// Both are honored by the taskmgr and memory backends.
 	Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error)
 
 	// Issue returns the full detail model for the issue identified by id.

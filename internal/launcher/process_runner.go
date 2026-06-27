@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 )
 
 type execProcessRunner struct{}
@@ -47,9 +48,8 @@ func setReaperHook(h chan<- struct{}) {
 //
 //  2. setSysProcAttr(cmd) is called to detach the subprocess from taskmgr-ui's process
 //     group so that signals sent to taskmgr-ui's process group (SIGHUP, SIGINT) do not
-//     propagate to the launched tool. Platform-specific: Linux/macOS use
-//     syscall.SysProcAttr{Setsid: true}; Windows does not support Setsid and
-//     receives no-op behaviour (see process_runner_windows.go).
+//     propagate to the launched tool. Linux/macOS use syscall.SysProcAttr{Setsid: true}.
+//     Windows is not a supported target (see .goreleaser.yaml and the CI matrix).
 //
 //  3. A reaper goroutine calls cmd.Wait() after Start succeeds. This claims the
 //     exit status from the kernel, preventing the child from becoming a zombie in
@@ -77,4 +77,11 @@ func (execProcessRunner) Run(_ context.Context, command string, args []string, d
 	}()
 
 	return nil
+}
+
+// setSysProcAttr configures the subprocess to start in a new session (setsid),
+// detaching it from taskmgr-ui's process group. This prevents SIGHUP/SIGINT
+// delivered to taskmgr-ui's process group from propagating to launched tools.
+func setSysProcAttr(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }

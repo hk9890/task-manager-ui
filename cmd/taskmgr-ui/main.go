@@ -58,7 +58,7 @@ func constructRepository(ctx context.Context, opts startupOptions) (repository.R
 			return nil, noop, fmt.Errorf("failed to open task-manager store at %q: %w", opts.projectRoot, err)
 		}
 		backend := repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor()))
-		return repository.NewValidating(backend, logManagerComponent(opts.logManager, "validating")), noop, nil
+		return backend, noop, nil
 	}
 }
 

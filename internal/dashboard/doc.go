@@ -1,2 +1,3 @@
-// Package dashboard contains dashboard definitions and providers.
+// Package dashboard composes the board's fixed columns (Compose) from a single
+// repository.DashboardData result.
 package dashboard

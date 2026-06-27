@@ -63,10 +63,10 @@ type storedIssue struct {
 	closed      time.Time
 	closeReason string
 
-	// Full IssueReference metadata for cross-ref projection, stored at SeedDetail
-	// time so that toDetailLocked can return them verbatim without re-resolving
-	// against r.issues. These are nil when the issue was seeded via Seed (not
-	// SeedDetail); toDetailLocked falls back to re-resolution in that case.
+	// Full IssueReference metadata for cross-ref projection, stored by
+	// SeedFromSnapshot so that toDetailLocked can return them verbatim without
+	// re-resolving against r.issues. These are nil when the issue was seeded via
+	// Seed (no verbatim refs); toDetailLocked falls back to re-resolution then.
 	// The nil-vs-non-nil distinction is the sentinel: non-nil (even empty slice)
 	// means "use verbatim"; nil means "re-resolve from memory map".
 	//
@@ -729,11 +729,10 @@ func (r *Repository) Catalogs(ctx context.Context) (repository.Catalogs, error) 
 // # Cross-reference metadata
 //
 // BlockedByRefs, RelatedRefs, and ParentRef carry the full
-// IssueReference metadata (Title, Status, Type, Priority) that was stored at
-// SeedDetail time. These fields follow the same nil-vs-non-nil sentinel as
-// storedIssue:
+// IssueReference metadata (Title, Status, Type, Priority) captured by Snapshot.
+// These fields follow the same nil-vs-non-nil sentinel as storedIssue:
 //
-//   - nil → refs were not populated at SeedDetail time; Load should call Seed
+//   - nil → refs were not populated; Load should call Seed
 //     (re-resolution path) so that toDetailLocked falls back to the memory map.
 //   - non-nil (even empty slice) → refs are authoritative; Load should call
 //     SeedFromSnapshot so toDetailLocked returns them verbatim.
@@ -878,15 +877,15 @@ func (r *Repository) toSummaryLocked(si *storedIssue) domain.IssueSummary {
 // toDetailLocked projects a storedIssue to domain.IssueDetail with resolved
 // dep references. Caller must hold at least RLock.
 //
-// When blockedByRefs/relatedRefs/parentRef/childrenRefs are non-nil (set by
-// SeedDetail), they are returned verbatim without re-resolving against r.issues.
+// When blockedByRefs/relatedRefs/parentRef are non-nil (set by
+// SeedFromSnapshot), they are returned verbatim without re-resolving against r.issues.
 // When those fields are nil (set by Seed), the classic re-resolution path is
 // used instead. The nil-vs-non-nil distinction is the sentinel.
 func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	sum := r.toSummaryLocked(si)
 
 	// Resolve DependsOn as BlockedBy references.
-	// Use stored refs verbatim when available (SeedDetail path); otherwise
+	// Use stored refs verbatim when available (SeedFromSnapshot path); otherwise
 	// re-resolve from the in-memory map (Seed path).
 	var blockedBy []domain.IssueReference
 	if si.blockedByRefs != nil {
@@ -979,7 +978,7 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	}
 
 	// Resolve Related references.
-	// Use stored refs verbatim when available (SeedDetail path); otherwise re-resolve.
+	// Use stored refs verbatim when available (SeedFromSnapshot path); otherwise re-resolve.
 	var related []domain.IssueReference
 	if si.relatedRefs != nil {
 		related = make([]domain.IssueReference, len(si.relatedRefs))
@@ -1003,10 +1002,10 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	}
 
 	// Resolve ParentGroupBrowserContext.
-	// Use stored refs verbatim when available (SeedDetail path); otherwise re-resolve.
+	// Use stored refs verbatim when available (SeedFromSnapshot path); otherwise re-resolve.
 	var parentGroupBrowser domain.ParentGroupBrowserContext
 	if si.parentRef != nil {
-		// SeedDetail path: parentRef was stored verbatim.
+		// Verbatim path: parentRef was stored by SeedFromSnapshot.
 		parentGroupBrowser.Parent = *si.parentRef
 	} else if si.parentID != "" {
 		// Seed path: re-resolve from memory map.
