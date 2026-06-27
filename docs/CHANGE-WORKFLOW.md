@@ -50,7 +50,7 @@ tests only). Run `mise tasks` for the full task list.
 
 CI runs a **superset** of `mise run quality` — it additionally runs
 `fmt:check`, `scripts:check`, `build`, and a `test:coverage` gate across an
-ubuntu/macos/windows matrix — so local-green does not guarantee CI-green. Run
+ubuntu/macos matrix — so local-green does not guarantee CI-green. Run
 `mise run fmt:check` and `mise run scripts:check` before handoff.
 
 ## Landing the plane
@@ -59,17 +59,16 @@ Before ending a work session:
 
 ```bash
 git status
-git add <files> .tasks
+git add <files>
 git commit -m "..."
 git pull --rebase
 git push
 git status
 ```
 
-The task-manager store lives in `.tasks/` and is versioned in git, so tracker
-state ships with the source commit — there is no separate tracker-sync step.
-Stage `.tasks` alongside your code changes so issue updates land in the same
-push.
+The task-manager store lives in `.tasks/`, which is gitignored and local-only
+(kept out of git, never published), so tracker state does NOT ship with the
+source commit — do not stage or commit `.tasks/`.
 
 If `git pull --rebase` changes the commit or requires conflict resolution,
 rerun the relevant verification before pushing.
@@ -79,11 +78,10 @@ Completion bar:
 - follow-up work is tracked in `taskmgr`
 - verification is complete for the touched surface
 - finished issues are closed or updated
-- `.tasks/` changes are staged and committed alongside the code
 - `git push` succeeds
 - final `git status` shows the branch is up to date with `origin`
 
-Work is not done until the tracker state and git state are both pushed.
+Work is not done until the code/git state is pushed.
 
 ## Review and release handoff
 

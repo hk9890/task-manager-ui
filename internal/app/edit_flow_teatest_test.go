@@ -1,7 +1,7 @@
 package app
 
-// Regression guard for the tea.Exec-based 'e' (edit issue) flow introduced in
-// task-manager-ui-h3ql. These tests drive the real Bubble Tea program loop via
+// Regression guard for the tea.Exec-based 'e' (edit issue) flow. These tests
+// drive the real Bubble Tea program loop via
 // teatest so that the goroutine-vs-tea.Exec bug cannot reappear undetected.
 //
 // Flow under test:

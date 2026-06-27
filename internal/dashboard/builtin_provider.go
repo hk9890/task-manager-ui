@@ -23,8 +23,9 @@ const (
 
 // BuiltInProvider is a metadata-only dashboard definition catalog.
 // It supplies section IDs and titles; in v1 it also populates Section.Query
-// for backward compatibility with the board model until task-manager-ui-lgln
-// migrates the board model to own repository query routing directly. Future
+// for backward compatibility with the board model until the board-model
+// query-routing migration moves repository query routing into the board model
+// directly. Future
 // providers should omit the Query field and rely on section ID and title only.
 type BuiltInProvider struct {
 }
@@ -39,7 +40,7 @@ func NewBuiltInProvider() *BuiltInProvider {
 // Dashboards returns the built-in dashboard definition with four sections:
 // not_ready, ready, in_progress, and done. Section IDs and titles are the
 // stable contract. The Query field is populated only as a backward-compat shim
-// for the current board model; it will be removed by task-manager-ui-lgln.
+// for the current board model; it will be removed by the board-model migration.
 func (p *BuiltInProvider) Dashboards(_ context.Context) ([]Definition, error) {
 	sections := []Section{
 		{

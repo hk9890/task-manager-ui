@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -40,6 +41,86 @@ func TestArchitectureGuardrails(t *testing.T) {
 			return orchestrationPattern.MatchString(dep)
 		})
 	})
+
+	t.Run("no leaked local tracker IDs in comments or docs", func(t *testing.T) {
+		t.Parallel()
+		assertNoLeakedTrackerIDs(t)
+	})
+}
+
+// leakedTrackerIDPattern matches the project's local .tasks tracker issue-ID
+// stems. These reference an unpublished, local-only store (see .gitignore), so
+// they must never appear in source comments or published docs — a reader of the
+// public repo cannot resolve them. Reference behavior by name instead.
+//
+// The list is an explicit denylist of every stem known to have leaked; extend it
+// when a new tracker prefix is coined. It deliberately does NOT include the stems
+// used by realistic issue-ID *test fixtures* (e.g. task-manager-ui-yze.4.2,
+// -u5s, -9uk, -dim1, -sc1, -syf), so those legitimate fixtures are never flagged
+// even though the scan reads raw file text.
+var leakedTrackerIDPattern = regexp.MustCompile(
+	`\b(?:iwvm|vtvb|fbea|ule7|b38b|czkq|znri|lgln|o7tk|uwmi|db0z|2ev4|okmo|6zvr|5q6t|j14c|24is|2rfx|h3ql|0x36)\b`,
+)
+
+// assertNoLeakedTrackerIDs walks the module tree and fails if any first-party
+// .go or .md file contains a known local tracker ID. It excludes the local
+// tracker store, VCS/dependency dirs, and this guard file itself (which holds
+// the denylist literal).
+func assertNoLeakedTrackerIDs(t *testing.T) {
+	t.Helper()
+
+	root := moduleRootDir(t)
+	_, guardFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("unable to resolve guard test file path")
+	}
+	guardBase := filepath.Base(guardFile)
+
+	violations := make([]string, 0)
+	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".tasks", "node_modules", "vendor":
+				if path != root {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if ext := filepath.Ext(path); ext != ".go" && ext != ".md" {
+			return nil
+		}
+		if filepath.Base(path) == guardBase {
+			return nil
+		}
+
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			rel = path
+		}
+		for i, line := range strings.Split(string(content), "\n") {
+			if hit := leakedTrackerIDPattern.FindString(line); hit != "" {
+				violations = append(violations, fmt.Sprintf("%s:%d: leaked tracker ID %q", rel, i+1, hit))
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scanning repo for leaked tracker IDs failed: %v", walkErr)
+	}
+
+	if len(violations) == 0 {
+		return
+	}
+	slices.Sort(violations)
+	t.Fatalf("leaked local tracker IDs found (reference behavior by name, not the .tasks issue ID):\n%s", strings.Join(violations, "\n"))
 }
 
 type listedPackage struct {
@@ -456,7 +537,7 @@ func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
 	// On macOS, t.TempDir() returns a path under /var/folders which is a symlink
 	// to /private/var/folders.  os.Getwd() (called inside run()) returns the
 	// canonical form, so we canonicalize here so all subsequent comparisons use
-	// the same representation (task-manager-ui-2rfx).
+	// the same representation.
 	if canonical, err := filepath.EvalSymlinks(startDir); err == nil {
 		startDir = canonical
 	}

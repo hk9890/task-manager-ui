@@ -114,7 +114,7 @@ internal/
   launcher/          # external editor and command launch actions
   dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
   mode/              # board/search/details feature models + shell message contracts
-  ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, styles)
+  ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, scroll, styles)
   testing/           # fakes and ui harness helpers
   version/           # build-time injected Version/Commit/Date symbols
 ```
@@ -135,7 +135,7 @@ internal/
    - Editable fields map directly to repository update capabilities: `title`, `description`, `status`, `type`, `priority`, `assignee`, and `labels`.
    - Read-only context (issue id, timestamps, notes, dependencies, related items, comments) is rendered for operator context and ignored by parser/diff logic.
    - Round-trip behavior is marker-based (`TASKMGRUI:EDITABLE` / `TASKMGRUI:FIELD:*`) so parser changes are deterministic and testable.
-   - The external editor launch is behind a replaceable seam (`internal/launcher/editor.Opener`) so tests never spawn a real interactive editor.
+   - The external editor launch is behind a replaceable seam (`internal/launcher/editor.Service`) so tests never spawn a real interactive editor.
 
 6. **Launchers are thin.** Launchers receive issue context and produce a subprocess. They must not become an orchestration engine.
 
@@ -229,7 +229,7 @@ Key tasks:
 | `mise run test:coverage` | unit+integration tests with a coverage-threshold gate (CI-enforced) |
 | `mise run quality` | full pre-handoff gate: `vet`, `lint`, `guardrails`, unit `test`, `test:integration` |
 | `mise run quality:fast` | fast pre-commit gate: `vet`, `lint`, `guardrails`, unit `test` (skips `test:integration` only) |
-| `mise run vuln` | `govulncheck ./...` — CVE scan against deps + stdlib (CI-enforced; needs network) |
+| `mise run vuln` | `govulncheck ./...` — CVE scan against deps + stdlib (local/on-demand; needs network) |
 | `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
 
 **Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) exercise real subprocess/OS interactions (for example launcher process execution); they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess or costs >1s, it belongs in an integration test file.
@@ -248,7 +248,7 @@ For the authoritative pre-handoff landing workflow, see
 - unit tests and integration tests
 
 CI (`.github/workflows/ci.yml`) runs a **superset** of this on an
-ubuntu/macos/windows matrix: it additionally runs `scripts:check`,
+ubuntu/macos matrix: it additionally runs `scripts:check`,
 `fmt:check`, `build`, and the `test:coverage` threshold gate. A change can
 pass local `mise run quality` and still fail CI on one of those, so also run
 `mise run fmt:check` and `mise run scripts:check` before handoff.

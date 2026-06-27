@@ -1,7 +1,7 @@
 package search
 
 // render_regression_test.go — regression harness for pane-stacking bugs in
-// the search view (task-manager-ui-o7tk, Bug A class applied to search).
+// the search view (Bug A class: pane-stacking applied to search).
 //
 // The search layout has 4 bordered panes:
 //   - Query box (left rail, top)

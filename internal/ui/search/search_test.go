@@ -304,7 +304,7 @@ func TestRenderGoldens(t *testing.T) {
 
 	// Stale-draft state: Query != AppliedQuery with prior results still visible.
 	// Reproduces the "zqx99 typed but 25 repository rows still shown" scenario from
-	// ticket task-manager-ui-2ev4.4.
+	// the stale-draft indicator scenario.
 	t.Run("stale_draft_w120", func(t *testing.T) {
 		view := Render(State{
 			Query:        "zqx99",
@@ -560,7 +560,7 @@ func TestRefreshSearchCarriesDimPhaseStyle(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Stale-draft indicator tests (task-manager-ui-2ev4.4)
+// Stale-draft indicator tests
 // ---------------------------------------------------------------------------
 
 // TestRenderStaleDraftShowsBanner verifies that when the typed draft query

@@ -25,14 +25,14 @@ The repository uses a two-tier model.
 
 ### Backend behavior tests
 
-The active repository backend (`internal/repository/taskmgr`, built on the task-manager Go SDK) carries its own package-level behavior tests in `internal/repository/taskmgr/repository_test.go`. These build a fresh store with `tasks.Init(t.TempDir(), ...)` and assert dashboard sections, search, mutation effects, error codes, time-field semantics, catalogs, and context cancellation — directly against the in-process backend, no subprocess and no build tag. The in-repo `memory.Repository` (`internal/repository/memory`) is the unit-test fixture and has its own behavior tests in `internal/repository/memory/repository_test.go`.
+The active repository backend (`internal/repository/taskmgr`, built on the task-manager Go SDK) carries its own package-level behavior tests in `internal/repository/taskmgr/repository_test.go`. These build a fresh store with `tasks.Init(t.TempDir(), ...)` and assert dashboard sections, search, mutation effects, write-path error codes, time-field semantics, catalogs, and context cancellation — directly against the in-process backend, no subprocess and no build tag. The in-repo `memory.Repository` (`internal/repository/memory`) is the unit-test fixture and has its own behavior tests in `internal/repository/memory/repository_test.go`.
 
 ## Where Does My New Test Go?
 
 | What the test asserts | Where it goes | Tool |
 |---|---|---|
-| App behavior given any repository state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub `repository.Repository` or `memory.New()` seeded via `Seed` / `SeedComments` / `SeedCatalogs` |
-| `taskmgr` backend semantics (reads, mutations, error mapping) | `internal/repository/taskmgr/repository_test.go` | a real `tasks.Store` via `tasks.Init(t.TempDir(), ...)` wrapped by `taskmgr.New` |
+| App behavior given any repository state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub `repository.Repository` or `memory.New()` seeded via `Seed` / `SeedComments` / `SeedClosed` / `SeedCatalogs` |
+| `taskmgr` backend semantics (reads, mutations, write-path error mapping) | `internal/repository/taskmgr/repository_test.go` | a real `tasks.Store` via `tasks.Init(t.TempDir(), ...)` wrapped by `taskmgr.New` |
 | A real OS seam (subprocess execution, filesystem) | Tier 2 — a `//go:build integration` test | real process/filesystem, run under `mise run test:integration` |
 
 Decision rule: if the test does not touch a real OS seam (subprocess, filesystem) and costs <100ms, it is a unit test; otherwise tag it `integration`.
@@ -56,7 +56,7 @@ Run `mise tasks` to see the full list. CI additionally runs `fmt:check`,
 Harness-focused runs (package-scoped):
 
 ```bash
-mise run test -- ./internal/testing/...
+go test ./internal/testing/... -v
 go test ./internal/repository/taskmgr/... -v
 ```
 
@@ -168,7 +168,7 @@ go test ./internal/app -run 'TestModelFixtureShapedBoardCaptureGolden|TestModelS
 
 ### Controller-async contract tests
 
-A fourth pattern, *controller-async contract*, drives the search controller against a `DelayedFakeRepository` (defined in `internal/mode/search/model_async_test.go`) to exercise overlapping-Cmd cadence that the synchronous-drain harness (`pressAndResolve` → `ApplyControllerKeySequence`) cannot reach. The gap exists because `ApplyControllerKeySequence` drains every Cmd to completion before the next key arrives, so `m.loading` is always `false` when the next message is processed — making async race windows (keys arriving before a prior search Cmd returns its Msg) completely invisible to those tests. Add controller-async contract tests in `TestSearchControllerAsyncContracts` whenever a bug's root cause involves a user event arriving while a prior async Cmd is still in flight (the czkq.4 / znri.6 / czkq.2 shape). The `DelayedFakeRepository` wraps any `repository.Repository`, so the same pattern applies to detail-mode follow-ups.
+A fourth pattern, *controller-async contract*, drives the search controller against a `DelayedFakeRepository` (defined in `internal/mode/search/model_async_test.go`) to exercise overlapping-Cmd cadence that the synchronous-drain harness (`pressAndResolve` → `ApplyControllerKeySequence`) cannot reach. The gap exists because `ApplyControllerKeySequence` drains every Cmd to completion before the next key arrives, so `m.loading` is always `false` when the next message is processed — making async race windows (keys arriving before a prior search Cmd returns its Msg) completely invisible to those tests. Add controller-async contract tests in `TestSearchControllerAsyncContracts` whenever a bug's root cause involves a user event arriving while a prior async Cmd is still in flight. The `DelayedFakeRepository` wraps any `repository.Repository`, so the same pattern applies to detail-mode follow-ups.
 
 ### Exceptions
 

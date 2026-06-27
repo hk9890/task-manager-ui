@@ -202,8 +202,7 @@ func TestLoad_InvalidYAMLReturnsError(t *testing.T) {
 func TestLoad_DirectoryAtConfigPathReturnsError(t *testing.T) {
 	configHome := t.TempDir()
 	// Use setConfigHome so that os.UserConfigDir() points to the temp dir on all
-	// platforms, including Windows where APPDATA takes precedence over HOME
-	// (task-manager-ui-2rfx).
+	// platforms, including Windows where APPDATA takes precedence over HOME.
 	setConfigHome(t, configHome)
 	path := filepath.Join(testUserConfigDir(t), configRelativePath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -546,7 +545,7 @@ func testUserConfigDir(t *testing.T) string {
 //   - APPDATA        — read by Windows (os.UserConfigDir ignores HOME on Windows)
 //
 // Call this instead of individual t.Setenv("HOME", ...) in tests that need to
-// control the config directory (task-manager-ui-2rfx).
+// control the config directory.
 func setConfigHome(t *testing.T, configHome string) {
 	t.Helper()
 	t.Setenv("HOME", configHome)

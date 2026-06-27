@@ -1,6 +1,6 @@
 package board
 
-// Controller-async contract tests for task-manager-ui-vtvb.8.
+// Controller-async contract tests.
 //
 // These tests exercise the board model against a deliberately-delayed
 // repository so that async command overlap is exercised.

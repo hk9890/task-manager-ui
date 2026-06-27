@@ -8,7 +8,7 @@ package search
 // repository call and overwrites m.pendingSelectionAnchor.
 //
 // These tests are deliberately RED on current (unfixed) code per TDD discipline for
-// epic 5q6t. They will turn GREEN as sibling task 5q6t.2 lands its fix.
+// the double-refresh epic. They will turn GREEN as the sibling fix lands.
 
 import (
 	"testing"

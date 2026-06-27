@@ -171,7 +171,7 @@ func TestShellCommandLauncherDoesNotExecuteAndAndOrInLabels(t *testing.T) {
 }
 
 // TestNewlineInAssigneeIsStripped asserts that \n in a field value is stripped
-// before reaching argv. Option (a) from ticket db0z.8: all C0 control chars
+// before reaching argv. Option (a): all C0 control chars
 // including \x0a (newline) are removed; the sanitised value arrives without the
 // newline so log/ANSI injection via env or argv is not possible.
 func TestNewlineInAssigneeIsStripped(t *testing.T) {
@@ -203,7 +203,7 @@ func TestNewlineInAssigneeIsStripped(t *testing.T) {
 }
 
 // TestNewlineInTitleIsStrippedFromArgv asserts that a title containing \n has
-// the newline character removed before reaching argv (db0z.8 AC step 3).
+// the newline character removed before reaching argv.
 func TestNewlineInTitleIsStrippedFromArgv(t *testing.T) {
 	t.Parallel()
 
@@ -230,7 +230,7 @@ func TestNewlineInTitleIsStrippedFromArgv(t *testing.T) {
 }
 
 // TestANSIEscapeInTitleIsStrippedFromArgv asserts that \x1b (ESC) in a field
-// value is removed before the value reaches argv (db0z.8 AC step 3).
+// value is removed before the value reaches argv.
 func TestANSIEscapeInTitleIsStrippedFromArgv(t *testing.T) {
 	t.Parallel()
 
@@ -257,8 +257,7 @@ func TestANSIEscapeInTitleIsStrippedFromArgv(t *testing.T) {
 }
 
 // TestEnvEntryMissingEqualsIsRejected asserts that an Env template that
-// produces no "=" after interpolation causes Launch to return an error
-// (db0z.8 AC step 1).
+// produces no "=" after interpolation causes Launch to return an error.
 func TestEnvEntryMissingEqualsIsRejected(t *testing.T) {
 	t.Parallel()
 

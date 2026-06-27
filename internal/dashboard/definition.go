@@ -27,16 +27,16 @@ type Section struct {
 	ID    string
 	Title string
 
-	// Query is a backward-compatibility shim retained until task-manager-ui-lgln
-	// migrates the board model to own its own repository calls. New providers should
+	// Query is a backward-compatibility shim retained until the board-model
+	// query-routing migration moves repository calls into the board model. New providers should
 	// leave this field at its zero value. It will be removed once the board model
 	// no longer reads it.
 	Query Query
 }
 
 // QueryType identifies which supported repository query contract backs a section.
-// This type is a backward-compatibility shim retained until
-// task-manager-ui-lgln migrates the board model. New code should not reference
+// This type is a backward-compatibility shim retained until the board-model
+// query-routing migration. New code should not reference
 // QueryType from dashboard definitions.
 type QueryType string
 
@@ -47,9 +47,9 @@ const (
 )
 
 // Query describes the repository query that backed a board section in the
-// pre-lgln architecture. It is a backward-compatibility shim retained until
-// task-manager-ui-lgln migrates the board model to own repository query routing
-// directly. New providers should not set this field.
+// legacy architecture. It is a backward-compatibility shim retained until the
+// board-model query-routing migration moves repository query routing into the
+// board model directly. New providers should not set this field.
 type Query struct {
 	Type          QueryType
 	ListIssues    domain.IssueListQuery

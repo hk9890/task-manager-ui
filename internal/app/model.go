@@ -232,7 +232,7 @@ type Model struct {
 	// prevents the "doubled column-top borders" artifact that occurred when
 	// Bubble Tea rendered a short default-size frame immediately on startup and
 	// then a taller post-resize frame that the terminal renderer could not fully
-	// overwrite (task-manager-ui-o7tk).
+	// overwrite.
 	sizeKnown bool
 
 	// pendingDialog guards an in-flight async dialog-open. It is set when the
@@ -946,7 +946,7 @@ func (m Model) View() string {
 	// frame (defaultViewportHeight lines) immediately on startup; when
 	// WindowSizeMsg then arrives the renderer produces a taller frame but only
 	// partially overwrites the first one, leaving stale column-top border rows
-	// visible above the correct render (task-manager-ui-o7tk).
+	// visible above the correct render.
 	if !m.sizeKnown {
 		return ""
 	}

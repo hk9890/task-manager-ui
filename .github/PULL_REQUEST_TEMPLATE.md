@@ -7,11 +7,11 @@ Delete sections that do not apply.
 
 <!-- One paragraph: what changed and why. Reference the task-manager issue. -->
 
-Closes #XXX
+Task: bwb-XXXXX
 
 ## Verification
 
-<!-- Which of the verification levels in docs/CHANGE-WORKFLOW.md you ran. -->
+<!-- Which verification depth in docs/CHANGE-WORKFLOW.md you ran. -->
 
 - [ ] `mise run quality` green locally
 - [ ] Touched runtime UI? Ran `docs/RUNTIME_UI_VERIFICATION.md`

@@ -832,7 +832,7 @@ func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 }
 
 // TestSearchModeStaleDraftIndicatorAppearsAndClears verifies the end-to-end
-// stale-results state machine (ticket task-manager-ui-2ev4.4):
+// stale-results state machine:
 //
 //   - After typing a new draft (before Enter), the view shows the stale banner
 //     and the Results badge contains "stale".
@@ -886,12 +886,12 @@ func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
 // TestSearchModeLogCarriesComponentSearch asserts that debug records emitted by
 // the search model carry component=search (not component=dashboard or any
 // other inherited value).
-// Regression test for task-manager-ui-okmo.
+// Regression test for component-logging in search mode.
 func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
 	t.Parallel()
 
 	// Use a root logger (no component attached) — matching what main.go now
-	// passes via services.Logger after the okmo fix.
+	// passes via services.Logger after the fix.
 	var buf bytes.Buffer
 	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	rootLogger := slog.New(jsonHandler)

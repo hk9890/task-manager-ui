@@ -56,7 +56,7 @@ import (
 // History:
 //
 //	v1: memory snapshot only (one SnapshotIssue per line). dashboardCache and
-//	    catalogsCache were NOT persisted — the root cause of the fbea bug. v1
+//	    catalogsCache were NOT persisted — the root cause of the catalog-cache persistence bug. v1
 //	    files are treated as degenerate on load (ErrSchemaMismatch returned);
 //	    caching.Hydrate handles this as a cold start with dashboardDirty=true
 //	    so the next Dashboard() call fans out to backing regardless of hash match.

@@ -10,7 +10,7 @@ import (
 )
 
 // These tests pin documented help-modal behavior surfaced by the
-// project-explore epic (task-manager-ui-znri.4 and znri.5).
+// project-explore epic.
 //
 // docs/user-guide/key-bindings.md states:
 //   - "? — toggle help"           (shell context)
@@ -38,9 +38,9 @@ func openHelpModal(t *testing.T) Model {
 	return m
 }
 
-// TestHelpModal_QuestionMarkToggleClosesModal pins znri.4: pressing '?' a
-// second time while the help modal is open must dismiss the modal (the
-// documented toggle semantics).
+// TestHelpModal_QuestionMarkToggleClosesModal pins the toggle-on-second-press
+// contract: pressing '?' a second time while the help modal is open must
+// dismiss the modal (the documented toggle semantics).
 func TestHelpModal_QuestionMarkToggleClosesModal(t *testing.T) {
 	m := openHelpModal(t)
 
@@ -51,9 +51,9 @@ func TestHelpModal_QuestionMarkToggleClosesModal(t *testing.T) {
 	}
 }
 
-// TestHelpModal_EscapeDismissesModal pins the Esc-cancel-modal claim from
-// znri.5: pressing Esc while the help modal is up must dismiss it (the
-// modal context's `escape — cancel` binding).
+// TestHelpModal_EscapeDismissesModal pins the Esc-cancel-modal claim:
+// pressing Esc while the help modal is up must dismiss it (the modal
+// context's `escape — cancel` binding).
 func TestHelpModal_EscapeDismissesModal(t *testing.T) {
 	m := openHelpModal(t)
 
@@ -64,8 +64,8 @@ func TestHelpModal_EscapeDismissesModal(t *testing.T) {
 }
 
 // TestHelpModal_EnterDismissesModal_BaselineRegressionGuard documents that
-// Enter dismisses the help modal today. If a fix to znri.4 or znri.5
-// accidentally regresses Enter dismissal, this test catches it.
+// Enter dismisses the help modal today. If a fix to the toggle or Esc
+// binding accidentally regresses Enter dismissal, this test catches it.
 func TestHelpModal_EnterDismissesModal_BaselineRegressionGuard(t *testing.T) {
 	m := openHelpModal(t)
 	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
@@ -78,7 +78,7 @@ func TestHelpModal_EnterDismissesModal_BaselineRegressionGuard(t *testing.T) {
 // View contains its title and at least one documented section heading. A
 // rendering regression that drops the bottom border or truncates the body
 // can show up here as a missing section, complementing the golden-file
-// approach for znri.5's visual rendering claim.
+// approach for the visual rendering claim.
 func TestHelpModal_RenderedContentVisible(t *testing.T) {
 	m := openHelpModal(t)
 	// Apply a representative terminal size so the help overlay computes

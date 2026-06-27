@@ -118,7 +118,7 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 // TestDetailsTeatestSelectionChangeResetsAllScrollOffsets drives a details.Model
 // through the real Bubble Tea runtime to assert that switching to a different
 // issue resets all three pane scroll offsets to zero (AC 2).
-// This overlaps intentionally with the task-manager-ui-db0z.7 fix — defense in depth.
+// This overlaps intentionally with the scroll-reset fix — defense in depth.
 func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 	t.Parallel()
 

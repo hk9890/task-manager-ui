@@ -54,7 +54,7 @@ func TestResolveAndValidateCWDRejectsFile(t *testing.T) {
 
 func TestResolveAndValidateCWDRejectsInaccessibleDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// TODO(task-manager-ui-2rfx): Windows ACLs do not honour Unix permission
+		// TODO: Windows ACLs do not honour Unix permission
 		// bits set via os.Chmod(0o000), so locked dirs remain accessible.
 		t.Skip("Unix permission bits have no effect on Windows")
 	}
@@ -83,7 +83,7 @@ func TestResolveAndValidateCWDRejectsInaccessibleDir(t *testing.T) {
 // code 1 with a clear message when --cwd points to an unreadable directory.
 func TestRunCWDInaccessibleExitsWithCode1(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// TODO(task-manager-ui-2rfx): Windows ACLs do not honour Unix permission
+		// TODO: Windows ACLs do not honour Unix permission
 		// bits set via os.Chmod(0o000), so locked dirs remain accessible.
 		t.Skip("Unix permission bits have no effect on Windows")
 	}
@@ -225,7 +225,7 @@ func noopLogger(logging.Options) *logging.Manager { return nil }
 // TestStartInteractiveSuppressesStderrDuringRun verifies that startInteractive
 // calls SetStderrSuppressed(true) before starting the interactive program and
 // SetStderrSuppressed(false) after it returns. This is the integration-level
-// guard for the alt-screen corruption bug (o7tk root cause 2).
+// guard for the alt-screen corruption bug (alt-screen suppression root cause 2).
 //
 // The test uses a probe-logger seam: a *logging.Manager constructed against a
 // bytes.Buffer stderr, and a stubbed "start" function that fires a slog.Warn

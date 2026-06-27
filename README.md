@@ -27,6 +27,9 @@ mise run build                    # build the taskmgr-ui binary
 taskmgr-ui --cwd /path/to/project        # run against a directory containing a .tasks/ store
 ```
 
+`mise run build` drops the binary at `./taskmgr-ui` in the current directory — run
+it as `./taskmgr-ui`, or put it on your `PATH` via `go install ./cmd/taskmgr-ui`.
+
 ## CLI Surface
 
 `taskmgr-ui` is intentionally a **TUI-first** binary with a small startup CLI.
@@ -69,10 +72,19 @@ gates, and `docs/CODING.md` for build/test details.
 - [`docs/MONITORING.md`](./docs/MONITORING.md) — centralized logging contract and evidence capture points
 - [`docs/RUNTIME_UI_VERIFICATION.md`](./docs/RUNTIME_UI_VERIFICATION.md) — built-binary runtime UI verification runbook
 - [`docs/CHANGE-WORKFLOW.md`](./docs/CHANGE-WORKFLOW.md) — task-manager-first change landing and session completion workflow
-- [`docs/RELEASING.md`](./docs/RELEASING.md) — tag-triggered release workflow
+- [`docs/RELEASING.md`](./docs/RELEASING.md) — manually dispatched release workflow
 - [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — default keybindings reference
 
 See also [`CHANGELOG.md`](./CHANGELOG.md) for the release history.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how to propose changes and the
+contribution workflow.
+
+## Security
+
+See [`SECURITY.md`](./SECURITY.md) for how to report security issues.
 
 ## Verifying releases
 

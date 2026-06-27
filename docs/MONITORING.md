@@ -88,6 +88,10 @@ in-process backend and logs structural-invariant violations at `WARN` under the
   the inner result is returned unchanged. Because `WARN` records mirror to
   `stderr`, a contract violation is operator-visible even without `--debug`.
 
+Only the production task-manager backend is wrapped by the validating decorator;
+the `--repo=memory` (filestorage) backend is returned unwrapped and therefore
+emits no contract-violation diagnostics.
+
 In a healthy session no repository records are emitted at all — the in-process
 SDK is fast and the validating decorator is silent unless it detects a
 malformed return value.
@@ -117,7 +121,7 @@ tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-*.log
 Or, if `XDG_STATE_HOME` is set:
 
 ```bash
-tail -f "$XDG_STATE_HOME/taskmgr-ui/taskmgr-ui-*.log"
+tail -f "$XDG_STATE_HOME"/taskmgr-ui/taskmgr-ui-*.log
 ```
 
 To follow a specific session by ID (the `session_id` is printed on `stderr`

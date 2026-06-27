@@ -116,7 +116,7 @@ Supported actions by context:
     `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
     `launch_shell_command`
 - `board`
-  - `move_left`, `move_right`, `move_up`, `move_down`, `open_detail`, `reload`
+  - `move_left`, `move_right`, `move_up`, `move_down`, `open_detail`, `reload`, `load_more`
 - `search`
   - `move_up`, `move_down`, `focus_left`, `focus_right`, `focus_query`,
     `reload`, `open_detail`, `cycle_focus_next`, `cycle_focus_prev`

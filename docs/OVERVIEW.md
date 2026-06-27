@@ -72,7 +72,7 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 - No direct SQL/database access and no orchestration/control-plane dependencies in the active `./cmd/taskmgr-ui` path; see `cmd/taskmgr-ui/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
-- Dashboard definitions must validate before rendering; see `internal/dashboard/definition.go`.
+- Dashboard definitions have a `ValidateDefinitions` check exercised in tests; it is not wired into the live render path (see `internal/dashboard/definition.go`).
 
 ## UI component boundaries
 
@@ -91,6 +91,10 @@ Rendering components live under `internal/ui/`:
   row/list rendering.
 - `ui/loading`, `ui/toaster`, and `ui/modal` provide shared loading, transient
   toast, and overlay feedback primitives.
+- `ui/scroll` is the shared `EnsureVisible` viewport/offset helper used by board
+  and details to keep the selected row visible.
+- `ui/overlay` provides ANSI-aware overlay placement used by modal/toaster/app.
+- `ui/fatalerror` is the full-screen startup-failure view used by app.
 
 ## Supporting docs
 
@@ -100,5 +104,5 @@ Rendering components live under `internal/ui/`:
 - `docs/MONITORING.md` — centralized logging contract, capture points, and evidence guidance
 - `docs/RUNTIME_UI_VERIFICATION.md` — runtime UI runbook for built-binary checks
 - `docs/CHANGE-WORKFLOW.md` — task-manager-first change landing and session completion workflow
-- `docs/RELEASING.md` — tag-triggered release process via GitHub Actions + GoReleaser
+- `docs/RELEASING.md` — manually dispatched (workflow_dispatch) release process via GitHub Actions + GoReleaser
 - `docs/user-guide/key-bindings.md` — default operator keybindings
