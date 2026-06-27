@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+if ! command -v gofmt >/dev/null 2>&1; then
+    printf 'pre-commit: gofmt not found in PATH\n' >&2
+    exit 1
+fi
+
+staged_go_files=$(git -C "$repo_root" diff --cached --name-only -z --diff-filter=ACMR -- '*.go')
+
+if [ -z "$staged_go_files" ]; then
+    exit 0
+fi
+
+printf 'pre-commit: formatting staged Go files\n'
+
+staged_list_file=$(mktemp)
+trap 'rm -f "$staged_list_file"' EXIT INT TERM
+
+git -C "$repo_root" diff --cached --name-only -z --diff-filter=ACMR -- '*.go' > "$staged_list_file"
+
+xargs -0 -I{} gofmt -w "$repo_root/{}" < "$staged_list_file"
+xargs -0 -I{} git -C "$repo_root" add -u -- "{}" < "$staged_list_file"
+
+# Run goimports on staged files if available (mirrors the fmt:check CI task).
+# Falls back to go run (slower, no install required) when goimports is not in PATH.
+GOIMPORTS_VERSION_FILE="$repo_root/.goimports-version"
+GOIMPORTS_LOCAL="github.com/hk9890/task-manager-ui"
+
+if command -v goimports >/dev/null 2>&1; then
+    printf 'pre-commit: running goimports on staged Go files\n'
+    xargs -0 -I{} goimports -local "$GOIMPORTS_LOCAL" -w "$repo_root/{}" < "$staged_list_file"
+    xargs -0 -I{} git -C "$repo_root" add -u -- "{}" < "$staged_list_file"
+elif [ -f "$GOIMPORTS_VERSION_FILE" ]; then
+    GOIMPORTS_VERSION=$(cat "$GOIMPORTS_VERSION_FILE")
+    printf 'pre-commit: running goimports (via go run) on staged Go files\n'
+    xargs -0 -I{} go run "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}" -local "$GOIMPORTS_LOCAL" -w "$repo_root/{}" < "$staged_list_file"
+    xargs -0 -I{} git -C "$repo_root" add -u -- "{}" < "$staged_list_file"
+fi

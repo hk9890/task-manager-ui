@@ -1,0 +1,843 @@
+package logging
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+func TestResolveLogPathCreatesAppStateDirectory(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+
+	logPath, err := resolveLogPath(stateDir, "testsession")
+	if err != nil {
+		t.Fatalf("resolveLogPath returned error: %v", err)
+	}
+
+	expectedDir := filepath.Join(stateDir, stateDirName)
+	if filepath.Dir(logPath) != expectedDir {
+		t.Fatalf("expected log parent %q, got %q", expectedDir, filepath.Dir(logPath))
+	}
+	expectedFileName := logFilePrefix + "testsession" + logFileSuffix
+	if filepath.Base(logPath) != expectedFileName {
+		t.Fatalf("expected log file name %q, got %q", expectedFileName, filepath.Base(logPath))
+	}
+
+	info, err := os.Stat(expectedDir)
+	if err != nil {
+		t.Fatalf("expected state directory to exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected %q to be a directory", expectedDir)
+	}
+}
+
+// TestResolveLogPathPerProcessFilename verifies that two different session IDs
+// produce two different log paths, confirming that concurrent processes with
+// distinct session IDs can never write to the same file.
+func TestResolveLogPathPerProcessFilename(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+
+	pathA, err := resolveLogPath(stateDir, "aabbccdd")
+	if err != nil {
+		t.Fatalf("resolveLogPath(aabbccdd) returned error: %v", err)
+	}
+	pathB, err := resolveLogPath(stateDir, "11223344")
+	if err != nil {
+		t.Fatalf("resolveLogPath(11223344) returned error: %v", err)
+	}
+
+	if pathA == pathB {
+		t.Fatalf("expected distinct log paths for distinct session IDs, but both resolved to %q", pathA)
+	}
+	if filepath.Base(pathA) != "taskmgr-ui-aabbccdd.log" {
+		t.Fatalf("expected taskmgr-ui-aabbccdd.log, got %q", filepath.Base(pathA))
+	}
+	if filepath.Base(pathB) != "taskmgr-ui-11223344.log" {
+		t.Fatalf("expected taskmgr-ui-11223344.log, got %q", filepath.Base(pathB))
+	}
+}
+
+// TestResolveLogPathFallsBackToPIDWhenSessionIDEmpty verifies that an empty
+// session ID produces a pid-based filename rather than an unusable bare path.
+func TestResolveLogPathFallsBackToPIDWhenSessionIDEmpty(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+
+	logPath, err := resolveLogPath(stateDir, "")
+	if err != nil {
+		t.Fatalf("resolveLogPath returned error: %v", err)
+	}
+
+	base := filepath.Base(logPath)
+	if !strings.HasPrefix(base, "taskmgr-ui-pid") || !strings.HasSuffix(base, ".log") {
+		t.Fatalf("expected taskmgr-ui-pid<N>.log filename pattern, got %q", base)
+	}
+}
+
+func TestManagerJSONRecordShapeAndComponentScope(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		SessionID:    "deadbeef",
+		ProjectRoot:  "/tmp/project-a",
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() {
+		_ = m.Close()
+	})
+
+	m.Component("repository").Warn("repository warning", "argv", []string{"taskmgr", "ready", "--json"})
+
+	line := firstLineFromFile(t, m.LogPath())
+	record := decodeJSONLine(t, line)
+
+	for _, key := range []string{"timestamp", "level", "message", "session_id", "project_root", "build_version"} {
+		if _, ok := record[key]; !ok {
+			t.Fatalf("expected JSON key %q in record: %#v", key, record)
+		}
+	}
+
+	if got := record["level"]; got != "WARN" {
+		t.Fatalf("expected level WARN, got %#v", got)
+	}
+	if got := record["message"]; got != "repository warning" {
+		t.Fatalf("expected message %q, got %#v", "repository warning", got)
+	}
+	if got := record["session_id"]; got != "deadbeef" {
+		t.Fatalf("expected session_id deadbeef, got %#v", got)
+	}
+	if got := record["project_root"]; got != "/tmp/project-a" {
+		t.Fatalf("expected project_root /tmp/project-a, got %#v", got)
+	}
+	if got := record["build_version"]; got != "dev" {
+		t.Fatalf("expected build_version dev, got %#v", got)
+	}
+	if got := record["component"]; got != "repository" {
+		t.Fatalf("expected component repository, got %#v", got)
+	}
+
+	if got := stderr.String(); !strings.Contains(got, "warn: repository warning") {
+		t.Fatalf("expected warning mirrored to stderr, got %q", got)
+	}
+	if got := stderr.String(); !strings.Contains(got, "project_root=/tmp/project-a") || !strings.Contains(got, "build_version=dev") {
+		t.Fatalf("expected provenance mirrored to stderr, got %q", got)
+	}
+}
+
+func TestManagerDebugLogsMirrorToStderrWithPrefix(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		Debug:        true,
+		SessionID:    "cafebabe",
+		ProjectRoot:  "/tmp/project-b",
+		BuildVersion: "1.2.3",
+	})
+	t.Cleanup(func() {
+		_ = m.Close()
+	})
+
+	m.Component("repository").Debug("taskmgr argv trace", "argv", []string{"taskmgr", "show", "ISSUE-1"})
+
+	gotStderr := stderr.String()
+	if !strings.Contains(gotStderr, "[taskmgr-ui-debug] session_id=cafebabe") {
+		t.Fatalf("expected debug session line, got %q", gotStderr)
+	}
+	if !strings.Contains(gotStderr, "[taskmgr-ui-debug] taskmgr argv trace") {
+		t.Fatalf("expected debug message with prefix, got %q", gotStderr)
+	}
+	if !strings.Contains(gotStderr, "project_root=/tmp/project-b") || !strings.Contains(gotStderr, "build_version=1.2.3") {
+		t.Fatalf("expected debug provenance fields, got %q", gotStderr)
+	}
+
+	line := firstLineFromFile(t, m.LogPath())
+	record := decodeJSONLine(t, line)
+	if got := record["level"]; got != "DEBUG" {
+		t.Fatalf("expected DEBUG level in persistent log, got %#v", got)
+	}
+	if got := record["message"]; got != "taskmgr argv trace" {
+		t.Fatalf("expected debug message in persistent log, got %#v", got)
+	}
+	if got := record["project_root"]; got != "/tmp/project-b" {
+		t.Fatalf("expected project_root /tmp/project-b, got %#v", got)
+	}
+	if got := record["build_version"]; got != "1.2.3" {
+		t.Fatalf("expected build_version 1.2.3, got %#v", got)
+	}
+}
+
+func TestManagerInfoLogsMirrorToStderrWithDebugPrefixWhenDebugEnabled(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		Debug:        true,
+		SessionID:    "facefeed",
+		ProjectRoot:  "/tmp/project-c",
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() {
+		_ = m.Close()
+	})
+
+	m.Component("startup").Info("resolved config path", "path", "/tmp/cfg.yaml")
+
+	gotStderr := stderr.String()
+	if !strings.Contains(gotStderr, "[taskmgr-ui-debug] resolved config path") || !strings.Contains(gotStderr, "path=/tmp/cfg.yaml") {
+		t.Fatalf("expected info message with debug prefix, got %q", gotStderr)
+	}
+
+	line := firstLineFromFile(t, m.LogPath())
+	record := decodeJSONLine(t, line)
+	if got := record["level"]; got != "INFO" {
+		t.Fatalf("expected INFO level in persistent log, got %#v", got)
+	}
+	if got := record["message"]; got != "resolved config path" {
+		t.Fatalf("expected info message in persistent log, got %#v", got)
+	}
+	if got := record["project_root"]; got != "/tmp/project-c" {
+		t.Fatalf("expected project_root /tmp/project-c, got %#v", got)
+	}
+	if got := record["build_version"]; got != "dev" {
+		t.Fatalf("expected build_version dev, got %#v", got)
+	}
+}
+
+func TestForcedRotationProducesRotatedOutput(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	const sessionID = "rottest1"
+	logPath, sink, err := buildPersistentSink(Options{StateDir: stateDir}, sessionID)
+	if err != nil {
+		t.Fatalf("buildPersistentSink returned error: %v", err)
+	}
+	activeLogName := filepath.Base(logPath) // taskmgr-ui-rottest1.log
+	// Close the sink and wait for lumberjack's background compression goroutine
+	// to finish before t.TempDir cleanup removes the directory. lumberjack.Close
+	// only closes the active log file; it does not drain the mill goroutine that
+	// compresses rotated backups. Without this wait, the goroutine may still hold
+	// files open in the temp dir when Go's test harness calls TempDir RemoveAll,
+	// causing an intermittent "directory not empty" error (~1 in 50 runs).
+	t.Cleanup(func() {
+		_ = sink.Close()
+		waitForLumberjackMill(t, filepath.Dir(logPath), 5*time.Second)
+	})
+
+	if _, err := sink.Write([]byte("before-rotate\n")); err != nil {
+		t.Fatalf("write before rotate failed: %v", err)
+	}
+	if err := sink.Rotate(); err != nil {
+		t.Fatalf("forced rotate failed: %v", err)
+	}
+	if _, err := sink.Write([]byte("after-rotate\n")); err != nil {
+		t.Fatalf("write after rotate failed: %v", err)
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(logPath))
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+
+	rotatedFound := false
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == activeLogName {
+			continue
+		}
+		if strings.Contains(name, ".log") {
+			rotatedFound = true
+			break
+		}
+	}
+
+	if !rotatedFound {
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		t.Fatalf("expected rotated output file to be produced, entries=%v", names)
+	}
+}
+
+// waitForLumberjackMill polls logDir until no uncompressed backup log files
+// remain (i.e. lumberjack's background mill goroutine has finished compressing
+// all rotated backups), or until timeout elapses. It is a best-effort guard
+// against the race between lumberjack's compression goroutine and t.TempDir
+// cleanup — lumberjack.Logger.Close does not drain the mill goroutine.
+//
+// activeLogName is the basename of the currently-active log file; it is
+// excluded from the pending-compression check.
+func waitForLumberjackMill(t *testing.T, logDir string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		entries, err := os.ReadDir(logDir)
+		if err != nil {
+			// Directory already gone — nothing to wait for.
+			return
+		}
+		pendingCompression := false
+		for _, entry := range entries {
+			name := entry.Name()
+			// A backup file that has ".log" but not ".gz" suffix is still being
+			// compressed (or waiting to be compressed) by the mill goroutine.
+			// We cannot know the active log name here, so we conservatively check
+			// all .log files that look like rotated backups (contain a timestamp).
+			if strings.HasSuffix(name, ".log") && strings.Contains(name, "T") {
+				pendingCompression = true
+				break
+			}
+		}
+		if !pendingCompression {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Timeout elapsed — log a warning but do not fail; the test assertions
+	// already passed. A leftover file may still cause TempDir cleanup noise
+	// but that is non-fatal for the test result.
+	t.Logf("waitForLumberjackMill: timeout waiting for compression in %s", logDir)
+}
+
+func TestFallbackWhenStateDirUnavailableWarnsOnceAndUsesStderrOnly(t *testing.T) {
+	t.Parallel()
+
+	notDirectory := filepath.Join(t.TempDir(), "state-file")
+	if err := os.WriteFile(notDirectory, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	m := New(Options{StateDir: notDirectory, Stderr: &stderr})
+
+	if m.LogPath() != "" {
+		t.Fatalf("expected empty log path in fallback mode, got %q", m.LogPath())
+	}
+
+	m.Logger().Warn("fallback warning")
+
+	got := stderr.String()
+	if count := strings.Count(got, "persistent log unavailable"); count != 1 {
+		t.Fatalf("expected one fallback warning, got %d in %q", count, got)
+	}
+	if !strings.Contains(got, "warn: fallback warning") {
+		t.Fatalf("expected warnings to continue on stderr, got %q", got)
+	}
+}
+
+// TestManagerCloseDoesNotPanicWhenPersistentSinkUnavailable is a regression
+// test for the typed-nil interface bug: when buildPersistentSink fails, a
+// previous version of New assigned the (*lumberjack.Logger)(nil) return value
+// directly to the io.Closer interface field. The interface was non-nil (it had
+// a type but a nil pointer value), so the nil guard in Close was bypassed and
+// lumberjack.Logger.Close panicked with a nil dereference.
+//
+// This test must FAIL on the pre-fix code (closer == typed nil interface) and
+// PASS after the fix (closer == nil interface when sink construction fails).
+func TestManagerCloseDoesNotPanicWhenPersistentSinkUnavailable(t *testing.T) {
+	t.Parallel()
+
+	// Use a plain file path as the state dir so MkdirAll fails — simulating an
+	// environment where the log state directory cannot be created (e.g. HOME=/root
+	// with no write permission).
+	notDirectory := filepath.Join(t.TempDir(), "state-file")
+	if err := os.WriteFile(notDirectory, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	m := New(Options{StateDir: notDirectory, Stderr: &stderr})
+
+	// Close must not panic. On the buggy code this triggers a nil-dereference
+	// inside lumberjack.Logger.Close via the non-nil typed-nil interface value.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Manager.Close panicked when persistent sink unavailable: %v", r)
+		}
+	}()
+
+	if err := m.Close(); err != nil {
+		t.Fatalf("expected nil error from Close in fallback mode, got: %v", err)
+	}
+}
+
+func TestGenerateSessionIDReturnsHexOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	id := generateSessionID()
+	if len(id) == 0 {
+		t.Fatal("expected non-empty session ID")
+	}
+	// Must be valid hex.
+	if _, err := strconv.ParseUint(id, 16, 64); err != nil {
+		// More than 64 bits: just verify every character is a hex digit.
+		for _, c := range id {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				t.Fatalf("session ID %q contains non-hex character %q", id, c)
+			}
+		}
+	}
+}
+
+func TestGenerateSessionIDFallsBackToTimestampOnRandError(t *testing.T) {
+	// Not parallel: modifies package-level randReader.
+	orig := randReader
+	randReader = func(b []byte) (int, error) { return 0, errors.New("entropy exhausted") }
+	t.Cleanup(func() { randReader = orig })
+
+	id1 := generateSessionID()
+	id2 := generateSessionID()
+
+	if id1 == "00000000" {
+		t.Fatalf("expected non-literal fallback, got %q", id1)
+	}
+	// Both IDs must be non-empty hex strings.
+	for _, id := range []string{id1, id2} {
+		if len(id) == 0 {
+			t.Fatalf("expected non-empty fallback session ID")
+		}
+		for _, c := range id {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				t.Fatalf("fallback session ID %q contains non-hex character %q", id, c)
+			}
+		}
+	}
+}
+
+// TestSetStderrSuppressedBlocksStderrButNotPersistentLog verifies that
+// Manager.SetStderrSuppressed(true) prevents warn+ records from reaching
+// stderr while the persistent file sink continues to receive all records.
+// This is the regression guard for the alt-screen corruption bug (o7tk root
+// cause 2): if suppression is removed, the first and third assertions will
+// pass but the second will fail because the warn line appears on stderr again.
+func TestSetStderrSuppressedBlocksStderrButNotPersistentLog(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		SessionID:    "supptest1",
+		ProjectRoot:  "/tmp/project-suppress",
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() { _ = m.Close() })
+
+	// Phase 1: suppression off — warn must reach stderr AND persistent file.
+	m.Logger().Warn("before-suppress")
+	if !strings.Contains(stderr.String(), "warn: before-suppress") {
+		t.Fatalf("phase 1: expected warn to reach stderr before suppression, got %q", stderr.String())
+	}
+
+	// Phase 2: suppression on — warn must NOT reach stderr; file still receives it.
+	m.SetStderrSuppressed(true)
+	stderr.Reset()
+	m.Logger().Warn("during-suppress")
+	if strings.Contains(stderr.String(), "during-suppress") {
+		t.Fatalf("phase 2 (regression): warn reached stderr while suppressed — alt-screen corruption would occur; got %q", stderr.String())
+	}
+
+	// Phase 3: suppression off again — warn must reach stderr again.
+	m.SetStderrSuppressed(false)
+	m.Logger().Warn("after-suppress")
+	if !strings.Contains(stderr.String(), "warn: after-suppress") {
+		t.Fatalf("phase 3: expected warn to reach stderr after unsuppression, got %q", stderr.String())
+	}
+
+	// All three messages must be in the persistent log.
+	content, err := os.ReadFile(m.LogPath())
+	if err != nil {
+		t.Fatalf("ReadFile log: %v", err)
+	}
+	for _, msg := range []string{"before-suppress", "during-suppress", "after-suppress"} {
+		if !strings.Contains(string(content), msg) {
+			t.Fatalf("persistent log missing message %q; log content: %s", msg, string(content))
+		}
+	}
+}
+
+// TestSetStderrSuppressedDebugModeAlsoSuppressed verifies that --debug mode
+// (which enables info/debug writes to stderr) is also suppressed during
+// interactive mode. No stderr writes may corrupt the alt-screen even in debug.
+func TestSetStderrSuppressedDebugModeAlsoSuppressed(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	var stderr bytes.Buffer
+
+	m := New(Options{
+		StateDir:     stateDir,
+		Stderr:       &stderr,
+		Debug:        true,
+		SessionID:    "supptest2",
+		ProjectRoot:  "/tmp/project-debug-suppress",
+		BuildVersion: "dev",
+	})
+	t.Cleanup(func() { _ = m.Close() })
+
+	// Confirm debug info reaches stderr before suppression.
+	stderr.Reset() // clear the session_id line emitted by New
+	m.Logger().Info("pre-suppress-info")
+	if !strings.Contains(stderr.String(), "pre-suppress-info") {
+		t.Fatalf("expected info to reach stderr in debug mode before suppression, got %q", stderr.String())
+	}
+
+	// Suppress and verify nothing reaches stderr.
+	m.SetStderrSuppressed(true)
+	stderr.Reset()
+	m.Logger().Info("suppressed-info")
+	m.Logger().Warn("suppressed-warn")
+	m.Logger().Debug("suppressed-debug")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr while suppressed in debug mode, got %q", stderr.String())
+	}
+}
+
+// TestSetStderrSuppressedNilManagerIsNoop verifies that calling
+// SetStderrSuppressed on a nil Manager does not panic.
+func TestSetStderrSuppressedNilManagerIsNoop(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("SetStderrSuppressed on nil Manager panicked: %v", r)
+		}
+	}()
+
+	var m *Manager
+	m.SetStderrSuppressed(true)
+	m.SetStderrSuppressed(false)
+}
+
+// TestPruneStaleLogFiles verifies that pruneStaleLogFiles removes log files
+// whose modification time is older than rotationMaxAgeDays, keeps files that
+// are within the age limit, and never removes the current session's own file
+// regardless of its modification time.
+func TestPruneStaleLogFiles(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	appDir := filepath.Join(stateDir, stateDirName)
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	writeFile := func(name string) string {
+		p := filepath.Join(appDir, name)
+		if err := os.WriteFile(p, []byte("log"), 0o644); err != nil {
+			t.Fatalf("WriteFile %q: %v", name, err)
+		}
+		return p
+	}
+
+	setMtime := func(p string, age time.Duration) {
+		mtime := time.Now().Add(-age)
+		if err := os.Chtimes(p, mtime, mtime); err != nil {
+			t.Fatalf("Chtimes %q: %v", p, err)
+		}
+	}
+
+	// staleAge is just over the threshold so ModTime is definitely before the cutoff.
+	staleAge := time.Duration(rotationMaxAgeDays+1) * 24 * time.Hour
+	freshAge := time.Duration(rotationMaxAgeDays-1) * 24 * time.Hour
+
+	staleA := writeFile("taskmgr-ui-stale1.log")
+	staleB := writeFile("taskmgr-ui-stale2.log")
+	freshFile := writeFile("taskmgr-ui-fresh.log")
+	currentFile := writeFile("taskmgr-ui-current.log")
+	unrelatedFile := writeFile("other-tool.log") // must not be touched
+
+	setMtime(staleA, staleAge)
+	setMtime(staleB, staleAge)
+	setMtime(freshFile, freshAge)
+	setMtime(currentFile, staleAge) // current file is old, but must be kept
+	setMtime(unrelatedFile, staleAge)
+
+	pruneStaleLogFiles(appDir, currentFile)
+
+	// Stale taskmgr-ui-*.log files must be removed.
+	for _, p := range []string{staleA, staleB} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("expected stale file %q to be removed, stat err: %v", p, err)
+		}
+	}
+
+	// Fresh taskmgr-ui-*.log file must be kept.
+	if _, err := os.Stat(freshFile); err != nil {
+		t.Errorf("expected fresh file %q to be kept, stat err: %v", freshFile, err)
+	}
+
+	// Current session's file must be kept even though its mtime is past the cutoff.
+	if _, err := os.Stat(currentFile); err != nil {
+		t.Errorf("expected current session file %q to be kept, stat err: %v", currentFile, err)
+	}
+
+	// Unrelated file (does not match taskmgr-ui-*.log glob) must be kept.
+	if _, err := os.Stat(unrelatedFile); err != nil {
+		t.Errorf("expected unrelated file %q to be kept, stat err: %v", unrelatedFile, err)
+	}
+}
+
+func firstLineFromFile(t *testing.T, filePath string) string {
+	t.Helper()
+
+	if strings.TrimSpace(filePath) == "" {
+		t.Fatal("expected non-empty log path")
+	}
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	text := strings.TrimSpace(string(content))
+	if text == "" {
+		t.Fatalf("expected log file content at %q", filePath)
+	}
+	lines := strings.Split(text, "\n")
+	return lines[0]
+}
+
+func decodeJSONLine(t *testing.T, line string) map[string]any {
+	t.Helper()
+
+	var out map[string]any
+	if err := json.Unmarshal([]byte(line), &out); err != nil {
+		t.Fatalf("json.Unmarshal failed for %q: %v", line, err)
+	}
+	return out
+}
+
+// TestConcurrentWritersProduceNoTornRecords is the reproducer for the rotation
+// race described in task-manager-ui-24is. It has two parts:
+//
+// Part 1 — BEFORE (shared file, old behavior): two raw lumberjack.Logger
+// instances share the same file path with MaxSize=1 (1 MB). Each writes enough
+// data to force multiple rotations. The resulting files are scanned for torn
+// JSON Lines records. On most runs with concurrent writes and frequent
+// rotation, at least one torn record appears. The sub-test is marked as
+// expected-to-fail-but-documented so that CI does not gate on the racy outcome;
+// the primary value is the comment explaining the mechanism.
+//
+// Part 2 — AFTER (per-process file, fixed behavior): N Manager instances each
+// receive a distinct session ID and therefore write to distinct files. Even
+// with forced rotation via a patched MaxSize, no torn records can appear
+// because the two lumberjack instances never share state.
+//
+// Rotation race mechanism (shared-file case):
+//
+//	writer A: size > MaxSize → rotate: close(taskmgr-ui.log) rename→taskmgr-ui-T1.log open new taskmgr-ui.log
+//	writer B: size > MaxSize → rotate: close(taskmgr-ui.log) rename→taskmgr-ui-T2.log (renames A's new file!)
+//	writer A: writes partial JSON to taskmgr-ui-T2.log (now orphaned/renamed away)
+//	writer B: opens new taskmgr-ui.log, writes independent records
+//	→ taskmgr-ui-T2.log (or taskmgr-ui.log) now contains a split record from A
+func TestConcurrentWritersProduceNoTornRecords(t *testing.T) {
+	t.Parallel()
+
+	// largePayload produces a ~5 KB string to push past the 1 MB rotation
+	// threshold within a reasonable number of writes (200 writes × ~5 KB = ~1 MB).
+	largePayload := strings.Repeat("x", 5000)
+
+	const (
+		numWriters = 3
+		writesEach = 250
+		maxSizeMB  = 1 // forces rotation within the write loop
+	)
+
+	// --- Part 2: AFTER fix — per-process log files, no torn records ---
+	t.Run("PerProcessFiles_NoTornRecords", func(t *testing.T) {
+		t.Parallel()
+
+		stateDir := t.TempDir()
+		sessionIDs := []string{"sess-aabb", "sess-ccdd", "sess-eeff"}
+
+		managers := make([]*Manager, numWriters)
+		for i := range managers {
+			managers[i] = New(Options{
+				StateDir:     stateDir,
+				Stderr:       &bytes.Buffer{},
+				SessionID:    sessionIDs[i],
+				ProjectRoot:  "/tmp/reproducer",
+				BuildVersion: "test",
+			})
+			// Lower MaxSize to 1 MB (the minimum lumberjack supports) to force
+			// rotation during the write loop; each writer produces ~1.25 MB.
+			if lj, ok := managers[i].closer.(*lumberjack.Logger); ok {
+				lj.MaxSize = maxSizeMB
+			}
+		}
+		t.Cleanup(func() {
+			for _, m := range managers {
+				_ = m.Close()
+			}
+			appDir := filepath.Join(stateDir, stateDirName)
+			waitForLumberjackMill(t, appDir, 15*time.Second)
+		})
+
+		var wg sync.WaitGroup
+		for i, m := range managers {
+			wg.Add(1)
+			go func(writerIdx int, mgr *Manager) {
+				defer wg.Done()
+				for j := range writesEach {
+					mgr.Logger().Warn("reproducer write",
+						"writer", writerIdx,
+						"seq", j,
+						"payload", largePayload,
+					)
+				}
+			}(i, m)
+		}
+		wg.Wait()
+
+		for _, m := range managers {
+			_ = m.Close()
+		}
+
+		// Verify rotation actually occurred: each writer should have produced at
+		// least 1.25 MB, triggering at least one rotation of the 1 MB MaxSize sink.
+		appDir := filepath.Join(stateDir, stateDirName)
+		allEntries, _ := os.ReadDir(appDir)
+		t.Logf("PerProcessFiles: files in taskmgr-ui dir after writes: %v", func() []string {
+			names := make([]string, 0, len(allEntries))
+			for _, e := range allEntries {
+				info, _ := e.Info()
+				names = append(names, fmt.Sprintf("%s(%dB)", e.Name(), info.Size()))
+			}
+			return names
+		}())
+
+		// Each process's active log file must contain only complete JSON objects.
+		for i, sid := range sessionIDs {
+			logPath := filepath.Join(stateDir, stateDirName, logFilePrefix+sid+logFileSuffix)
+			content, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("writer %d: ReadFile %q: %v", i, logPath, err)
+			}
+			lineCount := 0
+			for lineNum, line := range strings.Split(strings.TrimRight(string(content), "\n"), "\n") {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				lineCount++
+				var rec map[string]any
+				if err := json.Unmarshal([]byte(line), &rec); err != nil {
+					t.Errorf("writer %d: torn record at line %d in %s: %v\n  line: %q",
+						i, lineNum+1, logPath, err, line)
+				}
+			}
+			t.Logf("writer %d (%s): %d lines in active log file", i, sid, lineCount)
+		}
+	})
+
+	// --- Part 1: BEFORE fix — shared log file, demonstrates rotation race ---
+	// This sub-test is NOT a gating assertion. It documents the old behavior:
+	// two lumberjack instances sharing one file produce torn records under
+	// concurrent rotation. The sub-test scans for torn records and logs the
+	// count; it does NOT call t.Fail() because the race is probabilistic.
+	// On a lightly loaded machine or a very fast FS, some runs may not trigger
+	// a torn record even with the old behavior. The test is present as evidence
+	// and documentation, not as a regression gate.
+	t.Run("SharedFile_TornRecordReproducer", func(t *testing.T) {
+		t.Parallel()
+
+		stateDir := t.TempDir()
+		sharedPath := filepath.Join(stateDir, "shared-taskmgr-ui.log")
+
+		sinks := make([]*lumberjack.Logger, numWriters)
+		for i := range sinks {
+			sinks[i] = &lumberjack.Logger{
+				Filename:   sharedPath,
+				MaxSize:    maxSizeMB,
+				MaxBackups: 5,
+				MaxAge:     30,
+				Compress:   false, // disable compression so we can read backups immediately
+			}
+		}
+		t.Cleanup(func() {
+			for _, s := range sinks {
+				_ = s.Close()
+			}
+		})
+
+		// Each writer writes a JSON-like record that starts with '{' and ends with '}\n'.
+		// Torn records appear as lines that start with something other than '{'.
+		var wg sync.WaitGroup
+		for i, s := range sinks {
+			wg.Add(1)
+			go func(writerIdx int, sink *lumberjack.Logger) {
+				defer wg.Done()
+				for j := range writesEach {
+					record := fmt.Sprintf(
+						`{"writer":%d,"seq":%d,"payload":%q}`+"\n",
+						writerIdx, j, largePayload,
+					)
+					_, _ = sink.Write([]byte(record))
+				}
+			}(i, s)
+		}
+		wg.Wait()
+
+		for _, s := range sinks {
+			_ = s.Close()
+		}
+
+		// Scan all .log files in stateDir for torn records.
+		entries, _ := os.ReadDir(stateDir)
+		tornCount := 0
+		totalLines := 0
+		for _, entry := range entries {
+			if !strings.HasSuffix(entry.Name(), ".log") {
+				continue
+			}
+			content, err := os.ReadFile(filepath.Join(stateDir, entry.Name()))
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(strings.TrimRight(string(content), "\n"), "\n") {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				totalLines++
+				var rec map[string]any
+				if err := json.Unmarshal([]byte(line), &rec); err != nil {
+					tornCount++
+				}
+			}
+		}
+		t.Logf("SharedFile reproducer: %d total lines, %d torn records", totalLines, tornCount)
+		// Not asserting tornCount > 0 — the race is probabilistic and may not
+		// manifest on every run or every OS. The documentation above explains why.
+	})
+}

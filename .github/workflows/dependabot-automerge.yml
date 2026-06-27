@@ -1,0 +1,81 @@
+name: Dependabot auto-merge
+
+# Auto-merges Dependabot PRs after CI succeeds, but ONLY for patch/minor bumps.
+# Major bumps stay open for manual review.
+#
+# Trigger is `workflow_run` (rather than `pull_request`) for two reasons:
+#   1. Runs in the context of the default branch, so it gets a write-capable
+#      GITHUB_TOKEN — Dependabot-authored PRs do not get write tokens on
+#      regular `pull_request` events.
+#   2. Fires only after CI completes successfully, so we don't need a separate
+#      check-watching step.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot patch/minor bumps
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Squash-merge if Dependabot patch/minor
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+
+          pr=$(gh api "/repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            echo "No PR for sha=$SHA; nothing to do"
+            exit 0
+          fi
+
+          # GraphQL bot logins arrive as 'app/dependabot' on current gh; REST
+          # surfaces 'dependabot[bot]'; future versions may use the bare slug.
+          # Anchor on is_bot=true + any known dependabot login form.
+          author_json=$(gh pr view "$pr" --repo "$REPO" --json author --jq '.author')
+          is_bot=$(printf '%s' "$author_json" | jq -r '.is_bot')
+          login=$(printf '%s' "$author_json" | jq -r '.login')
+          case "$login" in
+            dependabot|app/dependabot|"dependabot[bot]") ;;
+            *)
+              echo "PR #$pr author is '$login' (is_bot=$is_bot); not Dependabot, skipping"
+              exit 0
+              ;;
+          esac
+          if [ "$is_bot" != "true" ]; then
+            echo "PR #$pr login '$login' matched a Dependabot form but is_bot=$is_bot; refusing to auto-merge"
+            exit 0
+          fi
+
+          title=$(gh pr view "$pr" --repo "$REPO" --json title --jq '.title')
+
+          # Dependabot PR titles include "Bump <pkg> from <from> to <to>" or
+          # "build(deps): bump <pkg> from <from> to <to>" — parse both.
+          from=$(printf '%s' "$title" | grep -oE 'from [0-9]+(\.[0-9]+){0,2}' | head -1 | awk '{print $2}' || true)
+          to=$(printf '%s' "$title" | grep -oE 'to [0-9]+(\.[0-9]+){0,2}' | head -1 | awk '{print $2}' || true)
+          if [ -z "${from:-}" ] || [ -z "${to:-}" ]; then
+            echo "Could not parse version bump from title: '$title'; leaving PR open"
+            exit 0
+          fi
+
+          from_major=$(printf '%s' "$from" | cut -d. -f1)
+          to_major=$(printf '%s' "$to" | cut -d. -f1)
+          if [ "$from_major" != "$to_major" ]; then
+            echo "Major bump ($from → $to) for PR #$pr; leaving open for manual review"
+            exit 0
+          fi
+
+          echo "Patch/minor bump ($from → $to) for PR #$pr; squash-merging"
+          gh pr merge "$pr" --repo "$REPO" --squash

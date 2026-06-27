@@ -1,0 +1,64 @@
+version: 2
+
+project_name: taskmgr-ui
+
+builds:
+  - id: taskmgr-ui
+    main: ./cmd/taskmgr-ui
+    binary: taskmgr-ui
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/hk9890/task-manager-ui/internal/version.Version={{ .Version }}
+      - -X github.com/hk9890/task-manager-ui/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/hk9890/task-manager-ui/internal/version.Date={{ .Date }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: taskmgr-ui-archives
+    ids:
+      - taskmgr-ui
+    formats:
+      - tar.gz
+    files:
+      - none*
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_{{ if eq .Arch "amd64" }}x64{{ else if eq .Arch "386" }}x86{{ else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+
+release:
+  # Allow re-running the release workflow against an existing tag/release
+  # without manually deleting assets first.
+  replace_existing_artifacts: true
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    # Track the keyless certificate as an uploadable artifact so ${certificate}
+    # is defined and the .pem ships alongside the .sig — required to verify the
+    # signature (see docs/RELEASING.md `cosign verify-blob`).
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --yes
+      - --output-signature=${signature}
+      - --output-certificate=${certificate}
+      - ${artifact}
+
+sboms:
+  - artifacts: archive
+    cmd: syft
+    args:
+      - "${artifact}"
+      - "--output"
+      - "spdx-json=${document}"

@@ -1,0 +1,15 @@
+╭─ Dependencies ────── 13 of 38 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│… (10 earlier)                  │  │T P1 OPN tm-main                                                  │  │  Core                          │
+│                                │  │Main issue                                                        │  │  Type    : task                │
+│Blocks (10)                     │  │──────────────────────────────────────────────────────────────────│  │  Status  : open                │
+│  ? P0 - tm-bl00 bl issue 0     │  │Description                                                       │  │  Priority: P1                  │
+│  ? P0 - tm-bl01 bl issue 1     │  │(no description)                                                  │  │  ------------------------------│
+│  ? P0 - tm-bl02 bl issue 2     │  │                                                                  │  │  Counts                        │
+│  ? P0 - tm-bl03 bl issue 3     │  │                                                                  │  │  Comments  : 0                 │
+│  ? P0 - tm-bl04 bl issue 4     │  │                                                                  │  │  Blocked by: 10                │
+│  ? P0 - tm-bl05 bl issue 5     │  │                                                                  │  │  Blocks    : 10                │
+│  ? P0 - tm-bl06 bl issue 6     │  │                                                                  │  │  Related   : 10                │
+│  ? P0 - tm-bl07 bl issue 7     │  │                                                                  │  │  Children  : 0                 │
+│  ? P0 - tm-bl08 bl issue 8     │  │                                                                  │  │                                │
+│… (15 more)                     │  │                                                                  │  │… (5 more)                      │
+╰────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯

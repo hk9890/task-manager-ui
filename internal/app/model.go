@@ -1,0 +1,1977 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
+	detailsmode "github.com/hk9890/task-manager-ui/internal/mode/details"
+	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
+	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
+)
+
+const (
+	defaultViewportWidth  = 120
+	defaultViewportHeight = 34
+	refreshTickInterval   = 60 * time.Second
+)
+
+type refreshTickMsg struct{}
+
+type startupHealthCheckMsg struct{ err error }
+
+// schedulerMu guards the test seam variables scheduleRefreshTickCmd,
+// scheduleToastDismissCmd, and scheduleSpinnerTickCmd. Tests that run in
+// parallel mutate these globals; the mutex ensures reads in
+// Init/Update/showToast and writes in test helpers do not race. Production
+// code never writes these after init.
+var schedulerMu sync.Mutex
+
+var scheduleRefreshTickCmd = func() tea.Cmd {
+	return tea.Tick(refreshTickInterval, func(_ time.Time) tea.Msg {
+		return refreshTickMsg{}
+	})
+}
+
+var scheduleToastDismissCmd = func(d time.Duration, seq int) tea.Cmd {
+	return toaster.ScheduleDismiss(d, seq)
+}
+
+var scheduleSpinnerTickCmd = func() tea.Cmd {
+	return loading.SpinnerTickCmd(100 * time.Millisecond)
+}
+
+// getRefreshTickScheduler returns the current scheduleRefreshTickCmd under lock.
+func getRefreshTickScheduler() func() tea.Cmd {
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+	return scheduleRefreshTickCmd
+}
+
+// getToastDismissScheduler returns the current scheduleToastDismissCmd under lock.
+func getToastDismissScheduler() func(time.Duration, int) tea.Cmd {
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+	return scheduleToastDismissCmd
+}
+
+// getSpinnerTickScheduler returns the current scheduleSpinnerTickCmd under lock.
+func getSpinnerTickScheduler() func() tea.Cmd {
+	schedulerMu.Lock()
+	defer schedulerMu.Unlock()
+	return scheduleSpinnerTickCmd
+}
+
+var modelNow = time.Now
+
+type detailLoadedMsg struct {
+	issueID string
+	detail  domain.IssueDetail
+	err     error
+}
+
+type editIssueResultMsg struct {
+	issueID string
+	updated bool
+	err     error
+}
+
+// editIssuePreparedMsg carries the result of the PrepareDocument phase.
+type editIssuePreparedMsg struct {
+	issueID  string
+	prepared launchereditor.Prepared
+	err      error
+}
+
+// editorExitedMsg is delivered by the tea.Exec callback when the editor process exits.
+type editorExitedMsg struct {
+	prepared launchereditor.Prepared
+	execErr  error
+}
+
+type launchActionResultMsg struct {
+	action string
+	err    error
+}
+
+type mutationKind string
+
+const (
+	mutationCreate   mutationKind = "create"
+	mutationUpdate   mutationKind = "update"
+	mutationClose    mutationKind = "close"
+	mutationComment  mutationKind = "comment"
+	mutationStatus   mutationKind = "status"
+	mutationPriority mutationKind = "priority"
+)
+
+type mutationCatalogsLoadedMsg struct {
+	kind     mutationKind
+	issue    domain.IssueSummary
+	statuses []domain.StatusOption
+	types    []domain.TypeOption
+	labels   []domain.LabelOption
+	err      error
+}
+
+type statusCatalogLoadedMsg struct {
+	issue    domain.IssueSummary
+	statuses []domain.StatusOption
+	err      error
+}
+
+type mutationResultMsg struct {
+	kind      mutationKind
+	issueID   string
+	createdID string
+	noChange  bool
+	err       error
+}
+
+type mutationDialogState struct {
+	kind        mutationKind
+	issue       domain.IssueSummary
+	statusNames map[string]struct{}
+	typeNames   map[string]struct{}
+	labelNames  map[string]struct{}
+	statusList  string
+	typeList    string
+	labelList   string
+}
+
+type surfaceRefreshState struct {
+	dirty       bool
+	lastRefresh time.Time
+}
+
+// pendingDialogGuard tracks an in-flight async dialog-open so that a key
+// press (ESC or otherwise) arriving before the catalog response is delivered
+// can cancel the pending open instead of causing the dialog to appear over the
+// wrong mode. It is keyed on kind (not issue ID) so that the create path,
+// which uses an empty IssueSummary, is handled correctly.
+type pendingDialogGuard struct {
+	active bool
+	kind   mutationKind
+}
+
+type RuntimeOptions struct {
+	DisableAutoRefresh bool
+}
+
+// Model is the root Bubble Tea shell for Task Manager UI.
+//
+// v1 detail presentation model keeps browse and full detail separated:
+//   - Board/Search prioritize high-density triage browsing.
+//   - Full issue inspection stays in dedicated detail mode.
+type Model struct {
+	services Services
+	keys     config.ResolvedKeyBindings
+
+	// fatalErrTitle and fatalErrBody are set when a startup health check detects
+	// that the app cannot run. When fatalErrTitle is non-empty, View() renders
+	// the fatal error screen and Update() only handles quit keys and window resize.
+	fatalErrTitle string
+	fatalErrBody  string
+
+	active     mode.ID
+	lastBrowse mode.ID
+
+	selectedByMode map[mode.ID]*mode.Selection
+
+	board  *boardmode.Model
+	search *searchmode.Model
+
+	detail detailsmode.Model
+
+	toast toaster.Model
+
+	help     modal.Model
+	showHelp bool
+
+	actionModal     modal.Model
+	showActionModal bool
+	actionState     mutationDialogState
+
+	focusKnown      bool
+	terminalFocused bool
+
+	// searchInitDone tracks whether the first lazy search init has been fired.
+	// Search mode is not pre-loaded at startup; the first mode switch to Search
+	// triggers Init() and sets this flag so subsequent entries do not reload.
+	searchInitDone bool
+
+	refreshStateBySurface map[mode.ID]surfaceRefreshState
+
+	spinnerFrame int
+
+	width  int
+	height int
+
+	// sizeKnown is set to true once the first tea.WindowSizeMsg has been
+	// processed. View() returns an empty string until sizeKnown is true so that
+	// the first rendered frame always uses the actual terminal dimensions rather
+	// than the defaultViewportWidth/defaultViewportHeight placeholders. This
+	// prevents the "doubled column-top borders" artifact that occurred when
+	// Bubble Tea rendered a short default-size frame immediately on startup and
+	// then a taller post-resize frame that the terminal renderer could not fully
+	// overwrite (task-manager-ui-o7tk).
+	sizeKnown bool
+
+	// pendingDialog guards an in-flight async dialog-open. It is set when the
+	// app dispatches an async catalog-load Cmd (status or create/update) and
+	// cleared at a single choke point at the top of the tea.KeyMsg branch so
+	// that any key — particularly ESC — arriving during the load window can
+	// cancel the pending open before the catalog response arrives. The
+	// catalog-loaded handlers check the guard before opening the modal; if the
+	// guard is not active they drop the result silently.
+	pendingDialog pendingDialogGuard
+
+	runtime RuntimeOptions
+}
+
+// NewModel builds the root shell model.
+func NewModel(services Services) (Model, error) {
+	return NewModelWithOptions(services, RuntimeOptions{})
+}
+
+// NewModelWithOptions builds the root shell model with runtime toggles.
+// It returns an error if the keybindings in services.Config cannot be resolved,
+// which can happen when callers construct Config directly (tests, programmatic
+// embed) without going through config.Load.
+func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, error) {
+	keys, err := config.ResolveKeyBindings(services.Config.KeyBindings)
+	if err != nil {
+		return Model{}, fmt.Errorf("invalid keybindings in app model: %w", err)
+	}
+
+	now := modelNow()
+
+	helpText := shellKeyHelp(keys)
+	help := modal.NewWithKeys(modal.Config{
+		Title:       "Keyboard Help",
+		Message:     helpText,
+		HideButtons: true,
+		Required:    false,
+		MinWidth:    72,
+	}, modal.BindingsFromConfig(keys))
+
+	return Model{
+		services:       services,
+		keys:           keys,
+		active:         mode.Board,
+		lastBrowse:     mode.Board,
+		selectedByMode: make(map[mode.ID]*mode.Selection),
+		// context.Background() is used here because the app model has no parent
+		// context today. This preserves prior behaviour while making future
+		// cancellation threading possible without touching the mode packages.
+		board:  boardmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "board"), keys),
+		search: searchmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "search"), keys),
+		detail: detailsmode.Model{Keys: keys},
+		toast:  toaster.New(),
+		help:   help,
+		width:  defaultViewportWidth,
+		height: defaultViewportHeight,
+		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
+			mode.Board:  {lastRefresh: now},
+			mode.Search: {lastRefresh: now},
+			mode.Detail: {},
+		},
+		runtime: runtime,
+	}, nil
+}
+
+// Init fires the startup health check and the spinner tick. Board loads are
+// deferred until the health check passes (see startupHealthCheckMsg handler in
+// Update). Search is deferred further until the user first switches to search
+// mode; see lazySearchInitCmd.
+func (m Model) Init() tea.Cmd {
+	m.applyWorkspaceSizeToBrowseModes()
+	healthCheckCmd := func() tea.Msg {
+		err := m.services.Repo.HealthCheck(context.Background())
+		return startupHealthCheckMsg{err: err}
+	}
+	if m.runtime.DisableAutoRefresh {
+		return tea.Batch(healthCheckCmd, getSpinnerTickScheduler()())
+	}
+	return tea.Batch(healthCheckCmd, getRefreshTickScheduler()(), getSpinnerTickScheduler()())
+}
+
+// lazySearchInitCmd fires m.search.Init() exactly once — the first time the
+// active mode is Search. It is safe to call on every mode transition; it is a
+// no-op when m.active is not Search, and a no-op after the first search init.
+// Subsequent re-entries into search mode use the normal auto-refresh path via
+// maybeAutoRefreshActiveSurfaceCmd.
+//
+// When it fires the initial load it also marks the search surface as refreshed
+// so the dirty flag is cleared; this prevents a double-load that would occur if
+// maybeAutoRefreshActiveSurfaceCmd ran immediately after (which it cannot,
+// because Init sets search.loading=true and the auto-refresh path gates on that
+// flag).
+func (m *Model) lazySearchInitCmd() tea.Cmd {
+	if m.active != mode.Search {
+		return nil
+	}
+	if m.searchInitDone {
+		return nil
+	}
+	m.searchInitDone = true
+	m.markSurfaceRefreshed(mode.Search)
+	return m.search.Init()
+}
+
+// Update handles root-level shell messages.
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle startup health check result before any other processing.
+	if check, ok := msg.(startupHealthCheckMsg); ok {
+		if check.err != nil {
+			var gwErr domain.RepositoryError
+			if errors.As(check.err, &gwErr) {
+				switch gwErr.Code {
+				case domain.ErrorCodeCommandUnavailable:
+					m.fatalErrTitle = "task manager is not available"
+					m.fatalErrBody = "The task-manager backend could not be initialized.\n\nSee https://github.com/hk9890/task-manager-ui for setup instructions."
+					slog.Default().Error("task-manager health check failed", "error", check.err)
+					return m, nil
+				case domain.ErrorCodeNoDatabaseFound:
+					m.fatalErrTitle = "no task-manager store here"
+					m.fatalErrBody = "No .tasks store was found in this directory.\n\nRun 'taskmgr init' to create one, or use --cwd to point to a directory that contains one."
+					slog.Default().Error("task-manager health check failed", "error", check.err)
+					return m, nil
+				}
+			}
+		}
+		// Health check passed — fire board loads now. Calling m.board.Init()
+		// here (from Update, which returns the model) correctly persists the
+		// board mutation (pendingResults=4, inflight=true) unlike calling it
+		// from Init() (value receiver, mutations discarded).
+		return m, m.board.Init()
+	}
+
+	// When a fatal error is set, only handle window resize and quit.
+	if m.fatalErrTitle != "" {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.sizeKnown = true
+			m.width = msg.Width
+			m.height = msg.Height
+		case tea.KeyMsg:
+			if m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) ||
+				msg.String() == "q" || msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	}
+
+	modeCmd := tea.Cmd(nil)
+	if !m.shouldCaptureKeyForOverlay(msg) {
+		modeCmd = m.forwardModeMessages(msg)
+	}
+
+	if m.showActionModal {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.sizeKnown = true
+			m.width = size.Width
+			m.height = size.Height
+			m.actionModal.SetSize(m.width, m.height)
+			return m, modeCmd
+		}
+
+		if _, ok := msg.(modal.CancelMsg); ok {
+			m.showActionModal = false
+			return m, modeCmd
+		}
+
+		if submit, ok := msg.(modal.SubmitMsg); ok {
+			m.showActionModal = false
+			return m, batchCmds(modeCmd, submitMutationCmd(m.services, m.actionState, submit.Values))
+		}
+
+		nextModal, cmd := m.actionModal.Update(msg)
+		m.actionModal = nextModal
+		return m, batchCmds(modeCmd, cmd)
+	}
+
+	if m.showHelp {
+		if k, ok := msg.(tea.KeyMsg); ok && k.String() == "?" {
+			m.showHelp = false
+			return m, modeCmd
+		}
+
+		if _, ok := msg.(modal.CancelMsg); ok {
+			m.showHelp = false
+			return m, modeCmd
+		}
+		if _, ok := msg.(modal.SubmitMsg); ok {
+			m.showHelp = false
+			return m, modeCmd
+		}
+
+		nextHelp, cmd := m.help.Update(msg)
+		m.help = nextHelp
+
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.sizeKnown = true
+			m.width = size.Width
+			m.height = size.Height
+			m.help.SetSize(m.width, m.height)
+		}
+
+		return m, batchCmds(modeCmd, cmd)
+	}
+
+	switch msg := msg.(type) {
+	case tea.FocusMsg:
+		wasBlurred := m.focusKnown && !m.terminalFocused
+		m.focusKnown = true
+		m.terminalFocused = true
+		if !wasBlurred {
+			return m, modeCmd
+		}
+		if m.runtime.DisableAutoRefresh {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
+	case tea.BlurMsg:
+		m.focusKnown = true
+		m.terminalFocused = false
+		return m, modeCmd
+	case refreshTickMsg:
+		if m.runtime.DisableAutoRefresh {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, getRefreshTickScheduler()(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case loading.TickMsg:
+		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
+		return m, batchCmds(modeCmd, getSpinnerTickScheduler()())
+	case tea.WindowSizeMsg:
+		m.sizeKnown = true
+		m.width = msg.Width
+		m.height = msg.Height
+		m.applyWorkspaceSizeToBrowseModes()
+		m.help.SetSize(m.width, m.height)
+		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
+		return m, modeCmd
+	case detailLoadedMsg:
+		if msg.issueID != m.detail.TargetID {
+			return m, modeCmd
+		}
+
+		m.detail.Loading = false
+		m.markSurfaceRefreshed(mode.Detail)
+		if msg.err != nil {
+			m.detail.Detail = domain.IssueDetail{}
+			m.detail.Error = msg.err.Error()
+			// Clear any pending drill-focus counter so a subsequent load is not
+			// incorrectly treated as the real-data leg of a drill sequence.
+			m.detail.ClearDrillFocus()
+			return m, batchCmds(modeCmd, m.showToast("Failed to load selected issue details", toaster.StyleError))
+		}
+
+		m.detail.Error = ""
+		if strings.TrimSpace(msg.issueID) == strings.TrimSpace(m.detail.SelectionID) {
+			m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
+		} else {
+			m.detail.ApplyPreviewDetail(msg.detail)
+		}
+		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
+		return m, modeCmd
+	case editIssuePreparedMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError))
+		}
+		editorCmd, err := m.services.Editor.BuildEditorCmd(msg.prepared.TempPath)
+		if err != nil {
+			// PrepareDocument already wrote the temp doc (containing the issue's
+			// title + description); remove it on this error path so it does not leak
+			// on disk until the stale-temp sweep — matching the editorExitedMsg and
+			// ApplyEdits cleanup paths.
+			_ = os.Remove(msg.prepared.TempPath)
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to build editor command: %v", err), toaster.StyleError))
+		}
+		prepared := msg.prepared
+		execCommand := m.services.ExecCommandFactory(editorCmd)
+		return m, batchCmds(modeCmd, tea.Exec(execCommand, func(err error) tea.Msg {
+			return editorExitedMsg{prepared: prepared, execErr: err}
+		}))
+	case editorExitedMsg:
+		if msg.execErr != nil {
+			_ = os.Remove(msg.prepared.TempPath)
+			issueID := msg.prepared.IssueID
+			execErr := msg.execErr
+			return m, batchCmds(modeCmd, func() tea.Msg {
+				return editIssueResultMsg{issueID: issueID, err: fmt.Errorf("editor exited with error: %w", execErr)}
+			})
+		}
+		return m, batchCmds(modeCmd, applyEditsCmd(m.services, msg.prepared))
+	case editIssueResultMsg:
+		// notifyEditResult fires the test-only hook (if set) after the toast has
+		// been set by showToast. Callers must call this before every return.
+		notifyEditResult := func() {
+			if h := m.services.OnEditIssueResult; h != nil {
+				h()
+			}
+		}
+
+		if msg.err != nil {
+			toastCmd := m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError)
+			notifyEditResult()
+			return m, batchCmds(modeCmd, toastCmd)
+		}
+
+		if !msg.updated {
+			toastCmd := m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo)
+			notifyEditResult()
+			return m, batchCmds(modeCmd, toastCmd)
+		}
+
+		m.markBrowseSurfacesDirty()
+
+		selection := m.currentSelection()
+		if selection == nil || selection.Issue.ID == "" {
+			toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
+			notifyEditResult()
+			return m, batchCmds(modeCmd, toastCmd)
+		}
+
+		m.detail.SelectionID = selection.Issue.ID
+		m.detail.SelectBrowserIssue(selection.Issue.ID)
+		m.detail.Loading = true
+		m.detail.Error = ""
+		m.detail.TargetID = selection.Issue.ID
+		toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
+		notifyEditResult()
+		return m, batchCmds(modeCmd,
+			toastCmd,
+			loadDetailCmd(m.services, selection.Issue.ID),
+		)
+	case launchActionResultMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launcher action %q failed: %v", msg.action, msg.err), toaster.StyleError))
+		}
+		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow). Use e for edit/save round-trip.", msg.action), toaster.StyleInfo))
+	case mutationCatalogsLoadedMsg:
+		if msg.err != nil {
+			m.pendingDialog = pendingDialogGuard{}
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load mutation catalogs: %v", msg.err), toaster.StyleError))
+		}
+
+		// Only open the modal if the pending-dialog guard is still active for
+		// this kind. If the guard was cleared by a key press (ESC or any other
+		// key arriving during the load window), drop the result silently.
+		if !m.pendingDialog.active || m.pendingDialog.kind != msg.kind {
+			return m, modeCmd
+		}
+		m.pendingDialog = pendingDialogGuard{}
+
+		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
+		m.actionState = dialog
+		m.actionModal = mutationModal(dialog, m.keys)
+		m.actionModal.SetSize(m.width, m.height)
+		m.showActionModal = true
+		return m, batchCmds(modeCmd, m.actionModal.Init())
+	case statusCatalogLoadedMsg:
+		if msg.err != nil {
+			m.pendingDialog = pendingDialogGuard{}
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load status catalog: %v", msg.err), toaster.StyleError))
+		}
+
+		// Only open the modal if the pending-dialog guard is still active for
+		// the status kind. If the guard was cleared by a key press arriving
+		// during the load window, drop the result silently.
+		if !m.pendingDialog.active || m.pendingDialog.kind != mutationStatus {
+			return m, modeCmd
+		}
+		m.pendingDialog = pendingDialogGuard{}
+
+		dialog := buildMutationDialog(mutationStatus, msg.issue, msg.statuses, nil, nil)
+		m.actionState = dialog
+		m.actionModal = mutationModal(dialog, m.keys)
+		m.actionModal.SetSize(m.width, m.height)
+		m.showActionModal = true
+		return m, batchCmds(modeCmd, m.actionModal.Init())
+	case mutationResultMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(msg.err.Error(), toaster.StyleError))
+		}
+
+		if msg.noChange {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo))
+		}
+
+		m.markBrowseSurfacesDirty()
+
+		switch msg.kind {
+		case mutationCreate:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Created issue %s", emptyFallback(msg.createdID, "(unknown)")), toaster.StyleSuccess),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
+		case mutationUpdate:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
+		case mutationClose:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Closed issue %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
+		case mutationComment:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
+		case mutationStatus:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
+		case mutationPriority:
+			return m, batchCmds(modeCmd,
+				m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
+				loadDetailCmd(m.services, msg.issueID),
+				m.maybeAutoRefreshActiveSurfaceCmd(),
+			)
+		default:
+			return m, modeCmd
+		}
+	case mode.SelectionChangedMsg:
+		if msg.Mode != mode.Board && msg.Mode != mode.Search {
+			return m, modeCmd
+		}
+		m.selectedByMode[msg.Mode] = msg.Selection
+		if msg.Mode == m.active {
+			m.lastBrowse = msg.Mode
+		}
+		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+	case mode.ActionRequestMsg:
+		if msg.Action != mode.ActionOpenDetail {
+			return m, modeCmd
+		}
+		if msg.Mode == mode.Board || msg.Mode == mode.Search {
+			m.lastBrowse = msg.Mode
+		}
+		if m.currentSelection() == nil {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
+		}
+		m.active = mode.Detail
+		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+	case toaster.DismissMsg:
+		// Only dismiss when the timer belongs to the toast currently shown; a
+		// stale timer from a superseded toast (two toasts within the dismiss
+		// window) must not hide the newer one early.
+		if msg.Seq == m.toast.Seq() {
+			m.toast = m.toast.Hide()
+		}
+		return m, modeCmd
+	case tea.KeyMsg:
+		// Single choke point: any key press clears the pending-dialog guard.
+		// The guard is set when an async catalog-load Cmd is dispatched and must
+		// be cleared before the key is processed so that the catalog-loaded
+		// handler (arriving later) sees the guard is gone and drops its result.
+		// We capture the guard state before clearing so ESC can use it to
+		// decide whether to cancel the pending open instead of popping the mode.
+		hadPendingDialog := m.pendingDialog.active
+		m.pendingDialog = pendingDialogGuard{}
+
+		searchCaptured := false
+		if m.active == mode.Search {
+			if m.search.CapturesShellKey(msg) {
+				searchCaptured = true
+			}
+		}
+		if searchCaptured {
+			return m, modeCmd
+		}
+
+		if m.active == mode.Detail {
+			m.detail.Keys = m.keys
+			consumed, intent := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
+			if m.detail.ConsumeOpenStatusDialogIntent() {
+				issue := m.detail.Detail.Summary
+				if strings.TrimSpace(issue.ID) == "" {
+					if selection := m.currentSelection(); selection != nil {
+						issue = selection.Issue
+					}
+				}
+				if strings.TrimSpace(issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+				}
+				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
+				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, issue))
+			}
+			if m.detail.ConsumeOpenPriorityDialogIntent() {
+				issue := m.detail.Detail.Summary
+				if strings.TrimSpace(issue.ID) == "" {
+					if selection := m.currentSelection(); selection != nil {
+						issue = selection.Issue
+					}
+				}
+				if strings.TrimSpace(issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+				}
+				dialog := buildMutationDialog(mutationPriority, issue, nil, nil, nil)
+				m.actionState = dialog
+				m.actionModal = mutationModal(dialog, m.keys)
+				m.actionModal.SetSize(m.width, m.height)
+				m.showActionModal = true
+				return m, batchCmds(modeCmd, m.actionModal.Init())
+			}
+			if intent != nil {
+				issueID := strings.TrimSpace(intent.IssueID)
+				if issueID == "" {
+					return m, modeCmd
+				}
+				m.active = mode.Detail
+				// Drilling into a related issue is a full navigation, not a peek:
+				// the target becomes the new detail selection so ALL three panes —
+				// including the Dependencies rail — reflect the target once loaded.
+				// This is what lets you open a child from an epic and then jump
+				// back via the child's own Parent row. Seeding an optimistic
+				// placeholder from the row's known ref renders the header + core
+				// metadata immediately, while the description and Dependencies pane
+				// show their skeleton until the single taskmgr show returns.
+				// ApplyLoadedDetail resets scroll offsets when the issue changes.
+				//
+				// Focus retention: set Loading and the drill-focus counter before the
+				// placeholder ApplyLoadedDetail call so that clearBrowserPanel does not
+				// flip focus away from the Dependencies pane during the in-flight window.
+				// The real detailLoadedMsg will apply the correct focus decision from
+				// actual rail content via the counter mechanism in ApplyLoadedDetail.
+				m.detail.SelectionID = issueID
+				m.detail.TargetID = issueID
+				m.detail.Loading = true
+				m.detail.Error = ""
+				m.detail.SetDrillFromDepsFocus()
+				m.detail.ApplyLoadedDetail(issueID, detailsmode.PlaceholderDetail(issueID, intent.Ref, true))
+				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
+			}
+			if consumed {
+				return m, modeCmd
+			}
+		}
+
+		if m.active == mode.Search {
+			if m.search.ConsumeOpenStatusDialogIntent() {
+				selection := m.selectedByMode[mode.Search]
+				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+				}
+				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
+				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, selection.Issue))
+			}
+			if m.search.ConsumeOpenPriorityDialogIntent() {
+				selection := m.selectedByMode[mode.Search]
+				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+				}
+				dialog := buildMutationDialog(mutationPriority, selection.Issue, nil, nil, nil)
+				m.actionState = dialog
+				m.actionModal = mutationModal(dialog, m.keys)
+				m.actionModal.SetSize(m.width, m.height)
+				m.showActionModal = true
+				return m, batchCmds(modeCmd, m.actionModal.Init())
+			}
+		}
+
+		switch {
+		case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
+			return m, batchCmds(modeCmd, tea.Quit)
+		case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
+			m.showHelp = true
+			m.help.SetSize(m.width, m.height)
+			return m, modeCmd
+		case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
+			m.active = mode.Board
+			m.lastBrowse = mode.Board
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
+			m.active = mode.Search
+			m.lastBrowse = mode.Search
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
+			if m.active == mode.Detail {
+				m.active = mode.Board
+				m.lastBrowse = mode.Board
+				return m, modeCmd
+			}
+			if m.active == mode.Search {
+				m.active = mode.Board
+				m.lastBrowse = mode.Board
+				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			}
+			m.active = mode.Search
+			m.lastBrowse = mode.Search
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
+			if m.active == mode.Board || m.active == mode.Search {
+				m.lastBrowse = m.active
+			}
+			if m.currentSelection() == nil {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
+			}
+			m.active = mode.Detail
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
+			m.applyModeCycle(nextMode(m.active, m.lastBrowse))
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
+			m.applyModeCycle(prevMode(m.active, m.lastBrowse))
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
+			// If a dialog-open was in flight when ESC arrived, the guard has
+			// already been cleared at the top of this branch. Consume ESC as
+			// "cancel the pending open" and keep the current mode — do NOT pop
+			// Detail → Board (or Search → Board) while the load is in progress.
+			if hadPendingDialog {
+				return m, modeCmd
+			}
+			if m.active == mode.Detail {
+				m.active = m.lastBrowse
+				return m, modeCmd
+			}
+			if m.active == mode.Search {
+				m.active = mode.Board
+				m.lastBrowse = mode.Board
+				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			}
+			m.toast = m.toast.Hide()
+			return m, modeCmd
+		case m.keys.Match(config.ShellContext, config.ShellActionReloadDetail, msg):
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			if m.currentSelection() == nil {
+				return m, modeCmd
+			}
+			m.detail.Loading = true
+			m.detail.Error = ""
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
+			issueID, ok := m.selectedIssueID()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, prepareEditCmd(m.services, issueID))
+		case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationCreate, domain.IssueSummary{}))
+		case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
+			selection := m.currentSelection()
+			if selection == nil || selection.Issue.ID == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
+			}
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationUpdate, selection.Issue))
+		case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
+			selection := m.currentSelection()
+			if selection == nil || selection.Issue.ID == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
+			}
+			m.actionState = mutationDialogState{kind: mutationClose, issue: selection.Issue}
+			m.actionModal = mutationModal(m.actionState, m.keys)
+			m.actionModal.SetSize(m.width, m.height)
+			m.showActionModal = true
+			return m, batchCmds(modeCmd, m.actionModal.Init())
+		case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
+			selection := m.currentSelection()
+			if selection == nil || selection.Issue.ID == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
+			}
+			m.actionState = mutationDialogState{kind: mutationComment, issue: selection.Issue}
+			m.actionModal = mutationModal(m.actionState, m.keys)
+			m.actionModal.SetSize(m.width, m.height)
+			m.showActionModal = true
+			return m, batchCmds(modeCmd, m.actionModal.Init())
+		case m.keys.Match(config.ShellContext, config.ShellActionLaunchNvim, msg):
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			issueContext, ok := m.selectedIssueContext()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, launchActionCmd(m.services, "nvim", issueContext))
+		case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			issueContext, ok := m.selectedIssueContext()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, launchActionCmd(m.services, "opencode", issueContext))
+		case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
+			if m.active != mode.Detail {
+				return m, modeCmd
+			}
+			issueContext, ok := m.selectedIssueContext()
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, launchActionCmd(m.services, "shell-command", issueContext))
+		}
+	}
+
+	return m, modeCmd
+}
+
+// View renders the root shell.
+func (m Model) View() string {
+	// Suppress the very first render until the terminal has sent us its real
+	// dimensions via WindowSizeMsg. Without this guard the TUI emits a short
+	// frame (defaultViewportHeight lines) immediately on startup; when
+	// WindowSizeMsg then arrives the renderer produces a taller frame but only
+	// partially overwrites the first one, leaving stale column-top border rows
+	// visible above the correct render (task-manager-ui-o7tk).
+	if !m.sizeKnown {
+		return ""
+	}
+
+	if m.fatalErrTitle != "" {
+		return fatalerror.View(m.fatalErrTitle, m.fatalErrBody, m.width, m.height)
+	}
+
+	header := m.renderHeader()
+	body := m.renderBody()
+	footer := m.renderFooter()
+
+	view := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	if m.toast.Visible() {
+		view = m.toast.Overlay(view, m.width, m.height)
+	}
+	if m.showActionModal {
+		view = m.actionModal.Overlay(view)
+	}
+	if m.showHelp {
+		view = m.help.Overlay(view)
+	}
+
+	return view
+}
+
+func (m Model) currentSelection() *mode.Selection {
+	if m.lastBrowse != mode.Board && m.lastBrowse != mode.Search {
+		if m.active == mode.Board || m.active == mode.Search {
+			return m.selectedByMode[m.active]
+		}
+		return nil
+	}
+
+	if m.active == mode.Board || m.active == mode.Search {
+		return m.selectedByMode[m.active]
+	}
+
+	return m.selectedByMode[m.lastBrowse]
+}
+
+func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
+	selection := m.currentSelection()
+	if selection == nil || selection.Issue.ID == "" {
+		if m.active == mode.Detail {
+			m.detail = detailsmode.Model{}
+		}
+		return nil
+	}
+
+	m.detail.SelectionID = selection.Issue.ID
+	m.detail.SelectBrowserIssue(selection.Issue.ID)
+
+	if m.detail.Loading && m.detail.TargetID == selection.Issue.ID {
+		return nil
+	}
+	if !m.detail.Loading && m.detail.Detail.Summary.ID == selection.Issue.ID && m.detail.Error == "" && !m.shouldRefreshSurface(mode.Detail) {
+		return nil
+	}
+
+	// When the target issue changes (new selection, not just a refresh of the
+	// same issue), synchronously apply a placeholder detail BEFORE issuing the
+	// repository call so that scroll offsets reset immediately rather than waiting
+	// for the ShowIssue response.
+	previousID := strings.TrimSpace(m.detail.Detail.Summary.ID)
+	newID := selection.Issue.ID
+	if previousID != strings.TrimSpace(newID) {
+		// A board/search selection change supersedes any pending drill-focus sequence.
+		m.detail.ClearDrillFocus()
+		ref := domain.IssueReference{
+			ID:       selection.Issue.ID,
+			Title:    selection.Issue.Title,
+			Status:   selection.Issue.Status,
+			Type:     selection.Issue.Type,
+			Priority: selection.Issue.Priority,
+		}
+		m.detail.ApplyLoadedDetail(newID, detailsmode.PlaceholderDetail(newID, ref, true))
+	}
+
+	// Required: loadingStates() reads m.detail.Loading to drive the header spinner — do not remove.
+	m.detail.Loading = true
+	m.detail.Error = ""
+	m.detail.TargetID = selection.Issue.ID
+	return loadDetailCmd(m.services, selection.Issue.ID)
+}
+
+// headerSpinnerCell returns a fixed 2-cell string: the current braille spinner
+// glyph followed by a space when any surface is loading, or two literal spaces
+// when idle. Using a fixed-width cell keeps lipgloss.Width(headerLeft) invariant.
+func (m Model) headerSpinnerCell() string {
+	style := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
+	if len(m.loadingStates()) > 0 {
+		return style.Render(loading.Glyph(m.spinnerFrame) + " ")
+	}
+	return style.Render("  ")
+}
+
+func (m Model) renderHeader() string {
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render("Task Manager UI")
+
+	tab := func(id mode.ID, label string) string {
+		base := lipgloss.NewStyle().Padding(0, 1)
+		if m.active == id {
+			return base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true).Render(label)
+		}
+		return base.Foreground(styles.ShellTabInactiveColor).Render(label)
+	}
+
+	left := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		title,
+		m.headerSpinnerCell(),
+		tab(mode.Board, "Board"),
+		" ",
+		tab(mode.Search, "Search"),
+	)
+
+	context := lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(m.headerContext())
+	if m.width <= 0 {
+		return left
+	}
+
+	leftWidth := lipgloss.Width(left)
+	contextWidth := lipgloss.Width(context)
+	if leftWidth+1+contextWidth > m.width {
+		available := max(0, m.width-leftWidth-1)
+		if available <= 0 {
+			return left
+		}
+		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(styles.TruncateString(m.headerContext(), available))
+		contextWidth = lipgloss.Width(context)
+	}
+
+	spacer := strings.Repeat(" ", max(1, m.width-leftWidth-contextWidth))
+	return left + spacer + context
+}
+
+func (m Model) renderBody() string {
+	workspaceWidth, workspaceHeight := m.workspaceSize()
+	m.board.SetSize(workspaceWidth, workspaceHeight)
+	m.search.SetSize(workspaceWidth, workspaceHeight)
+	m.syncSearchPreviewDetailState()
+
+	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
+
+	if m.active == mode.Detail {
+		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false, skeletonPhase)
+	}
+
+	var browse string
+	if m.active == mode.Board {
+		browse = m.board.View(skeletonPhase)
+	} else {
+		browse = m.search.View(skeletonPhase)
+	}
+
+	return browse
+}
+
+func (m *Model) syncSearchPreviewDetailState() {
+	if m.search == nil {
+		return
+	}
+	session := m.search.SessionState()
+	if len(session.Page.Results) == 0 {
+		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
+		return
+	}
+	selection := m.selectedByMode[mode.Search]
+	if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
+		return
+	}
+
+	selectedID := strings.TrimSpace(selection.Issue.ID)
+	if m.detail.Loading && strings.TrimSpace(m.detail.TargetID) == selectedID {
+		m.search.SetSelectedDetail(domain.IssueDetail{}, true)
+		return
+	}
+	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.Loading && strings.TrimSpace(m.detail.Error) == "" {
+		m.search.SetSelectedDetail(m.detail.Detail, false)
+		return
+	}
+
+	m.search.SetSelectedDetail(domain.IssueDetail{}, false)
+}
+
+func (m Model) detailViewportHeight() int {
+	_, workspaceHeight := m.workspaceSize()
+	return workspaceHeight
+}
+
+func (m Model) detailViewportWidth() int {
+	workspaceWidth, _ := m.workspaceSize()
+	return workspaceWidth
+}
+
+func (m Model) workspaceSize() (int, int) {
+	workspaceWidth := max(1, m.width)
+	headerHeight := lipgloss.Height(m.renderHeader())
+	footerHeight := lipgloss.Height(m.renderFooter())
+	workspaceHeight := max(1, m.height-headerHeight-footerHeight)
+	return workspaceWidth, workspaceHeight
+}
+
+func (m Model) applyWorkspaceSizeToBrowseModes() {
+	workspaceWidth, workspaceHeight := m.workspaceSize()
+	m.board.SetSize(workspaceWidth, workspaceHeight)
+	m.search.SetSize(workspaceWidth, workspaceHeight)
+}
+
+func (m Model) renderFooter() string {
+	if !m.services.Config.UI.ShowModeSwitcherHelp {
+		return ""
+	}
+
+	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(footerHelpText(m.active, m.width, m.keys))
+}
+
+func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
+	m.toast = m.toast.Show(message, style)
+	// Tag the dismiss timer with this toast's identity so a stale timer from an
+	// earlier toast cannot dismiss the one now on screen (see DismissMsg handler).
+	return getToastDismissScheduler()(3*time.Second, m.toast.Seq())
+}
+
+func (m Model) boardIsLoading() bool {
+	if m.board == nil {
+		return false
+	}
+	return m.board.IsLoading()
+}
+
+func (m Model) searchIsLoading() bool {
+	if m.search == nil {
+		return false
+	}
+	return m.search.SessionState().Loading
+}
+
+func (m Model) searchResultCount() int {
+	if m.search == nil {
+		return 0
+	}
+	session := m.search.SessionState()
+	if session.Page.Metadata.ReturnedCount > 0 {
+		return session.Page.Metadata.ReturnedCount
+	}
+	return len(session.Page.Results)
+}
+
+func (m *Model) maybeAutoRefreshActiveSurfaceCmd() tea.Cmd {
+	return m.maybeAutoRefreshActiveSurfaceCmdWithPolicy(false)
+}
+
+func (m *Model) maybeAutoRefreshActiveSurfaceCmdOnFocusRegain() tea.Cmd {
+	return m.maybeAutoRefreshActiveSurfaceCmdWithPolicy(true)
+}
+
+func (m *Model) maybeAutoRefreshActiveSurfaceCmdWithPolicy(force bool) tea.Cmd {
+	if m.showHelp || m.showActionModal {
+		return nil
+	}
+	if m.focusKnown && !m.terminalFocused {
+		return nil
+	}
+	if !force && !m.shouldRefreshSurface(m.active) {
+		return nil
+	}
+	return m.refreshActiveSurfaceCmd()
+}
+
+func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
+	switch m.active {
+	case mode.Board:
+		if m.boardIsLoading() {
+			return nil
+		}
+		m.markSurfaceRefreshed(mode.Board)
+		return m.board.AutoRefresh()
+	case mode.Search:
+		if m.searchIsLoading() {
+			return nil
+		}
+		m.markSurfaceRefreshed(mode.Search)
+		return m.search.AutoRefresh()
+	case mode.Detail:
+		if m.detail.Loading {
+			return nil
+		}
+		selection := m.currentSelection()
+		if selection == nil || selection.Issue.ID == "" {
+			return nil
+		}
+		m.detail.SelectionID = selection.Issue.ID
+		m.detail.SelectBrowserIssue(selection.Issue.ID)
+		m.detail.Loading = true
+		m.detail.Error = ""
+		m.detail.TargetID = selection.Issue.ID
+		m.markSurfaceRefreshed(mode.Detail)
+		return loadDetailCmd(m.services, selection.Issue.ID)
+	default:
+		return nil
+	}
+}
+
+func (m *Model) markBrowseSurfacesDirty() {
+	m.markSurfaceDirty(mode.Board, mode.Search)
+}
+
+func (m *Model) markSurfaceDirty(surfaces ...mode.ID) {
+	if m.refreshStateBySurface == nil {
+		m.refreshStateBySurface = make(map[mode.ID]surfaceRefreshState)
+	}
+	for _, surface := range surfaces {
+		state := m.refreshStateBySurface[surface]
+		state.dirty = true
+		m.refreshStateBySurface[surface] = state
+	}
+}
+
+func (m *Model) markSurfaceRefreshed(surface mode.ID) {
+	if m.refreshStateBySurface == nil {
+		m.refreshStateBySurface = make(map[mode.ID]surfaceRefreshState)
+	}
+	state := m.refreshStateBySurface[surface]
+	state.dirty = false
+	state.lastRefresh = modelNow()
+	m.refreshStateBySurface[surface] = state
+}
+
+func (m *Model) shouldRefreshSurface(surface mode.ID) bool {
+	state, ok := m.refreshStateBySurface[surface]
+	if !ok {
+		return true
+	}
+	if state.dirty {
+		return true
+	}
+	if state.lastRefresh.IsZero() {
+		return true
+	}
+	return modelNow().Sub(state.lastRefresh) >= refreshTickInterval
+}
+
+func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
+	boardCmd := m.forwardBoardMessage(msg)
+	searchCmd := m.forwardSearchMessage(msg)
+	return batchCmds(boardCmd, searchCmd)
+}
+
+func (m *Model) forwardBoardMessage(msg tea.Msg) tea.Cmd {
+	if m.board == nil || !m.shouldForwardToBoard(msg) {
+		return nil
+	}
+	return m.board.Update(msg)
+}
+
+func (m *Model) forwardSearchMessage(msg tea.Msg) tea.Cmd {
+	if m.search == nil || !m.shouldForwardToSearch(msg) {
+		return nil
+	}
+	return m.search.Update(msg)
+}
+
+func (m Model) shouldForwardToBoard(msg tea.Msg) bool {
+	if _, isKey := msg.(tea.KeyMsg); isKey {
+		return m.active == mode.Board
+	}
+	return true
+}
+
+func (m Model) shouldForwardToSearch(msg tea.Msg) bool {
+	if _, isKey := msg.(tea.KeyMsg); isKey {
+		return m.active == mode.Search
+	}
+	return true
+}
+
+func batchCmds(cmds ...tea.Cmd) tea.Cmd {
+	filtered := make([]tea.Cmd, 0, len(cmds))
+	for _, cmd := range cmds {
+		if cmd != nil {
+			filtered = append(filtered, cmd)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	if len(filtered) == 1 {
+		return filtered[0]
+	}
+	return tea.Batch(filtered...)
+}
+
+// applyModeCycle switches the active mode to target while preserving the
+// invariant that lastBrowse is always a browse mode (Board or Search) —
+// currentSelection() and the Escape handler rely on it. Entering a browse mode
+// sets lastBrowse to it; entering Detail captures the browse mode we came from
+// (mirroring the explicit Detail handler) and otherwise leaves lastBrowse
+// untouched. The previous code did `lastBrowse = active` unconditionally, so
+// cycling into Detail (e.g. prevMode(Board) == Detail) set lastBrowse = Detail,
+// which made currentSelection() return nil (blank/stuck Detail view) and turned
+// Escape (active = lastBrowse) into a no-op.
+func (m *Model) applyModeCycle(target mode.ID) {
+	switch target {
+	case mode.Board, mode.Search:
+		m.active = target
+		m.lastBrowse = target
+	case mode.Detail:
+		if m.active == mode.Board || m.active == mode.Search {
+			m.lastBrowse = m.active
+		}
+		m.active = mode.Detail
+	default:
+		m.active = target
+	}
+}
+
+func nextMode(current mode.ID, lastBrowse mode.ID) mode.ID {
+	switch current {
+	case mode.Board:
+		return mode.Search
+	case mode.Search:
+		return mode.Board
+	case mode.Detail:
+		if lastBrowse == mode.Search {
+			return mode.Board
+		}
+		return mode.Search
+	default:
+		return mode.Board
+	}
+}
+
+func prevMode(current mode.ID, _ mode.ID) mode.ID {
+	switch current {
+	case mode.Board:
+		return mode.Detail
+	case mode.Search:
+		return mode.Board
+	case mode.Detail:
+		return mode.Search
+	default:
+		return mode.Search
+	}
+}
+
+func loadDetailCmd(services Services, issueID string) tea.Cmd {
+	return func() tea.Msg {
+		detail, err := services.Repo.Issue(context.Background(), issueID)
+		return detailLoadedMsg{issueID: issueID, detail: detail, err: err}
+	}
+}
+
+// prepareEditCmd runs the PrepareDocument phase in a goroutine. The result is
+// delivered as editIssuePreparedMsg; the model then returns tea.Exec to hand
+// terminal control to the editor process.
+func prepareEditCmd(services Services, issueID string) tea.Cmd {
+	return func() tea.Msg {
+		prepared, err := services.Editor.PrepareDocument(context.Background(), issueID)
+		return editIssuePreparedMsg{issueID: issueID, prepared: prepared, err: err}
+	}
+}
+
+// applyEditsCmd runs the ApplyEdits phase in a goroutine after the editor exits
+// cleanly (execErr == nil path). It reads the temp file, parses the document,
+// and calls UpdateIssue if there are changes. Temp-file cleanup is handled
+// inside ApplyEdits. On editor exec error the caller short-circuits before
+// reaching here, so no UpdateIssue call is possible from an error path.
+func applyEditsCmd(services Services, prepared launchereditor.Prepared) tea.Cmd {
+	return func() tea.Msg {
+		result, err := services.Editor.ApplyEdits(context.Background(), prepared.IssueID, prepared.Issue, prepared.TempPath)
+		if err != nil {
+			return editIssueResultMsg{issueID: prepared.IssueID, err: err}
+		}
+		return editIssueResultMsg{issueID: prepared.IssueID, updated: result.Updated}
+	}
+}
+
+func launchActionCmd(services Services, action string, issue domain.IssueDetail) tea.Cmd {
+	return func() tea.Msg {
+		err := services.Launcher.Launch(context.Background(), action, issue)
+		return launchActionResultMsg{action: action, err: err}
+	}
+}
+
+func (m Model) selectedIssueID() (string, bool) {
+	selection := m.currentSelection()
+	if selection == nil || selection.Issue.ID == "" {
+		return "", false
+	}
+
+	return selection.Issue.ID, true
+}
+
+func (m Model) selectedIssueContext() (domain.IssueDetail, bool) {
+	selection := m.currentSelection()
+	if selection == nil || selection.Issue.ID == "" {
+		return domain.IssueDetail{}, false
+	}
+
+	if m.detail.Detail.Summary.ID == selection.Issue.ID {
+		return m.detail.Detail, true
+	}
+
+	return domain.IssueDetail{Summary: selection.Issue}, true
+}
+
+func shellKeyHelp(keys config.ResolvedKeyBindings) string {
+	return strings.Join([]string{
+		"Mode switching:",
+		fmt.Sprintf("  %s = toggle Board/Search", keys.DisplayLabel(config.ShellContext, config.ShellActionToggleSearch)),
+		fmt.Sprintf("  %s = open selected issue detail", keys.DisplayLabel(config.ShellContext, config.ShellActionModeDetail)),
+		"",
+		"Selection:",
+		fmt.Sprintf("  Board: %s switch columns, %s move within a column", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
+		fmt.Sprintf("  Search: type query text, then Enter to search; %s focuses query; %s/%s switch panes; %s/%s moves query/results and result selection; %s/%s cycles focus", keys.DisplayLabel(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusRight), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveDown), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveUp), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusPrev)),
+		"",
+		"Actions:",
+		fmt.Sprintf("  %s = create issue (inline modal)", keys.DisplayLabel(config.ShellContext, config.ShellActionCreateIssue)),
+		fmt.Sprintf("  %s = update selected issue metadata", keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue)),
+		fmt.Sprintf("  %s = close selected issue", keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue)),
+		fmt.Sprintf("  %s = add comment to selected issue", keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue)),
+		fmt.Sprintf("  %s = edit selected issue in external editor", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
+		fmt.Sprintf("  %s/%s/%s = launch external tools (detail mode, background fire-and-forget)", keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchNvim), keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchOpencode), keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchShell)),
+		"  launcher actions do not provide in-app return/save handling",
+		fmt.Sprintf("  use %s for edit/save round-trip that reloads detail", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
+		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
+		fmt.Sprintf("  detail scroll: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
+		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
+		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
+		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
+		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
+		"",
+		"Detail presentation model (v1): dedicated detail mode",
+		"  - Board/Search prioritize overview triage density",
+		fmt.Sprintf("  - %s opens full issue detail view", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
+	}, "\n")
+}
+
+func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, second string) string {
+	left := keys.DisplayLabel(context, first)
+	right := keys.DisplayLabel(context, second)
+	if left == "" {
+		return right
+	}
+	if right == "" {
+		return left
+	}
+	return left + " or " + right
+}
+
+func (m Model) headerContext() string {
+	variants := m.headerContextVariants()
+	if len(variants) == 0 {
+		return ""
+	}
+
+	if m.width <= 0 {
+		return variants[0]
+	}
+
+	for _, v := range variants {
+		if lipgloss.Width(v) <= m.width/2 {
+			return v
+		}
+	}
+
+	return variants[len(variants)-1]
+}
+
+func (m Model) headerContextVariants() []string {
+	if m.active == mode.Detail {
+		id := strings.TrimSpace(m.detail.Detail.Summary.ID)
+		if id == "" {
+			id = strings.TrimSpace(m.detail.SelectionID)
+		}
+		status := strings.TrimSpace(m.detail.Detail.Summary.Status)
+		if id != "" && status != "" {
+			return []string{fmt.Sprintf("Detail: %s · %s", id, status), fmt.Sprintf("Detail: %s", id), "Detail"}
+		}
+		if id != "" {
+			return []string{fmt.Sprintf("Detail: %s", id), "Detail"}
+		}
+		return []string{"Detail"}
+	}
+
+	prefix := "Board"
+	if m.active == mode.Search {
+		prefix = fmt.Sprintf("Search: %d results", m.searchResultCount())
+	}
+
+	selectedLong, selectedShort := "Selected: none", "Sel: none"
+	if sel := m.currentSelection(); sel != nil {
+		selectedLong = fmt.Sprintf("Selected: %s (%s)", sel.Issue.ID, sel.Issue.Status)
+		selectedShort = fmt.Sprintf("Sel: %s", sel.Issue.ID)
+	}
+
+	loadingSummary := loading.Summary(m.loadingStates())
+	loadingShort := loadingSummary
+	if loadingSummary == "Idle" {
+		loadingShort = "idle"
+	}
+
+	variants := []string{
+		fmt.Sprintf("%s · %s · %s", prefix, selectedLong, loadingSummary),
+		fmt.Sprintf("%s · %s", prefix, selectedLong),
+		fmt.Sprintf("%s · %s · %s", prefix, selectedShort, loadingShort),
+		prefix,
+	}
+
+	if m.active == mode.Search {
+		variants = append(variants, []string{
+			fmt.Sprintf("Search · %s · %s", selectedLong, loadingSummary),
+			fmt.Sprintf("Search · %s", selectedShort),
+		}...)
+	}
+
+	return variants
+}
+
+func (m Model) loadingStates() []loading.State {
+	loadingStates := make([]loading.State, 0, 3)
+	if m.boardIsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeBoard})
+	}
+	if m.searchIsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
+	}
+	if m.detail.Loading {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID})
+	}
+	return loadingStates
+}
+
+func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) string {
+	if width < 90 {
+		switch active {
+		case mode.Search:
+			return fmt.Sprintf("Search: type+enter %s %s/%s %s %s %s", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusPrev), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown)+"/"+keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
+		case mode.Detail:
+			return fmt.Sprintf("Detail: %s/%s %s/%s %s/%s %s", keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionHome), keys.DisplayPrimary(config.DetailContext, config.DetailActionEnd), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
+		default:
+			return fmt.Sprintf("Board: %s %s %s %s %s %s", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+		}
+	}
+
+	switch active {
+	case mode.Search:
+		return fmt.Sprintf("Search: type + Enter query · %s focus · %s/%s switch panes · %s/%s query/results · %s detail · %s board", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusRight), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
+	case mode.Detail:
+		return fmt.Sprintf("Detail: %s/%s scroll · %s/%s page · %s/%s bounds · %s edit · %s back", keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionHome), keys.DisplayPrimary(config.DetailContext, config.DetailActionEnd), keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
+	default:
+		return fmt.Sprintf("Board: %s/%s columns · %s/%s issues · %s detail · %s search · %s help · %s quit", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+	}
+}
+
+func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
+	if !m.showHelp && !m.showActionModal {
+		return false
+	}
+	_, isKey := msg.(tea.KeyMsg)
+	return isKey
+}
+
+func loadMutationCatalogsCmd(services Services, kind mutationKind, issue domain.IssueSummary) tea.Cmd {
+	return func() tea.Msg {
+		catalogs, err := services.Repo.Catalogs(context.Background())
+		if err != nil {
+			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("catalogs: %w", err)}
+		}
+
+		return mutationCatalogsLoadedMsg{kind: kind, issue: issue, statuses: catalogs.Statuses, types: catalogs.Types, labels: catalogs.Labels}
+	}
+}
+
+func loadStatusCatalogForIssueCmd(services Services, issue domain.IssueSummary) tea.Cmd {
+	return func() tea.Msg {
+		catalogs, err := services.Repo.Catalogs(context.Background())
+		if err != nil {
+			return statusCatalogLoadedMsg{issue: issue, err: fmt.Errorf("status catalog: %w", err)}
+		}
+		return statusCatalogLoadedMsg{issue: issue, statuses: catalogs.Statuses}
+	}
+}
+
+func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) mutationDialogState {
+	statusNames := make(map[string]struct{}, len(statuses))
+	typeNames := make(map[string]struct{}, len(types))
+	labelNames := make(map[string]struct{}, len(labels))
+
+	statusList := make([]string, 0, len(statuses))
+	typeList := make([]string, 0, len(types))
+	labelList := make([]string, 0, len(labels))
+
+	for _, option := range statuses {
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			continue
+		}
+		statusNames[name] = struct{}{}
+		statusList = append(statusList, name)
+	}
+
+	for _, option := range types {
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			continue
+		}
+		typeNames[name] = struct{}{}
+		typeList = append(typeList, name)
+	}
+
+	for _, option := range labels {
+		name := strings.TrimSpace(option.Name)
+		if name == "" {
+			continue
+		}
+		labelNames[name] = struct{}{}
+		labelList = append(labelList, name)
+	}
+
+	return mutationDialogState{
+		kind:        kind,
+		issue:       issue,
+		statusNames: statusNames,
+		typeNames:   typeNames,
+		labelNames:  labelNames,
+		statusList:  strings.Join(statusList, ", "),
+		typeList:    strings.Join(typeList, ", "),
+		labelList:   strings.Join(labelList, ", "),
+	}
+}
+
+func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) modal.Model {
+	switch state.kind {
+	case mutationCreate:
+		return modal.NewWithKeys(modal.Config{
+			Title:       "Create Issue",
+			Message:     fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
+			ConfirmText: "Create",
+			MinWidth:    92,
+			Required:    false,
+			Inputs: []modal.InputConfig{
+				{Key: "title", Label: "Title", Placeholder: "Issue title"},
+				{Key: "type", Label: "Type", Placeholder: emptyFallback(state.typeList, "task")},
+				{Key: "priority", Label: "Priority", Placeholder: "0-4"},
+				{Key: "assignee", Label: "Assignee", Placeholder: "username"},
+				{Key: "labels", Label: "Labels", Placeholder: "comma,separated"},
+				{Key: "description", Label: "Description", Placeholder: "Short description"},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationUpdate:
+		return modal.NewWithKeys(modal.Config{
+			Title:       fmt.Sprintf("Update Issue %s", state.issue.ID),
+			Message:     fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
+			ConfirmText: "Update",
+			MinWidth:    92,
+			Required:    false,
+			Inputs: []modal.InputConfig{
+				{Key: "title", Label: "Title", Value: state.issue.Title, Placeholder: "Leave unchanged"},
+				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
+				{Key: "type", Label: "Type", Value: state.issue.Type, Placeholder: emptyFallback(state.typeList, state.issue.Type)},
+				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-4"},
+				{Key: "assignee", Label: "Assignee", Value: state.issue.Assignee, Placeholder: "username"},
+				{Key: "labels", Label: "Labels", Value: strings.Join(state.issue.Labels, ","), Placeholder: "comma,separated"},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationClose:
+		return modal.NewWithKeys(modal.Config{
+			Title:          fmt.Sprintf("Close Issue %s", state.issue.ID),
+			Message:        "Provide an optional close reason.",
+			ConfirmText:    "Close",
+			ConfirmVariant: modal.ButtonDanger,
+			Required:       false,
+			MinWidth:       72,
+			Inputs: []modal.InputConfig{
+				{Key: "reason", Label: "Reason", Placeholder: "completed"},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationComment:
+		return modal.NewWithKeys(modal.Config{
+			Title:       fmt.Sprintf("Comment on %s", state.issue.ID),
+			Message:     "Add a comment for the selected issue.",
+			ConfirmText: "Add comment",
+			Required:    false,
+			MinWidth:    72,
+			Inputs: []modal.InputConfig{
+				{Key: "body", Label: "Comment", Placeholder: "Comment text"},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationStatus:
+		return modal.NewWithKeys(modal.Config{
+			Title:         fmt.Sprintf("Update Status %s", state.issue.ID),
+			Message:       fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)")),
+			ConfirmText:   "Update",
+			MinWidth:      72,
+			Required:      true,
+			SubmitOnEnter: true,
+			Inputs: []modal.InputConfig{
+				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
+			},
+		}, modal.BindingsFromConfig(keys))
+	case mutationPriority:
+		return modal.NewWithKeys(modal.Config{
+			Title:         fmt.Sprintf("Update Priority %s", state.issue.ID),
+			Message:       "Set the issue priority (0-4).",
+			ConfirmText:   "Update",
+			MinWidth:      72,
+			Required:      true,
+			SubmitOnEnter: true,
+			Inputs: []modal.InputConfig{
+				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-4"},
+			},
+		}, modal.BindingsFromConfig(keys))
+	default:
+		return modal.NewWithKeys(modal.Config{Title: "Action", Message: "Unsupported action", Required: false}, modal.BindingsFromConfig(keys))
+	}
+}
+
+func submitMutationCmd(services Services, state mutationDialogState, values map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		switch state.kind {
+		case mutationCreate:
+			title := strings.TrimSpace(values["title"])
+			if title == "" {
+				return mutationResultMsg{kind: mutationCreate, err: fmt.Errorf("create issue failed: title is required")}
+			}
+
+			priority, err := parsePriority(values["priority"])
+			if err != nil {
+				return mutationResultMsg{kind: mutationCreate, err: fmt.Errorf("create issue failed: %w", err)}
+			}
+
+			labels := parseCommaList(values["labels"])
+			result, err := services.Repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+				Title:       title,
+				Description: strings.TrimSpace(values["description"]),
+				Type:        strings.TrimSpace(values["type"]),
+				Priority:    priority,
+				Assignee:    strings.TrimSpace(values["assignee"]),
+				Labels:      labels,
+			})
+			if err != nil {
+				return mutationResultMsg{kind: mutationCreate, err: fmt.Errorf("create issue failed: %w", err)}
+			}
+
+			return mutationResultMsg{kind: mutationCreate, createdID: result.IssueID}
+		case mutationUpdate:
+			status := strings.TrimSpace(values["status"])
+			if status != "" {
+				if _, ok := state.statusNames[status]; len(state.statusNames) > 0 && !ok {
+					return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: unknown status %q", status)}
+				}
+			}
+
+			issueType := strings.TrimSpace(values["type"])
+			if issueType != "" {
+				if _, ok := state.typeNames[issueType]; len(state.typeNames) > 0 && !ok {
+					return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: unknown type %q", issueType)}
+				}
+			}
+
+			priority, err := parseRequiredPriority(values["priority"])
+			if err != nil {
+				return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: %w", err)}
+			}
+
+			labels := parseCommaList(values["labels"])
+			for _, label := range labels {
+				if _, ok := state.labelNames[label]; len(state.labelNames) > 0 && !ok {
+					return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: unknown label %q", label)}
+				}
+			}
+
+			title := strings.TrimSpace(values["title"])
+			assignee := strings.TrimSpace(values["assignee"])
+			input := domain.UpdateIssueInput{}
+			if title != "" {
+				input.Title = &title
+			}
+			if status != "" {
+				input.Status = &status
+			}
+			if issueType != "" {
+				input.Type = &issueType
+			}
+			if priority != nil {
+				input.Priority = priority
+			}
+			// Diff against the original assignee rather than gating on non-empty, so
+			// clearing the pre-filled field unassigns the issue (sends Assignee=""),
+			// instead of being silently treated as "no change".
+			if assignee != strings.TrimSpace(state.issue.Assignee) {
+				input.Assignee = &assignee
+			}
+			if len(labels) > 0 {
+				input.Labels = labels
+			} else {
+				input.ClearLabels = true
+			}
+
+			if err := services.Repo.UpdateIssue(context.Background(), state.issue.ID, input); err != nil {
+				return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID, err: fmt.Errorf("update issue failed: %w", err)}
+			}
+
+			return mutationResultMsg{kind: mutationUpdate, issueID: state.issue.ID}
+		case mutationClose:
+			reason := strings.TrimSpace(values["reason"])
+			if err := services.Repo.CloseIssue(context.Background(), state.issue.ID, domain.CloseIssueInput{Reason: reason}); err != nil {
+				return mutationResultMsg{kind: mutationClose, issueID: state.issue.ID, err: fmt.Errorf("close issue failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationClose, issueID: state.issue.ID}
+		case mutationComment:
+			body := strings.TrimSpace(values["body"])
+			if body == "" {
+				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: body is required")}
+			}
+			if err := services.Repo.AddComment(context.Background(), state.issue.ID, domain.AddCommentInput{Body: body}); err != nil {
+				return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID, err: fmt.Errorf("add comment failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationComment, issueID: state.issue.ID}
+		case mutationStatus:
+			status := strings.TrimSpace(values["status"])
+			if status == "" {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: status is required")}
+			}
+			if _, ok := state.statusNames[status]; len(state.statusNames) > 0 && !ok {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: unknown status %q", status)}
+			}
+			if status == strings.TrimSpace(state.issue.Status) {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, noChange: true}
+			}
+
+			if err := services.Repo.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Status: &status}); err != nil {
+				return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID, err: fmt.Errorf("update status failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationStatus, issueID: state.issue.ID}
+		case mutationPriority:
+			priority, err := parseRequiredPriority(values["priority"])
+			if err != nil {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
+			}
+			if priority == nil {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: priority is required")}
+			}
+			// Range (0..4) is enforced by parseRequiredPriority above.
+			if *priority == state.issue.Priority {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, noChange: true}
+			}
+
+			if err := services.Repo.UpdateIssue(context.Background(), state.issue.ID, domain.UpdateIssueInput{Priority: priority}); err != nil {
+				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: %w", err)}
+			}
+			return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID}
+		default:
+			return mutationResultMsg{kind: state.kind, issueID: state.issue.ID, err: fmt.Errorf("unsupported mutation action")}
+		}
+	}
+}
+
+func parseCommaList(value string) []string {
+	parts := strings.Split(value, ",")
+	labels := make([]string, 0, len(parts))
+	for _, part := range parts {
+		label := strings.TrimSpace(part)
+		if label == "" {
+			continue
+		}
+		labels = append(labels, label)
+	}
+	return labels
+}
+
+func parsePriority(value string) (*int, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("priority must be an integer")
+	}
+	if parsed < 0 || parsed > 4 {
+		return nil, fmt.Errorf("priority must be between 0 and 4")
+	}
+
+	return &parsed, nil
+}
+
+func parseRequiredPriority(value string) (*int, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, fmt.Errorf("priority is required")
+	}
+
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("priority must be an integer")
+	}
+	if parsed < 0 || parsed > 4 {
+		return nil, fmt.Errorf("priority must be between 0 and 4")
+	}
+
+	return &parsed, nil
+}
+
+// modeLogger derives a component-scoped logger for a mode.
+// When logger is nil, modeLogger returns nil so that each mode can fall back to
+// slog.Default() as usual.  When logger is non-nil it appends exactly one
+// "component" key — callers must NOT pre-attach "component" to the parent
+// logger they pass here (services.Logger must be the root logger, not a
+// component-scoped one).
+func modeLogger(logger *slog.Logger, component string) *slog.Logger {
+	if logger == nil {
+		return nil
+	}
+	return logger.With("component", component)
+}
+
+func emptyFallback(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}

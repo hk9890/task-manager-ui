@@ -1,0 +1,24 @@
+╭─ Dependencies ───────────── 3 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+│Blocked by (1)                  │  │F P1 IP tm-wide                                                   │  │  Core                          │
+│  T P1 B tm-1 Auth migration    │  │Wide layout sample                                                │  │  Type    : feature             │
+│                                │  │──────────────────────────────────────────────────────────────────│  │  Status  : in_progress         │
+│Blocks (1)                      │  │Description                                                       │  │  Priority: P1                  │
+│  D P2 O tm-2 Docs update       │  │Three column layout should render related rail on wide terminals. │  │  ------------------------------│
+│                                │  │                                                                  │  │  Counts                        │
+│Related (1)                     │  │Notes                                                             │  │  Comments  : 0                 │
+│  C P3 O tm-3 Renderer cleanup  │  │Inline related work section should be suppressed when rail is acti│  │  Blocked by: 1                 │
+│                                │  │ve.                                                               │  │  Blocks    : 1                 │
+│Children (0)                    │  │                                                                  │  │  Related   : 1                 │
+│(none)                          │  │                                                                  │  │  Children  : 0                 │
+│                                │  │                                                                  │  │                                │
+│Parent (1)                      │  │                                                                  │  │Quick actions                   │
+│› ? P0 - …parent Parent epic    │  │                                                                  │  │e Edit issue                    │
+│                                │  │                                                                  │  │u Update issue                  │
+│                                │  │                                                                  │  │a Add comment                   │
+│                                │  │                                                                  │  │x Close issue                   │
+│                                │  │                                                                  │  │r Reload detail                 │
+│                                │  │                                                                  │  │                                │
+│                                │  │                                                                  │  │                                │
+│                                │  │                                                                  │  │                                │
+│                                │  │                                                                  │  │                                │
+╰────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯

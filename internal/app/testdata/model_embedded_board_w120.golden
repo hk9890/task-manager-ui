@@ -1,0 +1,34 @@
+Task Manager UI   Board   Search                                                Board · Selected: bwf-2 (blocked) · Idle
+Default · cols 1-3/4
+╭─ Not Ready ──────────────────── 1 ─╮  ╭─ Ready ───────────────────────── 1 ─╮  ╭─ In Progress ─────────────────── 0 ─╮
+│› B P0 BLK bwf-2 Blocked bug for ...│  │  T P1 OPN bwf-1 Seed fixture root...│  │(no issues)                          │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+│                                    │  │                                     │  │                                     │
+╰────────────────────────────────────╯  ╰─────────────────────────────────────╯  ╰─────────────────────────────────────╯
+Board: h/l columns · j/k issues · enter detail · ctrl+space search · ? help · ctrl+q quit

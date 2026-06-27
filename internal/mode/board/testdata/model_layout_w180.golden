@@ -1,0 +1,34 @@
+Default
+╭─ Not Ready ───────────────────────── 2 ─╮  ╭─ Ready ───────────────────────────── 3 ─╮  ╭─ In Progress ──────────────────────── 3 ─╮  ╭─ Done ─────────────────────────────── 3 ─╮
+│› B P0 BLK tm-3 Blocked: API contract ...│  │  T P1 OPN tm-1 Ready fix login prompt   │  │  F P1 IP tm-2 Implement board keyboard...│  │  F P1 IP tm-2 Implement board keyboard...│
+│  T P1 BLK tm-9 Blocked: migration seq...│  │  T P2 OPN tm-5 Ready improve docs out...│  │  T P1 IP tm-7 Wire detail reload behavior│  │  T P1 IP tm-7 Wire detail reload behavior│
+│                                         │  │  C P2 OPN tm-6 Ready triage inbox       │  │  D P2 IP tm-8 Polish header help copy    │  │  D P2 IP tm-8 Polish header help copy    │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+│                                         │  │                                         │  │                                          │  │                                          │
+╰─────────────────────────────────────────╯  ╰─────────────────────────────────────────╯  ╰──────────────────────────────────────────╯  ╰──────────────────────────────────────────╯

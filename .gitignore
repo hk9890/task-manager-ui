@@ -1,0 +1,22 @@
+
+# Editor / agent local dirs
+.coder/
+.opencode/
+.idea/
+.claude/
+/taskmgr-ui
+coverage.out
+coverage-*.out
+dist/
+/load-test-report.json
+__pycache__/
+*.pyc
+
+# Temp/agent extraction dirs (must never be committed)
+.tmp-*/
+
+# Local dev task tracker — kept local, not published
+.tasks/
+
+# Local, non-shared working notes
+hako-private/

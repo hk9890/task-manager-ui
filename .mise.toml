@@ -1,0 +1,137 @@
+[tools]
+go = "1.26.3"
+"go:gotest.tools/gotestsum" = "1.13.0"
+"go:golang.org/x/tools/cmd/goimports" = "0.30.0"
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.1.6"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.1.4"
+
+[env]
+CGO_ENABLED = "0"
+
+[tasks.build]
+description = "Build the taskmgr-ui binary"
+run = """
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+go build -ldflags "-s -w \
+  -X github.com/hk9890/task-manager-ui/internal/version.Version=$VERSION \
+  -X github.com/hk9890/task-manager-ui/internal/version.Commit=$COMMIT \
+  -X github.com/hk9890/task-manager-ui/internal/version.Date=$DATE" \
+  ./cmd/taskmgr-ui
+"""
+
+[tasks.fmt]
+description = "Format Go source"
+run = "go fmt ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.lint]
+description = "Run golangci-lint at pinned version"
+run = "golangci-lint run --timeout=5m"
+
+[tasks.guardrails]
+description = "Architecture guardrails (fast)"
+run = "go test ./cmd/taskmgr-ui -run TestArchitectureGuardrails"
+
+[tasks.vuln]
+description = "Run govulncheck against the module (CVEs in deps + stdlib)"
+run = "govulncheck ./..."
+
+[tasks.test]
+description = "Unit tests (fast, no external deps)"
+run = "gotestsum --format pkgname-and-test-fails -- -race ./..."
+[tasks.test.env]
+CGO_ENABLED = "1"
+
+[tasks."test:integration"]
+description = "Integration tests (build tag: integration)"
+run = "gotestsum --format pkgname-and-test-fails -- -race -tags=integration ./..."
+[tasks."test:integration".env]
+CGO_ENABLED = "1"
+
+[tasks."test:coverage"]
+description = "Run unit+integration tests and enforce coverage threshold"
+run = """
+go test -race -tags=integration -coverprofile=coverage.out -covermode=atomic ./...
+COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+COVERAGE_INT=${COVERAGE%.*}
+echo "Total coverage: ${COVERAGE}% (threshold: ${COVERAGE_THRESHOLD:-75}%)"
+if [ "$COVERAGE_INT" -lt "${COVERAGE_THRESHOLD:-75}" ]; then
+  echo "FAIL: below threshold"; exit 1
+fi
+"""
+[tasks."test:coverage".env]
+CGO_ENABLED = "1"
+
+[tasks."test:all"]
+description = "Run unit + integration tests"
+depends = ["test", "test:integration"]
+
+[tasks."test:verbose"]
+description = "Unit tests with full per-test output (for debugging a hang or noisy failure)"
+run = "gotestsum --format standard-verbose -- -race ./..."
+[tasks."test:verbose".env]
+CGO_ENABLED = "1"
+
+[tasks."test:integration:verbose"]
+description = "Integration tests with full per-test output (=== RUN / --- PASS for every test)"
+run = "gotestsum --format standard-verbose -- -race -tags=integration ./..."
+[tasks."test:integration:verbose".env]
+CGO_ENABLED = "1"
+
+[tasks."scripts:check"]
+description = "Validate script syntax (shell + python)"
+dir = "{{config_root}}"
+run = '''
+find scripts -maxdepth 1 -name '*.sh' -print0 | xargs -0 --no-run-if-empty bash -n
+find scripts -maxdepth 1 -name '*.py' -print0 | xargs -0 python3 -m py_compile
+'''
+
+[tasks."quality:fast"]
+description = "Fast pre-commit gate (NO integration tests; ~15s)"
+depends = ["vet", "lint", "guardrails", "test"]
+
+[tasks.quality]
+description = "Full pre-handoff gate (includes integration tests; ~2min)"
+depends = ["vet", "lint", "guardrails", "test", "test:integration"]
+
+[tasks."fmt:check"]
+description = "Check formatting (goimports + go mod tidy)"
+run = """
+OUT=$(goimports -local github.com/hk9890/task-manager-ui -l cmd internal)
+if [ -n "$OUT" ]; then
+  echo "Files not formatted:"
+  echo "$OUT"
+  echo "Run: goimports -local github.com/hk9890/task-manager-ui -w cmd internal"
+  exit 1
+fi
+go mod tidy
+if ! git diff --exit-code go.mod go.sum; then
+  echo "go.mod/go.sum not tidy. Run 'go mod tidy' and commit."
+  exit 1
+fi
+"""
+
+[tasks."hooks:install"]
+description = "Install repo git hooks (one-time setup)"
+dir = "{{config_root}}"
+run = "git config core.hooksPath scripts/git-hooks"
+
+[tasks.taskmgr-ui]
+description = "Build taskmgr-ui and run interactively against the current project's .tasks store"
+dir = "{{config_root}}"
+run = """
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+go build -ldflags "-s -w \
+  -X github.com/hk9890/task-manager-ui/internal/version.Version=$VERSION \
+  -X github.com/hk9890/task-manager-ui/internal/version.Commit=$COMMIT \
+  -X github.com/hk9890/task-manager-ui/internal/version.Date=$DATE" \
+  -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
+/tmp/taskmgr-ui
+"""
