@@ -117,7 +117,6 @@ internal/
   ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, styles)
   testing/           # fakes and ui harness helpers
   version/           # build-time injected Version/Commit/Date symbols
-project-plan/        # product, architecture, and execution planning docs
 ```
 
 ## Core Architectural Rules
@@ -198,19 +197,19 @@ under Architectural boundaries.
 ## Donor Migration Rules (Perles → Task Manager UI)
 
 This section applies only to a maintainer performing the Perles migration with a
-local checkout of the donor repo; the paths below are maintainer-local and not
-part of this repository.
+local checkout of the donor repo; the paths below are relative to that local
+donor checkout and are not part of this repository.
 
-When adapting code from the donor repo (Perles, checked out locally — paths
-below assume `/home/hans/dev/github/perles`), prefer **small, isolated UI
+When adapting code from the donor repo (Perles, checked out locally; paths below
+are relative to the donor checkout root), prefer **small, isolated UI
 primitives** and keep imports local to rendering concerns.
 
 ### Allowed donor paths (UI primitive scope)
 
-- `/home/hans/dev/github/perles/internal/ui/shared/modal/`
-- `/home/hans/dev/github/perles/internal/ui/shared/toaster/`
-- `/home/hans/dev/github/perles/internal/ui/styles/`
-- `/home/hans/dev/github/perles/internal/ui/shared/overlay/` (only as a rendering helper used by UI primitives)
+- `internal/ui/shared/modal/`
+- `internal/ui/shared/toaster/`
+- `internal/ui/styles/`
+- `internal/ui/shared/overlay/` (only as a rendering helper used by UI primitives)
 
 Typical adapted local targets in this repo are `internal/ui/modal/`,
 `internal/ui/toaster/`, `internal/ui/styles/`, and `internal/ui/overlay/`.
@@ -305,4 +304,4 @@ pass local `mise run quality` and still fail CI on one of those, so also run
 - The initial lint pass is intentionally scoped to non-test packages
   (`run.tests: false`) to keep rollout conservative and signal high.
 
-See `project-plan/ARCHITECTURE.md` for the full architecture definition, interface contracts, and `project-plan/IMPLEMENTATION.md` for phase sequencing and donor reuse strategy.
+See `docs/OVERVIEW.md` for the architecture map and boundaries.

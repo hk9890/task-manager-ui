@@ -4,7 +4,6 @@ go = "1.26.3"
 "go:golang.org/x/tools/cmd/goimports" = "0.30.0"
 "go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.1.6"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.1.4"
-"github:hk9890/task-manager" = "0.4.0"
 
 [env]
 CGO_ENABLED = "0"

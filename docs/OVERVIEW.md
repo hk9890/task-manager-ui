@@ -64,9 +64,7 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 | `internal/ui/*` | Reusable rendering components and shared styles |
 | `internal/testing/*` | Repository fakes and UI test harnesses |
 | `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
-| `project-plan/` | Deeper product, architecture, and implementation planning docs |
-| `.tasks/` | On-disk task-manager store for the project's own dev issue tracking (file-based, managed by `taskmgr`; not a product data backend) |
-| `ai.package.yaml` | AI tooling package manifest — declares AI packages/skills used with this repo |
+| `.tasks/` | On-disk task-manager store for the project's own dev issue tracking (file-based, managed by `taskmgr`; local-only, not published) |
 
 ## Architectural boundaries
 
@@ -104,4 +102,3 @@ Rendering components live under `internal/ui/`:
 - `docs/CHANGE-WORKFLOW.md` — task-manager-first change landing and session completion workflow
 - `docs/RELEASING.md` — tag-triggered release process via GitHub Actions + GoReleaser
 - `docs/user-guide/key-bindings.md` — default operator keybindings
-- `project-plan/*.md` — deeper product/architecture/implementation intent kept as planning docs, not operator runbooks
