@@ -2,9 +2,8 @@
 
 ## Current diagnostics surface
 
-Runtime diagnostics are now centralized through `internal/logging` and used by
-`cmd/taskmgr-ui/main.go` plus the repository backend (the validating decorator in
-`internal/repository/validating.go`).
+Runtime diagnostics are centralized through `internal/logging` and used by
+`cmd/taskmgr-ui/main.go` at startup.
 
 - `stdout` remains the success surface for non-interactive `--help`, `--version`,
   `--print-config`, and `--check-config`
@@ -53,12 +52,11 @@ Structured records include at least:
 - `session_id`
 - `project_root`
 - `build_version`
-- component-specific fields such as `component` (for example `startup` or
-  `validating`)
+- component-specific fields such as `component` (for example `startup`)
 
 To attribute a session safely in a collected set of log files, use `session_id`
-together with `project_root` and `build_version`. Startup and repository records
-both inherit those root attributes automatically.
+together with `project_root` and `build_version`. Startup records inherit those
+root attributes automatically.
 
 ## `--debug` coverage
 
@@ -74,27 +72,8 @@ both inherit those root attributes automatically.
 The repository backend is in-process (the task-manager Go SDK,
 `github.com/hk9890/task-manager/sdk/tasks`); there is no external subprocess in
 the product data path and therefore no per-command argv/exit-code/duration
-execution trace. Repository diagnostics are limited to contract-violation
-warnings emitted by the validating decorator (see below).
-
-### Repository contract violations
-
-The validating decorator (`internal/repository/validating.go`) wraps the
-in-process backend and logs structural-invariant violations at `WARN` under the
-`validating` component:
-
-- WARN `"repository contract violation"` — carries the offending `method`, the
-  violated `rule`, and a `sample` of the bad value. The call is never failed;
-  the inner result is returned unchanged. Because `WARN` records mirror to
-  `stderr`, a contract violation is operator-visible even without `--debug`.
-
-Only the production task-manager backend is wrapped by the validating decorator;
-the `--repo=memory` (filestorage) backend is returned unwrapped and therefore
-emits no contract-violation diagnostics.
-
-In a healthy session no repository records are emitted at all — the in-process
-SDK is fast and the validating decorator is silent unless it detects a
-malformed return value.
+execution trace. The repository backend emits no diagnostic records of its own,
+so in a healthy session the diagnostics surface is startup-only.
 
 The startup debug stream also prints the run `session_id` once so operators can
 correlate stderr output with structured log records. This applies equally to
@@ -147,9 +126,8 @@ Effective capture destinations therefore include:
 
 ## Relevant code paths
 
-- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New` → `repository.NewValidating`)
+- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New`)
 - `internal/repository/taskmgr/` — in-process task-manager backend (the production repository); behavior tests live alongside it
-- `internal/repository/validating.go` — validating decorator; emits `"repository contract violation"` WARN records under the `validating` component
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
 
@@ -171,5 +149,5 @@ The active runtime path still does not provide:
 - metrics collection
 - tracing/span export
 
-Update this file when `internal/logging/`, `cmd/taskmgr-ui/main.go`, or
-`internal/repository/validating.go` changes the diagnostics contract.
+Update this file when `internal/logging/` or `cmd/taskmgr-ui/main.go` changes
+the diagnostics contract.

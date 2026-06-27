@@ -106,13 +106,13 @@ internal/
   app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
   config/            # runtime configuration model + defaults
   domain/            # Task Manager UI issue and dashboard models
-  repository/        # repository.Repository interface + Validating wrapper + shared errors/types
+  repository/        # repository.Repository interface + shared errors/types
   repository/taskmgr/   # production backend: in-process adapter over the task-manager Go SDK
   repository/memory/    # in-memory backend (loaded from a JSONL file via filestorage)
   repository/filestorage/  # JSONL load/save for the memory backend
   logging/           # central slog logging package used by runtime startup and repository tracing
   launcher/          # external editor and command launch actions
-  dashboard/         # dashboard metadata catalog (section IDs/titles) + provider interface + validation guardrails
+  dashboard/         # board column composition (Compose) from a DashboardData result
   mode/              # board/search/details feature models + shell message contracts
   ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, scroll, styles)
   testing/           # fakes and ui harness helpers
@@ -127,7 +127,7 @@ internal/
 
 3. **Repository is source-specific.** A `taskmgr.Repository` instance is bound to one task-manager store (one project directory). Federation is a future layer above repositories, not a change to the core interface.
 
-4. **Dashboard renderer and dashboard provider are separate.** The provider (`internal/dashboard`) is a metadata-only catalog: it returns section IDs and titles only. The board model owns repository query routing for each section (three parallel `Query` / `ReadyExplain` calls, fanned out after the provider responds). A file-backed provider can be added later by supplying section IDs and titles without touching the renderer or the board model's query logic.
+4. **Dashboard composition is centralized.** `internal/dashboard.Compose` turns a single `repository.DashboardData` result into the fixed board columns (`ColumnData`). The board model owns repository query routing and calls `Compose` to lay out the columns; the renderer stays independent of where the data came from.
 
 5. **Editor handoff is a first-class flow.** Rich issue editing opens `$EDITOR` rather than building complex inline forms.
 
@@ -174,8 +174,6 @@ internal/
 9. **Selection/detail sync is event-driven, not polled.** Browse modes emit `SelectionChangedMsg` when selection changes; app reacts by updating shared selection state and (when needed) issuing detail loads. Do not reintroduce polling-based synchronization loops.
 
 10. **Repository mapping is typed and operation-scoped.** `internal/repository/taskmgr` maps the SDK's typed model onto taskmgr-ui's domain types through explicit converters (see `convert.go`). Avoid `map[string]any`/generic map decoding paths for primary read flows.
-
-11. **Dashboard provider output must validate before rendering.** Board rendering consumes `dashboard.Definition` values only after `dashboard.ValidateDefinitions` checks. Validation enforces non-empty IDs, titles, and sections. Query payload validation is no longer enforced at the provider boundary; the board model owns repository query routing and validates query types internally.
 
 ## UI Rendering Conventions
 
