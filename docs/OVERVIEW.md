@@ -33,8 +33,8 @@ resolution behavior, see `docs/CODING.md`.
    `repository.Repository` via `constructRepository` in `cmd/taskmgr-ui/main.go`:
    for the default `taskmgr` backend it opens an in-process store with
    `tasks.Open(projectRoot)`, wraps it with
-   `repository/taskmgr.New(store, WithAuthor(...))`, and composes
-   `repository.NewValidating` on top (no caching layer).
+   `repository/taskmgr.New(store, WithAuthor(...))`, and uses that adapter
+   directly (no validating decorator, no caching layer).
 4. It builds shell services with `internal/app.NewServices(...)`.
 5. It starts the TUI with
    `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
@@ -53,11 +53,11 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 | `internal/app` | Root shell, mode lifecycle, selection/detail coordination |
 | `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
 | `internal/domain` | Issue, query, mutation, catalog, and error models |
-| `internal/repository` | `Repository` interface plus the `Validating` decorator and shared error/types helpers |
+| `internal/repository` | `Repository` interface and shared error/types helpers |
 | `internal/repository/taskmgr` | Production `repository.Repository` over the in-process task-manager SDK (`sdk/tasks`); maps the SDK's typed model onto taskmgr-ui domain types |
 | `internal/repository/memory` | In-memory `repository.Repository` for tests and `--repo memory`; backed by `internal/repository/filestorage` JSONL load/save |
 | `internal/logging` | Central slog-based logging package used by startup and repository code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
-| `internal/dashboard` | Built-in dashboard definitions and validation |
+| `internal/dashboard` | Board column composition (`Compose`) from a `DashboardData` result |
 | `internal/mode/*` | Board, search, and details feature-local state/controllers |
 | `internal/launcher` | External tool launch actions and process runner |
 | `internal/launcher/editor` | Rich issue editor handoff flow |
@@ -68,11 +68,11 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 
 ## Architectural boundaries
 
-- Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and wrapped in `repository.NewValidating` by default. There is no tracker-CLI subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
+- Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and used directly. There is no tracker-CLI subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
 - No direct SQL/database access and no orchestration/control-plane dependencies in the active `./cmd/taskmgr-ui` path; see `cmd/taskmgr-ui/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
-- Dashboard definitions have a `ValidateDefinitions` check exercised in tests; it is not wired into the live render path (see `internal/dashboard/definition.go`).
+- Dashboard columns are composed by `internal/dashboard.Compose` from a single `repository.DashboardData`; the board model owns query routing and calls `Compose`.
 
 ## UI component boundaries
 
