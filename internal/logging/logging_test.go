@@ -438,7 +438,7 @@ func TestGenerateSessionIDFallsBackToTimestampOnRandError(t *testing.T) {
 // TestSetStderrSuppressedBlocksStderrButNotPersistentLog verifies that
 // Manager.SetStderrSuppressed(true) prevents warn+ records from reaching
 // stderr while the persistent file sink continues to receive all records.
-// This is the regression guard for the alt-screen corruption bug (o7tk root
+// This is the regression guard for the alt-screen corruption bug (root
 // cause 2): if suppression is removed, the first and third assertions will
 // pass but the second will fail because the warn line appears on stderr again.
 func TestSetStderrSuppressedBlocksStderrButNotPersistentLog(t *testing.T) {
@@ -639,8 +639,8 @@ func decodeJSONLine(t *testing.T, line string) map[string]any {
 	return out
 }
 
-// TestConcurrentWritersProduceNoTornRecords is the reproducer for the rotation
-// race described in task-manager-ui-24is. It has two parts:
+// TestConcurrentWritersProduceNoTornRecords is the reproducer for the
+// concurrent log-rotation race. It has two parts:
 //
 // Part 1 — BEFORE (shared file, old behavior): two raw lumberjack.Logger
 // instances share the same file path with MaxSize=1 (1 MB). Each writes enough

@@ -1171,7 +1171,7 @@ func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
 }
 
 // TestSkeletonRenderDoesNotShowLiteralZeroOrNoneInCountsAndDeps is a regression
-// test for task-manager-ui-czkq.2: with state.Skeleton==true, the Counts panel
+// test for the skeleton-counts regression: with state.Skeleton==true, the Counts panel
 // must not render literal "0" values and the Dependencies pane must not render
 // "(none)" — both must use placeholder glyphs instead.
 func TestSkeletonRenderDoesNotShowLiteralZeroOrNoneInCountsAndDeps(t *testing.T) {
@@ -1520,7 +1520,7 @@ func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 }
 
 // TestContentBodySkeletonIsProseNotBoardRows verifies the AC for
-// task-manager-ui-6zvr: the Content body skeleton must NOT produce board
+// the Content body skeleton must NOT produce board
 // issue-row shapes (issuerow.RenderCompactSkeleton output) and must include at
 // least one blank-line gap separating prose blocks.
 //

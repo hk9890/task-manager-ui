@@ -1,7 +1,7 @@
 package board
 
 // render_regression_test.go — regression harness for the "doubled column-top
-// borders" and "frame-stacking" bug classes (task-manager-ui-o7tk).
+// borders" and "frame-stacking" bug classes.
 //
 // These tests operate on the board model directly (not via app.Model, since
 // internal/app imports internal/mode/board and a reverse import would be

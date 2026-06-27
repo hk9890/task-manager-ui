@@ -11,8 +11,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
-// These tests pin the fatal-error screen quit affordances surfaced by
-// task-manager-ui-znri.7. The fatal screen renders the no-task-store message and tells
+// These tests pin the fatal-error screen quit affordances. The fatal screen
+// renders the no-task-store message and tells
 // the user "Press q or ctrl+c to quit." — the shell-level keybinding for
 // ctrl+q (the documented global quit) is NOT honored on this screen today.
 //
@@ -67,16 +67,16 @@ func TestFatalErrorScreen_QKeyQuits(t *testing.T) {
 	}
 }
 
-// TestFatalErrorScreen_CtrlQQuits pins the real znri.7 claim: ctrl+q is
-// the documented global quit shortcut (docs/user-guide/key-bindings.md
+// TestFatalErrorScreen_CtrlQQuits pins the ctrl+q-is-global-quit claim:
+// ctrl+q is the documented global quit shortcut (docs/user-guide/key-bindings.md
 // "Shell / Global"). It must work on the fatal screen too.
 //
-// Regression guard for znri.7: ctrl+q must continue to quit the fatal screen.
+// Regression guard: ctrl+q must continue to quit the fatal screen.
 func TestFatalErrorScreen_CtrlQQuits(t *testing.T) {
 	m := enterFatalErrorState(t)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
 	if !isQuitCmd(cmd) {
-		t.Fatalf("expected ctrl+q to produce tea.Quit on fatal screen; got cmd=%v (znri.7)", cmd)
+		t.Fatalf("expected ctrl+q to produce tea.Quit on fatal screen; got cmd=%v", cmd)
 	}
 }
 

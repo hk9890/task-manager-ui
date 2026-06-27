@@ -3507,7 +3507,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 }
 
 // TestPendingDialogGuardStatusRaceEscCancelsOpen reproduces the async ESC race
-// for the Update Status dialog (task-manager-ui-j14c):
+// for the Update Status dialog:
 //   - Enter on the Status metadata row dispatches an async catalog-load Cmd and
 //     sets the pending-dialog guard.
 //   - ESC arrives before the catalog response → guard is cleared; ESC is
@@ -3600,7 +3600,7 @@ func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
 }
 
 // TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen reproduces the async ESC
-// race for the Create and Update mutation dialogs (task-manager-ui-j14c).
+// race for the Create and Update mutation dialogs.
 // Create dispatches with an empty IssueSummary (no issue ID), so the guard must
 // key on kind, not issue ID.
 //

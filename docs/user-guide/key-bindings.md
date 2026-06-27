@@ -10,7 +10,7 @@ overridden through runtime config.
 
 - `ctrl+q` — quit
 - `?` — toggle help
-- `ctrl+space` (`ctrl+@`) — toggle search mode
+- `ctrl+space` (`ctrl+@`) — toggle between board and search modes (from detail mode, returns to board)
 - `1` — switch to board mode
 - `2` — switch to search mode
 - `3` — switch to detail mode
@@ -35,6 +35,7 @@ overridden through runtime config.
 - `j`, `down` — move down within the current column
 - `enter`, `o` — open selected issue in detail mode
 - `r` — manually reload board data immediately
+- `>` — load more closed issues into the Done column (only active when the Done column is focused; configurable as the board `load_more` action)
 
 ## Search Mode
 

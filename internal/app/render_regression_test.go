@@ -78,8 +78,7 @@ func debugColumnTopReport(view string) string {
 // TestViewReturnsEmptyBeforeWindowSizeMsg verifies that View() returns an empty
 // string before any WindowSizeMsg has been received. This prevents Bubble Tea
 // from producing a short default-size first frame that the renderer cannot
-// fully overwrite when the taller post-resize frame is produced
-// (task-manager-ui-o7tk).
+// fully overwrite when the taller post-resize frame is produced.
 func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
@@ -117,8 +116,9 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 }
 
 // TestNoDoubledColumnHeadersAfterWindowSizeMsg is the primary regression test
-// for task-manager-ui-o7tk: taskmgr-ui produced TWO rows of column-top borders when a
-// tall terminal sent a WindowSizeMsg after the initial default-size render.
+// for the doubled-column-headers bug: taskmgr-ui produced TWO rows of
+// column-top borders when a tall terminal sent a WindowSizeMsg after the
+// initial default-size render.
 //
 // Sequence:
 //  1. Build model, send WindowSizeMsg{180, 60} — sizeKnown becomes true

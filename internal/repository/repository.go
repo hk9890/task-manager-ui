@@ -44,18 +44,18 @@ import (
 type DashboardOptions struct {
 	// ClosedLimit is the maximum number of recently-closed issues to include
 	// in DashboardData.Closed. ClosedLimit <= 0 means use the implementation
-	// default. Honored by the iwvm epic; ignored by all current impls.
+	// default. Honored by both the taskmgr and memory backends.
 	ClosedLimit int
 
 	// ClosedOffset is the page start index into the closed-issue list sorted
 	// ClosedAt DESC; combined with ClosedLimit forms a half-open window
 	// [offset, offset+limit). Default 0 = first page (existing behavior).
-	// All current implementations ignore this field; vtvb.2/.3/.4 add support.
+	// Honored by both the taskmgr and memory backends.
 	ClosedOffset int
 
 	// ForceFresh, when true, bypasses any cache fast-path and forces a
-	// full backing call. Honored by the caching layer (fbea epic); ignored
-	// by all current impls.
+	// full backing call. Currently ignored by all implementations; reserved
+	// for a future caching layer.
 	ForceFresh bool
 }
 
@@ -75,8 +75,9 @@ type Repository interface {
 	// opts.ClosedLimit <= 0 means use the implementation default.
 	// opts.ClosedOffset is the page start index (0 = first page).
 	// opts.ForceFresh = true bypasses any cache fast-path and forces a
-	// backing call. Note: current impls ignore all three fields. iwvm honors
-	// ClosedLimit; vtvb honors ClosedOffset; fbea honors ForceFresh.
+	// backing call. Note: ClosedLimit and ClosedOffset are honored by all
+	// current implementations; ForceFresh is currently ignored and reserved
+	// for a future caching layer.
 	Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error)
 
 	// Issue returns the full detail model for the issue identified by id.

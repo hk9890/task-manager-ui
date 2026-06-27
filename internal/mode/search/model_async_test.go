@@ -1,16 +1,16 @@
 package search
 
-// Controller-async contract tests for task-manager-ui-czkq.5.
+// Controller-async contract tests.
 //
 // These tests exercise the controller against a deliberately-delayed repository
-// so that async command overlap is exercised — the gap that hid czkq.4.
+// so that async command overlap is exercised — the gap that hid the Enter-drop bug.
 //
 // # Why a separate test tier
 //
 // The existing model_test.go helpers (pressAndResolve → ApplyControllerKeySequence)
 // synchronously drain every Cmd before the next key arrives. That means m.loading
 // is always false by the time the next key is processed, making the race window
-// that produced czkq.4 completely invisible.
+// that made the Enter-drop race window completely invisible.
 //
 // Here we use a goroutine-based driver: the search Cmd runs in a goroutine
 // (blocked inside DelayedFakeRepository.Search), while the test synchronously
@@ -57,8 +57,8 @@ import (
 //
 // Use InFlight to observe how many Search calls are currently blocked.
 //
-// Designed to be reusable for future detail-mode async contract tests (czkq.2
-// follow-up): it wraps any repository.Repository, not just memory.Repository.
+// Designed to be reusable for future detail-mode async contract tests
+// (follow-up work): it wraps any repository.Repository, not just memory.Repository.
 type DelayedFakeRepository struct {
 	inner repository.Repository
 
@@ -254,7 +254,7 @@ func (r *bdDefaultFilterRepo) Search(ctx context.Context, q domain.SearchIssuesQ
 // ---- controller-async contract tests ----
 
 // TestSearchControllerAsyncContracts is the parent test for the five
-// controller-async contract subtests (czkq.5). Each subtest exercises the
+// controller-async contract subtests. Each subtest exercises the
 // search controller against a DelayedFakeRepository to simulate real
 // tea.Program cadence: user events may arrive before a prior async Cmd
 // returns its Msg.
@@ -544,7 +544,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 	//
 	// Regression pin: if the model were to set Statuses: []string{"all"} in
 	// the SearchIssuesQuery it emits, this test would fail. Combined with the
-	// pendingDraft fix, this is the complete czkq.4 regression guard.
+	// pendingDraft fix, this is the complete regression guard.
 	t.Run("EmptyAutoInitDoesNotLeakClosedRowsUnderTypedDraft", func(t *testing.T) {
 		t.Parallel()
 
@@ -614,7 +614,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 
 		// Assert result-set content: the final page must not contain any closed
-		// issues. This is the direct symptom from czkq.4: when Enter was dropped
+		// issues. This is the direct symptom: when Enter was dropped
 		// and lean_reads forced --status all, the Init result (which included the
 		// closed issue) remained visible.
 		//

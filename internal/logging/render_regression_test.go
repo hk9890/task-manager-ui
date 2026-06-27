@@ -1,7 +1,7 @@
 package logging
 
 // render_regression_test.go — regression guard for the stderr-suppression fix
-// (task-manager-ui-o7tk, Bug B root cause).
+// (Bug B root cause).
 //
 // Root cause: when the app started, slog warn-level writes were mirrored to
 // stderr, which corrupted the alt-screen TTY because Bubble Tea does not expect
@@ -26,7 +26,7 @@ import (
 )
 
 // TestStderrSuppressionBlocksWarnDuringActiveSession is the regression guard
-// for the o7tk Bug B fix.  It verifies that Manager.SetStderrSuppressed(true)
+// for the stderr-suppression Bug B fix.  It verifies that Manager.SetStderrSuppressed(true)
 // fully silences slog warn-level writes to stderr.
 //
 // Failure condition: if suppression is removed or bypassed, the stderr buffer
@@ -62,7 +62,7 @@ func TestStderrSuppressionBlocksWarnDuringActiveSession(t *testing.T) {
 
 	// Regression assertion: if this fires, the suppression fix has been removed.
 	if strings.Contains(stderr.String(), "active-session-warn") {
-		t.Fatalf("regression (o7tk Bug B): warn reached stderr while suppressed — "+
+		t.Fatalf("regression (alt-screen suppression): warn reached stderr while suppressed — "+
 			"alt-screen TTY corruption would occur during an active Bubble Tea session; "+
 			"got %q", stderr.String())
 	}

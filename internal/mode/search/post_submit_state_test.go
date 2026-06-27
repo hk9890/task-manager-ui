@@ -11,7 +11,7 @@ import (
 )
 
 // TestSearchPostSubmitState_StaleMarkersClearedWhenAppliedQueryMatches pins
-// task-manager-ui-znri.6: after Enter is processed and a successful
+// After Enter is processed and a successful
 // searchLoadedMsg arrives, the rendered view must not still show the
 // "draft" / "stale" markers that are only meant to appear when the user's
 // typed draft differs from the last applied query.

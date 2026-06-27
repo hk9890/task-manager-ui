@@ -877,7 +877,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 }
 
 // TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn is the regression
-// test for task-manager-ui-2ev4.2: an issue with status=blocked and no dependency
+// test for this scenario: an issue with status=blocked and no dependency
 // blocker must appear in the Not Ready column.
 func TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn(t *testing.T) {
 	t.Parallel()
@@ -996,7 +996,7 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 
 // TestStartReloadManual_ForceFreshTrue verifies that startReload(refreshModeManual)
 // passes DashboardOptions{ForceFresh:true} to the repository. This is the
-// direct unit test for the r-key wiring (fbea.4 Defect #2).
+// direct unit test for the r-key wiring.
 func TestStartReloadManual_ForceFreshTrue(t *testing.T) {
 	t.Parallel()
 
@@ -1067,7 +1067,7 @@ func TestStartReloadAuto_ForceFreshFalse(t *testing.T) {
 	}
 }
 
-// --- Scroll-window tests (b38b.4) ---
+// --- Scroll-window tests ---
 
 // TestBoardModeScrollWindowAdvancesWithSelection verifies that pressing j×30
 // on a column with 80 rows (height=25, sectionItemCapacity=22) advances
@@ -1243,7 +1243,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	}
 }
 
-// --- Done column load-more tests (vtvb.6) ---
+// --- Done column load-more tests ---
 
 // loadMoreCapture is a minimal stub repository that records all Dashboard opts
 // and returns a configurable canned response for each call.
@@ -1532,7 +1532,7 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 	}
 }
 
-// --- Done column load-more reset tests (vtvb.7) ---
+// --- Done column load-more reset tests ---
 
 // TestDoneLoadMore_ManualReloadResetsToPage1 verifies that pressing r (manual
 // reload) while doneLoadedCount=85 resets the state and dispatches a Dashboard
@@ -1542,7 +1542,7 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 //
 // Audit note: the r key handler calls startReload(refreshModeManual) which
 // already resets doneLoadedCount=0 and doneLoadInFlight=false (lines 383-384
-// of model.go, vtvb.6). This test is the explicit regression guard for that
+// of model.go). This test is the explicit regression guard for that
 // path.
 func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	t.Parallel()
@@ -1722,7 +1722,7 @@ func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
 // TestDoneLoadMore_ForceFreshResetsState verifies that the ForceFresh path
 // (manual reload, r key) resets doneLoadedCount and doneLoadInFlight to zero
 // and dispatches with ClosedOffset=0 — the composite ForceFresh+ClosedOffset=0
-// contract that governs full cache-bypass + page-1 reload (vtvb.7).
+// contract that governs full cache-bypass + page-1 reload.
 //
 // This test is complementary to TestDoneLoadMore_ManualReloadResetsToPage1 and
 // focuses specifically on the ForceFresh+reset interaction rather than the

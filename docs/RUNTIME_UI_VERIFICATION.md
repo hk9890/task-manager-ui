@@ -13,6 +13,7 @@ Run these before tagging any release. They guard against visible UI artifacts.
 | `internal/mode/board/render_regression_test.go` | Frame-stacking regression guard — confirms expected border count per rendered board frame. |
 | `internal/mode/search/render_regression_test.go` | Frame-stacking regression guard for search mode. |
 | `internal/logging/render_regression_test.go` | Log-bleed regression guard — confirms log output does not bleed into rendered frames. |
+| `internal/app/render_regression_test.go` | Doubled-column-header / frame-stacking guard at the app composition level. |
 
 The `taskmgr` repository backend has its own behavior tests in `internal/repository/taskmgr` that confirm the in-process reads (counts, sort order, search) match the task-manager SDK.
 
@@ -74,7 +75,9 @@ Prefer repeatable `--step` instructions over blind delay chains.
 
 - `send-key:<KEY>`
 - `wait-for-text:<TEXT>[:timeout-ms]`
+- `wait-for-text-once:<TEXT>[:timeout-ms]`
 - `wait-for-no-text:<TEXT>[:timeout-ms]`
+- `sleep-ms:<MS>`
 - `checkpoint:<name>`
 
 Legacy `--steps delay:key,...` still works, but `--step` wait-based flows are the default for reliable mutation verification.
@@ -158,7 +161,7 @@ Add process-level automation only when a concrete bug class cannot be proven in-
 
 Raw stdout transcript capture alone is not enough proof for alt-screen rendering.
 
-## 5) Done-column closed-limit: resize-then-refresh (iwvm)
+## 5) Done-column closed-limit: resize-then-refresh
 
 **What this verifies:** `sectionItemCapacity()` scales linearly with terminal height — `N = height - 3` with no floor. Resizing the terminal and pressing `r` causes the Done column to fetch a different number of rows proportional to the new height.
 
@@ -196,7 +199,7 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 - `N` does not equal `height - 3`: `sectionItemCapacity()` may not be receiving the updated window size — check the `WindowSizeMsg` handler in `internal/mode/board/model.go`.
 - `M` equals `N` after resize: `ClosedTotal` is being computed after the limit slice instead of before. Check `internal/repository/memory/repository.go` and `internal/repository/taskmgr`.
 
-## 6) Board and details scroll-window visibility: EnsureVisible (b38b.4)
+## 6) Board and details scroll-window visibility: EnsureVisible
 
 **What this verifies:** After pressing `j` past the visible window boundary, the selected row stays visible (the `›` chevron remains on screen) and the column/pane header shows `N of M` to indicate the window is clipping the full list.
 
@@ -240,9 +243,9 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 - `›` disappears after pressing `j` past the viewport: `EnsureVisible` is not being called from `moveRow` (board) or `moveRelatedSelection` (details). Check `internal/mode/board/model.go` and `internal/mode/details/model.go`.
 - Header shows plain count instead of `N of M` when window clips: the `visibleCount < len(rows)` branch in `internal/ui/board/board.go:Render` is not triggered, or the deps pane header in `internal/ui/details/details.go` is not updated. Check the header logic in both renderers.
 
-## 7) Deep Done-column navigation: load-more pagination (vtvb)
+## 7) Deep Done-column navigation: load-more pagination
 
-**What this verifies:** Pressing `j` past the initial loaded slice in the Done column triggers incremental loads, the Done header N grows monotonically toward M, the `›` chevron stays visible throughout (b38b.4 contract), the `r` reload resets state correctly, and the final header format transitions from `N of M` to plain `N` once all issues are loaded.
+**What this verifies:** Pressing `j` past the initial loaded slice in the Done column triggers incremental loads, the Done header N grows monotonically toward M, the `›` chevron stays visible throughout (scroll-window visibility contract), the `r` reload resets state correctly, and the final header format transitions from `N of M` to plain `N` once all issues are loaded.
 
 **Pre-conditions:**
 
@@ -271,16 +274,16 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 6. Press `j` repeatedly past the loaded-slice boundary. Confirm:
    - The Done header N grows (e.g. `25 of 89` → `50 of 89` → `75 of 89`). M stays 89.
-   - The `›` chevron remains visible in the Done column next to the selected issue at all times (b38b.4 scroll-window contract — see §6).
-   - No double-loads: run with `--debug` and confirm at most one `loadMoreClosed` event per threshold crossing in the `[taskmgr-ui-debug]` trace (these are now in-process repository traces, not external tracker-CLI subprocess argv):
+   - The `›` chevron remains visible in the Done column next to the selected issue at all times (scroll-window contract — see §6).
+   - No double-loads: run with `--debug` and confirm at most one load-more event per threshold crossing in the persistent JSON log (during an interactive session stderr is suppressed, so debug output goes only to the persistent log — not a stderr redirect). The real log messages are `dispatching load-more for Done column` and `load-more suppressed`:
      ```bash
-     (cd /path/to/store && /tmp/taskmgr-ui --debug 2>/tmp/taskmgr-ui-debug.log)
-     # in another terminal: tail -f /tmp/taskmgr-ui-debug.log | grep loadMoreClosed
+     (cd /path/to/store && /tmp/taskmgr-ui --debug)
+     # in another terminal: tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-*.log | grep load-more
      ```
 
 7. Press `r` for manual reload. Confirm:
    - The Done header resets to the initial viewport-sized N (same as step 4).
-   - The selection returns to the top of the Done column (vtvb.7 contract).
+   - The selection returns to the top of the Done column (load-more reset contract).
 
 8. Press `j` repeatedly until Done header shows `89 of 89`. Then continue pressing `j` once more. Confirm:
    - The final header transitions from `89 of 89` to plain `89` (the `TotalIsExact` flip — see `internal/ui/board/board.go` header logic).
@@ -297,8 +300,8 @@ Raw stdout transcript capture alone is not enough proof for alt-screen rendering
 
 **Diagnostics on failure:**
 
-- `r` does not reset N to the initial value: check the `doneLoadedCount` reset path in `internal/mode/board/model.go` (vtvb.7).
-- N does not grow when scrolling deep: check the `loadMoreClosedCmd` dispatch threshold and the offset wiring in the `taskmgr` repository backend (vtvb.6).
-- Double-loads on a single threshold crossing: check the `doneLoadInFlight` guard (vtvb.8).
-- `›` chevron disappears after pressing `j` past the loaded slice: the b38b.4 `EnsureVisible` scroll-following logic has regressed — see §6 for the diagnostic steps.
+- `r` does not reset N to the initial value: check the `doneLoadedCount` reset path in `internal/mode/board/model.go`.
+- N does not grow when scrolling deep: check the `loadMoreClosedCmd` dispatch threshold and the offset wiring in the `taskmgr` repository backend.
+- Double-loads on a single threshold crossing: check the `doneLoadInFlight` guard.
+- `›` chevron disappears after pressing `j` past the loaded slice: the `EnsureVisible` scroll-following logic has regressed — see §6 for the diagnostic steps.
 - `89 of 89` never transitions to plain `89`: `TotalIsExact` is not being set when the last page is loaded, or the header renderer in `internal/ui/board/board.go` is not checking it.

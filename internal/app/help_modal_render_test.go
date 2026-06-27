@@ -9,8 +9,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 )
 
-// TestHelpModal_RenderedFrameHasClosingBottomBorder pins znri.5's visual
-// rendering claim: when the help modal is open the rendered View must
+// TestHelpModal_RenderedFrameHasClosingBottomBorder pins the visual rendering
+// claim: when the help modal is open the rendered View must
 // include a closing bottom border (`╰`) at the SAME column as the modal's
 // opening top border (`╭`). If only the top corner appears, the modal box
 // is unbounded and the underlying board renders through the lower portion.
@@ -18,8 +18,8 @@ import (
 // Tested at terminal widths that surfaced the bug during exploration:
 // 120x34 (the documented default) and 160x40.
 //
-// Regression guard for znri.5: if the closing border disappears again, this
-// test catches it before the bug ships.
+// Regression guard: if the closing border disappears again, this test catches
+// it before the bug ships.
 func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
 	for _, size := range []struct {
 		name          string

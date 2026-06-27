@@ -794,7 +794,7 @@ func TestModelApplyLoadedDetailWithoutParentGroupDefaultsSelectionToFirstDepende
 	}
 }
 
-// --- Tests for non-blocking loading UX (0x36.4) ---
+// --- Tests for non-blocking loading UX ---
 
 // TestColdStartViewRendersSkeleton verifies that when Loading=true and no prior
 // detail has been loaded (Summary.ID == ""), the view renders skeleton placeholders
@@ -887,7 +887,7 @@ func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 }
 
 // TestScrollResetOnIssueSwitchViaApplyLoadedDetail is the regression test for
-// task-manager-ui-db0z.7. It verifies that when the caller applies a placeholder
+// the scroll-reset-on-issue-switch fix. It verifies that when the caller applies a placeholder
 // detail synchronously on selection-change (mimicking what app/model.go does),
 // all three scroll offsets are immediately zeroed before the repository response
 // arrives.
@@ -1246,7 +1246,7 @@ func TestSelectBrowserIssue(t *testing.T) {
 	})
 }
 
-// --- Scroll-window tests (b38b.4) ---
+// --- Scroll-window tests ---
 
 // TestDetailsDependencyScrollOffsetAdvancesWithSelection verifies that pressing
 // j×15 on a Dependencies pane with 30 deps advances BrowserSelectedIndex to 15

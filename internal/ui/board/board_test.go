@@ -248,14 +248,14 @@ func TestSkeletonRows(t *testing.T) {
 // TestDoneColumnHeaderBadge verifies that the Done column renders the correct
 // header badge depending on whether the row list is truncated.
 //
-// After the scroll-window fix (b38b.4), the renderer shows "N of M" whenever
+// After the scroll-window fix, the renderer shows "N of M" whenever
 // the scroll window is smaller than the full row list — regardless of
 // TotalIsExact. The invariants are:
 //
 //   - When all rows fit in the window: show exact count, no "+" or "N of M".
 //   - When the window clips rows: show "N of M", never "75+".
 //
-// This covers the fix for bug task-manager-ui-2ev4.3: an exact closed-count
+// This covers the fix for a bug where an exact closed-count
 // was rendered as "75+" (lower-bound notation) because the row list was capped.
 func TestDoneColumnHeaderBadge(t *testing.T) {
 	t.Parallel()

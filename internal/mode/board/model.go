@@ -120,7 +120,7 @@ type Model struct {
 	doneLoadedCount int
 
 	// doneLoadInFlight is true while a loadMoreClosedCmd is outstanding.
-	// It prevents parallel load-more dispatches (ule7 pattern).
+	// It prevents parallel load-more dispatches.
 	doneLoadInFlight bool
 
 	// doneClosedTotal is the authoritative DB total from the last Dashboard
@@ -352,7 +352,7 @@ func (m *Model) AutoRefresh() tea.Cmd {
 func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that
 	// may not check IsLoading() at the call site. The call-site guards in the
-	// keyboard handler (5q6t.1) and AutoRefresh are the primary protection; this
+	// keyboard handler and AutoRefresh are the primary protection; this
 	// guard is a second line of defense so the invariant is maintained regardless
 	// of how startReload is called.
 	if m.inflight {
@@ -378,8 +378,8 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.refreshAnchor = anchor
 
 	// Reset load-more state before any new full reload so the next compose
-	// sets doneLoadedCount from scratch. vtvb.7 owns the "r resets page 1"
-	// test; this reset is the safety net for all reload modes.
+	// sets doneLoadedCount from scratch. This is the "r resets page 1"
+	// contract; this reset is the safety net for all reload modes.
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
 

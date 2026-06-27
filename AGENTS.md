@@ -28,7 +28,7 @@ Read `docs/MONITORING.md` for the centralized diagnostics surface, `--debug` beh
 
 ## Releases
 
-Read `docs/RELEASING.md` for the tag-triggered GitHub release flow backed by `.github/workflows/release.yml` and `.goreleaser.yaml`.
+Read `docs/RELEASING.md` for the manually dispatched (workflow_dispatch) GitHub release flow backed by `.github/workflows/release.yml` and `.goreleaser.yaml`.
 
 ## Change Workflow
 

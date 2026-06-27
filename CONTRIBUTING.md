@@ -12,7 +12,7 @@ provisions the pinned Go toolchain and dev tools from `.mise.toml`.
 mise install          # provision the toolchain and dev tools
 mise run build        # build the taskmgr-ui binary
 mise run test:all     # run the test suite
-mise run quality      # run the full pre-handoff quality gate (lint, vet, build, test)
+mise run quality      # run the full pre-handoff quality gate (vet, lint, guardrails, unit + integration tests (~2min))
 ```
 
 Run `mise tasks` to list every available task.
@@ -31,7 +31,10 @@ Run `mise tasks` to list every available task.
 
 1. Fork the repository and create a feature branch.
 2. Make your change with tests where behavior changes.
-3. Run `mise run quality` and ensure it passes.
+3. Run `mise run quality` and ensure it passes. Also run `mise run fmt:check`,
+   which `quality` does not cover but CI enforces, along with a coverage gate
+   (`mise run test:coverage`, threshold 69) — so a green `quality` alone does
+   not guarantee green CI.
 4. Open a pull request describing the change and its motivation. The
    [pull request template](./.github/PULL_REQUEST_TEMPLATE.md) lists the
    expected checklist.

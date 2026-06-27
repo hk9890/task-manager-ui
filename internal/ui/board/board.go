@@ -38,7 +38,7 @@ type Column struct {
 	// Loading is true while the column's data is being fetched. When Loading
 	// is true and Rows is empty, the renderer shows skeleton placeholder rows.
 	// When Loading is true and Rows is non-empty, stale rows are shown as-is
-	// (the global header spinner from 0x36.6 signals the in-flight state).
+	// (the global header spinner signals the in-flight state).
 	Loading bool
 	// Total is the number of issues in this column as reported by the repository.
 	// TotalIsExact is false when the rendered row list is truncated to a height
@@ -149,12 +149,12 @@ func Render(state State) string {
 		// (1) TotalIsExact=false (paginated column, e.g. Done with load-more):
 		//     show "loaded of total" — len(col.Rows) / col.Total — so the user
 		//     sees real pagination progress, not the window size. The chevron
-		//     visibility property (b38b.4) implicitly communicates window clip.
+		//     visibility property implicitly communicates window clip.
 		//
 		// (2) TotalIsExact=true and window clips (visibleCount < len(rows)):
 		//     show "visible of total" — visibleCount / col.Total — so the user
 		//     knows the rendered window is smaller than the loaded slice. This
-		//     is the b38b.4 honesty path for Ready / NotReady / InProgress.
+		//     is the honesty path for Ready / NotReady / InProgress.
 		//
 		// (3) TotalIsExact=true and everything fits: just col.Total.
 		var topRight string

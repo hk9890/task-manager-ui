@@ -8,7 +8,7 @@ import (
 
 // TestDashboardOptionsClosedOffsetField verifies that DashboardOptions has a
 // ClosedOffset int field and that its zero value is 0 (first page, existing
-// behavior). All implementations currently ignore the field; vtvb.2/.3/.4 add
+// behavior). All implementations currently ignore the field; future work will add
 // support.
 func TestDashboardOptionsClosedOffsetField(t *testing.T) {
 	// Zero value must be 0.

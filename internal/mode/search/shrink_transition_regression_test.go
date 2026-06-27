@@ -1,10 +1,10 @@
 package search
 
 // shrink_transition_regression_test.go — deterministic regression test for
-// task-manager-ui-uwmi: "Search results pane briefly shows stale rows below
+// "Search results pane briefly shows stale rows below
 // new results during async swap".
 //
-// # Root cause investigation (uwmi)
+// # Root cause investigation
 //
 // The two obvious hypotheses were falsified by code review and confirmed here:
 //
@@ -62,7 +62,7 @@ import (
 )
 
 // TestSearchShrinkTransition_NoStaleRowsInView is the primary regression pin for
-// task-manager-ui-uwmi.
+// the stale-row shrink transition regression.
 //
 // Sequence: seed 12 issues → init (large result set) → type narrow query →
 // submit → deliver small searchLoadedMsg (3 results) → assert View contains
@@ -145,7 +145,7 @@ func TestSearchShrinkTransition_NoStaleRowsInView(t *testing.T) {
 	// the old large-result rows would appear here and this assertion would fail.
 	if strings.Contains(viewSmall, "StaleRow") {
 		t.Errorf(
-			"REGRESSION (uwmi): View() contains stale 'StaleRow' titles after shrink transition.\n"+
+			"REGRESSION: View() contains stale 'StaleRow' titles after shrink transition.\n"+
 				"Expected: only NewRow titles and blank padding.\n"+
 				"View after small result delivery:\n%s",
 			viewSmall,
@@ -167,7 +167,7 @@ func TestSearchShrinkTransition_NoStaleRowsInView(t *testing.T) {
 	// FormSection padding keeps the height stable, so this should always hold.
 	if smallLines < largeLines {
 		t.Errorf(
-			"REGRESSION (uwmi): rendered frame SHRINKS after result-count reduction.\n"+
+			"REGRESSION: rendered frame SHRINKS after result-count reduction.\n"+
 				"Large result view: %d lines, Small result view: %d lines.\n"+
 				"A shorter frame leaves trailing stale terminal rows that Bubble Tea does not clear.",
 			largeLines, smallLines,

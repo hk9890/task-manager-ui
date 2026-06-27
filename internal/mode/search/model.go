@@ -369,7 +369,7 @@ func (m *Model) triggerSearchPreservingSelection() tea.Cmd {
 func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAnchor) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that
 	// may not check m.loading at the call site. The call-site guard in Reload()
-	// (5q6t.2) is the primary protection; this guard is a second line of defense
+	// is the primary protection; this guard is a second line of defense
 	// so the invariant is maintained regardless of how triggerSearchWithAnchor is called.
 	if m.loading {
 		m.logger.Debug("triggerSearchWithAnchor re-entry suppressed; search already in flight",

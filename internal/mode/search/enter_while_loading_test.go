@@ -1,6 +1,6 @@
 package search
 
-// Regression tests for task-manager-ui-czkq.4: "Search Enter never submits
+// Regression tests for "Search Enter never submits
 // draft; results stay stuck on prior auto-search ignoring the typed query".
 //
 // Root cause: when the user presses Enter while Init's empty-query search is
