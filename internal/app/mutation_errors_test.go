@@ -7,7 +7,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // errInjected is the sentinel used by all mutation error-injection tests.
@@ -36,7 +36,7 @@ func TestMutationUpdateRepositoryError(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
-	gw.SetError(repository.MethodUpdateIssue, errInjected)
+	gw.SetError(fakes.MethodUpdateIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
 
@@ -78,7 +78,7 @@ func TestMutationCloseRepositoryError(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
-	gw.SetError(repository.MethodCloseIssue, errInjected)
+	gw.SetError(fakes.MethodCloseIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
 
@@ -113,7 +113,7 @@ func TestMutationCommentRepositoryError(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
-	gw.SetError(repository.MethodAddComment, errInjected)
+	gw.SetError(fakes.MethodAddComment, errInjected)
 
 	services := newMutationErrorServices(t, gw)
 
@@ -149,7 +149,7 @@ func TestMutationStatusRepositoryError(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
-	gw.SetError(repository.MethodUpdateIssue, errInjected)
+	gw.SetError(fakes.MethodUpdateIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
 
@@ -187,7 +187,7 @@ func TestMutationPriorityRepositoryError(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
-	gw.SetError(repository.MethodUpdateIssue, errInjected)
+	gw.SetError(fakes.MethodUpdateIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
 

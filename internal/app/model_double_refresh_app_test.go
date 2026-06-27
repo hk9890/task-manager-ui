@@ -25,14 +25,14 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // countBoardRepositoryCalls counts calls to the board repository method (Dashboard).
 // The memory repo records a single MethodDashboard call per board refresh, unlike
 // FakeRepo which fanned out into 5 sub-calls (ReadyExplain + 3×Query + CountIssues).
 func countBoardRepositoryCalls(gw *appTestRepository, start int) int {
-	return gw.callCountSince(start, repository.MethodDashboard)
+	return gw.callCountSince(start, fakes.MethodDashboard)
 }
 
 // expandCmds recursively expands a tea.Cmd (which may return a BatchMsg) into

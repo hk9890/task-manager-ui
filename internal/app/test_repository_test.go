@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // appTestRepository bundles a memory repository (for seeding) and an
@@ -21,7 +22,7 @@ import (
 // repository.Repository via the embedded *ErrorInjectingRepository.
 type appTestRepository struct {
 	repo *memoryrepo.Repository
-	*repository.ErrorInjectingRepository
+	*fakes.ErrorInjectingRepository
 }
 
 // newTestRepository creates an appTestRepository with an empty memory repository.
@@ -29,12 +30,12 @@ func newTestRepository() *appTestRepository {
 	repo := memoryrepo.New()
 	return &appTestRepository{
 		repo:                     repo,
-		ErrorInjectingRepository: repository.NewErrorInjecting(repo),
+		ErrorInjectingRepository: fakes.NewErrorInjecting(repo),
 	}
 }
 
 // hasCall reports whether the given method appears in the recorded calls.
-func (g *appTestRepository) hasCall(m repository.Method) bool {
+func (g *appTestRepository) hasCall(m fakes.Method) bool {
 	for _, c := range g.ErrorInjectingRepository.Calls() {
 		if c.Method == m {
 			return true
@@ -46,7 +47,7 @@ func (g *appTestRepository) hasCall(m repository.Method) bool {
 // callCountSince returns the number of calls to method m recorded after
 // index start (inclusive). Use len(g.Calls()) as the start marker before an
 // action to measure only the calls produced by that action.
-func (g *appTestRepository) callCountSince(start int, m repository.Method) int {
+func (g *appTestRepository) callCountSince(start int, m fakes.Method) int {
 	all := g.ErrorInjectingRepository.Calls()
 	n := 0
 	for i := start; i < len(all); i++ {
@@ -58,31 +59,31 @@ func (g *appTestRepository) callCountSince(start int, m repository.Method) int {
 }
 
 // hasDashboardCall reports whether a Dashboard call appears in the recorded calls.
-func (g *appTestRepository) hasDashboardCall() bool { return g.hasCall(repository.MethodDashboard) }
+func (g *appTestRepository) hasDashboardCall() bool { return g.hasCall(fakes.MethodDashboard) }
 
 // hasIssueCall reports whether an Issue (detail fetch) call appears.
-func (g *appTestRepository) hasIssueCall() bool { return g.hasCall(repository.MethodIssue) }
+func (g *appTestRepository) hasIssueCall() bool { return g.hasCall(fakes.MethodIssue) }
 
 // hasSearchCall reports whether a Search call appears.
-func (g *appTestRepository) hasSearchCall() bool { return g.hasCall(repository.MethodSearch) }
+func (g *appTestRepository) hasSearchCall() bool { return g.hasCall(fakes.MethodSearch) }
 
 // hasUpdateIssueCall reports whether an UpdateIssue call appears.
-func (g *appTestRepository) hasUpdateIssueCall() bool { return g.hasCall(repository.MethodUpdateIssue) }
+func (g *appTestRepository) hasUpdateIssueCall() bool { return g.hasCall(fakes.MethodUpdateIssue) }
 
 // hasCatalogsCall reports whether a Catalogs call appears.
-func (g *appTestRepository) hasCatalogsCall() bool { return g.hasCall(repository.MethodCatalogs) }
+func (g *appTestRepository) hasCatalogsCall() bool { return g.hasCall(fakes.MethodCatalogs) }
 
 // hasCreateIssueCall reports whether a CreateIssue call appears.
-func (g *appTestRepository) hasCreateIssueCall() bool { return g.hasCall(repository.MethodCreateIssue) }
+func (g *appTestRepository) hasCreateIssueCall() bool { return g.hasCall(fakes.MethodCreateIssue) }
 
 // hasCloseIssueCall reports whether a CloseIssue call appears.
-func (g *appTestRepository) hasCloseIssueCall() bool { return g.hasCall(repository.MethodCloseIssue) }
+func (g *appTestRepository) hasCloseIssueCall() bool { return g.hasCall(fakes.MethodCloseIssue) }
 
 // hasAddCommentCall reports whether an AddComment call appears.
-func (g *appTestRepository) hasAddCommentCall() bool { return g.hasCall(repository.MethodAddComment) }
+func (g *appTestRepository) hasAddCommentCall() bool { return g.hasCall(fakes.MethodAddComment) }
 
 // hasHealthCheckCall reports whether a HealthCheck call appears.
-func (g *appTestRepository) hasHealthCheckCall() bool { return g.hasCall(repository.MethodHealthCheck) }
+func (g *appTestRepository) hasHealthCheckCall() bool { return g.hasCall(fakes.MethodHealthCheck) }
 
 // seedSearchResult seeds an issue so it will be found by the memory repo's
 // text-matching search. The issue must have the search term in title,
@@ -99,7 +100,7 @@ func (g *appTestRepository) callCount() int { return len(g.ErrorInjectingReposit
 func (g *appTestRepository) resetMark() int { return len(g.ErrorInjectingRepository.Calls()) }
 
 // hasCallSince reports whether method m was called after the given mark.
-func (g *appTestRepository) hasCallSince(mark int, m repository.Method) bool {
+func (g *appTestRepository) hasCallSince(mark int, m fakes.Method) bool {
 	return g.callCountSince(mark, m) > 0
 }
 

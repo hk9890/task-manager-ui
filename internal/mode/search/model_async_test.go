@@ -13,7 +13,7 @@ package search
 // that made the Enter-drop race window completely invisible.
 //
 // Here we use a goroutine-based driver: the search Cmd runs in a goroutine
-// (blocked inside DelayedFakeRepository.Search), while the test synchronously
+// (blocked inside fakes.DelayingRepository.Search), while the test synchronously
 // sends additional key presses to the model. Release() unblocks the goroutine,
 // which returns the Msg to the model for processing. This matches real tea.Program
 // cadence: user events can arrive before a prior async Cmd returns its Msg.
@@ -34,7 +34,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,123 +41,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
-
-// ---- DelayedFakeRepository ----
-
-// DelayedFakeRepository wraps a repository.Repository and blocks every call to
-// Search until Release (or ReleaseAll) is called. All other methods are
-// delegated immediately.
-//
-// The blocking mechanism uses a channel gate: each in-flight Search call waits
-// for a value to be sent on the release channel before proceeding. Release
-// unblocks exactly one in-flight call; ReleaseAll unblocks all current and
-// future calls by closing the channel.
-//
-// Use InFlight to observe how many Search calls are currently blocked.
-//
-// Designed to be reusable for future detail-mode async contract tests
-// (follow-up work): it wraps any repository.Repository, not just memory.Repository.
-type DelayedFakeRepository struct {
-	inner repository.Repository
-
-	mu       sync.Mutex
-	release  chan struct{} // current gate; each value released unblocks one call
-	released bool          // true once ReleaseAll has been called (close)
-	inFlight atomic.Int64  // count of Search calls currently inside the blocked wait
-}
-
-// NewDelayedRepository creates a DelayedFakeRepository wrapping inner.
-// Calls to Search block until Release() or ReleaseAll() is invoked.
-func NewDelayedRepository(inner repository.Repository) *DelayedFakeRepository {
-	return &DelayedFakeRepository{
-		inner:   inner,
-		release: make(chan struct{}, 64), // buffer so Release() never blocks the test goroutine
-	}
-}
-
-// Release unblocks exactly one in-flight Search call (or permits one future
-// Search call to pass through immediately).
-func (d *DelayedFakeRepository) Release() {
-	d.mu.Lock()
-	if d.released {
-		d.mu.Unlock()
-		return
-	}
-	d.mu.Unlock()
-	d.release <- struct{}{}
-}
-
-// ReleaseAll unblocks all current and future Search calls by closing the gate
-// channel. After ReleaseAll, any subsequent Search call returns immediately.
-func (d *DelayedFakeRepository) ReleaseAll() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if !d.released {
-		d.released = true
-		close(d.release)
-	}
-}
-
-// InFlight returns the number of Search calls currently blocked inside the gate.
-func (d *DelayedFakeRepository) InFlight() int {
-	return int(d.inFlight.Load())
-}
-
-// Search implements repository.Repository. It blocks until Release or
-// ReleaseAll is called, then delegates to the inner repository.
-func (d *DelayedFakeRepository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	d.inFlight.Add(1)
-	defer d.inFlight.Add(-1)
-
-	// Block until released, or context cancels.
-	select {
-	case <-ctx.Done():
-		return domain.SearchResultPage{}, ctx.Err()
-	case _, ok := <-d.release:
-		if !ok {
-			// Channel closed (ReleaseAll) — pass through immediately.
-		}
-	}
-
-	return d.inner.Search(ctx, query)
-}
-
-// Delegate all non-Search methods to the inner repository.
-
-func (d *DelayedFakeRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
-	return d.inner.Dashboard(ctx, opts)
-}
-
-func (d *DelayedFakeRepository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
-	return d.inner.Issue(ctx, id)
-}
-
-func (d *DelayedFakeRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return d.inner.CreateIssue(ctx, input)
-}
-
-func (d *DelayedFakeRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
-	return d.inner.UpdateIssue(ctx, id, input)
-}
-
-func (d *DelayedFakeRepository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
-	return d.inner.CloseIssue(ctx, id, input)
-}
-
-func (d *DelayedFakeRepository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
-	return d.inner.AddComment(ctx, id, input)
-}
-
-func (d *DelayedFakeRepository) HealthCheck(ctx context.Context) error {
-	return d.inner.HealthCheck(ctx)
-}
-
-func (d *DelayedFakeRepository) Catalogs(ctx context.Context) (repository.Catalogs, error) {
-	return d.inner.Catalogs(ctx)
-}
-
-var _ repository.Repository = (*DelayedFakeRepository)(nil)
 
 // ---- queryRecordingRepo ----
 
@@ -191,7 +75,7 @@ func (r *queryRecordingRepo) Queries() []domain.SearchIssuesQuery {
 // erroringSearchRepo wraps a repository.Repository and forces every Search call
 // to return err (delegating all other methods). It drives the searchLoadedMsg
 // ERROR branch through the real repository seam — combined with
-// DelayedFakeRepository it produces a genuine in-flight search that resolves
+// fakes.DelayingRepository it produces a genuine in-flight search that resolves
 // with an error, exactly as a failing backend would.
 type erroringSearchRepo struct {
 	repository.Repository
@@ -255,7 +139,7 @@ func (r *bdDefaultFilterRepo) Search(ctx context.Context, q domain.SearchIssuesQ
 
 // TestSearchControllerAsyncContracts is the parent test for the five
 // controller-async contract subtests. Each subtest exercises the
-// search controller against a DelayedFakeRepository to simulate real
+// search controller against a fakes.DelayingRepository to simulate real
 // tea.Program cadence: user events may arrive before a prior async Cmd
 // returns its Msg.
 func TestSearchControllerAsyncContracts(t *testing.T) {
@@ -277,7 +161,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "bug beta", Status: "open", Type: "bug", Priority: 2})
 		inner.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 3})
 
-		delayed := NewDelayedRepository(inner)
+		delayed := fakes.NewDelayedSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -358,7 +242,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "bar issue", Status: "open", Type: "task", Priority: 2})
 		inner.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "unrelated", Status: "open", Type: "task", Priority: 3})
 
-		delayed := NewDelayedRepository(inner)
+		delayed := fakes.NewDelayedSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -445,7 +329,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner := memoryrepo.New()
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task thing", Status: "open", Type: "task", Priority: 1})
 
-		delayed := NewDelayedRepository(inner)
+		delayed := fakes.NewDelayedSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -493,7 +377,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner := memoryrepo.New()
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task item", Status: "open", Type: "task", Priority: 1})
 
-		delayed := NewDelayedRepository(inner)
+		delayed := fakes.NewDelayedSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -557,7 +441,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// result-set content (no closed issues in the final page).
 		filtered := &bdDefaultFilterRepo{Repository: inner}
 		recording := &queryRecordingRepo{Repository: filtered}
-		delayed := NewDelayedRepository(recording)
+		delayed := fakes.NewDelayedSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -653,7 +537,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Stack: inner → erroring (every Search fails) → recording (observe queries) → delayed (gate).
 		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
 		recording := &queryRecordingRepo{Repository: erroring}
-		delayed := NewDelayedRepository(recording)
+		delayed := fakes.NewDelayedSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)

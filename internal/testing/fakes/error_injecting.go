@@ -1,10 +1,11 @@
-package repository
+package fakes
 
 import (
 	"context"
 	"sync"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
 // Method identifies a Repository interface method by name. Used with
@@ -28,27 +29,26 @@ type Call struct {
 	Method Method
 }
 
-// ErrorInjectingRepository wraps any Repository and allows tests to inject
-// errors on a per-method basis. When an error is configured for a method that
-// method returns the configured error immediately without delegating to the
-// inner repository. When no error is configured the call is forwarded to
-// inner unchanged.
+// ErrorInjectingRepository wraps any repository.Repository and allows tests to
+// inject errors on a per-method basis. When an error is configured for a method
+// that method returns the configured error immediately without delegating to the
+// inner repository. When no error is configured the call is forwarded to inner
+// unchanged.
 //
 // All methods are concurrency-safe (a single mutex guards both errs and calls).
 //
-// This decorator is intended for failure-path testing only. It is exported so
-// that test packages outside this module can use it, but it should not appear
-// in production wiring.
+// It lives in the fakes package so the failure-path test seam is shared across
+// the app/board/search test suites without shipping in any product binary.
 type ErrorInjectingRepository struct {
 	mu    sync.Mutex
-	inner Repository
+	inner repository.Repository
 	errs  map[Method]error
 	calls []Call
 }
 
 // NewErrorInjecting returns an ErrorInjectingRepository wrapping inner with no
 // errors configured. Calls to inner are tracked; retrieve them with Calls.
-func NewErrorInjecting(inner Repository) *ErrorInjectingRepository {
+func NewErrorInjecting(inner repository.Repository) *ErrorInjectingRepository {
 	return &ErrorInjectingRepository{
 		inner: inner,
 		errs:  make(map[Method]error),
@@ -85,19 +85,19 @@ func (e *ErrorInjectingRepository) injected(m Method) error {
 	return e.errs[m]
 }
 
-// Dashboard implements Repository.
-func (e *ErrorInjectingRepository) Dashboard(ctx context.Context, opts DashboardOptions) (DashboardData, error) {
+// Dashboard implements repository.Repository.
+func (e *ErrorInjectingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	e.mu.Lock()
 	e.record(MethodDashboard)
 	err := e.injected(MethodDashboard)
 	e.mu.Unlock()
 	if err != nil {
-		return DashboardData{}, err
+		return repository.DashboardData{}, err
 	}
 	return e.inner.Dashboard(ctx, opts)
 }
 
-// Issue implements Repository.
+// Issue implements repository.Repository.
 func (e *ErrorInjectingRepository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
 	e.mu.Lock()
 	e.record(MethodIssue)
@@ -109,7 +109,7 @@ func (e *ErrorInjectingRepository) Issue(ctx context.Context, id string) (domain
 	return e.inner.Issue(ctx, id)
 }
 
-// Search implements Repository.
+// Search implements repository.Repository.
 func (e *ErrorInjectingRepository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	e.mu.Lock()
 	e.record(MethodSearch)
@@ -121,7 +121,7 @@ func (e *ErrorInjectingRepository) Search(ctx context.Context, query domain.Sear
 	return e.inner.Search(ctx, query)
 }
 
-// CreateIssue implements Repository.
+// CreateIssue implements repository.Repository.
 func (e *ErrorInjectingRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	e.mu.Lock()
 	e.record(MethodCreateIssue)
@@ -133,7 +133,7 @@ func (e *ErrorInjectingRepository) CreateIssue(ctx context.Context, input domain
 	return e.inner.CreateIssue(ctx, input)
 }
 
-// UpdateIssue implements Repository.
+// UpdateIssue implements repository.Repository.
 func (e *ErrorInjectingRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
 	e.mu.Lock()
 	e.record(MethodUpdateIssue)
@@ -145,7 +145,7 @@ func (e *ErrorInjectingRepository) UpdateIssue(ctx context.Context, id string, i
 	return e.inner.UpdateIssue(ctx, id, input)
 }
 
-// CloseIssue implements Repository.
+// CloseIssue implements repository.Repository.
 func (e *ErrorInjectingRepository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
 	e.mu.Lock()
 	e.record(MethodCloseIssue)
@@ -157,7 +157,7 @@ func (e *ErrorInjectingRepository) CloseIssue(ctx context.Context, id string, in
 	return e.inner.CloseIssue(ctx, id, input)
 }
 
-// AddComment implements Repository.
+// AddComment implements repository.Repository.
 func (e *ErrorInjectingRepository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
 	e.mu.Lock()
 	e.record(MethodAddComment)
@@ -169,7 +169,7 @@ func (e *ErrorInjectingRepository) AddComment(ctx context.Context, id string, in
 	return e.inner.AddComment(ctx, id, input)
 }
 
-// HealthCheck implements Repository.
+// HealthCheck implements repository.Repository.
 func (e *ErrorInjectingRepository) HealthCheck(ctx context.Context) error {
 	e.mu.Lock()
 	e.record(MethodHealthCheck)
@@ -181,14 +181,14 @@ func (e *ErrorInjectingRepository) HealthCheck(ctx context.Context) error {
 	return e.inner.HealthCheck(ctx)
 }
 
-// Catalogs implements Repository.
-func (e *ErrorInjectingRepository) Catalogs(ctx context.Context) (Catalogs, error) {
+// Catalogs implements repository.Repository.
+func (e *ErrorInjectingRepository) Catalogs(ctx context.Context) (repository.Catalogs, error) {
 	e.mu.Lock()
 	e.record(MethodCatalogs)
 	err := e.injected(MethodCatalogs)
 	e.mu.Unlock()
 	if err != nil {
-		return Catalogs{}, err
+		return repository.Catalogs{}, err
 	}
 	return e.inner.Catalogs(ctx)
 }
