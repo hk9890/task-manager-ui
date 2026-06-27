@@ -110,18 +110,36 @@ func Render(state State) string {
 		// is in flight (offset > 0 indicates deep navigation with a pending page fetch).
 		displayRows := rows
 		if (!col.Loading || isLoadMore) && len(rows) > 0 {
+			// renderColumnRows prepends an inline error row (when col.Error is set)
+			// above the issue rows. ScrollOffset is an issue index, so the window
+			// must be applied to the issue rows only; the error row is pinned at the
+			// top and counts against innerHeight. Without this the window shifts by
+			// the prefix length and clips the wrong issue (the selected row can fall
+			// off-screen) whenever an error and issues coexist (e.g. a failed Done
+			// load-more that keeps its rows).
+			prefix := 0
+			if strings.TrimSpace(col.Error) != "" {
+				prefix = 1
+			}
+			issueRows := rows[prefix:]
 			offset := col.ScrollOffset
 			if offset < 0 {
 				offset = 0
 			}
-			if offset > len(rows) {
-				offset = len(rows)
+			if offset > len(issueRows) {
+				offset = len(issueRows)
 			}
-			end := offset + innerHeight
-			if end > len(rows) {
-				end = len(rows)
+			end := offset + innerHeight - prefix
+			if end < offset {
+				end = offset
 			}
-			displayRows = rows[offset:end]
+			if end > len(issueRows) {
+				end = len(issueRows)
+			}
+			windowed := issueRows[offset:end]
+			displayRows = make([]string, 0, prefix+len(windowed))
+			displayRows = append(displayRows, rows[:prefix]...)
+			displayRows = append(displayRows, windowed...)
 		}
 
 		// Compute header badge.

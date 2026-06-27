@@ -864,6 +864,130 @@ func TestDashboard_ClosedOffset_BeyondEnd(t *testing.T) {
 	}
 }
 
+// TestDashboard_DeferredRoutesToBlocked verifies that a stored-status "deferred"
+// issue with NO open dependency blocker lands in DashboardData.Blocked (the
+// board's Not Ready feed), matching the taskmgr backend's
+// `status == "blocked" || status == "deferred"` Not-Ready query. Before the fix
+// the Dashboard switch only routed "blocked", so a dependency-free deferred
+// issue matched no column and vanished from the board entirely. A "blocked"
+// issue is seeded alongside to assert both share the feed.
+func TestDashboard_DeferredRoutesToBlocked(t *testing.T) {
+	r := memory.New()
+
+	// Deferred with no deps: non-closed, not in_progress, and not ready (status
+	// != open). Without explicit routing it matches no Dashboard column.
+	r.Seed(memory.Issue{ID: "def-1", Status: "deferred"})
+	// Stored-status blocked (no deps) shares the Not-Ready feed.
+	r.Seed(memory.Issue{ID: "blk-1", Status: "blocked"})
+
+	d, err := r.Dashboard(context.Background(), repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+
+	blockedIDs := issueIDs(d.Blocked)
+	if !containsID(blockedIDs, "def-1") {
+		t.Errorf("Blocked: expected deferred def-1, got %v", blockedIDs)
+	}
+	if !containsID(blockedIDs, "blk-1") {
+		t.Errorf("Blocked: expected blocked blk-1, got %v", blockedIDs)
+	}
+
+	// The deferred issue must NOT leak into any other column.
+	if containsID(issueIDs(d.ReadyExplain.Ready), "def-1") {
+		t.Errorf("ReadyExplain.Ready must not contain deferred def-1, got %v", issueIDs(d.ReadyExplain.Ready))
+	}
+	if containsID(blockedViewIDs(d.ReadyExplain.Blocked), "def-1") {
+		t.Errorf("ReadyExplain.Blocked must not contain deferred def-1 (no open deps), got %v", blockedViewIDs(d.ReadyExplain.Blocked))
+	}
+	if containsID(issueIDs(d.InProgress), "def-1") {
+		t.Errorf("InProgress must not contain deferred def-1, got %v", issueIDs(d.InProgress))
+	}
+	if containsID(issueIDs(d.Closed), "def-1") {
+		t.Errorf("Closed must not contain deferred def-1, got %v", issueIDs(d.Closed))
+	}
+}
+
+// TestDashboard_ClosedSortDeterministicWithTiebreak verifies that closed issues
+// sharing the same ClosedAt timestamp are ordered deterministically (ClosedAt
+// DESC, then ID ascending) on every call, and that paging across a
+// same-timestamp boundary returns distinct, non-overlapping issues. Before the
+// fix the comparator used only ClosedAt with no tiebreak over a randomly-ordered
+// map, so equal-timestamp issues landed in an unspecified relative order that
+// varied between calls — a boundary issue could be skipped or duplicated across
+// ClosedOffset pages.
+func TestDashboard_ClosedSortDeterministicWithTiebreak(t *testing.T) {
+	base := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	tNew := base.Add(48 * time.Hour)
+	tOld := base
+
+	r := memory.New()
+	// Two timestamp cohorts, members seeded in scrambled ID order. Within a
+	// cohort (equal ClosedAt) the tiebreak is ID ascending; cohorts order by
+	// ClosedAt DESC. Expected: [n-a, n-b, n-c, o-x, o-y, o-z].
+	for _, id := range []string{"n-c", "n-a", "n-b"} {
+		r.Seed(memory.Issue{ID: id, Status: "closed"})
+		r.SeedClosed(id, tNew, "done")
+	}
+	for _, id := range []string{"o-z", "o-x", "o-y"} {
+		r.Seed(memory.Issue{ID: id, Status: "closed"})
+		r.SeedClosed(id, tOld, "done")
+	}
+
+	want := []string{"n-a", "n-b", "n-c", "o-x", "o-y", "o-z"}
+
+	// Map iteration order is randomized per call, so without the ID tiebreak the
+	// equal-ClosedAt members would land in a varying relative order. Assert the
+	// exact, total order on every call.
+	for iter := 0; iter < 20; iter++ {
+		d, err := r.Dashboard(context.Background(), repository.DashboardOptions{})
+		if err != nil {
+			t.Fatalf("Dashboard iter %d: %v", iter, err)
+		}
+		got := issueIDs(d.Closed)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Closed order iter %d: got %v, want %v", iter, got, want)
+		}
+	}
+
+	// Paging at a same-timestamp boundary: two issues sharing one ClosedAt.
+	// (offset=0,limit=1) and (offset=1,limit=1) must return two DISTINCT issues
+	// that together cover both — no skip, no duplicate.
+	pr := memory.New()
+	for _, id := range []string{"p-b", "p-a"} {
+		pr.Seed(memory.Issue{ID: id, Status: "closed"})
+		pr.SeedClosed(id, base, "done")
+	}
+
+	p0, err := pr.Dashboard(context.Background(), repository.DashboardOptions{ClosedOffset: 0, ClosedLimit: 1})
+	if err != nil {
+		t.Fatalf("Dashboard page0: %v", err)
+	}
+	p1, err := pr.Dashboard(context.Background(), repository.DashboardOptions{ClosedOffset: 1, ClosedLimit: 1})
+	if err != nil {
+		t.Fatalf("Dashboard page1: %v", err)
+	}
+	if len(p0.Closed) != 1 || len(p1.Closed) != 1 {
+		t.Fatalf("page sizes: got %d and %d, want 1 and 1", len(p0.Closed), len(p1.Closed))
+	}
+	if p0.Closed[0].ID == p1.Closed[0].ID {
+		t.Errorf("paging returned duplicate boundary issue %q across pages", p0.Closed[0].ID)
+	}
+	covered := map[string]bool{p0.Closed[0].ID: true, p1.Closed[0].ID: true}
+	for _, id := range []string{"p-a", "p-b"} {
+		if !covered[id] {
+			t.Errorf("paging skipped issue %q (covered=%v)", id, covered)
+		}
+	}
+	// Deterministic ID-ascending tiebreak fixes the page contents exactly.
+	if p0.Closed[0].ID != "p-a" {
+		t.Errorf("page0: want p-a, got %s", p0.Closed[0].ID)
+	}
+	if p1.Closed[0].ID != "p-b" {
+		t.Errorf("page1: want p-b, got %s", p1.Closed[0].ID)
+	}
+}
+
 // ---- Search ----
 
 func TestSearch_TextFilter(t *testing.T) {

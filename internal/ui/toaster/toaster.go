@@ -26,6 +26,11 @@ type Model struct {
 	message string
 	style   Style
 	visible bool
+	// seq is a monotonically increasing identity bumped on every Show. A
+	// scheduled DismissMsg carries the seq of the toast it was scheduled for, so
+	// a stale dismiss timer (from an earlier toast) cannot hide a newer toast
+	// that replaced it within the dismiss window.
+	seq int
 }
 
 // New creates a toaster model.
@@ -33,12 +38,20 @@ func New() Model {
 	return Model{}
 }
 
-// Show displays a toast message.
+// Show displays a toast message. Each Show bumps the toast identity (seq) so a
+// previously scheduled dismiss no longer matches the current toast.
 func (m Model) Show(message string, style Style) Model {
 	m.message = message
 	m.style = style
 	m.visible = true
+	m.seq++
 	return m
+}
+
+// Seq returns the current toast identity. Callers schedule a DismissMsg with
+// this value and compare it on receipt to avoid dismissing a newer toast.
+func (m Model) Seq() int {
+	return m.seq
 }
 
 // Hide dismisses the toast.
@@ -95,12 +108,17 @@ func (m Model) Overlay(bg string, width, height int) string {
 	}, m.View(), bg)
 }
 
-// DismissMsg signals automatic dismissal.
-type DismissMsg struct{}
+// DismissMsg signals automatic dismissal of the toast identified by Seq. The
+// shell hides the toast only when Seq matches the currently shown toast, so a
+// stale timer from a superseded toast is ignored.
+type DismissMsg struct {
+	Seq int
+}
 
-// ScheduleDismiss emits DismissMsg after d.
-func ScheduleDismiss(d time.Duration) tea.Cmd {
+// ScheduleDismiss emits DismissMsg after d, tagged with the toast identity seq
+// so the receiver can ignore it if a newer toast has since been shown.
+func ScheduleDismiss(d time.Duration, seq int) tea.Cmd {
 	return tea.Tick(d, func(_ time.Time) tea.Msg {
-		return DismissMsg{}
+		return DismissMsg{Seq: seq}
 	})
 }

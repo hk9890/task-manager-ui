@@ -28,7 +28,7 @@ import (
 
 func TestMain(m *testing.M) {
 	scheduleRefreshTickCmd = func() tea.Cmd { return nil }
-	scheduleToastDismissCmd = func(_ time.Duration) tea.Cmd { return nil }
+	scheduleToastDismissCmd = func(_ time.Duration, _ int) tea.Cmd { return nil }
 	scheduleSpinnerTickCmd = func() tea.Cmd { return nil }
 	modelNow = time.Now
 	os.Exit(m.Run())
@@ -3327,7 +3327,7 @@ func withSpinnerTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
 	})
 }
 
-func withToastDismissScheduler(t *testing.T, scheduler func(time.Duration) tea.Cmd) {
+func withToastDismissScheduler(t *testing.T, scheduler func(time.Duration, int) tea.Cmd) {
 	t.Helper()
 	schedulerMu.Lock()
 	original := scheduleToastDismissCmd

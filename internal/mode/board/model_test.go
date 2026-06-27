@@ -1777,3 +1777,184 @@ func TestDoneLoadMore_ForceFreshResetsState(t *testing.T) {
 		t.Errorf("expected ForceFresh=true on manual reload, got false")
 	}
 }
+
+// TestDoneLoadMore_EmptyDoneColumnNoDispatch is the regression test for the
+// empty-Done load-more guard (FIX #14). When the Done column is empty after a
+// Dashboard load (ClosedTotal==0, no closed issues), triggering load-more while
+// focused on Done must NOT dispatch a wasted backend Dashboard fetch.
+//
+// The previous all-loaded guard read `loaded >= total && total > 0`, so the
+// empty case (loaded==0, total==0) failed the `total > 0` clause, fell through,
+// and dispatched a fresh Dashboard call on every cursor move / load-more
+// keypress. With that clause removed, `loaded(0) >= total(0)` short-circuits and
+// returns nil. Reverting the fix makes this test fail: dispatchLoadMoreClosed
+// would return a non-nil Cmd that calls repo.Dashboard.
+func TestDoneLoadMore_EmptyDoneColumnNoDispatch(t *testing.T) {
+	t.Parallel()
+
+	stub := &loadMoreCapture{}
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	m.SetSize(120, 25)
+
+	// Simulate a completed Dashboard load with no closed issues. compose() sets
+	// doneLoadedCount=0 and doneClosedTotal=0 from this empty result. Feeding the
+	// dashboardLoadedMsg directly does not touch the repo stub, so capturedOpts
+	// stays empty until (and unless) a load-more is dispatched.
+	feedDashboardData(m, repository.DashboardData{})
+
+	if m.doneClosedTotal != 0 {
+		t.Fatalf("precondition: expected doneClosedTotal=0 for empty Done, got %d", m.doneClosedTotal)
+	}
+	if m.doneLoadedCount != 0 {
+		t.Fatalf("precondition: expected doneLoadedCount=0 for empty Done, got %d", m.doneLoadedCount)
+	}
+
+	// Focus the (empty) Done column and trigger an explicit load-more (>).
+	m.focusedColumn = doneColumnIndex
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+
+	// FIX #14: empty Done must short-circuit — no Cmd, no in-flight flag.
+	if cmd != nil {
+		// Drain in case the buggy code returned a Cmd (single or batch) so any
+		// leaked Dashboard call is recorded before we assert on capturedOpts.
+		if c, ok := cmd().(tea.BatchMsg); ok {
+			for _, sub := range c {
+				if sub != nil {
+					_ = sub()
+				}
+			}
+		}
+		t.Error("expected nil Cmd for empty Done column load-more, got non-nil")
+	}
+	if m.doneLoadInFlight {
+		t.Error("expected doneLoadInFlight=false for empty Done column (no dispatch)")
+	}
+
+	// No Dashboard fetch may have been dispatched for the wasted load-more.
+	if opts := stub.capturedOpts(); len(opts) != 0 {
+		t.Fatalf("expected 0 Dashboard calls for empty Done load-more, got %d: %v", len(opts), opts)
+	}
+}
+
+// TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused is the regression test
+// for the post-merge selection re-sync (FIX #7). After a successful load-more
+// replaces the Done column, applyLoadMoreClosed must re-emit a
+// SelectionChangedMsg (when the Done column is focused) so the shell's stored
+// selection, header, and any open detail pane stay in sync with the highlighted
+// row rather than referencing a stale issue.
+//
+// Previously applyLoadMoreClosed returned nil after merging, desyncing the
+// selection from the highlighted row. Reverting the fix makes this test fail at
+// the non-nil Cmd assertion.
+func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(120, 25)
+
+	const priorCount = 35
+	const incomingCount = 50
+	priorIssues := makeClosedIssues(priorCount)
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: priorIssues, total: 736, exact: false},
+	}
+	m.doneLoadedCount = priorCount
+	m.doneClosedTotal = 736
+	m.doneLoadInFlight = true // simulates the in-flight state before the response
+
+	// Done column focused, cursor parked on a prior issue (row 5 → "closed-5").
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 5
+
+	// Incoming continuation page with non-overlapping IDs.
+	incomingIssues := make([]domain.IssueSummary, incomingCount)
+	for i := range incomingIssues {
+		incomingIssues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("incoming-%d", i),
+			Title: fmt.Sprintf("Incoming closed %d", i),
+		}
+	}
+
+	cmd := m.Update(loadMoreClosedDoneMsg{
+		data: repository.DashboardData{Closed: incomingIssues, ClosedTotal: 736},
+		opts: repository.DashboardOptions{ClosedOffset: priorCount, ClosedLimit: 50},
+	})
+
+	// FIX #7: a non-nil re-sync Cmd must be returned when Done is focused.
+	if cmd == nil {
+		t.Fatal("expected non-nil re-sync Cmd from applyLoadMoreClosed when Done is focused")
+	}
+
+	// The Cmd must produce a board SelectionChangedMsg reflecting the issue at
+	// the highlighted row in the merged Done column.
+	msg := cmd()
+	selChanged, ok := msg.(mode.SelectionChangedMsg)
+	if !ok {
+		t.Fatalf("expected mode.SelectionChangedMsg from re-sync Cmd, got %T", msg)
+	}
+	if selChanged.Mode != mode.Board {
+		t.Errorf("expected SelectionChangedMsg.Mode=%v, got %v", mode.Board, selChanged.Mode)
+	}
+	if selChanged.Selection == nil {
+		t.Fatal("expected non-nil Selection in re-sync SelectionChangedMsg")
+	}
+
+	// The emitted selection must match the issue under the cursor in the merged
+	// Done column — proving selection re-syncs to the highlighted row.
+	row := m.selectedRow[doneColumnIndex]
+	wantID := m.columns[doneColumnIndex].issues[row].ID
+	if selChanged.Selection.Issue.ID != wantID {
+		t.Errorf("re-sync selection ID = %q, want %q (issue at selected row %d)",
+			selChanged.Selection.Issue.ID, wantID, row)
+	}
+	// Sanity: the merge preserves prior order, so row 5 is still "closed-5".
+	if wantID != "closed-5" {
+		t.Errorf("expected merged row 5 to be %q, got %q", "closed-5", wantID)
+	}
+}
+
+// TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow is the model-side
+// regression guard for FIX #6. When the focused column shows an inline error
+// row, the renderer pins that row at the top and shows one fewer issue row, so
+// moveRow must reserve it in the scroll-window size (sectionItemCapacity()-1).
+// Without that reservation the selected bottom row lands at offset+capacity-1 —
+// exactly the row the renderer drops — and clips off-screen.
+func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(40, 13) // sectionItemCapacity() == 13-3 == 10
+
+	const n = 20
+	issues := make([]domain.IssueSummary, n)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{ID: fmt.Sprintf("c%d", i), Title: fmt.Sprintf("closed %d", i), Status: "closed"}
+	}
+	// Focused Done column carrying an inline error alongside loaded rows
+	// (the failed-load-more shape that keeps its issues).
+	m.columns[doneColumnIndex] = columnData{title: sectionTitleDone, issues: issues, total: n, exact: true, err: errors.New("load failed")}
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 0
+	m.scrollOffset[doneColumnIndex] = 0
+
+	for i := 0; i < n-1; i++ {
+		m.moveRow(1)
+	}
+
+	idx := m.selectedRow[doneColumnIndex]
+	off := m.scrollOffset[doneColumnIndex]
+	capacity := m.sectionItemCapacity()
+	// The renderer's visible issue window with an error prefix is
+	// [off, off+capacity-1); the selected row must fall inside it.
+	if idx-off > capacity-2 {
+		t.Errorf("selected row clips below the error-reserved window: idx=%d offset=%d capacity=%d (idx-off=%d must be <= %d)",
+			idx, off, capacity, idx-off, capacity-2)
+	}
+	if idx != n-1 {
+		t.Fatalf("expected selection at last row %d, got %d", n-1, idx)
+	}
+	if off == 0 {
+		t.Fatalf("expected scroll offset to advance for a clipped column, got 0")
+	}
+}

@@ -225,22 +225,31 @@ func BuildIssueUpdateInput(original IssueDetail, edited IssueEditDocument) (Upda
 	input := UpdateIssueInput{}
 	changed := false
 
-	if edited.Title != original.Summary.Title {
+	// Title/Status/Type/Assignee are rendered TrimSpace'd and parsed TrimSpace'd,
+	// so an unedited save round-trips to the trimmed value; normalize the original
+	// the same way before diffing to avoid a spurious "changed" on a stored value
+	// that carried surrounding whitespace (same class as the Description fix below).
+	if edited.Title != strings.TrimSpace(original.Summary.Title) {
 		input.Title = ptr(edited.Title)
 		changed = true
 	}
 
-	if edited.Description != original.Description {
+	// The parser \n-trims the extracted description (issueEditExtractField), so a
+	// description with a leading/trailing newline round-trips to a \n-trimmed
+	// value even when the user edits nothing. Normalize the original the same way
+	// before diffing so an unedited save is correctly detected as no-change rather
+	// than rewriting the description and showing a misleading "Updated" toast.
+	if edited.Description != strings.Trim(original.Description, "\n") {
 		input.Description = ptr(edited.Description)
 		changed = true
 	}
 
-	if edited.Status != original.Summary.Status {
+	if edited.Status != strings.TrimSpace(original.Summary.Status) {
 		input.Status = ptr(edited.Status)
 		changed = true
 	}
 
-	if edited.Type != original.Summary.Type {
+	if edited.Type != strings.TrimSpace(original.Summary.Type) {
 		input.Type = ptr(edited.Type)
 		changed = true
 	}
@@ -251,7 +260,7 @@ func BuildIssueUpdateInput(original IssueDetail, edited IssueEditDocument) (Upda
 		changed = true
 	}
 
-	if edited.Assignee != original.Summary.Assignee {
+	if edited.Assignee != strings.TrimSpace(original.Summary.Assignee) {
 		input.Assignee = ptr(edited.Assignee)
 		changed = true
 	}

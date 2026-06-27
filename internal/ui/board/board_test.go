@@ -503,6 +503,81 @@ func TestRenderDoneDeepNavigation(t *testing.T) {
 	assertGoldenNormalized(t, []byte(rendered), "done_deep_navigation.golden")
 }
 
+// TestRenderErrorRowPinnedAboveScrolledWindow locks in FIX #6: when a column
+// has BOTH an inline error row AND a scrolled issue window (ScrollOffset > 0),
+// the error row must stay pinned at the top and the scroll window must apply to
+// the issue rows only (the error row counts against innerHeight).
+//
+// The pre-fix renderer treated ScrollOffset (an issue index) as a raw offset
+// into the rendered-rows slice — which already includes the prepended error row
+// — so the window shifted up by one: the error row was sliced off entirely and
+// the issue immediately ABOVE the intended window top leaked in.
+//
+// Layout: Height=10 -> columnHeight=9 -> innerHeight=7. With the error row
+// pinned, six issue rows fit. ScrollOffset=10 puts issues 10..15 in the window;
+// SelectedRow=15 is the last visible issue.
+//
+//   - Buggy:  rows[10:17] -> issues 09..15, error row dropped.
+//   - Fixed:  [⚠ error] + issues 10..15.
+//
+// Discriminating assertions (fail if the fix is reverted): the pinned error row
+// is present (buggy slices it off) and off-window issue 09 is absent (buggy
+// leaks it via the one-row shift). The selected issue 15 is asserted present to
+// pin the intended bottom edge.
+func TestRenderErrorRowPinnedAboveScrolledWindow(t *testing.T) {
+	t.Parallel()
+
+	const rowCount = 20
+	issues := make([]domain.IssueSummary, rowCount)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:    fmt.Sprintf("bw-%02d", i),
+			Title: fmt.Sprintf("Issue marker %02d", i),
+			Type:  "task",
+		}
+	}
+
+	state := State{
+		DashboardTitle: "Test",
+		FocusedColumn:  0,
+		Width:          80,
+		Height:         10,
+		Columns: []Column{{
+			Title:        "Done",
+			Rows:         issues,
+			SelectedRow:  15,
+			ScrollOffset: 10,
+			Error:        "bd query timed out",
+			Total:        rowCount,
+			TotalIsExact: true,
+		}},
+	}
+
+	plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
+
+	// (a) The pinned error row must survive the scroll window. The pre-fix
+	// renderer sliced it off the top whenever ScrollOffset > 0.
+	if !strings.Contains(plain, "⚠ load failed") {
+		t.Errorf("expected pinned error row '⚠ load failed' alongside scrolled issues, got:\n%s", plain)
+	}
+
+	// (b) The selected issue (the last visible issue) must be present.
+	if !strings.Contains(plain, "marker 15") {
+		t.Errorf("expected selected issue 15 visible at the bottom edge, got:\n%s", plain)
+	}
+
+	// (c) Off-by-one leak: issue 09 sits one row above the intended window top.
+	// The fix keeps it out of view; the buggy raw-offset slice pulled it in.
+	if strings.Contains(plain, "marker 09") {
+		t.Errorf("issue 09 is above the scroll window and must not appear (one-row shift), got:\n%s", plain)
+	}
+
+	// Issue 16 is below the window and must never appear (bottom-edge sanity).
+	if strings.Contains(plain, "marker 16") {
+		t.Errorf("issue 16 is below the scroll window and must not appear, got:\n%s", plain)
+	}
+}
+
 func assertEqualColumnHeights(t *testing.T, view string) {
 	t.Helper()
 

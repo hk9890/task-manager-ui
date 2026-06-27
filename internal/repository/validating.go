@@ -87,7 +87,8 @@ func (v *validatingRepository) HealthCheck(ctx context.Context) error {
 //   - Status-slot consistency (new at Repository boundary):
 //     InProgress items must have status=="in_progress",
 //     Closed items must have status=="closed",
-//     Blocked items must have status=="blocked".
+//     Blocked items (the Not-Ready feed) must have status=="blocked" or
+//     status=="deferred".
 //   - ValidateReadyExplain rules (6 sub-rules from contractcheck).
 //   - Ssom in-call invariant (replaces cross-method state): ClosedTotal >= len(Closed).
 //
@@ -121,7 +122,11 @@ func (v *validatingRepository) Dashboard(ctx context.Context, opts DashboardOpti
 	// Status-slot consistency.
 	vs = append(vs, validateSlotStatus("Dashboard", "DashboardInProgressStatusMatches", data.InProgress, "in_progress")...)
 	vs = append(vs, validateSlotStatus("Dashboard", "DashboardClosedStatusMatches", data.Closed, "closed")...)
-	vs = append(vs, validateSlotStatus("Dashboard", "DashboardBlockedStatusMatches", data.Blocked, "blocked")...)
+	// The Blocked slot is the board's "Not Ready" feed, which both backends
+	// populate with stored-status "blocked" AND "deferred" issues (deferred is an
+	// active, non-closed status that is neither ready nor in-progress). Accept
+	// either so legitimate deferred issues are not flagged as contract violations.
+	vs = append(vs, validateSlotStatusOneOf("Dashboard", "DashboardBlockedStatusMatches", data.Blocked, "blocked", "deferred")...)
 
 	// ReadyExplain structural rules.
 	vs = append(vs, validateReadyExplain("Dashboard", data.ReadyExplain, false)...)
@@ -396,6 +401,27 @@ func validateSlotStatus(method, rule string, items []domain.IssueSummary, expect
 				method: method,
 				rule:   rule,
 				sample: fmt.Sprintf("items[%d]: id=%q has status=%q, expected %q for this slot", i, item.ID, item.Status, expected),
+			})
+		}
+	}
+	return vs
+}
+
+// validateSlotStatusOneOf is the multi-status variant of validateSlotStatus for
+// slots whose membership is defined by a set of stored statuses (e.g. the
+// Not-Ready/Blocked slot, which holds both "blocked" and "deferred" issues).
+func validateSlotStatusOneOf(method, rule string, items []domain.IssueSummary, expected ...string) []violation {
+	allowed := make(map[string]struct{}, len(expected))
+	for _, s := range expected {
+		allowed[s] = struct{}{}
+	}
+	var vs []violation
+	for i, item := range items {
+		if _, ok := allowed[item.Status]; !ok {
+			vs = append(vs, violation{
+				method: method,
+				rule:   rule,
+				sample: fmt.Sprintf("items[%d]: id=%q has status=%q, expected one of %v for this slot", i, item.ID, item.Status, expected),
 			})
 		}
 	}

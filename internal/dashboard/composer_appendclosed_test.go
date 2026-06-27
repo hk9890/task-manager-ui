@@ -177,32 +177,29 @@ func TestCompose_AppendClosed(t *testing.T) {
 		assertClosedAtDESC(t, "normal prior+incoming", got.Done.Issues)
 	})
 
-	t.Run("order: not-already-sorted across boundary → sort-merge recovers DESC", func(t *testing.T) {
+	t.Run("order: merge preserves backend order; does not re-sort by UpdatedAt", func(t *testing.T) {
 		t.Parallel()
 
-		// Construct a case where concatenating prior+incoming would NOT be DESC:
-		// prior contains a very old issue at the end; incoming starts with a
-		// moderately recent issue that is newer than that old prior issue.
-		// After concatenation the last element of prior is OLDER than the first
-		// element of incoming, so a naïve concat is out of order.
-		// The composer must sort-merge to recover DESC.
+		// Regression for the first-load/load-more ordering inconsistency (#12):
+		// the backend returns closed issues in ClosedAt DESC order, but
+		// IssueSummary carries no ClosedAt — only UpdatedAt. A closed issue can
+		// have UpdatedAt > its ClosedAt (e.g. a comment added after it was closed).
+		// The merge must PRESERVE the backend's order (concatenation of prior +
+		// incoming) rather than re-sorting by UpdatedAt, so the Done column looks
+		// identical whether reached by first-load (which never re-sorts) or
+		// load-more.
 
-		veryRecent := base.Add(-1 * time.Hour)
-		moderate := base.Add(-10 * time.Hour)
-		veryOld := base.Add(-100 * time.Hour)
-		slightlyOld := base.Add(-20 * time.Hour)
-
-		// prior (as if already on screen): recent, then veryOld — DESC within prior
+		// prior (backend ClosedAt DESC): p0 then p1. p1 carries the NEWEST
+		// UpdatedAt of all rows (it was commented on after closing) — a re-sort by
+		// UpdatedAt would wrongly hoist it to the top.
 		prior := []domain.IssueSummary{
-			makeClosedSummary("p0", veryRecent),
-			makeClosedSummary("p1", veryOld), // out-of-order relative to incoming
+			makeClosedSummary("p0", base.Add(-1*time.Hour)),
+			{ID: "p1", Status: "closed", Priority: 1, UpdatedAt: base}, // newest UpdatedAt
 		}
-		// incoming from repo: moderate, then slightlyOld — DESC within incoming
-		// But moderate > veryOld, so concat(prior, incoming) would put veryOld
-		// before moderate — NOT DESC.
+		// incoming continuation page (older ClosedAt), backend DESC: i0 then i1.
 		incoming := []domain.IssueSummary{
-			makeClosedSummary("i0", moderate),
-			makeClosedSummary("i1", slightlyOld),
+			makeClosedSummary("i0", base.Add(-10*time.Hour)),
+			makeClosedSummary("i1", base.Add(-20*time.Hour)),
 		}
 
 		got := Compose(Inputs{
@@ -214,11 +211,9 @@ func TestCompose_AppendClosed(t *testing.T) {
 		if len(got.Done.Issues) != 4 {
 			t.Fatalf("len(Done.Issues) = %d, want 4", len(got.Done.Issues))
 		}
-		// Expected order after sort-merge DESC by UpdatedAt:
-		// veryRecent, moderate, slightlyOld, veryOld
-		wantIDs := []string{"p0", "i0", "i1", "p1"}
-		assertIDs(t, "Done (sort-merge recovery)", got.Done.Issues, wantIDs)
-		assertClosedAtDESC(t, "sort-merge recovery", got.Done.Issues)
+		// Backend order preserved: prior (p0, p1) then incoming (i0, i1). A
+		// UpdatedAt re-sort would have produced [p1, p0, i0, i1] (p1 hoisted).
+		assertIDs(t, "Done (order-preserving merge)", got.Done.Issues, []string{"p0", "p1", "i0", "i1"})
 	})
 
 	t.Run("PriorClosed=nil uses first-load path (existing behavior)", func(t *testing.T) {

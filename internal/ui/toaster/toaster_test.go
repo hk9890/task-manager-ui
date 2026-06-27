@@ -3,7 +3,9 @@ package toaster
 import (
 	"strings"
 	"testing"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -61,6 +63,41 @@ func TestViewStylesAreDistinctAndContainContent(t *testing.T) {
 		views[StyleWarn] == views[StyleSuccess] ||
 		views[StyleInfo] == views[StyleSuccess] {
 		t.Fatalf("expected all toast style views to be visually distinct")
+	}
+}
+
+func TestShowBumpsSeqMonotonically(t *testing.T) {
+	t.Parallel()
+
+	if got := New().Seq(); got != 0 {
+		t.Fatalf("new toaster Seq should be 0, got %d", got)
+	}
+
+	m1 := New().Show("a", StyleSuccess)
+	m2 := m1.Show("b", StyleInfo)
+
+	if m2.Seq() != m1.Seq()+1 {
+		t.Fatalf("Show should bump Seq: m1.Seq()=%d, m2.Seq()=%d, want m2 == m1+1", m1.Seq(), m2.Seq())
+	}
+}
+
+func TestScheduleDismissEmitsDismissMsgWithSeq(t *testing.T) {
+	t.Parallel()
+
+	const seq = 7
+	var cmd tea.Cmd = ScheduleDismiss(time.Millisecond, seq)
+	if cmd == nil {
+		t.Fatalf("ScheduleDismiss should return a non-nil cmd")
+	}
+
+	// tea.Tick blocks for the duration when invoked, so keep it tiny.
+	msg := cmd()
+	dismiss, ok := msg.(DismissMsg)
+	if !ok {
+		t.Fatalf("expected DismissMsg, got %T", msg)
+	}
+	if dismiss.Seq != seq {
+		t.Fatalf("DismissMsg.Seq = %d, want %d", dismiss.Seq, seq)
 	}
 }
 

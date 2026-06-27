@@ -32,6 +32,7 @@ package search
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -183,6 +184,22 @@ func (r *queryRecordingRepo) Queries() []domain.SearchIssuesQuery {
 	out := make([]domain.SearchIssuesQuery, len(r.queries))
 	copy(out, r.queries)
 	return out
+}
+
+// ---- erroringSearchRepo ----
+
+// erroringSearchRepo wraps a repository.Repository and forces every Search call
+// to return err (delegating all other methods). It drives the searchLoadedMsg
+// ERROR branch through the real repository seam — combined with
+// DelayedFakeRepository it produces a genuine in-flight search that resolves
+// with an error, exactly as a failing backend would.
+type erroringSearchRepo struct {
+	repository.Repository
+	err error
+}
+
+func (r *erroringSearchRepo) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+	return domain.SearchResultPage{}, r.err
 }
 
 // ---- test driver helpers ----
@@ -612,6 +629,151 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 			if result.Issue.Status == "closed" {
 				t.Errorf("closed issue %q leaked into result set; model or repo injected --status all", result.Issue.ID)
 			}
+		}
+	})
+
+	// PendingDraftFiresWhenInFlightSearchErrors verifies that a queued Enter-submit
+	// survives an in-flight search that resolves with an ERROR: the user types a
+	// query + Enter while a search is in flight (queuing pendingDraft), the
+	// in-flight search then fails (searchLoadedMsg{err: ...}), and the model must
+	// re-fire a search for the queued text rather than silently dropping it.
+	//
+	// Regression pin (FIX #4): the searchLoadedMsg ERROR branch used to return
+	// without consuming pendingDraft, so a queued submit was lost whenever the
+	// in-flight search errored. The fix calls consumePendingDraft(appliedQuery,
+	// forceRefire=true) on the error path. If that call were removed, pendingDraft
+	// would stay set, no second Search would fire, and m.IsLoading() would stay
+	// false — each of the assertions below would fail.
+	t.Run("PendingDraftFiresWhenInFlightSearchErrors", func(t *testing.T) {
+		t.Parallel()
+
+		inner := memoryrepo.New()
+		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
+
+		// Stack: inner → erroring (every Search fails) → recording (observe queries) → delayed (gate).
+		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
+		recording := &queryRecordingRepo{Repository: erroring}
+		delayed := NewDelayedRepository(recording)
+
+		m := NewModel(context.Background(), delayed, nil)
+		m.SetSize(120, 30)
+
+		// Init fires and blocks inside delayed.Search.
+		initCmd := m.Init()
+		if initCmd == nil {
+			t.Fatal("expected non-nil Cmd from Init()")
+		}
+		initMsgCh := runCmdAsync(initCmd)
+		if !m.loading {
+			t.Fatal("expected loading=true before Init resolves")
+		}
+
+		// Type "task" + Enter while the search is in flight — Enter must queue,
+		// not fire.
+		for _, r := range []rune("task") {
+			cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			if cmd != nil {
+				t.Fatalf("unexpected non-nil Cmd from rune input: %v", cmd)
+			}
+		}
+		enterCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		if enterCmd != nil {
+			t.Fatal("expected nil Cmd from Enter while loading (should queue, not fire)")
+		}
+		if m.pendingDraft == nil || *m.pendingDraft != "task" {
+			t.Fatalf("expected pendingDraft=%q, got %v", "task", m.pendingDraft)
+		}
+
+		// Unblock the in-flight search — it resolves with an ERROR.
+		delayed.Release()
+		initMsg := <-initMsgCh
+		errMsg, ok := initMsg.(searchLoadedMsg)
+		if !ok || errMsg.err == nil {
+			t.Fatalf("expected in-flight search to resolve with an error searchLoadedMsg, got %#v", initMsg)
+		}
+
+		// Deliver the error result. The ERROR branch must consume the queued draft
+		// and re-fire a search for "task" — the queued submit is NOT dropped.
+		pendingCmd := m.Update(errMsg)
+		if pendingCmd == nil {
+			t.Fatal("queued submit dropped: error branch returned no Cmd despite pendingDraft set")
+		}
+		if m.pendingDraft != nil {
+			t.Fatalf("expected pendingDraft cleared after error resolution, got %q", *m.pendingDraft)
+		}
+		if !m.IsLoading() {
+			t.Fatal("expected loading=true: a new search for the queued draft must be in flight")
+		}
+
+		// Drain the re-fired search (also errors) so the goroutine does not leak.
+		delayed.Release()
+		pendingMsg := <-runCmdAsync(pendingCmd)
+		_ = m.Update(pendingMsg)
+
+		// A second Search call for the queued text must have been issued.
+		queries := recording.Queries()
+		foundTask := false
+		for _, q := range queries {
+			if q.Text == "task" {
+				if len(q.Statuses) > 0 {
+					t.Errorf("re-fired search injected Statuses=%v; model must not force a status filter", q.Statuses)
+				}
+				foundTask = true
+			}
+		}
+		if !foundTask {
+			t.Errorf("no Search call for queued text %q after in-flight error; queries seen: %v", "task", queries)
+		}
+	})
+
+	// SameQueryRetryAfterErrorStillRefires pins the forceRefire=true choice on the
+	// error path. When the queued draft equals the last applied query, a
+	// forceRefire=false consume would NOT re-fire (pending == appliedQuery), so a
+	// retry-after-error of the same text would be lost. With forceRefire=true the
+	// error branch re-fires regardless. The other sub-test cannot catch this
+	// because the failed Init search leaves appliedQuery=="" (≠ the queued text),
+	// so it re-fires even with forceRefire=false.
+	t.Run("SameQueryRetryAfterErrorStillRefires", func(t *testing.T) {
+		t.Parallel()
+
+		inner := memoryrepo.New()
+		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
+		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
+		recording := &queryRecordingRepo{Repository: erroring}
+
+		m := NewModel(context.Background(), recording, nil)
+		m.SetSize(120, 30)
+
+		// Simulate: a prior search for "task" already applied, a fresh search for
+		// the SAME text now in flight, and the user re-queued "task" via Enter.
+		m.appliedQuery = "task"
+		m.hasLoadedPage = true
+		m.loading = true
+		draft := "task"
+		m.pendingDraft = &draft
+
+		// The in-flight search resolves with an error and appliedQuery still "task".
+		cmd := m.Update(searchLoadedMsg{appliedQuery: "task", err: errors.New("backend unavailable")})
+		if cmd == nil {
+			t.Fatal("same-query queued submit dropped after error: expected a re-fire (forceRefire must be true)")
+		}
+		if m.pendingDraft != nil {
+			t.Fatalf("expected pendingDraft cleared, got %q", *m.pendingDraft)
+		}
+		if !m.IsLoading() {
+			t.Fatal("expected loading=true: the same-query retry must be in flight (forceRefire=false would NOT re-fire here)")
+		}
+
+		// Drain the re-fired search so the recording repo observes the retry.
+		_ = m.Update(cmd())
+		foundTask := false
+		for _, q := range recording.Queries() {
+			if q.Text == "task" {
+				foundTask = true
+			}
+		}
+		if !foundTask {
+			t.Errorf("no re-fired Search for the same queued text %q after error", "task")
 		}
 	})
 }

@@ -620,10 +620,19 @@ func (m *Model) moveRow(delta int) {
 		idx = len(issues) - 1
 	}
 	m.selectedRow[m.focusedColumn] = idx
+	capacity := m.sectionItemCapacity()
+	// When the focused column carries an inline error, the renderer pins that
+	// error row at the top of the column and shows one fewer issue row (see
+	// internal/ui/board Render). Reserve that row here so EnsureVisible keeps the
+	// selected row inside the renderer's actual issue window rather than letting
+	// the bottom row clip off-screen.
+	if m.columns[m.focusedColumn].err != nil && capacity > 1 {
+		capacity--
+	}
 	m.scrollOffset[m.focusedColumn] = scroll.EnsureVisible(
 		m.scrollOffset[m.focusedColumn],
 		idx,
-		m.sectionItemCapacity(),
+		capacity,
 	)
 }
 
@@ -664,7 +673,12 @@ func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
 		m.logger.Debug("load-more suppressed; already in flight")
 		return nil
 	}
-	if m.doneLoadedCount >= m.doneClosedTotal && m.doneClosedTotal > 0 {
+	// Nothing (more) to load: loaded count has reached the DB total. This also
+	// covers an empty Done column (total == 0, loaded == 0): the initial Dashboard
+	// always sets doneClosedTotal, so 0 means "no closed issues", not "unknown".
+	// The previous `&& doneClosedTotal > 0` clause let the empty case fall through
+	// and dispatch a fresh backend fetch on every cursor move / load-more keypress.
+	if m.doneLoadedCount >= m.doneClosedTotal {
 		m.logger.Debug("load-more suppressed; all closed issues loaded",
 			"loaded", m.doneLoadedCount,
 			"total", m.doneClosedTotal,
@@ -728,6 +742,16 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 		}
 	}
 
+	// The merged slice may have shifted the issue under the cursor (dedup/replace
+	// on ID conflict, or a refreshed copy of the selected issue). Re-clamp the
+	// selection and, when the Done column is focused (the only column load-more
+	// touches), re-emit SelectionChangedMsg so the shell's stored selection,
+	// header, and any open detail pane stay in sync with the highlighted row
+	// rather than referencing a stale issue.
+	m.normalizeSelectionForFocusedColumn()
+	if m.focusedColumn == doneColumnIndex {
+		return m.selectionChangedCmd()
+	}
 	return nil
 }
 

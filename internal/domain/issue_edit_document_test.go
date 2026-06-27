@@ -280,6 +280,78 @@ func TestBuildIssueUpdateInputAssigneeClearing(t *testing.T) {
 	}
 }
 
+func TestBuildIssueUpdateInputNoSpuriousDescriptionRewriteOnNewlineTrimmedRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		description string
+	}{
+		{name: "trailing newline", description: "body\n"},
+		{name: "leading newline", description: "\nbody"},
+		{name: "leading and trailing newline", description: "\nbody\n"},
+		{name: "multiple surrounding newlines", description: "\n\nbody\n\n"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			original := IssueDetail{Summary: IssueSummary{
+				Title:    "Round-trip body",
+				Status:   "open",
+				Type:     "task",
+				Priority: 2,
+			}, Description: tc.description}
+
+			// Simulate the real editor round-trip with no user edit. The parser
+			// \n-trims the extracted description, so without normalization the
+			// unedited save would diff as a description change.
+			parsed, err := ParseIssueEditDocument(RenderIssueEditDocument(original))
+			if err != nil {
+				t.Fatalf("ParseIssueEditDocument returned error: %v", err)
+			}
+
+			input, changed := BuildIssueUpdateInput(original, parsed)
+			if changed {
+				t.Fatalf("expected changed=false for unedited newline-padded description %q, got %#v", tc.description, input)
+			}
+			if input.Description != nil {
+				t.Fatalf("expected no spurious description rewrite for %q, got %q", tc.description, *input.Description)
+			}
+		})
+	}
+}
+
+func TestBuildIssueUpdateInputDetectsGenuineDescriptionChangeAfterRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	original := IssueDetail{Summary: IssueSummary{
+		Title:    "Round-trip body",
+		Status:   "open",
+		Type:     "task",
+		Priority: 2,
+	}, Description: "\nbody\n"}
+
+	parsed, err := ParseIssueEditDocument(RenderIssueEditDocument(original))
+	if err != nil {
+		t.Fatalf("ParseIssueEditDocument returned error: %v", err)
+	}
+
+	// A genuine user edit must still be detected even though the original had
+	// surrounding newlines that get trimmed on round-trip.
+	parsed.Description = "rewritten body"
+
+	input, changed := BuildIssueUpdateInput(original, parsed)
+	if !changed {
+		t.Fatalf("expected changed=true for genuine description edit")
+	}
+	if input.Description == nil || *input.Description != "rewritten body" {
+		t.Fatalf("expected description update to %q, got %#v", "rewritten body", input.Description)
+	}
+}
+
 func TestParseIssueEditDocumentPreservesMultiParagraphDescription(t *testing.T) {
 	t.Parallel()
 

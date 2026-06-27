@@ -295,7 +295,8 @@ func DefaultCatalogs() repository.Catalogs {
 // IDs point to closed issues (or DependsOn is empty).
 // ReadyExplain.Blocked: issues where status is not "closed" and at least one
 // DependsOn ID points to a non-closed issue.
-// DashboardData.Blocked: issues where status == "blocked" (stored status).
+// DashboardData.Blocked: the Not Ready feed — issues where stored status ==
+// "blocked" OR "deferred" (matching the taskmgr backend's Not-Ready query).
 // DashboardData.InProgress: issues where status == "in_progress".
 // DashboardData.Closed: closed issues sorted by ClosedAt DESC, windowed by
 // opts.ClosedOffset (skip) then opts.ClosedLimit (cap). When opts.ClosedOffset
@@ -325,7 +326,13 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 			closed = append(closed, sum)
 		case "in_progress":
 			inProgress = append(inProgress, sum)
-		case "blocked":
+		case "blocked", "deferred":
+			// The Blocked slot feeds the board's Not Ready column. "deferred" is an
+			// active, non-closed status (consciously postponed) that is neither
+			// ready nor in-progress, so — matching the taskmgr backend's
+			// `status == "blocked" || status == "deferred"` Not-Ready query — it
+			// joins blocked-status issues here. Without this a deferred issue with
+			// no open dependency blocker matches no column and vanishes from the board.
 			blocked = append(blocked, sum)
 		}
 
@@ -367,12 +374,20 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 		}
 	}
 
-	// Sort closed DESC by ClosedAt.
+	// Sort closed DESC by ClosedAt with a deterministic ID tiebreak. The map
+	// iteration above is randomized, so a comparator that only orders by ClosedAt
+	// leaves equal-timestamp issues in an unspecified relative order that differs
+	// between calls; the first-page and load-more (ClosedOffset) windows would then
+	// come from two independent orderings and a boundary issue could be skipped or
+	// duplicated. The ID tiebreak makes the order a total, stable function of the
+	// data so paging is consistent across calls. Zero-closed-time issues sort last.
 	sort.Slice(closed, func(i, j int) bool {
-		// Closed issues with a zero closed time sort last.
 		ti := r.issues[closed[i].ID].closed
 		tj := r.issues[closed[j].ID].closed
-		return ti.After(tj)
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return closed[i].ID < closed[j].ID
 	})
 
 	re := domain.ReadyExplainResult{

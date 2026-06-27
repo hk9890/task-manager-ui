@@ -51,8 +51,8 @@ var scheduleRefreshTickCmd = func() tea.Cmd {
 	})
 }
 
-var scheduleToastDismissCmd = func(d time.Duration) tea.Cmd {
-	return toaster.ScheduleDismiss(d)
+var scheduleToastDismissCmd = func(d time.Duration, seq int) tea.Cmd {
+	return toaster.ScheduleDismiss(d, seq)
 }
 
 var scheduleSpinnerTickCmd = func() tea.Cmd {
@@ -67,7 +67,7 @@ func getRefreshTickScheduler() func() tea.Cmd {
 }
 
 // getToastDismissScheduler returns the current scheduleToastDismissCmd under lock.
-func getToastDismissScheduler() func(time.Duration) tea.Cmd {
+func getToastDismissScheduler() func(time.Duration, int) tea.Cmd {
 	schedulerMu.Lock()
 	defer schedulerMu.Unlock()
 	return scheduleToastDismissCmd
@@ -500,6 +500,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		editorCmd, err := m.services.Editor.BuildEditorCmd(msg.prepared.TempPath)
 		if err != nil {
+			// PrepareDocument already wrote the temp doc (containing the issue's
+			// title + description); remove it on this error path so it does not leak
+			// on disk until the stale-temp sweep — matching the editorExitedMsg and
+			// ApplyEdits cleanup paths.
+			_ = os.Remove(msg.prepared.TempPath)
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to build editor command: %v", err), toaster.StyleError))
 		}
 		prepared := msg.prepared
@@ -675,7 +680,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.active = mode.Detail
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case toaster.DismissMsg:
-		m.toast = m.toast.Hide()
+		// Only dismiss when the timer belongs to the toast currently shown; a
+		// stale timer from a superseded toast (two toasts within the dismiss
+		// window) must not hide the newer one early.
+		if msg.Seq == m.toast.Seq() {
+			m.toast = m.toast.Hide()
+		}
 		return m, modeCmd
 	case tea.KeyMsg:
 		// Single choke point: any key press clears the pending-dialog guard.
@@ -826,12 +836,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.active = mode.Detail
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
-			m.active = nextMode(m.active, m.lastBrowse)
-			m.lastBrowse = m.active
+			m.applyModeCycle(nextMode(m.active, m.lastBrowse))
 			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
-			m.active = prevMode(m.active, m.lastBrowse)
-			m.lastBrowse = m.active
+			m.applyModeCycle(prevMode(m.active, m.lastBrowse))
 			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
 			// If a dialog-open was in flight when ESC arrived, the guard has
@@ -1160,7 +1168,9 @@ func (m Model) renderFooter() string {
 
 func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	m.toast = m.toast.Show(message, style)
-	return getToastDismissScheduler()(3 * time.Second)
+	// Tag the dismiss timer with this toast's identity so a stale timer from an
+	// earlier toast cannot dismiss the one now on screen (see DismissMsg handler).
+	return getToastDismissScheduler()(3*time.Second, m.toast.Seq())
 }
 
 func (m Model) boardIsLoading() bool {
@@ -1330,6 +1340,30 @@ func batchCmds(cmds ...tea.Cmd) tea.Cmd {
 		return filtered[0]
 	}
 	return tea.Batch(filtered...)
+}
+
+// applyModeCycle switches the active mode to target while preserving the
+// invariant that lastBrowse is always a browse mode (Board or Search) —
+// currentSelection() and the Escape handler rely on it. Entering a browse mode
+// sets lastBrowse to it; entering Detail captures the browse mode we came from
+// (mirroring the explicit Detail handler) and otherwise leaves lastBrowse
+// untouched. The previous code did `lastBrowse = active` unconditionally, so
+// cycling into Detail (e.g. prevMode(Board) == Detail) set lastBrowse = Detail,
+// which made currentSelection() return nil (blank/stuck Detail view) and turned
+// Escape (active = lastBrowse) into a no-op.
+func (m *Model) applyModeCycle(target mode.ID) {
+	switch target {
+	case mode.Board, mode.Search:
+		m.active = target
+		m.lastBrowse = target
+	case mode.Detail:
+		if m.active == mode.Board || m.active == mode.Search {
+			m.lastBrowse = m.active
+		}
+		m.active = mode.Detail
+	default:
+		m.active = target
+	}
 }
 
 func nextMode(current mode.ID, lastBrowse mode.ID) mode.ID {
@@ -1660,7 +1694,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 			Inputs: []modal.InputConfig{
 				{Key: "title", Label: "Title", Placeholder: "Issue title"},
 				{Key: "type", Label: "Type", Placeholder: emptyFallback(state.typeList, "task")},
-				{Key: "priority", Label: "Priority", Placeholder: "0-3"},
+				{Key: "priority", Label: "Priority", Placeholder: "0-4"},
 				{Key: "assignee", Label: "Assignee", Placeholder: "username"},
 				{Key: "labels", Label: "Labels", Placeholder: "comma,separated"},
 				{Key: "description", Label: "Description", Placeholder: "Short description"},
@@ -1677,7 +1711,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 				{Key: "title", Label: "Title", Value: state.issue.Title, Placeholder: "Leave unchanged"},
 				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
 				{Key: "type", Label: "Type", Value: state.issue.Type, Placeholder: emptyFallback(state.typeList, state.issue.Type)},
-				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-3"},
+				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-4"},
 				{Key: "assignee", Label: "Assignee", Value: state.issue.Assignee, Placeholder: "username"},
 				{Key: "labels", Label: "Labels", Value: strings.Join(state.issue.Labels, ","), Placeholder: "comma,separated"},
 			},
@@ -1804,7 +1838,10 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 			if priority != nil {
 				input.Priority = priority
 			}
-			if assignee != "" {
+			// Diff against the original assignee rather than gating on non-empty, so
+			// clearing the pre-filled field unassigns the issue (sends Assignee=""),
+			// instead of being silently treated as "no change".
+			if assignee != strings.TrimSpace(state.issue.Assignee) {
 				input.Assignee = &assignee
 			}
 			if len(labels) > 0 {
@@ -1857,9 +1894,7 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 			if priority == nil {
 				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: priority is required")}
 			}
-			if *priority < 0 || *priority > 4 {
-				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, err: fmt.Errorf("update priority failed: priority must be between 0 and 4")}
-			}
+			// Range (0..4) is enforced by parseRequiredPriority above.
 			if *priority == state.issue.Priority {
 				return mutationResultMsg{kind: mutationPriority, issueID: state.issue.ID, noChange: true}
 			}
@@ -1897,6 +1932,9 @@ func parsePriority(value string) (*int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("priority must be an integer")
 	}
+	if parsed < 0 || parsed > 4 {
+		return nil, fmt.Errorf("priority must be between 0 and 4")
+	}
 
 	return &parsed, nil
 }
@@ -1910,6 +1948,9 @@ func parseRequiredPriority(value string) (*int, error) {
 	parsed, err := strconv.Atoi(trimmed)
 	if err != nil {
 		return nil, fmt.Errorf("priority must be an integer")
+	}
+	if parsed < 0 || parsed > 4 {
+		return nil, fmt.Errorf("priority must be between 0 and 4")
 	}
 
 	return &parsed, nil

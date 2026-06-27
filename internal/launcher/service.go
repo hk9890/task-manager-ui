@@ -15,6 +15,112 @@ import (
 // NAME=value where NAME follows POSIX env-variable naming conventions.
 var envEntryRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=.*$`)
 
+// shellBaseNames are the POSIX-shell executables that interpret a -c/-lc script
+// body. A launcher whose command is one of these can re-parse a body argument as
+// code, which is the shell-injection surface the security rule guards.
+var shellBaseNames = map[string]struct{}{
+	"sh": {}, "bash": {}, "dash": {}, "zsh": {}, "ksh": {}, "ash": {}, "busybox": {},
+}
+
+// shellCommandFlagRe matches a single-dash shell flag bundle that contains the
+// "command" option (c), e.g. -c, -lc, -ic, -lic. The argument immediately
+// following such a flag is the script body.
+var shellCommandFlagRe = regexp.MustCompile(`^-[a-z]*c[a-z]*$`)
+
+// issueFieldPlaceholders are the operator-untrusted interpolation placeholders.
+// They carry issue content (id, title, labels, assignee) that anyone able to
+// file or edit an issue controls. They must never be interpolated into a shell
+// body; only project.root is operator-trusted. See docs/CODING.md
+// "Shell-launcher security rule".
+var issueFieldPlaceholders = []string{
+	"{{issue.id}}",
+	"{{issue.title}}",
+	"{{issue.labels}}",
+	"{{issue.assignee}}",
+}
+
+// validateShellBodySafety enforces the shell-launcher security invariant: when a
+// launcher invokes a POSIX shell with a -c/-lc body, that body must not contain
+// any issue-field placeholder. Issue fields are operator-untrusted input;
+// interpolating them into a re-parsed shell body allows command injection / RCE
+// via issue content. Operators must pass issue fields as positional arguments
+// after the body and reference them via $1, $2, … instead. Enforced at
+// definition-build time so a dangerous config fails fast at startup rather than
+// silently shelling out attacker-controlled issue content at launch.
+//
+// The whole argv (command + args) is scanned, not just the leading command, so
+// an exec wrapper that fronts the shell — e.g. `env sh -c …`, `/usr/bin/env bash
+// -lc …`, `timeout 10 sh -c …`, `nice -n5 sh -c …` — cannot smuggle the same
+// injection past a command-only check. Anywhere a shell token is followed by a
+// -c-style flag, the body argument after that flag is checked.
+//
+// Note: issue-field placeholders inside Env entries are intentionally NOT
+// rejected — passing issue data through environment variables is a documented
+// safe pattern (see the built-in "opencode" launcher) because env values are not
+// re-parsed as shell code. An operator who deliberately writes `eval "$VAR"` in a
+// shell body re-introduces the risk; that is out of scope for this static check.
+func validateShellBodySafety(def Definition) error {
+	// Combined token stream: the command plus its args. A wrapper prefix (env,
+	// timeout, nice, …) simply appears before the shell token and is skipped over.
+	tokens := make([]string, 0, len(def.Args)+1)
+	tokens = append(tokens, def.Command)
+	tokens = append(tokens, def.Args...)
+
+	for i, tok := range tokens {
+		if !isShellCommandName(tok) {
+			continue
+		}
+		// Find this shell's -c/-lc flag. POSIX shells place the script body in the
+		// argument immediately after the command flag; tolerate intervening shell
+		// options (e.g. `sh -l -c BODY`) but stop at the first non-flag token.
+		for j := i + 1; j < len(tokens); j++ {
+			t := strings.TrimSpace(tokens[j])
+			if shellCommandFlagRe.MatchString(t) {
+				if j+1 < len(tokens) {
+					if ph := issuePlaceholderIn(tokens[j+1]); ph != "" {
+						return fmt.Errorf(
+							"launcher action %q: issue-field placeholder %s must not be interpolated into a shell %q body (command-injection risk); pass it as a positional argument after the body and reference it via $1/$2/… instead",
+							strings.TrimSpace(def.Action), ph, t,
+						)
+					}
+				}
+				break // found this shell's command flag; done with it
+			}
+			if strings.HasPrefix(t, "-") {
+				continue // another shell option (e.g. -l, -i); keep looking for -c
+			}
+			break // a non-flag token before any -c: not a -c invocation
+		}
+	}
+	return nil
+}
+
+// issuePlaceholderIn returns the first issue-field placeholder found in s, or ""
+// when none is present.
+func issuePlaceholderIn(s string) string {
+	for _, ph := range issueFieldPlaceholders {
+		if strings.Contains(s, ph) {
+			return ph
+		}
+	}
+	return ""
+}
+
+// isShellCommandName reports whether command names a POSIX shell (by basename),
+// ignoring any directory path. The command template is matched as-is (before
+// interpolation); shell commands in practice are literal (e.g. "sh", "/bin/sh").
+func isShellCommandName(command string) bool {
+	name := strings.TrimSpace(command)
+	if name == "" {
+		return false
+	}
+	if idx := strings.LastIndexAny(name, "/\\"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	_, ok := shellBaseNames[name]
+	return ok
+}
+
 // stripC0 removes all C0 control characters (U+0000–U+001F) from s.
 // This prevents ANSI-escape injection, newline injection into env entries, and
 // NUL-byte issues in argv before values reach the child process.
@@ -87,6 +193,9 @@ func newDefinitionResolver(definitions []Definition) (definitionResolver, error)
 		}
 		if strings.TrimSpace(definition.Command) == "" {
 			return definitionResolver{}, fmt.Errorf("launcher command is required for action %q", action)
+		}
+		if err := validateShellBodySafety(definition); err != nil {
+			return definitionResolver{}, err
 		}
 		if _, exists := indexed[action]; exists {
 			return definitionResolver{}, fmt.Errorf("duplicate launcher action %q", action)

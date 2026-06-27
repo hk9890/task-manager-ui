@@ -28,11 +28,12 @@ const cardinalityThreshold = 500
 // PriorClosed, when non-nil, enables the load-more merge path in Compose:
 // the board model passes the issues already displayed in the Done column
 // (PriorClosed) together with a freshly fetched offset page (Closed).
-// Compose concatenates prior+incoming, deduplicates by ID (incoming wins on
-// conflict — matches caching layer semantics), and sorts the merged result
-// by UpdatedAt DESC to recover ClosedAt DESC ordering. ClosedTotal must be
-// set when using PriorClosed; TotalIsExact is recomputed as
-// len(merged) >= ClosedTotal. ClosedLimit is ignored when PriorClosed is set.
+// Compose concatenates prior+incoming and deduplicates by ID (incoming wins on
+// conflict — matches caching layer semantics), preserving the backend's
+// ClosedAt DESC order without re-sorting, so the Done column looks identical
+// whether reached by first-load or load-more. ClosedTotal must be set when
+// using PriorClosed; TotalIsExact is recomputed as len(merged) >= ClosedTotal.
+// ClosedLimit is ignored when PriorClosed is set.
 type Inputs struct {
 	Ready         []domain.IssueSummary
 	Blocked       []domain.BlockedIssueView
@@ -106,15 +107,22 @@ func mapBlockedToSummaries(blocked []domain.BlockedIssueView) []domain.IssueSumm
 	return out
 }
 
-// mergeClosedAppend merges prior (already-on-screen) with incoming (freshly
-// fetched offset page) for the Done column load-more path.
+// mergeClosedAppend merges prior (already-on-screen) with incoming (the next
+// freshly fetched offset page) for the Done column load-more path.
 //
-// Dedup: incoming wins on ID conflict (latest version from the backing store
-// replaces the stale copy already on screen — matches caching layer semantics).
-// Order: after dedup the merged slice is sorted UpdatedAt DESC as the best
-// available proxy for ClosedAt DESC ordering; incoming pages arrive pre-sorted
-// by the repository, but the sort-merge here is the defensive recovery path for
-// out-of-order boundaries (e.g. equal UpdatedAt at a page seam).
+// Order: both prior and incoming arrive from the backend already in ClosedAt
+// DESC order, and incoming is the continuation page (fetched at offset =
+// len(prior)), so concatenating prior ++ incoming preserves the backend's
+// ClosedAt DESC ordering. The merge deliberately does NOT re-sort: the first-load
+// path (Compose) also trusts the backend order, and IssueSummary carries no
+// ClosedAt field, so re-sorting here by a proxy key (e.g. UpdatedAt) would make
+// the two paths order Done differently — an issue whose UpdatedAt differs from
+// its ClosedAt (e.g. a comment added after it was closed) would jump position
+// after a load-more but not on first load.
+//
+// Dedup: incoming wins on ID conflict (the freshly fetched version replaces the
+// stale on-screen copy — matches caching layer semantics). A prior entry that
+// reappears in incoming is dropped from its prior position and kept at incoming's.
 func mergeClosedAppend(prior, incoming []domain.IssueSummary) []domain.IssueSummary {
 	if len(incoming) == 0 {
 		out := make([]domain.IssueSummary, len(prior))
@@ -134,21 +142,15 @@ func mergeClosedAppend(prior, incoming []domain.IssueSummary) []domain.IssueSumm
 		incomingIDs[iss.ID] = struct{}{}
 	}
 
-	// Start with prior entries not overridden by incoming.
+	// Start with prior entries not overridden by incoming, preserving their
+	// backend order, then append the incoming continuation page.
 	merged := make([]domain.IssueSummary, 0, len(prior)+len(incoming))
 	for _, iss := range prior {
 		if _, replaced := incomingIDs[iss.ID]; !replaced {
 			merged = append(merged, iss)
 		}
 	}
-	// Append all incoming entries (new + replacements).
 	merged = append(merged, incoming...)
-
-	// Sort UpdatedAt DESC as the best available proxy for ClosedAt DESC.
-	// A stable sort preserves the original relative order within equal timestamps.
-	sort.SliceStable(merged, func(i, j int) bool {
-		return merged[i].UpdatedAt.After(merged[j].UpdatedAt)
-	})
 
 	return merged
 }
@@ -257,8 +259,9 @@ func Compose(in Inputs) Columns {
 	var doneTotal int
 
 	if in.PriorClosed != nil {
-		// Load-more merge path: concatenate prior+incoming, dedup by ID
-		// (incoming wins), sort UpdatedAt DESC to recover ClosedAt DESC order.
+		// Load-more merge path: concatenate prior+incoming and dedup by ID
+		// (incoming wins), preserving the backend's ClosedAt DESC order without
+		// re-sorting (consistent with the first-load path below).
 		// ClosedTotal is authoritative; ClosedLimit is ignored on this path.
 		closedIssues = mergeClosedAppend(in.PriorClosed, in.Closed)
 		doneTotal = in.ClosedTotal

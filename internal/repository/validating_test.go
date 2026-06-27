@@ -840,6 +840,87 @@ func TestValidatingRepository_Dashboard_BlockedSlotStatusMismatch(t *testing.T) 
 }
 
 // ============================================================
+// Dashboard — "deferred" issues in the Blocked (Not Ready) slot are accepted
+// (FIX #11 regression guard)
+// ============================================================
+//
+// Both backends deliberately place stored-status "deferred" issues into the
+// Blocked slot (the board's "Not Ready" feed). The slot validator must accept
+// BOTH "blocked" and "deferred"; flagging "deferred" as a contract violation
+// floods the diagnostics log with bogus warnings for every deferred issue.
+//
+// This test would FAIL against the pre-fix code that asserted status=="blocked"
+// only (validateSlotStatus(...,"blocked")), and PASSES with the fix
+// (validateSlotStatusOneOf(...,"blocked","deferred")).
+
+type deferredBlockedSlotRepo struct{ stubRepository }
+
+func (deferredBlockedSlotRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		InProgress:   []domain.IssueSummary{},
+		Closed:       []domain.IssueSummary{},
+		ClosedTotal:  0,
+		Blocked: []domain.IssueSummary{
+			// "deferred" is a legitimate member of the Not-Ready feed — no violation.
+			{ID: "d-1", Title: "Deferred issue", Status: "deferred", Type: "task"},
+			// A "blocked" item alongside it must also remain accepted.
+			{ID: "b-1", Title: "Blocked issue", Status: "blocked", Type: "task"},
+		},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_DeferredInBlockedSlotAccepted(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(deferredBlockedSlotRepo{})
+	data, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Inner data returned unchanged.
+	if len(data.Blocked) != 2 {
+		t.Fatalf("expected inner data returned unchanged, got %d Blocked items", len(data.Blocked))
+	}
+	// The core regression: no slot-status violation for the deferred (or blocked) item.
+	if h.hasWarnWithRule("DashboardBlockedStatusMatches") {
+		t.Errorf("deferred issue in Blocked slot must not trigger DashboardBlockedStatusMatches; records=%v", h.records)
+	}
+	// Well-formed data should be entirely warning-free.
+	if h.warnCount() != 0 {
+		t.Errorf("expected zero warnings for deferred-in-Blocked data, got %d; records=%v", h.warnCount(), h.records)
+	}
+}
+
+// Negative control: a genuinely wrong status ("in_progress") in the Blocked slot
+// — neither "blocked" nor "deferred" — must still be flagged, proving the fix did
+// not simply disable the rule.
+type trulyWrongBlockedSlotRepo struct{ stubRepository }
+
+func (trulyWrongBlockedSlotRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
+	return repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{TotalReady: 0, TotalBlocked: 0},
+		InProgress:   []domain.IssueSummary{},
+		Closed:       []domain.IssueSummary{},
+		ClosedTotal:  0,
+		Blocked: []domain.IssueSummary{
+			{ID: "x-1", Title: "Wrong slot", Status: "in_progress", Type: "task"}, // VIOLATION
+		},
+	}, nil
+}
+
+func TestValidatingRepository_Dashboard_WrongStatusInBlockedSlotStillWarns(t *testing.T) {
+	t.Parallel()
+	repo, h := newCapturingRepo(trulyWrongBlockedSlotRepo{})
+	_, err := repo.Dashboard(context.Background(), repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !h.hasWarnWithRule("DashboardBlockedStatusMatches") {
+		t.Errorf("expected warn with rule=DashboardBlockedStatusMatches for status=in_progress in Blocked slot; records=%v", h.records)
+	}
+}
+
+// ============================================================
 // Dashboard / ReadyExplain — NonEmptyReadyIDs violation
 // ============================================================
 

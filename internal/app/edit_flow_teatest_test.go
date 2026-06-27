@@ -100,7 +100,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	// Not parallel — modifies global scheduler vars via TestMain.
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withToastDismissScheduler(t, func(_ time.Duration) tea.Cmd { return nil })
+	withToastDismissScheduler(t, func(_ time.Duration, _ int) tea.Cmd { return nil })
 
 	const issueID = "bw-edit-1"
 	originalTitle := "Original Title"
@@ -207,7 +207,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 func TestEditFlowNoChangeTeatest(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withToastDismissScheduler(t, func(_ time.Duration) tea.Cmd { return nil })
+	withToastDismissScheduler(t, func(_ time.Duration, _ int) tea.Cmd { return nil })
 
 	const issueID = "bw-edit-2"
 
@@ -300,7 +300,7 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 func TestEditFlowEditorErrorTeatest(t *testing.T) {
 	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withToastDismissScheduler(t, func(_ time.Duration) tea.Cmd { return nil })
+	withToastDismissScheduler(t, func(_ time.Duration, _ int) tea.Cmd { return nil })
 
 	const issueID = "bw-edit-3"
 

