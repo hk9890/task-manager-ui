@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
@@ -98,7 +99,7 @@ func feedDashboardErr(m *Model, err error) {
 func TestBoardModeInitDispatchesSingleDashboardCall(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewErrorInjecting(memoryrepo.New())
+	repo := fakes.NewErrorInjecting(memoryrepo.New())
 	m := newBoardModel(repo, resolvedBoardKeys(t))
 
 	cmd := m.Init()
@@ -112,7 +113,7 @@ func TestBoardModeInitDispatchesSingleDashboardCall(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("expected exactly 1 repository call on Init, got %d: %v", len(calls), calls)
 	}
-	if calls[0].Method != repository.MethodDashboard {
+	if calls[0].Method != fakes.MethodDashboard {
 		t.Errorf("expected Dashboard call, got %v", calls[0].Method)
 	}
 }

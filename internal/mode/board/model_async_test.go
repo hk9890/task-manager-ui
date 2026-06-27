@@ -170,7 +170,7 @@ var _ repository.Repository = (*dashboardCallCounter)(nil)
 
 // waitForInFlight polls delayed.InFlight() until it reaches want or the
 // deadline expires. Returns the final InFlight() value.
-func waitForInFlight(delayed *fakes.DelayedDashboardRepository, want int, timeout time.Duration) int {
+func waitForInFlight(delayed *fakes.DelayingRepository, want int, timeout time.Duration) int {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if n := delayed.InFlight(); n == want {

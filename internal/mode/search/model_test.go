@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
@@ -26,7 +27,7 @@ import (
 // repository.Repository via the embedded ErrorInjectingRepository.
 type searchRepo struct {
 	repo *memoryrepo.Repository
-	*repository.ErrorInjectingRepository
+	*fakes.ErrorInjectingRepository
 }
 
 // newSearchRepo creates a searchRepo with an empty memory repository.
@@ -34,12 +35,12 @@ func newSearchRepo() *searchRepo {
 	repo := memoryrepo.New()
 	return &searchRepo{
 		repo:                     repo,
-		ErrorInjectingRepository: repository.NewErrorInjecting(repo),
+		ErrorInjectingRepository: fakes.NewErrorInjecting(repo),
 	}
 }
 
 // hasSearchCall reports whether any Search call appears in calls.
-func hasSearchCall(calls []repository.Call) bool {
+func hasSearchCall(calls []fakes.Call) bool {
 	return countSearchCalls(calls) > 0
 }
 
@@ -899,7 +900,7 @@ func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
 	searchLogger := rootLogger.With("component", "search")
 
 	repo := memoryrepo.New()
-	gw := repository.NewErrorInjecting(repo)
+	gw := fakes.NewErrorInjecting(repo)
 	m := NewModel(context.Background(), gw, searchLogger)
 
 	// Put the model into a loading state and call Reload(). The guard path in

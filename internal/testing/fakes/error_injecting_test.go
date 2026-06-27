@@ -1,4 +1,4 @@
-package repository_test
+package fakes_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // fakeInner is a minimal happy-path Repository stub used by decorator tests.
@@ -109,7 +110,7 @@ func TestErrorInjecting_Delegation(t *testing.T) {
 	for _, m := range methods {
 		t.Run(m.name, func(t *testing.T) {
 			inner := &fakeInner{}
-			ei := repository.NewErrorInjecting(inner)
+			ei := fakes.NewErrorInjecting(inner)
 
 			if err := m.call(ei); err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -136,38 +137,38 @@ func TestErrorInjecting_InjectionPerMethod(t *testing.T) {
 	sentinel := errors.New("injected")
 
 	methodCases := []struct {
-		method repository.Method
+		method fakes.Method
 		call   func(r repository.Repository) error
 	}{
-		{repository.MethodDashboard, func(r repository.Repository) error {
+		{fakes.MethodDashboard, func(r repository.Repository) error {
 			_, err := r.Dashboard(ctx, repository.DashboardOptions{})
 			return err
 		}},
-		{repository.MethodIssue, func(r repository.Repository) error {
+		{fakes.MethodIssue, func(r repository.Repository) error {
 			_, err := r.Issue(ctx, "x")
 			return err
 		}},
-		{repository.MethodSearch, func(r repository.Repository) error {
+		{fakes.MethodSearch, func(r repository.Repository) error {
 			_, err := r.Search(ctx, domain.SearchIssuesQuery{})
 			return err
 		}},
-		{repository.MethodCreateIssue, func(r repository.Repository) error {
+		{fakes.MethodCreateIssue, func(r repository.Repository) error {
 			_, err := r.CreateIssue(ctx, domain.CreateIssueInput{Title: "t"})
 			return err
 		}},
-		{repository.MethodUpdateIssue, func(r repository.Repository) error {
+		{fakes.MethodUpdateIssue, func(r repository.Repository) error {
 			return r.UpdateIssue(ctx, "x", domain.UpdateIssueInput{})
 		}},
-		{repository.MethodCloseIssue, func(r repository.Repository) error {
+		{fakes.MethodCloseIssue, func(r repository.Repository) error {
 			return r.CloseIssue(ctx, "x", domain.CloseIssueInput{})
 		}},
-		{repository.MethodAddComment, func(r repository.Repository) error {
+		{fakes.MethodAddComment, func(r repository.Repository) error {
 			return r.AddComment(ctx, "x", domain.AddCommentInput{Body: "hi"})
 		}},
-		{repository.MethodHealthCheck, func(r repository.Repository) error {
+		{fakes.MethodHealthCheck, func(r repository.Repository) error {
 			return r.HealthCheck(ctx)
 		}},
-		{repository.MethodCatalogs, func(r repository.Repository) error {
+		{fakes.MethodCatalogs, func(r repository.Repository) error {
 			_, err := r.Catalogs(ctx)
 			return err
 		}},
@@ -176,7 +177,7 @@ func TestErrorInjecting_InjectionPerMethod(t *testing.T) {
 	for _, tc := range methodCases {
 		t.Run(string(tc.method), func(t *testing.T) {
 			inner := &fakeInner{}
-			ei := repository.NewErrorInjecting(inner)
+			ei := fakes.NewErrorInjecting(inner)
 			ei.SetError(tc.method, sentinel)
 
 			err := tc.call(ei)
@@ -198,16 +199,16 @@ func TestErrorInjecting_ClearError(t *testing.T) {
 	sentinel := errors.New("injected")
 
 	inner := &fakeInner{}
-	ei := repository.NewErrorInjecting(inner)
+	ei := fakes.NewErrorInjecting(inner)
 
 	// Inject an error, confirm it fires.
-	ei.SetError(repository.MethodHealthCheck, sentinel)
+	ei.SetError(fakes.MethodHealthCheck, sentinel)
 	if err := ei.HealthCheck(ctx); !errors.Is(err, sentinel) {
 		t.Fatalf("expected sentinel, got %v", err)
 	}
 
 	// Clear the error; next call should delegate.
-	ei.SetError(repository.MethodHealthCheck, nil)
+	ei.SetError(fakes.MethodHealthCheck, nil)
 	if err := ei.HealthCheck(ctx); err != nil {
 		t.Fatalf("unexpected error after clear: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestErrorInjecting_ClearError(t *testing.T) {
 func TestErrorInjecting_CallTracking(t *testing.T) {
 	ctx := context.Background()
 	inner := &fakeInner{}
-	ei := repository.NewErrorInjecting(inner)
+	ei := fakes.NewErrorInjecting(inner)
 
 	_ = ei.HealthCheck(ctx)
 	_, _ = ei.Dashboard(ctx, repository.DashboardOptions{})
@@ -231,10 +232,10 @@ func TestErrorInjecting_CallTracking(t *testing.T) {
 	if len(calls) != 3 {
 		t.Fatalf("expected 3 calls, got %d", len(calls))
 	}
-	want := []repository.Method{
-		repository.MethodHealthCheck,
-		repository.MethodDashboard,
-		repository.MethodCatalogs,
+	want := []fakes.Method{
+		fakes.MethodHealthCheck,
+		fakes.MethodDashboard,
+		fakes.MethodCatalogs,
 	}
 	for i, w := range want {
 		if calls[i].Method != w {
@@ -248,7 +249,7 @@ func TestErrorInjecting_CallTracking(t *testing.T) {
 func TestErrorInjecting_Snapshot(t *testing.T) {
 	ctx := context.Background()
 	inner := &fakeInner{}
-	ei := repository.NewErrorInjecting(inner)
+	ei := fakes.NewErrorInjecting(inner)
 
 	_ = ei.HealthCheck(ctx)
 	snap1 := ei.Calls()
@@ -257,7 +258,7 @@ func TestErrorInjecting_Snapshot(t *testing.T) {
 	_ = ei.HealthCheck(ctx)
 	snap2 := ei.Calls()
 
-	if snap2[0].Method != repository.MethodHealthCheck {
+	if snap2[0].Method != fakes.MethodHealthCheck {
 		t.Errorf("snapshot mutation leaked into internal state: got %q", snap2[0].Method)
 	}
 	if len(snap2) != 2 {

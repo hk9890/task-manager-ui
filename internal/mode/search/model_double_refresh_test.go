@@ -15,8 +15,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // searchReloadKeyMsg returns a tea.KeyMsg for the 'r' key (the SearchActionReload default).
@@ -25,10 +25,10 @@ func searchReloadKeyMsg() tea.KeyMsg {
 }
 
 // countSearchCalls returns the number of Search calls in the given slice.
-func countSearchCalls(calls []repository.Call) int {
+func countSearchCalls(calls []fakes.Call) int {
 	n := 0
 	for _, c := range calls {
-		if c.Method == repository.MethodSearch {
+		if c.Method == fakes.MethodSearch {
 			n++
 		}
 	}
@@ -39,9 +39,9 @@ func countSearchCalls(calls []repository.Call) int {
 // Init(), drains all messages so the model is fully settled (loading=false),
 // and then applies a search query to set appliedQuery so reload has something
 // to re-trigger.
-func newSettledSearchModel(t *testing.T, repository *repository.ErrorInjectingRepository) *Model {
+func newSettledSearchModel(t *testing.T, eir *fakes.ErrorInjectingRepository) *Model {
 	t.Helper()
-	m := initModel(repository)
+	m := initModel(eir)
 	if m.loading {
 		t.Fatalf("setup: expected loading=false after initModel settle")
 	}
@@ -63,16 +63,16 @@ func TestSearchManualReloadIgnoredWhileInFlight(t *testing.T) {
 	repo := memoryrepo.New()
 	repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Result one", Status: "open", Priority: 1})
 	repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Result two", Status: "open", Priority: 2})
-	repository := repository.NewErrorInjecting(repo)
+	eir := fakes.NewErrorInjecting(repo)
 
-	m := newSettledSearchModel(t, repository)
+	m := newSettledSearchModel(t, eir)
 
 	// Navigate to results to establish a meaningful selection anchor.
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	// Focus should now be on results (FocusResults).
 
 	// Record call count before reload so we measure only reload-triggered calls.
-	callsBefore := len(repository.Calls())
+	callsBefore := len(eir.Calls())
 
 	// === First reload: fire 'r', capture Cmd, do NOT drain ===
 	firstCmd := m.Update(searchReloadKeyMsg())
@@ -91,13 +91,13 @@ func TestSearchManualReloadIgnoredWhileInFlight(t *testing.T) {
 	// Execute the first Cmd's closure to record repository calls (but don't apply
 	// the returned messages to the model yet — leaving it "in flight").
 	firstMsgs := drainCmd(firstCmd)
-	callsAfterFirst := countSearchCalls(repository.Calls()[callsBefore:])
+	callsAfterFirst := countSearchCalls(eir.Calls()[callsBefore:])
 	if callsAfterFirst != 1 {
 		t.Fatalf("first reload: expected exactly 1 Search call, got %d", callsAfterFirst)
 	}
 
 	// Record count to measure second-reload calls.
-	callsBeforeSecond := len(repository.Calls())
+	callsBeforeSecond := len(eir.Calls())
 
 	// === Second reload: fire 'r' again WITHOUT applying first Cmd's results ===
 	secondCmd := m.Update(searchReloadKeyMsg())
@@ -105,7 +105,7 @@ func TestSearchManualReloadIgnoredWhileInFlight(t *testing.T) {
 	// === ASSERTIONS — these FAIL on current (buggy) code ===
 
 	// Assert 1: repository must NOT have received a second Search call.
-	callsFromSecond := countSearchCalls(repository.Calls()[callsBeforeSecond:])
+	callsFromSecond := countSearchCalls(eir.Calls()[callsBeforeSecond:])
 	if callsFromSecond != 0 {
 		// Execute the second batch to count calls.
 		if secondCmd != nil {

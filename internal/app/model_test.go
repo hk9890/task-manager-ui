@@ -17,7 +17,6 @@ import (
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	detailsmode "github.com/hk9890/task-manager-ui/internal/mode/details"
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	"github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -158,7 +157,7 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	if m.active != mode.Search {
 		t.Fatalf("expected search active after toggle, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, repository.MethodSearch) {
+	if !gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected Search call on first search mode activation; got calls=%#v", gw.Calls())
 	}
 	if !m.searchInitDone {
@@ -184,7 +183,7 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	// not by Init. Confirm no second Search call came from the lazy path.
 	// (Auto-refresh may or may not fire depending on stale cadence; we apply no
 	// messages to avoid triggering it.)
-	if gw.hasCallSince(mark, repository.MethodSearch) {
+	if gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected lazy init NOT to re-fire Search on second search activation; got calls=%#v", gw.Calls())
 	}
 }
@@ -339,7 +338,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 	if m.active != mode.Search {
 		t.Fatalf("expected active mode to stay search while typing, got %s", m.active)
 	}
-	if gw.callCountSince(mark, repository.MethodSearch) != 0 {
+	if gw.callCountSince(mark, fakes.MethodSearch) != 0 {
 		t.Fatalf("expected typing in search query not to run search until enter, got %#v", gw.Calls())
 	}
 
@@ -370,7 +369,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	m = applyMessages(t, m, runBatch(cmd))
 
 	// Trigger a repository-backed search error.
-	gw.SetError(repository.MethodSearch, errors.New("search boom"))
+	gw.SetError(fakes.MethodSearch, errors.New("search boom"))
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -383,7 +382,7 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 	}
 
 	// Clear error and run another non-empty query that returns no results.
-	gw.SetError(repository.MethodSearch, nil)
+	gw.SetError(fakes.MethodSearch, nil)
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -504,7 +503,7 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodDashboard) {
+	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected board refresh from tick fallback without focus events, calls=%#v", gw.Calls())
 	}
 }
@@ -528,7 +527,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	next, cmd := m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, repository.MethodDashboard) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected initial focus event not to force refresh, calls=%#v", gw.Calls())
 	}
 
@@ -541,7 +540,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	next, cmd = m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if !gw.hasCallSince(mark, repository.MethodDashboard) {
+	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected focus regain to refresh active board, calls=%#v", gw.Calls())
 	}
 
@@ -549,7 +548,7 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	next, cmd = m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, repository.MethodDashboard) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected repeated focus while focused to avoid refresh spam, calls=%#v", gw.Calls())
 	}
 }
@@ -588,10 +587,10 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected focus regain to refresh active detail immediately, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, repository.MethodDashboard) || gw.hasCallSince(mark, repository.MethodSearch) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected focus regain in detail to refresh only active detail surface, calls=%#v", gw.Calls())
 	}
 }
@@ -625,10 +624,10 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodSearch) {
+	if !gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected search surface refresh on tick when search is active, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, repository.MethodDashboard) || gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected tick refresh to target only active search surface, calls=%#v", gw.Calls())
 	}
 }
@@ -669,7 +668,7 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 	if m.detail.Detail.Summary.ID != "tm-3" || m.detail.Detail.Description != "cached detail" {
 		t.Fatalf("expected board auto-refresh not to clear shell detail cache, got %#v", m.detail.Detail)
 	}
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected board auto-refresh not to force detail reload when selection remains, calls=%#v", gw.Calls())
 	}
 }
@@ -715,7 +714,7 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	if m.detail.Detail.Summary.ID != "tm-9" || m.detail.Detail.Description != "cached detail" {
 		t.Fatalf("expected search auto-refresh not to clear shell detail cache, got %#v", m.detail.Detail)
 	}
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected search auto-refresh not to force detail reload when selection remains, calls=%#v", gw.Calls())
 	}
 }
@@ -746,7 +745,7 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.callCountSince(mark, repository.MethodSearch) != 0 {
+	if gw.callCountSince(mark, fakes.MethodSearch) != 0 {
 		t.Fatalf("expected query edit not to search before enter, got %#v", gw.Calls())
 	}
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -766,10 +765,10 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodSearch) {
+	if !gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected focus regain in search to refresh immediately, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, repository.MethodDashboard) || gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected search focus regain to refresh only active search surface, calls=%#v", gw.Calls())
 	}
 	if got := m.search.SessionState().AppliedQuery; got != "x" {
@@ -865,7 +864,7 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	if session := m.search.SessionState(); !session.Loading || !session.Reloading {
 		t.Fatalf("expected search session to mark reload in flight, got %#v", session)
 	}
-	gw.SetError(repository.MethodSearch, errors.New("refresh boom"))
+	gw.SetError(fakes.MethodSearch, errors.New("refresh boom"))
 
 	m = applyMessages(t, m, runBatch(cmd))
 	m.renderBody()
@@ -916,7 +915,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(tickCmd))
 
-	if gw.callCountSince(mark, repository.MethodSearch) != 0 {
+	if gw.callCountSince(mark, fakes.MethodSearch) != 0 {
 		t.Fatalf("expected no repository calls before queued typing command resolves, got %#v", gw.Calls())
 	}
 
@@ -924,7 +923,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	calls := gw.Calls()
-	if gw.callCountSince(mark, repository.MethodSearch) != 1 {
+	if gw.callCountSince(mark, fakes.MethodSearch) != 1 {
 		t.Fatalf("expected only one enter-triggered search call while auto-refresh is suppressed, got %#v", calls)
 	}
 	if m.search.IsLoading() {
@@ -953,7 +952,7 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	next, cmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.callCountSince(mark, repository.MethodDashboard)+gw.callCountSince(mark, repository.MethodSearch)+gw.callCountSince(mark, repository.MethodIssue) != 0 {
+	if gw.callCountSince(mark, fakes.MethodDashboard)+gw.callCountSince(mark, fakes.MethodSearch)+gw.callCountSince(mark, fakes.MethodIssue) != 0 {
 		t.Fatalf("expected no auto-refresh while help modal is open, calls=%#v", gw.Calls())
 	}
 
@@ -963,7 +962,7 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.callCountSince(mark, repository.MethodDashboard)+gw.callCountSince(mark, repository.MethodSearch)+gw.callCountSince(mark, repository.MethodIssue) != 0 {
+	if gw.callCountSince(mark, fakes.MethodDashboard)+gw.callCountSince(mark, fakes.MethodSearch)+gw.callCountSince(mark, fakes.MethodIssue) != 0 {
 		t.Fatalf("expected no auto-refresh while action modal is open, calls=%#v", gw.Calls())
 	}
 
@@ -975,7 +974,7 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected duplicate detail reload suppression while loading, calls=%#v", gw.Calls())
 	}
 }
@@ -1001,13 +1000,13 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodDashboard) {
+	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected board to refresh immediately when active and dirty after write, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, repository.MethodSearch) {
+	if gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected hidden search surface not to refresh from board-active write, calls=%#v", gw.Calls())
 	}
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected write flow to keep immediate detail reload, calls=%#v", gw.Calls())
 	}
 
@@ -1026,10 +1025,10 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	if m.active != mode.Search {
 		t.Fatalf("expected active mode search after toggle, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, repository.MethodSearch) {
+	if !gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected dirty search to refresh on activation, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, repository.MethodDashboard) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected only newly active search to refresh on activation, calls=%#v", gw.Calls())
 	}
 	if state := m.refreshStateBySurface[mode.Search]; state.dirty {
@@ -1060,7 +1059,7 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if gw.hasCallSince(mark, repository.MethodDashboard) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected no board refresh before stale interval elapses, calls=%#v", gw.Calls())
 	}
 
@@ -1070,7 +1069,7 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodDashboard) {
+	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected board refresh at ~60s stale threshold, calls=%#v", gw.Calls())
 	}
 }
@@ -1134,7 +1133,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if gw.callCountSince(mark, repository.MethodDashboard)+gw.callCountSince(mark, repository.MethodSearch)+gw.callCountSince(mark, repository.MethodIssue) != 0 {
+	if gw.callCountSince(mark, fakes.MethodDashboard)+gw.callCountSince(mark, fakes.MethodSearch)+gw.callCountSince(mark, fakes.MethodIssue) != 0 {
 		t.Fatalf("expected no auto-refresh side effects from focus/tick when disabled, calls=%#v", gw.Calls())
 	}
 
@@ -1143,7 +1142,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodDashboard) {
+	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected manual reload to include board data refresh, calls=%#v", gw.Calls())
 	}
 }
@@ -1178,10 +1177,10 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected active detail to refresh when eligible, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, repository.MethodDashboard) || gw.hasCallSince(mark, repository.MethodSearch) {
+	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected no background refresh of inactive board/search surfaces, calls=%#v", gw.Calls())
 	}
 }
@@ -1759,7 +1758,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	// cmd may be nil or a no-op batch; it must NOT trigger a detail reload.
 	mark := gw.resetMark()
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected down on browser to NOT trigger repository.Issue call, got calls=%#v", gw.Calls())
 	}
 	if m.detail.BrowserSelectedIndex == prevIndex {
@@ -1782,7 +1781,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	if m.active != mode.Detail {
 		t.Errorf("expected app to remain in detail mode after Enter on browser panel, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected Enter on browser to trigger repository.Issue call (loadDetailCmd), calls=%#v", gw.Calls())
 	}
 	// Scroll must be reset and Loading must have been set (may now be false after applyMessages resolves the load).
@@ -1855,7 +1854,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected first down to NOT trigger Issue call, calls=%#v", gw.Calls())
 	}
 
@@ -1863,7 +1862,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected second down to NOT trigger Issue call, calls=%#v", gw.Calls())
 	}
 
@@ -1876,7 +1875,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	if m.active != mode.Detail {
 		t.Errorf("expected app to remain in detail mode after Enter on dependencies pane, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected Enter on dependencies pane to trigger repository.Issue call, calls=%#v", gw.Calls())
 	}
 	// TargetID must point to the cursor row (tm-4).
@@ -2499,7 +2498,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 		t.Fatalf("expected editor call for tm-9, got %q", fakeEditor.Calls[0].IssueID)
 	}
 
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected detail reload via Issue after successful update, calls=%#v", gw.Calls())
 	}
 
@@ -2559,7 +2558,7 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls)
 	}
 
-	if gw.hasCallSince(mark, repository.MethodIssue) {
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("did not expect issue reload from launcher action, calls=%#v", gw.Calls())
 	}
 }
@@ -2704,7 +2703,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
-	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeCommandUnavailable,
 		Operation: "health check",
 		Message:   "task-manager backend unavailable",
@@ -2747,7 +2746,7 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
-	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeCommandUnavailable,
 		Message: "task-manager backend unavailable",
 	})
@@ -2774,7 +2773,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
-	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeCommandUnavailable,
 		Message: "task-manager backend unavailable",
 	})
@@ -2820,7 +2819,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
-	gw.SetError(repository.MethodHealthCheck, domain.RepositoryError{
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeNoDatabaseFound,
 		Operation: "health check",
 		Message:   "no task-manager store found",
@@ -2851,7 +2850,7 @@ func TestModelFatalErrIgnoresNonRepositoryError(t *testing.T) {
 	t.Parallel()
 
 	gw := newTestRepository()
-	gw.SetError(repository.MethodHealthCheck, errors.New("some plain error"))
+	gw.SetError(fakes.MethodHealthCheck, errors.New("some plain error"))
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -3116,7 +3115,7 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 
 	// App must have issued a detail load command (Issue call).
 	m = applyMessages(t, m, runBatch(cmd))
-	if !gw.hasCallSince(mark, repository.MethodIssue) {
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Error("expected repository.Issue call after Enter-reload; handler must dispatch loadDetailCmd")
 	}
 }
