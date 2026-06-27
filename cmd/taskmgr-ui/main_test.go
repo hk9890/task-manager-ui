@@ -376,6 +376,20 @@ func TestParseCLIRepoFlags(t *testing.T) {
 			wantRepo: "taskmgr",
 			wantFile: "data.jsonl",
 		},
+		{
+			name:           "unknown flag errors exit 2",
+			args:           []string{"--nope"},
+			wantOK:         false,
+			wantCode:       2,
+			stderrContains: []string{"nope"},
+		},
+		{
+			name:           "trailing positional argument errors exit 2",
+			args:           []string{"extra-arg"},
+			wantOK:         false,
+			wantCode:       2,
+			stderrContains: []string{"unexpected arguments", "extra-arg"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -485,5 +499,34 @@ func TestRunRepoMemoryWithoutFileExitsCode2(t *testing.T) {
 	msg := stderr.String()
 	if !strings.Contains(msg, "memory") || !strings.Contains(msg, "--repo-file") {
 		t.Fatalf("expected error message referencing 'memory' and '--repo-file', got: %q", msg)
+	}
+}
+
+// TestResolveAuthor covers the author-attribution precedence that stamps the
+// creator on every issue created through the taskmgr backend: $USER wins, then
+// $USERNAME, with whitespace trimmed and a stable fallback when both are empty.
+func TestResolveAuthor(t *testing.T) {
+	tests := []struct {
+		name     string
+		user     string
+		username string
+		want     string
+	}{
+		{"USER set wins", "ada", "winhost", "ada"},
+		{"USER empty falls to USERNAME", "", "winhost", "winhost"},
+		{"USER whitespace falls to USERNAME", "   ", "winhost", "winhost"},
+		{"USER trimmed", "  ada  ", "", "ada"},
+		{"both empty -> default", "", "", "taskmgr-ui"},
+		{"both whitespace -> default", "  ", "  ", "taskmgr-ui"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("USER", tc.user)
+			t.Setenv("USERNAME", tc.username)
+			if got := resolveAuthor(); got != tc.want {
+				t.Errorf("resolveAuthor() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

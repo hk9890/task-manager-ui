@@ -181,6 +181,27 @@ func waitForInFlight(delayed *fakes.DelayingRepository, want int, timeout time.D
 	return delayed.InFlight()
 }
 
+// maxInFlightWithin polls delayed.InFlight() for the given duration and returns
+// the highest value observed, returning early as soon as the count exceeds ceil.
+// It lets a "count never rises above N" assertion wait on an observable
+// condition over a bounded window instead of a fixed-duration sleep guess: a
+// guard regression (a leaked in-flight call) is caught whenever it appears, and
+// the full window is available on a slow/loaded runner.
+func maxInFlightWithin(delayed *fakes.DelayingRepository, ceil int, d time.Duration) int {
+	deadline := time.Now().Add(d)
+	highest := delayed.InFlight()
+	for time.Now().Before(deadline) {
+		if n := delayed.InFlight(); n > highest {
+			highest = n
+		}
+		if highest > ceil {
+			return highest
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return highest
+}
+
 // TestDoneLoadMore_InFlightGuard verifies that the doneLoadInFlight guard
 // prevents parallel load-more dispatches under realistic async conditions.
 //
@@ -275,16 +296,15 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 		// selectionChangedCmds (no load-more); without the guard, extra
 		// loadMoreClosedCmds would accumulate in InFlight().
 		_ = startCmdSubcmdsAsync(cmd)
-		// Brief pause so any goroutine started above can reach delayed.Dashboard
-		// before the next assertion. 5ms is ample for a goroutine to enter the
-		// channel select; 0ms would be a race.
-		time.Sleep(5 * time.Millisecond)
 	}
 
 	// --- Step 3: assert exactly 1 in-flight call (guard blocked the rest) ---
-
-	if n := delayed.InFlight(); n != 1 {
-		t.Errorf("step 3: expected 1 in-flight Dashboard call after 5 guarded j presses, got %d", n)
+	// Poll over a generous window so a leaked load-more goroutine has ample time
+	// to reach delayed.Dashboard and be observed; the count must never exceed 1.
+	// (A fixed sleep would pass for the wrong reason on a loaded runner where a
+	// leaked goroutine simply hadn't been scheduled yet.)
+	if n := maxInFlightWithin(delayed, 1, 500*time.Millisecond); n != 1 {
+		t.Errorf("step 3: expected in-flight to stay at 1 after 5 guarded j presses, got %d", n)
 	}
 	if !m.doneLoadInFlight {
 		t.Error("step 3: expected doneLoadInFlight=true throughout the in-flight window")

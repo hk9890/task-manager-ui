@@ -629,6 +629,31 @@ func TestRenderCommentsOrdersNewestFirst(t *testing.T) {
 	}
 }
 
+// TestRenderCommentsTieBreakByIDDescending pins the documented tie-break
+// (docs/CODING.md "Comment ordering"): when two comments share a CreatedAt,
+// they sort by ID descending. Input order is c-a then c-b; without the
+// tie-break the stable sort would keep c-a first, so this fails if the
+// tie-break is dropped or inverted.
+func TestRenderCommentsTieBreakByIDDescending(t *testing.T) {
+	t.Parallel()
+
+	ts := mustTime(t, "2026-04-05T10:00:00Z")
+	lines := renderComments([]domain.IssueComment{
+		{ID: "c-a", Author: "alpha", Body: "first added", CreatedAt: ts},
+		{ID: "c-b", Author: "bravo", Body: "second added", CreatedAt: ts},
+	}, 80)
+
+	joined := strings.Join(lines, "\n")
+	bIndex := strings.Index(joined, "bravo · 2026-04-05 10:00")
+	aIndex := strings.Index(joined, "alpha · 2026-04-05 10:00")
+	if aIndex == -1 || bIndex == -1 {
+		t.Fatalf("expected both comment headers, got:\n%s", joined)
+	}
+	if bIndex >= aIndex {
+		t.Fatalf("expected higher-ID comment (c-b/bravo) first on CreatedAt tie, got:\n%s", joined)
+	}
+}
+
 func TestRenderCommentsElidesVeryLongLogLikeBodiesWithMarker(t *testing.T) {
 	t.Parallel()
 
