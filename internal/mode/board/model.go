@@ -66,14 +66,12 @@ type columnData struct {
 type refreshMode int
 
 const (
-	// refreshModeInit is used for the cold-start load (Init). It performs the
-	// same full-reset as refreshModeManual but does NOT set ForceFresh so that
-	// the caching layer can serve a hydrated Dashboard on cold start.
-	refreshModeInit refreshMode = iota
-	// refreshModeManual is used when the user presses the reload key (r). It
-	// sets ForceFresh: true so the caching layer skips its fast-path and fans
-	// out to backing, replacing any stale cached Dashboard.
-	refreshModeManual
+	// refreshModeReload performs a full reset of board state (focus, selection,
+	// scroll, columns). It is used for the cold-start load (Init) and the
+	// user-initiated reload (r key).
+	refreshModeReload refreshMode = iota
+	// refreshModeAuto is a background refresh that preserves the current
+	// selection anchor instead of resetting board state.
 	refreshModeAuto
 )
 
@@ -155,7 +153,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		keys:         keys,
 		selectedRow:  map[int]int{},
 		scrollOffset: map[int]int{},
-		refreshMode:  refreshModeManual,
+		refreshMode:  refreshModeReload,
 	}
 	m.columns = initialLoadingColumns()
 	return m
@@ -174,7 +172,7 @@ func initialLoadingColumns() []columnData {
 
 // Init loads board data from the repository via 3 parallel calls.
 func (m *Model) Init() tea.Cmd {
-	return m.startReload(refreshModeInit)
+	return m.startReload(refreshModeReload)
 }
 
 // Update processes board-specific messages and keybindings.
@@ -239,7 +237,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					"trigger", "board-manual")
 				return nil
 			}
-			return m.startReload(refreshModeManual)
+			return m.startReload(refreshModeReload)
 		case m.keys.Match(config.BoardContext, config.BoardActionLoadMore, msg):
 			// Explicit load-more: dispatch regardless of cursor proximity,
 			// but still respect the in-flight guard and "nothing more" check.
@@ -383,7 +381,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
 
-	if rm == refreshModeInit || rm == refreshModeManual {
+	if rm == refreshModeReload {
 		// Full reset: move focus to col 0, clear selection and scroll maps, reset columns.
 		m.focusedColumn = 0
 		m.selectedRow = map[int]int{}
@@ -395,9 +393,6 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// inside the closure (Bubble Tea runs Cmds outside the Update loop — per
 	// grill Q4, reading model state there is a race smell).
 	opts := repository.DashboardOptions{ClosedLimit: m.sectionItemCapacity()}
-	if rm == refreshModeManual {
-		opts.ForceFresh = true
-	}
 	return loadDashboardCmd(m.ctx, m.repo, opts)
 }
 
@@ -504,7 +499,7 @@ func (m *Model) settleAfterRefreshLoad() {
 	} else {
 		m.normalizeFocus()
 	}
-	m.refreshMode = refreshModeManual
+	m.refreshMode = refreshModeReload
 	m.refreshAnchor = nil
 }
 

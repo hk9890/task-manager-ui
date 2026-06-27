@@ -1,6 +1,6 @@
 package details
 
-// detailsTeatestWrapper adapts details.Model for use with the teatest harness.
+// detailsTestWrapper adapts details.Model for use with the teatest harness.
 // details.Model is not a full tea.Model (no Init/Update/View lifecycle);
 // this wrapper holds terminal dimensions and wires key messages to HandleKey
 // so that teatest can drive the model through real Bubble Tea message dispatch.

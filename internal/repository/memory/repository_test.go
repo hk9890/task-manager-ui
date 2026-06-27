@@ -1370,38 +1370,6 @@ func closedOffsetIssueIndex(id string) int {
 	return n
 }
 
-// ---- Forget tests ----
-
-func TestForget_ExistingID_DropsIssue(t *testing.T) {
-	r := memory.New()
-	r.Seed(memory.Issue{ID: "x-1", Title: "to forget"})
-
-	// Confirm it exists.
-	if _, err := r.Issue(context.Background(), "x-1"); err != nil {
-		t.Fatalf("before Forget: unexpected error %v", err)
-	}
-
-	r.Forget("x-1")
-
-	// Should be gone.
-	_, err := r.Issue(context.Background(), "x-1")
-	if !errors.Is(err, repository.ErrIssueNotFound) {
-		t.Fatalf("after Forget: expected ErrIssueNotFound, got %v", err)
-	}
-}
-
-func TestForget_AbsentID_NoOp(t *testing.T) {
-	r := memory.New()
-
-	// Should not panic or return an error.
-	r.Forget("does-not-exist")
-
-	// Store is empty; verify HealthCheck still works.
-	if err := r.HealthCheck(context.Background()); err != nil {
-		t.Fatalf("HealthCheck after Forget of absent ID: %v", err)
-	}
-}
-
 // ---- Snapshot round-trip tests ----
 
 // TestSnapshot_LosslessRoundTrip_FullDetail verifies that Snapshot/Seed
@@ -1447,8 +1415,8 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 	})
 
 	// Take a snapshot, JSON-encode each issue, JSON-decode back, then re-seed
-	// into a fresh repository. This mirrors the SaveNow→Hydrate code path in
-	// filestorage.LoadWithManifest.
+	// into a fresh repository. This mirrors the Save→Load code path in
+	// filestorage.Load.
 	snaps := src.Snapshot()
 
 	dst := memory.New(memory.WithClock(staticClock(base)))
@@ -1517,42 +1485,39 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 	}
 }
 
-// ---- SeedDetail tests ----
+// ---- SeedFromSnapshot verbatim-ref tests ----
 
-// TestSeedDetail_PreservesCrossRefMetadata verifies that SeedDetail stores full
-// IssueReference metadata (Title, Status, Type, Priority) for cross-referenced
-// issues, and that a subsequent Issue call returns those fields verbatim — even
-// when the referenced issues (B, R, P) were never seeded into the store.
-func TestSeedDetail_PreservesCrossRefMetadata(t *testing.T) {
+// TestSeedFromSnapshot_PreservesCrossRefMetadata verifies that SeedFromSnapshot
+// stores full IssueReference metadata (Title, Status, Type, Priority) for
+// cross-referenced issues, and that a subsequent Issue call returns those fields
+// verbatim — even when the referenced issues (B, R, P) were never seeded.
+func TestSeedFromSnapshot_PreservesCrossRefMetadata(t *testing.T) {
 	r := memory.New()
 
-	// Seed ONLY issue A; do NOT seed B, R, or P.
-	detail := domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:       "A",
-			Title:    "Issue A",
-			Status:   "open",
-			Type:     "task",
-			Priority: 0,
-		},
-		BlockedBy: []domain.IssueReference{
+	// Seed ONLY issue A, via a snapshot carrying verbatim cross-ref metadata;
+	// do NOT seed B, R, or P.
+	pRef := domain.IssueReference{ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2}
+	r.SeedFromSnapshot(memory.SnapshotIssue{
+		ID:        "A",
+		Title:     "Issue A",
+		Status:    "open",
+		Type:      "task",
+		Priority:  0,
+		DependsOn: []string{"B"},
+		Related:   []string{"R"},
+		ParentID:  "P",
+		BlockedByRefs: []domain.IssueReference{
 			{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1},
 		},
-		Related: []domain.IssueReference{
+		RelatedRefs: []domain.IssueReference{
 			{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0},
 		},
-		ParentGroupBrowser: domain.ParentGroupBrowserContext{
-			Parent: domain.IssueReference{
-				ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2,
-			},
-		},
-	}
-
-	r.SeedDetail(detail)
+		ParentRef: &pRef,
+	})
 
 	got, err := r.Issue(context.Background(), "A")
 	if err != nil {
-		t.Fatalf("Issue(A) after SeedDetail: %v", err)
+		t.Fatalf("Issue(A) after SeedFromSnapshot: %v", err)
 	}
 
 	// BlockedBy: cross-ref B was never seeded — must preserve all metadata.
@@ -1587,63 +1552,55 @@ func TestSeedDetail_PreservesCrossRefMetadata(t *testing.T) {
 	}
 }
 
-func TestSeedDetail_RoundTrip(t *testing.T) {
+func TestSeedFromSnapshot_RoundTrip(t *testing.T) {
 	r := memory.New()
 
-	detail := domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:       "sd-1",
-			Title:    "seeded via detail",
-			Status:   "in_progress",
-			Type:     "bug",
-			Priority: 2,
-			Assignee: "alice",
-			Labels:   []string{"backend"},
-		},
+	r.SeedFromSnapshot(memory.SnapshotIssue{
+		ID:          "sd-1",
+		Title:       "seeded via snapshot",
+		Status:      "in_progress",
+		Type:        "bug",
+		Priority:    2,
+		Assignee:    "alice",
+		Labels:      []string{"backend"},
 		Description: "a description",
 		Notes:       "some notes",
-	}
-
-	r.SeedDetail(detail)
+	})
 
 	got, err := r.Issue(context.Background(), "sd-1")
 	if err != nil {
-		t.Fatalf("Issue after SeedDetail: %v", err)
+		t.Fatalf("Issue after SeedFromSnapshot: %v", err)
 	}
 	if got.Summary.ID != "sd-1" {
 		t.Errorf("ID: got %q, want sd-1", got.Summary.ID)
 	}
-	if got.Summary.Title != detail.Summary.Title {
-		t.Errorf("Title: got %q, want %q", got.Summary.Title, detail.Summary.Title)
+	if got.Summary.Title != "seeded via snapshot" {
+		t.Errorf("Title: got %q, want %q", got.Summary.Title, "seeded via snapshot")
 	}
-	if got.Summary.Status != detail.Summary.Status {
-		t.Errorf("Status: got %q, want %q", got.Summary.Status, detail.Summary.Status)
+	if got.Summary.Status != "in_progress" {
+		t.Errorf("Status: got %q, want %q", got.Summary.Status, "in_progress")
 	}
-	if got.Description != detail.Description {
-		t.Errorf("Description: got %q, want %q", got.Description, detail.Description)
+	if got.Description != "a description" {
+		t.Errorf("Description: got %q, want %q", got.Description, "a description")
 	}
 }
 
-// TestSeedDetail_PreservesCreator verifies that SeedDetail preserves the
-// Creator field and that a subsequent Issue call returns it correctly.
-func TestSeedDetail_PreservesCreator(t *testing.T) {
+// TestSeedFromSnapshot_PreservesCreator verifies that SeedFromSnapshot preserves
+// the Creator field and that a subsequent Issue call returns it correctly.
+func TestSeedFromSnapshot_PreservesCreator(t *testing.T) {
 	r := memory.New()
 
-	detail := domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:     "creator-1",
-			Title:  "issue with creator",
-			Status: "open",
-			Type:   "task",
-		},
+	r.SeedFromSnapshot(memory.SnapshotIssue{
+		ID:      "creator-1",
+		Title:   "issue with creator",
+		Status:  "open",
+		Type:    "task",
 		Creator: "alice",
-	}
-
-	r.SeedDetail(detail)
+	})
 
 	got, err := r.Issue(context.Background(), "creator-1")
 	if err != nil {
-		t.Fatalf("Issue after SeedDetail: %v", err)
+		t.Fatalf("Issue after SeedFromSnapshot: %v", err)
 	}
 	if got.Creator != "alice" {
 		t.Errorf("Creator: got %q, want %q", got.Creator, "alice")
@@ -1655,16 +1612,13 @@ func TestSeedDetail_PreservesCreator(t *testing.T) {
 func TestSnapshotRoundTrip_PreservesCreator(t *testing.T) {
 	src := memory.New()
 
-	detail := domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:     "snap-creator-1",
-			Title:  "issue for snapshot creator test",
-			Status: "open",
-			Type:   "task",
-		},
+	src.SeedFromSnapshot(memory.SnapshotIssue{
+		ID:      "snap-creator-1",
+		Title:   "issue for snapshot creator test",
+		Status:  "open",
+		Type:    "task",
 		Creator: "alice",
-	}
-	src.SeedDetail(detail)
+	})
 
 	snaps := src.Snapshot()
 
