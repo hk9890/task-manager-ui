@@ -23,7 +23,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # linux + macOS are the supported/released platforms (see .goreleaser.yaml).
+        # Windows is not a release target and the file-based store backend does not
+        # support Windows directory fsync, so it is intentionally excluded.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
