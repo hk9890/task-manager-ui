@@ -11,24 +11,52 @@ A standalone terminal UI for browsing and updating task-manager issues.
 
 ## Getting Started
 
-### Prerequisites
+### Install
 
-- [mise](https://mise.jdx.dev/) — provisions the pinned Go toolchain and dev
-  tools from `.mise.toml`, so a separate Go install is not required.
+#### From a release (recommended)
 
-No external CLI is required at runtime. `taskmgr-ui` reads and writes issues in-process
-via the [task-manager](https://github.com/hk9890/task-manager) Go SDK
-(`github.com/hk9890/task-manager/sdk/tasks`), pinned in `go.mod`.
-
-### Build and run
+Download a prebuilt, signed archive from the
+[releases page](https://github.com/hk9890/task-manager-ui/releases) and put the
+`taskmgr-ui` binary on your `PATH`. Archives are named
+`taskmgr-ui_<version>_<os>_<arch>.tar.gz` (for example
+`taskmgr-ui_<version>_linux_x64.tar.gz` or
+`taskmgr-ui_<version>_macos_arm64.tar.gz`):
 
 ```bash
-mise run build                    # build the taskmgr-ui binary
-taskmgr-ui --cwd /path/to/project        # run against a directory containing a .tasks/ store
+tar -xzf taskmgr-ui_<version>_linux_x64.tar.gz
+mv taskmgr-ui ~/.local/bin/        # or anywhere on your PATH
 ```
 
-`mise run build` drops the binary at `./taskmgr-ui` in the current directory — run
-it as `./taskmgr-ui`, or put it on your `PATH` via `go install ./cmd/taskmgr-ui`.
+If you use [mise](https://mise.jdx.dev/), the release asset names let it fetch
+and pin a release for you:
+
+```bash
+mise use -g ubi:hk9890/task-manager-ui
+```
+
+Release archives ship with a cosign-signed checksum file — see
+[Verifying releases](#verifying-releases) to verify a download.
+
+#### From source
+
+Building from source uses [mise](https://mise.jdx.dev/), which provisions the
+pinned Go toolchain and dev tools from `.mise.toml`, so a separate Go install is
+not required:
+
+```bash
+mise run build                    # build the taskmgr-ui binary at ./taskmgr-ui
+go install ./cmd/taskmgr-ui       # or install it onto your PATH
+```
+
+### Run
+
+No external CLI is required at runtime. `taskmgr-ui` reads and writes issues
+in-process via the [task-manager](https://github.com/hk9890/task-manager) Go SDK
+(`github.com/hk9890/task-manager/sdk/tasks`), pinned in `go.mod`.
+
+```bash
+taskmgr-ui --cwd /path/to/project   # run against a directory containing a .tasks/ store
+```
 
 ## CLI Surface
 
@@ -50,18 +78,10 @@ For exit codes, config details, and centralized debug/logging behavior, see
 
 ## Developer Tasks
 
-This repository uses [mise](https://mise.jdx.dev/) as the execution layer.
-Run `mise tasks` to list all available tasks.
-
-```bash
-mise run build
-mise run test:all
-mise run vet
-mise run quality
-```
-
-See `docs/CHANGE-WORKFLOW.md` for the landing workflow and pre-handoff quality
-gates, and `docs/CODING.md` for build/test details.
+Building, testing, and the pre-handoff quality gates are documented in
+[`CONTRIBUTING.md`](./CONTRIBUTING.md). Run `mise tasks` to list every available
+task; see `docs/CHANGE-WORKFLOW.md` for the landing workflow and `docs/CODING.md`
+for build/test details.
 
 ## Docs
 
