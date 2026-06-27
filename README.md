@@ -72,21 +72,13 @@ gates, and `docs/CODING.md` for build/test details.
 - [`docs/RELEASING.md`](./docs/RELEASING.md) — tag-triggered release workflow
 - [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — default keybindings reference
 
-For deeper design and planning context, see:
-
-- [`project-plan/PRODUCT.md`](./project-plan/PRODUCT.md)
-- [`project-plan/ARCHITECTURE.md`](./project-plan/ARCHITECTURE.md)
-- [`project-plan/IMPLEMENTATION.md`](./project-plan/IMPLEMENTATION.md)
-- [`project-plan/EXECUTION-PLAN.md`](./project-plan/EXECUTION-PLAN.md)
-- [`CHANGELOG.md`](./CHANGELOG.md)
+See also [`CHANGELOG.md`](./CHANGELOG.md) for the release history.
 
 ## Verifying releases
 
 Releases include a cosign-signed checksum file and per-archive SBOMs. See
 [`docs/RELEASING.md`](./docs/RELEASING.md) for the verification commands.
 
-## Release visibility policy
+## License
 
-This repository remains **private**. GitHub releases created here are
-**internal-only** and are not intended to be publicly accessible unless a future
-maintainer decision explicitly changes this policy.
+Licensed under the [Apache License 2.0](./LICENSE).

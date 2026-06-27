@@ -16,5 +16,14 @@ dist/
 __pycache__/
 *.pyc
 
+# Temp/agent extraction dirs (must never be committed)
+.tmp-*/
+
+# Predecessor "beads" tracker store (migrated to .tasks/)
+.beads/
+
+# Local dev task tracker — kept local, not published
+.tasks/
+
 # Local, non-shared working notes
 hako-private/

@@ -1,36 +1,20 @@
 name: CI
 
-# Auto-triggers (push, pull_request) are temporarily disabled while the
-# private-repo GitHub Actions billing is paused. The local quality gate
-# (`mise run quality`) substitutes as release provenance in this period —
-# see docs/RELEASING.md.
-#
-# Re-enable by restoring the `push:` and `pull_request:` triggers when
-# Actions billing is restored.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+# Least-privilege default: CI only needs to read the repo. Fork PRs get a
+# read-only token automatically; this makes that explicit for same-repo runs too.
+permissions:
+  contents: read
 
 # Ratchet this value upward as coverage improves.
 # Gate sits a couple of points below current to absorb minor fluctuation.
 env:
   COVERAGE_THRESHOLD: 69
-  # Disable mise's GitHub artifact-attestation verification for the `taskmgr`
-  # install (`github:hk9890/task-manager` backend). The verification path calls
-  # api.github.com/orgs/<org>/attestations/<digest>, which 401s against a
-  # different org with this workflow's GITHUB_TOKEN. Since hk9890/task-manager
-  # publishes no attestations, the check has nothing to assert in the first
-  # place — we are explicitly returning to the trust posture that existed
-  # before mise added verification.
-  #   Canonical setting (per https://mise.jdx.dev/configuration/settings.html):
-  #     github_attestations (default true) ↔ MISE_GITHUB_ATTESTATIONS
-  #   Background: https://github.com/jdx/mise/discussions/9092
-  MISE_GITHUB_ATTESTATIONS: "0"
-  # Belt-and-suspenders: even with attestation verification off, mise still has
-  # adjacent provenance code paths (SLSA, sigstore) that may call GitHub APIs.
-  # Treat any provenance-API HTTP failure as a warning rather than a fatal
-  # install error, so a future code path swap can't bring this flake back.
-  #   provenance_api_failures_fatal (default true) ↔ MISE_PROVENANCE_API_FAILURES_FATAL
-  MISE_PROVENANCE_API_FAILURES_FATAL: "false"
 
 jobs:
   quality-gates:
@@ -42,16 +26,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install mise (handles Go toolchain via .mise.toml)
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
         with:
-          # Pin the mise binary to a known-good release. `jdx/mise-action@v4`
-          # otherwise pulls "latest", which is what introduced the attestation-
-          # verification regression that prompted this PR. Bump deliberately
-          # rather than auto-floating; the env vars above mitigate the same
-          # class of bug if it recurs on a future bump.
+          # Pin the mise binary to a known-good release rather than auto-floating
+          # "latest"; bump deliberately.
           version: 2026.5.15
 
       - name: Scripts syntax
