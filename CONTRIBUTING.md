@@ -33,8 +33,9 @@ Run `mise tasks` to list every available task.
 2. Make your change with tests where behavior changes.
 3. Run `mise run quality` and ensure it passes. Also run `mise run fmt:check`,
    which `quality` does not cover but CI enforces, along with a coverage gate
-   (`mise run test:coverage`, threshold 69) — so a green `quality` alone does
-   not guarantee green CI.
+   (`mise run test:coverage`, which defaults to threshold 75 locally; CI
+   overrides `COVERAGE_THRESHOLD` to 69) — so a green `quality` alone does not
+   guarantee green CI.
 4. Open a pull request describing the change and its motivation. The
    [pull request template](./.github/PULL_REQUEST_TEMPLATE.md) lists the
    expected checklist.
