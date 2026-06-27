@@ -156,7 +156,7 @@ func TestEmptyStore_Search(t *testing.T) {
 
 // TestSearch_AllWordsAndSemantics verifies the memory backend matches free text
 // with AND-of-words: every whitespace-separated word must appear (order-independent,
-// per-word substring, across Title/Description/Notes), mirroring the taskmgr backend
+// per-word substring, across Title/Description), mirroring the taskmgr backend
 // and the task-manager CLI.
 func TestSearch_AllWordsAndSemantics(t *testing.T) {
 	r := memory.New()
@@ -171,7 +171,7 @@ func TestSearch_AllWordsAndSemantics(t *testing.T) {
 		{"both words present", "widget redesign", []string{"m-1"}},
 		{"order independent", "redesign widget", []string{"m-1"}},
 		{"words span title and description", "widget chassis", []string{"m-1"}},
-		{"word in notes counts", "widget tidy", []string{"m-2"}},
+		{"word only in notes is not matched (taskmgr parity)", "widget tidy", nil},
 		{"one word absent excludes all", "widget absent", nil},
 	}
 	for _, tc := range cases {
@@ -1009,7 +1009,11 @@ func TestSearch_TextFilter(t *testing.T) {
 	}
 }
 
-func TestSearch_TextInNotes(t *testing.T) {
+// TestSearch_TextNotesExcluded verifies that Notes are NOT part of the text
+// search, matching the taskmgr backend (which has no notes field — the SDK stores
+// a single markdown body). A term that appears only in Notes must not produce a
+// hit, so the memory fixture cannot certify search behavior production lacks.
+func TestSearch_TextNotesExcluded(t *testing.T) {
 	r := memory.New()
 	r.Seed(memory.Issue{ID: "n1", Title: "boring", Notes: "secret keyword hidden", Status: "open"})
 	r.Seed(memory.Issue{ID: "n2", Title: "boring", Notes: "nothing here", Status: "open"})
@@ -1018,8 +1022,8 @@ func TestSearch_TextInNotes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(page.Results) != 1 || page.Results[0].Issue.ID != "n1" {
-		t.Errorf("Search: expected n1, got %v", searchResultIDs(page.Results))
+	if len(page.Results) != 0 {
+		t.Errorf("Search: expected no results (notes excluded from text search), got %v", searchResultIDs(page.Results))
 	}
 }
 

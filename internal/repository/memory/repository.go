@@ -1059,20 +1059,21 @@ func (r *Repository) depStateLocked(dependsOn []string) (allClosed bool, openDep
 // matchesSearchLocked reports whether si matches the given SearchIssuesQuery.
 // Caller must hold at least RLock.
 func (r *Repository) matchesSearchLocked(si *storedIssue, q domain.SearchIssuesQuery) bool {
-	// Text filter: case-insensitive AND-of-words across Title, Description, Notes.
+	// Text filter: case-insensitive AND-of-words across Title and Description.
 	// Every whitespace-separated word in q.Text must appear as a substring in at
-	// least one of the fields; words may match different fields (order-independent).
+	// least one of those fields; words may match different fields (order-independent).
 	// This mirrors the task-manager SDK's TextAllWords semantics so search behaves
-	// identically across the memory and taskmgr backends and the CLI. A
+	// identically across the memory and taskmgr backends and the CLI. Notes are
+	// intentionally excluded: the taskmgr backend has no notes field (the SDK
+	// stores a single markdown body), so matching notes here would let the memory
+	// fixture certify search behavior the real backend cannot reproduce. A
 	// whitespace-only query imposes no constraint (strings.Fields yields no words).
 	if q.Text != "" {
 		title := strings.ToLower(si.title)
 		desc := strings.ToLower(si.description)
-		notes := strings.ToLower(si.notes)
 		for _, word := range strings.Fields(strings.ToLower(q.Text)) {
 			if !strings.Contains(title, word) &&
-				!strings.Contains(desc, word) &&
-				!strings.Contains(notes, word) {
+				!strings.Contains(desc, word) {
 				return false
 			}
 		}
