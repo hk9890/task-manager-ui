@@ -10,12 +10,17 @@ import (
 func TestViewContainsExpectedContent(t *testing.T) {
 	t.Parallel()
 
-	view := fatalerror.View("task manager is not available", "The task-manager backend could not be initialized.", 80, 24)
+	view := fatalerror.Render(fatalerror.State{
+		Title:  "task manager is not available",
+		Body:   "The task-manager backend could not be initialized.",
+		Width:  80,
+		Height: 24,
+	})
 
 	checks := []string{"task manager is not available", "task-manager", "q"}
 	for _, want := range checks {
 		if !strings.Contains(view, want) {
-			t.Errorf("expected %q in View(80,24), output:\n%s", want, view)
+			t.Errorf("expected %q in Render(80,24), output:\n%s", want, view)
 		}
 	}
 }
@@ -23,7 +28,12 @@ func TestViewContainsExpectedContent(t *testing.T) {
 func TestViewNoDatabaseShowsTailoredContent(t *testing.T) {
 	t.Parallel()
 
-	view := fatalerror.View("no task-manager store here", "No .tasks store was found in this directory.", 80, 24)
+	view := fatalerror.Render(fatalerror.State{
+		Title:  "no task-manager store here",
+		Body:   "No .tasks store was found in this directory.",
+		Width:  80,
+		Height: 24,
+	})
 
 	if !strings.Contains(view, "no task-manager store here") {
 		t.Errorf("expected title in no-database view, got:\n%s", view)
@@ -36,9 +46,9 @@ func TestViewNoDatabaseShowsTailoredContent(t *testing.T) {
 func TestViewZeroDimensionsDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
-	view := fatalerror.View("title", "body", 0, 0)
+	view := fatalerror.Render(fatalerror.State{Title: "title", Body: "body"})
 
 	if !strings.Contains(view, "title") {
-		t.Errorf("expected title in View(0,0), output:\n%s", view)
+		t.Errorf("expected title in Render(0,0), output:\n%s", view)
 	}
 }

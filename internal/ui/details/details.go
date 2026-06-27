@@ -12,6 +12,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/markdown"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/renderhelpers"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -247,7 +248,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 			metadataLine = metadataLines[i]
 		}
 		bottomLines = append(bottomLines,
-			padToWidth(dependenciesLine, dependenciesWidth)+strings.Repeat(" ", detailColumnGap)+padToWidth(metadataLine, metadataWidth),
+			textutil.PadToWidth(dependenciesLine, dependenciesWidth)+strings.Repeat(" ", detailColumnGap)+textutil.PadToWidth(metadataLine, metadataWidth),
 		)
 	}
 
@@ -375,9 +376,9 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 			metaLine = metaLines[i]
 		}
 		out = append(out,
-			padToWidth(leftLine, leftWidth)+strings.Repeat(" ", detailColumnGap)+
-				padToWidth(contentLine, contentWidth)+strings.Repeat(" ", detailColumnGap)+
-				padToWidth(metaLine, metadataWidth),
+			textutil.PadToWidth(leftLine, leftWidth)+strings.Repeat(" ", detailColumnGap)+
+				textutil.PadToWidth(contentLine, contentWidth)+strings.Repeat(" ", detailColumnGap)+
+				textutil.PadToWidth(metaLine, metadataWidth),
 		)
 	}
 
@@ -449,7 +450,7 @@ func splitThreePaneWidths(total int) (left, content, metadata int) {
 	}
 
 	metadata = metadataRailWidth
-	left = clamp(available/4, leftRailMinWidth, leftRailMaxWidth)
+	left = textutil.Clamp(available/4, leftRailMinWidth, leftRailMaxWidth)
 	content = available - left - metadata
 
 	const minContent = 20
@@ -634,7 +635,7 @@ func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) i
 	for i, line := range lines {
 		// The selected field line is prefixed with the selection indicator.
 		// We detect it by checking for the "› " prefix after ANSI stripping.
-		stripped := stripANSI(line)
+		stripped := textutil.StripANSI(line)
 		if strings.HasPrefix(stripped, "› ") || strings.HasPrefix(stripped, "›") {
 			return i
 		}
@@ -643,24 +644,6 @@ func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) i
 }
 
 // stripANSI removes ANSI escape sequences for line-content comparison.
-func stripANSI(s string) string {
-	var out strings.Builder
-	i := 0
-	for i < len(s) {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			i += 2
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			i++ // skip 'm'
-			continue
-		}
-		out.WriteByte(s[i])
-		i++
-	}
-	return out.String()
-}
-
 // contentDividerStyle renders the thin header/body divider in a muted border color.
 var contentDividerStyle = lipgloss.NewStyle().Foreground(styles.BorderDefaultColor)
 
@@ -907,24 +890,6 @@ func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) 
 	}
 
 	return window, offset
-}
-
-func clamp(value, low, high int) int {
-	if value < low {
-		return low
-	}
-	if value > high {
-		return high
-	}
-	return value
-}
-
-func padToWidth(value string, width int) string {
-	renderedWidth := lipgloss.Width(value)
-	if renderedWidth >= width {
-		return styles.TruncateString(value, width)
-	}
-	return value + strings.Repeat(" ", width-renderedWidth)
 }
 
 func renderCompact(detail domain.IssueDetail, width int) string {

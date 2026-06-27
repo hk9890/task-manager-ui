@@ -9,6 +9,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -402,7 +403,7 @@ func splitWideWidths(total int) (rail, content, metadata int) {
 	}
 
 	metadata = searchMetadataWidth
-	rail = clamp((available*searchRailPercentWide)/100, searchRailMinWidthWide, searchRailMaxWidthWide)
+	rail = textutil.Clamp((available*searchRailPercentWide)/100, searchRailMinWidthWide, searchRailMaxWidthWide)
 	content = available - rail - metadata
 
 	if content < searchContentMinWidthWide {
@@ -474,14 +475,4 @@ func splitNarrowRightHeights(total int) (content, metadata int) {
 		metadata = 1
 	}
 	return content, metadata
-}
-
-func clamp(value, low, high int) int {
-	if value < low {
-		return low
-	}
-	if value > high {
-		return high
-	}
-	return value
 }

@@ -1,19 +1,18 @@
 package markdown
 
 import (
-	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
+
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 const (
 	defaultWidth         = 80
 	DefaultEmptyFallback = "(no content)"
 )
-
-var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // renderMarkdownANSIMu guards renderMarkdownANSI. Production code never
 // reassigns the variable after init; the mutex exists so that tests running in
@@ -74,7 +73,7 @@ func (r Renderer) RenderReadOnly(input string, width int) string {
 		return renderPlain(content, width)
 	}
 
-	if strings.TrimSpace(stripANSI(rendered)) == "" {
+	if strings.TrimSpace(textutil.StripANSI(rendered)) == "" {
 		return renderPlain(content, width)
 	}
 
@@ -93,10 +92,6 @@ func normalizeWidth(width int) int {
 		return defaultWidth
 	}
 	return width
-}
-
-func stripANSI(value string) string {
-	return ansiPattern.ReplaceAllString(value, "")
 }
 
 func isEffectivelyPlainText(value string) bool {

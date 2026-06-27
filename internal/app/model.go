@@ -952,7 +952,12 @@ func (m Model) View() string {
 	}
 
 	if m.fatalErrTitle != "" {
-		return fatalerror.View(m.fatalErrTitle, m.fatalErrBody, m.width, m.height)
+		return fatalerror.Render(fatalerror.State{
+			Title:  m.fatalErrTitle,
+			Body:   m.fatalErrBody,
+			Width:  m.width,
+			Height: m.height,
+		})
 	}
 
 	header := m.renderHeader()
@@ -1184,7 +1189,9 @@ func (m Model) searchIsLoading() bool {
 	if m.search == nil {
 		return false
 	}
-	return m.search.SessionState().Loading
+	// Use IsLoading() so both browse modes are queried uniformly (board also
+	// exposes IsLoading()); SessionState() remains for the richer search bundle.
+	return m.search.IsLoading()
 }
 
 func (m Model) searchResultCount() int {
