@@ -25,7 +25,7 @@ The repository uses a two-tier model.
 
 ### Backend behavior tests
 
-The active repository backend (`internal/repository/taskmgr`, built on the task-manager Go SDK) carries its own package-level behavior tests in `internal/repository/taskmgr/repository_test.go`. These build a fresh store with `tasks.Init(t.TempDir(), ...)` and assert dashboard sections, search, mutation effects, write-path error codes, time-field semantics, catalogs, and context cancellation — directly against the in-process backend, no subprocess and no build tag. The in-repo `memory.Repository` (`internal/repository/memory`) is the unit-test fixture and has its own behavior tests in `internal/repository/memory/repository_test.go`.
+The active repository backend (`internal/repository/taskmgr`, built on the task-manager Go SDK) carries its own package-level behavior tests in `internal/repository/taskmgr/repository_test.go`. These build a fresh store with `tasks.Init(t.TempDir(), ...)` and assert dashboard sections, search, mutation effects, write-path error codes, time-field semantics, catalogs, and context cancellation — directly against the in-process backend, no subprocess and no build tag. The cross-backend conformance suite (`internal/repository/conformance_test.go`) builds its `taskmgr` backend the same way (`tasks.Init(t.TempDir(), ...)`) to assert parity with `memory.Repository`, and likewise stays untagged. The in-repo `memory.Repository` (`internal/repository/memory`) is the unit-test fixture and has its own behavior tests in `internal/repository/memory/repository_test.go`.
 
 ## Where Does My New Test Go?
 
@@ -35,7 +35,7 @@ The active repository backend (`internal/repository/taskmgr`, built on the task-
 | `taskmgr` backend semantics (reads, mutations, write-path error mapping) | `internal/repository/taskmgr/repository_test.go` | a real `tasks.Store` via `tasks.Init(t.TempDir(), ...)` wrapped by `taskmgr.New` |
 | A real OS seam (subprocess execution, filesystem) | Tier 2 — a `//go:build integration` test | real process/filesystem, run under `mise run test:integration` |
 
-Decision rule: if the test does not touch a real OS seam (subprocess, filesystem) and costs <100ms, it is a unit test; otherwise tag it `integration`.
+Decision rule: if the test does not touch a real OS seam (subprocess, filesystem) and costs <100ms, it is a unit test; otherwise tag it `integration`. The in-process task-manager SDK store built via `tasks.Init(t.TempDir(), ...)` counts as a unit seam (in-process, <100ms), not an OS seam — so the backend behavior and conformance tests that use it stay untagged.
 
 ## Commands
 
