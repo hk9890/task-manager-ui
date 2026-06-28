@@ -1,4 +1,4 @@
-package details
+package detail
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
 
 // issueWithLongContent returns an IssueDetail with enough content lines for
@@ -110,7 +110,7 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 	}
 
 	// Final focus should be back on content.
-	if final.focusPane() != uidetails.FocusPaneContent {
+	if final.focusPane() != detail.FocusPaneContent {
 		t.Errorf("expected final focus on content pane, got %v", final.focusPane())
 	}
 }

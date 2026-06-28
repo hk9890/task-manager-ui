@@ -11,7 +11,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
-	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
@@ -61,7 +61,7 @@ type Model struct {
 
 	selectedDetail            domain.IssueDetail
 	selectedDetailLoading     bool
-	metadataSelectedField     uidetails.MetadataFieldKey
+	metadataSelectedField     detail.MetadataFieldKey
 	pendingOpenStatusDialog   bool
 	pendingOpenPriorityDialog bool
 
@@ -99,7 +99,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		logger:                logger,
 		keys:                  keys,
 		focus:                 uisearch.FocusQuery,
-		metadataSelectedField: uidetails.MetadataFieldStatus,
+		metadataSelectedField: detail.MetadataFieldStatus,
 	}
 }
 
@@ -222,9 +222,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.triggerSearch()
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusMetadata:
 		switch m.metadataSelectedField {
-		case uidetails.MetadataFieldStatus:
+		case detail.MetadataFieldStatus:
 			m.pendingOpenStatusDialog = true
-		case uidetails.MetadataFieldPriority:
+		case detail.MetadataFieldPriority:
 			m.pendingOpenPriorityDialog = true
 		}
 		return nil
@@ -401,7 +401,7 @@ func (m *Model) View(skeletonPhase int) string {
 		SelectedDetail:        m.selectedDetail,
 		DetailLoading:         m.selectedDetailLoading,
 		MetadataSelectedField: m.metadataSelectedField,
-		QuickActions: uidetails.QuickActionLabels{
+		QuickActions: detail.QuickActionLabels{
 			EditIssue:    m.keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
 			UpdateIssue:  m.keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
 			AddComment:   m.keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
@@ -513,16 +513,16 @@ func (m *Model) normalizeSelection() {
 }
 
 func (m *Model) ensureMetadataSelection() {
-	if m.metadataSelectedField != uidetails.MetadataFieldStatus && m.metadataSelectedField != uidetails.MetadataFieldPriority {
-		m.metadataSelectedField = uidetails.MetadataFieldStatus
+	if m.metadataSelectedField != detail.MetadataFieldStatus && m.metadataSelectedField != detail.MetadataFieldPriority {
+		m.metadataSelectedField = detail.MetadataFieldStatus
 	}
 }
 
 func (m *Model) moveMetadataSelection(delta int) {
-	fields := []uidetails.MetadataFieldKey{uidetails.MetadataFieldStatus, uidetails.MetadataFieldPriority}
+	fields := []detail.MetadataFieldKey{detail.MetadataFieldStatus, detail.MetadataFieldPriority}
 	m.ensureMetadataSelection()
 	idx := 0
-	if m.metadataSelectedField == uidetails.MetadataFieldPriority {
+	if m.metadataSelectedField == detail.MetadataFieldPriority {
 		idx = 1
 	}
 	next := idx + delta

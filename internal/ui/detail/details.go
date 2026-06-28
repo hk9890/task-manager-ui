@@ -1,10 +1,8 @@
-package details
+package detail
 
 import (
 	"fmt"
-	"sort"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -20,9 +18,6 @@ const (
 	defaultDetailWidth  = 80
 	defaultDetailHeight = 24
 	timeLayout          = "2006-01-02 15:04"
-
-	maxCommentBodyLines        = 18
-	maxLogLikeCommentBodyLines = 28
 
 	// Kept for compatibility with existing tests/callers.
 	InspectorTwoColumnMinWidth   = 110
@@ -84,12 +79,6 @@ type QuickActionLabels struct {
 	AddComment   string
 	CloseIssue   string
 	ReloadDetail string
-}
-
-// relationshipGroup is shared relation rendering input used by multiple rails.
-type relationshipGroup struct {
-	Label string
-	Refs  []domain.IssueReference
 }
 
 // Render renders standalone issue detail metadata and content.
@@ -496,130 +485,6 @@ func splitThreeColumnWidths(total int) (left, content, metadata int) {
 	return splitThreePaneWidths(total)
 }
 
-func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domain.IssueReference, cursorIssueID string, width int, skeleton bool, skeletonPhase int) []string {
-	return renderRelationshipGroups(dependencyGroups(detail, browserItems), cursorIssueID, width, skeleton, skeletonPhase)
-}
-
-func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueReference) []relationshipGroup {
-	// Group order: Blocked by, Blocks, Related, Children, Parent.
-	// The Parent group reads the parent ref directly from detail; browserItems
-	// is used only as a capacity hint for the dedup set below.
-	groups := []relationshipGroup{
-		{Label: "Blocked by", Refs: detail.BlockedBy},
-		{Label: "Blocks", Refs: detail.Blocks},
-		{Label: "Related", Refs: detail.Related},
-		{Label: "Children", Refs: detail.Children},
-	}
-	if parent := detail.ParentGroupBrowser.Parent; strings.TrimSpace(parent.ID) != "" {
-		groups = append(groups, relationshipGroup{Label: "Parent", Refs: []domain.IssueReference{parent}})
-	}
-
-	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+len(browserItems))
-	out := make([]relationshipGroup, 0, len(groups))
-	for _, group := range groups {
-		ordered := orderedReferences(group.Refs)
-		filtered := make([]domain.IssueReference, 0, len(ordered))
-		for _, ref := range ordered {
-			refID := strings.TrimSpace(ref.ID)
-			if refID == "" {
-				continue
-			}
-			if _, exists := seen[refID]; exists {
-				continue
-			}
-			filtered = append(filtered, ref)
-			seen[refID] = struct{}{}
-		}
-		out = append(out, relationshipGroup{Label: group.Label, Refs: filtered})
-	}
-
-	return out
-}
-
-func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID string, width int, skeleton bool, skeletonPhase int) []string {
-	out := make([]string, 0, 32)
-	cursorIssueID = strings.TrimSpace(cursorIssueID)
-	cursorMatched := false
-	for _, group := range groups {
-		ordered := orderedReferences(group.Refs)
-		if len(out) > 0 {
-			out = append(out, "")
-		}
-		if skeleton {
-			out = append(out, styles.TruncateString(fmt.Sprintf("%s (%s)", group.Label, issuerow.SkeletonGlyph), width))
-			out = append(out, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
-				Width:  width,
-				Seed:   len(out),
-				Phase:  skeletonPhase,
-				Styled: true,
-			}))
-			continue
-		}
-		out = append(out, styles.TruncateString(fmt.Sprintf("%s (%d)", group.Label, len(ordered)), width))
-		if len(ordered) == 0 {
-			out = append(out, styles.TruncateString("(none)", width))
-			continue
-		}
-		for _, ref := range ordered {
-			isCursor := !cursorMatched && cursorIssueID != "" && ref.ID == cursorIssueID
-			if isCursor {
-				cursorMatched = true
-			}
-			out = append(out, renderReferenceRow(ref, width, isCursor))
-		}
-	}
-	if len(out) == 0 {
-		return []string{"(none)"}
-	}
-	return out
-}
-
-func countDependencyReferences(detail domain.IssueDetail) int {
-	return len(detail.BlockedBy) + len(detail.Blocks) + len(detail.Related) + len(detail.Children)
-}
-
-// DependencyRefLineIndex returns the zero-based line index of the
-// browserItems[refIndex] entry within the rendered dependency pane line list
-// (as produced by renderDependenciesPaneLines). Returns -1 if refIndex is out
-// of range or if browserItems is empty.
-//
-// The dependency pane renders groups separated by empty lines and headed by a
-// label line. This function mirrors that structure to compute the line position
-// without allocating rendered strings.
-func DependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, detail domain.IssueDetail) int {
-	if refIndex < 0 || len(browserItems) == 0 || refIndex >= len(browserItems) {
-		return -1
-	}
-	targetID := strings.TrimSpace(browserItems[refIndex].ID)
-	if targetID == "" {
-		return -1
-	}
-
-	groups := dependencyGroups(detail, browserItems)
-	linePos := 0
-	firstGroup := true
-	for _, group := range groups {
-		ordered := orderedReferences(group.Refs)
-		if !firstGroup {
-			linePos++ // empty separator line
-		}
-		linePos++ // group label line
-		if len(ordered) == 0 {
-			linePos++ // "(none)" line
-			firstGroup = false
-			continue
-		}
-		for _, ref := range ordered {
-			if strings.TrimSpace(ref.ID) == targetID {
-				return linePos
-			}
-			linePos++
-		}
-		firstGroup = false
-	}
-	return -1
-}
-
 // MetadataFieldLineIndex returns the zero-based line index of the given
 // MetadataFieldKey within the rendered metadata pane line list (as produced
 // by renderMetadataPaneLines). Returns -1 if the field is not found or is
@@ -746,81 +611,6 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	out = append(out, commentsSection...)
 
 	return out
-}
-
-// proseSkeletonBarFractions is the normative table of bar-fill widths used by
-// renderProseContentSkeleton.  Seven values produce visibly different bar
-// lengths so the column does not read as a uniform block.
-var proseSkeletonBarFractions = [7]float64{0.85, 0.70, 0.55, 0.80, 0.65, 0.75, 0.90}
-
-// renderProseContentSkeleton renders n prose-style placeholder lines for the
-// Content pane description body during the loading skeleton.  The shape is:
-//
-//	heading bar (≈55 % width) ← shorter bar signals a section heading
-//	blank line                ← visual gap before the first paragraph block
-//	paragraph lines (varying widths)
-//	blank line                ← gap between paragraph blocks
-//	… (pattern repeats until n lines are filled)
-//
-// The ░ glyphs are styled with styles.SkeletonShades[phase] (same animation
-// language as the Dependencies rail and board skeletons).
-// Total line count is always n regardless of width or phase.
-func renderProseContentSkeleton(width, n, phase int) []string {
-	if n <= 0 {
-		return nil
-	}
-
-	// Resolve the phase-keyed skeleton colour from the shared shades table.
-	numShades := len(styles.SkeletonShades)
-	idx := ((phase % numShades) + numShades) % numShades
-	color := styles.SkeletonShades[idx]
-	barStyle := lipgloss.NewStyle().Foreground(color)
-
-	barLine := func(fraction float64) string {
-		barWidth := int(float64(width) * fraction)
-		if barWidth < 1 {
-			barWidth = 1
-		}
-		if barWidth > width {
-			barWidth = width
-		}
-		return barStyle.Render(strings.Repeat(issuerow.SkeletonGlyph, barWidth))
-	}
-
-	// Cycle through: heading, blank, para, para, para, blank, para, para, para, blank, …
-	// "heading" uses fraction 0.55; subsequent para lines cycle through proseSkeletonBarFractions.
-	//
-	// The pattern is encoded as a flat []float64 sentinel slice where -1 = blank
-	// and -2 = heading (fraction 0.55).
-	const headingFraction = 0.55
-	const blankSentinel = -1.0
-
-	// Fixed leading segment: heading then blank.
-	pattern := make([]float64, 0, 8)
-	pattern = append(pattern, headingFraction, blankSentinel)
-	// Then cycles of three para lines followed by a blank.
-	for i := 0; i < 3; i++ {
-		pattern = append(pattern,
-			proseSkeletonBarFractions[i*3%7],
-			proseSkeletonBarFractions[(i*3+1)%7],
-			proseSkeletonBarFractions[(i*3+2)%7],
-			blankSentinel,
-		)
-	}
-	// pattern now has 2 + 4*3 = 14 entries; we'll cycle it below.
-
-	lines := make([]string, 0, n)
-	pi := 0
-	for len(lines) < n {
-		entry := pattern[pi%len(pattern)]
-		pi++
-		if entry == blankSentinel {
-			lines = append(lines, "")
-		} else {
-			lines = append(lines, barLine(entry))
-		}
-	}
-	return lines[:n]
 }
 
 func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) []string {
@@ -978,167 +768,6 @@ func renderMarkdownMultiline(text, fallback string, width int) []string {
 	return out
 }
 
-func renderComments(comments []domain.IssueComment, width int) []string {
-	if len(comments) == 0 {
-		return []string{"(no comments)"}
-	}
-
-	ordered := append([]domain.IssueComment(nil), comments...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		left := ordered[i].CreatedAt
-		right := ordered[j].CreatedAt
-		if left.Equal(right) {
-			return ordered[i].ID > ordered[j].ID
-		}
-		if left.IsZero() {
-			return false
-		}
-		if right.IsZero() {
-			return true
-		}
-		return left.After(right)
-	})
-
-	out := make([]string, 0, len(ordered)*6)
-	for i, comment := range ordered {
-		author := emptyFallback(comment.Author, "unknown")
-		timestamp := formatTime(comment.CreatedAt)
-		commentHeader := fmt.Sprintf("[%d/%d] %s · %s", i+1, len(ordered), author, timestamp)
-		out = append(out, styles.TruncateString(commentHeader, width))
-
-		body, logLike := renderCommentBody(comment.Body, width)
-		if logLike {
-			out = append(out, styles.TruncateString("  ├─ output", width))
-			for _, line := range body {
-				if line == "" {
-					out = append(out, styles.TruncateString("  │", width))
-					continue
-				}
-				out = append(out, styles.TruncateString("  │ "+line, width))
-			}
-			out = append(out, styles.TruncateString("  └─", width))
-		} else {
-			for _, line := range body {
-				if line == "" {
-					out = append(out, "")
-					continue
-				}
-				out = append(out, styles.TruncateString("  "+line, width))
-			}
-		}
-		if i < len(ordered)-1 {
-			out = append(out, styles.TruncateString(strings.Repeat("─", max(8, width)), width))
-		}
-	}
-
-	return out
-}
-
-func renderCommentBody(body string, width int) ([]string, bool) {
-	normalized := strings.ReplaceAll(body, "\r\n", "\n")
-	normalized = strings.ReplaceAll(normalized, "\t", "    ")
-
-	logLike := isLogLikeComment(normalized)
-	if logLike {
-		lines := renderMultiline(normalized, "(empty comment)", max(1, width-4))
-		return applyCommentElision(lines, maxLogLikeCommentBodyLines, max(1, width-4)), true
-	}
-
-	lines := renderMarkdownMultiline(normalized, "(empty comment)", max(1, width-2))
-	return applyCommentElision(lines, maxCommentBodyLines, max(1, width-2)), false
-}
-
-func applyCommentElision(lines []string, maxLines, width int) []string {
-	if maxLines <= 0 || len(lines) <= maxLines {
-		return lines
-	}
-	kept := append([]string(nil), lines[:maxLines-1]...)
-	elided := len(lines) - (maxLines - 1)
-	kept = append(kept, styles.TruncateString(fmt.Sprintf("… (+%d lines elided)", elided), width))
-	return kept
-}
-
-func isLogLikeComment(body string) bool {
-	if strings.TrimSpace(body) == "" {
-		return false
-	}
-	if strings.Contains(body, "```") {
-		return true
-	}
-
-	lines := strings.Split(body, "\n")
-	longLines := 0
-	tabLines := 0
-	indicatorLines := 0
-
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if raw != "" && strings.Contains(raw, "\t") {
-			tabLines++
-		}
-		if len([]rune(raw)) >= 100 {
-			longLines++
-		}
-		if line == "" {
-			continue
-		}
-		if hasLogIndicator(line) {
-			indicatorLines++
-		}
-	}
-
-	return tabLines >= 2 || longLines >= 3 || indicatorLines >= 3
-}
-
-func hasLogIndicator(line string) bool {
-	indicators := []string{
-		"$ ",
-		"> ",
-		"--- PASS:",
-		"--- FAIL:",
-		"PASS",
-		"FAIL",
-		"ok  ",
-		"panic:",
-		"Error:",
-		"[error]",
-		"[warn]",
-		"stdout",
-		"stderr",
-	}
-
-	for _, marker := range indicators {
-		if strings.Contains(line, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-// renderReferenceRow renders a single dependency reference row.
-//
-// isCursor marks the movable selection row (↑/↓ moves it; Enter commits the load).
-// It is rendered with the app-wide "› " selection prefix via issuerow Selected=true —
-// byte-identical to the cursor in the board, search, and metadata panes, so the one
-// marker the user moves looks the same everywhere. The currently-viewed issue is never
-// in this list (it is excluded when the browser panel is assembled), so it needs no
-// marker here — it lives in the Content/Metadata panes.
-func renderReferenceRow(ref domain.IssueReference, width int, isCursor bool) string {
-	return issuerow.RenderReferenceCompact(issuerow.ReferenceRenderConfig{
-		Issue:    ref,
-		Selected: isCursor,
-		Width:    width,
-		Styled:   true,
-	})
-}
-
-func formatTime(ts time.Time) string {
-	if ts.IsZero() {
-		return "unknown time"
-	}
-	return ts.Format(timeLayout)
-}
-
 func formatPriority(priority int) string {
 	if priority < 0 {
 		return "(unknown)"
@@ -1151,45 +780,4 @@ func emptyFallback(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-// skeletonDetail returns a synthetic IssueDetail for cold-start skeleton
-// rendering.  Only Summary.ID is set; everything else is empty/zero so the
-// Dependencies and Metadata panes render natural empty frames.
-func skeletonDetail(targetID string) domain.IssueDetail {
-	return domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			ID:       targetID,
-			Title:    "",
-			Status:   "",
-			Priority: -1,
-			Type:     "",
-		},
-	}
-}
-
-// renderColdStartSkeleton renders the full 3-pane layout for the cold-start
-// case (no prior detail loaded).  It routes through renderResponsiveLayout /
-// renderThreePane with Skeleton=true so the layout is identical to a loaded
-// detail render and there is no visible jump when data arrives.
-func renderColdStartSkeleton(targetID string, width, height, skeletonPhase int) string {
-	if width <= 0 {
-		width = defaultDetailWidth
-	}
-	if height <= 0 {
-		height = defaultDetailHeight
-	}
-	detail := skeletonDetail(targetID)
-	skeletonState := State{
-		Loading:       true,
-		Skeleton:      true,
-		SkeletonPhase: skeletonPhase,
-		Detail:        detail,
-		Width:         width,
-		Height:        height,
-	}
-	if usesResponsiveDetailLayout(width) {
-		return renderResponsiveLayout(detail, skeletonState, width, height)
-	}
-	return renderThreePane(detail, skeletonState, width, height)
 }

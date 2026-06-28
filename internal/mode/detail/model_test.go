@@ -1,4 +1,4 @@
-package details
+package detail
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
@@ -229,7 +229,7 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed in detail mode")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneDependencies {
+	if got := m.focusPane(); got != detail.FocusPaneDependencies {
 		t.Fatalf("expected left from content to focus dependencies pane, got %v", got)
 	}
 
@@ -237,35 +237,35 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneBrowser {
+	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from content to focus browser when present, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneBrowser {
+	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from browser to stay on browser, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneContent {
+	if got := m.focusPane(); got != detail.FocusPaneContent {
 		t.Fatalf("expected right from browser to focus content, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneMetadata {
+	if got := m.focusPane(); got != detail.FocusPaneMetadata {
 		t.Fatalf("expected right from content to focus metadata, got %v", got)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != uidetails.FocusPaneMetadata {
+	if got := m.focusPane(); got != detail.FocusPaneMetadata {
 		t.Fatalf("expected right from metadata to stay on metadata, got %v", got)
 	}
 }
@@ -280,7 +280,7 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 	m := Model{
 		SelectionID: "tm-1",
 		TargetID:    "tm-1",
-		FocusPane:   uidetails.FocusPaneBrowser,
+		FocusPane:   detail.FocusPaneBrowser,
 		BrowserItems: []domain.IssueReference{
 			{ID: "tm-1", Title: "One"},
 			{ID: "tm-2", Title: "two"},
@@ -328,7 +328,7 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent(t *testing.T) 
 	m := Model{
 		SelectionID:          "tm-1",
 		TargetID:             "tm-1",
-		FocusPane:            uidetails.FocusPaneBrowser,
+		FocusPane:            detail.FocusPaneBrowser,
 		BrowserSelectedIndex: 1,
 		BrowserItems: []domain.IssueReference{
 			{ID: "tm-1", Title: "One"},
@@ -446,7 +446,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	m := Model{
 		SelectionID: "tm-1",
 		TargetID:    "tm-1",
-		FocusPane:   uidetails.FocusPaneMetadata,
+		FocusPane:   detail.FocusPaneMetadata,
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-1", Title: "One"},
 			Description: strings.Repeat("line\n", 50),
@@ -460,7 +460,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	if intent != nil {
 		t.Fatalf("expected no intent in metadata pane, got %+v", intent)
 	}
-	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
+	if m.MetadataSelectedField != detail.MetadataFieldPriority {
 		t.Fatalf("expected metadata down to select priority after status, got %q", m.MetadataSelectedField)
 	}
 
@@ -468,7 +468,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	if !consumed || intent != nil {
 		t.Fatalf("expected metadata down to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
 	}
-	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
+	if m.MetadataSelectedField != detail.MetadataFieldPriority {
 		t.Fatalf("expected metadata selection clamped to priority, got %q", m.MetadataSelectedField)
 	}
 
@@ -476,7 +476,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	if !consumed || intent != nil {
 		t.Fatalf("expected metadata up to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
 	}
-	if m.MetadataSelectedField != uidetails.MetadataFieldStatus {
+	if m.MetadataSelectedField != detail.MetadataFieldStatus {
 		t.Fatalf("expected metadata up to select status, got %q", m.MetadataSelectedField)
 	}
 }
@@ -487,7 +487,7 @@ func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T
 	m := Model{
 		SelectionID: "tm-1",
 		TargetID:    "tm-1",
-		FocusPane:   uidetails.FocusPaneMetadata,
+		FocusPane:   detail.FocusPaneMetadata,
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Status: "open"},
 		},
@@ -514,8 +514,8 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 	m := Model{
 		SelectionID:           "tm-1",
 		TargetID:              "tm-1",
-		FocusPane:             uidetails.FocusPaneMetadata,
-		MetadataSelectedField: uidetails.MetadataFieldPriority,
+		FocusPane:             detail.FocusPaneMetadata,
+		MetadataSelectedField: detail.MetadataFieldPriority,
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Priority: 1},
 		},
@@ -671,7 +671,7 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 		BrowserGroupParentID: "tm-parent",
 		BrowserItems:         []domain.IssueReference{{ID: "tm-parent"}, {ID: "tm-child"}},
 		BrowserSelectedIndex: 1,
-		FocusPane:            uidetails.FocusPaneBrowser,
+		FocusPane:            detail.FocusPaneBrowser,
 	}
 
 	m.ApplyLoadedDetail("tm-child", domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-child"}})
@@ -685,7 +685,7 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 	if m.BrowserSelectedIndex != -1 {
 		t.Fatalf("expected browser selection reset to -1, got %d", m.BrowserSelectedIndex)
 	}
-	if m.FocusPane != uidetails.FocusPaneContent {
+	if m.FocusPane != detail.FocusPaneContent {
 		t.Fatalf("expected focus to move back to content when browser absent, got %v", m.FocusPane)
 	}
 }
@@ -1258,7 +1258,7 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 	m := Model{
 		SelectionID: "tm-main",
 		TargetID:    "tm-main",
-		FocusPane:   uidetails.FocusPaneDependencies,
+		FocusPane:   detail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:   domain.IssueSummary{ID: "tm-main", Title: "Main"},
 			BlockedBy: blockedBy,
@@ -1304,8 +1304,8 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	m := Model{
 		SelectionID:           "tm-1",
 		TargetID:              "tm-1",
-		FocusPane:             uidetails.FocusPaneMetadata,
-		MetadataSelectedField: uidetails.MetadataFieldStatus,
+		FocusPane:             detail.FocusPaneMetadata,
+		MetadataSelectedField: detail.MetadataFieldStatus,
 		Keys:                  mustResolveDetailKeys(t, nil),
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Title: "One", Status: "open", Priority: 1},
@@ -1322,7 +1322,7 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	if intent != nil {
 		t.Fatalf("expected no intent from metadata nav, got %+v", intent)
 	}
-	if m.MetadataSelectedField != uidetails.MetadataFieldPriority {
+	if m.MetadataSelectedField != detail.MetadataFieldPriority {
 		t.Errorf("expected field to advance to Priority, got %q", m.MetadataSelectedField)
 	}
 }
@@ -1385,7 +1385,7 @@ func TestRenderDetailChildrenAnchoredToBaseDetail(t *testing.T) {
 
 	// Verify the rendered view shows Children group with correct count in the deps pane.
 	// Use a wide terminal for layout stability.
-	view := m.View(uidetails.InspectorThreeColumnMinWidth, 24, false, 0)
+	view := m.View(detail.InspectorThreeColumnMinWidth, 24, false, 0)
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "Children (2)") {
 		t.Errorf("expected 'Children (2)' in rendered deps pane, got:\n%s", plain)
@@ -1446,7 +1446,7 @@ func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
 	m := Model{
 		SelectionID: "tm-parent",
 		TargetID:    "tm-parent",
-		FocusPane:   uidetails.FocusPaneDependencies,
+		FocusPane:   detail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-parent"},
 			Children: []domain.IssueReference{{ID: "tm-child"}},
@@ -1463,7 +1463,7 @@ func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
 	m.ApplyLoadedDetail("tm-child", PlaceholderDetail("tm-child", domain.IssueReference{ID: "tm-child"}, true))
 
 	// Placeholder phase: focus must not have been flipped to Content.
-	if m.FocusPane != uidetails.FocusPaneDependencies {
+	if m.FocusPane != detail.FocusPaneDependencies {
 		t.Errorf("placeholder phase: expected FocusPane=Dependencies, got %v", m.FocusPane)
 	}
 
@@ -1475,7 +1475,7 @@ func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
 	})
 
 	// Non-empty rail: focus must stay on Dependencies.
-	if m.FocusPane != uidetails.FocusPaneDependencies {
+	if m.FocusPane != detail.FocusPaneDependencies {
 		t.Errorf("real load with deps: expected FocusPane=Dependencies, got %v", m.FocusPane)
 	}
 	// Counter must have been consumed (no leftover).
@@ -1493,7 +1493,7 @@ func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
 	m := Model{
 		SelectionID: "tm-parent",
 		TargetID:    "tm-parent",
-		FocusPane:   uidetails.FocusPaneDependencies,
+		FocusPane:   detail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-parent"},
 			Children: []domain.IssueReference{{ID: "tm-leaf"}},
@@ -1509,7 +1509,7 @@ func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
 	m.ApplyLoadedDetail("tm-leaf", PlaceholderDetail("tm-leaf", domain.IssueReference{ID: "tm-leaf"}, true))
 
 	// Placeholder phase: focus stays on Dependencies (deferred, not flipped early).
-	if m.FocusPane != uidetails.FocusPaneDependencies {
+	if m.FocusPane != detail.FocusPaneDependencies {
 		t.Errorf("placeholder phase: expected FocusPane=Dependencies (deferred), got %v", m.FocusPane)
 	}
 
@@ -1520,7 +1520,7 @@ func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
 	})
 
 	// Empty rail: focus must move to Content.
-	if m.FocusPane != uidetails.FocusPaneContent {
+	if m.FocusPane != detail.FocusPaneContent {
 		t.Errorf("real load leaf: expected FocusPane=Content, got %v", m.FocusPane)
 	}
 	if m.drillDepsFocusCalls != 0 {
@@ -1535,7 +1535,7 @@ func TestDrillFromDepsFocusClearDrillFocusCancels(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		FocusPane: uidetails.FocusPaneDependencies,
+		FocusPane: detail.FocusPaneDependencies,
 	}
 
 	m.Loading = true
@@ -1550,7 +1550,7 @@ func TestDrillFromDepsFocusClearDrillFocusCancels(t *testing.T) {
 		Summary: domain.IssueSummary{ID: "tm-x"},
 	})
 
-	if m.FocusPane != uidetails.FocusPaneContent {
+	if m.FocusPane != detail.FocusPaneContent {
 		t.Errorf("after ClearDrillFocus: expected FocusPane=Content, got %v", m.FocusPane)
 	}
 }

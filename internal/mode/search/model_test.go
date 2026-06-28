@@ -18,7 +18,7 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
@@ -792,42 +792,42 @@ func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 		t.Fatalf("expected right from content to move focus to metadata, got %v", m.focus)
 	}
 	// ensureMetadataSelection should have left a valid field selected.
-	if m.metadataSelectedField != uidetails.MetadataFieldStatus && m.metadataSelectedField != uidetails.MetadataFieldPriority {
+	if m.metadataSelectedField != detail.MetadataFieldStatus && m.metadataSelectedField != detail.MetadataFieldPriority {
 		t.Fatalf("expected valid metadata field after entering metadata pane, got %q", m.metadataSelectedField)
 	}
 
 	// Initially on status; move down to priority (covers moveMetadataSelection(+1)).
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.metadataSelectedField != uidetails.MetadataFieldPriority {
+	if m.metadataSelectedField != detail.MetadataFieldPriority {
 		t.Fatalf("expected down to move metadata selection to priority, got %q", m.metadataSelectedField)
 	}
 
 	// Move up back to status (covers moveMetadataSelection(-1)).
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
-	if m.metadataSelectedField != uidetails.MetadataFieldStatus {
+	if m.metadataSelectedField != detail.MetadataFieldStatus {
 		t.Fatalf("expected up to move metadata selection to status, got %q", m.metadataSelectedField)
 	}
 
 	// Verify clamping: down past the end stays at the last field.
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // status -> priority
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // already at last; must stay at priority
-	if m.metadataSelectedField != uidetails.MetadataFieldPriority {
+	if m.metadataSelectedField != detail.MetadataFieldPriority {
 		t.Fatalf("expected selection clamped at priority on over-scroll, got %q", m.metadataSelectedField)
 	}
 
 	// Verify clamping at top: move up past first field stays at status.
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // priority -> status
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // already at first; must stay at status
-	if m.metadataSelectedField != uidetails.MetadataFieldStatus {
+	if m.metadataSelectedField != detail.MetadataFieldStatus {
 		t.Fatalf("expected selection clamped at status on over-scroll, got %q", m.metadataSelectedField)
 	}
 
 	// Verify ensureMetadataSelection resets a stale/invalid field value.
 	// Inject an invalid MetadataFieldKey directly, then trigger ensureMetadataSelection
 	// via cycleFocus reaching the metadata pane.
-	m.metadataSelectedField = uidetails.MetadataFieldKey("stale-invalid")
+	m.metadataSelectedField = detail.MetadataFieldKey("stale-invalid")
 	m.ensureMetadataSelection()
-	if m.metadataSelectedField != uidetails.MetadataFieldStatus {
+	if m.metadataSelectedField != detail.MetadataFieldStatus {
 		t.Fatalf("expected ensureMetadataSelection to reset stale field to status, got %q", m.metadataSelectedField)
 	}
 }

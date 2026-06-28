@@ -15,11 +15,11 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	detailsmode "github.com/hk9890/task-manager-ui/internal/mode/details"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	"github.com/hk9890/task-manager-ui/internal/testing/ui"
-	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
@@ -2653,7 +2653,7 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 		longLines = append(longLines, fmt.Sprintf("Line %d", i))
 	}
 	m.active = mode.Detail
-	m.detail = detailsmode.Model{
+	m.detail = detail.Model{
 		SelectionID: "tm-1",
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-1", Title: "Issue one", Status: "open", Type: "task", Priority: 1},
@@ -3015,10 +3015,10 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 
 	// Put the model into Detail mode with tm-1 loaded and non-zero scroll offsets.
 	m.active = mode.Detail
-	m.detail = detailsmode.Model{
+	m.detail = detail.Model{
 		SelectionID: "tm-1",
 		TargetID:    "tm-1",
-		FocusPane:   uidetails.FocusPaneDependencies,
+		FocusPane:   uidetail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
 			Children: []domain.IssueReference{{ID: "tm-child", Title: "Child issue"}},
@@ -3091,10 +3091,10 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 
 	m := mustNewModel(t, services)
 	m.active = mode.Detail
-	m.detail = detailsmode.Model{
+	m.detail = detail.Model{
 		SelectionID: "tm-1",
 		TargetID:    "tm-1",
-		FocusPane:   uidetails.FocusPaneDependencies,
+		FocusPane:   uidetail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
 			Children: []domain.IssueReference{{ID: "tm-child", Title: "Child issue"}},
@@ -3112,7 +3112,7 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 	m = next.(Model)
 
 	// Placeholder phase: focus must NOT have been flipped to Content.
-	if m.detail.FocusPane != uidetails.FocusPaneDependencies {
+	if m.detail.FocusPane != uidetail.FocusPaneDependencies {
 		t.Errorf("placeholder phase: expected FocusPane=Dependencies, got %v", m.detail.FocusPane)
 	}
 
@@ -3125,7 +3125,7 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 	m = next.(Model)
 
 	// After real load: non-empty rail → focus must stay on Dependencies.
-	if m.detail.FocusPane != uidetails.FocusPaneDependencies {
+	if m.detail.FocusPane != uidetail.FocusPaneDependencies {
 		t.Errorf("after real load with deps: expected FocusPane=Dependencies, got %v", m.detail.FocusPane)
 	}
 
@@ -3149,10 +3149,10 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 
 	m := mustNewModel(t, services)
 	m.active = mode.Detail
-	m.detail = detailsmode.Model{
+	m.detail = detail.Model{
 		SelectionID: "tm-1",
 		TargetID:    "tm-1",
-		FocusPane:   uidetails.FocusPaneDependencies,
+		FocusPane:   uidetail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
 			Children: []domain.IssueReference{{ID: "tm-leaf", Title: "Leaf issue"}},
@@ -3171,7 +3171,7 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 
 	// Placeholder phase: focus must NOT have been flipped to Content yet
 	// (the focus decision is deferred to real load, not triggered by the empty placeholder).
-	if m.detail.FocusPane != uidetails.FocusPaneDependencies {
+	if m.detail.FocusPane != uidetail.FocusPaneDependencies {
 		t.Errorf("placeholder phase: expected FocusPane=Dependencies (deferred), got %v", m.detail.FocusPane)
 	}
 
@@ -3183,7 +3183,7 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 	m = next.(Model)
 
 	// After real load: empty rail → focus must move to Content.
-	if m.detail.FocusPane != uidetails.FocusPaneContent {
+	if m.detail.FocusPane != uidetail.FocusPaneContent {
 		t.Errorf("after real load with no deps: expected FocusPane=Content, got %v", m.detail.FocusPane)
 	}
 
