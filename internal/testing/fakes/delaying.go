@@ -41,13 +41,13 @@ func NewDelayingRepository(inner repository.Repository, gated Method) *DelayingR
 	}
 }
 
-// NewDelayedDashboardRepository wraps inner and gates Dashboard calls.
-func NewDelayedDashboardRepository(inner repository.Repository) *DelayingRepository {
+// NewDelayingDashboardRepository wraps inner and gates Dashboard calls.
+func NewDelayingDashboardRepository(inner repository.Repository) *DelayingRepository {
 	return NewDelayingRepository(inner, MethodDashboard)
 }
 
-// NewDelayedSearchRepository wraps inner and gates Search calls.
-func NewDelayedSearchRepository(inner repository.Repository) *DelayingRepository {
+// NewDelayingSearchRepository wraps inner and gates Search calls.
+func NewDelayingSearchRepository(inner repository.Repository) *DelayingRepository {
 	return NewDelayingRepository(inner, MethodSearch)
 }
 
