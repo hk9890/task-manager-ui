@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -24,11 +23,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
-
-func TestMain(m *testing.M) {
-	modelNow = time.Now
-	os.Exit(m.Run())
-}
 
 // mustNewModel wraps NewModel and fails the test if an error is returned.
 // It pre-sets sizeKnown=true and installs no-op scheduler functions so that
