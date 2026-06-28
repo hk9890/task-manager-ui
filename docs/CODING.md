@@ -113,8 +113,8 @@ internal/
   logging/           # central slog logging package used by runtime startup and repository tracing
   launcher/          # external editor and command launch actions
   dashboard/         # board column composition (Compose) from a DashboardData result
-  mode/              # board/search/details feature models + shell message contracts
-  ui/                # reusable rendering components (board, search, details, modal, toaster, loading, overlay, fatalerror, shared, scroll, styles)
+  mode/              # board/search/detail feature models + shell message contracts
+  ui/                # reusable rendering components (board, search, detail, modal, toaster, loading, overlay, fatalerror, shared, scroll, styles)
   testing/           # fakes and ui harness helpers
   version/           # build-time injected Version/Commit/Date symbols
 ```
@@ -185,7 +185,7 @@ internal/
 - **UI leaf components** (`internal/ui/toaster`, `internal/ui/modal`): use `New(...)` returning a
   `Model`. These are lightweight rendering components with no cross-cutting dependencies.
 - **No constructor** when a mode model is simple enough to zero-initialize directly (e.g.
-  `internal/mode/details.Model` is set up via field assignment in the owning shell).
+  `internal/mode/detail.Model` is set up via field assignment in the owning shell).
 
 Do not add `Model` suffix to leaf UI component constructors; do not use bare `New` for feature-level
 controllers.

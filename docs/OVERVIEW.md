@@ -87,7 +87,7 @@ Rendering components live under `internal/ui/`:
   duplication appears above the row level.
 - `ui/styles.FormSection` is the shared rounded-border section/container
   primitive used to frame columns, panes, and detail shells.
-- `ui/details` is the dedicated issue-detail renderer, separate from compact
+- `ui/detail` is the dedicated issue-detail renderer, separate from compact
   row/list rendering.
 - `ui/loading`, `ui/toaster`, and `ui/modal` provide shared loading, transient
   toast, and overlay feedback primitives.

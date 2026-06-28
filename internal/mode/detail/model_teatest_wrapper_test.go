@@ -1,4 +1,4 @@
-package details
+package detail
 
 // detailsTestWrapper adapts details.Model for use with the teatest harness.
 // details.Model is not a full tea.Model (no Init/Update/View lifecycle);

@@ -1,4 +1,4 @@
-package details
+package detail
 
 import (
 	"sort"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	uidetails "github.com/hk9890/task-manager-ui/internal/ui/details"
+	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 )
 
@@ -21,8 +21,8 @@ type Model struct {
 	Loading               bool
 	Error                 string
 	Keys                  config.ResolvedKeyBindings
-	FocusPane             uidetails.FocusPane
-	MetadataSelectedField uidetails.MetadataFieldKey
+	FocusPane             detail.FocusPane
+	MetadataSelectedField detail.MetadataFieldKey
 
 	BrowserGroupParentID string
 	BrowserItems         []domain.IssueReference
@@ -80,14 +80,14 @@ func (m *Model) ClearDrillFocus() {
 // the final call (real data) drives the focus decision: Dependencies if the rail is
 // non-empty, Content if empty. Intermediate calls (the optimistic placeholder) do not
 // flip focus.
-func (m *Model) ApplyLoadedDetail(issueID string, detail domain.IssueDetail) {
+func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 	previousID := strings.TrimSpace(m.Detail.Summary.ID)
 	if previousID == "" || previousID != strings.TrimSpace(issueID) {
 		m.ContentScrollOffset = 0
 		m.MetadataScrollOffset = 0
 		m.DependenciesScrollOffset = 0
 	}
-	m.Detail = detail
+	m.Detail = d
 	m.PreviewDetail = domain.IssueDetail{}
 	m.syncBrowserPanel(issueID)
 	if m.drillDepsFocusCalls > 0 {
@@ -95,17 +95,17 @@ func (m *Model) ApplyLoadedDetail(issueID string, detail domain.IssueDetail) {
 		if m.drillDepsFocusCalls == 0 {
 			// Real data arrived: set focus from actual rail content.
 			if len(m.BrowserItems) > 0 {
-				m.FocusPane = uidetails.FocusPaneDependencies
+				m.FocusPane = detail.FocusPaneDependencies
 			} else {
-				m.FocusPane = uidetails.FocusPaneContent
+				m.FocusPane = detail.FocusPaneContent
 			}
 		}
 	}
 }
 
 // ApplyPreviewDetail stores loaded preview detail without mutating browser-panel state.
-func (m *Model) ApplyPreviewDetail(detail domain.IssueDetail) {
-	m.PreviewDetail = detail
+func (m *Model) ApplyPreviewDetail(d domain.IssueDetail) {
+	m.PreviewDetail = d
 }
 
 // SelectBrowserIssue updates the highlighted browser item for a target issue.
@@ -115,7 +115,7 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
-	detail := m.RenderDetail()
+	d := m.RenderDetail()
 	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
 	// skeleton=true in two cases:
 	// 1. preview path: target differs from selection and preview detail has not yet loaded.
@@ -133,11 +133,11 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 	skeletonContent := previewSkeleton || directNavSkeleton
 
 	if compact || viewportHeight <= 0 {
-		return uidetails.Render(uidetails.State{
+		return detail.Render(detail.State{
 			SelectionID: m.SelectionID,
 			TargetID:    m.TargetID,
-			Detail:      detail,
-			QuickActions: uidetails.QuickActionLabels{
+			Detail:      d,
+			QuickActions: detail.QuickActionLabels{
 				EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
 				UpdateIssue:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
 				AddComment:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
@@ -153,11 +153,11 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		})
 	}
 
-	return uidetails.Render(uidetails.State{
+	return detail.Render(detail.State{
 		SelectionID: m.SelectionID,
 		TargetID:    m.TargetID,
-		Detail:      detail,
-		QuickActions: uidetails.QuickActionLabels{
+		Detail:      d,
+		QuickActions: detail.QuickActionLabels{
 			EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
 			UpdateIssue:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
 			AddComment:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
@@ -188,7 +188,7 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	if viewportHeight <= 0 {
 		return
 	}
-	bounds := uidetails.MaxScrollOffsets(uidetails.State{
+	bounds := detail.MaxScrollOffsets(detail.State{
 		Detail:       m.Detail,
 		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
 		Width:        maxWidth,
@@ -222,7 +222,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		return true, nil
 	}
 
-	if msg.Type == tea.KeyEnter && m.focusPane() == uidetails.FocusPaneDependencies {
+	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneDependencies {
 		// Wire Enter to open the highlighted related/child issue. This is
 		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
 		// special case, consistent with how Enter in the Metadata pane works.
@@ -232,17 +232,17 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		return true, nil
 	}
 
-	if msg.Type == tea.KeyEnter && m.focusPane() == uidetails.FocusPaneMetadata {
+	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneMetadata {
 		switch m.metadataSelectedField() {
-		case uidetails.MetadataFieldStatus:
+		case detail.MetadataFieldStatus:
 			m.pendingOpenStatusDialog = true
-		case uidetails.MetadataFieldPriority:
+		case detail.MetadataFieldPriority:
 			m.pendingOpenPriorityDialog = true
 		}
 		return true, nil
 	}
 
-	bounds := uidetails.MaxScrollOffsets(uidetails.State{
+	bounds := detail.MaxScrollOffsets(detail.State{
 		Detail:       m.Detail,
 		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
 		Width:        maxWidth,
@@ -273,7 +273,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	}
 
 	switch m.focusPane() {
-	case uidetails.FocusPaneDependencies:
+	case detail.FocusPaneDependencies:
 		if action == config.DetailActionScrollUp {
 			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
 			// The full detail reloads only when the user presses Enter (Q5).
@@ -288,7 +288,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		}
 		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
 		return true, nil
-	case uidetails.FocusPaneMetadata:
+	case detail.FocusPaneMetadata:
 		if action == config.DetailActionScrollUp {
 			m.moveMetadataSelection(-1, maxWidth, viewportHeight)
 			return true, nil
@@ -305,51 +305,51 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	}
 }
 
-func (m *Model) focusPane() uidetails.FocusPane {
+func (m *Model) focusPane() detail.FocusPane {
 	switch m.FocusPane {
-	case uidetails.FocusPaneDependencies, uidetails.FocusPaneContent, uidetails.FocusPaneMetadata:
+	case detail.FocusPaneDependencies, detail.FocusPaneContent, detail.FocusPaneMetadata:
 		return m.FocusPane
 	default:
-		return uidetails.FocusPaneContent
+		return detail.FocusPaneContent
 	}
 }
 
 func (m *Model) moveFocusLeft() {
 	switch m.focusPane() {
-	case uidetails.FocusPaneMetadata:
-		m.FocusPane = uidetails.FocusPaneContent
-	case uidetails.FocusPaneContent:
-		m.FocusPane = uidetails.FocusPaneDependencies
+	case detail.FocusPaneMetadata:
+		m.FocusPane = detail.FocusPaneContent
+	case detail.FocusPaneContent:
+		m.FocusPane = detail.FocusPaneDependencies
 	}
 }
 
 func (m *Model) moveFocusRight() {
 	switch m.focusPane() {
-	case uidetails.FocusPaneDependencies:
-		m.FocusPane = uidetails.FocusPaneContent
-	case uidetails.FocusPaneContent:
-		m.FocusPane = uidetails.FocusPaneMetadata
+	case detail.FocusPaneDependencies:
+		m.FocusPane = detail.FocusPaneContent
+	case detail.FocusPaneContent:
+		m.FocusPane = detail.FocusPaneMetadata
 		m.ensureMetadataSelection()
 	}
 }
 
-func (m *Model) metadataSelectedField() uidetails.MetadataFieldKey {
+func (m *Model) metadataSelectedField() detail.MetadataFieldKey {
 	if !isEditableMetadataField(m.MetadataSelectedField) {
-		return uidetails.MetadataFieldStatus
+		return detail.MetadataFieldStatus
 	}
 	return m.MetadataSelectedField
 }
 
 func (m *Model) ensureMetadataSelection() {
 	if !isEditableMetadataField(m.MetadataSelectedField) {
-		m.MetadataSelectedField = uidetails.MetadataFieldStatus
+		m.MetadataSelectedField = detail.MetadataFieldStatus
 	}
 }
 
 func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	fields := editableMetadataFields()
 	if len(fields) == 0 {
-		m.MetadataSelectedField = uidetails.MetadataFieldNone
+		m.MetadataSelectedField = detail.MetadataFieldNone
 		return
 	}
 
@@ -380,11 +380,11 @@ func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	}
 }
 
-func editableMetadataFields() []uidetails.MetadataFieldKey {
-	return []uidetails.MetadataFieldKey{uidetails.MetadataFieldStatus, uidetails.MetadataFieldPriority}
+func editableMetadataFields() []detail.MetadataFieldKey {
+	return []detail.MetadataFieldKey{detail.MetadataFieldStatus, detail.MetadataFieldPriority}
 }
 
-func isEditableMetadataField(key uidetails.MetadataFieldKey) bool {
+func isEditableMetadataField(key detail.MetadataFieldKey) bool {
 	for _, field := range editableMetadataFields() {
 		if key == field {
 			return true
@@ -560,8 +560,8 @@ func (m *Model) clearBrowserPanel() {
 	m.BrowserSelectedIndex = -1
 	// Do not flip focus during an in-flight drill sequence: the placeholder has no
 	// dependencies yet, but the real data load will decide focus from actual rail content.
-	if m.FocusPane == uidetails.FocusPaneDependencies && m.drillDepsFocusCalls <= 0 {
-		m.FocusPane = uidetails.FocusPaneContent
+	if m.FocusPane == detail.FocusPaneDependencies && m.drillDepsFocusCalls <= 0 {
+		m.FocusPane = detail.FocusPaneContent
 	}
 }
 
@@ -579,26 +579,26 @@ func (m *Model) selectBrowserIssue(issueID string) {
 	m.normalizeRelatedSelection()
 }
 
-func browserItemsFromDependencies(detail domain.IssueDetail) []domain.IssueReference {
+func browserItemsFromDependencies(d domain.IssueDetail) []domain.IssueReference {
 	// Group order: Blocked by, Blocks, Related, Children, Parent.
 	groups := [][]domain.IssueReference{
-		detail.BlockedBy,
-		detail.Blocks,
-		detail.Related,
-		detail.Children,
+		d.BlockedBy,
+		d.Blocks,
+		d.Related,
+		d.Children,
 	}
 	// The Parent group surfaces only the parent itself (the last navigable
 	// row drills up to the parent). Siblings are intentionally not listed,
 	// which also avoids a second `taskmgr show` per detail load.
-	if strings.TrimSpace(detail.ParentGroupBrowser.Parent.ID) != "" {
-		groups = append(groups, []domain.IssueReference{detail.ParentGroupBrowser.Parent})
+	if strings.TrimSpace(d.ParentGroupBrowser.Parent.ID) != "" {
+		groups = append(groups, []domain.IssueReference{d.ParentGroupBrowser.Parent})
 	}
 
 	// The currently-viewed issue is shown in the Content pane; it must never
 	// appear in the browser panel itself.
-	selfID := strings.TrimSpace(detail.Summary.ID)
+	selfID := strings.TrimSpace(d.Summary.ID)
 
-	seen := make(map[string]struct{}, len(detail.BlockedBy)+len(detail.Blocks)+len(detail.Related)+len(detail.Children)+1)
+	seen := make(map[string]struct{}, len(d.BlockedBy)+len(d.Blocks)+len(d.Related)+len(d.Children)+1)
 	out := make([]domain.IssueReference, 0, len(seen))
 	for _, refs := range groups {
 		ordered := append([]domain.IssueReference(nil), refs...)
@@ -641,23 +641,23 @@ func paneInnerHeight(maxWidth, viewportHeight int, _ paneKind) int {
 	if viewportHeight <= 0 {
 		return 1
 	}
-	if uidetails.UsesResponsiveDetailLayout(maxWidth) {
-		_, bottomHeight := uidetails.SplitResponsiveLayoutHeights(viewportHeight)
+	if detail.UsesResponsiveDetailLayout(maxWidth) {
+		_, bottomHeight := detail.SplitResponsiveLayoutHeights(viewportHeight)
 		return max(1, bottomHeight-2)
 	}
 	return max(1, viewportHeight-2)
 }
 
 // dependencyRefLineIndex returns the line index of browserItems[refIndex] in
-// the rendered dependency pane line list by delegating to the ui/details helper.
-func dependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, detail domain.IssueDetail) int {
-	return uidetails.DependencyRefLineIndex(refIndex, browserItems, detail)
+// the rendered dependency pane line list by delegating to the ui/detail helper.
+func dependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, d domain.IssueDetail) int {
+	return detail.DependencyRefLineIndex(refIndex, browserItems, d)
 }
 
 // metadataFieldLineIndex returns the line index of the given metadata field in
-// the rendered metadata pane by delegating to the ui/details helper.
-func metadataFieldLineIndex(field uidetails.MetadataFieldKey, detail domain.IssueDetail, _ int) int {
-	return uidetails.MetadataFieldLineIndex(field, detail)
+// the rendered metadata pane by delegating to the ui/detail helper.
+func metadataFieldLineIndex(field detail.MetadataFieldKey, d domain.IssueDetail, _ int) int {
+	return detail.MetadataFieldLineIndex(field, d)
 }
 
 func applyScrollAction(current, maxOffset int, action string, move int) int {

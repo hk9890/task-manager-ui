@@ -233,8 +233,8 @@ See `docs/TESTING.md` (Process-level capture policy) for the authoritative rule.
 
 **Failure modes and diagnostics:**
 
-- `›` disappears after pressing `j` past the viewport: `EnsureVisible` is not being called from `moveRow` (board) or `moveRelatedSelection` (details). Check `internal/mode/board/model.go` and `internal/mode/details/model.go`.
-- Header shows plain count instead of `N of M` when window clips: the `visibleCount < len(rows)` branch in `internal/ui/board/board.go:Render` is not triggered, or the deps pane header in `internal/ui/details/details.go` is not updated. Check the header logic in both renderers.
+- `›` disappears after pressing `j` past the viewport: `EnsureVisible` is not being called from `moveRow` (board) or `moveRelatedSelection` (details). Check `internal/mode/board/model.go` and `internal/mode/detail/model.go`.
+- Header shows plain count instead of `N of M` when window clips: the `visibleCount < len(rows)` branch in `internal/ui/board/board.go:Render` is not triggered, or the deps pane header in `internal/ui/detail/details.go` is not updated. Check the header logic in both renderers.
 
 ## 7) Deep Done-column navigation: load-more pagination
 
