@@ -17,8 +17,8 @@ import (
 // ctrl+q (the documented global quit) is NOT honored on this screen today.
 //
 // The screen is the path taken when taskmgr's startup health check fails with
-// ErrorCodeNoDatabaseFound or ErrorCodeCommandUnavailable; see
-// internal/app/model.go around the startupHealthCheckMsg handler.
+// ErrorCodeNoDatabaseFound; see internal/app/model.go around the
+// startupHealthCheckMsg handler.
 
 // enterFatalErrorState constructs a Model and drives it into the fatal-error
 // state by simulating a failed taskmgr health check. Returns the model in the

@@ -3,6 +3,8 @@ package board
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,6 +33,14 @@ func assertGoldenNormalized(t *testing.T, output []byte, golden string) {
 	}
 
 	got := normalize(output)
+
+	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
+		path := filepath.Join("testdata", golden)
+		if err := os.WriteFile(path, got, 0o600); err != nil {
+			t.Fatalf("write golden %s: %v", path, err)
+		}
+	}
+
 	want := normalize(testui.ReadGolden(t, golden))
 	if !bytes.Equal(got, want) {
 		t.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", golden, string(want), string(got))

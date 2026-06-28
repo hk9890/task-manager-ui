@@ -158,7 +158,10 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	resolvedConfigPath := resolveAgainstStartCWD(startCWD, opts.configPath)
-	startupLogger := logManagerComponent(logManager, "startup")
+	var startupLogger *slog.Logger
+	if logManager != nil {
+		startupLogger = logManager.Component("startup")
+	}
 
 	loadOpts := config.LoadOptions{Path: resolvedConfigPath, RequireExplicit: opts.configPath != ""}
 	configResult, err := load(loadOpts)
@@ -247,13 +250,6 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 
 	return 0
-}
-
-func logManagerComponent(manager *logging.Manager, component string) *slog.Logger {
-	if manager == nil {
-		return nil
-	}
-	return manager.Component(component)
 }
 
 // resolveAuthor determines the identity recorded as the creator of new issues

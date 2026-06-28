@@ -111,8 +111,8 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		},
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ScrollOffset == 0 {
-		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ScrollOffset)
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
+		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ContentScrollOffset)
 	}
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
 		t.Fatal("expected configured scroll-up key to be consumed")
@@ -123,8 +123,8 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
 		t.Fatal("expected configured end key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ScrollOffset != 0 {
-		t.Fatalf("expected configured home key to reset offset, got %d", m.ScrollOffset)
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
+		t.Fatalf("expected configured home key to reset offset, got %d", m.ContentScrollOffset)
 	}
 }
 
@@ -206,14 +206,14 @@ func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
 		t.Fatal("expected end key at wide width to be consumed")
 	}
-	wideOffset := m.ScrollOffset
+	wideOffset := m.ContentScrollOffset
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
 		t.Fatal("expected end key at narrow width to be consumed")
 	}
 
-	if m.ScrollOffset <= wideOffset {
-		t.Fatalf("expected larger max offset after narrowing width, wide=%d narrow=%d", wideOffset, m.ScrollOffset)
+	if m.ContentScrollOffset <= wideOffset {
+		t.Fatalf("expected larger max offset after narrowing width, wide=%d narrow=%d", wideOffset, m.ContentScrollOffset)
 	}
 }
 
@@ -909,7 +909,7 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	m.ContentScrollOffset = 15
 	m.MetadataScrollOffset = 7
 	m.DependenciesScrollOffset = 3
-	m.ScrollOffset = 15
+	m.ContentScrollOffset = 15
 
 	// Simulate app-level selection change to tm-2: synchronously apply placeholder
 	// BEFORE the repository response arrives (this is the mechanism from app/model.go).
@@ -921,16 +921,16 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 
 	// All scroll offsets must be zero immediately (before repository responds).
 	if m.ContentScrollOffset != 0 {
-		t.Errorf("ContentScrollOffset must be 0 immediately after issue switch, got %d", m.ContentScrollOffset)
+		t.Errorf("ContentContentScrollOffset must be 0 immediately after issue switch, got %d", m.ContentScrollOffset)
 	}
 	if m.MetadataScrollOffset != 0 {
-		t.Errorf("MetadataScrollOffset must be 0 immediately after issue switch, got %d", m.MetadataScrollOffset)
+		t.Errorf("MetadataContentScrollOffset must be 0 immediately after issue switch, got %d", m.MetadataScrollOffset)
 	}
 	if m.DependenciesScrollOffset != 0 {
-		t.Errorf("DependenciesScrollOffset must be 0 immediately after issue switch, got %d", m.DependenciesScrollOffset)
+		t.Errorf("DependenciesContentScrollOffset must be 0 immediately after issue switch, got %d", m.DependenciesScrollOffset)
 	}
-	if m.ScrollOffset != 0 {
-		t.Errorf("ScrollOffset must be 0 immediately after issue switch, got %d", m.ScrollOffset)
+	if m.ContentScrollOffset != 0 {
+		t.Errorf("ContentScrollOffset must be 0 immediately after issue switch, got %d", m.ContentScrollOffset)
 	}
 
 	// The view while loading with the placeholder must NOT be a full-screen
@@ -1001,22 +1001,22 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 		m.ContentScrollOffset = 10
 		m.MetadataScrollOffset = 5
 		m.DependenciesScrollOffset = 3
-		m.ScrollOffset = 10
+		m.ContentScrollOffset = 10
 
 		// Switch to a different issue.
 		m.ApplyLoadedDetail("tm-2", issueB)
 
 		if m.ContentScrollOffset != 0 {
-			t.Errorf("expected ContentScrollOffset=0 after issue switch, got %d", m.ContentScrollOffset)
+			t.Errorf("expected ContentContentScrollOffset=0 after issue switch, got %d", m.ContentScrollOffset)
 		}
 		if m.MetadataScrollOffset != 0 {
-			t.Errorf("expected MetadataScrollOffset=0 after issue switch, got %d", m.MetadataScrollOffset)
+			t.Errorf("expected MetadataContentScrollOffset=0 after issue switch, got %d", m.MetadataScrollOffset)
 		}
 		if m.DependenciesScrollOffset != 0 {
-			t.Errorf("expected DependenciesScrollOffset=0 after issue switch, got %d", m.DependenciesScrollOffset)
+			t.Errorf("expected DependenciesContentScrollOffset=0 after issue switch, got %d", m.DependenciesScrollOffset)
 		}
-		if m.ScrollOffset != 0 {
-			t.Errorf("expected ScrollOffset=0 after issue switch, got %d", m.ScrollOffset)
+		if m.ContentScrollOffset != 0 {
+			t.Errorf("expected ContentScrollOffset=0 after issue switch, got %d", m.ContentScrollOffset)
 		}
 	})
 
@@ -1030,7 +1030,7 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 		m.ContentScrollOffset = 7
 		m.MetadataScrollOffset = 2
 		m.DependenciesScrollOffset = 4
-		m.ScrollOffset = 7
+		m.ContentScrollOffset = 7
 
 		// Re-load the same issue (e.g. refresh).
 		m.ApplyLoadedDetail("tm-1", issueA)
@@ -1060,13 +1060,13 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 		m.ApplyLoadedDetail("tm-1", issueA)
 
 		if m.ContentScrollOffset != 0 {
-			t.Errorf("expected ContentScrollOffset=0 on first issue load, got %d", m.ContentScrollOffset)
+			t.Errorf("expected ContentContentScrollOffset=0 on first issue load, got %d", m.ContentScrollOffset)
 		}
 		if m.MetadataScrollOffset != 0 {
-			t.Errorf("expected MetadataScrollOffset=0 on first issue load, got %d", m.MetadataScrollOffset)
+			t.Errorf("expected MetadataContentScrollOffset=0 on first issue load, got %d", m.MetadataScrollOffset)
 		}
 		if m.DependenciesScrollOffset != 0 {
-			t.Errorf("expected DependenciesScrollOffset=0 on first issue load, got %d", m.DependenciesScrollOffset)
+			t.Errorf("expected DependenciesContentScrollOffset=0 on first issue load, got %d", m.DependenciesScrollOffset)
 		}
 	})
 }

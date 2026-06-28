@@ -101,7 +101,21 @@ func (m *Manager) Logger() *slog.Logger {
 
 // Component returns a component-scoped logger.
 func (m *Manager) Component(name string) *slog.Logger {
-	logger := m.Logger()
+	return WithComponent(m.Logger(), name)
+}
+
+// WithComponent attaches a "component" attribute to logger and returns the
+// derived logger. It is the single canonical implementation of component-logger
+// attachment; both Manager.Component and callers that hold a *slog.Logger
+// directly should route through here.
+//
+// Nil handling: a nil logger is returned unchanged so callers that use nil as a
+// "no-op / fall back to slog.Default()" sentinel preserve that behaviour.
+// Empty/whitespace-only names are a no-op (logger returned unchanged).
+func WithComponent(logger *slog.Logger, name string) *slog.Logger {
+	if logger == nil {
+		return nil
+	}
 	if strings.TrimSpace(name) == "" {
 		return logger
 	}

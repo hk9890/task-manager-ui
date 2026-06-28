@@ -16,19 +16,19 @@ import (
 // SearchResult.Snippet is left empty: the task-manager backend does not produce
 // match snippets. Result ordering is work order (priority, then created), which
 // is not a documented contract.
-func (r *Repository) Search(ctx context.Context, q domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
+func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.SearchResultPage{}, err
 	}
-	criteria, opt := buildCriteria(q)
+	criteria, opt := buildCriteria(query)
 
 	// If the caller requested a status/type filter but every value was unknown,
 	// nothing can match. Return empty rather than letting the now-empty filter
 	// widen the result to all statuses/types (which would also trip the
 	// validating decorator's filter-respected check, one warn per result).
-	if (len(q.Statuses) > 0 && len(criteria.Statuses) == 0) ||
-		(len(q.Types) > 0 && len(criteria.Types) == 0) {
-		return emptySearchPage(q.Limit), nil
+	if (len(query.Statuses) > 0 && len(criteria.Statuses) == 0) ||
+		(len(query.Types) > 0 && len(criteria.Types) == 0) {
+		return emptySearchPage(query.Limit), nil
 	}
 
 	page, err := r.store.FindPage(criteria, opt)
@@ -44,7 +44,7 @@ func (r *Repository) Search(ctx context.Context, q domain.SearchIssuesQuery) (do
 	// The window is complete unless a positive Limit truncated matches that lie
 	// beyond it (Page.Total counts all matches in scope before Offset/Limit).
 	completeness := domain.SearchResultCompletenessExact
-	if q.Limit > 0 && page.Total > q.Offset+len(results) {
+	if query.Limit > 0 && page.Total > query.Offset+len(results) {
 		completeness = domain.SearchResultCompletenessMaybeMore
 	}
 
@@ -52,7 +52,7 @@ func (r *Repository) Search(ctx context.Context, q domain.SearchIssuesQuery) (do
 		Results: results,
 		Metadata: domain.SearchResultMetadata{
 			ReturnedCount:  len(results),
-			RequestedLimit: q.Limit,
+			RequestedLimit: query.Limit,
 			Completeness:   completeness,
 			Source:         domain.SearchResultSourceTaskmgrFind,
 		},

@@ -2,7 +2,7 @@
 │zqx99│                                │  │T P1 OPN tm-1                           │  │  Core                          │
 ╰──────────────────────────────────────╯  │Backend search result                   │  │  Type    : task                │
 ╭─ Results ───────────────── 2 capped ─╮  │────────────────────────────────────────│  │  Status  : open                │
-│Results below are stale. Press Ente...│  │Description                             │  │  Priority: P1                  │
+│Results below are stale. Press Enter …│  │Description                             │  │  Priority: P1                  │
 │                                      │  │░░░░░░░░░░░░░░░░░░░░░░                  │  │  ------------------------------│
 │› T P1 OPN tm-1 Backend search result │  │                                        │  │  Ownership                     │
 │  B P0 IP tm-2 Another result         │  │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░      │  │  Assignee: hans                │

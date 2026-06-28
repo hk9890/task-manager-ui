@@ -94,8 +94,7 @@ func (r *Repository) Catalogs(ctx context.Context) (repository.Catalogs, error) 
 	return staticCatalogs(labels), nil
 }
 
-// HealthCheck confirms the store is reachable. There is no external binary, so
-// it never reports domain.ErrorCodeCommandUnavailable.
+// HealthCheck confirms the store is reachable.
 func (r *Repository) HealthCheck(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err

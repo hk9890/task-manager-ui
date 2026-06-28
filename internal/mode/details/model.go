@@ -28,9 +28,6 @@ type Model struct {
 	BrowserItems         []domain.IssueReference
 	BrowserSelectedIndex int
 
-	// ScrollOffset is retained as a compatibility alias to content offset.
-	ScrollOffset int
-
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
@@ -89,7 +86,6 @@ func (m *Model) ApplyLoadedDetail(issueID string, detail domain.IssueDetail) {
 		m.ContentScrollOffset = 0
 		m.MetadataScrollOffset = 0
 		m.DependenciesScrollOffset = 0
-		m.ScrollOffset = 0
 	}
 	m.Detail = detail
 	m.PreviewDetail = domain.IssueDetail{}
@@ -157,7 +153,6 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		})
 	}
 
-	m.syncLegacyScrollAlias()
 	return uidetails.Render(uidetails.State{
 		SelectionID: m.SelectionID,
 		TargetID:    m.TargetID,
@@ -193,7 +188,6 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	if viewportHeight <= 0 {
 		return
 	}
-	m.syncLegacyScrollAlias()
 	bounds := uidetails.MaxScrollOffsets(uidetails.State{
 		Detail:       m.Detail,
 		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
@@ -203,7 +197,6 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	m.ContentScrollOffset = clampOffset(m.ContentScrollOffset, bounds.Content)
 	m.DependenciesScrollOffset = clampOffset(m.DependenciesScrollOffset, bounds.Dependencies)
 	m.MetadataScrollOffset = clampOffset(m.MetadataScrollOffset, bounds.Metadata)
-	m.ScrollOffset = m.ContentScrollOffset
 }
 
 // HandleKey updates detail-mode scroll state and reports whether it consumed the key.
@@ -211,7 +204,6 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	if viewportHeight <= 0 {
 		return false, nil
 	}
-	m.syncLegacyScrollAlias()
 	m.normalizeRelatedSelection()
 	m.ensureMetadataSelection()
 	if m.Keys.IsZero() {
@@ -309,7 +301,6 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		return true, nil
 	default:
 		m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, action, move)
-		m.ScrollOffset = m.ContentScrollOffset
 		return true, nil
 	}
 }
@@ -695,11 +686,4 @@ func clampOffset(value, maxOffset int) int {
 		return maxOffset
 	}
 	return value
-}
-
-func (m *Model) syncLegacyScrollAlias() {
-	if m.ScrollOffset != 0 && m.ContentScrollOffset == 0 {
-		m.ContentScrollOffset = m.ScrollOffset
-	}
-	m.ScrollOffset = m.ContentScrollOffset
 }

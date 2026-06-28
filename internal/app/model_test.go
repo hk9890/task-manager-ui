@@ -26,16 +26,13 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	scheduleRefreshTickCmd = func() tea.Cmd { return nil }
-	scheduleToastDismissCmd = func(_ time.Duration, _ int) tea.Cmd { return nil }
-	scheduleSpinnerTickCmd = func() tea.Cmd { return nil }
 	modelNow = time.Now
 	os.Exit(m.Run())
 }
 
 // mustNewModel wraps NewModel and fails the test if an error is returned.
-// It pre-sets sizeKnown=true so tests that call View() without sending a
-// WindowSizeMsg receive a rendered view (not the empty pre-size guard string).
+// It pre-sets sizeKnown=true and installs no-op scheduler functions so that
+// tests run without real time-based ticks and without any global shared state.
 // Tests that specifically validate the sizeKnown=false/empty-view behaviour
 // should call NewModelWithOptions directly and leave sizeKnown at its zero value.
 func mustNewModel(t *testing.T, services Services) Model {
@@ -45,14 +42,17 @@ func mustNewModel(t *testing.T, services Services) Model {
 		t.Fatalf("NewModel returned unexpected error: %v", err)
 	}
 	m.sizeKnown = true
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 	return m
 }
 
 // mustNewModelWithOptions wraps NewModelWithOptions and fails the test if an error is returned.
-// It pre-sets sizeKnown=true so tests that call View() without sending a
-// WindowSizeMsg receive a rendered view (not the empty pre-size guard string).
-// Tests that specifically validate the sizeKnown=false/empty-view behaviour
-// should call NewModelWithOptions directly and leave sizeKnown at its zero value.
+// It pre-sets sizeKnown=true and installs no-op scheduler functions (same as
+// mustNewModel). Tests that specifically validate the sizeKnown=false/empty-view
+// behaviour should call NewModelWithOptions directly and leave sizeKnown at its
+// zero value.
 func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOptions) Model {
 	t.Helper()
 	m, err := NewModelWithOptions(services, runtime)
@@ -60,6 +60,9 @@ func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOpt
 		t.Fatalf("NewModelWithOptions returned unexpected error: %v", err)
 	}
 	m.sizeKnown = true
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 	return m
 }
 
@@ -126,7 +129,6 @@ func TestModelInitDoesNotPreloadSearch(t *testing.T) {
 // transition to search mode fires exactly one SearchIssues call (lazy init),
 // and that a second transition does NOT fire another SearchIssues call.
 func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready", "task", 1)
@@ -479,7 +481,6 @@ func TestModelSearchEscFromResultsFocusReturnsToBoard(t *testing.T) {
 }
 
 func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withModelNow(t, time.Unix(0, 0))
 
 	gw := newTestRepository()
@@ -509,7 +510,6 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 }
 
 func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -554,7 +554,6 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 }
 
 func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -596,7 +595,6 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 }
 
 func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -633,7 +631,6 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 }
 
 func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -674,7 +671,6 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 }
 
 func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -720,7 +716,6 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 }
 
 func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -777,7 +772,6 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 }
 
 func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -822,7 +816,6 @@ func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 }
 
 func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -880,7 +873,6 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 }
 
 func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -932,7 +924,6 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 }
 
 func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -980,7 +971,6 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 }
 
 func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -1037,7 +1027,6 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 }
 
 func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 	withModelNow(t, time.Unix(0, 0))
 
 	gw := newTestRepository()
@@ -1076,11 +1065,6 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 
 func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 	refreshMarkerSeen := false
-	withRefreshTickScheduler(t, func() tea.Cmd {
-		return func() tea.Msg {
-			return refreshTickMsg{}
-		}
-	})
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -1092,6 +1076,10 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 	}
 
 	m := mustNewModelWithOptions(t, services, RuntimeOptions{DisableAutoRefresh: true})
+	// Install a non-nil scheduler so we can detect if it fires (it should not).
+	m.scheduleRefreshTick = func() tea.Cmd {
+		return func() tea.Msg { return refreshTickMsg{} }
+	}
 	for _, msg := range runBatch(m.Init()) {
 		if _, ok := msg.(refreshTickMsg); ok {
 			refreshMarkerSeen = true
@@ -1105,7 +1093,6 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 }
 
 func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -1148,7 +1135,6 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 }
 
 func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
@@ -1385,7 +1371,6 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 }
 
 func TestModelEditHotkeyUsesEditorService(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) {
@@ -1599,7 +1584,6 @@ func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 
 func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	t.Parallel()
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
@@ -1745,7 +1729,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	m.detail.ScrollOffset = 5
+	m.detail.ContentScrollOffset = 5
 
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	m = next.(Model)
@@ -2429,7 +2413,6 @@ func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T)
 
 func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	t.Parallel()
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-9", "Ninth", "task", 2)
@@ -2699,30 +2682,6 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	}
 }
 
-func TestModelStartupHealthCheckSetsFatalErrOnCommandUnavailable(t *testing.T) {
-	t.Parallel()
-
-	gw := newTestRepository()
-	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
-		Code:      domain.ErrorCodeCommandUnavailable,
-		Operation: "health check",
-		Message:   "task-manager backend unavailable",
-	})
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	msgs := runBatch(m.Init())
-	m = applyMessages(t, m, msgs)
-
-	if m.fatalErrTitle == "" {
-		t.Fatal("expected fatalErr to be set after CommandUnavailable health check, got empty string")
-	}
-}
-
 func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -2747,8 +2706,8 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
-		Code:    domain.ErrorCodeCommandUnavailable,
-		Message: "task-manager backend unavailable",
+		Code:    domain.ErrorCodeNoDatabaseFound,
+		Message: "no task-manager store found",
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -2761,11 +2720,11 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	m = applyMessages(t, m, msgs)
 
 	view := m.View()
-	if !strings.Contains(view, "task manager is not available") {
+	if !strings.Contains(view, "no task-manager store here") {
 		t.Fatalf("expected fatal error title in View(), got %q", view)
 	}
-	if !strings.Contains(view, "task-manager") {
-		t.Fatalf("expected 'task-manager' mention in View(), got %q", view)
+	if !strings.Contains(view, "taskmgr") {
+		t.Fatalf("expected 'taskmgr' mention in View(), got %q", view)
 	}
 }
 
@@ -2774,8 +2733,8 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 
 	gw := newTestRepository()
 	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
-		Code:    domain.ErrorCodeCommandUnavailable,
-		Message: "task-manager backend unavailable",
+		Code:    domain.ErrorCodeNoDatabaseFound,
+		Message: "no task-manager store found",
 	})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
@@ -3077,7 +3036,6 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 		ContentScrollOffset:      5,
 		MetadataScrollOffset:     3,
 		DependenciesScrollOffset: 1,
-		ScrollOffset:             5,
 		Keys:                     m.keys,
 	}
 	m.sizeKnown = true
@@ -3105,9 +3063,6 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 	}
 	if m.detail.DependenciesScrollOffset != 0 {
 		t.Errorf("expected DependenciesScrollOffset=0 after Enter-reload, got %d", m.detail.DependenciesScrollOffset)
-	}
-	if m.detail.ScrollOffset != 0 {
-		t.Errorf("expected ScrollOffset=0 after Enter-reload, got %d", m.detail.ScrollOffset)
 	}
 	if m.active != mode.Detail {
 		t.Errorf("expected mode.Detail to stay active after Enter on dep pane, got %s", m.active)
@@ -3300,45 +3255,6 @@ func browserIDs(refs []domain.IssueReference) []string {
 	return out
 }
 
-func withRefreshTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
-	t.Helper()
-	schedulerMu.Lock()
-	original := scheduleRefreshTickCmd
-	scheduleRefreshTickCmd = scheduler
-	schedulerMu.Unlock()
-	t.Cleanup(func() {
-		schedulerMu.Lock()
-		scheduleRefreshTickCmd = original
-		schedulerMu.Unlock()
-	})
-}
-
-func withSpinnerTickScheduler(t *testing.T, scheduler func() tea.Cmd) {
-	t.Helper()
-	schedulerMu.Lock()
-	original := scheduleSpinnerTickCmd
-	scheduleSpinnerTickCmd = scheduler
-	schedulerMu.Unlock()
-	t.Cleanup(func() {
-		schedulerMu.Lock()
-		scheduleSpinnerTickCmd = original
-		schedulerMu.Unlock()
-	})
-}
-
-func withToastDismissScheduler(t *testing.T, scheduler func(time.Duration, int) tea.Cmd) {
-	t.Helper()
-	schedulerMu.Lock()
-	original := scheduleToastDismissCmd
-	scheduleToastDismissCmd = scheduler
-	schedulerMu.Unlock()
-	t.Cleanup(func() {
-		schedulerMu.Lock()
-		scheduleToastDismissCmd = original
-		schedulerMu.Unlock()
-	})
-}
-
 func withModelNow(t *testing.T, now time.Time) {
 	t.Helper()
 	original := modelNow
@@ -3442,9 +3358,6 @@ func TestModeCycleDirections(t *testing.T) {
 func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 	t.Parallel()
 
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-
 	gw := newTestRepository()
 	services := Services{Repo: gw, Config: config.Default()}
 	m := mustNewModel(t, services)
@@ -3471,9 +3384,6 @@ func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 // contains none of them when idle.
 func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	t.Parallel()
-
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	services := Services{Repo: gw, Config: config.Default()}

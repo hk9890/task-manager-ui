@@ -178,10 +178,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		// focus states, let the key fall through so the shell-level
 		// escape action can fire (CapturesShellKey already returns false
 		// for Esc in non-query focus states, so the shell handler runs).
-		if m.focus == uisearch.FocusQuery {
-			return nil
-		}
-		return nil // non-query focus: no local action; shell escape runs
+		return nil
 	case tea.KeyBackspace:
 		if m.focus != uisearch.FocusQuery {
 			return nil

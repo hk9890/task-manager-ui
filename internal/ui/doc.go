@@ -1,2 +1,2 @@
-// Package ui contains reusable Task Manager UI UI components.
+// Package ui contains reusable Task Manager UI components.
 package ui

@@ -155,7 +155,7 @@ func TestCompactIssueID(t *testing.T) {
 		{name: "fits as is", id: "tm-1", maxWidth: 10, want: "tm-1"},
 		{name: "repo prefix dropped", id: "task-manager-ui-9uk", maxWidth: 8, want: "9uk"},
 		{name: "suffix ellipsis", id: "very-long-id", maxWidth: 5, want: "…g-id"},
-		{name: "tiny width truncates", id: "abcdef", maxWidth: 1, want: "."},
+		{name: "tiny width truncates", id: "abcdef", maxWidth: 1, want: "…"},
 	}
 
 	for _, tc := range tests {
