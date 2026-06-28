@@ -129,7 +129,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "bug beta", Status: "open", Type: "bug", Priority: 2})
 		inner.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 3})
 
-		delayed := fakes.NewDelayedSearchRepository(inner)
+		delayed := fakes.NewDelayingSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -210,7 +210,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "bar issue", Status: "open", Type: "task", Priority: 2})
 		inner.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "unrelated", Status: "open", Type: "task", Priority: 3})
 
-		delayed := fakes.NewDelayedSearchRepository(inner)
+		delayed := fakes.NewDelayingSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -297,7 +297,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner := memoryrepo.New()
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task thing", Status: "open", Type: "task", Priority: 1})
 
-		delayed := fakes.NewDelayedSearchRepository(inner)
+		delayed := fakes.NewDelayingSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -345,7 +345,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner := memoryrepo.New()
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task item", Status: "open", Type: "task", Priority: 1})
 
-		delayed := fakes.NewDelayedSearchRepository(inner)
+		delayed := fakes.NewDelayingSearchRepository(inner)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -413,7 +413,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Assertions check query-shape (no forced Statuses) and that Enter was not
 		// silently dropped (the typed "task" query was executed).
 		recording := &queryRecordingRepo{Repository: inner}
-		delayed := fakes.NewDelayedSearchRepository(recording)
+		delayed := fakes.NewDelayingSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)
@@ -510,7 +510,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Stack: inner → erroring (every Search fails) → recording (observe queries) → delayed (gate).
 		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
 		recording := &queryRecordingRepo{Repository: erroring}
-		delayed := fakes.NewDelayedSearchRepository(recording)
+		delayed := fakes.NewDelayingSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
 		m.SetSize(120, 30)

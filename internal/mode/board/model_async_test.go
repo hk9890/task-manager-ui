@@ -245,7 +245,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 	// counter records completed Dashboard calls (resolved through the delay gate).
 	inner := &fixedDashboardRepo{resp: loadMoreResp}
 	counter := newDashboardCallCounter(inner)
-	delayed := fakes.NewDelayedDashboardRepository(counter)
+	delayed := fakes.NewDelayingDashboardRepository(counter)
 
 	m := newBoardModel(delayed, resolvedBoardKeys(t))
 	m.SetSize(120, 25) // sectionItemCapacity=22; closedPageSize=max(44,50)=50
