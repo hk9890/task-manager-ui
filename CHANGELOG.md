@@ -10,6 +10,14 @@ Releases page above.
 
 ## Unreleased
 
+## v0.12.1
+
+- Maintenance release: internal refactors (god-file splits, consistency-seam
+  unification, repository test seams), removal of dead code including leftover
+  Windows-only paths, expanded and cross-backend test coverage, hardened
+  tracker-ID guardrails, and documentation accuracy fixes. No user-facing
+  behavior changes.
+
 ## v0.12.0
 
 - Initial public release.
