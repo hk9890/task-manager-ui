@@ -1,8 +1,8 @@
 Default · cols 1-3/4
 ╭─ Not Ready ──────────────────── 2 ─╮  ╭─ Ready ───────────────────────── 3 ─╮  ╭─ In Progress ─────────────────── 3 ─╮
-│› B P0 BLK tm-3 Blocked: API cont...│  │  T P1 OPN tm-1 Ready fix login pr...│  │  F P1 IP tm-2 Implement board key...│
-│  T P1 BLK tm-9 Blocked: migratio...│  │  T P2 OPN tm-5 Ready improve docs...│  │  T P1 IP tm-7 Wire detail reload ...│
-│                                    │  │  C P2 OPN tm-6 Ready triage inbox   │  │  D P2 IP tm-8 Polish header help ...│
+│› B P0 BLK tm-3 Blocked: API contra…│  │  T P1 OPN tm-1 Ready fix login prom…│  │  F P1 IP tm-2 Implement board keybo…│
+│  T P1 BLK tm-9 Blocked: migration …│  │  T P2 OPN tm-5 Ready improve docs o…│  │  T P1 IP tm-7 Wire detail reload be…│
+│                                    │  │  C P2 OPN tm-6 Ready triage inbox   │  │  D P2 IP tm-8 Polish header help co…│
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │

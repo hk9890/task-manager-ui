@@ -484,6 +484,35 @@ func TestSearchInvalidStatusFilter(t *testing.T) {
 	}
 }
 
+// TestSearchDefaultStatuesIncludesClosed pins that the taskmgr backend sets
+// IncludeClosed:true in buildCriteria so a default-Statuses (empty) search
+// returns closed issues. Removing IncludeClosed:true from search.go must fail
+// this test — that is the pin (T2 from the 2026-06-27 project review).
+func TestSearchDefaultStatuesIncludesClosed(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	openID := mustCreate(t, r, domain.CreateIssueInput{Title: "active widget"})
+	closedID := mustCreate(t, r, domain.CreateIssueInput{Title: "archived widget"})
+	if err := r.CloseIssue(ctx, closedID, domain.CloseIssueInput{Reason: "done"}); err != nil {
+		t.Fatalf("CloseIssue: %v", err)
+	}
+
+	// Default-Statuses search (empty Statuses) must include the closed issue.
+	// The taskmgr backend achieves this via IncludeClosed:true in buildCriteria.
+	page, err := r.Search(ctx, domain.SearchIssuesQuery{Text: "widget"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	ids := searchIDs(page.Results)
+	if !containsID(ids, openID) {
+		t.Errorf("open issue %s missing from default search; got %v", openID, ids)
+	}
+	if !containsID(ids, closedID) {
+		t.Errorf("closed issue %s missing from default search; got %v — IncludeClosed must be true in buildCriteria", closedID, ids)
+	}
+}
+
 func TestSearchByDeferredStatus(t *testing.T) {
 	r, _ := newTestRepo(t)
 	ctx := context.Background()

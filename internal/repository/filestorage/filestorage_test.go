@@ -6,12 +6,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
@@ -384,97 +382,13 @@ func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 	}
 }
 
-// TestSnapshotRoundTrip_PreservesCrossRefMetadata verifies that cross-reference
-// metadata (Title, Status, Type, Priority on BlockedBy, Related, and
-// ParentGroupBrowser) survives a full Save→Load cycle even when the referenced
-// issues were never independently seeded — Load uses SeedFromSnapshot, which
-// restores the verbatim ref fields so toDetailLocked returns them without
-// re-resolving against the memory map.
-func TestSnapshotRoundTrip_PreservesCrossRefMetadata(t *testing.T) {
+// TestSnapshotRoundTrip_ReResolvesRefsAfterLoad verifies that cross-reference
+// metadata (Title on BlockedBy) is re-resolved from the memory map after a
+// Save→Load cycle when both the issue and its dependency are seeded.
+func TestSnapshotRoundTrip_ReResolvesRefsAfterLoad(t *testing.T) {
 	r := memory.New()
 
-	// Seed ONLY issue A, carrying verbatim cross-ref metadata; do NOT seed B,
-	// R, or P. This reproduces the path where only the looked-up issue is in
-	// memory and its cross-refs were stored as full IssueReferences.
-	pRef := domain.IssueReference{ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2}
-	r.SeedFromSnapshot(memory.SnapshotIssue{
-		ID:        "A",
-		Title:     "Issue A",
-		Status:    "open",
-		Type:      "task",
-		Priority:  0,
-		DependsOn: []string{"B"},
-		Related:   []string{"R"},
-		ParentID:  "P",
-		BlockedByRefs: []domain.IssueReference{
-			{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1},
-		},
-		RelatedRefs: []domain.IssueReference{
-			{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0},
-		},
-		ParentRef: &pRef,
-	})
-
-	// Save to disk.
-	dir := t.TempDir()
-	path := filepath.Join(dir, "crossref.jsonl")
-	if err := filestorage.Save(r, path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	// Load into a fresh repository.
-	loaded, err := filestorage.Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	got, err := loaded.Issue(context.Background(), "A")
-	if err != nil {
-		t.Fatalf("Issue(A) after Load: %v", err)
-	}
-
-	// BlockedBy[0] must preserve the full metadata, not just the bare ID "B".
-	if len(got.BlockedBy) != 1 {
-		t.Fatalf("BlockedBy: got %d entries, want 1", len(got.BlockedBy))
-	}
-	wantBlockedBy := domain.IssueReference{
-		ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1,
-	}
-	if !reflect.DeepEqual(got.BlockedBy[0], wantBlockedBy) {
-		t.Errorf("BlockedBy[0]:\n  got  %+v\n  want %+v", got.BlockedBy[0], wantBlockedBy)
-	}
-
-	// Related[0] must preserve full metadata.
-	if len(got.Related) != 1 {
-		t.Fatalf("Related: got %d entries, want 1", len(got.Related))
-	}
-	wantRelated := domain.IssueReference{
-		ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0,
-	}
-	if !reflect.DeepEqual(got.Related[0], wantRelated) {
-		t.Errorf("Related[0]:\n  got  %+v\n  want %+v", got.Related[0], wantRelated)
-	}
-
-	// ParentGroupBrowser.Parent must preserve full metadata.
-	wantParent := domain.IssueReference{
-		ID: "P", Title: "Parent Epic", Status: "open", Type: "epic", Priority: 2,
-	}
-	if !reflect.DeepEqual(got.ParentGroupBrowser.Parent, wantParent) {
-		t.Errorf("ParentGroupBrowser.Parent:\n  got  %+v\n  want %+v",
-			got.ParentGroupBrowser.Parent, wantParent)
-	}
-}
-
-// TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution verifies backward
-// compatibility: an issue seeded via Seed (no verbatim refs) has nil ref fields,
-// those nil fields survive Snapshot→JSON→Snapshot→Load, and Load produces a
-// repository where toDetailLocked re-resolves references from the memory map
-// (the original behavior — no regression).
-func TestSnapshotRoundTrip_NilRefFields_FallsBackToReResolution(t *testing.T) {
-	r := memory.New()
-
-	// Seed two issues with plain Seed (no verbatim refs).
-	// B is a dependency; A references B via DependsOn.
+	// Seed two issues; B is a dependency of A.
 	r.Seed(memory.Issue{
 		ID:        "A",
 		Title:     "Issue A",

@@ -43,14 +43,11 @@ type dashboardLoadedMsg struct {
 }
 
 // loadMoreClosedDoneMsg carries the result of a load-more Dashboard call for
-// the Done column. opts is echoed back from the originating loadMoreClosedCmd
-// so the handler can verify it is processing the expected page (offset / limit).
-// On err != nil the handler clears doneLoadInFlight and surfaces the error on
-// the Done column; on success it merges via dashboard.Compose with PriorClosed
-// set to the current Done issues.
+// the Done column. On err != nil the handler clears doneLoadInFlight and
+// surfaces the error on the Done column; on success it merges via
+// dashboard.Compose with PriorClosed set to the current Done issues.
 type loadMoreClosedDoneMsg struct {
 	data repository.DashboardData
-	opts repository.DashboardOptions
 	err  error
 }
 
@@ -171,7 +168,7 @@ func initialLoadingColumns() []columnData {
 	}
 }
 
-// Init loads board data from the repository via 3 parallel calls.
+// Init loads board data from the repository via a single Dashboard call.
 func (m *Model) Init() tea.Cmd {
 	return m.startReload(refreshModeReload)
 }
@@ -346,7 +343,7 @@ func (m *Model) AutoRefresh() tea.Cmd {
 }
 
 // startReload captures the selection anchor (if auto), marks all columns
-// loading, and dispatches all 3 repository calls in a single tea.Batch. It is
+// loading, and dispatches a single Dashboard repository call. It is
 // the single entry point for initial load, manual reload, and auto-refresh.
 func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that
@@ -771,12 +768,10 @@ func loadDashboardCmd(ctx context.Context, repo repository.Repository, opts repo
 
 // loadMoreClosedCmd fires a Dashboard call scoped to the next closed page
 // (offset=doneLoadedCount, limit=pageSize) and wraps the result in a
-// loadMoreClosedDoneMsg. opts is captured at construction time and echoed
-// back in the message so the handler can assert it is receiving the expected
-// page.
+// loadMoreClosedDoneMsg.
 func loadMoreClosedCmd(ctx context.Context, repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
 	return func() tea.Msg {
 		data, err := repo.Dashboard(ctx, opts)
-		return loadMoreClosedDoneMsg{data: data, opts: opts, err: err}
+		return loadMoreClosedDoneMsg{data: data, err: err}
 	}
 }

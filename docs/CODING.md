@@ -175,6 +175,39 @@ internal/
 
 10. **Repository mapping is typed and operation-scoped.** `internal/repository/taskmgr` maps the SDK's typed model onto taskmgr-ui's domain types through explicit converters (see `convert.go`). Avoid `map[string]any`/generic map decoding paths for primary read flows.
 
+## Naming Conventions
+
+### Constructor names
+
+- **Feature mode models** (`internal/mode/board`, `internal/mode/search`, `internal/app`): use
+  `NewModel(...)` returning a named `Model` (or `*Model`). These are stateful Bubble Tea controllers
+  with complex dependency injection.
+- **UI leaf components** (`internal/ui/toaster`, `internal/ui/modal`): use `New(...)` returning a
+  `Model`. These are lightweight rendering components with no cross-cutting dependencies.
+- **No constructor** when a mode model is simple enough to zero-initialize directly (e.g.
+  `internal/mode/details.Model` is set up via field assignment in the owning shell).
+
+Do not add `Model` suffix to leaf UI component constructors; do not use bare `New` for feature-level
+controllers.
+
+### Package doc placement
+
+All packages must have a package-level doc comment. The preferred placement is a `doc.go` file for
+packages with multiple files; inline on the `package` declaration for single-file packages. Do not
+place the doc in the largest source file and leave sibling files uncommented.
+
+### Test fakes (`internal/testing/fakes`)
+
+Two naming styles coexist by design:
+
+| Style | When to use | Examples |
+|---|---|---|
+| `Fake<Thing>` + public struct literal | Simple, non-repository seams — typically a one-method interface or command type | `FakeEditor`, `FakeLauncher`, `FakeProcessRunner`, `FakeExecCommand` |
+| `<Adjective>Repository` + `New*` constructor | Repository wrappers that carry non-trivial state or construction logic | `ErrorInjectingRepository` / `NewErrorInjecting`, `DelayingRepository` / `NewDelayingRepository` |
+
+New fakes follow the style that matches the complexity: struct literal + `Fake` prefix for thin
+seams; named type + constructor for stateful wrappers.
+
 ## UI Rendering Conventions
 
 **Comment ordering:** The detail view renders comments newest-first (sorted by
@@ -230,7 +263,7 @@ Key tasks:
 | `mise run vuln` | `govulncheck ./...` — CVE scan against deps + stdlib (local/on-demand; needs network) |
 | `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
 
-**Unit vs integration distinction:** Unit tests (`mise run test`) are fast and have no external dependencies. Integration tests (`mise run test:integration`) exercise real subprocess/OS interactions (for example launcher process execution); they are gated behind `//go:build integration` in `*_integration_test.go` files. If your test forks a real subprocess or costs >1s, it belongs in an integration test file.
+**Unit vs integration distinction:** See `docs/TESTING.md` for the authoritative decision rule (threshold, seam definition, and the `tasks.Init(t.TempDir())` carve-out). In short: unit tests are fast with no external processes; integration tests (`//go:build integration`) exercise real OS seams such as subprocess execution.
 
 **Tool version pins:** `golangci-lint` and `gotestsum` are pinned in `.mise.toml` under `[tools]` (no leading `v`, e.g. `2.1.6`). `mise` installs and resolves these binaries on the `PATH` for tasks like `mise run lint` and `mise run test`.
 

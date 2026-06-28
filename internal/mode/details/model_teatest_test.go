@@ -188,7 +188,4 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 	if mid.m.MetadataScrollOffset != 0 {
 		t.Errorf("expected MetadataScrollOffset=0 after issue switch, got %d", mid.m.MetadataScrollOffset)
 	}
-	if mid.m.ScrollOffset != 0 {
-		t.Errorf("expected ScrollOffset=0 after issue switch, got %d", mid.m.ScrollOffset)
-	}
 }

@@ -27,7 +27,9 @@ func SelectionPrefix(selected, styled bool) (plain string, rendered string) {
 	return selectionSelectedPrefix, selectionSelectedPrefix
 }
 
-// TruncateString truncates a string to fit maxWidth with ellipsis.
+// TruncateString truncates a string to fit maxWidth with a Unicode ellipsis (…).
+// The ellipsis glyph has rendered width 1, so more of the original content is
+// preserved compared with a three-dot ASCII tail.
 func TruncateString(s string, maxWidth int) string {
 	if maxWidth < 1 {
 		return ""
@@ -37,11 +39,7 @@ func TruncateString(s string, maxWidth int) string {
 		return s
 	}
 
-	if maxWidth <= 3 {
-		return strings.Repeat(".", maxWidth)
-	}
-
-	return ansi.Truncate(s, maxWidth, "...")
+	return ansi.Truncate(s, maxWidth, "…")
 }
 
 // WrapLines word-wraps s to maxWidth and returns the resulting lines.

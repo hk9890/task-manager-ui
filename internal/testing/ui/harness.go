@@ -79,10 +79,19 @@ func NormalizeOutput(output []byte) []byte {
 }
 
 // AssertMatchesGoldenNormalized compares normalized output against normalized golden text.
+// Set env var TASKMGR_UI_UPDATE_GOLDEN=1 to write the current output as the new golden.
 func AssertMatchesGoldenNormalized(tb testing.TB, output []byte, name string) {
 	tb.Helper()
 
 	got := NormalizeOutput(output)
+
+	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
+		path := filepath.Join("testdata", name)
+		if err := os.WriteFile(path, got, 0o600); err != nil {
+			tb.Fatalf("write golden %s: %v", path, err)
+		}
+	}
+
 	want := NormalizeOutput(ReadGolden(tb, name))
 	if !bytes.Equal(got, want) {
 		tb.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", name, string(want), string(got))

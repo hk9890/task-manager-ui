@@ -1,7 +1,7 @@
 Default · cols 1-2/4
 ╭─ Not Ready ───────────────────── 2 ─╮  ╭─ Ready ───────────────────────── 3 ─╮
-│› B P0 BLK tm-3 Blocked: API contr...│  │  T P1 OPN tm-1 Ready fix login pr...│
-│  T P1 BLK tm-9 Blocked: migration...│  │  T P2 OPN tm-5 Ready improve docs...│
+│› B P0 BLK tm-3 Blocked: API contrac…│  │  T P1 OPN tm-1 Ready fix login prom…│
+│  T P1 BLK tm-9 Blocked: migration s…│  │  T P2 OPN tm-5 Ready improve docs o…│
 │                                     │  │  C P2 OPN tm-6 Ready triage inbox   │
 │                                     │  │                                     │
 │                                     │  │                                     │

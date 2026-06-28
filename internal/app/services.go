@@ -65,14 +65,9 @@ type Services struct {
 	ExecCommandFactory func(*exec.Cmd) tea.ExecCommand
 	// Logger is the optional root runtime logger. It must NOT carry a
 	// "component" attribute; NewModelWithOptions derives per-mode loggers
-	// (component=board, component=search, …) via modeLogger. When nil, each
-	// mode falls back to slog.Default().
+	// (component=board, component=search, …) via logging.WithComponent. When
+	// nil, each mode falls back to slog.Default().
 	Logger *slog.Logger
-	// OnEditIssueResult is a test-only hook called after editIssueResultMsg is
-	// fully processed and the toast has been set. It is nil in production and
-	// must not be set in non-test code. Tests can use it to replace the
-	// time.Sleep settle budget with a precise synchronisation point.
-	OnEditIssueResult func()
 }
 
 // NewServices constructs the minimal app services container.

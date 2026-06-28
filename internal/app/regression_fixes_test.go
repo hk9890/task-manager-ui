@@ -254,8 +254,6 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 // lastBrowse == Detail. That made currentSelection() return nil (blank Detail)
 // and turned Escape (active = lastBrowse) into a no-op (stuck in Detail).
 func TestModeCyclePrevFromBoardKeepsSelectionAndAllowsEscape(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
 	gw.seedInProgress("tm-2", "In progress", "task", 2)
@@ -409,10 +407,10 @@ func TestShowToastSchedulesDismissWithCurrentSeq(t *testing.T) {
 	var gotDur time.Duration
 	var gotSeq int
 	var called bool
-	withToastDismissScheduler(t, func(d time.Duration, seq int) tea.Cmd {
+	m.scheduleToastDismiss = func(d time.Duration, seq int) tea.Cmd {
 		gotDur, gotSeq, called = d, seq, true
 		return nil
-	})
+	}
 
 	m.showToast("hello", toaster.StyleInfo)
 

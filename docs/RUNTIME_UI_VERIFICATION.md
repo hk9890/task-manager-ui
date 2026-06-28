@@ -20,7 +20,7 @@ The `taskmgr` repository backend has its own behavior tests in `internal/reposit
 ### Commands
 
 ```bash
-# Fast fixture-backed run (no live store required, always available):
+# Integration tests (build tag: integration) — includes taskmgr backend behavior tests:
 mise run test:integration
 ```
 
@@ -52,13 +52,13 @@ Seed a throwaway `.tasks` store with the `taskmgr` CLI, then run the real app ag
 go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
 repoPath="$(mktemp -d)"
 ( cd "$repoPath" \
-  && taskmgr init --prefix bwf \
+  && taskmgr init --prefix bwb \
   && taskmgr create --title "Ready issue" \
   && taskmgr create --title "In-progress issue" --type bug )
 (cd "$repoPath" && /tmp/taskmgr-ui)
 ```
 
-`taskmgr create --json` prints the new ID (e.g. `bwf-0001`) if you need to reference it in a later step.
+`taskmgr create --json` prints the new ID (e.g. `bwb-<code>`) if you need to reference it in a later step.
 
 ### Ad-hoc PTY recipes (copy/paste)
 
@@ -86,7 +86,7 @@ Legacy `--steps delay:key,...` still works, but `--step` wait-based flows are th
 
 ```bash
 repoPath="$(mktemp -d)"
-( cd "$repoPath" && taskmgr init --prefix bwf && taskmgr create --title "Ready issue" )
+( cd "$repoPath" && taskmgr init --prefix bwb && taskmgr create --title "Ready issue" )
 python3 scripts/capture_taskmgr_ui_screen.py \
   --cwd "$repoPath" --width 120 --height 34 --startup-wait 1.2 \
   --step 'wait-for-text:Ready:3000' \
@@ -106,9 +106,10 @@ Capture the mutation flow, then compare the issue state with `taskmgr show --jso
 
 ```bash
 repoPath="$(mktemp -d)"
-( cd "$repoPath" && taskmgr init --prefix bwf && taskmgr create --title "Ready issue" )
+( cd "$repoPath" && taskmgr init --prefix bwb && taskmgr create --title "Ready issue" )
+issueID="$( (cd "$repoPath" && taskmgr list --json) | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])' )"
 
-before="$( (cd "$repoPath" && taskmgr show bwf-0001 --json) )"
+before="$( (cd "$repoPath" && taskmgr show "$issueID" --json) )"
 
 # Insert the mode-specific edit + save keystrokes as extra --step lines
 # between opening Detail and returning to Board.
@@ -121,7 +122,7 @@ python3 scripts/capture_taskmgr_ui_screen.py \
   --step 'send-key:CTRL+Q' \
   -- -- /tmp/taskmgr-ui
 
-after="$( (cd "$repoPath" && taskmgr show bwf-0001 --json) )"
+after="$( (cd "$repoPath" && taskmgr show "$issueID" --json) )"
 [ "$before" != "$after" ] && echo "changed: true" || echo "changed: false"
 ```
 
@@ -151,15 +152,7 @@ If your change targets only one area, still sanity-check the other areas quickly
 
 ## 4) Process-level policy (optional and narrow)
 
-Default: do **not** add new process-level capture harnesses.
-
-Add process-level automation only when a concrete bug class cannot be proven in-process. Any proposal must define:
-
-1. readiness signal,
-2. hard timeout,
-3. guaranteed cleanup behavior.
-
-Raw stdout transcript capture alone is not enough proof for alt-screen rendering.
+See `docs/TESTING.md` (Process-level capture policy) for the authoritative rule. In short: do not add new process-level capture harnesses unless a concrete bug class cannot be proven in-process, and any such path must define a readiness signal, a hard timeout, and guaranteed cleanup behavior.
 
 ## 5) Done-column closed-limit: resize-then-refresh
 

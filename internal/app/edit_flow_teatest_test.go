@@ -97,11 +97,6 @@ func editableDocWithTitle(issue domain.IssueDetail, newTitle string) string {
 // it is a precise zero-sleep signal. Final assertion uses FinalModel — post-tea.Exec
 // View() frames do not reliably reach the output pipe under CI load.
 func TestEditFlowSuccessPathTeatest(t *testing.T) {
-	// Not parallel — modifies global scheduler vars via TestMain.
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withToastDismissScheduler(t, func(_ time.Duration, _ int) tea.Cmd { return nil })
-
 	const issueID = "tm-edit-1"
 	originalTitle := "Original Title"
 	editedTitle := "Edited Title"
@@ -128,17 +123,14 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 
 	services := buildEditFlowServices(t, gw, fakeCmd)
 
+	// mustNewModel sets sizeKnown=true and no-op schedulers; the model is then
+	// handed to teatest which drives the full runtime loop.
+	model := mustNewModel(t, services)
+
 	// Wire the test-only hook so we get a precise signal when editIssueResultMsg
 	// has been fully processed and the toast set — eliminating the time.Sleep.
 	var editResultCount atomic.Int32
-	services.OnEditIssueResult = func() { editResultCount.Add(1) }
-
-	model, err := NewModel(services)
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
-	// Set sizeKnown so View() renders content (not the empty pre-size guard).
-	model.sizeKnown = true
+	model.onEditIssueResult = func() { editResultCount.Add(1) }
 
 	tm := testui.NewTestModelWithSize(t, model, 120, 34)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 34})
@@ -205,10 +197,6 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 // asserting the opposite). Final assertion uses FinalModel — output-buffer scanning
 // is not reliable for post-tea.Exec frames under CI load.
 func TestEditFlowNoChangeTeatest(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withToastDismissScheduler(t, func(_ time.Duration, _ int) tea.Cmd { return nil })
-
 	const issueID = "tm-edit-2"
 
 	issue := domain.IssueDetail{
@@ -233,16 +221,12 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 
 	services := buildEditFlowServices(t, gw, fakeCmd)
 
+	model := mustNewModel(t, services)
+
 	// Wire the test-only hook so we get a precise signal when editIssueResultMsg
 	// has been fully processed and the toast set — eliminating the time.Sleep.
 	var editResultCount atomic.Int32
-	services.OnEditIssueResult = func() { editResultCount.Add(1) }
-
-	model, err := NewModel(services)
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
-	model.sizeKnown = true
+	model.onEditIssueResult = func() { editResultCount.Add(1) }
 
 	tm := testui.NewTestModelWithSize(t, model, 120, 34)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 34})
@@ -298,10 +282,6 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 // needed. Final assertion uses FinalModel — post-tea.Exec View() frames do not
 // reliably reach the output pipe under CI load.
 func TestEditFlowEditorErrorTeatest(t *testing.T) {
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withToastDismissScheduler(t, func(_ time.Duration, _ int) tea.Cmd { return nil })
-
 	const issueID = "tm-edit-3"
 
 	issue := domain.IssueDetail{
@@ -326,16 +306,12 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 
 	services := buildEditFlowServices(t, gw, fakeCmd)
 
+	model := mustNewModel(t, services)
+
 	// Wire the test-only hook so we get a precise signal when editIssueResultMsg
 	// has been fully processed and the toast set — eliminating the time.Sleep.
 	var editResultCount atomic.Int32
-	services.OnEditIssueResult = func() { editResultCount.Add(1) }
-
-	model, err := NewModel(services)
-	if err != nil {
-		t.Fatalf("NewModel: %v", err)
-	}
-	model.sizeKnown = true
+	model.onEditIssueResult = func() { editResultCount.Add(1) }
 
 	tm := testui.NewTestModelWithSize(t, model, 120, 34)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 34})

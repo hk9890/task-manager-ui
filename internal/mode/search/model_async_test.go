@@ -103,38 +103,6 @@ func runCmdAsync(cmd tea.Cmd) <-chan tea.Msg {
 	return ch
 }
 
-// ---- bdDefaultFilterRepo ----
-
-// bdDefaultFilterRepo mirrors the real taskmgr search backend's default behaviour:
-// when SearchIssuesQuery.Statuses is empty, closed issues are excluded from
-// results. This lets async contract tests assert on result set content rather
-// than relying only on the query-shape proxy.
-//
-// In the memory repository, an empty Statuses field returns every seeded issue
-// (open and closed alike). Stacking bdDefaultFilterRepo between the inner repo
-// and the test doubles restores the taskmgr-default contract so tests can call
-//
-//	if result.Issue.Status == "closed" { t.Errorf(...) }
-//
-// without their assertions becoming vacuously true on the memory backend.
-type bdDefaultFilterRepo struct{ repository.Repository }
-
-func (r *bdDefaultFilterRepo) Search(ctx context.Context, q domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	page, err := r.Repository.Search(ctx, q)
-	if err != nil || len(q.Statuses) > 0 {
-		return page, err
-	}
-	// No explicit Statuses filter → apply taskmgr default: exclude closed.
-	filtered := page.Results[:0]
-	for _, res := range page.Results {
-		if res.Issue.Status != "closed" {
-			filtered = append(filtered, res)
-		}
-	}
-	page.Results = filtered
-	return page, nil
-}
-
 // ---- controller-async contract tests ----
 
 // TestSearchControllerAsyncContracts is the parent test for the five
@@ -422,13 +390,18 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 	// that corresponds to the lean_reads.go change in commit 2d60d94.
 	//
 	// Before 2d60d94: lean_reads forced filterStatuses = []string{"all"} when
-	// query.Statuses was empty, overriding taskmgr search's own default (which
-	// excludes closed). This caused the Init result page — containing closed
-	// issues — to remain visible when Enter was silently dropped.
+	// query.Statuses was empty. This caused the Init result page to remain
+	// visible when Enter was silently dropped, because the in-flight Init result
+	// was displayed instead of a fresh typed query.
 	//
 	// Regression pin: if the model were to set Statuses: []string{"all"} in
 	// the SearchIssuesQuery it emits, this test would fail. Combined with the
 	// pendingDraft fix, this is the complete regression guard.
+	//
+	// Note: the real taskmgr backend sets IncludeClosed:true unconditionally, so
+	// a default-Statuses search INCLUDES closed issues. Both the typed "task"
+	// query and the Init empty query can return closed issues; the assertion here
+	// pins query-shape (no forced Statuses) and that Enter was not dropped.
 	t.Run("EmptyAutoInitDoesNotLeakClosedRowsUnderTypedDraft", func(t *testing.T) {
 		t.Parallel()
 
@@ -436,11 +409,10 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task open", Status: "open", Type: "task", Priority: 1})
 		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "task closed", Status: "closed", Type: "task", Priority: 2})
 
-		// Stack: inner → bdDefaultFilterRepo (taskmgr-default closed exclusion) → queryRecordingRepo → delayed.
-		// This lets assertions check both query-shape (no forced Statuses) and
-		// result-set content (no closed issues in the final page).
-		filtered := &bdDefaultFilterRepo{Repository: inner}
-		recording := &queryRecordingRepo{Repository: filtered}
+		// Stack: inner → queryRecordingRepo → delayed.
+		// Assertions check query-shape (no forced Statuses) and that Enter was not
+		// silently dropped (the typed "task" query was executed).
+		recording := &queryRecordingRepo{Repository: inner}
 		delayed := fakes.NewDelayedSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
@@ -473,8 +445,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		// Assert: neither the Init query nor the typed "task" query passed any
 		// non-empty Statuses. The model must not inject a forced status filter
-		// — that responsibility belongs to the repository layer (taskmgr's own
-		// default excludes closed issues on real repos).
+		// — that responsibility belongs to the repository layer (taskmgr sets
+		// IncludeClosed:true unconditionally, including closed issues by default).
 		queries := recording.Queries()
 		if len(queries) == 0 {
 			t.Fatal("expected at least one recorded Search query")
@@ -487,6 +459,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 
 		// Verify that a typed-query search was actually executed (not just Init).
+		// This is the Enter-drop regression pin: if Enter were silently dropped,
+		// no Search with Text=="task" would be recorded.
 		foundTypedQuery := false
 		for _, q := range queries {
 			if q.Text == "task" {
@@ -497,22 +471,21 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 			t.Errorf("no Search call with Text=%q found; queries seen: %v", "task", queries)
 		}
 
-		// Assert result-set content: the final page must not contain any closed
-		// issues. This is the direct symptom: when Enter was dropped
-		// and lean_reads forced --status all, the Init result (which included the
-		// closed issue) remained visible.
-		//
-		// With bdDefaultFilterRepo in the stack, the memory repo behaves like the
-		// real taskmgr backend: closed issues are excluded when Statuses is empty. If
-		// the model were to inject Statuses:[]string{"all"} (reverting lean_reads),
-		// bdDefaultFilterRepo passes through all issues and this assertion fails.
+		// Assert result-set content: the typed "task" search must return the open
+		// issue (bwf-1). The memory backend (like the real taskmgr backend with
+		// IncludeClosed:true) also returns the closed issue (bwf-2) — that is
+		// correct and expected, not a bug.
 		if len(m.page.Results) == 0 {
 			t.Error("expected non-empty Results after 'task' search resolves")
 		}
+		foundOpen := false
 		for _, result := range m.page.Results {
-			if result.Issue.Status == "closed" {
-				t.Errorf("closed issue %q leaked into result set; model or repo injected --status all", result.Issue.ID)
+			if result.Issue.ID == "bwf-1" {
+				foundOpen = true
 			}
+		}
+		if !foundOpen {
+			t.Errorf("open issue bwf-1 missing from results; got %v", m.page.Results)
 		}
 	})
 

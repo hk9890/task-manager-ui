@@ -1489,18 +1489,19 @@ func TestSnapshot_LosslessRoundTrip_FullDetail(t *testing.T) {
 	}
 }
 
-// ---- SeedFromSnapshot verbatim-ref tests ----
+// ---- SeedFromSnapshot cross-ref resolution tests ----
 
-// TestSeedFromSnapshot_PreservesCrossRefMetadata verifies that SeedFromSnapshot
-// stores full IssueReference metadata (Title, Status, Type, Priority) for
-// cross-referenced issues, and that a subsequent Issue call returns those fields
-// verbatim — even when the referenced issues (B, R, P) were never seeded.
-func TestSeedFromSnapshot_PreservesCrossRefMetadata(t *testing.T) {
+// TestSeedFromSnapshot_ReResolvesCrossRefs verifies that SeedFromSnapshot
+// re-resolves cross-reference metadata from the in-memory map on a subsequent
+// Issue call, returning full Title/Status/Type/Priority for seeded neighbours.
+func TestSeedFromSnapshot_ReResolvesCrossRefs(t *testing.T) {
 	r := memory.New()
 
-	// Seed ONLY issue A, via a snapshot carrying verbatim cross-ref metadata;
-	// do NOT seed B, R, or P.
-	pRef := domain.IssueReference{ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2}
+	// Seed B, R, and P first so re-resolution can find them.
+	r.Seed(memory.Issue{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1})
+	r.Seed(memory.Issue{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0})
+	r.Seed(memory.Issue{ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2})
+
 	r.SeedFromSnapshot(memory.SnapshotIssue{
 		ID:        "A",
 		Title:     "Issue A",
@@ -1510,13 +1511,6 @@ func TestSeedFromSnapshot_PreservesCrossRefMetadata(t *testing.T) {
 		DependsOn: []string{"B"},
 		Related:   []string{"R"},
 		ParentID:  "P",
-		BlockedByRefs: []domain.IssueReference{
-			{ID: "B", Title: "Real B title", Status: "open", Type: "task", Priority: 1},
-		},
-		RelatedRefs: []domain.IssueReference{
-			{ID: "R", Title: "Related title", Status: "in_progress", Type: "bug", Priority: 0},
-		},
-		ParentRef: &pRef,
 	})
 
 	got, err := r.Issue(context.Background(), "A")
@@ -1524,7 +1518,7 @@ func TestSeedFromSnapshot_PreservesCrossRefMetadata(t *testing.T) {
 		t.Fatalf("Issue(A) after SeedFromSnapshot: %v", err)
 	}
 
-	// BlockedBy: cross-ref B was never seeded — must preserve all metadata.
+	// BlockedBy: re-resolved from B in the map.
 	if len(got.BlockedBy) != 1 {
 		t.Fatalf("BlockedBy: got %d entries, want 1", len(got.BlockedBy))
 	}
@@ -1535,7 +1529,7 @@ func TestSeedFromSnapshot_PreservesCrossRefMetadata(t *testing.T) {
 		t.Errorf("BlockedBy[0]:\n  got  %+v\n  want %+v", got.BlockedBy[0], wantBlockedBy)
 	}
 
-	// Related: cross-ref R was never seeded — must preserve all metadata.
+	// Related: re-resolved from R in the map.
 	if len(got.Related) != 1 {
 		t.Fatalf("Related: got %d entries, want 1", len(got.Related))
 	}
@@ -1546,7 +1540,7 @@ func TestSeedFromSnapshot_PreservesCrossRefMetadata(t *testing.T) {
 		t.Errorf("Related[0]:\n  got  %+v\n  want %+v", got.Related[0], wantRelated)
 	}
 
-	// ParentGroupBrowser.Parent: cross-ref P was never seeded — must preserve metadata.
+	// ParentGroupBrowser.Parent: re-resolved from P in the map.
 	wantParent := domain.IssueReference{
 		ID: "P", Title: "Parent", Status: "open", Type: "epic", Priority: 2,
 	}

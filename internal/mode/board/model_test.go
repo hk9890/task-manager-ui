@@ -1422,7 +1422,6 @@ func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 			Closed:      incomingIssues,
 			ClosedTotal: 736,
 		},
-		opts: repository.DashboardOptions{ClosedOffset: priorCount, ClosedLimit: 50},
 	})
 
 	// AC 1: Done column must have prior+incoming (no ID overlap → 35+50=85).
@@ -1823,7 +1822,6 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 
 	cmd := m.Update(loadMoreClosedDoneMsg{
 		data: repository.DashboardData{Closed: incomingIssues, ClosedTotal: 736},
-		opts: repository.DashboardOptions{ClosedOffset: priorCount, ClosedLimit: 50},
 	})
 
 	// FIX #7: a non-nil re-sync Cmd must be returned when Done is focused.

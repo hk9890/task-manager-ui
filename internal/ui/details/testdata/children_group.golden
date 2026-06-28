@@ -1,6 +1,6 @@
 ╭─ Dependencies ───── 3 ─╮  ╭─ Content ───────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Blocked by (1)          │  │E P1 IP tm-epic                             │  │  Core                          │
-│  ? P0 - …locker Upst...│  │Epic with children                          │  │  Type    : epic                │
+│  ? P0 - …locker Upstre…│  │Epic with children                          │  │  Type    : epic                │
 │                        │  │────────────────────────────────────────────│  │  Status  : in_progress         │
 │Blocks (0)              │  │Description                                 │  │  Priority: P1                  │
 │(none)                  │  │An epic that has child tasks.               │  │  ------------------------------│
@@ -9,8 +9,8 @@
 │(none)                  │  │                                            │  │  Blocked by: 1                 │
 │                        │  │                                            │  │  Blocks    : 0                 │
 │Children (2)            │  │                                            │  │  Related   : 0                 │
-│  T P2 O …child1 Firs...│  │                                            │  │  Children  : 2                 │
-│  T P2 I …child2 Seco...│  │                                            │  │                                │
+│  T P2 O …child1 First …│  │                                            │  │  Children  : 2                 │
+│  T P2 I …child2 Second…│  │                                            │  │                                │
 │                        │  │                                            │  │Quick actions                   │
 │                        │  │                                            │  │e Edit issue                    │
 │                        │  │                                            │  │u Update issue                  │

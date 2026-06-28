@@ -80,16 +80,18 @@ func debugColumnTopReport(view string) string {
 // from producing a short default-size first frame that the renderer cannot
 // fully overwrite when the taller post-resize frame is produced.
 func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	services := newRegressionServices(t)
 	// Use NewModelWithOptions directly (NOT mustNewModelWithOptions) so that
-	// sizeKnown stays at its zero value false.
+	// sizeKnown stays at its zero value false. Install no-op schedulers to
+	// prevent real tea.Tick commands from causing an infinite applyMessages loop.
 	m, err := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
 	if err != nil {
 		t.Fatalf("NewModelWithOptions: %v", err)
 	}
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 
 	// Before any WindowSizeMsg, View() must return empty string.
 	got := m.View()
@@ -128,15 +130,17 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 //  5. Resize to {200, 80}
 //  6. View() — assert exactly 1 column-top line
 func TestNoDoubledColumnHeadersAfterWindowSizeMsg(t *testing.T) {
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	services := newRegressionServices(t)
-	// Use NewModelWithOptions directly so sizeKnown starts false.
+	// Use NewModelWithOptions directly so sizeKnown starts false. Install no-op
+	// schedulers to prevent real tea.Tick commands from causing an infinite loop.
 	m, err := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
 	if err != nil {
 		t.Fatalf("NewModelWithOptions: %v", err)
 	}
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 
 	// --- Step 1: send WindowSizeMsg{180, 60} — sets sizeKnown=true ---
 	// Width=180 ensures all 4 columns are visible (at 120 only 3 fit).
@@ -167,14 +171,15 @@ func TestNoDoubledColumnHeadersAfterWindowSizeMsg(t *testing.T) {
 //  2. Data is loaded
 //  3. Terminal is resized again
 func TestNoDoubledColumnHeadersPresizeDataResize(t *testing.T) {
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	services := newRegressionServices(t)
 	m, err := NewModelWithOptions(services, RuntimeOptions{DisableAutoRefresh: true})
 	if err != nil {
 		t.Fatalf("NewModelWithOptions: %v", err)
 	}
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 
 	// Send size before any data.
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 180, Height: 30}})

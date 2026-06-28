@@ -72,7 +72,7 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 	}
 
 	m = testui.ApplyKeySequence(m, testui.DetailScrollKeys()...).(Model)
-	if m.detail.ScrollOffset == 0 {
+	if m.detail.ContentScrollOffset == 0 {
 		t.Fatalf("expected detail scroll scenario to move viewport offset")
 	}
 
@@ -84,7 +84,6 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 
 func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *testing.T) {
 	t.Parallel()
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)

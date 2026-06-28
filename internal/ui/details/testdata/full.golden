@@ -1,12 +1,12 @@
 ╭─ Dependencies ──────── 3 ─╮  ╭─ Content ──────────────────────────── 1 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Blocked by (1)             │  │F P2 IP tm-22                                      │  │  Core                          │
-│  ? P0 - tm-10 Data mode...│  │Full detail sample                                 │  │  Type    : feature             │
+│  ? P0 - tm-10 Data model …│  │Full detail sample                                 │  │  Type    : feature             │
 │                           │  │───────────────────────────────────────────────────│  │  Status  : in_progress         │
 │Blocks (1)                 │  │Description                                        │  │  Priority: P2                  │
-│  ? P0 - tm-30 Integrati...│  │Ship issue detail rendering for standalone mode.   │  │  ------------------------------│
+│  ? P0 - tm-30 Integration…│  │Ship issue detail rendering for standalone mode.   │  │  ------------------------------│
 │                           │  │Keep shell-owned selection state.                  │  │  Ownership                     │
 │Related (1)                │  │                                                   │  │  Assignee: alice               │
-│  ? P0 - tm-44 Renderer ...│  │Notes                                              │  │  Owner   : hans                │
+│  ? P0 - tm-44 Renderer cl…│  │Notes                                              │  │  Owner   : hans                │
 │                           │  │Reference donor rendering patterns only.           │  │  ------------------------------│
 │Children (0)               │  │                                                   │  │  Time                          │
 │(none)                     │  │                                                   │  │  Created : 2026-04-01 12:00    │

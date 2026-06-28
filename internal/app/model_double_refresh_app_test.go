@@ -68,10 +68,6 @@ func expandCmds(cmd tea.Cmd) []tea.Cmd {
 // This test PASSES on current code. It will fail if the guard is accidentally
 // removed or bypassed in a future refactor.
 func TestAppRapidMutationsDoNotEnqueueConcurrentRefreshes(t *testing.T) {
-	// Install deterministic tick schedulers — no real time advances during this test.
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-
 	gw := newTestRepository()
 	gw.seedReady("tm-10", "Ready alpha", "task", 1)
 	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-11", Title: "Blocked beta", Status: "blocked", Priority: 2})

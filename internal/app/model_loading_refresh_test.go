@@ -66,10 +66,6 @@ func TestSkeletonPhasePulse(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	// Disable real tick schedulers so we control timing.
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
-
 	// Empty repository — board stays in loading=true, cold-start.
 	gw := newTestRepository()
 
@@ -133,8 +129,6 @@ func TestSkeletonPhasePulse(t *testing.T) {
 //     after a Board → Search → Board round-trip (data is preserved).
 func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// Install deterministic tick schedulers — no real time passes.
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	// Configure the repository with known, distinguishable issue IDs.
 	gw := newTestRepository()
@@ -283,10 +277,6 @@ func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
-
-	// Disable real tick schedulers so we control timing.
-	withSpinnerTickScheduler(t, func() tea.Cmd { return nil })
-	withRefreshTickScheduler(t, func() tea.Cmd { return nil })
 
 	// Empty repository — board stays in loading=true, cold-start.
 	gw := newTestRepository()

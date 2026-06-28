@@ -4,7 +4,7 @@ import "errors"
 
 // ErrIssueNotFound is returned by local-state implementations (e.g. memory)
 // when an issue ID is not present in the store. It is distinct from a
-// *domain.RepositoryError wrapping domain.ErrorCodeCommandFailed, which is what
+// domain.RepositoryError wrapping domain.ErrorCodeCommandFailed, which is what
 // taskmgr-backed implementations return for unknown identifiers.
 var ErrIssueNotFound = errors.New("repository: issue not found")
 

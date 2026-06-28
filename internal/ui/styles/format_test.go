@@ -12,7 +12,9 @@ func TestTruncateString(t *testing.T) {
 	if got := TruncateString("hello", 10); got != "hello" {
 		t.Fatalf("unexpected non-truncated value: %q", got)
 	}
-	if got := TruncateString("hello world", 5); got != "he..." {
+	// Unicode ellipsis (…, width 1) replaces the old ASCII "..." tail so one
+	// more character of content fits in the same rendered width.
+	if got := TruncateString("hello world", 5); got != "hell…" {
 		t.Fatalf("unexpected truncated value: %q", got)
 	}
 }
@@ -32,7 +34,7 @@ func TestTruncateStringPreservesWellFormedANSI(t *testing.T) {
 		t.Fatalf("expected no dangling/incomplete ANSI escapes after truncation, got %q", truncated)
 	}
 
-	if !strings.HasSuffix(stripped, "...") {
+	if !strings.HasSuffix(stripped, "…") {
 		t.Fatalf("expected ellipsis suffix after truncation, got %q", stripped)
 	}
 }

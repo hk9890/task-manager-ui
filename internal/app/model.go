@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
 	detailsmode "github.com/hk9890/task-manager-ui/internal/mode/details"
@@ -38,46 +38,28 @@ type refreshTickMsg struct{}
 
 type startupHealthCheckMsg struct{ err error }
 
-// schedulerMu guards the test seam variables scheduleRefreshTickCmd,
-// scheduleToastDismissCmd, and scheduleSpinnerTickCmd. Tests that run in
-// parallel mutate these globals; the mutex ensures reads in
-// Init/Update/showToast and writes in test helpers do not race. Production
-// code never writes these after init.
-var schedulerMu sync.Mutex
-
-var scheduleRefreshTickCmd = func() tea.Cmd {
+// defaultScheduleRefreshTick is the production implementation of the refresh
+// tick scheduler. It is stored per-Model so tests can override it without a
+// global mutex. Production code sets this once in NewModelWithOptions and
+// never writes it again.
+func defaultScheduleRefreshTick() tea.Cmd {
 	return tea.Tick(refreshTickInterval, func(_ time.Time) tea.Msg {
 		return refreshTickMsg{}
 	})
 }
 
-var scheduleToastDismissCmd = func(d time.Duration, seq int) tea.Cmd {
+// defaultScheduleToastDismiss is the production implementation of the toast
+// dismiss scheduler. Stored per-Model for the same reason as
+// defaultScheduleRefreshTick.
+func defaultScheduleToastDismiss(d time.Duration, seq int) tea.Cmd {
 	return toaster.ScheduleDismiss(d, seq)
 }
 
-var scheduleSpinnerTickCmd = func() tea.Cmd {
+// defaultScheduleSpinnerTick is the production implementation of the spinner
+// tick scheduler. Stored per-Model for the same reason as
+// defaultScheduleRefreshTick.
+func defaultScheduleSpinnerTick() tea.Cmd {
 	return loading.SpinnerTickCmd(100 * time.Millisecond)
-}
-
-// getRefreshTickScheduler returns the current scheduleRefreshTickCmd under lock.
-func getRefreshTickScheduler() func() tea.Cmd {
-	schedulerMu.Lock()
-	defer schedulerMu.Unlock()
-	return scheduleRefreshTickCmd
-}
-
-// getToastDismissScheduler returns the current scheduleToastDismissCmd under lock.
-func getToastDismissScheduler() func(time.Duration, int) tea.Cmd {
-	schedulerMu.Lock()
-	defer schedulerMu.Unlock()
-	return scheduleToastDismissCmd
-}
-
-// getSpinnerTickScheduler returns the current scheduleSpinnerTickCmd under lock.
-func getSpinnerTickScheduler() func() tea.Cmd {
-	schedulerMu.Lock()
-	defer schedulerMu.Unlock()
-	return scheduleSpinnerTickCmd
 }
 
 var modelNow = time.Now
@@ -129,12 +111,6 @@ type mutationCatalogsLoadedMsg struct {
 	statuses []domain.StatusOption
 	types    []domain.TypeOption
 	labels   []domain.LabelOption
-	err      error
-}
-
-type statusCatalogLoadedMsg struct {
-	issue    domain.IssueSummary
-	statuses []domain.StatusOption
 	err      error
 }
 
@@ -245,6 +221,21 @@ type Model struct {
 	pendingDialog pendingDialogGuard
 
 	runtime RuntimeOptions
+
+	// scheduleRefreshTick, scheduleToastDismiss, scheduleSpinnerTick are the
+	// per-Model scheduler functions. Production code initialises them to the
+	// default*Schedule* functions; tests override them directly on the Model
+	// instance without needing a global mutex.
+	scheduleRefreshTick  func() tea.Cmd
+	scheduleToastDismiss func(time.Duration, int) tea.Cmd
+	scheduleSpinnerTick  func() tea.Cmd
+
+	// onEditIssueResult is a test-only hook called after editIssueResultMsg is
+	// fully processed and the toast has been set. It is nil in production.
+	// Tests can use it to replace a time.Sleep settle budget with a precise
+	// synchronisation point. Set via the model field directly in test code
+	// (the field is unexported; it is accessible from within package app).
+	onEditIssueResult func()
 }
 
 // NewModel builds the root shell model.
@@ -282,8 +273,8 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		// context.Background() is used here because the app model has no parent
 		// context today. This preserves prior behaviour while making future
 		// cancellation threading possible without touching the mode packages.
-		board:  boardmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "board"), keys),
-		search: searchmode.NewModel(context.Background(), services.Repo, modeLogger(services.Logger, "search"), keys),
+		board:  boardmode.NewModel(context.Background(), services.Repo, logging.WithComponent(services.Logger, "board"), keys),
+		search: searchmode.NewModel(context.Background(), services.Repo, logging.WithComponent(services.Logger, "search"), keys),
 		detail: detailsmode.Model{Keys: keys},
 		toast:  toaster.New(),
 		help:   help,
@@ -294,7 +285,10 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 			mode.Search: {lastRefresh: now},
 			mode.Detail: {},
 		},
-		runtime: runtime,
+		runtime:              runtime,
+		scheduleRefreshTick:  defaultScheduleRefreshTick,
+		scheduleToastDismiss: defaultScheduleToastDismiss,
+		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
 	}, nil
 }
 
@@ -309,9 +303,9 @@ func (m Model) Init() tea.Cmd {
 		return startupHealthCheckMsg{err: err}
 	}
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, getSpinnerTickScheduler()())
+		return tea.Batch(healthCheckCmd, m.scheduleSpinnerTick())
 	}
-	return tea.Batch(healthCheckCmd, getRefreshTickScheduler()(), getSpinnerTickScheduler()())
+	return tea.Batch(healthCheckCmd, m.scheduleRefreshTick(), m.scheduleSpinnerTick())
 }
 
 // lazySearchInitCmd fires m.search.Init() exactly once — the first time the
@@ -343,19 +337,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if check, ok := msg.(startupHealthCheckMsg); ok {
 		if check.err != nil {
 			var gwErr domain.RepositoryError
-			if errors.As(check.err, &gwErr) {
-				switch gwErr.Code {
-				case domain.ErrorCodeCommandUnavailable:
-					m.fatalErrTitle = "task manager is not available"
-					m.fatalErrBody = "The task-manager backend could not be initialized.\n\nSee https://github.com/hk9890/task-manager-ui for setup instructions."
-					slog.Default().Error("task-manager health check failed", "error", check.err)
-					return m, nil
-				case domain.ErrorCodeNoDatabaseFound:
-					m.fatalErrTitle = "no task-manager store here"
-					m.fatalErrBody = "No .tasks store was found in this directory.\n\nRun 'taskmgr init' to create one, or use --cwd to point to a directory that contains one."
-					slog.Default().Error("task-manager health check failed", "error", check.err)
-					return m, nil
-				}
+			if errors.As(check.err, &gwErr) && gwErr.Code == domain.ErrorCodeNoDatabaseFound {
+				m.fatalErrTitle = "no task-manager store here"
+				m.fatalErrBody = "No .tasks store was found in this directory.\n\nRun 'taskmgr init' to create one, or use --cwd to point to a directory that contains one."
+				slog.Default().Error("task-manager health check failed", "error", check.err)
+				return m, nil
 			}
 		}
 		// Health check passed — fire board loads now. Calling m.board.Init()
@@ -458,10 +444,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.runtime.DisableAutoRefresh {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, getRefreshTickScheduler()(), m.maybeAutoRefreshActiveSurfaceCmd())
+		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case loading.TickMsg:
 		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
-		return m, batchCmds(modeCmd, getSpinnerTickScheduler()())
+		return m, batchCmds(modeCmd, m.scheduleSpinnerTick())
 	case tea.WindowSizeMsg:
 		m.sizeKnown = true
 		m.width = msg.Width
@@ -526,7 +512,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// notifyEditResult fires the test-only hook (if set) after the toast has
 		// been set by showToast. Callers must call this before every return.
 		notifyEditResult := func() {
-			if h := m.services.OnEditIssueResult; h != nil {
+			if h := m.onEditIssueResult; h != nil {
 				h()
 			}
 		}
@@ -583,26 +569,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingDialog = pendingDialogGuard{}
 
 		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
-		m.actionState = dialog
-		m.actionModal = mutationModal(dialog, m.keys)
-		m.actionModal.SetSize(m.width, m.height)
-		m.showActionModal = true
-		return m, batchCmds(modeCmd, m.actionModal.Init())
-	case statusCatalogLoadedMsg:
-		if msg.err != nil {
-			m.pendingDialog = pendingDialogGuard{}
-			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load status catalog: %v", msg.err), toaster.StyleError))
-		}
-
-		// Only open the modal if the pending-dialog guard is still active for
-		// the status kind. If the guard was cleared by a key press arriving
-		// during the load window, drop the result silently.
-		if !m.pendingDialog.active || m.pendingDialog.kind != mutationStatus {
-			return m, modeCmd
-		}
-		m.pendingDialog = pendingDialogGuard{}
-
-		dialog := buildMutationDialog(mutationStatus, msg.issue, msg.statuses, nil, nil)
 		m.actionState = dialog
 		m.actionModal = mutationModal(dialog, m.keys)
 		m.actionModal.SetSize(m.width, m.height)
@@ -721,7 +687,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
 				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, issue))
+				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationStatus, issue))
 			}
 			if m.detail.ConsumeOpenPriorityDialogIntent() {
 				issue := m.detail.Detail.Summary
@@ -781,7 +747,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
 				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-				return m, batchCmds(modeCmd, loadStatusCatalogForIssueCmd(m.services, selection.Issue))
+				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationStatus, selection.Issue))
 			}
 			if m.search.ConsumeOpenPriorityDialogIntent() {
 				selection := m.selectedByMode[mode.Search]
@@ -1175,7 +1141,7 @@ func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	m.toast = m.toast.Show(message, style)
 	// Tag the dismiss timer with this toast's identity so a stale timer from an
 	// earlier toast cannot dismiss the one now on screen (see DismissMsg handler).
-	return getToastDismissScheduler()(3*time.Second, m.toast.Seq())
+	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())
 }
 
 func (m Model) boardIsLoading() bool {
@@ -1631,16 +1597,6 @@ func loadMutationCatalogsCmd(services Services, kind mutationKind, issue domain.
 	}
 }
 
-func loadStatusCatalogForIssueCmd(services Services, issue domain.IssueSummary) tea.Cmd {
-	return func() tea.Msg {
-		catalogs, err := services.Repo.Catalogs(context.Background())
-		if err != nil {
-			return statusCatalogLoadedMsg{issue: issue, err: fmt.Errorf("status catalog: %w", err)}
-		}
-		return statusCatalogLoadedMsg{issue: issue, statuses: catalogs.Statuses}
-	}
-}
-
 func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) mutationDialogState {
 	statusNames := make(map[string]struct{}, len(statuses))
 	typeNames := make(map[string]struct{}, len(types))
@@ -1961,19 +1917,6 @@ func parseRequiredPriority(value string) (*int, error) {
 	}
 
 	return &parsed, nil
-}
-
-// modeLogger derives a component-scoped logger for a mode.
-// When logger is nil, modeLogger returns nil so that each mode can fall back to
-// slog.Default() as usual.  When logger is non-nil it appends exactly one
-// "component" key — callers must NOT pre-attach "component" to the parent
-// logger they pass here (services.Logger must be the root logger, not a
-// component-scoped one).
-func modeLogger(logger *slog.Logger, component string) *slog.Logger {
-	if logger == nil {
-		return nil
-	}
-	return logger.With("component", component)
 }
 
 func emptyFallback(value, fallback string) string {

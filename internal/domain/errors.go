@@ -6,16 +6,15 @@ import "fmt"
 type ErrorCode string
 
 const (
-	ErrorCodeCommandUnavailable ErrorCode = "command_unavailable"
-	ErrorCodeNoDatabaseFound    ErrorCode = "no_database_found"
-	ErrorCodeCommandFailed      ErrorCode = "command_failed"
-	ErrorCodeDecodeFailed       ErrorCode = "decode_failed"
-	ErrorCodeValidationFailed   ErrorCode = "validation_failed"
-	ErrorCodeNotFound           ErrorCode = "not_found"
-	ErrorCodeUnauthorized       ErrorCode = "unauthorized"
-	ErrorCodeTimeout            ErrorCode = "timeout"
-	ErrorCodeConflict           ErrorCode = "conflict"
-	ErrorCodeUnknown            ErrorCode = "unknown"
+	ErrorCodeNoDatabaseFound  ErrorCode = "no_database_found"
+	ErrorCodeCommandFailed    ErrorCode = "command_failed"
+	ErrorCodeDecodeFailed     ErrorCode = "decode_failed"
+	ErrorCodeValidationFailed ErrorCode = "validation_failed"
+	ErrorCodeNotFound         ErrorCode = "not_found"
+	ErrorCodeUnauthorized     ErrorCode = "unauthorized"
+	ErrorCodeTimeout          ErrorCode = "timeout"
+	ErrorCodeConflict         ErrorCode = "conflict"
+	ErrorCodeUnknown          ErrorCode = "unknown"
 )
 
 // RepositoryError is a normalized source operation error for TUI presentation.

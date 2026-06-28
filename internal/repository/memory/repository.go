@@ -62,21 +62,6 @@ type storedIssue struct {
 	updated     time.Time
 	closed      time.Time
 	closeReason string
-
-	// Full IssueReference metadata for cross-ref projection, stored by
-	// SeedFromSnapshot so that toDetailLocked can return them verbatim without
-	// re-resolving against r.issues. These are nil when the issue was seeded via
-	// Seed (no verbatim refs); toDetailLocked falls back to re-resolution then.
-	// The nil-vs-non-nil distinction is the sentinel: non-nil (even empty slice)
-	// means "use verbatim"; nil means "re-resolve from memory map".
-	//
-	// Persistence: these fields are serialized into SnapshotIssue by Snapshot()
-	// and restored by SeedFromSnapshot(), so they survive a Save+Load cycle.
-	// Old on-disk JSONLs without these fields decode them as nil, which correctly
-	// falls back to re-resolution (backward-compatible).
-	blockedByRefs []domain.IssueReference // corresponds to dependsOn
-	relatedRefs   []domain.IssueReference // corresponds to related
-	parentRef     *domain.IssueReference  // corresponds to parentID (nil = re-resolve)
 }
 
 // storedComment is a comment record inside a storedIssue.
@@ -725,22 +710,6 @@ func (r *Repository) Catalogs(ctx context.Context) (repository.Catalogs, error) 
 // SnapshotIssue is a read-only exported view of a storedIssue for use by
 // file persistence (Save). It preserves all fields, including timestamps and
 // comments, so a round-trip through Save/Load is lossless.
-//
-// # Cross-reference metadata
-//
-// BlockedByRefs, RelatedRefs, and ParentRef carry the full
-// IssueReference metadata (Title, Status, Type, Priority) captured by Snapshot.
-// These fields follow the same nil-vs-non-nil sentinel as storedIssue:
-//
-//   - nil → refs were not populated; Load should call Seed
-//     (re-resolution path) so that toDetailLocked falls back to the memory map.
-//   - non-nil (even empty slice) → refs are authoritative; Load should call
-//     SeedFromSnapshot so toDetailLocked returns them verbatim.
-//
-// JSON encoding: nil slice → null (or absent) → decodes back to nil.
-// Non-nil empty slice → [] → decodes back to non-nil empty slice.
-// Do NOT add omitempty to the slice fields; that would silently flip
-// authoritative-empty into re-resolution.
 type SnapshotIssue struct {
 	ID          string
 	Title       string
@@ -760,12 +729,6 @@ type SnapshotIssue struct {
 	Updated     time.Time
 	Closed      time.Time
 	CloseReason string
-
-	// Cross-reference metadata. Nil means "use re-resolution path on Load".
-	// See type-level doc for the nil-vs-non-nil sentinel semantics.
-	BlockedByRefs []domain.IssueReference // corresponds to DependsOn
-	RelatedRefs   []domain.IssueReference // corresponds to Related
-	ParentRef     *domain.IssueReference  // corresponds to ParentID (nil = re-resolve)
 }
 
 // SnapshotComment is the exported view of a storedComment used by Snapshot.
@@ -805,50 +768,25 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			}
 		}
 
-		// Copy the cross-reference metadata preserving the nil sentinel.
-		// nil means "re-resolve on Load"; non-nil (even empty) means "verbatim".
-		// We must NOT use make(..., 0) for a nil source — that would flip nil
-		// into non-nil and incorrectly activate the verbatim path on Load.
-		var blockedByRefs []domain.IssueReference
-		if si.blockedByRefs != nil {
-			blockedByRefs = make([]domain.IssueReference, len(si.blockedByRefs))
-			copy(blockedByRefs, si.blockedByRefs)
-		}
-
-		var relatedRefs []domain.IssueReference
-		if si.relatedRefs != nil {
-			relatedRefs = make([]domain.IssueReference, len(si.relatedRefs))
-			copy(relatedRefs, si.relatedRefs)
-		}
-
-		var parentRef *domain.IssueReference
-		if si.parentRef != nil {
-			ref := *si.parentRef
-			parentRef = &ref
-		}
-
 		out = append(out, SnapshotIssue{
-			ID:            si.id,
-			Title:         si.title,
-			Status:        si.status,
-			Priority:      si.priority,
-			Type:          si.issueType,
-			Assignee:      si.assignee,
-			Creator:       si.creator,
-			Labels:        labels,
-			Description:   si.description,
-			Notes:         si.notes,
-			DependsOn:     deps,
-			Related:       related,
-			ParentID:      si.parentID,
-			Comments:      comments,
-			Created:       si.created,
-			Updated:       si.updated,
-			Closed:        si.closed,
-			CloseReason:   si.closeReason,
-			BlockedByRefs: blockedByRefs,
-			RelatedRefs:   relatedRefs,
-			ParentRef:     parentRef,
+			ID:          si.id,
+			Title:       si.title,
+			Status:      si.status,
+			Priority:    si.priority,
+			Type:        si.issueType,
+			Assignee:    si.assignee,
+			Creator:     si.creator,
+			Labels:      labels,
+			Description: si.description,
+			Notes:       si.notes,
+			DependsOn:   deps,
+			Related:     related,
+			ParentID:    si.parentID,
+			Comments:    comments,
+			Created:     si.created,
+			Updated:     si.updated,
+			Closed:      si.closed,
+			CloseReason: si.closeReason,
 		})
 	}
 	return out
@@ -876,37 +814,24 @@ func (r *Repository) toSummaryLocked(si *storedIssue) domain.IssueSummary {
 
 // toDetailLocked projects a storedIssue to domain.IssueDetail with resolved
 // dep references. Caller must hold at least RLock.
-//
-// When blockedByRefs/relatedRefs/parentRef are non-nil (set by
-// SeedFromSnapshot), they are returned verbatim without re-resolving against r.issues.
-// When those fields are nil (set by Seed), the classic re-resolution path is
-// used instead. The nil-vs-non-nil distinction is the sentinel.
 func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 	sum := r.toSummaryLocked(si)
 
-	// Resolve DependsOn as BlockedBy references.
-	// Use stored refs verbatim when available (SeedFromSnapshot path); otherwise
-	// re-resolve from the in-memory map (Seed path).
-	var blockedBy []domain.IssueReference
-	if si.blockedByRefs != nil {
-		blockedBy = make([]domain.IssueReference, len(si.blockedByRefs))
-		copy(blockedBy, si.blockedByRefs)
-	} else {
-		blockedBy = make([]domain.IssueReference, 0, len(si.dependsOn))
-		for _, depID := range si.dependsOn {
-			dep, ok := r.issues[depID]
-			if !ok {
-				blockedBy = append(blockedBy, domain.IssueReference{ID: depID})
-				continue
-			}
-			blockedBy = append(blockedBy, domain.IssueReference{
-				ID:       dep.id,
-				Title:    dep.title,
-				Type:     dep.issueType,
-				Priority: dep.priority,
-				Status:   dep.status,
-			})
+	// Resolve DependsOn as BlockedBy references from the in-memory map.
+	blockedBy := make([]domain.IssueReference, 0, len(si.dependsOn))
+	for _, depID := range si.dependsOn {
+		dep, ok := r.issues[depID]
+		if !ok {
+			blockedBy = append(blockedBy, domain.IssueReference{ID: depID})
+			continue
 		}
+		blockedBy = append(blockedBy, domain.IssueReference{
+			ID:       dep.id,
+			Title:    dep.title,
+			Type:     dep.issueType,
+			Priority: dep.priority,
+			Status:   dep.status,
+		})
 	}
 
 	// Resolve Blocks: if blocksIDs is explicitly set, use it; otherwise fall
@@ -977,38 +902,26 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 		}
 	}
 
-	// Resolve Related references.
-	// Use stored refs verbatim when available (SeedFromSnapshot path); otherwise re-resolve.
-	var related []domain.IssueReference
-	if si.relatedRefs != nil {
-		related = make([]domain.IssueReference, len(si.relatedRefs))
-		copy(related, si.relatedRefs)
-	} else {
-		related = make([]domain.IssueReference, 0, len(si.related))
-		for _, relID := range si.related {
-			rel, ok := r.issues[relID]
-			if !ok {
-				related = append(related, domain.IssueReference{ID: relID})
-				continue
-			}
-			related = append(related, domain.IssueReference{
-				ID:       rel.id,
-				Title:    rel.title,
-				Type:     rel.issueType,
-				Priority: rel.priority,
-				Status:   rel.status,
-			})
+	// Resolve Related references from the in-memory map.
+	related := make([]domain.IssueReference, 0, len(si.related))
+	for _, relID := range si.related {
+		rel, ok := r.issues[relID]
+		if !ok {
+			related = append(related, domain.IssueReference{ID: relID})
+			continue
 		}
+		related = append(related, domain.IssueReference{
+			ID:       rel.id,
+			Title:    rel.title,
+			Type:     rel.issueType,
+			Priority: rel.priority,
+			Status:   rel.status,
+		})
 	}
 
-	// Resolve ParentGroupBrowserContext.
-	// Use stored refs verbatim when available (SeedFromSnapshot path); otherwise re-resolve.
+	// Resolve ParentGroupBrowserContext from the in-memory map.
 	var parentGroupBrowser domain.ParentGroupBrowserContext
-	if si.parentRef != nil {
-		// Verbatim path: parentRef was stored by SeedFromSnapshot.
-		parentGroupBrowser.Parent = *si.parentRef
-	} else if si.parentID != "" {
-		// Seed path: re-resolve from memory map.
+	if si.parentID != "" {
 		parent, ok := r.issues[si.parentID]
 		if ok {
 			parentGroupBrowser.Parent = domain.IssueReference{
