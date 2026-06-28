@@ -6,7 +6,7 @@ A terminal UI for browsing task-manager issues, creating and updating work, and 
 
 ## Project Overview
 
-Read `docs/OVERVIEW.md` for the runtime flow, package map, architectural boundaries, and supporting doc index.
+Read `docs/OVERVIEW.md` for the runtime flow, package map, and architectural boundaries.
 
 ## Coding
 

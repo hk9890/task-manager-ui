@@ -92,7 +92,7 @@ func editableDocWithTitle(issue domain.IssueDetail, newTitle string) string {
 //
 // Assertion strategy: we gate on three observable signals: FakeExecCommand.RunCount
 // (subprocess invoked), repository HasCall (ApplyEdits produced a write), and the
-// Services.OnEditIssueResult hook (editIssueResultMsg processed, toast set). The
+// onEditIssueResult hook (editIssueResultMsg processed, toast set). The
 // hook fires synchronously from the BubbleTea Update handler after showToast, so
 // it is a precise zero-sleep signal. Final assertion uses FinalModel — post-tea.Exec
 // View() frames do not reliably reach the output pipe under CI load.
@@ -155,7 +155,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 		return gw.hasUpdateIssueCall()
 	})
 	// Gate 3: editIssueResultMsg was processed by Update and the toast set.
-	// The OnEditIssueResult hook fires synchronously after showToast, so this
+	// The onEditIssueResult hook fires synchronously after showToast, so this
 	// is a precise signal — no sleep needed.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
 		return editResultCount.Load() >= 1
@@ -192,7 +192,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 // "No changes saved" toast is set on the settled model.
 //
 // Assertion strategy: we gate on FakeExecCommand.RunCount (subprocess invoked)
-// and the Services.OnEditIssueResult hook (editIssueResultMsg processed, toast
+// and the onEditIssueResult hook (editIssueResultMsg processed, toast
 // set). Gating on repository.HasCall(UpdateIssue) is not available here (we are
 // asserting the opposite). Final assertion uses FinalModel — output-buffer scanning
 // is not reliable for post-tea.Exec frames under CI load.
@@ -277,7 +277,7 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 // shown and UpdateIssue is NOT called.
 //
 // Assertion strategy: we gate on FakeExecCommand.RunCount (subprocess invoked)
-// and the Services.OnEditIssueResult hook (editIssueResultMsg processed, toast
+// and the onEditIssueResult hook (editIssueResultMsg processed, toast
 // set). The hook fires synchronously from Update after showToast — no sleep
 // needed. Final assertion uses FinalModel — post-tea.Exec View() frames do not
 // reliably reach the output pipe under CI load.
@@ -325,7 +325,7 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 		return fakeCmd.RunCount() >= 1
 	})
 	// Gate 2: editIssueResultMsg was processed by Update and the toast set.
-	// The OnEditIssueResult hook fires synchronously after showToast, giving a
+	// The onEditIssueResult hook fires synchronously after showToast, giving a
 	// precise signal without sleeping.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
 		return editResultCount.Load() >= 1

@@ -484,11 +484,11 @@ func TestSearchInvalidStatusFilter(t *testing.T) {
 	}
 }
 
-// TestSearchDefaultStatuesIncludesClosed pins that the taskmgr backend sets
+// TestSearchDefaultStatusesIncludesClosed pins that the taskmgr backend sets
 // IncludeClosed:true in buildCriteria so a default-Statuses (empty) search
 // returns closed issues. Removing IncludeClosed:true from search.go must fail
 // this test — that is the pin (T2 from the 2026-06-27 project review).
-func TestSearchDefaultStatuesIncludesClosed(t *testing.T) {
+func TestSearchDefaultStatusesIncludesClosed(t *testing.T) {
 	r, _ := newTestRepo(t)
 	ctx := context.Background()
 
