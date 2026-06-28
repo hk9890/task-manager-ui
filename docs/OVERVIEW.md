@@ -98,11 +98,7 @@ Rendering components live under `internal/ui/`:
 
 ## Supporting docs
 
-- `docs/CODING.md` — build commands, package layout, architectural rules, and quality gates
-- `docs/CONFIGURATION.md` — runtime config model, keybindings, and launcher interpolation reference
-- `docs/TESTING.md` — test policy, fixtures, and required verification depth
-- `docs/MONITORING.md` — centralized logging contract, capture points, and evidence guidance
-- `docs/RUNTIME_UI_VERIFICATION.md` — runtime UI runbook for built-binary checks
-- `docs/CHANGE-WORKFLOW.md` — task-manager-first change landing and session completion workflow
-- `docs/RELEASING.md` — manually dispatched (workflow_dispatch) release process via GitHub Actions + GoReleaser
-- `docs/user-guide/key-bindings.md` — default operator keybindings
+`AGENTS.md` is the single entry point that routes to every doc by topic (coding,
+configuration, testing, monitoring, releasing, change workflow) — see it instead
+of duplicating that index here. Operator keybindings live in
+`docs/user-guide/key-bindings.md`.

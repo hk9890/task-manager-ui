@@ -28,7 +28,7 @@ package search
 //   - TypeAndEnterDuringPriorSearch_EventuallySubmitsLatestDraft
 //   - EnterIsNotSilentlyDropped
 //   - HasDraftChangesResolves
-//   - EmptyAutoInitDoesNotLeakClosedRowsUnderTypedDraft
+//   - EmptyAutoInitDoesNotForceStatusFilterUnderTypedDraft
 
 import (
 	"context"
@@ -383,7 +383,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 	})
 
-	// EmptyAutoInitDoesNotLeakClosedRowsUnderTypedDraft verifies that when the
+	// EmptyAutoInitDoesNotForceStatusFilterUnderTypedDraft verifies that when the
 	// user types a query + Enter after Init, the model does NOT inject a forced
 	// Statuses filter into the SearchIssuesQuery it passes to the repository.
 	// The absence of Statuses: []string{"all"} is the controller-level contract
@@ -402,7 +402,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 	// a default-Statuses search INCLUDES closed issues. Both the typed "task"
 	// query and the Init empty query can return closed issues; the assertion here
 	// pins query-shape (no forced Statuses) and that Enter was not dropped.
-	t.Run("EmptyAutoInitDoesNotLeakClosedRowsUnderTypedDraft", func(t *testing.T) {
+	t.Run("EmptyAutoInitDoesNotForceStatusFilterUnderTypedDraft", func(t *testing.T) {
 		t.Parallel()
 
 		inner := memoryrepo.New()

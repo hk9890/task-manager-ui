@@ -39,14 +39,11 @@ Release archives ship with a cosign-signed checksum file — see
 
 #### From source
 
-Building from source uses [mise](https://mise.jdx.dev/), which provisions the
-pinned Go toolchain and dev tools from `.mise.toml`, so a separate Go install is
-not required:
-
-```bash
-mise run build                    # build the taskmgr-ui binary at ./taskmgr-ui
-go install ./cmd/taskmgr-ui       # or install it onto your PATH
-```
+Building from source uses [mise](https://mise.jdx.dev/) to provision the pinned
+Go toolchain and dev tools from `.mise.toml`, so a separate Go install is not
+required. See [CONTRIBUTING.md](CONTRIBUTING.md#getting-started) for the
+`mise install` / `mise run build` setup; to install the binary onto your `PATH`,
+run `go install ./cmd/taskmgr-ui`.
 
 ### Run
 
