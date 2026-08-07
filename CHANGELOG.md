@@ -10,6 +10,19 @@ Releases page above.
 
 ## Unreleased
 
+## v0.13.0
+
+- Upgraded the task-manager SDK to v0.7.0 and added support for its `doc` issue
+  type. Doc issues now render with their own compact-row token and colour
+  instead of `?`, and — following the SDK's `Type.IsWork` — are excluded from
+  the Ready and Blocked board columns, so an open doc is reachable via search.
+  Issue bodies over 64KB, which the SDK now keeps in a content sidecar, render
+  in the detail view instead of appearing empty.
+- Internal: documentation/code drift fixes across the repository contract and
+  backend catalogs, runtime diagnostics routed through the injected logger, the
+  application lifecycle context threaded through shell reads, a unified
+  golden-file harness, and expanded modal keyboard coverage.
+
 ## v0.12.1
 
 - Maintenance release: internal refactors (god-file splits, consistency-seam
