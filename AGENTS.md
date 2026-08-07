@@ -32,7 +32,9 @@ Read `docs/RELEASING.md` for the manually dispatched (workflow_dispatch) GitHub 
 
 ## Change Workflow
 
-Read `docs/CHANGE-WORKFLOW.md` for tracker usage, quality gates, session completion, and push requirements.
+**MUST read `docs/CHANGE-WORKFLOW.md` before any git command that writes** — commit, push, branch, worktree — **or before opening a PR.** Read-only git (`status`, `log`, `diff`) is not gated. It owns tracker usage, quality gates, session completion, and PR requirements.
+
+**Every change starts in a worktree**, created with the `EnterWorktree` tool (never a hand-rolled `git worktree add`). `main` is not a working branch, and a worktree without the `.tasks` symlink breaks every `taskmgr` call — `docs/CHANGE-WORKFLOW.md` → Worktrees explains both.
 
 ## Issue Tracker (task-manager)
 
