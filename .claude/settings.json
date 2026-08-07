@@ -1,4 +1,8 @@
 {
+  "worktree": {
+    "baseRef": "head",
+    "symlinkDirectories": [".tasks"]
+  },
   "hooks": {
     "PreToolUse": [
       {
