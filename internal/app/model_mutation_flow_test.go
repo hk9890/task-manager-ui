@@ -497,3 +497,183 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 		}
 	})
 }
+
+// --- Keyboard-driven dialog path -------------------------------------------
+//
+// The tests above hand the shell a ready-made modal.SubmitMsg. That proves the
+// shell reacts correctly to a submit, but it skips everything a user actually
+// does: typing into the input, moving focus, and pressing the key that submits.
+// A regression anywhere in that stretch — modal key handling, the shell's
+// forwarding of keys while a dialog is open, or the mapping of typed values
+// onto the write — would leave every SubmitMsg test green.
+//
+// These tests drive real tea.KeyMsg values end to end and assert the value that
+// reached the store, not merely that a call happened.
+
+// typeIntoDialog sends each rune to the shell.
+//
+// The returned Cmd is deliberately discarded: the focused textinput answers a
+// rune with a cursor-blink tick, and runBatch would invoke it and block the
+// test on a timer.
+func typeIntoDialog(m Model, text string) Model {
+	for _, r := range text {
+		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = next.(Model)
+	}
+	return m
+}
+
+// pressAndSettle sends one key and drains everything it sets off.
+func pressAndSettle(t *testing.T, m Model, msg tea.KeyMsg) Model {
+	t.Helper()
+	next, cmd := m.Update(msg)
+	return applyMessages(t, next.(Model), runBatch(cmd))
+}
+
+// openDialog presses a mutation hotkey and feeds in the catalog load that backs
+// the dialog, returning a model with the modal open.
+//
+// The catalog results are applied one at a time with the follow-up Cmds
+// discarded, rather than through applyMessages: opening the modal returns
+// modal.Init, which is textinput.Blink. Draining that invokes a tick, and each
+// blink schedules the next, so a full drain never terminates.
+func openDialog(t *testing.T, m Model, hotkey rune) Model {
+	t.Helper()
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{hotkey}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected a catalog-load command from %q", string(hotkey))
+	}
+
+	for _, msg := range runBatch(cmd) {
+		next, _ := m.Update(msg)
+		m = next.(Model)
+	}
+	if !m.showActionModal {
+		t.Fatalf("expected the %q dialog to be open", string(hotkey))
+	}
+	return m
+}
+
+func TestCommentDialogKeyboardPathWritesTypedBody(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	m = openDialog(t, m, 'a')
+	m = typeIntoDialog(m, "looks good")
+
+	// First Enter advances off the input. Nothing may be written yet — this is
+	// the contract that cost a manual verification run to discover.
+	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if gw.hasAddCommentCall() {
+		t.Fatal("Enter on the focused input must not submit the comment dialog")
+	}
+	if !m.showActionModal {
+		t.Fatal("expected the dialog to stay open after the field-advance Enter")
+	}
+
+	// Second Enter, with the buttons focused, submits.
+	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.showActionModal {
+		t.Fatal("expected the dialog to close after submitting")
+	}
+	if !gw.hasAddCommentCall() {
+		t.Fatalf("expected AddComment after the submitting Enter, calls=%#v", gw.Calls())
+	}
+
+	detail, err := gw.repo.Issue(t.Context(), "tm-1")
+	if err != nil {
+		t.Fatalf("reading tm-1 back: %v", err)
+	}
+	if len(detail.Comments) != 1 {
+		t.Fatalf("expected exactly one comment on tm-1, got %d", len(detail.Comments))
+	}
+	if got := detail.Comments[0].Body; got != "looks good" {
+		t.Errorf("typed comment body did not reach the store: got %q, want %q", got, "looks good")
+	}
+}
+
+func TestCreateDialogKeyboardPathWritesTypedTitle(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	m = openDialog(t, m, 'c')
+	m = typeIntoDialog(m, "Typed from the keyboard")
+
+	// The create dialog has six inputs; Tab off the last one lands on Save.
+	for i := 0; i < 6; i++ {
+		m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	if gw.hasCreateIssueCall() {
+		t.Fatal("walking the fields must not create the issue")
+	}
+
+	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !gw.hasCreateIssueCall() {
+		t.Fatalf("expected CreateIssue after submitting, calls=%#v", gw.Calls())
+	}
+
+	page, err := gw.repo.Search(t.Context(), domain.SearchIssuesQuery{Text: "Typed"})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	titles := make([]string, 0, len(page.Results))
+	for _, r := range page.Results {
+		titles = append(titles, r.Issue.Title)
+	}
+	if len(titles) != 1 || titles[0] != "Typed from the keyboard" {
+		t.Errorf("typed title did not reach the store: got %v", titles)
+	}
+}
+
+func TestMutationDialogEscapeWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	m = openDialog(t, m, 'a')
+	m = typeIntoDialog(m, "discard me")
+	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+
+	if m.showActionModal {
+		t.Fatal("expected Escape to close the dialog")
+	}
+	if gw.hasAddCommentCall() {
+		t.Fatalf("Escape must not write, calls=%#v", gw.Calls())
+	}
+
+	detail, err := gw.repo.Issue(t.Context(), "tm-1")
+	if err != nil {
+		t.Fatalf("reading tm-1 back: %v", err)
+	}
+	if len(detail.Comments) != 0 {
+		t.Errorf("expected no comments after Escape, got %d", len(detail.Comments))
+	}
+}

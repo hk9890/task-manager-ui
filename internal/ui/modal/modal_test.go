@@ -268,3 +268,91 @@ func TestSubmitOnEnterSubmitsFromFocusedInput(t *testing.T) {
 		t.Fatalf("expected submitted status open, got %#v", submit.Values)
 	}
 }
+
+// TestEnterOnFocusedInputAdvancesInsteadOfSubmitting is the counterpart to the
+// test above: with SubmitOnEnter off — the default, and what every mutation
+// dialog uses — Enter walks the fields and only submits once focus has left the
+// inputs.
+//
+// This is easy to "fix" in the helpful direction, and doing so would submit
+// half-filled multi-field dialogs on the first Enter.
+func TestEnterOnFocusedInputAdvancesInsteadOfSubmitting(t *testing.T) {
+	t.Parallel()
+
+	m := New(Config{
+		Title: "Two fields",
+		Inputs: []InputConfig{
+			{Key: "first", Label: "First"},
+			{Key: "second", Label: "Second"},
+		},
+	})
+
+	if got := m.FocusedInput(); got != 0 {
+		t.Fatalf("expected focus to start on the first input, got %d", got)
+	}
+
+	assertNotSubmit := func(cmd tea.Cmd, when string) {
+		t.Helper()
+		if cmd == nil {
+			return
+		}
+		if _, isSubmit := cmd().(SubmitMsg); isSubmit {
+			t.Fatalf("Enter %s must not submit", when)
+		}
+	}
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	assertNotSubmit(cmd, "on the first input")
+	if got := m.FocusedInput(); got != 1 {
+		t.Fatalf("expected focus to advance to the second input, got %d", got)
+	}
+
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	assertNotSubmit(cmd, "on the last input")
+	if got := m.FocusedInput(); got != -1 {
+		t.Fatalf("expected focus to leave the inputs, got %d", got)
+	}
+	if got := m.FocusedField(); got != FieldSave {
+		t.Fatalf("expected focus to land on Save, got %v", got)
+	}
+
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected Enter on the Save button to submit")
+	}
+	if _, ok := cmd().(SubmitMsg); !ok {
+		t.Fatalf("expected SubmitMsg from the Save button, got %T", cmd())
+	}
+}
+
+// TestTypedRunesReachSubmitValues covers the path a user actually takes. The
+// other submit tests seed InputConfig.Value and never press a rune key, so a
+// break between key handling and values() would not show up in them.
+func TestTypedRunesReachSubmitValues(t *testing.T) {
+	t.Parallel()
+
+	m := New(Config{
+		Title:  "Comment",
+		Inputs: []InputConfig{{Key: "body", Label: "Comment"}},
+	})
+
+	for _, r := range "looks good" {
+		// Discard the cmd on purpose: textinput returns a cursor-blink tick and
+		// invoking it here would block the test on a timer.
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected submit command")
+	}
+
+	submit, ok := cmd().(SubmitMsg)
+	if !ok {
+		t.Fatalf("expected SubmitMsg, got %T", cmd())
+	}
+	if submit.Values["body"] != "looks good" {
+		t.Fatalf("typed text did not reach the submit values: %#v", submit.Values)
+	}
+}
