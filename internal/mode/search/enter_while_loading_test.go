@@ -23,47 +23,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
-
-// recordingSearchRepo wraps a searchRepo and records all Search queries.
-type recordingSearchRepo struct {
-	repo          *searchRepo
-	searchQueries []domain.SearchIssuesQuery
-}
-
-func (r *recordingSearchRepo) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	r.searchQueries = append(r.searchQueries, query)
-	return r.repo.Search(ctx, query)
-}
-
-func (r *recordingSearchRepo) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
-	return r.repo.Dashboard(ctx, opts)
-}
-func (r *recordingSearchRepo) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
-	return r.repo.Issue(ctx, id)
-}
-func (r *recordingSearchRepo) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return r.repo.CreateIssue(ctx, input)
-}
-func (r *recordingSearchRepo) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
-	return r.repo.UpdateIssue(ctx, id, input)
-}
-func (r *recordingSearchRepo) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
-	return r.repo.CloseIssue(ctx, id, input)
-}
-func (r *recordingSearchRepo) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
-	return r.repo.AddComment(ctx, id, input)
-}
-func (r *recordingSearchRepo) HealthCheck(ctx context.Context) error {
-	return r.repo.HealthCheck(ctx)
-}
-func (r *recordingSearchRepo) Catalogs(ctx context.Context) (repository.Catalogs, error) {
-	return r.repo.Catalogs(ctx)
-}
 
 // TestEnterWhileInitInFlight_PendingDraftQueued verifies that pressing Enter
 // while the Init empty-query search is still in flight (m.loading==true) does
@@ -204,12 +166,10 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	t.Parallel()
 
-	wantArgv := []string{"search", "task", "--json", "--limit", "20"}
-
 	innerRepo := newSearchRepo()
 	innerRepo.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
 	innerRepo.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
-	rec := &recordingSearchRepo{repo: innerRepo}
+	rec := &queryRecordingRepo{Repository: innerRepo}
 
 	// Build and Init WITHOUT draining.
 	m := NewModel(context.Background(), rec, nil)
@@ -235,7 +195,7 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	}
 
 	// Verify no "all" status was passed.
-	queries := rec.searchQueries
+	queries := rec.Queries()
 	foundTextSearch := false
 	for _, q := range queries {
 		if q.Text == "task" {
@@ -248,8 +208,6 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	if !foundTextSearch {
 		t.Errorf("expected a search call with Text=%q; got queries: %v", "task", queries)
 	}
-
-	_ = wantArgv // argvCheck via argv_cardinality_test.go covers the argv shape
 }
 
 // TestEnterWhileInitInFlight_PendingDraftNotFiredIfMatchesApplied verifies that

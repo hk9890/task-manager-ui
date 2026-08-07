@@ -50,11 +50,36 @@ func ReadGolden(tb testing.TB, name string) []byte {
 	return bts
 }
 
-// AssertMatchesGolden compares output against a package-local golden file.
-// It strips \r from the golden file before comparison to handle Windows
-// CRLF line endings that may be present in existing checkouts.
+// updateGolden writes got to testdata/name when TASKMGR_UI_UPDATE_GOLDEN=1.
+//
+// Every assertion below regenerates through this with exactly the bytes it
+// then compares — that equality is the point. Three packages once carried
+// their own regeneration wrappers writing three different byte streams
+// (normalized, ANSI-stripped, raw), so which directory you happened to be in
+// decided what got committed.
+func updateGolden(tb testing.TB, got []byte, name string) {
+	tb.Helper()
+
+	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") != "1" {
+		return
+	}
+	path := filepath.Join("testdata", name)
+	if err := os.WriteFile(path, got, 0o600); err != nil {
+		tb.Fatalf("write golden %s: %v", path, err)
+	}
+}
+
+// AssertMatchesGolden compares output against a package-local golden file
+// byte-for-byte, colour codes included. It strips \r from the golden file
+// before comparison to handle Windows CRLF line endings that may be present in
+// existing checkouts. Set TASKMGR_UI_UPDATE_GOLDEN=1 to regenerate.
+//
+// Prefer AssertMatchesGoldenNormalized for rendered layout: trailing spaces are
+// invisible in a diff and this helper fails on them.
 func AssertMatchesGolden(tb testing.TB, output []byte, name string) {
 	tb.Helper()
+
+	updateGolden(tb, output, name)
 
 	want := ReadGolden(tb, name)
 	normalizedWant := bytes.TrimSuffix(bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")), []byte("\n"))
@@ -78,21 +103,41 @@ func NormalizeOutput(output []byte) []byte {
 	return []byte(strings.Join(lines, "\n"))
 }
 
-// AssertMatchesGoldenNormalized compares normalized output against normalized golden text.
-// Set env var TASKMGR_UI_UPDATE_GOLDEN=1 to write the current output as the new golden.
+// AssertMatchesGoldenNormalized compares normalized output against normalized
+// golden text, keeping colour codes. This is the default for rendered UI: the
+// status/priority/type colour language has no other regression coverage, so a
+// golden that drops it stops testing anything about colour.
+// Set TASKMGR_UI_UPDATE_GOLDEN=1 to regenerate.
 func AssertMatchesGoldenNormalized(tb testing.TB, output []byte, name string) {
 	tb.Helper()
 
 	got := NormalizeOutput(output)
-
-	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
-		path := filepath.Join("testdata", name)
-		if err := os.WriteFile(path, got, 0o600); err != nil {
-			tb.Fatalf("write golden %s: %v", path, err)
-		}
-	}
+	updateGolden(tb, got, name)
 
 	want := NormalizeOutput(ReadGolden(tb, name))
+	if !bytes.Equal(got, want) {
+		tb.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", name, string(want), string(got))
+	}
+}
+
+// StripANSI removes SGR colour escapes and then normalizes, for goldens that
+// pin layout and text but deliberately not colour.
+func StripANSI(output []byte) []byte {
+	return NormalizeOutput(AnsiEscapePattern.ReplaceAll(output, nil))
+}
+
+// AssertMatchesGoldenStripANSI compares output against a golden with colour
+// escapes removed. Use it only where the golden exists to pin column geometry
+// and a colour change would be pure noise; anything asserting the colour
+// language itself must use AssertMatchesGoldenNormalized.
+// Set TASKMGR_UI_UPDATE_GOLDEN=1 to regenerate.
+func AssertMatchesGoldenStripANSI(tb testing.TB, output []byte, name string) {
+	tb.Helper()
+
+	got := StripANSI(output)
+	updateGolden(tb, got, name)
+
+	want := StripANSI(ReadGolden(tb, name))
 	if !bytes.Equal(got, want) {
 		tb.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", name, string(want), string(got))
 	}

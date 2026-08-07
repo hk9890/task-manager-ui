@@ -227,7 +227,7 @@ under Architectural boundaries.
 
 ## Enforced Architecture Guardrails
 
-Automated guardrails are enforced in `cmd/taskmgr-ui/architecture_guardrails_test.go` by checking the full dependency graph for `./cmd/taskmgr-ui` (`go list -deps ./cmd/taskmgr-ui`).
+Automated guardrails are enforced in `cmd/taskmgr-ui/architecture_guardrails_test.go`, which walks the full transitive dependency graph of `./cmd/taskmgr-ui` via `golang.org/x/tools/go/packages`.
 
 The checks fail if any dependency in the active product path violates these boundaries:
 
@@ -238,6 +238,8 @@ The checks fail if any dependency in the active product path violates these boun
    - Any import path segment matching `orchestration`, `control-plane`, or `control_plane` is forbidden.
 
 These checks are intentionally lightweight and local-friendly: they run as a normal Go test and require no external services.
+
+A separate repo-hygiene scan — no local `.tasks` issue IDs in tracked `.go`/`.md` files — lives in `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`. It shells out to `git ls-files`, so it is tagged `//go:build integration` and runs under `mise run test:integration`, not in the unit suite.
 
 ## Quality Gates
 

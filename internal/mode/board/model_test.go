@@ -207,7 +207,7 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 		t.Fatalf("expected wrapped board model, got %T", final.Controller)
 	}
 
-	if sel := finalModel.CurrentSelection(); sel == nil || sel.Issue.ID != "tm-4" {
+	if sel := finalModel.currentSelection(); sel == nil || sel.Issue.ID != "tm-4" {
 		t.Fatalf("expected initial selection tm-4 from Not Ready lane (earliest non-empty), got %#v", sel)
 	}
 
@@ -436,7 +436,7 @@ func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testin
 		t.Fatalf("expected focused column 2 (InProgress) to be restored via anchor, got %d", m.focusedColumn)
 	}
 
-	sel := m.CurrentSelection()
+	sel := m.currentSelection()
 	if sel == nil || sel.Issue.ID != "tm-3" {
 		t.Fatalf("expected preserved selected issue tm-3, got %#v", sel)
 	}
@@ -469,7 +469,7 @@ func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t 
 	if m.focusedColumn != 1 {
 		t.Fatalf("expected fallback to clamped prior focused column 1 (Ready), got %d", m.focusedColumn)
 	}
-	sel := m.CurrentSelection()
+	sel := m.currentSelection()
 	if sel == nil || sel.Issue.ID != "tm-11" {
 		t.Fatalf("expected deterministic row-clamp fallback selection tm-11, got %#v", sel)
 	}
@@ -501,7 +501,7 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 	if m.focusedColumn != 1 {
 		t.Fatalf("expected manual reload to reset focus to first non-empty column (Ready, col 1), got %d", m.focusedColumn)
 	}
-	sel := m.CurrentSelection()
+	sel := m.currentSelection()
 	if sel == nil || sel.Issue.ID != "tm-21" {
 		t.Fatalf("expected manual reload selection to be tm-21 (first issue in first non-empty col), got %#v", sel)
 	}
@@ -633,8 +633,8 @@ func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
 		}()
 	}
 
-	if m.CurrentSelection() != nil {
-		t.Fatalf("expected nil selection when all columns empty, got: %#v", m.CurrentSelection())
+	if m.currentSelection() != nil {
+		t.Fatalf("expected nil selection when all columns empty, got: %#v", m.currentSelection())
 	}
 }
 
@@ -1183,7 +1183,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	}
 
 	// Scroll offset must have advanced so the selection stays in the window.
-	offset := finalBoard.ScrollOffsetForColumn(finalBoard.focusedColumn)
+	offset := finalBoard.scrollOffset[finalBoard.focusedColumn]
 	capacity := finalBoard.sectionItemCapacity()
 	if sel < offset || sel >= offset+capacity {
 		t.Errorf("selection %d not in visible window [%d, %d)", sel, offset, offset+capacity)

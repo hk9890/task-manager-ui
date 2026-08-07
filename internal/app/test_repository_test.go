@@ -10,8 +10,13 @@ package app
 
 import (
 	"context"
+	"testing"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
@@ -211,4 +216,108 @@ func (g *appTestRepository) seedInProgress(id, title string, issueType string, p
 		fn(&iss)
 	}
 	g.repo.Seed(iss)
+}
+
+// mustNewModel wraps NewModel and fails the test if an error is returned.
+// It pre-sets sizeKnown=true and installs no-op scheduler functions so that
+// tests run without real time-based ticks and without any global shared state.
+// Tests that specifically validate the sizeKnown=false/empty-view behaviour
+// should call NewModelWithOptions directly and leave sizeKnown at its zero value.
+func mustNewModel(t *testing.T, services Services) Model {
+	t.Helper()
+	m, err := NewModel(services)
+	if err != nil {
+		t.Fatalf("NewModel returned unexpected error: %v", err)
+	}
+	m.sizeKnown = true
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
+	return m
+}
+
+// mustNewModelWithOptions wraps NewModelWithOptions and fails the test if an error is returned.
+// It pre-sets sizeKnown=true and installs no-op scheduler functions (same as
+// mustNewModel). Tests that specifically validate the sizeKnown=false/empty-view
+// behaviour should call NewModelWithOptions directly and leave sizeKnown at its
+// zero value.
+func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOptions) Model {
+	t.Helper()
+	m, err := NewModelWithOptions(services, runtime)
+	if err != nil {
+		t.Fatalf("NewModelWithOptions returned unexpected error: %v", err)
+	}
+	m.sizeKnown = true
+	m.scheduleRefreshTick = func() tea.Cmd { return nil }
+	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
+	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
+	return m
+}
+
+func runBatch(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+
+	var msgs []tea.Msg
+	queue := []tea.Msg{cmd()}
+	for len(queue) > 0 {
+		msg := queue[0]
+		queue = queue[1:]
+		switch v := msg.(type) {
+		case tea.BatchMsg:
+			for _, c := range v {
+				if c == nil {
+					continue
+				}
+				queue = append(queue, c())
+			}
+		default:
+			msgs = append(msgs, msg)
+		}
+	}
+
+	return msgs
+}
+
+func applyMessages(t *testing.T, model Model, msgs []tea.Msg) Model {
+	t.Helper()
+
+	m := model
+	queue := append([]tea.Msg(nil), msgs...)
+	for len(queue) > 0 {
+		msg := queue[0]
+		queue = queue[1:]
+
+		next, cmd := m.Update(msg)
+		m = next.(Model)
+		queue = append(queue, runBatch(cmd)...)
+	}
+
+	return m
+}
+
+func firstSelectionID(m Model, modeID mode.ID) string {
+	sel := m.selectedByMode[modeID]
+	if sel == nil {
+		return ""
+	}
+	return sel.Issue.ID
+}
+
+func browserIDs(refs []domain.IssueReference) []string {
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, r.ID)
+	}
+	return out
+}
+
+func withModelNow(t *testing.T, now time.Time) {
+	t.Helper()
+	original := modelNow
+	modelNow = func() time.Time { return now }
+	t.Cleanup(func() {
+		modelNow = original
+	})
 }

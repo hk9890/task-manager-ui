@@ -137,8 +137,9 @@ Shared helpers live under `internal/testing/ui`:
 
 - `NewTestModel`: starts `teatest` with deterministic terminal size.
 - `NewTestModelWithSize`: starts `teatest` at explicit terminal width/height.
-- `AssertMatchesGolden`: compares rendered output to package-local `testdata/*.golden` files.
-- `AssertMatchesGoldenNormalized`: compares output with trailing-space normalization for stable layout snapshots.
+- `AssertMatchesGoldenNormalized`: **the default.** Compares with trailing-space normalization, colour codes kept.
+- `AssertMatchesGoldenStripANSI`: same, with colour escapes removed. Use only where the golden pins column geometry and colour would be noise.
+- `AssertMatchesGolden`: byte-for-byte comparison. Trailing spaces are invisible in a diff and this helper fails on them, so prefer the normalized variant for rendered layout.
 - `AssertModelViewMatchesGolden`: convenience for comparing `tea.Model.View()` output.
 - `WaitForOutputContainsAll`: waits for real runtime output containing required UI snippets before assertions.
 
@@ -146,6 +147,20 @@ Golden file convention:
 
 - Store golden files under the tested package's `testdata/` directory.
 - Keep one scenario per golden for readable diffs.
+- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `search_results_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test.
+- When the width comes from a layout constant rather than a literal, use a symbolic suffix — `_w3col`, `_w2col`, `_w3col_less1` — so the filename cannot go stale if the constant moves.
+
+### Regenerating goldens
+
+```bash
+TASKMGR_UI_UPDATE_GOLDEN=1 go test ./internal/...   # rewrite every golden from current output
+```
+
+Every assertion helper above regenerates with exactly the bytes it then compares, so a regeneration run against unchanged code produces **no** diff — if `git status` shows a golden after one, the rendering really changed. Review that diff; do not commit it blind.
+
+Goldens are stored with no trailing newline (that is what the normalizing helpers emit). Do not add one.
+
+Use one idiom per package and prefer the shared helpers: three packages once carried their own regeneration wrappers writing three different byte streams, so which directory you were in decided what got committed.
 
 ### Dashboard UX verification workflow (required for redesign work)
 

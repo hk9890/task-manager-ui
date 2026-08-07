@@ -7,7 +7,9 @@
 // Repository uses a sync.RWMutex. All read methods (Dashboard, Issue, Search,
 // Catalogs, HealthCheck) acquire a shared read lock; all write methods
 // (CreateIssue, UpdateIssue, CloseIssue, AddComment) acquire the exclusive
-// write lock. This satisfies the Repository interface's concurrency contract.
+// write lock. That is strictly stronger than the Repository interface
+// guarantees — the taskmgr backend's reads are lock-free — so a test relying on
+// read/write serialisation here proves nothing about production.
 //
 // # Seeding
 //
@@ -21,11 +23,10 @@
 //
 // # Error codes
 //
-// Issue() returns repository.ErrIssueNotFound for unknown IDs — this is the
-// local-state carve-out documented in the interface godoc. UpdateIssue,
+// Issue() returns repository.ErrIssueNotFound for unknown IDs; UpdateIssue,
 // CloseIssue, and AddComment return domain.RepositoryError{Code:
-// ErrorCodeCommandFailed} to match taskmgr's observable behavior, as documented in
-// the Repository interface.
+// ErrorCodeCommandFailed}. Both match the Repository interface and the taskmgr
+// backend.
 package memory
 
 import (
@@ -240,9 +241,11 @@ func (r *Repository) SeedCatalogs(c repository.Catalogs) {
 	r.catalogs = c
 }
 
-// DefaultCatalogs returns the taskmgr 1.0.4 standard statuses, core types, and an
-// empty label list. Tests that need labels should call SeedCatalogs with
-// additional LabelOption values.
+// DefaultCatalogs returns the task-manager status and type enums and an empty
+// label list. The name sets must match what the taskmgr backend reports —
+// conformance_test.go pins that — so a create/edit form fed by this fixture
+// offers exactly the values the real store accepts. Tests that need labels
+// should call SeedCatalogs with additional LabelOption values.
 func DefaultCatalogs() repository.Catalogs {
 	return repository.Catalogs{
 		Statuses: []domain.StatusOption{
@@ -251,19 +254,14 @@ func DefaultCatalogs() repository.Catalogs {
 			{Name: "blocked", Description: "Blocked by a dependency"},
 			{Name: "deferred", Description: "Deliberately put on ice for later"},
 			{Name: "closed", Description: "Completed"},
-			{Name: "pinned", Description: "Pinned for visibility"},
-			{Name: "hooked", Description: "Hooked — waiting on an external trigger"},
 		},
 		Types: []domain.TypeOption{
 			{Name: "task", Description: "General work item (default)"},
 			{Name: "bug", Description: "Bug report or defect"},
 			{Name: "feature", Description: "New feature or enhancement"},
-			{Name: "chore", Description: "Maintenance or housekeeping"},
 			{Name: "epic", Description: "Large body of work spanning multiple issues"},
-			{Name: "decision", Description: "Architectural or design decision"},
-			{Name: "spike", Description: "Time-boxed research or investigation"},
-			{Name: "story", Description: "User story"},
-			{Name: "milestone", Description: "Project milestone"},
+			{Name: "chore", Description: "Maintenance or housekeeping"},
+			{Name: "doc", Description: "Documentation work"},
 		},
 		Labels: []domain.LabelOption{},
 	}

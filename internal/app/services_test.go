@@ -74,9 +74,6 @@ func TestCleanStaleTempFiles(t *testing.T) {
 	recent := createFile("taskmgr-ui-issue-def456-002.md", now.Add(-1*time.Hour))
 	unrelated := createFile("unrelated.md", now.Add(-48*time.Hour))
 
-	// Override os.TempDir by patching: instead, call the internal helper
-	// directly but we can't change TempDir. Use a wrapper approach:
-	// We call cleanStaleTempFilesInDir (introduced for testability).
 	cleanStaleTempFilesInDir(nil, dir)
 
 	// Stale file must be gone.

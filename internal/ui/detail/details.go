@@ -70,6 +70,15 @@ type ScrollOffsets struct {
 	Dependencies int
 	Content      int
 	Metadata     int
+
+	// Inner heights are the visible content rows of each pane — total pane
+	// height minus its two border rows — at the width and height the bounds
+	// were computed for. They are returned alongside the bounds so a controller
+	// clamping scroll never has to re-derive the responsive split; that
+	// arithmetic lives here, next to the code that draws the panes.
+	DependenciesInnerHeight int
+	ContentInnerHeight      int
+	MetadataInnerHeight     int
 }
 
 // QuickActionLabels controls the metadata-rail quick action hints.
@@ -176,9 +185,12 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 		return ScrollOffsets{
-			Dependencies: max(0, len(deps)-bottomInnerHeight),
-			Content:      max(0, len(content)-contentInnerHeight),
-			Metadata:     max(0, len(metadata)-bottomInnerHeight),
+			Dependencies:            max(0, len(deps)-bottomInnerHeight),
+			Content:                 max(0, len(content)-contentInnerHeight),
+			Metadata:                max(0, len(metadata)-bottomInnerHeight),
+			DependenciesInnerHeight: bottomInnerHeight,
+			ContentInnerHeight:      contentInnerHeight,
+			MetadataInnerHeight:     bottomInnerHeight,
 		}
 	}
 
@@ -190,28 +202,17 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 	return ScrollOffsets{
-		Dependencies: max(0, len(deps)-innerHeight),
-		Content:      max(0, len(content)-innerHeight),
-		Metadata:     max(0, len(metadata)-innerHeight),
+		Dependencies:            max(0, len(deps)-innerHeight),
+		Content:                 max(0, len(content)-innerHeight),
+		Metadata:                max(0, len(metadata)-innerHeight),
+		DependenciesInnerHeight: innerHeight,
+		ContentInnerHeight:      innerHeight,
+		MetadataInnerHeight:     innerHeight,
 	}
 }
 
 func usesResponsiveDetailLayout(width int) bool {
 	return width < InspectorTwoColumnMinWidth
-}
-
-// UsesResponsiveDetailLayout reports whether the given width triggers the
-// responsive (stacked) layout. Exported for layout-height arithmetic in the
-// mode model.
-func UsesResponsiveDetailLayout(width int) bool {
-	return usesResponsiveDetailLayout(width)
-}
-
-// SplitResponsiveLayoutHeights returns the (content, bottom) heights for the
-// responsive stacked layout at the given total height. Exported for layout-
-// height arithmetic in the mode model.
-func SplitResponsiveLayoutHeights(total int) (content, bottom int) {
-	return splitResponsiveLayoutHeights(total)
 }
 
 func renderResponsiveLayout(detail domain.IssueDetail, state State, width, height int) string {

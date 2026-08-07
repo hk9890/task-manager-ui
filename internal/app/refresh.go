@@ -55,7 +55,7 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 		m.detail.Error = ""
 		m.detail.TargetID = selection.Issue.ID
 		m.markSurfaceRefreshed(mode.Detail)
-		return loadDetailCmd(m.services, selection.Issue.ID)
+		return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
 	default:
 		return nil
 	}

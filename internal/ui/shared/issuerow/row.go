@@ -1,3 +1,6 @@
+// Package issuerow renders one issue as a single compact line. It is the shared
+// row primitive behind the board columns and the search results, so both
+// surfaces read identically.
 package issuerow
 
 import (

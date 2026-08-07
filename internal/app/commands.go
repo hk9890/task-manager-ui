@@ -12,9 +12,13 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
-func loadDetailCmd(services Services, issueID string) tea.Cmd {
+// Reads take the lifecycle ctx so quitting abandons them; writes deliberately
+// do not. A cancelled read costs a discarded result, but a cancelled write can
+// land half-applied, and the user quitting is not a request to undo a save.
+
+func loadDetailCmd(ctx context.Context, services Services, issueID string) tea.Cmd {
 	return func() tea.Msg {
-		detail, err := services.Repo.Issue(context.Background(), issueID)
+		detail, err := services.Repo.Issue(ctx, issueID)
 		return detailLoadedMsg{issueID: issueID, detail: detail, err: err}
 	}
 }
@@ -22,9 +26,9 @@ func loadDetailCmd(services Services, issueID string) tea.Cmd {
 // prepareEditCmd runs the PrepareDocument phase in a goroutine. The result is
 // delivered as editIssuePreparedMsg; the model then returns tea.Exec to hand
 // terminal control to the editor process.
-func prepareEditCmd(services Services, issueID string) tea.Cmd {
+func prepareEditCmd(ctx context.Context, services Services, issueID string) tea.Cmd {
 	return func() tea.Msg {
-		prepared, err := services.Editor.PrepareDocument(context.Background(), issueID)
+		prepared, err := services.Editor.PrepareDocument(ctx, issueID)
 		return editIssuePreparedMsg{issueID: issueID, prepared: prepared, err: err}
 	}
 }
@@ -34,6 +38,9 @@ func prepareEditCmd(services Services, issueID string) tea.Cmd {
 // and calls UpdateIssue if there are changes. Temp-file cleanup is handled
 // inside ApplyEdits. On editor exec error the caller short-circuits before
 // reaching here, so no UpdateIssue call is possible from an error path.
+//
+// Uncancellable on purpose: this is the write that persists what the user just
+// typed into their editor.
 func applyEditsCmd(services Services, prepared launchereditor.Prepared) tea.Cmd {
 	return func() tea.Msg {
 		result, err := services.Editor.ApplyEdits(context.Background(), prepared.IssueID, prepared.Issue, prepared.TempPath)
@@ -44,9 +51,11 @@ func applyEditsCmd(services Services, prepared launchereditor.Prepared) tea.Cmd 
 	}
 }
 
-func launchActionCmd(services Services, action string, issue domain.IssueDetail) tea.Cmd {
+// launchActionCmd starts an external tool. The runner ignores ctx by design so
+// launched processes outlive taskmgr-ui (see launcher.execProcessRunner.Run).
+func launchActionCmd(ctx context.Context, services Services, action string, issue domain.IssueDetail) tea.Cmd {
 	return func() tea.Msg {
-		err := services.Launcher.Launch(context.Background(), action, issue)
+		err := services.Launcher.Launch(ctx, action, issue)
 		return launchActionResultMsg{action: action, err: err}
 	}
 }
@@ -125,7 +134,7 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 	notifyEditResult()
 	return m, batchCmds(modeCmd,
 		toastCmd,
-		loadDetailCmd(m.services, selection.Issue.ID),
+		loadDetailCmd(m.ctx, m.services, selection.Issue.ID),
 	)
 }
 

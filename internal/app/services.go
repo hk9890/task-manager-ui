@@ -97,8 +97,6 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 		return Services{}, err
 	}
 
-	go cleanStaleTempFiles(slog.Default())
-
 	return Services{
 		Repo:               repo,
 		Launcher:           launcherService,
@@ -108,12 +106,18 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 	}, nil
 }
 
-// cleanStaleTempFiles removes taskmgr-ui-issue-*.md files in os.TempDir() that are
-// older than 24 hours. These are leftover temp documents from editor sessions
-// that were interrupted by SIGKILL or a panic (the normal defer os.Remove path
-// only runs on clean exit).
-func cleanStaleTempFiles(logger *slog.Logger) {
-	cleanStaleTempFilesInDir(logger, os.TempDir())
+// SweepStaleTempFiles removes taskmgr-ui-issue-*.md files in os.TempDir() older
+// than 24 hours — leftover editor documents from sessions killed by SIGKILL or a
+// panic, where the normal defer os.Remove never ran.
+//
+// This is scheduled by Model.Init rather than fired from a constructor: deleting
+// files is not something a caller can expect from constructing a value, and
+// doing it in one of the two constructors made them non-substitutable.
+func (s Services) SweepStaleTempFiles() tea.Cmd {
+	return func() tea.Msg {
+		cleanStaleTempFilesInDir(s.Logger, os.TempDir())
+		return nil
+	}
 }
 
 // cleanStaleTempFilesInDir is the testable core of cleanStaleTempFiles.

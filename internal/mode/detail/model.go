@@ -1,3 +1,7 @@
+// Package detail is the detail-mode controller: pane focus, scroll offsets,
+// dependency-browser selection, and the metadata quick-edit intents the shell
+// turns into dialogs. Rendering — and all pane geometry — is internal/ui/detail,
+// a different package with the same name.
 package detail
 
 import (
@@ -188,12 +192,7 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	if viewportHeight <= 0 {
 		return
 	}
-	bounds := detail.MaxScrollOffsets(detail.State{
-		Detail:       m.Detail,
-		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
-		Width:        maxWidth,
-		Height:       viewportHeight,
-	})
+	bounds := m.paneGeometry(maxWidth, viewportHeight)
 	m.ContentScrollOffset = clampOffset(m.ContentScrollOffset, bounds.Content)
 	m.DependenciesScrollOffset = clampOffset(m.DependenciesScrollOffset, bounds.Dependencies)
 	m.MetadataScrollOffset = clampOffset(m.MetadataScrollOffset, bounds.Metadata)
@@ -242,12 +241,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		return true, nil
 	}
 
-	bounds := detail.MaxScrollOffsets(detail.State{
-		Detail:       m.Detail,
-		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
-		Width:        maxWidth,
-		Height:       viewportHeight,
-	})
+	bounds := m.paneGeometry(maxWidth, viewportHeight)
 
 	move := 0
 	action := ""
@@ -371,12 +365,11 @@ func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	}
 	m.MetadataSelectedField = fields[next]
 
-	// Compute the line index of the selected field within the metadata pane so
-	// we can call EnsureVisible to keep the field in the visible window.
-	lineIdx := metadataFieldLineIndex(m.MetadataSelectedField, m.Detail, maxWidth)
+	// Keep the selected field inside the visible window.
+	lineIdx := detail.MetadataFieldLineIndex(m.MetadataSelectedField, m.Detail)
 	if lineIdx >= 0 && viewportHeight > 0 {
-		paneInner := paneInnerHeight(maxWidth, viewportHeight, paneMetadata)
-		m.MetadataScrollOffset = scroll.EnsureVisible(m.MetadataScrollOffset, lineIdx, paneInner)
+		geometry := m.paneGeometry(maxWidth, viewportHeight)
+		m.MetadataScrollOffset = scroll.EnsureVisible(m.MetadataScrollOffset, lineIdx, geometry.MetadataInnerHeight)
 	}
 }
 
@@ -430,10 +423,10 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 
 	// Keep the selected ref's rendered line inside the visible window.
 	if viewportHeight > 0 {
-		lineIdx := dependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
+		lineIdx := detail.DependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
 		if lineIdx >= 0 {
-			paneInner := paneInnerHeight(maxWidth, viewportHeight, paneDependencies)
-			m.DependenciesScrollOffset = scroll.EnsureVisible(m.DependenciesScrollOffset, lineIdx, paneInner)
+			geometry := m.paneGeometry(maxWidth, viewportHeight)
+			m.DependenciesScrollOffset = scroll.EnsureVisible(m.DependenciesScrollOffset, lineIdx, geometry.DependenciesInnerHeight)
 		}
 	}
 
@@ -625,39 +618,17 @@ func browserItemsFromDependencies(d domain.IssueDetail) []domain.IssueReference 
 	return out
 }
 
-// paneKind identifies which pane height is being requested.
-type paneKind int
-
-const (
-	paneDependencies paneKind = iota
-	paneMetadata
-)
-
-// paneInnerHeight returns the number of content rows visible in a pane (i.e.,
-// total height minus 2 border rows). For the responsive layout (narrow widths),
-// the Dependencies and Metadata panes share the bottom section whose height is
-// computed by splitResponsiveLayoutHeights.
-func paneInnerHeight(maxWidth, viewportHeight int, _ paneKind) int {
-	if viewportHeight <= 0 {
-		return 1
-	}
-	if detail.UsesResponsiveDetailLayout(maxWidth) {
-		_, bottomHeight := detail.SplitResponsiveLayoutHeights(viewportHeight)
-		return max(1, bottomHeight-2)
-	}
-	return max(1, viewportHeight-2)
-}
-
-// dependencyRefLineIndex returns the line index of browserItems[refIndex] in
-// the rendered dependency pane line list by delegating to the ui/detail helper.
-func dependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, d domain.IssueDetail) int {
-	return detail.DependencyRefLineIndex(refIndex, browserItems, d)
-}
-
-// metadataFieldLineIndex returns the line index of the given metadata field in
-// the rendered metadata pane by delegating to the ui/detail helper.
-func metadataFieldLineIndex(field detail.MetadataFieldKey, d domain.IssueDetail, _ int) int {
-	return detail.MetadataFieldLineIndex(field, d)
+// paneGeometry returns the renderer's scroll bounds and pane inner heights for
+// the current detail at the given viewport. Every scroll calculation goes
+// through here so the responsive split is computed once, by the package that
+// draws the panes.
+func (m *Model) paneGeometry(maxWidth, viewportHeight int) detail.ScrollOffsets {
+	return detail.MaxScrollOffsets(detail.State{
+		Detail:       m.Detail,
+		BrowserItems: append([]domain.IssueReference(nil), m.BrowserItems...),
+		Width:        maxWidth,
+		Height:       viewportHeight,
+	})
 }
 
 func applyScrollAction(current, maxOffset int, action string, move int) int {

@@ -1,10 +1,7 @@
 package board
 
 import (
-	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,37 +12,6 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
-
-func assertGoldenNormalized(t *testing.T, output []byte, golden string) {
-	t.Helper()
-
-	normalize := func(bts []byte) []byte {
-		withoutANSI := testui.AnsiEscapePattern.ReplaceAll(bts, nil)
-		// Strip \r\n and lone \r to handle Windows CRLF in golden files.
-		normalized := bytes.ReplaceAll(withoutANSI, []byte("\r\n"), []byte("\n"))
-		normalized = bytes.ReplaceAll(normalized, []byte("\r"), []byte("\n"))
-		trimmedNewline := bytes.TrimSuffix(normalized, []byte("\n"))
-		lines := strings.Split(string(trimmedNewline), "\n")
-		for i, line := range lines {
-			lines[i] = strings.TrimRight(line, " ")
-		}
-		return []byte(strings.Join(lines, "\n"))
-	}
-
-	got := normalize(output)
-
-	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
-		path := filepath.Join("testdata", golden)
-		if err := os.WriteFile(path, got, 0o600); err != nil {
-			t.Fatalf("write golden %s: %v", path, err)
-		}
-	}
-
-	want := normalize(testui.ReadGolden(t, golden))
-	if !bytes.Equal(got, want) {
-		t.Fatalf("output mismatch for %s\n--- want ---\n%s\n--- got ---\n%s", golden, string(want), string(got))
-	}
-}
 
 func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
@@ -161,7 +127,7 @@ func TestRenderBoardColumnsGolden(t *testing.T) {
 			}
 
 			assertEqualColumnHeights(t, Render(state))
-			assertGoldenNormalized(t, []byte(Render(state)), tc.golden)
+			testui.AssertMatchesGoldenStripANSI(t, []byte(Render(state)), tc.golden)
 		})
 	}
 }
@@ -184,7 +150,7 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 	}
 
 	assertEqualColumnHeights(t, Render(state))
-	assertGoldenNormalized(t, []byte(Render(state)), "board_responsive_wide.golden")
+	testui.AssertMatchesGoldenStripANSI(t, []byte(Render(state)), "board_responsive_wide_w120.golden")
 }
 
 // TestRefreshBoardCarriesDimPhaseStyle verifies that when a board column is
@@ -390,7 +356,7 @@ func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
 		t.Errorf("expected row 0 to be hidden by scroll, got:\n%s", plain)
 	}
 
-	assertGoldenNormalized(t, []byte(rendered), "large_column_window.golden")
+	testui.AssertMatchesGoldenStripANSI(t, []byte(rendered), "large_column_window_w80.golden")
 }
 
 // TestRenderDoneLoadingMore verifies the "load more in flight" affordance: when
@@ -450,7 +416,7 @@ func TestRenderDoneLoadingMore(t *testing.T) {
 		t.Errorf("expected row 0 to be hidden by scroll window, got:\n%s", plain)
 	}
 
-	assertGoldenNormalized(t, []byte(rendered), "done_loading_more.golden")
+	testui.AssertMatchesGoldenStripANSI(t, []byte(rendered), "done_loading_more_w80.golden")
 }
 
 // TestRenderDoneDeepNavigation verifies the last-page loaded state: Done column
@@ -510,7 +476,7 @@ func TestRenderDoneDeepNavigation(t *testing.T) {
 		t.Errorf("expected issue tm-done-58 visible at selected row, got:\n%s", plain)
 	}
 
-	assertGoldenNormalized(t, []byte(rendered), "done_deep_navigation.golden")
+	testui.AssertMatchesGoldenStripANSI(t, []byte(rendered), "done_deep_navigation_w80.golden")
 }
 
 // TestRenderErrorRowPinnedAboveScrolledWindow locks in FIX #6: when a column

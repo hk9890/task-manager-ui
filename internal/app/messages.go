@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -55,4 +56,9 @@ type surfaceRefreshState struct {
 // RuntimeOptions carries toggles that alter runtime behaviour without touching config.
 type RuntimeOptions struct {
 	DisableAutoRefresh bool
+
+	// Ctx is the application lifecycle context. Repository reads issued by the
+	// shell and by both browse modes derive from it, so quitting abandons work
+	// in flight instead of waiting for it. Nil means context.Background().
+	Ctx context.Context
 }
