@@ -18,6 +18,7 @@ package app
 // full filesystem and repository round-trip is exercised.
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -29,6 +30,8 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -368,3 +371,282 @@ func (e *fakeEditorError) Error() string { return e.msg }
 // Verify the test-local teatest helpers compile. teatest.WaitFor is imported
 // transitively through testui.WaitForOutputContainsAllWithTimeout.
 var _ = teatest.WaitFor
+
+func TestModelEditHotkeyUsesEditorService(t *testing.T) {
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) {
+		i.Assignee = "hans"
+		i.Labels = []string{"infra"}
+	})
+	gw.seedInProgress("tm-2", "In progress", "task", 2)
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	fakeEditor := &fakes.FakeEditor{}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+	services.Editor = fakeEditor
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(fakeEditor.Calls) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	}
+	if fakeEditor.Calls[0].IssueID != "tm-1" {
+		t.Fatalf("expected selected issue tm-1, got %q", fakeEditor.Calls[0].IssueID)
+	}
+
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected edit hotkey to avoid launcher service, got %#v", fakeLauncher.Calls)
+	}
+}
+
+func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw.seedInProgress("tm-2", "In progress", "task", 2)
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	fakeEditor := &fakes.FakeEditor{PrepareErr: errors.New("editor boom")}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+	services.Editor = fakeEditor
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+
+	if cmd == nil {
+		t.Fatalf("expected launcher command after edit hotkey")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	view := m.View()
+	if !strings.Contains(view, "Failed to edit issue tm-1") {
+		t.Fatalf("expected editor failure toast, got:\n%s", view)
+	}
+
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected no launcher calls when editor fails, got %#v", fakeLauncher.Calls)
+	}
+}
+
+func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-9", "Ninth", "task", 2)
+	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	// Seed initial detail (before edit) — memory repo returns last-seeded for a given ID,
+	// so we seed "after edit" after Init() has loaded the "before" state.
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
+		Description: "detail before edit",
+	})
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+
+	fakeEditor := &fakes.FakeEditor{ApplyResult: launchereditor.Result{Updated: true}}
+	services.Editor = fakeEditor
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	if m.detail.Detail.Summary.ID != "tm-9" {
+		t.Fatalf("expected initial detail load for selected issue tm-9, got %q", m.detail.Detail.Summary.ID)
+	}
+
+	// Re-seed with the "after edit" detail so subsequent Issue() call returns updated data.
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth edited", Status: "open", Type: "task", Priority: 2},
+		Description: "detail after edit",
+	})
+	mark := gw.resetMark()
+
+	// Phase 1: press 'e' → prepareEditCmd.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatalf("expected edit command from edit hotkey")
+	}
+
+	// Phase 2: run prepareEditCmd → editIssuePreparedMsg; model returns tea.Exec cmd.
+	preparedMsg := cmd()
+	prepared, ok := preparedMsg.(editIssuePreparedMsg)
+	if !ok {
+		t.Fatalf("expected editIssuePreparedMsg, got %T", preparedMsg)
+	}
+	next, execCmd := m.Update(prepared)
+	m = next.(Model)
+	if execCmd == nil {
+		t.Fatalf("expected tea.Exec command after prepare message")
+	}
+
+	// Phase 3: inject editorExitedMsg directly (bypasses real tea.Exec in unit tests).
+	next, applyCmd := m.Update(editorExitedMsg{prepared: prepared.prepared, execErr: nil})
+	m = next.(Model)
+	if applyCmd == nil {
+		t.Fatalf("expected apply command after editor exited message")
+	}
+	m = applyMessages(t, m, runBatch(applyCmd))
+
+	if len(fakeEditor.Calls) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	}
+	if fakeEditor.Calls[0].IssueID != "tm-9" {
+		t.Fatalf("expected editor call for tm-9, got %q", fakeEditor.Calls[0].IssueID)
+	}
+
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+		t.Fatalf("expected detail reload via Issue after successful update, calls=%#v", gw.Calls())
+	}
+
+	if m.detail.Detail.Summary.Title != "Ninth edited" {
+		t.Fatalf("expected updated detail title after reload, got %q", m.detail.Detail.Summary.Title)
+	}
+	if m.detail.Detail.Description != "detail after edit" {
+		t.Fatalf("expected updated detail description after reload, got %q", m.detail.Detail.Description)
+	}
+}
+
+func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-9", "Ninth", "task", 2)
+	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
+		Description: "detail before edit",
+	})
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+	fakeEditor := &fakes.FakeEditor{}
+	services.Editor = fakeEditor
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	mark := gw.resetMark()
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+
+	if cmd == nil {
+		t.Fatalf("expected editor command from edit hotkey")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if len(fakeEditor.Calls) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	}
+	if fakeEditor.Calls[0].IssueID != "tm-9" {
+		t.Fatalf("expected selected detail issue tm-9, got %q", fakeEditor.Calls[0].IssueID)
+	}
+
+	if len(fakeLauncher.Calls) != 0 {
+		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls)
+	}
+
+	if gw.hasCallSince(mark, fakes.MethodIssue) {
+		t.Fatalf("did not expect issue reload from launcher action, calls=%#v", gw.Calls())
+	}
+}
+
+func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
+	gw.seedInProgress("tm-2", "In progress", "task", 2)
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(fakeLauncher.Calls) != 1 || fakeLauncher.Calls[0].Action != "nvim" {
+		t.Fatalf("expected nvim launcher call before toast assertion, got %#v", fakeLauncher.Calls)
+	}
+
+	next, _ = m.Update(launchActionResultMsg{action: "nvim", err: nil})
+	m = next.(Model)
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if len(fakeLauncher.Calls) != 3 {
+		t.Fatalf("expected 3 launcher calls, got %d", len(fakeLauncher.Calls))
+	}
+
+	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
+	if actions[0] != "nvim" || actions[1] != "opencode" || actions[2] != "shell-command" {
+		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
+	}
+}
+
+func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw.seedInProgress("tm-2", "In progress", "task", 2)
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, _ := m.Update(launchActionResultMsg{action: "nvim", err: nil})
+	m = next.(Model)
+
+	view := m.View()
+	if !strings.Contains(view, "background (no return flow)") || !strings.Contains(view, "Use e for edit/save round-trip") {
+		t.Fatalf("expected launcher lifecycle guidance toast, got:\n%s", view)
+	}
+}

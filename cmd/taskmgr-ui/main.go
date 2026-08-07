@@ -1,3 +1,8 @@
+// Command taskmgr-ui is the terminal UI for browsing task-manager issues.
+//
+// This package owns the pre-TUI surface only: flag parsing, config resolution,
+// logging setup, and repository backend selection. Everything after the Bubble
+// Tea program starts belongs to internal/app.
 package main
 
 import (
@@ -37,40 +42,37 @@ type startupOptions struct {
 	repoFile    string // resolved path; source of truth for --repo memory, ignored by taskmgr
 }
 
-// constructRepository builds and wires the repository for startInteractive.
-// It returns the repository, a cleanup function to call on exit, and any
-// construction error. The cleanup function is always safe to call even when
-// an error is returned (it is a no-op in that case).
-func constructRepository(ctx context.Context, opts startupOptions) (repository.Repository, func(), error) {
-	noop := func() {}
-
+// buildRepository selects and opens the repository backend for startInteractive.
+// Neither backend needs shutdown work: the memory backend is a loaded value, and
+// the taskmgr backend's store holds no handle to release.
+func buildRepository(opts startupOptions) (repository.Repository, error) {
 	switch opts.repoFlag {
 	case "memory":
 		loaded, err := filestorage.Load(opts.repoFile)
 		if err != nil {
-			return nil, noop, fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
+			return nil, fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
 		}
-		return loaded, noop, nil
+		return loaded, nil
 
 	default: // "taskmgr" (default) or unset
 		store, err := tasks.Open(opts.projectRoot)
 		if err != nil {
-			return nil, noop, fmt.Errorf("failed to open task-manager store at %q: %w", opts.projectRoot, err)
+			return nil, fmt.Errorf("failed to open task-manager store at %q: %w", opts.projectRoot, err)
 		}
-		backend := repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor()))
-		return backend, noop, nil
+		return repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())), nil
 	}
 }
 
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
+	// Cancelled when program.Run returns, so repository reads still in flight at
+	// shutdown are abandoned rather than waited on.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	repo, cleanup, err := constructRepository(ctx, opts)
+	repo, err := buildRepository(opts)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
 
 	services, err := app.NewServices(repo, cfg, opts.projectRoot)
 	if err != nil {
@@ -80,7 +82,10 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		services.Logger = opts.logManager.Logger()
 	}
 
-	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{DisableAutoRefresh: !opts.autoRefresh})
+	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
+		DisableAutoRefresh: !opts.autoRefresh,
+		Ctx:                ctx,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize app model: %w", err)
 	}

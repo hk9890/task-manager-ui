@@ -67,7 +67,7 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 	m.detail.Loading = true
 	m.detail.Error = ""
 	m.detail.TargetID = selection.Issue.ID
-	return loadDetailCmd(m.services, selection.Issue.ID)
+	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
 }
 
 func (m Model) selectedIssueID() (string, bool) {

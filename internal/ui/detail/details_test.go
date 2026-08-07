@@ -2,8 +2,6 @@ package detail
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,19 +14,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
-
-func assertGolden(t *testing.T, output []byte, name string) {
-	t.Helper()
-
-	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
-		path := filepath.Join("testdata", name)
-		if err := os.WriteFile(path, output, 0o600); err != nil {
-			t.Fatalf("write golden %s: %v", path, err)
-		}
-	}
-
-	ui.AssertMatchesGolden(t, output, name)
-}
 
 func TestRenderMinimalGolden(t *testing.T) {
 	t.Parallel()
@@ -47,7 +32,7 @@ func TestRenderMinimalGolden(t *testing.T) {
 		Width: 120,
 	})
 
-	assertGolden(t, []byte(view), "minimal.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "minimal_w120.golden")
 }
 
 func TestRenderFullGolden(t *testing.T) {
@@ -82,7 +67,7 @@ func TestRenderFullGolden(t *testing.T) {
 		Width: 120,
 	})
 
-	assertGolden(t, []byte(view), "full.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "full_w120.golden")
 }
 
 func TestRenderCommentsGolden(t *testing.T) {
@@ -108,7 +93,7 @@ func TestRenderCommentsGolden(t *testing.T) {
 		Width: 100,
 	})
 
-	assertGolden(t, []byte(view), "comments.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "comments_w100.golden")
 }
 
 func TestRenderDependencyRichGolden(t *testing.T) {
@@ -141,7 +126,7 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 		Width: 100,
 	})
 
-	assertGolden(t, []byte(view), "dependency_rich.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "dependency_rich_w100.golden")
 }
 
 func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
@@ -197,7 +182,7 @@ func TestRenderCompactGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	assertGolden(t, []byte(view), "compact.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "compact_w56.golden")
 }
 
 func TestRenderCompactClosedDurationGolden(t *testing.T) {
@@ -224,7 +209,7 @@ func TestRenderCompactClosedDurationGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	assertGolden(t, []byte(view), "compact_closed_duration.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "compact_closed_duration_w56.golden")
 }
 
 func TestRenderCompactWithChildrenGolden(t *testing.T) {
@@ -253,7 +238,7 @@ func TestRenderCompactWithChildrenGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	assertGolden(t, []byte(view), "compact_with_children.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "compact_with_children_w56.golden")
 }
 
 func TestRenderWideThreeColumnGolden(t *testing.T) {
@@ -297,7 +282,7 @@ func TestRenderWideThreeColumnGolden(t *testing.T) {
 		Width:                  InspectorThreeColumnMinWidth,
 	})
 
-	assertGolden(t, []byte(view), "wide_three_column.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "wide_three_column_w3col.golden")
 }
 
 func TestRenderFallbackKeepsInlineRelatedWorkGolden(t *testing.T) {
@@ -321,7 +306,7 @@ func TestRenderFallbackKeepsInlineRelatedWorkGolden(t *testing.T) {
 		Width: InspectorThreeColumnMinWidth - 1,
 	})
 
-	assertGolden(t, []byte(view), "fallback_inline_related_work.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "fallback_inline_related_work_w3col_less1.golden")
 }
 
 func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
@@ -1350,7 +1335,7 @@ func TestRenderLongDepsWindowGolden(t *testing.T) {
 		t.Fatalf("expected 'N of M' in Dependencies header when window clips, got:\n%s", plain)
 	}
 
-	assertGolden(t, []byte(view), "long_deps_window.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "long_deps_window_w3col.golden")
 }
 
 // TestDependencyRefLineIndexChildrenConsistency asserts that BrowserSelectedIndex
@@ -1458,7 +1443,7 @@ func TestRenderChildrenGroupGolden(t *testing.T) {
 		Height: 24,
 	})
 
-	assertGolden(t, []byte(view), "children_group.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "children_group_w2col.golden")
 }
 
 // --- Browser-panel cursor golden assertions ---
@@ -1495,7 +1480,7 @@ func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 		Height:                 18,
 	})
 
-	assertGolden(t, []byte(view), "cursor_row_selection_prefix.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "cursor_row_selection_prefix_w2col.golden")
 
 	// The cursor row must carry the › selection prefix.
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
@@ -1532,7 +1517,7 @@ func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 		Height:                 18,
 	})
 
-	assertGolden(t, []byte(view), "epic_children_cursor.golden")
+	ui.AssertMatchesGolden(t, []byte(view), "epic_children_cursor_w3col.golden")
 
 	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
 	// The cursor row (tm-child1) must carry the › selection prefix.
@@ -1605,4 +1590,78 @@ func TestContentBodySkeletonIsProseNotBoardRows(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMaxScrollOffsetsReportsPaneInnerHeights pins the geometry the controller
+// now consumes instead of re-deriving. mode/detail used to compute the
+// responsive split itself, through two exported forwarders, so a change to the
+// split here silently desynchronised scroll clamping there with nothing
+// type-checking the agreement. These assertions are that check.
+func TestMaxScrollOffsetsReportsPaneInnerHeights(t *testing.T) {
+	t.Parallel()
+
+	stateAt := func(width, height int) State {
+		return State{
+			Detail: domain.IssueDetail{
+				Summary: domain.IssueSummary{ID: "tm-1", Title: "One", Status: "open", Type: "task"},
+			},
+			Width:  width,
+			Height: height,
+		}
+	}
+
+	t.Run("responsive layout splits the bottom section", func(t *testing.T) {
+		t.Parallel()
+
+		const width, height = InspectorTwoColumnMinWidth - 1, 40
+		if !usesResponsiveDetailLayout(width) {
+			t.Fatalf("width %d must select the responsive layout for this test to mean anything", width)
+		}
+
+		wantContent, bottom := splitResponsiveLayoutHeights(height)
+		got := MaxScrollOffsets(stateAt(width, height))
+
+		if got.ContentInnerHeight != wantContent-2 {
+			t.Errorf("ContentInnerHeight = %d, want %d (content height minus 2 borders)", got.ContentInnerHeight, wantContent-2)
+		}
+		// Dependencies and Metadata share the bottom section in this layout.
+		if got.DependenciesInnerHeight != bottom-2 {
+			t.Errorf("DependenciesInnerHeight = %d, want %d (bottom height minus 2 borders)", got.DependenciesInnerHeight, bottom-2)
+		}
+		if got.MetadataInnerHeight != got.DependenciesInnerHeight {
+			t.Errorf("Metadata (%d) and Dependencies (%d) share the bottom section and must report the same inner height",
+				got.MetadataInnerHeight, got.DependenciesInnerHeight)
+		}
+	})
+
+	t.Run("three-pane layout gives every pane the full height", func(t *testing.T) {
+		t.Parallel()
+
+		const width, height = InspectorThreeColumnMinWidth, 40
+		if usesResponsiveDetailLayout(width) {
+			t.Fatalf("width %d must select the three-pane layout for this test to mean anything", width)
+		}
+
+		got := MaxScrollOffsets(stateAt(width, height))
+		for name, inner := range map[string]int{
+			"Dependencies": got.DependenciesInnerHeight,
+			"Content":      got.ContentInnerHeight,
+			"Metadata":     got.MetadataInnerHeight,
+		} {
+			if inner != height-2 {
+				t.Errorf("%sInnerHeight = %d, want %d (viewport height minus 2 borders)", name, inner, height-2)
+			}
+		}
+	})
+
+	t.Run("degenerate heights stay at least one row", func(t *testing.T) {
+		t.Parallel()
+
+		for _, height := range []int{1, 2, 3} {
+			got := MaxScrollOffsets(stateAt(InspectorTwoColumnMinWidth-1, height))
+			if got.ContentInnerHeight < 1 || got.DependenciesInnerHeight < 1 || got.MetadataInnerHeight < 1 {
+				t.Errorf("height=%d produced a non-positive inner height: %+v", height, got)
+			}
+		}
+	})
 }

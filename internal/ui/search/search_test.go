@@ -2,8 +2,6 @@ package search
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,19 +12,6 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
-
-func assertGoldenNormalized(t *testing.T, output []byte, name string) {
-	t.Helper()
-
-	if os.Getenv("TASKMGR_UI_UPDATE_GOLDEN") == "1" {
-		path := filepath.Join("testdata", name)
-		if err := os.WriteFile(path, output, 0o600); err != nil {
-			t.Fatalf("write golden %s: %v", path, err)
-		}
-	}
-
-	testui.AssertMatchesGoldenNormalized(t, output, name)
-}
 
 func TestRenderResultsFirstSearchLayout(t *testing.T) {
 	t.Parallel()
@@ -200,7 +185,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:         28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_results_preview_w120.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_results_preview_w120.golden")
 	})
 
 	t.Run("results_loading_stub_w120", func(t *testing.T) {
@@ -220,7 +205,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:        28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_results_loading_stub_w120.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_results_loading_stub_w120.golden")
 	})
 
 	t.Run("no_search_yet_w120", func(t *testing.T) {
@@ -231,7 +216,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:  28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_no_search_yet_w120.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_no_search_yet_w120.golden")
 	})
 
 	t.Run("no_matches_w120", func(t *testing.T) {
@@ -245,7 +230,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:       28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_no_matches_w120.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_no_matches_w120.golden")
 	})
 
 	t.Run("results_narrow_w80", func(t *testing.T) {
@@ -263,7 +248,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:     24,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_results_narrow_w80.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_results_narrow_w80.golden")
 	})
 
 	t.Run("results_boundary_w110", func(t *testing.T) {
@@ -282,7 +267,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:         28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_results_boundary_w110.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_results_boundary_w110.golden")
 	})
 
 	t.Run("default_all_results_w120", func(t *testing.T) {
@@ -299,7 +284,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:         28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_default_all_results_w120.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_default_all_results_w120.golden")
 	})
 
 	// Stale-draft state: Query != AppliedQuery with prior results still visible.
@@ -320,7 +305,7 @@ func TestRenderGoldens(t *testing.T) {
 			Height:     28,
 		})
 
-		assertGoldenNormalized(t, []byte(view), "search_results_stale_draft_w120.golden")
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "search_results_stale_draft_w120.golden")
 	})
 }
 

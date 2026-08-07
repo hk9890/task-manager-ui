@@ -2,6 +2,7 @@ package repository_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"testing"
@@ -135,6 +136,100 @@ func buildTaskmgrBackendWithClosed(t *testing.T) repository.Repository {
 		t.Fatalf("CloseIssue: %v", err)
 	}
 	return r
+}
+
+// backends returns the two conformance backends under their display names, for
+// clause tests that assert both implementations behave identically.
+func backends(t *testing.T) []struct {
+	name string
+	repo repository.Repository
+} {
+	t.Helper()
+	return []struct {
+		name string
+		repo repository.Repository
+	}{
+		{"memory", buildMemoryBackend(t)},
+		{"taskmgr", buildTaskmgrBackend(t)},
+	}
+}
+
+// TestRepositoryContractConformance pins the clauses the Repository interface
+// godoc states, one subtest per clause, against both backends. Prose in
+// repository.go is not enforcement: before this table existed the interface
+// documented an Issue() error contract that neither backend implemented and a
+// concurrency guarantee only one of them provided, and nothing failed. A clause
+// worth writing down belongs here.
+func TestRepositoryContractConformance(t *testing.T) {
+	t.Run("Catalogs name sets match across backends", func(t *testing.T) {
+		bs := backends(t)
+		names := func(r repository.Repository) (statuses, types []string) {
+			c, err := r.Catalogs(context.Background())
+			if err != nil {
+				t.Fatalf("Catalogs: %v", err)
+			}
+			for _, s := range c.Statuses {
+				statuses = append(statuses, s.Name)
+			}
+			for _, ty := range c.Types {
+				types = append(types, ty.Name)
+			}
+			sort.Strings(statuses)
+			sort.Strings(types)
+			return statuses, types
+		}
+
+		memStatuses, memTypes := names(bs[0].repo)
+		tmStatuses, tmTypes := names(bs[1].repo)
+
+		if !equalStrings(memStatuses, tmStatuses) {
+			t.Errorf("status catalogs diverged: memory=%v taskmgr=%v — a form fed by the memory fixture would offer values the real store rejects",
+				memStatuses, tmStatuses)
+		}
+		if !equalStrings(memTypes, tmTypes) {
+			t.Errorf("type catalogs diverged: memory=%v taskmgr=%v — a form fed by the memory fixture would offer values the real store rejects",
+				memTypes, tmTypes)
+		}
+	})
+
+	t.Run("Issue on an unknown ID returns ErrIssueNotFound", func(t *testing.T) {
+		for _, b := range backends(t) {
+			_, err := b.repo.Issue(context.Background(), "no-such-issue")
+			if !errors.Is(err, repository.ErrIssueNotFound) {
+				t.Errorf("%s: Issue(unknown) = %v, want repository.ErrIssueNotFound", b.name, err)
+			}
+		}
+	})
+
+	t.Run("write methods on an unknown ID return ErrorCodeCommandFailed", func(t *testing.T) {
+		for _, b := range backends(t) {
+			ctx := context.Background()
+			status := "closed"
+			for op, err := range map[string]error{
+				"UpdateIssue": b.repo.UpdateIssue(ctx, "no-such-issue", domain.UpdateIssueInput{Status: &status}),
+				"CloseIssue":  b.repo.CloseIssue(ctx, "no-such-issue", domain.CloseIssueInput{Reason: "done"}),
+				"AddComment":  b.repo.AddComment(ctx, "no-such-issue", domain.AddCommentInput{Body: "hi"}),
+			} {
+				var re domain.RepositoryError
+				if !errors.As(err, &re) || re.Code != domain.ErrorCodeCommandFailed {
+					t.Errorf("%s: %s(unknown) = %v, want domain.RepositoryError with ErrorCodeCommandFailed", b.name, op, err)
+				}
+			}
+		}
+	})
+
+	t.Run("a cancelled context is reported as ctx.Err", func(t *testing.T) {
+		for _, b := range backends(t) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if _, err := b.repo.Dashboard(ctx, repository.DashboardOptions{}); !errors.Is(err, context.Canceled) {
+				t.Errorf("%s: Dashboard(cancelled) = %v, want context.Canceled", b.name, err)
+			}
+			if _, err := b.repo.Search(ctx, domain.SearchIssuesQuery{Text: "widget"}); !errors.Is(err, context.Canceled) {
+				t.Errorf("%s: Search(cancelled) = %v, want context.Canceled", b.name, err)
+			}
+		}
+	})
 }
 
 // TestSearchIncludesClosedIssuesByDefault pins that both backends return closed

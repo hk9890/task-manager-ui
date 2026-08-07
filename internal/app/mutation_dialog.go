@@ -63,9 +63,9 @@ type pendingDialogGuard struct {
 	kind   mutationKind
 }
 
-func loadMutationCatalogsCmd(services Services, kind mutationKind, issue domain.IssueSummary) tea.Cmd {
+func loadMutationCatalogsCmd(ctx context.Context, services Services, kind mutationKind, issue domain.IssueSummary) tea.Cmd {
 	return func() tea.Msg {
-		catalogs, err := services.Repo.Catalogs(context.Background())
+		catalogs, err := services.Repo.Catalogs(ctx)
 		if err != nil {
 			return mutationCatalogsLoadedMsg{kind: kind, issue: issue, err: fmt.Errorf("catalogs: %w", err)}
 		}
@@ -229,31 +229,31 @@ func (m Model) handleMutationResult(modeCmd tea.Cmd, msg mutationResultMsg) (tea
 	case mutationUpdate:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.services, msg.issueID),
+			loadDetailCmd(m.ctx, m.services, msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationClose:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Closed issue %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.services, msg.issueID),
+			loadDetailCmd(m.ctx, m.services, msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationComment:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.services, msg.issueID),
+			loadDetailCmd(m.ctx, m.services, msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationStatus:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.services, msg.issueID),
+			loadDetailCmd(m.ctx, m.services, msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationPriority:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.services, msg.issueID),
+			loadDetailCmd(m.ctx, m.services, msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	default:

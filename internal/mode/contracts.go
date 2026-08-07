@@ -36,5 +36,4 @@ type Action string
 
 const (
 	ActionOpenDetail Action = "open_detail"
-	ActionLaunch     Action = "launch"
 )

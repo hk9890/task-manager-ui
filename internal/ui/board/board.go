@@ -1,3 +1,5 @@
+// Package board renders the dashboard columns: headers, row windows, and the
+// responsive width split that decides how many columns fit.
 package board
 
 import (

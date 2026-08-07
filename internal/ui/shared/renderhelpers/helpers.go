@@ -1,3 +1,7 @@
+// Package renderhelpers turns issue fields into the compact tokens the board and
+// search rows display — type glyphs, priority and status markers, truncated IDs.
+// Its issue-type token set must match styles.IssueTypeStyle; type_style_parity_test.go
+// pins that.
 package renderhelpers
 
 import (
@@ -9,7 +13,9 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
-// CompactIssueType returns a short issue-type marker.
+// CompactIssueType returns a short issue-type marker. The token set must match
+// styles.IssueTypeStyle — a type with a distinct glyph but no distinct colour
+// reads as "unrecognised" on the board. type_style_parity_test.go pins that.
 func CompactIssueType(issueType string) string {
 	switch NormalizeToken(issueType) {
 	case "bug":
@@ -24,8 +30,6 @@ func CompactIssueType(issueType string) string {
 		return "C"
 	case "doc", "docs":
 		return "D"
-	case "spike":
-		return "S"
 	default:
 		return "?"
 	}

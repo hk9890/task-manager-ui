@@ -1,3 +1,7 @@
+// Package board is the board-mode controller: it owns column selection, scroll
+// offsets, and dashboard query routing, and emits mode.SelectionChangedMsg for
+// the shell to react to. Column layout is composed by internal/dashboard and
+// drawn by internal/ui/board.
 package board
 
 import (
@@ -304,20 +308,6 @@ func (m *Model) sectionItemCapacity() int {
 		rows = 1
 	}
 	return rows
-}
-
-// CurrentSelection returns the active issue selection for tests. Production
-// code uses the unexported currentSelection helper directly; this exported
-// wrapper exists as a test seam so model_test.go can assert on selection
-// state without exposing internals to other packages.
-func (m *Model) CurrentSelection() *mode.Selection {
-	return m.currentSelection()
-}
-
-// ScrollOffsetForColumn returns the per-column scroll offset for the given
-// column index. This is a test seam exported for assertions in model_test.go.
-func (m *Model) ScrollOffsetForColumn(colIdx int) int {
-	return m.scrollOffset[colIdx]
 }
 
 // IsLoading reports whether any column is still in its loading state.

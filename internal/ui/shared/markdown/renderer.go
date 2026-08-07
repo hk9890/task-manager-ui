@@ -1,3 +1,5 @@
+// Package markdown renders issue descriptions and comment bodies for terminal
+// display.
 package markdown
 
 import (

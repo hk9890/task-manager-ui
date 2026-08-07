@@ -1288,7 +1288,7 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 	paneInner := max(1, height-2) // three-pane: height-2 = 18
 	offset := m.DependenciesScrollOffset
 	if m.BrowserSelectedIndex >= 0 {
-		lineIdx := dependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
+		lineIdx := detail.DependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
 		if lineIdx >= 0 && (lineIdx < offset || lineIdx >= offset+paneInner) {
 			t.Errorf("selection line %d not in window [%d, %d)", lineIdx, offset, offset+paneInner)
 		}

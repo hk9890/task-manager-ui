@@ -1,14 +1,17 @@
 package app
 
 import (
+	"errors"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // These tests pin the fatal-error screen quit affordances. The fatal screen
@@ -93,5 +96,149 @@ func TestFatalErrorScreen_CtrlCQuits(t *testing.T) {
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if !isQuitCmd(cmd) {
 		t.Fatalf("expected ctrl+c to produce tea.Quit on fatal screen; got cmd=%v", cmd)
+	}
+}
+
+func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErrTitle != "" {
+		t.Fatalf("expected fatalErr to be empty after successful health check, got %q", m.fatalErrTitle)
+	}
+}
+
+func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
+		Code:    domain.ErrorCodeNoDatabaseFound,
+		Message: "no task-manager store found",
+	})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	view := m.View()
+	if !strings.Contains(view, "no task-manager store here") {
+		t.Fatalf("expected fatal error title in View(), got %q", view)
+	}
+	if !strings.Contains(view, "taskmgr") {
+		t.Fatalf("expected 'taskmgr' mention in View(), got %q", view)
+	}
+}
+
+func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
+		Code:    domain.ErrorCodeNoDatabaseFound,
+		Message: "no task-manager store found",
+	})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErrTitle == "" {
+		t.Fatal("precondition: expected fatalErr to be set")
+	}
+
+	// Window resize should update dimensions.
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	if m.width != 120 || m.height != 40 {
+		t.Fatalf("expected width=120 height=40 after resize, got %d %d", m.width, m.height)
+	}
+
+	// Quit key should return tea.Quit.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if cmd == nil {
+		t.Fatal("expected tea.Quit cmd from 'q' key when fatalErr is set, got nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+
+	// Arbitrary key should be swallowed (no cmd).
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if cmd != nil {
+		t.Fatalf("expected nil cmd for non-quit key when fatalErr is set, got non-nil")
+	}
+}
+
+func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
+		Code:      domain.ErrorCodeNoDatabaseFound,
+		Operation: "health check",
+		Message:   "no task-manager store found",
+	})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	if m.fatalErrTitle == "" {
+		t.Fatal("expected fatalErrTitle to be set after NoDatabaseFound health check")
+	}
+	view := m.View()
+	if !strings.Contains(view, "no task-manager store here") {
+		t.Fatalf("expected no-database title in View(), got %q", view)
+	}
+	if !strings.Contains(view, "taskmgr") {
+		t.Fatalf("expected 'taskmgr' hint in View(), got %q", view)
+	}
+}
+
+func TestModelFatalErrIgnoresNonRepositoryError(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.SetError(fakes.MethodHealthCheck, errors.New("some plain error"))
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	msgs := runBatch(m.Init())
+	m = applyMessages(t, m, msgs)
+
+	// A non-RepositoryError does not set fatalErr — app loads normally.
+	if m.fatalErrTitle != "" {
+		t.Fatalf("expected fatalErr to be empty for non-RepositoryError, got %q", m.fatalErrTitle)
 	}
 }

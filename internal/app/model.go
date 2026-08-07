@@ -31,6 +31,11 @@ type Model struct {
 	services Services
 	keys     config.ResolvedKeyBindings
 
+	// ctx is the application lifecycle context, cancelled when the process is
+	// shutting down. Shell-issued repository reads use it so quitting abandons
+	// them. Never nil — NewModelWithOptions defaults it to context.Background().
+	ctx context.Context
+
 	// fatalErrTitle and fatalErrBody are set when a startup health check detects
 	// that the app cannot run. When fatalErrTitle is non-empty, View() renders
 	// the fatal error screen and Update() only handles quit keys and window resize.
@@ -134,22 +139,25 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		MinWidth:    72,
 	}, modal.BindingsFromConfig(keys))
 
+	ctx := runtime.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return Model{
 		services:       services,
 		keys:           keys,
+		ctx:            ctx,
 		active:         mode.Board,
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
-		// context.Background() is used here because the app model has no parent
-		// context today. This preserves prior behaviour while making future
-		// cancellation threading possible without touching the mode packages.
-		board:  boardmode.NewModel(context.Background(), services.Repo, logging.WithComponent(services.Logger, "board"), keys),
-		search: searchmode.NewModel(context.Background(), services.Repo, logging.WithComponent(services.Logger, "search"), keys),
-		detail: detail.Model{Keys: keys},
-		toast:  toaster.New(),
-		help:   help,
-		width:  defaultViewportWidth,
-		height: defaultViewportHeight,
+		board:          boardmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "board"), keys),
+		search:         searchmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "search"), keys),
+		detail:         detail.Model{Keys: keys},
+		toast:          toaster.New(),
+		help:           help,
+		width:          defaultViewportWidth,
+		height:         defaultViewportHeight,
 		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
 			mode.Board:  {lastRefresh: now},
 			mode.Search: {lastRefresh: now},
@@ -162,6 +170,18 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 	}, nil
 }
 
+// logger returns the injected runtime logger, which carries the session_id,
+// project_root and build_version provenance and writes to the persistent JSON
+// Lines log. Never write to slog.Default() from a runtime path: that is the
+// stock stderr handler, and startInteractive suppresses stderr precisely
+// because a stray write corrupts the alt-screen frame Bubble Tea owns.
+func (m Model) logger() *slog.Logger {
+	if m.services.Logger != nil {
+		return m.services.Logger
+	}
+	return slog.Default()
+}
+
 // Init fires the startup health check and the spinner tick. Board loads are
 // deferred until the health check passes (see startupHealthCheckMsg handler in
 // Update). Search is deferred further until the user first switches to search
@@ -169,13 +189,14 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 func (m Model) Init() tea.Cmd {
 	m.applyWorkspaceSizeToBrowseModes()
 	healthCheckCmd := func() tea.Msg {
-		err := m.services.Repo.HealthCheck(context.Background())
+		err := m.services.Repo.HealthCheck(m.ctx)
 		return startupHealthCheckMsg{err: err}
 	}
+	sweepCmd := m.services.SweepStaleTempFiles()
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, m.scheduleSpinnerTick())
+		return tea.Batch(healthCheckCmd, sweepCmd, m.scheduleSpinnerTick())
 	}
-	return tea.Batch(healthCheckCmd, m.scheduleRefreshTick(), m.scheduleSpinnerTick())
+	return tea.Batch(healthCheckCmd, sweepCmd, m.scheduleRefreshTick(), m.scheduleSpinnerTick())
 }
 
 // lazySearchInitCmd fires m.search.Init() exactly once — the first time the
@@ -210,7 +231,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if errors.As(check.err, &gwErr) && gwErr.Code == domain.ErrorCodeNoDatabaseFound {
 				m.fatalErrTitle = "no task-manager store here"
 				m.fatalErrBody = "No .tasks store was found in this directory.\n\nRun 'taskmgr init' to create one, or use --cwd to point to a directory that contains one."
-				slog.Default().Error("task-manager health check failed", "error", check.err)
+				m.logger().Error("task-manager health check failed", "error", check.err)
 				return m, nil
 			}
 		}
@@ -446,7 +467,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
 				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationStatus, issue))
+				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue))
 			}
 			if m.detail.ConsumeOpenPriorityDialogIntent() {
 				issue := m.detail.Detail.Summary
@@ -492,7 +513,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detail.Error = ""
 				m.detail.SetDrillFromDepsFocus()
 				m.detail.ApplyLoadedDetail(issueID, detail.PlaceholderDetail(issueID, intent.Ref, true))
-				return m, batchCmds(modeCmd, loadDetailCmd(m.services, issueID))
+				return m, batchCmds(modeCmd, loadDetailCmd(m.ctx, m.services, issueID))
 			}
 			if consumed {
 				return m, modeCmd
@@ -506,7 +527,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 				}
 				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationStatus, selection.Issue))
+				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, selection.Issue))
 			}
 			if m.search.ConsumeOpenPriorityDialogIntent() {
 				selection := m.selectedByMode[mode.Search]
@@ -600,17 +621,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
 			}
-			return m, batchCmds(modeCmd, prepareEditCmd(m.services, issueID))
+			return m, batchCmds(modeCmd, prepareEditCmd(m.ctx, m.services, issueID))
 		case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
 			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationCreate, domain.IssueSummary{}))
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
 		case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
 			selection := m.currentSelection()
 			if selection == nil || selection.Issue.ID == "" {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
 			}
 			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.services, mutationUpdate, selection.Issue))
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, selection.Issue))
 		case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
 			selection := m.currentSelection()
 			if selection == nil || selection.Issue.ID == "" {
@@ -639,7 +660,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.services, "nvim", issueContext))
+			return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "nvim", issueContext))
 		case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
 			if m.active != mode.Detail {
 				return m, modeCmd
@@ -648,7 +669,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.services, "opencode", issueContext))
+			return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "opencode", issueContext))
 		case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
 			if m.active != mode.Detail {
 				return m, modeCmd
@@ -657,7 +678,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.services, "shell-command", issueContext))
+			return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "shell-command", issueContext))
 		}
 	}
 

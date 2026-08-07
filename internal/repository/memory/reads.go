@@ -157,11 +157,8 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 	}, nil
 }
 
-// Issue implements repository.Repository.
-//
-// Returns repository.ErrIssueNotFound for unknown IDs (local-state carve-out
-// as documented in the Repository interface). The domain.RepositoryError path is
-// reserved for taskmgr-backed implementations.
+// Issue implements repository.Repository. Unknown IDs return
+// repository.ErrIssueNotFound, as on every backend.
 func (r *Repository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.IssueDetail{}, err

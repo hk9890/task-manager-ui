@@ -14,9 +14,8 @@ func repoError(code domain.ErrorCode, op, message string, cause error) domain.Re
 }
 
 // mapIssueErr normalizes errors from the single-issue Issue() read. An unknown
-// ID becomes repository.ErrIssueNotFound — the local-state carve-out documented
-// on the Repository interface and used by the memory backend. Other errors fall
-// through to mapReadErr.
+// ID becomes repository.ErrIssueNotFound, the sentinel every backend returns
+// from Issue. Other errors fall through to mapReadErr.
 func mapIssueErr(op string, err error) error {
 	if err == nil {
 		return nil

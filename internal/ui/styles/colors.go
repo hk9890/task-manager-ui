@@ -124,7 +124,9 @@ var (
 					UnderlineSpaces(true)
 )
 
-// IssueTypeStyle returns the compact board style for an issue type token.
+// IssueTypeStyle returns the compact board style for an issue type token. The
+// token set must match renderhelpers.CompactIssueType; see the parity test in
+// internal/ui/shared/renderhelpers.
 func IssueTypeStyle(issueType string) lipgloss.Style {
 	switch normalizeIssueToken(issueType) {
 	case "bug":
@@ -137,7 +139,7 @@ func IssueTypeStyle(issueType string) lipgloss.Style {
 		return IssueTypeEpicStyle
 	case "chore":
 		return IssueTypeChoreStyle
-	case "doc":
+	case "doc", "docs":
 		return IssueTypeDocStyle
 	default:
 		return lipgloss.NewStyle().Foreground(TextMutedColor)
