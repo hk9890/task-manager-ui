@@ -270,7 +270,7 @@ Key tasks:
 **Tool version pins:** `golangci-lint` and `gotestsum` are pinned in `.mise.toml` under `[tools]` (no leading `v`, e.g. `2.1.6`). `mise` installs and resolves these binaries on the `PATH` for tasks like `mise run lint` and `mise run test`.
 
 For the authoritative pre-handoff landing workflow, see
-`docs/CHANGE-WORKFLOW.md#code-change-verification-sequence`.
+`docs/CHANGE-WORKFLOW.md#pre-handoff-gates`.
 
 `mise run quality` covers:
 
