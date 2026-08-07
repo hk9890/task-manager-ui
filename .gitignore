@@ -3,7 +3,11 @@
 .coder/
 .opencode/
 .idea/
-.claude/
+# .claude/ is local except the shared worktree guard (docs/CHANGE-WORKFLOW.md).
+# Needs the glob form: git cannot re-include a path under an excluded directory.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 /taskmgr-ui
 coverage.out
 coverage-*.out
@@ -15,8 +19,10 @@ __pycache__/
 # Temp/agent extraction dirs (must never be committed)
 .tmp-*/
 
-# Local dev task tracker — kept local, not published
-.tasks/
+# Local dev task tracker — kept local, not published.
+# No trailing slash: in a worktree these are symlinks to the main checkout, and a
+# directory-only pattern would leave them untracked-but-visible in git status.
+.tasks
 
 # Local, non-shared working notes
-hako-private/
+hako-private
