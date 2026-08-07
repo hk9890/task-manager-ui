@@ -22,7 +22,7 @@ func CompactIssueType(issueType string) string {
 		return "E"
 	case "chore":
 		return "C"
-	case "docs":
+	case "doc", "docs":
 		return "D"
 	case "spike":
 		return "S"

@@ -302,6 +302,28 @@ func TestAddCommentAndCatalogs(t *testing.T) {
 	}
 }
 
+// Every SDK enum value needs a description here, or the picker renders the value
+// with a blank explanation. This fails when task-manager adds a type or status
+// rather than letting the gap ship silently.
+func TestCatalogDescriptionsCoverEverySDKValue(t *testing.T) {
+	r, _ := newTestRepo(t)
+
+	cat, err := r.Catalogs(context.Background())
+	if err != nil {
+		t.Fatalf("Catalogs: %v", err)
+	}
+	for _, s := range cat.Statuses {
+		if s.Description == "" {
+			t.Errorf("status %q has no description", s.Name)
+		}
+	}
+	for _, ty := range cat.Types {
+		if ty.Description == "" {
+			t.Errorf("type %q has no description", ty.Name)
+		}
+	}
+}
+
 func TestContextCancellation(t *testing.T) {
 	r, _ := newTestRepo(t)
 	id := mustCreate(t, r, domain.CreateIssueInput{Title: "x"})

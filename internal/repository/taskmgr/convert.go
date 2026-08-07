@@ -153,6 +153,8 @@ func typeDescription(t tasks.Type) string {
 		return "A grouping of related issues"
 	case tasks.TypeChore:
 		return "Maintenance or housekeeping"
+	case tasks.TypeDoc:
+		return "Reference material, not work"
 	default:
 		return ""
 	}

@@ -40,6 +40,8 @@ func TestIssueTypeStyle(t *testing.T) {
 		{"EPIC", IssueTypeEpicStyle},
 		{"chore", IssueTypeChoreStyle},
 		{"Chore", IssueTypeChoreStyle},
+		{"doc", IssueTypeDocStyle},
+		{"Doc", IssueTypeDocStyle},
 	}
 
 	for _, tc := range tests {
@@ -65,6 +67,7 @@ func TestIssueTypeStyleDefaultBranch(t *testing.T) {
 		{"feature", IssueTypeFeatureStyle},
 		{"epic", IssueTypeEpicStyle},
 		{"chore", IssueTypeChoreStyle},
+		{"doc", IssueTypeDocStyle},
 	} {
 		if sameStyle(got, named.style) {
 			t.Fatalf("IssueTypeStyle(\"unknown-type\") unexpectedly matched %s style", named.name)
