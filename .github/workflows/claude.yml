@@ -4,6 +4,9 @@ name: Claude Code
 # Claude (Max subscription) quota is spent only when actually invoked — idle
 # issues and PRs cost nothing. GitHub Actions compute minutes are likewise only
 # used on an actual @claude mention because of the job-level `if:` guard below.
+#
+# This is the only Claude path in CI: PRs get no automatic review. To have one
+# reviewed, comment "@claude review this PR" on it.
 
 on:
   issue_comment:
