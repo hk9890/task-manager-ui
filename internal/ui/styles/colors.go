@@ -61,6 +61,7 @@ var (
 	IssueTypeFeatureColor = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 	IssueTypeEpicColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
 	IssueTypeChoreColor   = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
+	IssueTypeDocColor     = lipgloss.AdaptiveColor{Light: "#0FA3A3", Dark: "#4ECDC4"}
 
 	IssuePriorityP0Color = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
 	IssuePriorityP1Color = lipgloss.AdaptiveColor{Light: "#FF9F43", Dark: "#FF9F43"}
@@ -90,6 +91,7 @@ var (
 	IssueTypeFeatureStyle   = lipgloss.NewStyle().Foreground(IssueTypeFeatureColor)
 	IssueTypeEpicStyle      = lipgloss.NewStyle().Foreground(IssueTypeEpicColor)
 	IssueTypeChoreStyle     = lipgloss.NewStyle().Foreground(IssueTypeChoreColor)
+	IssueTypeDocStyle       = lipgloss.NewStyle().Foreground(IssueTypeDocColor)
 
 	PrimaryButtonStyle = baseButtonStyle.
 				Foreground(ButtonTextColor).
@@ -135,6 +137,8 @@ func IssueTypeStyle(issueType string) lipgloss.Style {
 		return IssueTypeEpicStyle
 	case "chore":
 		return IssueTypeChoreStyle
+	case "doc":
+		return IssueTypeDocStyle
 	default:
 		return lipgloss.NewStyle().Foreground(TextMutedColor)
 	}

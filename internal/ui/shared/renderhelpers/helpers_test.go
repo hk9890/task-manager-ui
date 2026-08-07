@@ -45,6 +45,7 @@ func TestCompactIssueType(t *testing.T) {
 		{name: "bug", input: "BUG", want: "B"},
 		{name: "task", input: "task", want: "T"},
 		{name: "feature", input: "Feature", want: "F"},
+		{name: "doc", input: "doc", want: "D"},
 		{name: "unknown", input: "something_else", want: "?"},
 	}
 
