@@ -230,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var gwErr domain.RepositoryError
 			if errors.As(check.err, &gwErr) && gwErr.Code == domain.ErrorCodeNoDatabaseFound {
 				m.fatalErrTitle = "no task-manager store here"
-				m.fatalErrBody = "No .tasks store was found in this directory.\n\nRun 'taskmgr init' to create one, or use --cwd to point to a directory that contains one."
+				m.fatalErrBody = "No task-manager store resolved for this directory: no local .tasks store, and no central store registered for it.\n\nRun 'taskmgr init' to create one, use --cwd to point at a directory that has one, or use --store-name to open a central store by name ('taskmgr store list' shows them)."
 				m.logger().Error("task-manager health check failed", "error", check.err)
 				return m, nil
 			}

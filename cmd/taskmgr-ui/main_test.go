@@ -2,14 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/hk9890/task-manager/sdk/tasks"
+
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/logging"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
@@ -339,6 +344,7 @@ func TestParseCLIRepoFlags(t *testing.T) {
 		wantCode       int
 		wantRepo       string
 		wantFile       string
+		wantStoreName  string
 		stderrContains []string
 	}{
 		{
@@ -347,6 +353,27 @@ func TestParseCLIRepoFlags(t *testing.T) {
 			wantOK:   true,
 			wantRepo: "taskmgr",
 			wantFile: "",
+		},
+		{
+			name:          "--store-name is accepted in taskmgr mode",
+			args:          []string{"--store-name", "acme"},
+			wantOK:        true,
+			wantRepo:      "taskmgr",
+			wantStoreName: "acme",
+		},
+		{
+			name:          "--store-name is trimmed",
+			args:          []string{"--store-name", "  acme  "},
+			wantOK:        true,
+			wantRepo:      "taskmgr",
+			wantStoreName: "acme",
+		},
+		{
+			name:           "--store-name with --repo memory errors exit 2",
+			args:           []string{"--repo", "memory", "--repo-file", "x.jsonl", "--store-name", "acme"},
+			wantOK:         false,
+			wantCode:       2,
+			stderrContains: []string{"--store-name", "memory"},
 		},
 		{
 			name:     "--repo memory with --repo-file is valid",
@@ -421,6 +448,9 @@ func TestParseCLIRepoFlags(t *testing.T) {
 			if opts.repoFile != tc.wantFile {
 				t.Errorf("opts.repoFile: got %q, want %q", opts.repoFile, tc.wantFile)
 			}
+			if opts.storeName != tc.wantStoreName {
+				t.Errorf("opts.storeName: got %q, want %q", opts.storeName, tc.wantStoreName)
+			}
 		})
 	}
 }
@@ -479,6 +509,35 @@ func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
 	}
 }
 
+// TestRunPassesStoreNameToStartup pins the wiring between the --store-name flag
+// and the startup options buildRepository resolves from.
+func TestRunPassesStoreNameToStartup(t *testing.T) {
+	t.Parallel()
+
+	var seenOpts startupOptions
+	var stderr bytes.Buffer
+	code := runWithLogger(
+		[]string{"--store-name", "acme", "--cwd", t.TempDir()},
+		&bytes.Buffer{},
+		&stderr,
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			seenOpts = opts
+			return nil
+		},
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr=%q)", code, stderr.String())
+	}
+	if seenOpts.storeName != "acme" {
+		t.Errorf("storeName: got %q, want %q", seenOpts.storeName, "acme")
+	}
+}
+
 // TestRunRepoMemoryWithoutFileExitsCode2 verifies that --repo=memory without
 // --repo-file exits with code 2 and a clear message.
 func TestRunRepoMemoryWithoutFileExitsCode2(t *testing.T) {
@@ -528,5 +587,210 @@ func TestResolveAuthor(t *testing.T) {
 				t.Errorf("resolveAuthor() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// --- store resolution tests ---
+//
+// These cover buildRepository's taskmgr path, which must reach a store the way
+// the taskmgr CLI does: a local .tasks by walk-up first, then the central
+// registry. They also pin the project root it hands to the launcher service —
+// the store's project path, not the working directory.
+
+// isolateCentralHome points central-store resolution at a scratch home so a test
+// never reads or writes the developer's real ~/.taskmgr registry. It also clears
+// TASKMGR_DIR, which tasks.Resolve refuses to run under and which a developer
+// shell may have exported.
+func isolateCentralHome(t *testing.T) {
+	t.Helper()
+	t.Setenv("TASKMGR_HOME", filepath.Join(t.TempDir(), "taskmgr-home"))
+	t.Setenv("TASKMGR_DIR", "")
+}
+
+// canonicalPath mirrors the symlink resolution the SDK applies to a project path
+// before reporting it, so expectations hold where the temp directory is itself a
+// symlink (macOS /tmp).
+func canonicalPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return path
+	}
+	return resolved
+}
+
+// seedIssue creates one issue in the store so a test can prove the repository
+// reads through to the store that was actually resolved.
+func seedIssue(t *testing.T, store *tasks.Store, title string) string {
+	t.Helper()
+	res, err := store.Create(tasks.CreateInput{Title: title, Type: "task"})
+	if err != nil {
+		t.Fatalf("store.Create: %v", err)
+	}
+	return res.Issue.ID
+}
+
+// assertReadsIssue asserts the repository serves the seeded issue, which no
+// other store in the test can supply.
+func assertReadsIssue(t *testing.T, repo repository.Repository, id, wantTitle string) {
+	t.Helper()
+	detail, err := repo.Issue(context.Background(), id)
+	if err != nil {
+		t.Fatalf("repo.Issue(%q): %v", id, err)
+	}
+	if detail.Summary.Title != wantTitle {
+		t.Errorf("issue title: got %q, want %q", detail.Summary.Title, wantTitle)
+	}
+}
+
+func TestBuildRepositoryResolvesLocalStoreFromSubdirectory(t *testing.T) {
+	isolateCentralHome(t)
+
+	project := t.TempDir()
+	store, err := tasks.Init(project, "loc")
+	if err != nil {
+		t.Fatalf("tasks.Init: %v", err)
+	}
+	id := seedIssue(t, store, "local store issue")
+
+	sub := filepath.Join(project, "internal", "app")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	repo, projectRoot, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: sub})
+	if err != nil {
+		t.Fatalf("buildRepository: %v", err)
+	}
+	assertReadsIssue(t, repo, id, "local store issue")
+
+	// The walk-up root, not the directory the app was started from: launcher
+	// templates interpolate this as {{project.root}}.
+	if want := canonicalPath(t, project); projectRoot != want {
+		t.Errorf("projectRoot: got %q, want %q", projectRoot, want)
+	}
+}
+
+func TestBuildRepositoryResolvesCentralStore(t *testing.T) {
+	isolateCentralHome(t)
+
+	project := t.TempDir()
+	store, err := tasks.InitCentral(project, "central-fixture", "cen")
+	if err != nil {
+		t.Fatalf("tasks.InitCentral: %v", err)
+	}
+	id := seedIssue(t, store, "central store issue")
+
+	// The regression this guards: the project has no .tasks directory at all,
+	// which is exactly the state `taskmgr store move --central` leaves behind.
+	if _, err := os.Stat(filepath.Join(project, ".tasks")); !os.IsNotExist(err) {
+		t.Fatalf("central fixture unexpectedly has a local .tasks (stat err=%v)", err)
+	}
+
+	repo, projectRoot, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: project})
+	if err != nil {
+		t.Fatalf("buildRepository: %v", err)
+	}
+	assertReadsIssue(t, repo, id, "central store issue")
+
+	if want := canonicalPath(t, project); projectRoot != want {
+		t.Errorf("projectRoot: got %q, want %q", projectRoot, want)
+	}
+
+	// Writes must land in the central store too, and must not materialize a
+	// second, local store beside the project.
+	created, err := repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+		Title: "written to the central store",
+		Type:  "task",
+	})
+	if err != nil {
+		t.Fatalf("repo.CreateIssue: %v", err)
+	}
+	if _, err := store.Detail(created.IssueID); err != nil {
+		t.Errorf("issue %q not readable from the central store: %v", created.IssueID, err)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".tasks")); !os.IsNotExist(err) {
+		t.Errorf("a write created a local .tasks beside the project (stat err=%v)", err)
+	}
+}
+
+func TestBuildRepositoryStoreNameOpensRegisteredStoreFromUnrelatedDirectory(t *testing.T) {
+	isolateCentralHome(t)
+
+	project := t.TempDir()
+	store, err := tasks.InitCentral(project, "named-fixture", "nam")
+	if err != nil {
+		t.Fatalf("tasks.InitCentral: %v", err)
+	}
+	id := seedIssue(t, store, "named store issue")
+
+	repo, projectRoot, err := buildRepository(startupOptions{
+		repoFlag:    "taskmgr",
+		projectRoot: t.TempDir(), // unrelated to the registered project
+		storeName:   "named-fixture",
+	})
+	if err != nil {
+		t.Fatalf("buildRepository: %v", err)
+	}
+	assertReadsIssue(t, repo, id, "named store issue")
+
+	// The override wins over the working directory, and the project root follows
+	// the store rather than the directory the app was started from.
+	if want := canonicalPath(t, project); projectRoot != want {
+		t.Errorf("projectRoot: got %q, want %q", projectRoot, want)
+	}
+}
+
+func TestBuildRepositoryUnknownStoreNameFails(t *testing.T) {
+	isolateCentralHome(t)
+
+	_, _, err := buildRepository(startupOptions{
+		repoFlag:    "taskmgr",
+		projectRoot: t.TempDir(),
+		storeName:   "not-registered",
+	})
+	if err == nil {
+		t.Fatal("expected an error for an unregistered store name")
+	}
+	if !strings.Contains(err.Error(), "not-registered") {
+		t.Errorf("error should name the store, got: %v", err)
+	}
+}
+
+func TestBuildRepositoryNoStoreAnywhereFails(t *testing.T) {
+	isolateCentralHome(t)
+
+	dir := t.TempDir()
+	_, _, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: dir})
+	if err == nil {
+		t.Fatal("expected an error when neither a local nor a central store resolves")
+	}
+	if !strings.Contains(err.Error(), dir) {
+		t.Errorf("error should name the working directory, got: %v", err)
+	}
+}
+
+func TestBuildRepositoryMemoryKeepsWorkingDirectoryAsProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "fixture-1", Title: "Fixture issue", Status: "open", Type: "task"})
+
+	dir := t.TempDir()
+	repoFile := filepath.Join(dir, "repo.jsonl")
+	if err := filestorage.Save(r, repoFile); err != nil {
+		t.Fatalf("filestorage.Save: %v", err)
+	}
+
+	_, projectRoot, err := buildRepository(startupOptions{
+		repoFlag:    "memory",
+		repoFile:    repoFile,
+		projectRoot: dir,
+	})
+	if err != nil {
+		t.Fatalf("buildRepository: %v", err)
+	}
+	if projectRoot != dir {
+		t.Errorf("projectRoot: got %q, want %q", projectRoot, dir)
 	}
 }

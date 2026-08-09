@@ -58,6 +58,27 @@ To attribute a session safely in a collected set of log files, use `session_id`
 together with `project_root` and `build_version`. Startup records inherit those
 root attributes automatically.
 
+### Store-resolution record
+
+Opening the `taskmgr` backend emits one `startup` record, `resolved
+task-manager store`, carrying:
+
+- `kind` — `local`, `central`, or `override_name`
+- `store_path` — the resolved store directory
+- `project_path` — the project the store tracks
+
+This is the record that distinguishes a project running on its own `.tasks`
+directory from one whose store was promoted with `taskmgr store move --central`,
+and it is the first thing to read when the UI opens a board the `taskmgr` CLI
+does not agree with. Note that `project_root` (the root attribute on every
+record) is the working directory, while `project_path` is the store's project —
+they differ for a central store, and for a run started in a subdirectory.
+`project_path` is the root launcher templates interpolate as `{{project.root}}`.
+
+A failure to resolve is reported by the existing `interactive startup failed`
+record instead; it names the working directory, or the store name when
+`--store-name` was given.
+
 ## `--debug` coverage
 
 `--debug` mirrors machine-visible startup diagnostics to `stderr`:
@@ -67,7 +88,12 @@ root attributes automatically.
   - resolved config path
   - resolved cwd
   - auto-refresh enabled/disabled
-  - repo backend (`repo` and `repo_file`)
+  - repo backend (`repo`, `repo_file`, and the `--store-name` override
+    `store_name`)
+
+The store-resolution record described below is not part of the `stderr` mirror:
+it is emitted after stderr suppression is raised for the interactive session, so
+it reaches the persistent log only.
 
 The repository backend is in-process (the task-manager Go SDK,
 `github.com/hk9890/task-manager/sdk/tasks`); there is no external subprocess in

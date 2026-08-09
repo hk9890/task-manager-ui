@@ -10,6 +10,16 @@ Releases page above.
 
 ## Unreleased
 
+- Fixed: `taskmgr-ui` failed to start in any project whose store had been
+  promoted with `taskmgr store move --central`, reporting "no .tasks directory
+  found". Stores are now resolved the way the `taskmgr` CLI resolves them —
+  local `.tasks` by walk-up, then the central registry — and a new
+  `--store-name <name>` flag opens a registered central store from anywhere.
+- Changed: `{{project.root}}` in launcher templates now interpolates the
+  resolved store's project path rather than the directory `taskmgr-ui` was
+  started in. These differ when the app is started from a subdirectory of the
+  project, or against a central store.
+
 ## v0.13.0
 
 - Upgraded the task-manager SDK to v0.7.0 and added support for its `doc` issue
