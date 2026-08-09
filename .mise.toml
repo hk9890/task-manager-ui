@@ -123,7 +123,7 @@ dir = "{{config_root}}"
 run = "git config core.hooksPath scripts/git-hooks"
 
 [tasks.taskmgr-ui]
-description = "Build taskmgr-ui and run interactively against the current project's .tasks store"
+description = "Build taskmgr-ui and run interactively against the current project's store"
 dir = "{{config_root}}"
 run = """
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)

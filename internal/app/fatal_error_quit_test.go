@@ -143,6 +143,14 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	if !strings.Contains(view, "taskmgr") {
 		t.Fatalf("expected 'taskmgr' mention in View(), got %q", view)
 	}
+	// A store can be central, so the screen must not present `taskmgr init` as
+	// the only remedy: running it in a project whose store was moved centrally
+	// creates a second, empty store beside the real one.
+	for _, want := range []string{"central", "--store-name"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected %q in the fatal error screen, got %q", want, view)
+		}
+	}
 }
 
 func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {

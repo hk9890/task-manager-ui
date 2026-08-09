@@ -19,6 +19,9 @@ Releases page above.
   resolved store's project path rather than the directory `taskmgr-ui` was
   started in. These differ when the app is started from a subdirectory of the
   project, or against a central store.
+- Changed: `TASKMGR_DIR`, which the previous store open ignored, is now refused
+  by the SDK with an explanatory error. Unset it and use `--cwd` or
+  `--store-name`.
 
 ## v0.13.0
 
