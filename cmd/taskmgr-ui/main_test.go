@@ -607,9 +607,10 @@ func isolateCentralHome(t *testing.T) {
 	t.Setenv("TASKMGR_DIR", "")
 }
 
-// canonicalPath mirrors the symlink resolution the SDK applies to a project path
-// before reporting it, so expectations hold where the temp directory is itself a
-// symlink (macOS /tmp).
+// canonicalPath mirrors the symlink resolution the SDK applies to a registry
+// project path before reporting it, so expectations hold where the temp
+// directory is itself a symlink (macOS /var -> /private/var). It applies to the
+// central paths only: a local walk-up reports the path it was handed, unresolved.
 func canonicalPath(t *testing.T, path string) string {
 	t.Helper()
 	resolved, err := filepath.EvalSymlinks(path)
@@ -665,9 +666,11 @@ func TestBuildRepositoryResolvesLocalStoreFromSubdirectory(t *testing.T) {
 	assertReadsIssue(t, repo, id, "local store issue")
 
 	// The walk-up root, not the directory the app was started from: launcher
-	// templates interpolate this as {{project.root}}.
-	if want := canonicalPath(t, project); projectRoot != want {
-		t.Errorf("projectRoot: got %q, want %q", projectRoot, want)
+	// templates interpolate this as {{project.root}}. Compared unresolved — a
+	// local walk-up reports the path it walked, so on macOS this stays under
+	// /var rather than becoming /private/var.
+	if projectRoot != project {
+		t.Errorf("projectRoot: got %q, want %q", projectRoot, project)
 	}
 }
 
