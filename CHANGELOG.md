@@ -10,6 +10,8 @@ Releases page above.
 
 ## Unreleased
 
+## v0.14.0
+
 - Fixed: `taskmgr-ui` failed to start in any project whose store had been
   promoted with `taskmgr store move --central`, reporting "no .tasks directory
   found". Stores are now resolved the way the `taskmgr` CLI resolves them —
@@ -22,6 +24,10 @@ Releases page above.
 - Changed: `TASKMGR_DIR`, which the previous store open ignored, is now refused
   by the SDK with an explanatory error. Unset it and use `--cwd` or
   `--store-name`.
+- Added: a startup warning when the resolved store's project path no longer
+  exists — a central registry entry outliving a moved or deleted project opens
+  normally, while launchers without an explicit `work_dir` would exec in a
+  directory that is gone.
 
 ## v0.13.0
 
