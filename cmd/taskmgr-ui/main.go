@@ -35,6 +35,7 @@ var configLoad = func(opts config.LoadOptions) (config.Result, error) {
 
 type startupOptions struct {
 	projectRoot string
+	storeName   string // central store to open by registry name; empty means resolve from projectRoot
 	debug       bool
 	autoRefresh bool
 	logManager  *logging.Manager
@@ -45,21 +46,59 @@ type startupOptions struct {
 // buildRepository selects and opens the repository backend for startInteractive.
 // Neither backend needs shutdown work: the memory backend is a loaded value, and
 // the taskmgr backend's store holds no handle to release.
-func buildRepository(opts startupOptions) (repository.Repository, error) {
+//
+// It also returns the project root to interpolate into launchers. For taskmgr
+// that is the store's own project path, not opts.projectRoot: a central store is
+// resolved from a registry entry whose project path is the registered root, and
+// even a local store resolves by walking up, so both differ from the working
+// directory when the app is started from a subdirectory. The memory backend has
+// no store to ask, so it keeps the working directory.
+func buildRepository(opts startupOptions) (repository.Repository, string, error) {
 	switch opts.repoFlag {
 	case "memory":
 		loaded, err := filestorage.Load(opts.repoFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
+			return nil, "", fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
 		}
-		return loaded, nil
+		return loaded, opts.projectRoot, nil
 
 	default: // "taskmgr" (default) or unset
-		store, err := tasks.Open(opts.projectRoot)
+		// Resolve, not Open: Open performs local discovery only, so a project
+		// whose store was promoted with `taskmgr store move --central` reports
+		// ErrNoStore. Resolve walks up for a local .tasks first and falls back to
+		// the central registry, matching what the taskmgr CLI does.
+		store, info, err := tasks.Resolve(tasks.ResolveOptions{
+			WorkDir:   opts.projectRoot,
+			StoreName: opts.storeName,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to open task-manager store at %q: %w", opts.projectRoot, err)
+			if opts.storeName != "" {
+				return nil, "", fmt.Errorf("failed to open central task-manager store %q: %w", opts.storeName, err)
+			}
+			return nil, "", fmt.Errorf("failed to open task-manager store for %q: %w", opts.projectRoot, err)
 		}
-		return repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())), nil
+		if opts.logManager != nil {
+			startup := opts.logManager.Component("startup")
+			startup.Info("resolved task-manager store",
+				"kind", info.Kind.String(),
+				"store_path", info.StorePath,
+				"project_path", info.ProjectPath,
+			)
+			// Resolution checks the store directory, never the project path the
+			// registry records for it, so an entry left behind by a project that
+			// was moved or deleted still opens: the board reads fine while every
+			// launcher without an explicit work_dir execs somewhere that is gone.
+			// Warn rather than substitute the working directory — running an
+			// editor in a directory the operator did not name is worse than a
+			// launch that fails and says why.
+			if _, statErr := os.Stat(info.ProjectPath); statErr != nil {
+				startup.Warn("resolved store's project path is not accessible; launchers without an explicit work_dir will fail",
+					"project_path", info.ProjectPath,
+					"error", statErr.Error(),
+				)
+			}
+		}
+		return repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())), info.ProjectPath, nil
 	}
 }
 
@@ -69,12 +108,12 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	repo, err := buildRepository(opts)
+	repo, projectRoot, err := buildRepository(opts)
 	if err != nil {
 		return err
 	}
 
-	services, err := app.NewServices(repo, cfg, opts.projectRoot)
+	services, err := app.NewServices(repo, cfg, projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize services: %w", err)
 	}
@@ -109,6 +148,7 @@ type cliOptions struct {
 	noAuto      bool
 	repo        string // "taskmgr" (default) or "memory"
 	repoFile    string // path to JSONL file; required for --repo memory, ignored by taskmgr
+	storeName   string // central store registry name; taskmgr backend only
 }
 
 func main() {
@@ -200,7 +240,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		startupLogger.Info("resolved config path", "path", configResult.Path)
 		startupLogger.Info("resolved cwd", "cwd", resolvedCWD)
 		startupLogger.Info("auto-refresh", "enabled", autoRefresh)
-		startupLogger.Info("repo backend", "repo", opts.repo, "repo_file", resolvedRepoFile)
+		startupLogger.Info("repo backend", "repo", opts.repo, "repo_file", resolvedRepoFile, "store_name", opts.storeName)
 	}
 
 	if opts.printConfig {
@@ -236,6 +276,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 	}
 	startErr := start(configResult.Config, startupOptions{
 		projectRoot: resolvedCWD,
+		storeName:   opts.storeName,
 		debug:       opts.debug,
 		autoRefresh: autoRefresh,
 		logManager:  logManager,
@@ -292,6 +333,7 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	fs.BoolVar(&opts.noAuto, "no-auto-refresh", false, "disable periodic auto-refresh")
 	fs.StringVar(&opts.repo, "repo", "taskmgr", "repository backend: taskmgr (default) or memory")
 	fs.StringVar(&opts.repoFile, "repo-file", "", "path to JSONL repository file (required for --repo=memory; ignored by --repo=taskmgr)")
+	fs.StringVar(&opts.storeName, "store-name", "", "open the central task-manager store registered under this name")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -319,6 +361,16 @@ func parseCLI(args []string, stderr io.Writer) (cliOptions, int, bool) {
 	// --repo=memory requires --repo-file.
 	if opts.repo == "memory" && strings.TrimSpace(opts.repoFile) == "" {
 		_, _ = fmt.Fprintln(stderr, "--repo=memory requires --repo-file <path>")
+		fs.Usage()
+		return cliOptions{}, 2, false
+	}
+
+	// --store-name names a task-manager store, so it is meaningless for the
+	// memory backend. Rejecting it beats silently ignoring it: the flag is how
+	// the caller says which issues they expect to see.
+	opts.storeName = strings.TrimSpace(opts.storeName)
+	if opts.repo == "memory" && opts.storeName != "" {
+		_, _ = fmt.Fprintln(stderr, "--store-name is not valid with --repo=memory")
 		fs.Usage()
 		return cliOptions{}, 2, false
 	}
@@ -378,4 +430,6 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "      --repo <backend>       Repository backend: taskmgr|memory (default: taskmgr)")
 	_, _ = fmt.Fprintln(w, "      --repo-file <path>     JSONL repository file; required when --repo=memory")
 	_, _ = fmt.Fprintln(w, "                             (the file is the source of truth). Ignored by taskmgr.")
+	_, _ = fmt.Fprintln(w, "      --store-name <name>    Open the central task-manager store registered under")
+	_, _ = fmt.Fprintln(w, "                             this name, ignoring --cwd. Not valid with --repo=memory.")
 }

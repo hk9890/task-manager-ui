@@ -52,8 +52,15 @@ in-process via the [task-manager](https://github.com/hk9890/task-manager) Go SDK
 (`github.com/hk9890/task-manager/sdk/tasks`), pinned in `go.mod`.
 
 ```bash
-taskmgr-ui --cwd /path/to/project   # run against a directory containing a .tasks/ store
+taskmgr-ui                          # run against the current project's store
+taskmgr-ui --cwd /path/to/project   # run against another project's store
+taskmgr-ui --store-name acme        # run against a central store, by registry name
 ```
+
+The store is resolved the way the `taskmgr` CLI resolves it: a local `.tasks/`
+directory found by walking up, otherwise the central registry
+(`taskmgr store list`). A project whose store was promoted with
+`taskmgr store move --central` needs no flag.
 
 ## CLI Surface
 
@@ -66,6 +73,7 @@ Common examples:
 
 ```bash
 taskmgr-ui --cwd /path/to/project
+taskmgr-ui --store-name acme
 taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
 taskmgr-ui --check-config
 ```

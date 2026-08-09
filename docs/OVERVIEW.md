@@ -64,11 +64,12 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 | `internal/ui/*` | Reusable rendering components and shared styles |
 | `internal/testing/*` | Repository fakes and UI test harnesses |
 | `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
-| `.tasks/` | On-disk task-manager store for the project's own dev issue tracking (file-based, managed by `taskmgr`; local-only, not published) |
+| `.tasks/` | On-disk task-manager store for this project's own dev issue tracking (file-based, managed by `taskmgr`; local-only, not published). Other projects may keep their store centrally instead — `taskmgr-ui` resolves both |
 
 ## Architectural boundaries
 
 - Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and used directly. There is no tracker-CLI subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
+- Store discovery is the SDK's, not ours: `cmd/taskmgr-ui/main.go` calls `tasks.Resolve`, so a local `.tasks` store and a central store registered in `~/.taskmgr/mapping.yaml` both resolve exactly as they do for the `taskmgr` CLI. Nothing below `cmd/` knows where the store lives — the repository adapter receives an already-open `*tasks.Store`. See [CODING.md → Store resolution](CODING.md#store-resolution).
 - No direct SQL/database access and no orchestration/control-plane dependencies in the active `./cmd/taskmgr-ui` path; see `cmd/taskmgr-ui/architecture_guardrails_test.go`.
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.

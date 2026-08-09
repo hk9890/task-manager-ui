@@ -149,6 +149,10 @@ Notes:
 - Unsupported placeholders are passed through literally.
 - Empty issue fields interpolate as empty strings.
 - `WorkDir` falls back to project root when blank.
+- `{{project.root}}` is the resolved store's project path, not the directory
+  `taskmgr-ui` was started in: the root of the project holding the local `.tasks`
+  store, or the project path registered for a central store. See
+  [CODING.md → Store resolution](CODING.md#store-resolution).
 
 The shell-launcher security rule (do not interpolate issue fields into a
 `sh -c`/`sh -lc` body) is an architectural rule — see `docs/CODING.md` Core

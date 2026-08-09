@@ -34,25 +34,56 @@ Supported flags:
 - `--check-config`
 - `--repo <backend>` — repository backend: `taskmgr | memory` (default: `taskmgr`)
   - `taskmgr` (default): in-process implementation over the task-manager Go SDK
-    (`github.com/hk9890/task-manager/sdk/tasks`). The store is opened at the
-    target project directory; reads and writes run in-process with no subprocess
-    or external binary in the product path.
+    (`github.com/hk9890/task-manager/sdk/tasks`). The store is resolved from the
+    target project directory (see [Store resolution](#store-resolution)); reads
+    and writes run in-process with no subprocess or external binary in the
+    product path.
   - `memory`: loads the full repository from a JSONL file on startup; all reads
     are served from memory; requires `--repo-file`.
 - `--repo-file <path>` — path to the JSONL repository file:
-  - `taskmgr` mode: ignored (not read or written); the task-manager store at the
-    project directory is the source of truth.
+  - `taskmgr` mode: ignored (not read or written); the resolved task-manager
+    store is the source of truth.
   - `memory` mode: required; the file is the sole source of truth.
+- `--store-name <name>` — open the central store registered under `<name>`
+  instead of resolving one from the working directory. `taskmgr` mode only;
+  combining it with `--repo=memory` exits `2`.
 
 Non-interactive flags (`--help`, `--version`, `--print-config`,
 `--check-config`) return without booting the Bubble Tea program.
+
+### Store resolution
+
+`buildRepository` opens the `taskmgr` backend with `tasks.Resolve`, not
+`tasks.Open`: `Open` performs local discovery only, so a project whose store was
+promoted with `taskmgr store move --central` would report "no .tasks directory
+found". `Resolve` applies the same precedence as the `taskmgr` CLI:
+
+1. `--store-name` — the central store registered under that name, ignoring the
+   working directory. An unregistered name is an error, never a fallback.
+2. a local `.tasks` directory, found by walking up from the target directory.
+3. the central registry (`~/.taskmgr/mapping.yaml`), matched on the longest
+   registered project path that is an ancestor of the target directory.
+
+Nothing resolving is an error: startup fails with exit code `1` rather than
+booting against an empty board.
+
+The project root the app runs with is the resolved store's project path, not the
+target directory. That is what `{{project.root}}` interpolates to
+([CONFIGURATION.md](CONFIGURATION.md#launcher-interpolationcontext-surface)) and it differs from
+the working directory whenever the app is started from a subdirectory or against
+a central store. `--repo=memory` has no store to ask, so it keeps the target
+directory.
+
+`TASKMGR_DIR` is rejected by the SDK rather than honored; unset it and use
+`--cwd` or `--store-name`.
 
 ### Path resolution and examples
 
 - `--config` sets an explicit config file path. Relative paths resolve against
   the process start cwd.
-- `--cwd` sets the target project directory used to open the repository backend.
+- `--cwd` sets the target project directory the repository backend resolves from.
   Relative paths also resolve against process start cwd.
+- `--store-name` takes precedence over `--cwd` for store selection.
 - `--print-config` loads config, prints the resolved source comment and YAML,
   then exits.
 - `--check-config` loads config, emits warnings, prints `config OK`, then exits.
@@ -62,6 +93,7 @@ Examples:
 ```bash
 taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml"
 taskmgr-ui --cwd ../another-project
+taskmgr-ui --store-name acme            # central store, from anywhere
 taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
 taskmgr-ui --check-config
 ```
