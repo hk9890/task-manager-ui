@@ -744,6 +744,52 @@ func TestBuildRepositoryStoreNameOpensRegisteredStoreFromUnrelatedDirectory(t *t
 	}
 }
 
+func TestBuildRepositoryWarnsWhenProjectPathIsGone(t *testing.T) {
+	isolateCentralHome(t)
+
+	project := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if _, err := tasks.InitCentral(project, "orphan-fixture", "orp"); err != nil {
+		t.Fatalf("tasks.InitCentral: %v", err)
+	}
+	// Capture the registered form while the directory still exists: the registry
+	// stores the symlink-resolved path, and once the directory is gone neither
+	// the SDK nor this test can recover that form from the raw one.
+	registered := canonicalPath(t, project)
+
+	// The project moves or is deleted; the registry entry survives it.
+	if err := os.RemoveAll(project); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	manager := logging.New(logging.Options{Stderr: &stderr, StateDir: t.TempDir()})
+	t.Cleanup(func() { _ = manager.Close() })
+
+	repo, projectRoot, err := buildRepository(startupOptions{
+		repoFlag:    "taskmgr",
+		projectRoot: t.TempDir(),
+		storeName:   "orphan-fixture",
+		logManager:  manager,
+	})
+	if err != nil {
+		t.Fatalf("buildRepository: %v", err)
+	}
+	if repo == nil {
+		t.Fatal("expected the store to open despite the missing project path")
+	}
+	// No silent substitution: launchers are told the registered path, and the
+	// warning is what explains the failure they will hit.
+	if projectRoot != registered {
+		t.Errorf("projectRoot: got %q, want the registered project path %q", projectRoot, registered)
+	}
+	if !strings.Contains(stderr.String(), "project path is not accessible") {
+		t.Errorf("expected a startup warning naming the inaccessible project path, got: %q", stderr.String())
+	}
+}
+
 func TestBuildRepositoryUnknownStoreNameFails(t *testing.T) {
 	isolateCentralHome(t)
 

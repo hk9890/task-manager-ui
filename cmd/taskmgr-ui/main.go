@@ -78,11 +78,25 @@ func buildRepository(opts startupOptions) (repository.Repository, string, error)
 			return nil, "", fmt.Errorf("failed to open task-manager store for %q: %w", opts.projectRoot, err)
 		}
 		if opts.logManager != nil {
-			opts.logManager.Component("startup").Info("resolved task-manager store",
+			startup := opts.logManager.Component("startup")
+			startup.Info("resolved task-manager store",
 				"kind", info.Kind.String(),
 				"store_path", info.StorePath,
 				"project_path", info.ProjectPath,
 			)
+			// Resolution checks the store directory, never the project path the
+			// registry records for it, so an entry left behind by a project that
+			// was moved or deleted still opens: the board reads fine while every
+			// launcher without an explicit work_dir execs somewhere that is gone.
+			// Warn rather than substitute the working directory — running an
+			// editor in a directory the operator did not name is worse than a
+			// launch that fails and says why.
+			if _, statErr := os.Stat(info.ProjectPath); statErr != nil {
+				startup.Warn("resolved store's project path is not accessible; launchers without an explicit work_dir will fail",
+					"project_path", info.ProjectPath,
+					"error", statErr.Error(),
+				)
+			}
 		}
 		return repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())), info.ProjectPath, nil
 	}

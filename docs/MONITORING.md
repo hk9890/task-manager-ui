@@ -79,6 +79,13 @@ A failure to resolve is reported by the existing `interactive startup failed`
 record instead; it names the working directory, or the store name when
 `--store-name` was given.
 
+A `WARN` follows the record when `project_path` is not accessible. Resolution
+checks the store directory, never the project path recorded for it, so a
+registry entry outliving a moved or deleted project opens normally — the board
+reads fine, while launchers without an explicit `work_dir` exec in a directory
+that is gone. Re-point the entry by running
+`taskmgr store move --relink --to <store>` from the project's new location.
+
 ## `--debug` coverage
 
 `--debug` mirrors machine-visible startup diagnostics to `stderr`:
@@ -91,7 +98,7 @@ record instead; it names the working directory, or the store name when
   - repo backend (`repo`, `repo_file`, and the `--store-name` override
     `store_name`)
 
-The store-resolution record described below is not part of the `stderr` mirror:
+The store-resolution record described above is not part of the `stderr` mirror:
 it is emitted after stderr suppression is raised for the interactive session, so
 it reaches the persistent log only.
 
