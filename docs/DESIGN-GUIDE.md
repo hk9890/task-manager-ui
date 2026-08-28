@@ -19,7 +19,8 @@ own: `modal`, `toaster` and `loading` own messages and commands; every other pac
   borders and overlays (`BorderDefaultColor`, `OverlayBorderColor`, `BorderHighlightFocusColor`),
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
   (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
-- Focus is carried by `BorderHighlightFocusColor` on the border, not by a background change.
+- Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tab strip and
+  the modal buttons carry focus on a background instead, each with its own `Focus` role.
 
 ## The issue vocabulary
 
@@ -79,7 +80,8 @@ siblings rather than inline at the call site.
   rendered by `Model.renderHeader` in `internal/app/render.go`. Detail never appears there: it is a
   drill-in, not a tab.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
-  `ShellTabInactiveColor`. This is the one place a background carries state instead of a border.
+  `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
+  a pane or a column it rides the border instead.
 - A new browse surface is one entry in `mode.BrowseModes` and one `tab(...)` call. Adding it anywhere
   else puts the strip and the cycle order out of step.
 - `tab` / `shift+tab` belong to the strip everywhere except inside a modal, which consumes keys
