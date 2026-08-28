@@ -8,7 +8,7 @@ via the manually dispatched Release workflow).
 This file exists as a stable entry point; for the per-release detail, see the
 Releases page above.
 
-## Unreleased
+## v0.15.0
 
 - Added: a Docs tab listing every `doc`-type issue in one column. It is the only
   surface that shows an **open** doc — the SDK keeps non-work types out of the
@@ -27,6 +27,20 @@ Releases page above.
   hook that already applied to `taskmgr` writes now also applies to writes made
   from `taskmgr-ui`; a hook that refuses one surfaces its message in the error
   toast.
+- Changed: search covers open work by default. A store accumulates closed issues
+  without bound, so every query used to bury live work under finished work. The
+  Results header names the active scope, and `ctrl+t` toggles closed history
+  into the query — a control key because the query box takes every printable
+  rune as text. The Docs tab still lists closed docs: closing a doc archives
+  reference material rather than finishing work.
+- Fixed: the selection chevron could vanish in a clipped detail pane. A scrolled
+  pane spends its first and last row on the `… (N earlier)` / `… (N more)`
+  indicators, and the selection was allowed to sit on exactly those rows, so
+  holding `j` in the Dependencies or Metadata pane scrolled the window with no
+  visible chevron.
+- Fixed: the `--repo memory` backend put open `doc` issues in the Ready and
+  Blocked columns, which the real backend never does. The two now apply the same
+  rule.
 
 ## v0.14.0
 
