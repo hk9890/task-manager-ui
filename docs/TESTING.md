@@ -102,20 +102,16 @@ basics.
 
 ### Process-level capture policy
 
-Current decision: **no new default process-level capture harness is added**.
+**No new default process-level capture harness is added.** The in-process fixtures
+cover the runtime UI risk surface deterministically, and the built-binary run covers
+the rest without fragile transcript automation.
 
-Reasoning:
-
-- Existing in-process `memory`-backed fixtures + teatest + golden/state assertions already cover the primary runtime UI risk surface quickly and deterministically.
-- Existing built-binary full-app verification already covers the remaining entrypoint/product run check for manual review without adding fragile transcript-only automation.
-
-Process-level capture stays optional and narrow. Add process-level automation only when a concrete bug class cannot be verified in-process. Any such path must define all of the following up front:
+Add process-level automation only when a concrete bug class cannot be proven
+in-process. Any such path defines all three up front:
 
 1. **Readiness signal** (what visible state means the app is ready for assertion/capture).
 2. **Hard timeout** (must fail explicitly rather than hang; startup-to-capture budget under 2s for the seeded fixture path unless documented otherwise).
 3. **Cleanup behavior** (guaranteed child-process termination on success, timeout, and failure).
-
-Do not rely on raw stdout transcript capture alone for alt-screen rendering proof.
 
 ## Bubble Tea UI Testing Strategy (default)
 
@@ -175,31 +171,26 @@ go test ./internal/app -run 'TestModelFixtureShapedBoardCaptureGolden|TestModelS
 
 ### Controller-async contract tests
 
-A fourth pattern, *controller-async contract*, drives the search controller against a `fakes.DelayingRepository` (from `internal/testing/fakes/delaying.go`) to exercise overlapping-Cmd cadence that the synchronous-drain harness (`pressAndResolve` → `ApplyControllerKeySequence`) cannot reach. The gap exists because `ApplyControllerKeySequence` drains every Cmd to completion before the next key arrives, so `m.loading` is always `false` when the next message is processed — making async race windows (keys arriving before a prior search Cmd returns its Msg) completely invisible to those tests. Add controller-async contract tests in `TestSearchControllerAsyncContracts` whenever a bug's root cause involves a user event arriving while a prior async Cmd is still in flight. The `fakes.DelayingRepository` wraps any `repository.Repository`, so the same pattern applies to detail-mode follow-ups.
+Add one to `TestSearchControllerAsyncContracts` whenever a bug's root cause is a key
+arriving while a prior async Cmd is still in flight. Drive the controller against
+`fakes.DelayingRepository` (`internal/testing/fakes/delaying.go`); it wraps any
+`repository.Repository`, so the pattern carries to detail-mode follow-ups.
+
+The ordinary harness cannot see these races: `ApplyControllerKeySequence` drains
+every Cmd before the next key arrives, so `m.loading` is always `false` by the time
+the next message is processed.
 
 ### Exceptions
 
 If a surface is not practical for teatest+golden (for example, highly volatile ANSI animation timing), document the exception in the package test file and use the narrowest deterministic alternative (typically message/state assertions).
 
-## Shared Fake Seams for UI Tests
+## Shared fake seams
 
-The shared deterministic seams live in `internal/testing/fakes`:
-
-- **`FakeEditor`**
-  - Deterministic non-interactive editor seam.
-  - Returns configured edit result or error.
-  - Records calls.
-
-- **`FakeLauncher`**
-  - Deterministic `launcher.Service` seam.
-  - Returns configured error and records launch calls.
-
-- **`FakeProcessRunner`**
-  - Deterministic seam for launcher process execution.
-  - Never spawns real interactive tools.
-  - Records command/args/dir/env for assertions.
-
-These seams are required for tests that must not launch real editors or subprocesses.
+Fake only what this repository does not own. The three seams in
+`internal/testing/fakes` exist so a test never launches a real editor or spawns a
+real process: `FakeEditor`, `FakeLauncher`, and `FakeProcessRunner`. Each returns
+what you configure and records its calls for assertions. A test that touches an
+editor, a launcher, or a subprocess is required to use them.
 
 ## Repository Fixture Conventions (unit)
 

@@ -18,39 +18,13 @@ mise run build       # the binary, with version metadata injected
 mise run ci          # the merge gate; see What the tools enforce
 ```
 
-## CLI startup semantics (v1)
+## CLI startup semantics
 
-`cmd/taskmgr-ui/main.go` intentionally keeps a minimal pre-TUI CLI surface before
-starting Bubble Tea.
+`taskmgr-ui --help` is the flag roster. `cmd/taskmgr-ui/main.go` keeps that surface
+minimal by design, and only what `--help` cannot say is written here.
 
-Supported flags:
-
-- `-h`, `--help`
-- `-v`, `--version`
-- `-c`, `--config <path>`
-- `--cwd <path>`
-- `-d`, `--debug`
-- `--no-auto-refresh`
-- `--print-config`
-- `--check-config`
-- `--repo <backend>` — repository backend: `taskmgr | memory` (default: `taskmgr`)
-  - `taskmgr` (default): in-process implementation over the task-manager Go SDK
-    (`github.com/hk9890/task-manager/sdk/tasks`). The store is resolved from the
-    target project directory (see [Store resolution](#store-resolution)); reads
-    and writes run in-process with no subprocess or external binary in the
-    product path.
-  - `memory`: loads the full repository from a JSONL file on startup; all reads
-    are served from memory; requires `--repo-file`.
-- `--repo-file <path>` — path to the JSONL repository file:
-  - `taskmgr` mode: ignored (not read or written); the resolved task-manager
-    store is the source of truth.
-  - `memory` mode: required; the file is the sole source of truth.
-- `--store-name <name>` — open the central store registered under `<name>`
-  instead of resolving one from the working directory. `taskmgr` mode only;
-  combining it with `--repo=memory` exits `2`.
-
-Non-interactive flags (`--help`, `--version`, `--print-config`,
-`--check-config`) return without booting the Bubble Tea program.
+`--help`, `--version`, `--print-config` and `--check-config` return without booting
+Bubble Tea. Everything else starts the TUI.
 
 ### Store resolution
 
@@ -88,16 +62,6 @@ directory.
 - `--print-config` loads config, prints the resolved source comment and YAML,
   then exits.
 - `--check-config` loads config, emits warnings, prints `config OK`, then exits.
-
-Examples:
-
-```bash
-taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml"
-taskmgr-ui --cwd ../another-project
-taskmgr-ui --store-name acme            # central store, from anywhere
-taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
-taskmgr-ui --check-config
-```
 
 ### Exit-code contract for non-interactive paths
 

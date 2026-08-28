@@ -62,24 +62,19 @@ directory found by walking up, otherwise the central registry
 (`taskmgr store list`). A project whose store was promoted with
 `taskmgr store move --central` needs no flag.
 
-## CLI Surface
+## CLI surface
 
-`taskmgr-ui` is intentionally a **TUI-first** binary with a small startup CLI.
-
-For the full flag list, exit codes, config-path behavior, and debug contract, see
-`docs/CODING.md`.
-
-Common examples:
+`taskmgr-ui` is a TUI-first binary with a small startup CLI. `taskmgr-ui --help` is
+the full flag list.
 
 ```bash
-taskmgr-ui --cwd /path/to/project
-taskmgr-ui --store-name acme
 taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
-taskmgr-ui --check-config
+taskmgr-ui --check-config      # validate the config file and exit
+taskmgr-ui --debug             # mirror startup diagnostics to stderr
 ```
 
-For exit codes, config details, and centralized debug/logging behavior, see
-`docs/CODING.md` and `docs/MONITORING.md`.
+Configuring it — the config file, keybinding overrides, launcher templates — is
+[`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md).
 
 ## Docs
 
