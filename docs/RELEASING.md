@@ -54,15 +54,12 @@ Run from the repository root.
    git status
    ```
 
-3. Run the pre-handoff quality gate (`mise run quality`); see `docs/CODING.md`
-   Quality Gates for the full task set. The Release run repeats build/vet/test in
+3. Run the merge gate (`mise run ci`). The Release run repeats build/vet/test in
    CI, but running the gate locally first avoids spending a workflow run on an
    avoidable failure.
 
-4. If the release includes user-facing/runtime behavior changes, run runtime
-   verification guidance from:
-   - [`docs/TESTING.md`](./TESTING.md)
-   - [`docs/RUNTIME_UI_VERIFICATION.md`](./RUNTIME_UI_VERIFICATION.md)
+4. If the release includes user-facing/runtime behavior changes, drive the built
+   binary per [`docs/RUNNING.md`](./RUNNING.md).
 
 ## Release flow (GitHub Actions)
 
@@ -76,7 +73,7 @@ Run from the repository root.
 2. Update `CHANGELOG.md` / release notes for this release and commit the release
    prep.
 
-3. Run `mise run quality` on the release commit.
+3. Run `mise run ci` on the release commit.
 
 4. Create an annotated tag **on the release commit**:
 
@@ -146,14 +143,14 @@ When GitHub Actions can't be used, build and publish locally from the same
 `.goreleaser.yaml`. This path produces binaries + checksums but **no signing,
 SBOMs, or SLSA provenance** (cosign keyless signing needs the workflow's
 interactive OIDC; SBOMs need `syft`). The substitute provenance is the local
-`mise run quality` output on the release commit.
+`mise run ci` output on the release commit.
 
 Prerequisites: `goreleaser` v2 in PATH
 (`go install github.com/goreleaser/goreleaser/v2@latest`), a `GITHUB_TOKEN` with
 `repo` scope (typically `gh auth token`), and a clean working tree on the tagged
 release commit.
 
-1. Confirm `mise run quality` passes on the release commit (substitutes for the
+1. Confirm `mise run ci` passes on the release commit (substitutes for the
    CI provenance gate).
 2. Create and push the annotated tag:
 

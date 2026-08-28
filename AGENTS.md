@@ -1,35 +1,86 @@
-# Task Manager UI
+# AGENTS.md — taskmgr-ui routing
 
-A terminal UI for browsing task-manager issues, creating and updating work, and launching external tools from issue context.
+## Repository purpose
 
-**Tech Stack**: Go, Bubble Tea, the task-manager Go SDK (`github.com/hk9890/task-manager/sdk/tasks`)
+A terminal UI for browsing task-manager issues, creating and updating work, and launching external
+tools from issue context. Go and Bubble Tea over the task-manager Go SDK
+(`github.com/hk9890/task-manager/sdk/tasks`) — the store is opened in-process, so there is no server,
+no database and no tracker subprocess.
 
-## Project Overview
+## Use-case routing
 
-Read `docs/OVERVIEW.md` for the runtime flow, package map, and architectural boundaries.
+Every route below is **mandatory, not advisory**. Load the document BEFORE the first action of that
+kind — loading it afterwards does not count, and no route becomes skippable because the task looks
+small.
 
-## Coding
+### Research, planning, architecture — and finding anything at all
 
-Read `docs/CODING.md` for build commands, package layout, and core architectural rules.
+**MUST read [docs/OVERVIEW.md](docs/OVERVIEW.md) before your first `rg`, `grep`, `Glob`, or `ls` of
+this repository, and before writing any plan or design.** It is the map — the layout, the store
+boundary, and the search expressions that locate things fast. Go there instead of grepping blind.
 
-Read `docs/CONFIGURATION.md` for the runtime config model, keybindings, and launcher interpolation reference.
+### Coding and file changes
 
-Run `mise tasks` to see all available build/test/quality tasks (`mise run <task>` to execute).
+**MUST read [docs/CODING.md](docs/CODING.md) before creating or editing ANY file under `cmd/`,
+`internal/`, or `scripts/`.** It owns the startup contract, the architectural rules, the naming
+conventions, and which doc outranks it inside each area.
 
-## Testing
+### Designing or changing what the operator sees
 
-Read `docs/TESTING.md` for test policy, verification depth, fixtures, and focused commands.
+**MUST read [docs/DESIGN-GUIDE.md](docs/DESIGN-GUIDE.md) before creating or editing ANY file under
+`internal/ui/` or `internal/mode/`, and before writing any plan or answer that specifies a screen, a
+key, a glyph, or a colour.** It is the interaction law, and no gate enforces it.
 
-Use `docs/RUNTIME_UI_VERIFICATION.md` when a change touches runtime UI behavior.
+### Runtime config, keybindings, launcher templates
 
-## Monitoring
+**MUST read [docs/CONFIGURATION.md](docs/CONFIGURATION.md) before editing `internal/config/`, and
+before adding or changing a config key, a keybinding, or a launcher placeholder.** It owns the config
+model, the resolution order, and the interpolation surface.
 
-Read `docs/MONITORING.md` for the centralized diagnostics surface, `--debug` behavior, persistent log location, and machine-visible evidence guidance.
+### Testing and verification
 
-## Releases
+**MUST read [docs/TESTING.md](docs/TESTING.md) before writing a test, and before your first
+`mise run test`, `mise run ci`, or `go test` in this repository.** It owns the tiers, which one a new
+test belongs in, the golden-file conventions, and what may be faked.
 
-Read `docs/RELEASING.md` for the manually dispatched (workflow_dispatch) GitHub release flow backed by `.github/workflows/release.yml` and `.goreleaser.yaml`.
+### Running the app to reproduce a bug or verify a change
 
-## Change Workflow
+**MUST read [docs/RUNNING.md](docs/RUNNING.md) before launching the binary by hand, before driving it
+under the PTY capture harness, and before reproducing a reported bug.** It owns the launch commands,
+the capture steps, and the gotchas that hang a scripted run.
 
-**MUST read `docs/CHANGE-WORKFLOW.md` before recording any task or TODO, before any git command that writes** — worktree, commit, branch, push — **and before opening a PR.** Reading it afterwards does not count; read-only git (`status`, `log`, `diff`) is not gated. It owns the tracker-first rule (this project tracks its own work in `taskmgr`, never TodoWrite), the worktree-per-change rule, pre-handoff gates, and PR requirements.
+### Diagnosing a failure, or reading what a past run did
+
+**MUST read [docs/MONITORING.md](docs/MONITORING.md) before reading the debug log or a session
+record, and before your first edit made in response to a failed run.** It owns where the evidence
+lands, the record shape, and what `--debug` does and does not mirror.
+
+### Reviewing a PR or a diff
+
+**MUST read [docs/REVIEWING.md](docs/REVIEWING.md) before your first `git diff` or `gh pr diff` run
+to judge a change, and whenever a review is requested.** It carries what this repository must check
+on top of the generic pass, and what is explicitly not a finding.
+
+### Writing documentation
+
+**MUST read [docs/DOCUMENTING.md](docs/DOCUMENTING.md) and invoke the
+`instruction-writing:writing-project-docs` skill before creating or editing ANY Markdown file under
+`docs/`, or `AGENTS.md`, `CLAUDE.md`, `README.md`, or `CONTRIBUTING.md`.** It owns the citation gate,
+the docs outside the canonical set, and what this repository decided not to document.
+
+### Recording a task, a TODO, or an issue
+
+**MUST invoke the `tasks:tasks-writing` skill before writing the body of a `taskmgr` issue.** This
+project tracks its own work in `taskmgr` — never TodoWrite, never a Markdown TODO list
+([docs/CHANGE-WORKFLOW.md](docs/CHANGE-WORKFLOW.md) owns the tracker-first rule).
+
+### Commit, branch, worktree, PR, merge
+
+**MUST read [docs/CHANGE-WORKFLOW.md](docs/CHANGE-WORKFLOW.md) before any git command that writes** —
+worktree, commit, branch, push — **and before opening a PR.** Read-only git (`status`, `log`, `diff`)
+is not gated. It owns the worktree-per-change rule, the pre-handoff gates, and the PR requirements.
+
+### Release
+
+**MUST read [docs/RELEASING.md](docs/RELEASING.md) before cutting a release**, or before editing
+`.github/workflows/release.yml`, `.goreleaser.yaml`, or what the project ships.

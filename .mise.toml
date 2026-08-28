@@ -92,6 +92,14 @@ find scripts/git-hooks -type f -print0 | xargs -0 --no-run-if-empty sh -n
 find scripts -maxdepth 1 -name '*.py' -print0 | xargs -0 python3 -m py_compile
 '''
 
+[tasks."ci:portable"]
+description = "The half of the merge gate that runs on every OS (macOS CI job)"
+depends = ["scripts:check", "fmt:check", "build", "vet", "test"]
+
+[tasks.ci]
+description = "The merge gate. Run before handoff — the linux CI job runs exactly this."
+depends = ["ci:portable", "lint", "guardrails", "test:coverage"]
+
 [tasks."quality:fast"]
 description = "Fast pre-commit gate (NO integration tests; ~15s)"
 depends = ["vet", "lint", "guardrails", "test"]

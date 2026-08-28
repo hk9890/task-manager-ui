@@ -1,55 +1,30 @@
 # Coding
 
-## Project Identity
+Repository-specific implementation constraints, for a change under `cmd/`, `internal/` or
+`scripts/`. Go, Bubble Tea, module `github.com/hk9890/task-manager-ui`, binary `taskmgr-ui`.
 
-- **Module:** `github.com/hk9890/task-manager-ui`
-- **Binary:** `taskmgr-ui` (`cmd/taskmgr-ui`)
-- **Language:** Go
-- **TUI framework:** Bubble Tea
+**Another doc outranks this file inside its area** — read the row before you edit:
 
-## Build and Test
+| Area | Doc |
+|---|---|
+| `internal/ui/`, `internal/mode/` | [DESIGN-GUIDE.md](DESIGN-GUIDE.md) — colour roles, glyphs, chrome, selection, overlays, width math |
+| `internal/config/` | [CONFIGURATION.md](CONFIGURATION.md) — the config model, keybinding resolution, launcher interpolation |
+| `internal/logging/` | [MONITORING.md](MONITORING.md) — the record shape, the sink, and what `--debug` mirrors |
 
-Use standard Go tooling from the repository root for build, vet, and test work.
-See `docs/CHANGE-WORKFLOW.md` for the authoritative pre-handoff landing
-workflow. See [Quality Gates](#quality-gates) for the code-change verification
-commands used by that workflow.
+## Build and run
 
-For testing strategy, vocabulary, and harness conventions (teatest, golden files,
-fake seams), see `docs/TESTING.md`.
+```bash
+mise run build       # the binary, with version metadata injected
+mise run ci          # the merge gate; see What the tools enforce
+```
 
-## CLI startup semantics (v1)
+## CLI startup semantics
 
-`cmd/taskmgr-ui/main.go` intentionally keeps a minimal pre-TUI CLI surface before
-starting Bubble Tea.
+`taskmgr-ui --help` is the flag roster. `cmd/taskmgr-ui/main.go` keeps that surface
+minimal by design, and only what `--help` cannot say is written here.
 
-Supported flags:
-
-- `-h`, `--help`
-- `-v`, `--version`
-- `-c`, `--config <path>`
-- `--cwd <path>`
-- `-d`, `--debug`
-- `--no-auto-refresh`
-- `--print-config`
-- `--check-config`
-- `--repo <backend>` — repository backend: `taskmgr | memory` (default: `taskmgr`)
-  - `taskmgr` (default): in-process implementation over the task-manager Go SDK
-    (`github.com/hk9890/task-manager/sdk/tasks`). The store is resolved from the
-    target project directory (see [Store resolution](#store-resolution)); reads
-    and writes run in-process with no subprocess or external binary in the
-    product path.
-  - `memory`: loads the full repository from a JSONL file on startup; all reads
-    are served from memory; requires `--repo-file`.
-- `--repo-file <path>` — path to the JSONL repository file:
-  - `taskmgr` mode: ignored (not read or written); the resolved task-manager
-    store is the source of truth.
-  - `memory` mode: required; the file is the sole source of truth.
-- `--store-name <name>` — open the central store registered under `<name>`
-  instead of resolving one from the working directory. `taskmgr` mode only;
-  combining it with `--repo=memory` exits `2`.
-
-Non-interactive flags (`--help`, `--version`, `--print-config`,
-`--check-config`) return without booting the Bubble Tea program.
+`--help`, `--version`, `--print-config` and `--check-config` return without booting
+Bubble Tea. Everything else starts the TUI.
 
 ### Store resolution
 
@@ -88,16 +63,6 @@ directory.
   then exits.
 - `--check-config` loads config, emits warnings, prints `config OK`, then exits.
 
-Examples:
-
-```bash
-taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml"
-taskmgr-ui --cwd ../another-project
-taskmgr-ui --store-name acme            # central store, from anywhere
-taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
-taskmgr-ui --check-config
-```
-
 ### Exit-code contract for non-interactive paths
 
 | Condition | Exit code |
@@ -117,39 +82,6 @@ taskmgr-ui --check-config
   - `-X github.com/hk9890/task-manager-ui/internal/version.Date={{ .Date }}`
 - The `mise run build` task also injects the same three symbols using
   `git describe` / `git rev-parse` / `date -u` for local dev builds.
-
-### Debug diagnostics contract
-
-`--debug` mirrors startup-resolution and repository-operation diagnostics to
-stderr (prefixed `[taskmgr-ui-debug]`); every config-loading startup path also writes
-structured JSON Lines records to a persistent per-session log. Repository traces
-are in-process (no subprocess argv) since the backend runs over the task-manager
-SDK. `docs/MONITORING.md` owns the full contract — event categories, log paths,
-`session_id` correlation, fallback behavior, and capture commands.
-
-## Package Layout
-
-Current bootstrapped layout:
-
-```
-cmd/
-  taskmgr-ui/               # primary TUI binary entrypoint
-internal/
-  app/               # Bubble Tea root shell: mode ownership, routing, selection/detail coordination
-  config/            # runtime configuration model + defaults
-  domain/            # Task Manager UI issue and dashboard models
-  repository/        # repository.Repository interface + shared errors/types
-  repository/taskmgr/   # production backend: in-process adapter over the task-manager Go SDK
-  repository/memory/    # in-memory backend (loaded from a JSONL file via filestorage)
-  repository/filestorage/  # JSONL load/save for the memory backend
-  logging/           # central slog logging package used by runtime startup and repository tracing
-  launcher/          # external editor and command launch actions
-  dashboard/         # board column composition (Compose) from a DashboardData result
-  mode/              # board/search/detail feature models + shell message contracts
-  ui/                # reusable rendering components (board, search, detail, modal, toaster, loading, overlay, fatalerror, shared, scroll, styles)
-  testing/           # fakes and ui harness helpers
-  version/           # build-time injected Version/Commit/Date symbols
-```
 
 ## Core Architectural Rules
 
@@ -240,95 +172,29 @@ Two naming styles coexist by design:
 New fakes follow the style that matches the complexity: struct literal + `Fake` prefix for thin
 seams; named type + constructor for stateful wrappers.
 
-## UI Rendering Conventions
+## What the tools enforce
 
-**Comment ordering:** The detail view renders comments newest-first (sorted by
-`CreatedAt` descending; ties broken by `ID` descending). This diverges from the
-backend's default comment order (oldest-first) and is intentional — surfacing
-the most recent activity at the top makes triage faster when an issue has many
-comments. The section header reads "Comments (N · newest first)" to make the
-ordering obvious to the reader.
+`mise run ci` is the merge gate; the linux CI job runs exactly it, and `ci:portable` is the subset
+that runs on macOS too. `mise run quality:fast` is the ~15s pre-commit subset. Run `mise tasks` for
+the rest.
 
-## Runtime Configuration
+This table says where each rule is written. It does not restate the rules — open the source when you
+need the exact one.
 
-Runtime config loading, the config model, keybindings, and the launcher
-interpolation reference live in `docs/CONFIGURATION.md`. The shell-launcher
-security rule and the editor/launcher handoff rules are in the Core
-Architectural Rules above; UI component placement is in `docs/OVERVIEW.md`
-under Architectural boundaries.
+| Gate | Enforces | Rule lives in |
+|---|---|---|
+| `lint` | `staticcheck` and `errcheck`, deliberately narrow, non-test packages only | `.golangci.yml` |
+| `vet` | the `go vet` suite | the toolchain |
+| `guardrails` | the import bans on `./cmd/taskmgr-ui`'s full transitive graph: no `database/sql`, no `orchestration` / `control-plane` / `control_plane` segment | `cmd/taskmgr-ui/architecture_guardrails_test.go` |
+| `fmt:check` | `goimports -local github.com/hk9890/task-manager-ui`, and a tidy `go.mod` / `go.sum` | `.mise.toml` |
+| `scripts:check` | shell and Python syntax under `scripts/` | `.mise.toml` |
+| `test` | the unit tier | [TESTING.md](TESTING.md) |
+| `test:coverage` | the unit + integration tiers against a coverage floor — 75 locally, 69 in CI | `.mise.toml`, `.github/workflows/ci.yml` |
+| `test:integration` | the real-OS-seam tier, plus two repo hygiene scans: no leaked tracker IDs, and no stale doc citations ([DOCUMENTING.md](DOCUMENTING.md)) | `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`, `cmd/taskmgr-ui/doc_citation_hygiene_integration_test.go` |
 
-## Enforced Architecture Guardrails
+The guardrail and hygiene scans are ordinary Go tests needing no external service. The two hygiene
+scans are tagged `//go:build integration` because they shell out to `git` — absent `git` would
+otherwise fail every unit test in the package.
 
-Automated guardrails are enforced in `cmd/taskmgr-ui/architecture_guardrails_test.go`, which walks the full transitive dependency graph of `./cmd/taskmgr-ui` via `golang.org/x/tools/go/packages`.
-
-The checks fail if any dependency in the active product path violates these boundaries:
-
-1. **No direct SQL in the active product path.**
-   - Forbidden at minimum: `database/sql`, `database/sql/driver`
-
-2. **No orchestration/control-plane subsystem in the active product path.**
-   - Any import path segment matching `orchestration`, `control-plane`, or `control_plane` is forbidden.
-
-These checks are intentionally lightweight and local-friendly: they run as a normal Go test and require no external services.
-
-A separate repo-hygiene scan — no tracker issue IDs in tracked `.go`/`.md` files — lives in `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`. It shells out to `git ls-files`, so it is tagged `//go:build integration` and runs under `mise run test:integration`, not in the unit suite.
-
-## Quality Gates
-
-The repository uses `.mise.toml` tasks as the execution layer. Run `mise tasks` to see all available tasks.
-
-Key tasks:
-
-| Task | What it runs |
-|---|---|
-| `mise run build` | `go build ./cmd/taskmgr-ui` |
-| `mise run vet` | `go vet ./...` |
-| `mise run test` | unit tests only (no `//go:build integration` tests) |
-| `mise run test:integration` | integration tests (build tag: `integration`) |
-| `mise run test:all` | unit + integration |
-| `mise run test:verbose` | unit tests with `-v` |
-| `mise run lint` | pinned `golangci-lint` (version from `.mise.toml` `[tools]`) |
-| `mise run guardrails` | `go test ./cmd/taskmgr-ui -run TestArchitectureGuardrails` |
-| `mise run fmt:check` | `goimports` formatting + `go mod tidy` cleanliness check (CI-enforced) |
-| `mise run scripts:check` | shell + Python script syntax validation (CI-enforced) |
-| `mise run test:coverage` | unit+integration tests with a coverage-threshold gate (CI-enforced) |
-| `mise run quality` | full pre-handoff gate: `vet`, `lint`, `guardrails`, unit `test`, `test:integration` |
-| `mise run quality:fast` | fast pre-commit gate: `vet`, `lint`, `guardrails`, unit `test` (skips `test:integration` only) |
-| `mise run vuln` | `govulncheck ./...` — CVE scan against deps + stdlib (local/on-demand; needs network) |
-| `mise run hooks:install` | `git config core.hooksPath scripts/git-hooks` |
-
-**Unit vs integration distinction:** See `docs/TESTING.md` for the authoritative decision rule (threshold, seam definition, and the `tasks.Init(t.TempDir())` carve-out). In short: unit tests are fast with no external processes; integration tests (`//go:build integration`) exercise real OS seams such as subprocess execution.
-
-**Tool version pins:** `golangci-lint` and `gotestsum` are pinned in `.mise.toml` under `[tools]` (no leading `v`, e.g. `2.1.6`). `mise` installs and resolves these binaries on the `PATH` for tasks like `mise run lint` and `mise run test`.
-
-For the authoritative pre-handoff landing workflow, see
-`docs/CHANGE-WORKFLOW.md#pre-handoff-gates`.
-
-`mise run quality` covers:
-
-- `go vet ./...`
-- pinned `golangci-lint` execution using the version in `.mise.toml`
-- fast architecture-guardrail verification via
-  `go test ./cmd/taskmgr-ui -run TestArchitectureGuardrails`
-- unit tests and integration tests
-
-CI (`.github/workflows/ci.yml`) runs a **superset** of this on an
-ubuntu/macos matrix: it additionally runs `scripts:check`,
-`fmt:check`, `build`, and the `test:coverage` threshold gate. A change can
-pass local `mise run quality` and still fail CI on one of those, so also run
-`mise run fmt:check` and `mise run scripts:check` before handoff.
-
-### `golangci-lint` install/invocation policy
-
-- Version pin lives in `.mise.toml` under `[tools]`
-  (`"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint"`).
-- Local and CI invocation both use the `mise`-installed binary on `PATH`:
-  `mise run lint` runs `golangci-lint run --timeout=5m`. CI activates `mise`
-  via `jdx/mise-action@v4` (see `.github/workflows/ci.yml`), so contributors
-  do not need a separate global install.
-- Lint scope is intentionally minimal for this repo: `staticcheck` and
-  `errcheck` only (configured in `.golangci.yml`).
-- The initial lint pass is intentionally scoped to non-test packages
-  (`run.tests: false`) to keep rollout conservative and signal high.
-
-See `docs/OVERVIEW.md` for the architecture map and boundaries.
+**Tool versions** are pinned in `.mise.toml` under `[tools]` with no leading `v`. `mise` puts them on
+`PATH`, and CI activates `mise` through `jdx/mise-action`, so no separate global install is needed.

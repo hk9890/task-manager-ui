@@ -1,9 +1,9 @@
 # Configuration
 
-Runtime configuration, keybindings, and launcher reference for Task Manager UI.
-For the architectural rules these settings operate under, see `docs/CODING.md`.
+The runtime config model, keybinding resolution, and the launcher interpolation
+surface — what a `config.yaml` may say and how it is resolved.
 
-## Runtime configuration (v1)
+## Runtime configuration
 
 Configuration lives in `internal/config` and is loaded once at startup via
 `config.LoadWithOptions(...)` (the startup path used by `cmd/taskmgr-ui/main.go`;
@@ -96,7 +96,7 @@ keybindings:
     escape: [q]
 ```
 
-## Keybindings (v1)
+## Keybindings
 
 Keybindings are resolved once at startup from the `keybindings` section.
 
@@ -161,39 +161,15 @@ The shell-launcher security rule (do not interpolate issue fields into a
 `sh -c`/`sh -lc` body) is an architectural rule — see `docs/CODING.md` Core
 Architectural Rules.
 
-## Shell editor/launcher UX behavior (v1)
+## Launching from the shell
 
-- `e` opens the rich marker-based issue edit document flow for the currently
-  selected issue via `services.Editor`. The editor launch is routed through
-  `tea.Exec`, which suspends the TUI and fully restores it after the editor
-  exits — eliminating any TTY contention between the editor and Bubble Tea.
-- `n`, `p`, `l` trigger `nvim`, `opencode`, `shell-command` launchers from
+- `e` opens the marker-based edit document for the selected issue through
+  `services.Editor`. The launch goes through `tea.Exec`, which suspends the TUI and
+  restores it when the editor exits, so the editor and Bubble Tea never contend for
+  the TTY.
+- `n`, `p` and `l` run the `nvim`, `opencode` and `shell-command` definitions from
   detail mode.
-- If no issue is selected, the shell shows a warning toast and does not launch.
-- Successful rich editor updates trigger detail reload; launchers remain
-  non-blocking and do not auto-refresh issue detail.
-- Launcher actions are explicitly **background fire-and-forget** in v1 (no
-  managed terminal handoff/return contract). After launching, the app stays
-  active and shows guidance toast text; use `e` for edit/save flows that round
-  trip back into app state with detail reload.
-
-The rich marker-based edit document flow in `internal/launcher/editor` is the
-actual interactive shell edit path. Launcher definitions remain a separate
-external-tool surface for non-edit actions.
-
-## Testing references for editor/launcher behavior
-
-- Config defaults and built-ins: `internal/config/model_test.go`
-- Interpolation/runner behavior: `internal/launcher/service_test.go`
-- Shell key wiring and launcher actions: `internal/app/model_test.go`
-- Editor round-trip service seam: `internal/launcher/editor/service_test.go`
-- Embedded fixture smoke coverage for edit flow: `internal/app/model_test.go`
-
-For broader policy and full-app verification expectations, see `docs/TESTING.md`.
-
-## Design intent
-
-- Keep config loading and access behind a clear boundary (`internal/config` +
-  `app.Services.Config`).
-- Avoid introducing legacy-style broad config surfaces (custom views,
-  orchestration settings, etc.).
+- With no issue selected, the shell warns by toast and launches nothing.
+- A successful edit reloads the detail. A launcher does not — it is fire-and-forget
+  ([CODING.md](CODING.md) Core Architectural Rules), so reach for `e` when the flow
+  has to round-trip into app state.

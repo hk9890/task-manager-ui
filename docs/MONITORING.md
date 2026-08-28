@@ -2,8 +2,9 @@
 
 ## Current diagnostics surface
 
-Runtime diagnostics are centralized through `internal/logging` and used by
-`cmd/taskmgr-ui/main.go` at startup.
+The log is the whole diagnostics surface — there is no metrics, health-endpoint or
+trace-export path to reach for. Runtime diagnostics are centralized through
+`internal/logging` and used by `cmd/taskmgr-ui/main.go` at startup.
 
 - `stdout` remains the success surface for non-interactive `--help`, `--version`,
   `--print-config`, and `--check-config`
@@ -149,38 +150,15 @@ When inspecting multiple log files, do not assume adjacent records across files
 came from the same repository or binary. Filter or inspect by `session_id`,
 `project_root`, and `build_version`.
 
-Effective capture destinations therefore include:
-
-- interactive terminal scrollback
-- shell redirection
-- CI job logs
-- tmux/screen scrollback
-- any external supervisor that captures stderr
-
 ## Relevant code paths
 
-- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New`)
+- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`buildRepository`: `tasks.Resolve` → `taskmgr.New`)
 - `internal/repository/taskmgr/` — in-process task-manager backend (the production repository); behavior tests live alongside it
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
 
 ## Runtime UI evidence
 
-For user-visible runtime capture rather than stderr diagnostics, use the
-verification tooling documented in `docs/RUNTIME_UI_VERIFICATION.md`:
-
-- `scripts/capture_taskmgr_ui_screen.py`
-
-That script captures rendered TUI state; it is not part of the logging
-surface.
-
-## Current limitations
-
-The active runtime path still does not provide:
-
-- health endpoints
-- metrics collection
-- tracing/span export
-
-Update this file when `internal/logging/` or `cmd/taskmgr-ui/main.go` changes
-the diagnostics contract.
+For user-visible runtime capture rather than stderr diagnostics, drive the built
+binary with `scripts/capture_taskmgr_ui_screen.py` ([RUNNING.md](RUNNING.md)).
+That script captures rendered TUI state; it is not part of the logging surface.
