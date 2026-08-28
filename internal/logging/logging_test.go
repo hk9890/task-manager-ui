@@ -2,9 +2,11 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -840,4 +842,61 @@ func TestConcurrentWritersProduceNoTornRecords(t *testing.T) {
 		// Not asserting tornCount > 0 — the race is probabilistic and may not
 		// manifest on every run or every OS. The documentation above explains why.
 	})
+}
+
+// failingHandler fails every Handle call. It stands in for a broken stderr
+// mirror — a closed pipe, a terminal that went away.
+type failingHandler struct{ err error }
+
+func (h failingHandler) Enabled(context.Context, slog.Level) bool  { return true }
+func (h failingHandler) Handle(context.Context, slog.Record) error { return h.err }
+func (h failingHandler) WithAttrs([]slog.Attr) slog.Handler        { return h }
+func (h failingHandler) WithGroup(string) slog.Handler             { return h }
+
+// recordingHandler captures the records it is given.
+type recordingHandler struct {
+	mu       sync.Mutex
+	messages []string
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordingHandler) Handle(_ context.Context, record slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.messages = append(h.messages, record.Message)
+	return nil
+}
+
+func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *recordingHandler) seen() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.messages...)
+}
+
+// TestTeeHandlerDeliversToEveryHandlerDespiteAFailure pins that one failing
+// handler cannot silence the others. Handle returned on the first error, so a
+// failed stderr write stopped the record reaching the persistent JSON Lines
+// sink — the file docs/MONITORING.md points a diagnosing agent at, and the one
+// that matters most when the terminal is already misbehaving.
+func TestTeeHandlerDeliversToEveryHandlerDespiteAFailure(t *testing.T) {
+	t.Parallel()
+
+	sink := &recordingHandler{}
+	failure := errors.New("stderr is gone")
+	tee := newTeeHandler(failingHandler{err: failure}, sink)
+
+	record := slog.NewRecord(time.Now(), slog.LevelError, "store unreadable", 0)
+	err := tee.Handle(context.Background(), record)
+
+	if !errors.Is(err, failure) {
+		t.Errorf("Handle error = %v, want it to carry the handler failure", err)
+	}
+	seen := sink.seen()
+	if len(seen) != 1 || seen[0] != "store unreadable" {
+		t.Errorf("the second handler received %v, want the record to reach it anyway", seen)
+	}
 }

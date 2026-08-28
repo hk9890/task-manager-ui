@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -348,16 +349,24 @@ func (h *teeHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return false
 }
 
+// Handle delivers the record to every enabled handler and joins their errors.
+//
+// It must not stop at the first failure: the handlers are the stderr mirror and
+// the persistent JSON Lines sink, and returning early on a failed stderr write
+// dropped the record from the file that docs/MONITORING.md calls the whole
+// diagnostics surface — exactly when something is already wrong with the
+// terminal.
 func (h *teeHandler) Handle(ctx context.Context, record slog.Record) error {
+	var errs []error
 	for _, handler := range h.handlers {
 		if !handler.Enabled(ctx, record.Level) {
 			continue
 		}
 		if err := handler.Handle(ctx, record); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (h *teeHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
