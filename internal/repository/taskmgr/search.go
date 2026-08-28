@@ -119,7 +119,7 @@ func buildCriteria(q domain.SearchIssuesQuery) (tasks.Criteria, tasks.FindOption
 	}
 
 	return criteria, tasks.FindOptions{
-		IncludeClosed: true,
+		IncludeClosed: q.IncludeClosed,
 		Sort:          tasks.SortWork,
 		Offset:        q.Offset,
 		Limit:         q.Limit,

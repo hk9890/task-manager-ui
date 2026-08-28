@@ -60,6 +60,12 @@ type State struct {
 	SelectedDetail domain.IssueDetail
 	DetailLoading  bool
 
+	// IncludeClosed reports the active search scope. It is rendered on the
+	// results header because it is a persistent mode rather than transient
+	// status: without it a thin result set reads as "nothing matched" when it
+	// actually means "nothing open matched".
+	IncludeClosed bool
+
 	MetadataSelectedField detail.MetadataFieldKey
 	QuickActions          detail.QuickActionLabels
 
@@ -265,10 +271,16 @@ func resultCountTitle(state State) string {
 	if badge != "" {
 		parts = append(parts, badge)
 	}
-	if len(parts) == 0 {
-		return fmt.Sprintf("%d", count)
-	}
+	parts = append(parts, searchScopeLabel(state))
 	return fmt.Sprintf("%d %s", count, strings.Join(parts, " · "))
+}
+
+// searchScopeLabel names the active scope for the results header.
+func searchScopeLabel(state State) string {
+	if state.IncludeClosed {
+		return "all"
+	}
+	return "open"
 }
 
 func renderResultsContent(state State, width int) []string {

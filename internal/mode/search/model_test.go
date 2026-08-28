@@ -944,3 +944,65 @@ func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchScopeToggleWidensToClosedAndBack pins the ctrl+t scope control end to
+// end: the default search reaches open work only, the toggle widens it to closed
+// history, and toggling back narrows it again.
+//
+// The scope has to be a control key. While the query box has focus every
+// printable rune is appended to the query, so a letter binding would be typed
+// rather than acted on.
+func TestSearchScopeToggleWidensToClosedAndBack(t *testing.T) {
+	gw := newSearchRepo()
+	gw.repo.Seed(memoryrepo.Issue{ID: "s-1", Title: "widget active", Status: "open"})
+	gw.repo.Seed(memoryrepo.Issue{ID: "s-2", Title: "widget archived", Status: "closed"})
+
+	m := NewModel(context.Background(), gw, nil)
+	m.SetSize(120, 30)
+
+	search := func(t *testing.T) []string {
+		t.Helper()
+		page, err := gw.Search(context.Background(), domain.SearchIssuesQuery{
+			Text:          "widget",
+			IncludeClosed: m.includeClosed,
+		})
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		ids := make([]string, 0, len(page.Results))
+		for _, res := range page.Results {
+			ids = append(ids, res.Issue.ID)
+		}
+		return ids
+	}
+
+	if m.includeClosed {
+		t.Fatal("search must open on the narrow scope; a store's closed history outgrows its open work without bound")
+	}
+	if got := search(t); len(got) != 1 || got[0] != "s-1" {
+		t.Fatalf("default scope returned %v, want only the open issue [s-1]", got)
+	}
+
+	// The toggle must be owned by search in every focus state, not just the
+	// query box, or it is unreachable once the user moves to the results.
+	m.focus = uisearch.FocusResults
+	if !m.CapturesShellKey(tea.KeyMsg{Type: toggleScopeKey}) {
+		t.Fatal("search must capture the scope key while the results pane has focus")
+	}
+
+	_ = m.Update(tea.KeyMsg{Type: toggleScopeKey})
+	if !m.includeClosed {
+		t.Fatal("scope key did not widen the search to closed issues")
+	}
+	if got := search(t); len(got) != 2 {
+		t.Fatalf("widened scope returned %v, want both the open and the closed issue", got)
+	}
+
+	_ = m.Update(tea.KeyMsg{Type: toggleScopeKey})
+	if m.includeClosed {
+		t.Fatal("scope key did not narrow the search back to open issues")
+	}
+	if got := search(t); len(got) != 1 || got[0] != "s-1" {
+		t.Fatalf("narrowed scope returned %v, want only the open issue [s-1]", got)
+	}
+}

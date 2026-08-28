@@ -1,7 +1,7 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ───────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │nomatch│                              │  │No selected result.                     │  │  Core                          │
 ╰──────────────────────────────────────╯  │Select a result in the search rail to pr│  │  Type    : (unknown)           │
-╭─ Results ────────────────── 0 exact ─╮  │eview issue content.                    │  │  Status  : (none)              │
+╭─ Results ─────────── 0 exact · open ─╮  │eview issue content.                    │  │  Status  : (none)              │
 │No matches for "nomatch".             │  │                                        │  │  Priority: (unknown)           │
 │                                      │  │                                        │  │  ------------------------------│
 │Try broader terms or clear the query, │  │                                        │  │  Counts                        │

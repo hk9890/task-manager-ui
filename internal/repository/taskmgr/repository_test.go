@@ -506,11 +506,16 @@ func TestSearchInvalidStatusFilter(t *testing.T) {
 	}
 }
 
-// TestSearchDefaultStatusesIncludesClosed pins that the taskmgr backend sets
-// IncludeClosed:true in buildCriteria so a default-Statuses (empty) search
-// returns closed issues. Removing IncludeClosed:true from search.go must fail
-// this test — that is the pin (T2 from the 2026-06-27 project review).
-func TestSearchDefaultStatusesIncludesClosed(t *testing.T) {
+// TestSearchScopeFollowsIncludeClosed pins that buildCriteria forwards the
+// query's scope into FindOptions.IncludeClosed rather than hardcoding it: a
+// default search returns open work only, and setting IncludeClosed reaches the
+// closed history.
+//
+// This replaced an inverted pin (TestSearchDefaultStatusesIncludesClosed) that
+// required closed issues in every default search. Hardcoding IncludeClosed:true
+// made the search UI unusable against a real store, where closed issues
+// outnumber open ones by orders of magnitude.
+func TestSearchScopeFollowsIncludeClosed(t *testing.T) {
 	r, _ := newTestRepo(t)
 	ctx := context.Background()
 
@@ -520,18 +525,25 @@ func TestSearchDefaultStatusesIncludesClosed(t *testing.T) {
 		t.Fatalf("CloseIssue: %v", err)
 	}
 
-	// Default-Statuses search (empty Statuses) must include the closed issue.
-	// The taskmgr backend achieves this via IncludeClosed:true in buildCriteria.
-	page, err := r.Search(ctx, domain.SearchIssuesQuery{Text: "widget"})
+	narrow, err := r.Search(ctx, domain.SearchIssuesQuery{Text: "widget"})
 	if err != nil {
-		t.Fatalf("Search: %v", err)
+		t.Fatalf("Search(default): %v", err)
 	}
-	ids := searchIDs(page.Results)
-	if !containsID(ids, openID) {
-		t.Errorf("open issue %s missing from default search; got %v", openID, ids)
+	narrowIDs := searchIDs(narrow.Results)
+	if !containsID(narrowIDs, openID) {
+		t.Errorf("open issue %s missing from the default search; got %v", openID, narrowIDs)
 	}
-	if !containsID(ids, closedID) {
-		t.Errorf("closed issue %s missing from default search; got %v — IncludeClosed must be true in buildCriteria", closedID, ids)
+	if containsID(narrowIDs, closedID) {
+		t.Errorf("closed issue %s present in the default search; got %v — buildCriteria must forward IncludeClosed, not hardcode it", closedID, narrowIDs)
+	}
+
+	wide, err := r.Search(ctx, domain.SearchIssuesQuery{Text: "widget", IncludeClosed: true})
+	if err != nil {
+		t.Fatalf("Search(IncludeClosed): %v", err)
+	}
+	wideIDs := searchIDs(wide.Results)
+	if !containsID(wideIDs, openID) || !containsID(wideIDs, closedID) {
+		t.Errorf("widened search missing an issue; got %v, want both %s and %s", wideIDs, openID, closedID)
 	}
 }
 

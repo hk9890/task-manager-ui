@@ -41,6 +41,11 @@ type SessionState struct {
 }
 
 // Model is the standalone search mode controller.
+// toggleScopeKey widens the search to closed history and back. It is a control
+// key by necessity, not taste: while the query box has focus every printable
+// rune is typed into the query, so a letter binding would be unreachable.
+const toggleScopeKey = tea.KeyCtrlT
+
 type Model struct {
 	ctx    context.Context
 	repo   repository.Repository
@@ -58,6 +63,10 @@ type Model struct {
 	draftQuery   string
 	appliedQuery string
 	focus        uisearch.FocusPane
+
+	// includeClosed widens the search to closed history. It starts false so the
+	// first screen shows live work; toggleScopeKey flips it and re-runs.
+	includeClosed bool
 
 	page        domain.SearchResultPage
 	selectedRow int
@@ -113,7 +122,7 @@ func (m *Model) Init() tea.Cmd {
 	m.reloading = false
 	m.errText = ""
 	m.typing = false
-	return loadSearchCmd(m.ctx, m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0})
+	return loadSearchCmd(m.ctx, m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0, IncludeClosed: m.includeClosed})
 }
 
 // Update processes search-specific messages and keybindings.
@@ -204,6 +213,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.draftQuery = ""
 		m.typing = false
 		return nil
+	case toggleScopeKey:
+		// Widen to, or narrow from, the closed history and re-run the applied
+		// query so the visible result set always matches the badge.
+		m.includeClosed = !m.includeClosed
+		m.logger.Debug("search scope toggled", "include_closed", m.includeClosed)
+		return m.triggerSearchWithAnchor(m.appliedQuery, nil)
 	}
 
 	switch {
@@ -378,9 +393,10 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 		return nil
 	}
 	query := domain.SearchIssuesQuery{
-		Text:   queryText,
-		Limit:  m.searchItemCapacity(),
-		Offset: 0,
+		Text:          queryText,
+		Limit:         m.searchItemCapacity(),
+		Offset:        0,
+		IncludeClosed: m.includeClosed,
 	}
 	m.loading = true
 	m.reloading = m.hasLoadedPage
@@ -405,6 +421,7 @@ func (m *Model) View(skeletonPhase int) string {
 		SelectedDetail:        m.selectedDetail,
 		DetailLoading:         m.selectedDetailLoading,
 		MetadataSelectedField: m.metadataSelectedField,
+		IncludeClosed:         m.includeClosed,
 		QuickActions: detail.QuickActionLabels{
 			EditIssue:    m.keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
 			UpdateIssue:  m.keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
@@ -611,6 +628,10 @@ func loadSearchCmd(ctx context.Context, repo repository.Repository, query domain
 // before shell-level keybindings are evaluated.
 func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
 	if m.keys.Match(config.SearchContext, config.SearchActionCycleFocusNext, msg) || m.keys.Match(config.SearchContext, config.SearchActionCycleFocusPrev, msg) {
+		return true
+	}
+	if msg.Type == toggleScopeKey {
+		// Owned by search in every focus state, not just the query box.
 		return true
 	}
 

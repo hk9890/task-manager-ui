@@ -67,6 +67,8 @@ the last applied query, the Results pane marks the displayed rows as stale.
 - `ctrl+k` — cycle focus to previous search pane
 - `backspace` — delete previous query character when query is focused (built-in behavior, not part of the configurable search keymap)
 - `ctrl+u` — clear query when query is focused (built-in behavior, not part of the configurable search keymap)
+- `ctrl+t` — widen the search to closed issues, or narrow it back to open work (built-in, works in
+  any focus state). Search starts on open work only; the Results header shows `open` or `all`
 
 ## Detail Mode
 

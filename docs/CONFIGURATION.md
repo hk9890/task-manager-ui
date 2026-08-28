@@ -128,6 +128,12 @@ Supported actions by context:
     configurable `open_detail` action. This mirrors `backspace` and `ctrl+u`,
     which are also built-in query-editing keys not part of the configurable
     search keymap.
+  - `ctrl+t` is built-in too, and widens the search to closed issues or narrows
+    it back. Search opens on open work alone, because a store's closed history
+    grows without bound while its open set does not. The Results header names
+    the active scope (`open` or `all`). It has to be a control key: while the
+    query box has focus every printable rune is typed into the query, so a
+    letter binding would be unreachable.
 - `detail`
   - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
 - `modal`
