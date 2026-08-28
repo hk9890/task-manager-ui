@@ -64,3 +64,68 @@ func TestEnsureVisible(t *testing.T) {
 		})
 	}
 }
+
+func TestEnsureVisibleClipped(t *testing.T) {
+	t.Parallel()
+
+	// A pane of `total` lines showing `window` rows replaces its first row with
+	// "… (N earlier)" once scrolled, and its last row with "… (N more)" while
+	// content remains below. contentRows reports the rows that survive that, so
+	// each case asserts the selection lands on one of them.
+	contentRows := func(offset, window, total int) (first, last int) {
+		first, last = offset, offset+window-1
+		if offset > 0 {
+			first++
+		}
+		if offset+window < total {
+			last--
+		}
+		return first, last
+	}
+
+	cases := []struct {
+		name                       string
+		offset, sel, window, total int
+		want                       int
+	}{
+		{"pane fits, no clipping", 0, 3, 10, 5, 0},
+		{"already on a content row", 5, 8, 10, 37, 5},
+		{"scrolling down clears the bottom indicator", 0, 9, 10, 37, 1},
+		{"scrolling up clears the top indicator", 10, 4, 10, 37, 3},
+		{"selection at the very top pins offset 0", 5, 0, 10, 37, 0},
+		{"selection at the very end pins max offset", 0, 36, 10, 37, 27},
+		{"window of one falls back to EnsureVisible", 0, 5, 1, 37, 5},
+		{"window of two falls back to EnsureVisible", 0, 5, 2, 37, 4},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := EnsureVisibleClipped(tc.offset, tc.sel, tc.window, tc.total)
+			if got != tc.want {
+				t.Fatalf("EnsureVisibleClipped(%d, %d, %d, %d) = %d, want %d",
+					tc.offset, tc.sel, tc.window, tc.total, got, tc.want)
+			}
+		})
+	}
+
+	// The property that matters: for any starting offset and any selection, the
+	// returned offset must put the selection on a row that renders content.
+	t.Run("selection always lands on a rendered row", func(t *testing.T) {
+		t.Parallel()
+		const window, total = 10, 37
+		for offset := 0; offset <= total-window; offset++ {
+			for sel := 0; sel < total; sel++ {
+				got := EnsureVisibleClipped(offset, sel, window, total)
+				if got < 0 || got > total-window {
+					t.Fatalf("offset %d sel %d: returned %d, outside [0, %d]", offset, sel, got, total-window)
+				}
+				first, last := contentRows(got, window, total)
+				if sel < first || sel > last {
+					t.Fatalf("offset %d sel %d: returned %d, but content rows are [%d, %d] — the selection would render under a scroll indicator",
+						offset, sel, got, first, last)
+				}
+			}
+		}
+	})
+}
