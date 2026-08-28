@@ -232,17 +232,38 @@ func TestRepositoryContractConformance(t *testing.T) {
 	})
 }
 
-// TestSearchIncludesClosedIssuesByDefault pins that both backends return closed
-// issues in a default-Statuses (empty) search. The taskmgr backend sets
-// IncludeClosed:true unconditionally in search.go; the memory backend has no
-// exclusion when Statuses is empty. Deleting IncludeClosed:true from the taskmgr
-// backend's buildCriteria call must break this test — that is the pin.
+// TestSearchScopeExcludesClosedUnlessAsked pins the search scope contract on both
+// backends: a default search sees open work only, and IncludeClosed widens it to
+// the closed history.
 //
-// The test also guards cross-backend parity: the same "archived" query must find
-// the closed issue on both backends (T2 from the 2026-06-27 project review).
-func TestSearchIncludesClosedIssuesByDefault(t *testing.T) {
+// This replaced an inverted pin (TestSearchIncludesClosedIssuesByDefault), which
+// required closed issues in every default search. That default did not survive
+// contact with a real store: closed issues accumulate without bound, so at ~880
+// closed against ~10 open every search returned effectively nothing but finished
+// work, and the search UI offered no way to narrow it.
+//
+// The test also guards cross-backend parity: the widened query must find the same
+// closed issue on both backends (T2 from the 2026-06-27 project review).
+func TestSearchScopeExcludesClosedUnlessAsked(t *testing.T) {
 	mem := buildMemoryBackendWithClosed(t)
 	tm := buildTaskmgrBackendWithClosed(t)
+
+	closedInResults := func(t *testing.T, backend repository.Repository, includeClosed bool) bool {
+		t.Helper()
+		page, err := backend.Search(context.Background(), domain.SearchIssuesQuery{
+			Text:          "archived",
+			IncludeClosed: includeClosed,
+		})
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		for _, res := range page.Results {
+			if res.Issue.Status == "closed" {
+				return true
+			}
+		}
+		return false
+	}
 
 	for _, tc := range []struct {
 		name    string
@@ -254,21 +275,14 @@ func TestSearchIncludesClosedIssuesByDefault(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			page, err := tc.backend.Search(context.Background(), domain.SearchIssuesQuery{
-				Text: "archived",
-			})
-			if err != nil {
-				t.Fatalf("Search: %v", err)
+
+			if closedInResults(t, tc.backend, false) {
+				t.Errorf("%s: default search for %q returned a closed issue — closed history is out of scope unless asked for",
+					tc.name, "archived")
 			}
-			found := false
-			for _, res := range page.Results {
-				if res.Issue.Status == "closed" {
-					found = true
-				}
-			}
-			if !found {
-				t.Errorf("%s: default-Statuses search for %q did not return the closed issue; got %v — IncludeClosed must be true",
-					tc.name, "archived", page.Results)
+			if !closedInResults(t, tc.backend, true) {
+				t.Errorf("%s: search for %q with IncludeClosed did not return the closed issue — the widened scope must reach it",
+					tc.name, "archived")
 			}
 		})
 	}

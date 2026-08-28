@@ -23,6 +23,12 @@ type ReadyExplainResult struct {
 type SearchIssuesQuery struct {
 	Text string
 
+	// IncludeClosed widens the search to the closed history. It defaults to
+	// false: a store accumulates closed issues without bound (this project's own
+	// runs ~880 closed against ~10 open), so including them by default buries
+	// every live issue under years of finished work.
+	IncludeClosed bool
+
 	Statuses []string
 	Types    []string
 	Labels   []string

@@ -205,7 +205,10 @@ func (m *Model) startReload(reset bool) tea.Cmd {
 
 	// Limit 0 means "no limit" in both backends: the doc set is small and the
 	// column scrolls, so paging it would add state with nothing to show for it.
-	query := domain.SearchIssuesQuery{Types: []string{docType}}
+	// Docs deliberately span the closed history: a doc is reference material, and
+	// closing one archives it rather than finishing work. The Search default is
+	// open-only (see domain.SearchIssuesQuery.IncludeClosed), so this opts in.
+	query := domain.SearchIssuesQuery{Types: []string{docType}, IncludeClosed: true}
 	return loadDocsCmd(m.ctx, m.repo, query)
 }
 

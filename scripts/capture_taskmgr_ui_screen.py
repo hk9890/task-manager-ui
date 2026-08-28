@@ -67,9 +67,16 @@ def feed_keys(fd: int, keys: str) -> None:
         "UP": ESC + "[A",
         "DOWN": ESC + "[B",
     }
+    # CTRL+<letter> is derived rather than tabulated: a terminal sends the
+    # control code as the letter's position in the alphabet, so every binding
+    # the app adds is drivable without touching this table.
+    if keys not in keymap and len(keys) == 6 and keys.startswith("CTRL+") and keys[5].isalpha():
+        keymap[keys] = chr(ord(keys[5].upper()) - ord("A") + 1)
+
     if keys not in keymap and len(keys) != 1:
         raise ValueError(
-            f"unknown send-key name {keys!r}; pass a single character or one of {sorted(keymap)}"
+            f"unknown send-key name {keys!r}; pass a single character, CTRL+<letter>, "
+            f"or one of {sorted(keymap)}"
         )
     data = keymap.get(keys, keys).encode()
     os.write(fd, data)

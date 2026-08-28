@@ -1,7 +1,7 @@
 ╭─ Search ───────────────────── shown ─╮  ╭─ Content ─────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │backend                               │  │T P1 OPN tm-1                 │  │  Core                          │
 ╰──────────────────────────────────────╯  │Backend search result         │  │  Type    : task                │
-╭─ Results ────────────────── 2 exact ─╮  │──────────────────────────────│  │  Status  : open                │
+╭─ Results ─────────── 2 exact · open ─╮  │──────────────────────────────│  │  Status  : open                │
 │› T P1 OPN tm-1 Backend search result │  │Description                   │  │  Priority: P1                  │
 │  B P0 IP tm-2 Another result         │  │Search preview description    │  │  ------------------------------│
 │                                      │  │                              │  │  Ownership                     │
