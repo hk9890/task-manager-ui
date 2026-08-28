@@ -92,3 +92,39 @@ func TestHelpModal_RenderedContentVisible(t *testing.T) {
 		}
 	}
 }
+
+// TestHelpModal_ReboundToggleClosesModal pins the toggle against a rebound key.
+//
+// The overlay opened through the resolved keymap and closed on a hardcoded "?",
+// so with the toggle_help override docs/CONFIGURATION.md shows in its own
+// example config the bound key opened the overlay and did nothing on the second
+// press, while "?" — by then bound to no action — still closed it. Escape was
+// the only way out.
+func TestHelpModal_ReboundToggleClosesModal(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready", "task", 1)
+
+	cfg := config.Default()
+	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
+		Shell: map[string][]string{config.ShellActionHelp: {"f1"}},
+	})
+
+	services, err := NewServices(gw, cfg, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyF1}})
+	if !m.showHelp {
+		t.Fatal("the rebound key did not open the help overlay")
+	}
+
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyF1}})
+	if m.showHelp {
+		t.Fatal("the rebound key did not close the help overlay")
+	}
+}

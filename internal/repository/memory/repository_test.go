@@ -455,7 +455,10 @@ func TestUpdateIssue_NonExistent(t *testing.T) {
 
 func TestUpdateIssue_NilFieldsPreserved(t *testing.T) {
 	r := memory.New()
-	r.Seed(memory.Issue{ID: "taskmgr-3", Title: "Keep title", Status: "open", Priority: 5})
+	// Priority stays inside 0..4: UpdateIssue validates the whole issue after
+	// applying the change, exactly as the SDK's Update does, so a fixture the
+	// production backend could never hold fails an unrelated field update.
+	r.Seed(memory.Issue{ID: "taskmgr-3", Title: "Keep title", Status: "open", Priority: 3})
 
 	// Update only description; title/status/priority must be unchanged.
 	if err := r.UpdateIssue(context.Background(), "taskmgr-3", domain.UpdateIssueInput{
@@ -471,8 +474,8 @@ func TestUpdateIssue_NilFieldsPreserved(t *testing.T) {
 	if detail.Summary.Status != "open" {
 		t.Errorf("Status: want open, got %s", detail.Summary.Status)
 	}
-	if detail.Summary.Priority != 5 {
-		t.Errorf("Priority: want 5, got %d", detail.Summary.Priority)
+	if detail.Summary.Priority != 3 {
+		t.Errorf("Priority: want 3, got %d", detail.Summary.Priority)
 	}
 	if detail.Description != "new desc" {
 		t.Errorf("Description: want 'new desc', got %s", detail.Description)

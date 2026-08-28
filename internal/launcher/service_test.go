@@ -229,3 +229,68 @@ func TestNewServiceRejectsIssueFieldInShellBody(t *testing.T) {
 		}
 	}
 }
+
+// TestNewServiceRejectsIssueFieldInShellDispatchArgument covers the commands
+// that re-parse a plain argument as a shell command line, with no -c flag to
+// mark the body. `tmux new-window "issue {{issue.id}}"` was the example
+// docs/CONFIGURATION.md shipped, and it passed the shell-name check unseen.
+func TestNewServiceRejectsIssueFieldInShellDispatchArgument(t *testing.T) {
+	t.Parallel()
+
+	unsafe := []launcher.Definition{
+		{Action: "danger", Command: "tmux", Args: []string{"new-window", "issue {{issue.id}}"}},
+		{Action: "danger", Command: "tmux", Args: []string{"new-session", "-d", "edit {{issue.title}}"}},
+		{Action: "danger", Command: "ssh", Args: []string{"build-host", "grep {{issue.title}} log"}},
+		{Action: "danger", Command: "/usr/bin/ssh", Args: []string{"host", "{{issue.assignee}}"}},
+		{Action: "danger", Command: "watch", Args: []string{"status {{issue.id}}"}},
+		// An exec wrapper in front must not smuggle it past the argv scan.
+		{Action: "danger", Command: "env", Args: []string{"tmux", "new-window", "note {{issue.labels}}"}},
+	}
+	for _, def := range unsafe {
+		if _, err := launcher.NewService([]launcher.Definition{def}, "/repo/root", &fakes.FakeProcessRunner{}); err == nil {
+			t.Errorf("expected error for unsafe definition command=%q args=%v, got nil", def.Command, def.Args)
+		}
+	}
+
+	safeDispatch := []launcher.Definition{
+		// No issue field reaches the re-parsed argument.
+		{Action: "ok", Command: "tmux", Args: []string{"new-window", "-n", "issues"}},
+		// The issue field travels in the environment, which is not re-parsed.
+		{Action: "ok", Command: "tmux", Args: []string{"new-window"}, Env: []string{"ISSUE_ID={{issue.id}}"}},
+	}
+	for _, def := range safeDispatch {
+		if _, err := launcher.NewService([]launcher.Definition{def}, "/repo/root", &fakes.FakeProcessRunner{}); err != nil {
+			t.Errorf("expected safe definition command=%q args=%v to be accepted, got error: %v", def.Command, def.Args, err)
+		}
+	}
+}
+
+// TestValidateDefinitionsRejectsWhatNewServiceRejects pins the entry point
+// --check-config uses to the same verdict an interactive start reaches.
+func TestValidateDefinitionsRejectsWhatNewServiceRejects(t *testing.T) {
+	t.Parallel()
+
+	cases := []launcher.Definition{
+		{Action: "danger", Command: "sh", Args: []string{"-lc", "echo {{issue.title}}"}},
+		{Action: "danger", Command: "tmux", Args: []string{"new-window", "issue {{issue.id}}"}},
+		{Action: "", Command: "sh"},
+		{Action: "no-command", Command: ""},
+		{Action: "ok", Command: "grep", Args: []string{"{{issue.title}}"}},
+	}
+
+	for _, def := range cases {
+		_, serviceErr := launcher.NewService([]launcher.Definition{def}, "/repo/root", &fakes.FakeProcessRunner{})
+		validateErr := launcher.ValidateDefinitions([]launcher.Definition{def})
+		if (serviceErr == nil) != (validateErr == nil) {
+			t.Errorf("verdict differs for command=%q args=%v: NewService=%v, ValidateDefinitions=%v",
+				def.Command, def.Args, serviceErr, validateErr)
+		}
+	}
+
+	if err := launcher.ValidateDefinitions([]launcher.Definition{
+		{Action: "dup", Command: "grep"},
+		{Action: "dup", Command: "grep"},
+	}); err == nil {
+		t.Error("expected ValidateDefinitions to reject a duplicate action")
+	}
+}

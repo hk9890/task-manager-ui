@@ -69,6 +69,7 @@ var (
 	IssuePriorityP3Color = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
 
 	IssueStatusOpenColor       = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+	IssueStatusReadyColor      = lipgloss.AdaptiveColor{Light: "#0F9B8E", Dark: "#4FD1C5"}
 	IssueStatusInProgressColor = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
 	IssueStatusBlockedColor    = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
 	IssueStatusClosedColor     = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
@@ -83,6 +84,7 @@ var (
 	IssuePriorityP2Style    = lipgloss.NewStyle().Foreground(IssuePriorityP2Color)
 	IssuePriorityP3Style    = lipgloss.NewStyle().Foreground(IssuePriorityP3Color)
 	IssueStatusOpenStyle    = lipgloss.NewStyle().Foreground(IssueStatusOpenColor)
+	IssueStatusReadyStyle   = lipgloss.NewStyle().Foreground(IssueStatusReadyColor)
 	IssueStatusIPStyle      = lipgloss.NewStyle().Foreground(IssueStatusInProgressColor)
 	IssueStatusBlockedStyle = lipgloss.NewStyle().Foreground(IssueStatusBlockedColor)
 	IssueStatusClosedStyle  = lipgloss.NewStyle().Foreground(IssueStatusClosedColor)
@@ -165,6 +167,8 @@ func IssueStatusStyle(status string) lipgloss.Style {
 	switch normalizeIssueToken(status) {
 	case "open":
 		return IssueStatusOpenStyle
+	case "ready":
+		return IssueStatusReadyStyle
 	case "in_progress":
 		return IssueStatusIPStyle
 	case "blocked":

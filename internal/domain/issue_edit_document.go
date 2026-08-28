@@ -138,7 +138,7 @@ Keep section headings and marker comments unchanged.
 // ParseIssueEditDocument parses the editable document content.
 func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 	if strings.Count(content, issueEditMarkerEditableEnd) > 1 {
-		return IssueEditDocument{}, fmt.Errorf("multiple %s markers found — description body must not contain TASKMGRUI: marker tokens", issueEditMarkerEditableEnd)
+		return IssueEditDocument{}, fmt.Errorf("multiple %s markers found — a field body must not contain TASKMGRUI: marker tokens", issueEditMarkerEditableEnd)
 	}
 
 	editable, err := issueEditExtractField(content, issueEditMarkerEditableBegin, issueEditMarkerEditableEnd)
@@ -146,37 +146,32 @@ func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 		return IssueEditDocument{}, err
 	}
 
-	title, err := issueEditExtractField(editable, issueEditFieldTitleBegin, issueEditFieldTitleEnd)
+	// Fields are consumed in document order and each one advances the scan
+	// window past its own END marker, so a marker pasted into one field body
+	// cannot satisfy a later field's markers and steal that field's value.
+	fields := issueEditFieldScanner{rest: editable}
+
+	title, err := fields.next(issueEditFieldTitleBegin, issueEditFieldTitleEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	description, err := issueEditExtractField(editable, issueEditFieldDescriptionBegin, issueEditFieldDescriptionEnd)
+	description, err := fields.next(issueEditFieldDescriptionBegin, issueEditFieldDescriptionEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	if err := issueEditCheckDescriptionForMarkers(description); err != nil {
-		return IssueEditDocument{}, err
-	}
-
-	descEndIdx := strings.Index(editable, issueEditFieldDescriptionEnd)
-	if descEndIdx < 0 {
-		return IssueEditDocument{}, fmt.Errorf("missing %s marker", issueEditFieldDescriptionEnd)
-	}
-	afterDesc := editable[descEndIdx+len(issueEditFieldDescriptionEnd):]
-
-	status, err := issueEditExtractField(afterDesc, issueEditFieldStatusBegin, issueEditFieldStatusEnd)
+	status, err := fields.next(issueEditFieldStatusBegin, issueEditFieldStatusEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	issueType, err := issueEditExtractField(afterDesc, issueEditFieldTypeBegin, issueEditFieldTypeEnd)
+	issueType, err := fields.next(issueEditFieldTypeBegin, issueEditFieldTypeEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	priorityRaw, err := issueEditExtractField(afterDesc, issueEditFieldPriorityBegin, issueEditFieldPriorityEnd)
+	priorityRaw, err := fields.next(issueEditFieldPriorityBegin, issueEditFieldPriorityEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
@@ -186,12 +181,12 @@ func ParseIssueEditDocument(content string) (IssueEditDocument, error) {
 		return IssueEditDocument{}, err
 	}
 
-	assignee, err := issueEditExtractField(afterDesc, issueEditFieldAssigneeBegin, issueEditFieldAssigneeEnd)
+	assignee, err := fields.next(issueEditFieldAssigneeBegin, issueEditFieldAssigneeEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
 
-	labelsRaw, err := issueEditExtractField(afterDesc, issueEditFieldLabelsBegin, issueEditFieldLabelsEnd)
+	labelsRaw, err := fields.next(issueEditFieldLabelsBegin, issueEditFieldLabelsEnd)
 	if err != nil {
 		return IssueEditDocument{}, err
 	}
@@ -277,27 +272,51 @@ func BuildIssueUpdateInput(original IssueDetail, edited IssueEditDocument) (Upda
 	return input, changed
 }
 
+// issueEditFieldScanner consumes the editable region one field at a time, in
+// document order. Each call advances the window past the field's END marker, so
+// a marker token pasted into one field body can neither satisfy a later field's
+// markers nor be accepted as that field's value.
+type issueEditFieldScanner struct {
+	rest string
+}
+
+func (s *issueEditFieldScanner) next(beginMarker, endMarker string) (string, error) {
+	value, remainder, err := issueEditCutField(s.rest, beginMarker, endMarker)
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(value, "TASKMGRUI:") {
+		return "", fmt.Errorf("field body between %s and %s must not contain TASKMGRUI: marker tokens (would corrupt edit round-trip)", beginMarker, endMarker)
+	}
+
+	s.rest = remainder
+	return value, nil
+}
+
 func issueEditExtractField(content, beginMarker, endMarker string) (string, error) {
+	value, _, err := issueEditCutField(content, beginMarker, endMarker)
+	return value, err
+}
+
+// issueEditCutField returns the body between the two markers and everything
+// after the end marker. Line endings are normalized to LF so a CRLF-writing
+// editor round-trips an untouched document to the same bytes it was given
+// rather than writing carriage returns into the store.
+func issueEditCutField(content, beginMarker, endMarker string) (string, string, error) {
 	start := strings.Index(content, beginMarker)
 	if start < 0 {
-		return "", fmt.Errorf("missing marker %q", beginMarker)
+		return "", "", fmt.Errorf("missing marker %q", beginMarker)
 	}
 
 	start += len(beginMarker)
 	rest := content[start:]
 	end := strings.Index(rest, endMarker)
 	if end < 0 {
-		return "", fmt.Errorf("missing marker %q", endMarker)
+		return "", "", fmt.Errorf("missing marker %q", endMarker)
 	}
 
-	return strings.Trim(rest[:end], "\n"), nil
-}
-
-func issueEditCheckDescriptionForMarkers(description string) error {
-	if strings.Contains(description, "TASKMGRUI:") {
-		return fmt.Errorf("description body must not contain TASKMGRUI: marker tokens (would corrupt edit round-trip)")
-	}
-	return nil
+	body := strings.ReplaceAll(rest[:end], "\r\n", "\n")
+	return strings.Trim(body, "\n"), rest[end+len(endMarker):], nil
 }
 
 func parseIssueEditPriority(raw string) (int, error) {

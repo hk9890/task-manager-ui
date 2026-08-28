@@ -51,20 +51,31 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 		if m.detail.Loading {
 			return nil
 		}
-		selection := m.currentSelection()
-		if selection == nil || selection.Issue.ID == "" {
-			return nil
-		}
-		m.detail.SelectionID = selection.Issue.ID
-		m.detail.SelectBrowserIssue(selection.Issue.ID)
-		m.detail.Loading = true
-		m.detail.Error = ""
-		m.detail.TargetID = selection.Issue.ID
-		m.markSurfaceRefreshed(mode.Detail)
-		return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
+		return m.reloadDetailCmd()
 	default:
 		return nil
 	}
+}
+
+// reloadDetailCmd issues a detail load for the current selection and marks the
+// surface refreshed. It is the path the explicit reload key takes.
+//
+// The reload key used to set detail.Loading and then call
+// ensureDetailForCurrentSelectionCmd, whose first guard returns nil for a
+// target that is already loading — so the key issued no load at all and left
+// the header claiming "Loading: detail" for the rest of the session.
+func (m *Model) reloadDetailCmd() tea.Cmd {
+	selection := m.currentSelection()
+	if selection == nil || selection.Issue.ID == "" {
+		return nil
+	}
+	m.detail.SelectionID = selection.Issue.ID
+	m.detail.SelectBrowserIssue(selection.Issue.ID)
+	m.detail.Loading = true
+	m.detail.Error = ""
+	m.detail.TargetID = selection.Issue.ID
+	m.markSurfaceRefreshed(mode.Detail)
+	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
 }
 
 func (m *Model) markBrowseSurfacesDirty() {

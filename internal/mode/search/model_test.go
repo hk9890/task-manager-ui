@@ -990,7 +990,18 @@ func TestSearchScopeToggleWidensToClosedAndBack(t *testing.T) {
 		t.Fatal("search must capture the scope key while the results pane has focus")
 	}
 
-	_ = m.Update(tea.KeyMsg{Type: toggleScopeKey})
+	// Each toggle re-runs the search; deliver its result before the next press,
+	// because the toggle is suppressed while a search is in flight (otherwise
+	// the badge would name a scope the visible results did not come from).
+	settle := func(t *testing.T, cmd tea.Cmd) {
+		t.Helper()
+		if cmd == nil {
+			t.Fatal("expected the scope toggle to re-run the search")
+		}
+		_ = m.Update(cmd())
+	}
+
+	settle(t, m.Update(tea.KeyMsg{Type: toggleScopeKey}))
 	if !m.includeClosed {
 		t.Fatal("scope key did not widen the search to closed issues")
 	}
@@ -998,7 +1009,7 @@ func TestSearchScopeToggleWidensToClosedAndBack(t *testing.T) {
 		t.Fatalf("widened scope returned %v, want both the open and the closed issue", got)
 	}
 
-	_ = m.Update(tea.KeyMsg{Type: toggleScopeKey})
+	settle(t, m.Update(tea.KeyMsg{Type: toggleScopeKey}))
 	if m.includeClosed {
 		t.Fatal("scope key did not narrow the search back to open issues")
 	}

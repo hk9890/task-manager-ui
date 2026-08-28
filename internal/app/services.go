@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -70,12 +71,16 @@ type Services struct {
 	Logger *slog.Logger
 }
 
-// NewServices constructs the minimal app services container.
-func NewServices(repo repository.Repository, cfg config.Model, projectRoot string) (Services, error) {
-	if repo == nil {
-		return Services{}, errors.New("repo is required")
-	}
+// LaunchableActions are the launcher action names the shell can actually start:
+// "editor" through the edit keybinding, and one per launch keybinding. The
+// keybinding action set is fixed (see internal/config), so a definition with any
+// other action name is configured but unreachable.
+var LaunchableActions = []string{"editor", "nvim", "opencode", "shell-command"}
 
+// LauncherDefinitions converts the configured launcher definitions into the
+// launcher package's own type. Exported so --check-config validates exactly the
+// definition set an interactive start builds.
+func LauncherDefinitions(cfg config.Model) []launcher.Definition {
 	definitions := make([]launcher.Definition, 0, len(cfg.Launcher.Definitions))
 	for _, definition := range cfg.Launcher.Definitions {
 		definitions = append(definitions, launcher.Definition{
@@ -86,8 +91,44 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 			WorkDir: definition.WorkDir,
 		})
 	}
+	return definitions
+}
 
-	launcherService, err := launcher.NewService(definitions, projectRoot, launcher.NewExecProcessRunner())
+// ValidateLauncherDefinitions reports whether the configured launcher
+// definitions would be accepted by an interactive start.
+func ValidateLauncherDefinitions(cfg config.Model) error {
+	return launcher.ValidateDefinitions(LauncherDefinitions(cfg))
+}
+
+// UnlaunchableActions returns the configured launcher actions no keybinding can
+// start, in config order. Startup warns about each one rather than leaving the
+// operator with a definition that validates and then never runs.
+func UnlaunchableActions(cfg config.Model) []string {
+	launchable := make(map[string]struct{}, len(LaunchableActions))
+	for _, action := range LaunchableActions {
+		launchable[action] = struct{}{}
+	}
+
+	var unreachable []string
+	for _, definition := range cfg.Launcher.Definitions {
+		action := strings.TrimSpace(definition.Action)
+		if action == "" {
+			continue
+		}
+		if _, ok := launchable[action]; !ok {
+			unreachable = append(unreachable, action)
+		}
+	}
+	return unreachable
+}
+
+// NewServices constructs the minimal app services container.
+func NewServices(repo repository.Repository, cfg config.Model, projectRoot string) (Services, error) {
+	if repo == nil {
+		return Services{}, errors.New("repo is required")
+	}
+
+	launcherService, err := launcher.NewService(LauncherDefinitions(cfg), projectRoot, launcher.NewExecProcessRunner())
 	if err != nil {
 		return Services{}, err
 	}

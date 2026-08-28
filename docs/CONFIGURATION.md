@@ -50,6 +50,9 @@ The v1 model is intentionally small and only covers app-shell concerns:
       leaves the field nil in the override struct, so the built-in value is
       preserved; writing `args: []` produces a non-nil empty slice that
       **replaces** the built-in args (use this to explicitly clear defaults)
+  - Only the four built-in action names can be launched — there is no keybinding
+    action for any other. Startup warns by name for a definition nothing can
+    start; override a built-in instead of appending a new action.
 - `UI.ShowModeSwitcherHelp`
   - Defaults to `true`.
   - Controls whether the shell renders the mode hotkey hint line.
@@ -68,11 +71,12 @@ launcher:
         - run
         - --issue
         - "{{issue.id}}"
-    - action: tmux-note
-      command: tmux
+    - action: shell-command
+      command: sh
       args:
-        - new-window
-        - "issue {{issue.id}}"
+        - -lc
+        - 'printf "issue=%s\n" "$0"'
+        - "{{issue.id}}"
 
 ui:
   show_mode_switcher_help: false
@@ -163,9 +167,10 @@ Notes:
   store, or the project path registered for a central store. See
   [CODING.md → Store resolution](CODING.md#store-resolution).
 
-The shell-launcher security rule (do not interpolate issue fields into a
-`sh -c`/`sh -lc` body) is an architectural rule — see `docs/CODING.md` Core
-Architectural Rules.
+The shell-launcher security rule (do not interpolate an issue field into any
+argument that is re-parsed as a command line) is an architectural rule — see
+`docs/CODING.md` Core Architectural Rules. `taskmgr-ui --check-config` rejects a
+definition that breaks it.
 
 ## Launching from the shell
 

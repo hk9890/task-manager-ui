@@ -323,7 +323,7 @@ func renderResultsBody(state State, width int) []string {
 
 	// Cold-start: loading with no prior results — render skeleton placeholder rows.
 	if state.Loading && len(state.Results) == 0 {
-		return renderSkeletonRows(width, 6)
+		return renderSkeletonRows(width, 6, state.SkeletonPhase)
 	}
 
 	if len(state.Results) == 0 {
@@ -366,12 +366,18 @@ func renderResultRows(state State, width int) []string {
 
 // renderSkeletonRows returns n skeleton placeholder rows for the cold-start
 // loading state. Each row uses RenderCompactSkeleton shaped like a real issue row.
-func renderSkeletonRows(width, n int) []string {
+//
+// phase is what makes the rows pulse: it indexes styles.SkeletonShades and
+// advances every 4 spinner frames (docs/DESIGN-GUIDE.md, Nothing waits
+// silently). Omitting it pinned every row to shade 0, so a stalled search
+// looked exactly like a fast one.
+func renderSkeletonRows(width, n, phase int) []string {
 	lines := make([]string, n)
 	for i := range lines {
 		lines[i] = issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 			Width:  width,
 			Seed:   i,
+			Phase:  phase,
 			Styled: true,
 		})
 	}

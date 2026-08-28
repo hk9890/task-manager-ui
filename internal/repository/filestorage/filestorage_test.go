@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
@@ -466,5 +467,47 @@ func TestLoad_LargeIssueLine(t *testing.T) {
 	}
 	if !strings.HasPrefix(detail.Description, "aaaa") {
 		t.Errorf("Description prefix: got %q..., want all 'a'", detail.Description[:min(20, len(detail.Description))])
+	}
+}
+
+// TestLoadedIDsSurviveACreate pins the collision the default ID generator used
+// to cause: a loaded snapshot holds "mem-1" and "mem-2", the generator starts at
+// "mem-1", and the first issue created in the session replaced a loaded one
+// outright — same store count, a different title, and no error.
+func TestLoadedIDsSurviveACreate(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "mem-1", Title: "Loaded one", Status: "open"})
+	r.Seed(memory.Issue{ID: "mem-2", Title: "Loaded two", Status: "open"})
+
+	path := filepath.Join(t.TempDir(), "store.jsonl")
+	if err := filestorage.Save(r, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := filestorage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	created, err := loaded.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "Created in session"})
+	if err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+	if created.IssueID == "mem-1" || created.IssueID == "mem-2" {
+		t.Fatalf("CreateIssue reused a loaded ID: %q", created.IssueID)
+	}
+
+	for id, wantTitle := range map[string]string{
+		"mem-1":         "Loaded one",
+		"mem-2":         "Loaded two",
+		created.IssueID: "Created in session",
+	} {
+		detail, err := loaded.Issue(context.Background(), id)
+		if err != nil {
+			t.Fatalf("Issue(%s): %v", id, err)
+		}
+		if detail.Summary.Title != wantTitle {
+			t.Errorf("Issue(%s).Title = %q, want %q", id, detail.Summary.Title, wantTitle)
+		}
 	}
 }

@@ -77,21 +77,21 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 // matchesSearchLocked reports whether si matches the given SearchIssuesQuery.
 // Caller must hold at least RLock.
 func (r *Repository) matchesSearchLocked(si *storedIssue, q domain.SearchIssuesQuery) bool {
-	// Text filter: case-insensitive AND-of-words across Title and Description.
-	// Every whitespace-separated word in q.Text must appear as a substring in at
-	// least one of those fields; words may match different fields (order-independent).
-	// This mirrors the task-manager SDK's TextAllWords semantics so search behaves
-	// identically across the memory and taskmgr backends and the CLI. Notes are
-	// intentionally excluded: the taskmgr backend has no notes field (the SDK
-	// stores a single markdown body), so matching notes here would let the memory
-	// fixture certify search behavior the real backend cannot reproduce. A
-	// whitespace-only query imposes no constraint (strings.Fields yields no words).
+	// Text filter: case-insensitive AND-of-words over the SDK's virtual "text"
+	// field, which is lower(id + " " + title + " " + description) — see
+	// tasks/query.go. Every whitespace-separated word in q.Text must appear as a
+	// substring of it; words may match different parts (order-independent).
+	// Matching the ID matters: searching for an issue ID is a normal operator
+	// move, and leaving it out let this fixture report "no matches" for a query
+	// the production backend answers. Notes are intentionally excluded: the
+	// taskmgr backend has no notes field (the SDK stores a single markdown body),
+	// so matching notes here would let the memory fixture certify search
+	// behavior the real backend cannot reproduce. A whitespace-only query
+	// imposes no constraint (strings.Fields yields no words).
 	if q.Text != "" {
-		title := strings.ToLower(si.title)
-		desc := strings.ToLower(si.description)
+		text := strings.ToLower(si.id + " " + si.title + " " + si.description)
 		for _, word := range strings.Fields(strings.ToLower(q.Text)) {
-			if !strings.Contains(title, word) &&
-				!strings.Contains(desc, word) {
+			if !strings.Contains(text, word) {
 				return false
 			}
 		}

@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -30,11 +31,14 @@ var (
 	t3 = t0.Add(3 * time.Hour)
 )
 
-// makeLarge returns n IssueSummary values with the same priority and UpdatedAt.
+// makeLarge returns n IssueSummary values with the same priority and UpdatedAt
+// and distinct IDs. The IDs have to differ: Compose drops a Not Ready issue that
+// In Progress already claims, so a fixture where every issue shares one ID makes
+// two populated columns collapse into one.
 func makeLarge(n int) []domain.IssueSummary {
 	out := make([]domain.IssueSummary, n)
 	for i := range out {
-		out[i] = makeSummary("id", 1, t0)
+		out[i] = makeSummary(fmt.Sprintf("large-%d", i), 1, t0)
 	}
 	return out
 }
@@ -53,7 +57,7 @@ func makeClosedLarge(n int) []domain.IssueSummary {
 func makeLargeBlocked(n int) []domain.BlockedIssueView {
 	out := make([]domain.BlockedIssueView, n)
 	for i := range out {
-		out[i] = makeBlocked("id", 1, t0)
+		out[i] = makeBlocked(fmt.Sprintf("blocked-%d", i), 1, t0)
 	}
 	return out
 }
@@ -581,6 +585,52 @@ func TestComposeDoesNotMutateInputSlices(t *testing.T) {
 		t.Errorf("Compose mutated InProgress input: got %s %s, want %s %s",
 			inProgress[0].ID, inProgress[1].ID, origInProgress[0], origInProgress[1])
 	}
+}
+
+// TestComposeDoesNotRenderAnIssueInTwoColumns pins the cross-column dedupe.
+// Store.Blocked skips only closed and non-work issues, so an in_progress issue
+// with an open blocker comes back from both the Blocked and the InProgress
+// query. Compose used to place it in both columns, which drew it twice, counted
+// it in both headers, and made the auto-refresh cursor jump out of In Progress
+// (restoreFromAnchor scans columns in index order and finds Not Ready first).
+func TestComposeDoesNotRenderAnIssueInTwoColumns(t *testing.T) {
+	t.Parallel()
+
+	shared := makeSummary("shared-1", 1, t0)
+
+	got := Compose(Inputs{
+		Blocked: []domain.BlockedIssueView{
+			{Issue: shared},
+			makeBlocked("blocked-only", 1, t0),
+		},
+		InProgress:  []domain.IssueSummary{shared, makeSummary("wip-only", 1, t0)},
+		ClosedLimit: 10,
+	})
+
+	assertIDs(t, "InProgress", got.InProgress.Issues, []string{"shared-1", "wip-only"})
+	assertIDs(t, "NotReady", got.NotReady.Issues, []string{"blocked-only"})
+
+	if got.NotReady.Total != 1 {
+		t.Errorf("NotReady.Total = %d, want 1 — the header must not count an issue another column owns", got.NotReady.Total)
+	}
+	if got.InProgress.Total != 2 {
+		t.Errorf("InProgress.Total = %d, want 2", got.InProgress.Total)
+	}
+}
+
+// TestComposeKeepsStoredBlockedThatIsNotInProgress guards the dedupe against
+// over-reaching: only the overlap is dropped, never a blocked issue of its own.
+func TestComposeKeepsStoredBlockedThatIsNotInProgress(t *testing.T) {
+	t.Parallel()
+
+	got := Compose(Inputs{
+		StoredBlocked: []domain.IssueSummary{makeSummary("stored-1", 1, t0)},
+		InProgress:    []domain.IssueSummary{makeSummary("wip-1", 1, t0)},
+		ClosedLimit:   10,
+	})
+
+	assertIDs(t, "NotReady", got.NotReady.Issues, []string{"stored-1"})
+	assertIDs(t, "InProgress", got.InProgress.Issues, []string{"wip-1"})
 }
 
 // assertIDs checks that the Issues in col have IDs in the expected order.

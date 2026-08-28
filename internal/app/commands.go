@@ -63,7 +63,8 @@ func launchActionCmd(ctx context.Context, services Services, action string, issu
 // handleEditIssuePrepared processes editIssuePreparedMsg in Update.
 func (m Model) handleEditIssuePrepared(modeCmd tea.Cmd, msg editIssuePreparedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError))
+		m.logger().Error("failed to prepare the issue edit document", "issue_id", msg.issueID, "error", msg.err.Error())
+		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s: %v", msg.issueID, msg.err), toaster.StyleError))
 	}
 	editorCmd, err := m.services.Editor.BuildEditorCmd(msg.prepared.TempPath)
 	if err != nil {
@@ -105,7 +106,14 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 	}
 
 	if msg.err != nil {
-		toastCmd := m.showToast(fmt.Sprintf("Failed to edit issue %s", msg.issueID), toaster.StyleError)
+		// Name the cause. ApplyEdits removes the temp document in a defer
+		// before returning, so a bare "Failed to edit issue X" left the
+		// operator with their rewritten text gone and no diagnostic anywhere —
+		// not the store's own actionable messages ("issue is closed; reopen it
+		// before editing"), not a parse error ("invalid priority \"P5\""), and
+		// nothing in the log under --debug either.
+		m.logger().Error("failed to apply the issue edit", "issue_id", msg.issueID, "error", msg.err.Error())
+		toastCmd := m.showToast(fmt.Sprintf("Failed to edit issue %s: %v", msg.issueID, msg.err), toaster.StyleError)
 		notifyEditResult()
 		return m, batchCmds(modeCmd, toastCmd)
 	}

@@ -227,6 +227,32 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		}
 	}
 
+	// A definition no keybinding can start validates cleanly and then never
+	// runs, so name it rather than leaving the operator to discover the silence.
+	for _, action := range app.UnlaunchableActions(configResult.Config) {
+		warning := fmt.Sprintf(
+			"launcher action %q cannot be launched: no keybinding starts it (launchable actions: %s)",
+			action, strings.Join(app.LaunchableActions, ", "),
+		)
+		if startupLogger != nil {
+			startupLogger.Warn("config warning", "warning", warning)
+		} else {
+			_, _ = fmt.Fprintf(stderr, "taskmgr-ui config warning: %s\n", warning)
+		}
+	}
+
+	// Validate the launcher definitions here, not only inside the interactive
+	// start: --check-config is the documented way to check a config, and it
+	// must reject exactly what start rejects.
+	if err := app.ValidateLauncherDefinitions(configResult.Config); err != nil {
+		if startupLogger != nil {
+			startupLogger.Error("invalid launcher configuration", "error", err.Error())
+		} else {
+			_, _ = fmt.Fprintf(stderr, "invalid launcher configuration: %v\n", err)
+		}
+		return 1
+	}
+
 	autoRefresh := !opts.noAuto
 
 	// Resolve --repo-file: only --repo=memory consumes it (the JSONL source of

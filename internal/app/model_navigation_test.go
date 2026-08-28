@@ -332,7 +332,6 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	if m.detail.Detail.Summary.ID != "tm-9" {
 		t.Fatalf("expected search selection detail to load, got %#v", m.detail.Detail)
 	}
-	m.renderBody()
 	if got := m.search.SessionState(); len(got.Page.Results) != 1 {
 		t.Fatalf("expected search page state present before reload, got %#v", got)
 	}
@@ -347,7 +346,6 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	gw.SetError(fakes.MethodSearch, errors.New("refresh boom"))
 
 	m = applyMessages(t, m, runBatch(cmd))
-	m.renderBody()
 	if got := m.search.SessionState(); got.Error != "refresh boom" || len(got.Page.Results) != 1 {
 		t.Fatalf("expected last search page retained after refresh failure, got %#v", got)
 	}
@@ -356,6 +354,54 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	}
 	if !strings.Contains(m.View(), "refresh boom") || !strings.Contains(m.View(), "Search result") || !strings.Contains(m.View(), "failed") || !strings.Contains(m.View(), "x") {
 		t.Fatalf("expected shell view to preserve search context on refresh failure, got:\n%s", m.View())
+	}
+}
+
+// TestSearchPreviewIsSyncedFromUpdateNotFromView pins Core Architectural Rule 9:
+// selection/detail sync is event-driven, not polled. renderBody used to call
+// syncSearchPreviewDetailState, so View() mutated model state and only stayed
+// correct because the always-on spinner tick re-rendered ten times a second.
+func TestSearchPreviewIsSyncedFromUpdateNotFromView(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1},
+		Description: "detail from the message path",
+	})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	// The preview is populated by the message path alone — no render needed.
+	if !strings.Contains(m.View(), "detail from the message path") {
+		t.Fatalf("the search preview was not synced by Update, got:\n%s", m.View())
+	}
+
+	// A render must not move it. Change the shell's detail behind View's back:
+	// a pure renderer leaves the preview exactly as the last message left it.
+	m.detail.Detail = domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1},
+		Description: "detail smuggled in through View",
+	}
+	if strings.Contains(m.View(), "detail smuggled in through View") {
+		t.Fatal("View() mutated the search preview state")
 	}
 }
 

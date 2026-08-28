@@ -650,3 +650,40 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 		t.Fatalf("expected launcher lifecycle guidance toast, got:\n%s", view)
 	}
 }
+
+// TestModelEditFailureToastNamesTheCause pins that a failed edit says why.
+//
+// ApplyEdits removes the temp document in a defer before returning, so a bare
+// "Failed to edit issue X" left the operator with their rewritten text gone and
+// no diagnostic anywhere — not the parser's message, not the store's own
+// ("issue is closed; reopen it before editing"), and nothing in the log.
+func TestModelEditFailureToastNamesTheCause(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+
+	fakeLauncher := &fakes.FakeLauncher{}
+	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
+	if err != nil {
+		t.Fatalf("NewServicesWithLauncher returned error: %v", err)
+	}
+	services.Editor = &fakes.FakeEditor{}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, _ := m.Update(editIssueResultMsg{
+		issueID: "tm-1",
+		err:     errors.New(`invalid priority "P5" (expected 0..4)`),
+	})
+	m = next.(Model)
+
+	view := m.View()
+	if !strings.Contains(view, "Failed to edit issue tm-1") {
+		t.Fatalf("expected an edit failure toast, got:\n%s", view)
+	}
+	if !strings.Contains(view, `invalid priority "P5"`) {
+		t.Fatalf("the toast does not name the cause, got:\n%s", view)
+	}
+}

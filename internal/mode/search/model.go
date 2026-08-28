@@ -216,6 +216,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case toggleScopeKey:
 		// Widen to, or narrow from, the closed history and re-run the applied
 		// query so the visible result set always matches the badge.
+		//
+		// The flip waits on the re-run being dispatched: triggerSearchWithAnchor
+		// returns nil while a search is already in flight, and flipping anyway
+		// left the Results header naming a scope the visible results did not
+		// come from, with no key that restored agreement.
+		if m.loading {
+			m.logger.Debug("search scope toggle suppressed; search already in flight",
+				"include_closed", m.includeClosed)
+			return nil
+		}
 		m.includeClosed = !m.includeClosed
 		m.logger.Debug("search scope toggled", "include_closed", m.includeClosed)
 		return m.triggerSearchWithAnchor(m.appliedQuery, nil)

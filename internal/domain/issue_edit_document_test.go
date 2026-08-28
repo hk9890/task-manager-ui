@@ -373,3 +373,43 @@ func TestParseIssueEditDocumentPreservesMultiParagraphDescription(t *testing.T) 
 		t.Fatalf("expected description to preserve blank lines, got %q", parsed.Description)
 	}
 }
+
+// TestParseIssueEditDocumentNormalizesCRLFBodies pins the CRLF round trip: an
+// editor configured with fileformat=dos rewrites the whole document with
+// carriage returns, and an unedited save must still be a no-change save rather
+// than writing \r into the stored description.
+func TestParseIssueEditDocumentNormalizesCRLFBodies(t *testing.T) {
+	t.Parallel()
+
+	issue := IssueDetail{
+		Summary: IssueSummary{
+			Title:    "CRLF round trip",
+			Status:   "open",
+			Type:     "task",
+			Priority: 2,
+			Assignee: "alice",
+			Labels:   []string{"infra"},
+		},
+		Description: "line one\nline two",
+	}
+
+	crlf := strings.ReplaceAll(RenderIssueEditDocument(issue), "\n", "\r\n")
+
+	doc, err := ParseIssueEditDocument(crlf)
+	if err != nil {
+		t.Fatalf("ParseIssueEditDocument returned error for a CRLF document: %v", err)
+	}
+	if strings.Contains(doc.Description, "\r") {
+		t.Fatalf("parsed description carries carriage returns: %q", doc.Description)
+	}
+	if doc.Description != issue.Description {
+		t.Fatalf("description = %q, want %q", doc.Description, issue.Description)
+	}
+	if doc.Title != issue.Summary.Title {
+		t.Fatalf("title = %q, want %q", doc.Title, issue.Summary.Title)
+	}
+
+	if _, changed := BuildIssueUpdateInput(issue, doc); changed {
+		t.Fatal("an unedited CRLF round trip reported a change")
+	}
+}

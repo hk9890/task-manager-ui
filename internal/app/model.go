@@ -48,6 +48,14 @@ type Model struct {
 
 	selectedByMode map[mode.ID]*mode.Selection
 
+	// drillSelection is the issue Detail drilled into from its Dependencies
+	// rail. While it is set and Detail is active it IS the shell's selection:
+	// the browse tab's row is not what the operator is looking at, so acting on
+	// it would edit, close, comment on or launch against the wrong issue. It is
+	// cleared whenever the shell leaves Detail or a browse tab moves its own
+	// selection.
+	drillSelection *mode.Selection
+
 	board  *boardmode.Model
 	docs   *docsmode.Model
 	search *searchmode.Model
@@ -76,6 +84,14 @@ type Model struct {
 	refreshStateBySurface map[mode.ID]surfaceRefreshState
 
 	spinnerFrame int
+
+	// spinnerTicking is true while a loading.TickMsg is scheduled. The tick used
+	// to be armed at startup and re-armed unconditionally, so View() ran ten
+	// times a second for the life of the process — every frame re-rendering the
+	// issue markdown from scratch — and every frame after the first was
+	// byte-identical and thrown away by Bubble Tea's diff. It is now armed only
+	// while something is loading, and there is at most one chain at a time.
+	spinnerTicking bool
 
 	width  int
 	height int
@@ -199,10 +215,13 @@ func (m Model) Init() tea.Cmd {
 		return startupHealthCheckMsg{err: err}
 	}
 	sweepCmd := m.services.SweepStaleTempFiles()
+	// The spinner tick is not armed here. Update arms it whenever something
+	// starts loading and stops re-arming when nothing is, so an idle app draws
+	// no frames; Init cannot set the armed flag anyway (value receiver).
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, sweepCmd, m.scheduleSpinnerTick())
+		return tea.Batch(healthCheckCmd, sweepCmd)
 	}
-	return tea.Batch(healthCheckCmd, sweepCmd, m.scheduleRefreshTick(), m.scheduleSpinnerTick())
+	return tea.Batch(healthCheckCmd, sweepCmd, m.scheduleRefreshTick())
 }
 
 // lazySearchInitCmd fires m.search.Init() exactly once — the first time the
@@ -245,15 +264,46 @@ func (m *Model) lazyDocsInitCmd() tea.Cmd {
 }
 
 // Update handles root-level shell messages.
+//
+// It wraps update so the spinner tick is armed at one choke point: whatever a
+// handler did, the tick runs if and only if something is loading afterwards.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+
+	model, ok := next.(Model)
+	if !ok {
+		return next, cmd
+	}
+	model.syncSearchPreviewDetailState()
+	return model, batchCmds(cmd, model.ensureSpinnerTickCmd())
+}
+
+// ensureSpinnerTickCmd arms the spinner tick when work is in flight and no tick
+// is already scheduled. Nothing waits silently (docs/DESIGN-GUIDE.md), and
+// nothing spins while nothing waits.
+func (m *Model) ensureSpinnerTickCmd() tea.Cmd {
+	if m.spinnerTicking || len(m.loadingStates()) == 0 {
+		return nil
+	}
+	m.spinnerTicking = true
+	return m.scheduleSpinnerTick()
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle startup health check result before any other processing.
 	if check, ok := msg.(startupHealthCheckMsg); ok {
 		if check.err != nil {
+			// Log every failure code, not only the one with a fatal screen. An
+			// unreadable store directory or a corrupt store reached neither the
+			// log docs/MONITORING.md points a diagnosing agent at nor a toast,
+			// so the operator saw only whatever the following Dashboard call
+			// happened to render.
+			m.logger().Error("task-manager health check failed", "error", check.err)
+
 			var gwErr domain.RepositoryError
 			if errors.As(check.err, &gwErr) && gwErr.Code == domain.ErrorCodeNoDatabaseFound {
 				m.fatalErrTitle = "no task-manager store here"
 				m.fatalErrBody = "No task-manager store resolved for this directory: no local .tasks store, and no central store registered for it.\n\nRun 'taskmgr init' to create one, use --cwd to point at a directory that has one, or use --store-name to open a central store by name ('taskmgr store list' shows them)."
-				m.logger().Error("task-manager health check failed", "error", check.err)
 				return m, nil
 			}
 		}
@@ -310,7 +360,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.showHelp {
-		if k, ok := msg.(tea.KeyMsg); ok && k.String() == "?" {
+		// Close through the same action that opens it. Matching a literal "?"
+		// made the toggle one-way for anyone who rebound toggle_help — the
+		// example config in docs/CONFIGURATION.md binds it to F1 — leaving
+		// Escape as the only way out.
+		if k, ok := msg.(tea.KeyMsg); ok && m.keys.Match(config.ShellContext, config.ShellActionHelp, k) {
 			m.showHelp = false
 			return m, modeCmd
 		}
@@ -360,7 +414,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case loading.TickMsg:
 		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
-		return m, batchCmds(modeCmd, m.scheduleSpinnerTick())
+		// This tick has fired; Update re-arms it only while work is in flight.
+		m.spinnerTicking = false
+		return m, modeCmd
 	case tea.WindowSizeMsg:
 		m.sizeKnown = true
 		m.width = msg.Width
@@ -434,6 +490,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Mode == m.active {
 			m.lastBrowse = msg.Mode
 		}
+		// A browse tab moving its own selection supersedes any drill-in.
+		m.clearDrillSelection()
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case mode.ActionRequestMsg:
 		if msg.Action != mode.ActionOpenDetail {
@@ -442,6 +500,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if mode.IsBrowse(msg.Mode) {
 			m.lastBrowse = msg.Mode
 		}
+		m.clearDrillSelection()
 		if m.currentSelection() == nil {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
 		}
@@ -531,6 +590,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// actual rail content via the counter mechanism in ApplyLoadedDetail.
 				m.detail.SelectionID = issueID
 				m.detail.TargetID = issueID
+				// The drilled issue becomes the shell's selection, so e/x/u/a
+				// and the launchers act on what is on screen rather than on the
+				// browse tab's row.
+				m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
+					ID:       issueID,
+					Title:    intent.Ref.Title,
+					Status:   intent.Ref.Status,
+					Type:     intent.Ref.Type,
+					Priority: intent.Ref.Priority,
+				}}
 				m.detail.Loading = true
 				m.detail.Error = ""
 				m.detail.SetDrillFromDepsFocus()
@@ -573,30 +642,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.SetSize(m.width, m.height)
 			return m, modeCmd
 		case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
-			m.active = mode.Board
-			m.lastBrowse = mode.Board
+			m.enterBrowseMode(mode.Board)
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
-			m.active = mode.Docs
-			m.lastBrowse = mode.Docs
+			m.enterBrowseMode(mode.Docs)
 			return m, batchCmds(modeCmd, m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
-			m.active = mode.Search
-			m.lastBrowse = mode.Search
+			m.enterBrowseMode(mode.Search)
 			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
 			if m.active == mode.Detail {
-				m.active = mode.Board
-				m.lastBrowse = mode.Board
+				m.enterBrowseMode(mode.Board)
 				return m, modeCmd
 			}
 			if m.active == mode.Search {
-				m.active = mode.Board
-				m.lastBrowse = mode.Board
+				m.enterBrowseMode(mode.Board)
 				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 			}
-			m.active = mode.Search
-			m.lastBrowse = mode.Search
+			m.enterBrowseMode(mode.Search)
 			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
 			if mode.IsBrowse(m.active) {
@@ -605,6 +668,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.currentSelection() == nil {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
 			}
+			// Opening Detail from a browse tab starts from that tab's row, not
+			// from wherever an earlier drill-in ended up.
+			m.clearDrillSelection()
 			m.active = mode.Detail
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
@@ -622,14 +688,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, modeCmd
 			}
 			if m.active == mode.Detail {
-				m.active = m.lastBrowse
+				m.enterBrowseMode(m.lastBrowse)
 				return m, modeCmd
 			}
 			// Board is the home tab: Escape from any other browse tab returns
 			// there before it starts dismissing toasts.
 			if mode.IsBrowse(m.active) && m.active != mode.Board {
-				m.active = mode.Board
-				m.lastBrowse = mode.Board
+				m.enterBrowseMode(mode.Board)
 				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 			}
 			m.toast = m.toast.Hide()
@@ -638,12 +703,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.active != mode.Detail {
 				return m, modeCmd
 			}
-			if m.currentSelection() == nil {
-				return m, modeCmd
-			}
-			m.detail.Loading = true
-			m.detail.Error = ""
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+			return m, batchCmds(modeCmd, m.reloadDetailCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
 			issueID, ok := m.selectedIssueID()
 			if !ok {

@@ -72,7 +72,10 @@ func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
 // cycling into Detail (e.g. prevMode(Board) == Detail) set lastBrowse = Detail,
 // which made currentSelection() return nil (blank/stuck Detail view) and turned
 // Escape (active = lastBrowse) into a no-op.
+// Cycling also drops any drill-in: the tab strip returns the operator to a
+// browse row, and that row is the selection every shell action then uses.
 func (m *Model) applyModeCycle(target mode.ID) {
+	m.clearDrillSelection()
 	switch {
 	case mode.IsBrowse(target):
 		m.active = target

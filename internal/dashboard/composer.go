@@ -193,6 +193,29 @@ func mergeNotReadyIssues(blocked []domain.BlockedIssueView, storedBlocked []doma
 	return out
 }
 
+// excludeIDs returns the issues in candidates whose IDs no issue in claimed
+// carries. It is how a column that another column already owns stays out of the
+// second one, so an issue is never drawn twice or counted twice.
+func excludeIDs(candidates, claimed []domain.IssueSummary) []domain.IssueSummary {
+	if len(candidates) == 0 || len(claimed) == 0 {
+		return candidates
+	}
+
+	claimedIDs := make(map[string]struct{}, len(claimed))
+	for _, iss := range claimed {
+		claimedIDs[iss.ID] = struct{}{}
+	}
+
+	out := make([]domain.IssueSummary, 0, len(candidates))
+	for _, iss := range candidates {
+		if _, taken := claimedIDs[iss.ID]; taken {
+			continue
+		}
+		out = append(out, iss)
+	}
+	return out
+}
+
 // Compose is a pure function — no I/O, no globals, no logging — that combines
 // the four data groups into the typed Columns value consumed by the board
 // renderer.
@@ -222,10 +245,25 @@ func Compose(in Inputs) Columns {
 		})
 	}
 
+	// --- build InProgress column ---
+	inProgressIssues := make([]domain.IssueSummary, len(in.InProgress))
+	copy(inProgressIssues, in.InProgress)
+	issueSort(inProgressIssues)
+	inProgress := ColumnData{
+		Issues:       inProgressIssues,
+		Total:        len(inProgressIssues),
+		TotalIsExact: true,
+	}
+
 	// --- build NotReady column (union of dep-blocked and stored-blocked) ---
 	// mergeNotReadyIssues deduplicates by ID so an issue present in both
-	// populations appears exactly once.
-	notReadyIssues := mergeNotReadyIssues(in.Blocked, in.StoredBlocked)
+	// populations appears exactly once, and excludeIDs then drops anything In
+	// Progress already claims: the two fan-out queries overlap by construction
+	// (Store.Blocked skips only closed and non-work issues, so an in_progress
+	// issue with an open blocker is in both), which rendered one issue in two
+	// columns and counted it in both headers. A status the operator set outranks
+	// a state derived from the dependency graph, so In Progress wins.
+	notReadyIssues := excludeIDs(mergeNotReadyIssues(in.Blocked, in.StoredBlocked), inProgressIssues)
 	issueSort(notReadyIssues)
 	notReady := ColumnData{
 		Issues:       notReadyIssues,
@@ -234,22 +272,14 @@ func Compose(in Inputs) Columns {
 	}
 
 	// --- build Ready column ---
+	// Ready needs no cross-column filter: the backend only reports open,
+	// unblocked issues there, so it cannot overlap the other three.
 	readyIssues := make([]domain.IssueSummary, len(in.Ready))
 	copy(readyIssues, in.Ready)
 	issueSort(readyIssues)
 	ready := ColumnData{
 		Issues:       readyIssues,
 		Total:        len(readyIssues),
-		TotalIsExact: true,
-	}
-
-	// --- build InProgress column ---
-	inProgressIssues := make([]domain.IssueSummary, len(in.InProgress))
-	copy(inProgressIssues, in.InProgress)
-	issueSort(inProgressIssues)
-	inProgress := ColumnData{
-		Issues:       inProgressIssues,
-		Total:        len(inProgressIssues),
 		TotalIsExact: true,
 	}
 

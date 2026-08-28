@@ -61,7 +61,10 @@ directory.
 - `--store-name` takes precedence over `--cwd` for store selection.
 - `--print-config` loads config, prints the resolved source comment and YAML,
   then exits.
-- `--check-config` loads config, emits warnings, prints `config OK`, then exits.
+- `--check-config` loads config, emits warnings, validates the launcher
+  definitions the same way an interactive start does, then prints `config OK` and
+  exits. An unsafe or malformed definition exits `1` instead — the point of the
+  command is that it reaches the same verdict as a start.
 
 ### Exit-code contract for non-interactive paths
 
@@ -109,12 +112,16 @@ directory.
    - Launchers start a subprocess and return immediately (no process supervision/retry).
    - Launch success/failure is surfaced in shell toast feedback.
 
-   **Shell-launcher security rule:** Launcher templates that use `sh -c` or
-   `sh -lc` MUST NOT interpolate issue fields into the shell body argument.
-   Issue fields (title, assignee, labels, etc.) are operator-untrusted input;
-   embedding them in the body allows shell injection. Instead, pass issue field
-   placeholders as additional positional arguments after the body, and reference
-   them via `$0`, `$1`, `$2` … inside the script. Example:
+   **Shell-launcher security rule:** A launcher template MUST NOT interpolate an
+   issue field into an argument that is re-parsed as a command line. Issue fields
+   (title, assignee, labels, etc.) are operator-untrusted input; embedding them
+   in such an argument allows shell injection. Two shapes qualify: the body after
+   a `-c`/`-lc`-style flag (`sh`, `bash`, `su`, `python`, …), and a plain
+   argument handed to a command that dispatches it to a shell (`tmux
+   new-window`, `ssh host`, `watch`). For the first, pass issue field
+   placeholders as additional positional arguments after the body and reference
+   them via `$0`, `$1`, `$2` … inside the script; for the second, pass the field
+   through `Env`, which is not re-parsed. Example:
 
    ```yaml
    # SAFE — issue fields are positional args, never re-parsed as code
