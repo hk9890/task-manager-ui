@@ -21,6 +21,12 @@ Releases page above.
   focus. `ctrl+pgdown`/`ctrl+pgup` still cycle, but over the three tabs only —
   they no longer step into detail mode, which is reached with `enter` (or `3`)
   and left with `esc`.
+- Changed: upgraded the task-manager SDK from v0.7.0 to v0.8.0. The UI's own
+  behaviour is unchanged. The SDK now reads a `hooks` block from the per-user
+  `~/.taskmgr/config.yaml` and runs it before the store's own hooks, so a global
+  hook that already applied to `taskmgr` writes now also applies to writes made
+  from `taskmgr-ui`; a hook that refuses one surfaces its message in the error
+  toast.
 
 ## v0.14.0
 
