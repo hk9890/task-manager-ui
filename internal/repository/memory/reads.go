@@ -10,10 +10,12 @@ import (
 
 // Dashboard implements repository.Repository.
 //
-// ReadyExplain.Ready: issues where status is not "closed" and all DependsOn
-// IDs point to closed issues (or DependsOn is empty).
-// ReadyExplain.Blocked: issues where status is not "closed" and at least one
-// DependsOn ID points to a non-closed issue.
+// ReadyExplain.Ready: issues of a work type where status == "open" and all
+// DependsOn IDs point to closed issues (or DependsOn is empty).
+// ReadyExplain.Blocked: issues of a work type where status is not "closed" and
+// at least one DependsOn ID points to a non-closed issue.
+// Both sets exclude type "doc", the one non-work type, mirroring the SDK's
+// Store.Ready/Store.Blocked.
 // DashboardData.Blocked: the Not Ready feed — issues where stored status ==
 // "blocked" OR "deferred" (matching the taskmgr backend's Not-Ready query).
 // DashboardData.InProgress: issues where status == "in_progress".
@@ -60,7 +62,13 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 		// - Blocked: has at least one open dep, AND status is not "closed" (any
 		//   non-closed stored status can be dep-blocked, matching taskmgr's behaviour
 		//   with bwf-2 status=blocked/has-dep → appears in Blocked).
-		if si.status == "closed" {
+		// - Neither: documents. Type.IsWork() is false for "doc" alone, and the SDK
+		//   applies it inside Store.Ready/Store.Blocked rather than in a caller's
+		//   filter, so a doc reaches neither set on the taskmgr backend no matter
+		//   its status or dependencies (TASK-STORAGE-SPEC §9). Without the same
+		//   skip here an open doc lands in the fixture's Ready column, letting the
+		//   memory backend certify a board the product cannot produce.
+		if si.status == "closed" || si.issueType == "doc" {
 			continue
 		}
 

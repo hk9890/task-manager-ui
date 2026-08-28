@@ -329,3 +329,111 @@ func TestSearchConformanceAcrossBackends(t *testing.T) {
 		})
 	}
 }
+
+// buildMemoryBackendWithDoc returns a memory repository seeded with the standard
+// conformanceSeed plus one open, dependency-free issue of type "doc".
+func buildMemoryBackendWithDoc(t *testing.T) repository.Repository {
+	t.Helper()
+	r := memory.New()
+	for i, s := range conformanceSeed {
+		r.Seed(memory.Issue{
+			ID:          fmt.Sprintf("m-%d", i+1),
+			Title:       s.title,
+			Description: s.description,
+			Status:      "open",
+		})
+	}
+	r.Seed(memory.Issue{
+		ID:     "m-doc",
+		Title:  conformanceDocTitle,
+		Status: "open",
+		Type:   "doc",
+	})
+	return r
+}
+
+// buildTaskmgrBackendWithDoc returns a taskmgr repository seeded with the standard
+// conformanceSeed plus one open, dependency-free issue of type "doc".
+func buildTaskmgrBackendWithDoc(t *testing.T) repository.Repository {
+	t.Helper()
+	store, err := tasks.Init(t.TempDir(), "tm")
+	if err != nil {
+		t.Fatalf("tasks.Init: %v", err)
+	}
+	r := taskmgr.New(store, taskmgr.WithAuthor("tester"))
+	for _, s := range conformanceSeed {
+		if _, err := r.CreateIssue(context.Background(), domain.CreateIssueInput{
+			Title:       s.title,
+			Description: s.description,
+		}); err != nil {
+			t.Fatalf("CreateIssue(%q): %v", s.title, err)
+		}
+	}
+	if _, err := r.CreateIssue(context.Background(), domain.CreateIssueInput{
+		Title: conformanceDocTitle,
+		Type:  "doc",
+	}); err != nil {
+		t.Fatalf("CreateIssue(doc): %v", err)
+	}
+	return r
+}
+
+// conformanceDocTitle is the title of the seeded doc-type issue. It shares no
+// word with conformanceSeed so an assertion cannot match it by accident.
+const conformanceDocTitle = "onboarding handbook"
+
+// TestOpenDocIsNeitherReadyNorBlocked pins that a document never reaches the
+// board's work columns on either backend.
+//
+// tasks.Type.IsWork() is false for "doc" and no other type, and the SDK applies
+// it inside Store.Ready/Store.Blocked rather than leaving it to callers
+// (TASK-STORAGE-SPEC §9), so the taskmgr backend cannot surface a doc there. The
+// memory backend computed Ready and Blocked from status and dependencies alone,
+// which put an open doc in Ready — a board the product cannot produce, certified
+// by the fixture that exists to stand in for it. Deleting the doc skip from
+// memory's Dashboard must break this test; that is the pin.
+func TestOpenDocIsNeitherReadyNorBlocked(t *testing.T) {
+	for _, b := range []struct {
+		name string
+		repo repository.Repository
+	}{
+		{"memory", buildMemoryBackendWithDoc(t)},
+		{"taskmgr", buildTaskmgrBackendWithDoc(t)},
+	} {
+		data, err := b.repo.Dashboard(context.Background(), repository.DashboardOptions{})
+		if err != nil {
+			t.Fatalf("%s: Dashboard: %v", b.name, err)
+		}
+
+		var readyTitles []string
+		for _, iss := range data.ReadyExplain.Ready {
+			readyTitles = append(readyTitles, iss.Title)
+		}
+		var blockedTitles []string
+		for _, view := range data.ReadyExplain.Blocked {
+			blockedTitles = append(blockedTitles, view.Issue.Title)
+		}
+
+		for _, c := range []struct {
+			set    string
+			titles []string
+		}{
+			{"Ready", readyTitles},
+			{"Blocked", blockedTitles},
+		} {
+			for _, got := range c.titles {
+				if got == conformanceDocTitle {
+					t.Errorf("%s: ReadyExplain.%s contains the doc %q — docs are not work and must appear in neither set (got %v)",
+						b.name, c.set, conformanceDocTitle, c.titles)
+				}
+			}
+		}
+
+		// Guard against the assertion passing because the board is empty: the
+		// work-type seed must still be Ready on both backends.
+		if len(readyTitles) != len(conformanceSeed) {
+			t.Errorf("%s: ReadyExplain.Ready = %v, want the %d work-type seed issues — the doc exclusion must not drop real work",
+				b.name, readyTitles, len(conformanceSeed))
+		}
+	}
+}
