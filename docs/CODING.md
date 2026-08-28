@@ -271,7 +271,7 @@ The checks fail if any dependency in the active product path violates these boun
 
 These checks are intentionally lightweight and local-friendly: they run as a normal Go test and require no external services.
 
-A separate repo-hygiene scan — no local `.tasks` issue IDs in tracked `.go`/`.md` files — lives in `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`. It shells out to `git ls-files`, so it is tagged `//go:build integration` and runs under `mise run test:integration`, not in the unit suite.
+A separate repo-hygiene scan — no tracker issue IDs in tracked `.go`/`.md` files — lives in `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`. It shells out to `git ls-files`, so it is tagged `//go:build integration` and runs under `mise run test:integration`, not in the unit suite.
 
 ## Quality Gates
 

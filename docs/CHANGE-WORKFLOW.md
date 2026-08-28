@@ -1,14 +1,19 @@
 # Change Workflow
 
+## Tracker
+
+Track every unit of work in `taskmgr`, the project's own task-manager store — never TodoWrite or a
+markdown TODO list.
+
+- Open the issue before the worktree; `taskmgr commands` prints the full command catalog.
+- The store is central, not a `.tasks` directory in this repo — `taskmgr where` resolves it.
+
 ## Worktrees
 
 Every change starts in its own worktree; `main` is not a working branch.
 
 - Create it with the `EnterWorktree` tool — `.claude/hooks/worktree-guard.sh` denies a persistent
   `git worktree add`. A throwaway `--detach` probe into `/tmp` or the scratchpad is exempt.
-- `.claude/settings.json` symlinks `.tasks` in; without it every `taskmgr` call fails with
-  `no .tasks directory found`. Personal extras go in `.claude/settings.local.json`, which replaces
-  that list rather than extending it — repeat `.tasks` there.
 - `baseRef: head` branches from local HEAD, so fast-forward `main` first to build on the pushed tip.
 - Nothing to install: the Go module cache and the `mise` toolchain are machine-global.
 - `ExitWorktree` with `keep` while the PR is open, `remove` once it merges.
