@@ -19,8 +19,8 @@ __pycache__/
 # Temp/agent extraction dirs (must never be committed)
 .tmp-*/
 
-# Local dev task tracker — kept local, not published. No trailing slash: inside a
-# worktree these are symlinks, which a directory-only pattern would not match.
+# Local dev task tracker. The store is central (~/.taskmgr); this guards a
+# .tasks re-created here by a stray `taskmgr init`, which must never be published.
 .tasks
 
 # Local, non-shared working notes

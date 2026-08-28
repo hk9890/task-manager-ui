@@ -64,7 +64,6 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 | `internal/ui/*` | Reusable rendering components and shared styles |
 | `internal/testing/*` | Repository fakes and UI test harnesses |
 | `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
-| `.tasks/` | On-disk task-manager store for this project's own dev issue tracking (file-based, managed by `taskmgr`; local-only, not published). Other projects may keep their store centrally instead — `taskmgr-ui` resolves both |
 
 ## Architectural boundaries
 

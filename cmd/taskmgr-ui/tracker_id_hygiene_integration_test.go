@@ -26,10 +26,10 @@ func TestNoLeakedLocalTrackerIDs(t *testing.T) {
 	assertNoLeakedTrackerIDs(t)
 }
 
-// Local .tasks tracker issue IDs must never appear in source comments or
-// published docs — they reference an unpublished, local-only store (see
-// .gitignore) and a reader of the public repo cannot resolve them. Reference
-// behavior by name instead.
+// Tracker issue IDs must never appear in source comments or published docs —
+// they reference an unpublished store that is not part of this repository, and
+// a reader of the public repo cannot resolve them. Reference behavior by name
+// instead.
 //
 // leakedTrackerIDPattern recognizes a tracker ID by one of a few high-precision
 // shapes, chosen so the guard cannot misfire on ordinary code or text:
@@ -107,5 +107,5 @@ func assertNoLeakedTrackerIDs(t *testing.T) {
 		return
 	}
 	slices.Sort(violations)
-	t.Fatalf("leaked local tracker IDs found (reference behavior by name, not the .tasks issue ID):\n%s", strings.Join(violations, "\n"))
+	t.Fatalf("leaked tracker IDs found (reference behavior by name, not the tracker issue ID):\n%s", strings.Join(violations, "\n"))
 }
