@@ -197,7 +197,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 							}
 						}
 					}
-					return m, func() tea.Msg { return SubmitMsg{Values: m.values()} }
+					return m, submitCmd(m.values())
 				}
 				m = m.nextField()
 				return m, nil
@@ -212,7 +212,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 					}
 				}
 			}
-			return m, func() tea.Msg { return SubmitMsg{Values: m.values()} }
+			return m, submitCmd(m.values())
 		case key.Matches(msg, m.keys.Escape...):
 			return m, func() tea.Msg { return CancelMsg{} }
 		case msg.String() == "y":
@@ -224,7 +224,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 						}
 					}
 				}
-				return m, func() tea.Msg { return SubmitMsg{Values: m.values()} }
+				return m, submitCmd(m.values())
 			}
 		case msg.String() == "n":
 			if m.focusedInput == -1 || !m.hasInputs {
@@ -245,6 +245,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// submitCmd wraps an already-read value set in a Cmd.
+//
+// The values must be read before the Cmd is built, never inside it. Update has
+// a value receiver, so a closure over m captures a copy whose inputs slice
+// shares its backing array with the live model, and Bubble Tea runs every Cmd
+// on its own goroutine. The shell clears showActionModal only when the
+// resulting SubmitMsg arrives, so a keystroke in that window still routes to
+// Update, which assigns a whole textinput.Model into that shared array while
+// the closure iterates it — a data race under -race, and a torn read or a value
+// typed after Enter without it.
+func submitCmd(values map[string]string) tea.Cmd {
+	return func() tea.Msg { return SubmitMsg{Values: values} }
 }
 
 func (m Model) values() map[string]string {

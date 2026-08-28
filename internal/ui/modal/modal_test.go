@@ -356,3 +356,52 @@ func TestTypedRunesReachSubmitValues(t *testing.T) {
 		t.Fatalf("typed text did not reach the submit values: %#v", submit.Values)
 	}
 }
+
+// TestSubmitCmdDoesNotRaceWithFurtherTyping pins that the submit Cmd carries a
+// snapshot rather than a view of the live model.
+//
+// Update has a value receiver, so a closure over m captured a Model whose
+// inputs slice shared its backing array with the live one, and Bubble Tea runs
+// every Cmd on its own goroutine. The shell clears the modal only when the
+// SubmitMsg arrives, so a keystroke in that window assigned a whole
+// textinput.Model into the shared array while the closure read it. Run under
+// -race (mise run test does), this test reported that race before the fix.
+func TestSubmitCmdDoesNotRaceWithFurtherTyping(t *testing.T) {
+	t.Parallel()
+
+	// SubmitOnEnter keeps the input focused across the submit, which is the
+	// shape that races: every later keystroke writes into the same inputs
+	// array the Cmd reads.
+	m := New(Config{
+		Title:         "Comment",
+		Inputs:        []InputConfig{{Key: "body", Label: "Comment"}},
+		SubmitOnEnter: true,
+	})
+
+	for _, r := range "ship it" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected submit command")
+	}
+	m = next
+
+	// The Cmd runs on its own goroutine while the update loop keeps handling
+	// keys, exactly as Bubble Tea would.
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmd() }()
+
+	for _, r := range " now" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	submit, ok := (<-done).(SubmitMsg)
+	if !ok {
+		t.Fatal("expected SubmitMsg from the submit command")
+	}
+	if submit.Values["body"] != "ship it" {
+		t.Fatalf("submitted values changed after Enter: got %q, want %q", submit.Values["body"], "ship it")
+	}
+}
