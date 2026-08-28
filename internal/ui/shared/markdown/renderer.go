@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
@@ -23,16 +25,110 @@ const (
 var renderMarkdownANSIMu sync.Mutex
 
 // renderMarkdownANSI is a test seam for deterministic fallback testing.
-var renderMarkdownANSI = func(content string, width int) (string, error) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
-		glamour.WithWordWrap(width),
-	)
+var renderMarkdownANSI = renderMarkdownANSIMemoized
+
+// renderMarkdownANSIMemoized is the production markdown renderer. Both the
+// glamour renderer and its output are memoized, keyed by everything that can
+// change the result.
+//
+// Nothing above this seam is memoized on purpose: a test that swaps
+// renderMarkdownANSI must see its own function, never a cached frame.
+func renderMarkdownANSIMemoized(content string, width int) (string, error) {
+	dark := lipgloss.HasDarkBackground()
+
+	if cached, ok := lookupRenderedMarkdown(content, width, dark); ok {
+		return cached, nil
+	}
+
+	renderer, err := termRendererFor(width, dark)
 	if err != nil {
 		return "", err
 	}
 
-	return renderer.Render(content)
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return "", err
+	}
+
+	storeRenderedMarkdown(content, width, dark, rendered)
+	return rendered, nil
+}
+
+// markdownCacheKey identifies one rendered result. dark is part of the key
+// because the style is chosen from the terminal background.
+type markdownCacheKey struct {
+	content string
+	width   int
+	dark    bool
+}
+
+// markdownCacheMaxEntries caps the memo. Detail mode re-renders a handful of
+// bodies at one or two widths, so a small cap holds the whole working set; the
+// map is dropped wholesale when it overflows rather than carrying an eviction
+// policy no measurement asked for.
+const markdownCacheMaxEntries = 64
+
+var (
+	markdownCacheMu sync.Mutex
+	markdownCache   = map[markdownCacheKey]string{}
+	termRenderers   = map[markdownCacheKey]*glamour.TermRenderer{}
+)
+
+func lookupRenderedMarkdown(content string, width int, dark bool) (string, bool) {
+	markdownCacheMu.Lock()
+	defer markdownCacheMu.Unlock()
+	rendered, ok := markdownCache[markdownCacheKey{content: content, width: width, dark: dark}]
+	return rendered, ok
+}
+
+func storeRenderedMarkdown(content string, width int, dark bool, rendered string) {
+	markdownCacheMu.Lock()
+	defer markdownCacheMu.Unlock()
+	if len(markdownCache) >= markdownCacheMaxEntries {
+		markdownCache = map[markdownCacheKey]string{}
+	}
+	markdownCache[markdownCacheKey{content: content, width: width, dark: dark}] = rendered
+}
+
+// termRendererFor returns the glamour renderer for one width and background,
+// building it once. A fresh renderer was constructed on every call: 7.7ms and
+// 2.9MB for a ~20-section document, 77.5ms and 30MB for a 21KB description.
+//
+// The style follows the terminal background the way every lipgloss.
+// AdaptiveColor in this app does. It was pinned to "dark", so on a light
+// terminal every description, note and comment rendered in dark-theme colours
+// while the chrome around them adapted (docs/DESIGN-GUIDE.md, Colour roles).
+func termRendererFor(width int, dark bool) (*glamour.TermRenderer, error) {
+	key := markdownCacheKey{width: width, dark: dark}
+
+	markdownCacheMu.Lock()
+	defer markdownCacheMu.Unlock()
+	if renderer, ok := termRenderers[key]; ok {
+		return renderer, nil
+	}
+
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(glamourStyleName(dark)),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(termRenderers) >= markdownCacheMaxEntries {
+		termRenderers = map[markdownCacheKey]*glamour.TermRenderer{}
+	}
+	termRenderers[key] = renderer
+	return renderer, nil
+}
+
+// glamourStyleName maps the terminal background to a glamour standard style,
+// the same split lipgloss.AdaptiveColor makes for every other colour here.
+func glamourStyleName(dark bool) string {
+	if dark {
+		return "dark"
+	}
+	return "light"
 }
 
 // getRenderMarkdownANSI returns the current renderMarkdownANSI function under lock.
@@ -145,23 +241,24 @@ func renderPlain(value string, width int) string {
 	return strings.Join(out, "\n")
 }
 
+// wrapLine hard-wraps one line to width terminal cells.
+//
+// Cells, not runes: a CJK ideograph or an emoji covers two cells, so counting
+// runes produced lines up to twice the requested width, which the width-correct
+// renderer downstream then truncated — losing text instead of wrapping it
+// (docs/DESIGN-GUIDE.md, Width and height).
 func wrapLine(line string, width int) []string {
 	if width <= 0 {
 		return []string{line}
 	}
-
-	runes := []rune(line)
-	if len(runes) <= width {
+	if ansi.StringWidth(line) <= width {
 		return []string{line}
 	}
 
-	wrapped := make([]string, 0, len(runes)/width+1)
-	for len(runes) > width {
-		chunk := strings.TrimRight(string(runes[:width]), " \t")
-		wrapped = append(wrapped, chunk)
-		runes = runes[width:]
+	wrapped := strings.Split(ansi.Hardwrap(line, width, false), "\n")
+	for i, chunk := range wrapped {
+		wrapped[i] = strings.TrimRight(chunk, " \t")
 	}
-	wrapped = append(wrapped, strings.TrimRight(string(runes), " \t"))
 
 	return wrapped
 }
