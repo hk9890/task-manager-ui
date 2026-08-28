@@ -110,13 +110,16 @@ Keybindings are resolved once at startup from the `keybindings` section.
 Supported actions by context:
 
 - `shell`
-  - `quit`, `toggle_help`, `mode_board`, `mode_search`, `toggle_search`,
-    `mode_detail`, `mode_cycle_next`, `mode_cycle_prev`, `escape`,
+  - `quit`, `toggle_help`, `mode_board`, `mode_docs`, `mode_search`,
+    `toggle_search`, `mode_detail`, `mode_cycle_next`, `mode_cycle_prev`, `escape`,
     `reload_detail`, `edit_issue`, `create_issue`, `update_issue`,
     `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
     `launch_shell_command`
 - `board`
   - `move_left`, `move_right`, `move_up`, `move_down`, `open_detail`, `reload`, `load_more`
+  - Docs mode has no context of its own: it reads `move_up`, `move_down`,
+    `open_detail`, and `reload` from this one. Rebinding them moves both
+    surfaces together, which is deliberate — the docs tab is a board column.
 - `search`
   - `move_up`, `move_down`, `focus_left`, `focus_right`, `focus_query`,
     `reload`, `open_detail`, `cycle_focus_next`, `cycle_focus_prev`

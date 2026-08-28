@@ -11,18 +11,15 @@ import (
 )
 
 func (m Model) currentSelection() *mode.Selection {
-	if m.lastBrowse != mode.Board && m.lastBrowse != mode.Search {
-		if m.active == mode.Board || m.active == mode.Search {
-			return m.selectedByMode[m.active]
-		}
-		return nil
-	}
-
-	if m.active == mode.Board || m.active == mode.Search {
+	// The active browse tab owns the selection; from Detail (or any other
+	// non-browse mode) it comes from the tab we drilled in from.
+	if mode.IsBrowse(m.active) {
 		return m.selectedByMode[m.active]
 	}
-
-	return m.selectedByMode[m.lastBrowse]
+	if mode.IsBrowse(m.lastBrowse) {
+		return m.selectedByMode[m.lastBrowse]
+	}
+	return nil
 }
 
 func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {

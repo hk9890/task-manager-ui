@@ -283,7 +283,10 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 }
 
-func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *testing.T) {
+// Pane cycling moved off tab/shift+tab when those became the shell tab strip
+// keys: search cycles panes with ctrl+j/ctrl+k, and must let tab through even
+// while the query field is focused so the shell can switch tabs mid-query.
+func TestSearchModePaneCycleUsesCtrlJKAndLeavesTabToTheShell(t *testing.T) {
 	t.Parallel()
 
 	gw := newSearchRepo()
@@ -296,18 +299,31 @@ func TestSearchModeTabInSearchOnlyCyclesFromQueryFocusAndIsCapturedByMode(t *tes
 		t.Fatalf("expected query focus after typing, got %v", m.focus)
 	}
 
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
 	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected tab to cycle query->results, got %v", m.focus)
+		t.Fatalf("expected ctrl+j to cycle query->results, got %v", m.focus)
 	}
 
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
 	if m.focus != uisearch.FocusContent {
-		t.Fatalf("expected tab to cycle results->content, got %v", m.focus)
+		t.Fatalf("expected ctrl+j to cycle results->content, got %v", m.focus)
 	}
 
-	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
-		t.Fatalf("expected search mode to capture tab for shell-level routing")
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.focus != uisearch.FocusResults {
+		t.Fatalf("expected ctrl+k to cycle content->results, got %v", m.focus)
+	}
+
+	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyCtrlJ}) {
+		t.Fatalf("expected search mode to capture ctrl+j for shell-level routing")
+	}
+	if m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
+		t.Fatalf("expected search mode to leave tab to the shell tab strip")
+	}
+	// Back to query focus: tab must still reach the shell while typing.
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
+		t.Fatalf("expected search mode to leave tab to the shell tab strip with the query focused")
 	}
 }
 

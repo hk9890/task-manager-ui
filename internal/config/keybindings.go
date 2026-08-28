@@ -20,6 +20,7 @@ const (
 	ShellActionQuit           = "quit"
 	ShellActionHelp           = "toggle_help"
 	ShellActionModeBoard      = "mode_board"
+	ShellActionModeDocs       = "mode_docs"
 	ShellActionModeSearch     = "mode_search"
 	ShellActionToggleSearch   = "toggle_search"
 	ShellActionModeDetail     = "mode_detail"
@@ -109,8 +110,9 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionModeSearch:     {"2"},
 			ShellActionToggleSearch:   {"ctrl+@"},
 			ShellActionModeDetail:     {"3"},
-			ShellActionModeCycleNext:  {"ctrl+pgdown"},
-			ShellActionModeCyclePrev:  {"ctrl+pgup"},
+			ShellActionModeDocs:       {"4"},
+			ShellActionModeCycleNext:  {"tab", "ctrl+pgdown"},
+			ShellActionModeCyclePrev:  {"shift+tab", "ctrl+pgup"},
 			ShellActionEscape:         {"esc"},
 			ShellActionReloadDetail:   {"r"},
 			ShellActionEditIssue:      {"e"},
@@ -124,7 +126,7 @@ func DefaultKeyBindings() KeyBindings {
 		},
 		Board: map[string][]string{
 			BoardActionMoveLeft:   {"h", "left"},
-			BoardActionMoveRight:  {"l", "right", "tab"},
+			BoardActionMoveRight:  {"l", "right"},
 			BoardActionMoveUp:     {"k", "up"},
 			BoardActionMoveDown:   {"j", "down"},
 			BoardActionOpenDetail: {"enter", "o"},
@@ -139,8 +141,8 @@ func DefaultKeyBindings() KeyBindings {
 			SearchActionFocusQuery:     {"/"},
 			SearchActionReload:         {"r"},
 			SearchActionOpenDetail:     {"enter"},
-			SearchActionCycleFocusNext: {"tab", "ctrl+j"},
-			SearchActionCycleFocusPrev: {"shift+tab", "ctrl+k"},
+			SearchActionCycleFocusNext: {"ctrl+j"},
+			SearchActionCycleFocusPrev: {"ctrl+k"},
 		},
 		Detail: map[string][]string{
 			DetailActionScrollUp:   {"k", "up"},
@@ -376,6 +378,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionQuit,
 			ShellActionHelp,
 			ShellActionModeBoard,
+			ShellActionModeDocs,
 			ShellActionModeSearch,
 			ShellActionToggleSearch,
 			ShellActionModeDetail,

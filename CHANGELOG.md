@@ -10,6 +10,18 @@ Releases page above.
 
 ## Unreleased
 
+- Added: a Docs tab listing every `doc`-type issue in one column. It is the only
+  surface that shows an **open** doc — the SDK keeps non-work types out of the
+  Ready queue, so an open doc never reaches a board column. Enter opens the
+  selected doc in detail mode, `r` reloads, and `4` switches to the tab
+  directly.
+- Changed: `tab` and `shift+tab` now cycle the header tab strip (Board, Docs,
+  Search) instead of moving board columns and search panes. The board keeps
+  `l`/`right` for the next column; search keeps `ctrl+j`/`ctrl+k` for pane
+  focus. `ctrl+pgdown`/`ctrl+pgup` still cycle, but over the three tabs only —
+  they no longer step into detail mode, which is reached with `enter` (or `3`)
+  and left with `esc`.
+
 ## v0.14.0
 
 - Fixed: `taskmgr-ui` failed to start in any project whose store had been

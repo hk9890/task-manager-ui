@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
@@ -358,10 +359,14 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 	}
 }
 
-func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
+// tab and shift+tab drive the header tab strip: Board, Docs, Search, in
+// mode.BrowseModes order. Detail is not a tab, so cycling out of it steps onto
+// the strip rather than staying put.
+func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
 	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -371,39 +376,97 @@ func TestModelDefaultTabAndShiftTabDoNotCycleModes(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Board {
-		t.Fatalf("expected shift+tab from board not to switch modes, got %s", m.active)
+	press := func(m Model, key tea.KeyMsg) Model {
+		t.Helper()
+		next, cmd := m.Update(key)
+		m = next.(Model)
+		return applyMessages(t, m, runBatch(cmd))
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected ctrl+space to switch to search, got %s", m.active)
+	tab := tea.KeyMsg{Type: tea.KeyTab}
+	shiftTab := tea.KeyMsg{Type: tea.KeyShiftTab}
+
+	for _, want := range []mode.ID{mode.Docs, mode.Search, mode.Board} {
+		m = press(m, tab)
+		if m.active != want {
+			t.Fatalf("expected tab to move to %s, got %s", want, m.active)
+		}
+		if m.lastBrowse != want {
+			t.Fatalf("expected lastBrowse to follow the tab strip to %s, got %s", want, m.lastBrowse)
+		}
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Board {
-		t.Fatalf("expected ctrl+space to return to board, got %s", m.active)
+	for _, want := range []mode.ID{mode.Search, mode.Docs, mode.Board} {
+		m = press(m, shiftTab)
+		if m.active != want {
+			t.Fatalf("expected shift+tab to move to %s, got %s", want, m.active)
+		}
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
+	// From Detail the cycle resumes from the tab we drilled in from.
+	m = press(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
 	if m.active != mode.Detail {
 		t.Fatalf("expected detail mode after hotkey 3, got %s", m.active)
 	}
+	m = press(m, tab)
+	if m.active != mode.Docs {
+		t.Fatalf("expected tab from detail (lastBrowse=board) to move to docs, got %s", m.active)
+	}
+}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+// The docs tab is the only surface that can show an open doc: task-manager
+// excludes docs from the ready queue, so one never reaches a board column.
+func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2})
+	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2}, Description: "doc body"})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	// Not asserted here: that the board omits the doc. Under the real backend
+	// it does — the SDK keeps non-work types out of Ready — but the memory
+	// fixture has no such exclusion yet, so the board view would show it and
+	// the assertion would pin fixture behavior, not product behavior. The
+	// fixture parity gap is tracked separately.
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Docs {
+		t.Fatalf("expected tab from board to enter docs, got %s", m.active)
+	}
+
+	view := m.View()
+	testui.AssertContainsAll(t, view, "Docs", "tm-9", "Auth redesign")
+	testui.AssertNotContainsAny(t, view, "Ready first")
+
+	if got := firstSelectionID(m, mode.Docs); got != "tm-9" {
+		t.Fatalf("expected docs selection tm-9, got %q", got)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
-		t.Fatalf("expected tab from detail not to cycle modes by default, got %s", m.active)
+		t.Fatalf("expected enter in docs to open detail, got %s", m.active)
+	}
+	if m.detail.TargetID != "tm-9" && m.detail.Detail.Summary.ID != "tm-9" {
+		t.Fatalf("expected detail to track the selected doc, target=%q detail=%q", m.detail.TargetID, m.detail.Detail.Summary.ID)
+	}
+
+	// Escape returns to the tab we drilled in from.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Docs {
+		t.Fatalf("expected escape from detail to return to docs, got %s", m.active)
 	}
 }
 
@@ -497,68 +560,73 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 	}
 }
 
-// TestModeCycleDirections asserts that nextMode and prevMode traverse the mode
-// cycle in opposite directions for every starting mode.
+// TestModeCycleDirections asserts that nextMode and prevMode traverse the
+// header tab strip — mode.BrowseModes: Board, Docs, Search — in opposite
+// directions, wrapping at both ends.
 //
-// Forward cycle  (nextMode): Board → Search → Board (2-mode browse toggle),
-//
-//	Detail → the browse mode not in lastBrowse
-//
-// Backward cycle (prevMode): Board → Detail → Search → Board
-// (prevMode ignores lastBrowse; the cycle is fixed).
-//
-// Together the two functions must differ at the modes where direction matters:
-// Board (next→Search vs prev→Detail) and Detail (next→browse vs prev→Search).
+// Detail is not a tab. Cycling from it resumes from lastBrowse, so it steps
+// onto the strip instead of staying in Detail.
 func TestModeCycleDirections(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nextMode_forward", func(t *testing.T) {
 		t.Parallel()
 
-		if got := nextMode(mode.Board, mode.Board); got != mode.Search {
-			t.Errorf("nextMode(Board, Board) = %s; want Search", got)
+		if got := nextMode(mode.Board, mode.Board); got != mode.Docs {
+			t.Errorf("nextMode(Board, Board) = %s; want Docs", got)
 		}
-		if got := nextMode(mode.Search, mode.Board); got != mode.Board {
-			t.Errorf("nextMode(Search, Board) = %s; want Board", got)
+		if got := nextMode(mode.Docs, mode.Docs); got != mode.Search {
+			t.Errorf("nextMode(Docs, Docs) = %s; want Search", got)
 		}
-		// Detail goes to the browse mode not in lastBrowse.
+		if got := nextMode(mode.Search, mode.Search); got != mode.Board {
+			t.Errorf("nextMode(Search, Search) = %s; want Board", got)
+		}
+		// From Detail the cycle resumes from lastBrowse.
 		if got := nextMode(mode.Detail, mode.Search); got != mode.Board {
 			t.Errorf("nextMode(Detail, Search) = %s; want Board", got)
 		}
-		if got := nextMode(mode.Detail, mode.Board); got != mode.Search {
-			t.Errorf("nextMode(Detail, Board) = %s; want Search", got)
+		if got := nextMode(mode.Detail, mode.Board); got != mode.Docs {
+			t.Errorf("nextMode(Detail, Board) = %s; want Docs", got)
 		}
 	})
 
 	t.Run("prevMode_backward", func(t *testing.T) {
 		t.Parallel()
 
-		// Backward cycle: Board → Detail → Search → Board
-		if got := prevMode(mode.Board, mode.Board); got != mode.Detail {
-			t.Errorf("prevMode(Board, _) = %s; want Detail", got)
+		if got := prevMode(mode.Board, mode.Board); got != mode.Search {
+			t.Errorf("prevMode(Board, Board) = %s; want Search", got)
+		}
+		if got := prevMode(mode.Search, mode.Search); got != mode.Docs {
+			t.Errorf("prevMode(Search, Search) = %s; want Docs", got)
+		}
+		if got := prevMode(mode.Docs, mode.Docs); got != mode.Board {
+			t.Errorf("prevMode(Docs, Docs) = %s; want Board", got)
 		}
 		if got := prevMode(mode.Detail, mode.Board); got != mode.Search {
-			t.Errorf("prevMode(Detail, _) = %s; want Search", got)
-		}
-		if got := prevMode(mode.Search, mode.Board); got != mode.Board {
-			t.Errorf("prevMode(Search, _) = %s; want Board", got)
+			t.Errorf("prevMode(Detail, Board) = %s; want Search", got)
 		}
 	})
 
-	t.Run("next_and_prev_differ_at_board_and_detail", func(t *testing.T) {
+	t.Run("next_and_prev_are_inverses", func(t *testing.T) {
 		t.Parallel()
 
-		// Board: next→Search, prev→Detail — must differ.
-		if nextMode(mode.Board, mode.Board) == prevMode(mode.Board, mode.Board) {
-			t.Errorf("nextMode(Board) and prevMode(Board) both returned %s; they must differ",
-				nextMode(mode.Board, mode.Board))
+		for _, tab := range mode.BrowseModes {
+			if got := prevMode(nextMode(tab, tab), tab); got != tab {
+				t.Errorf("prevMode(nextMode(%s)) = %s; want %s", tab, got, tab)
+			}
+			if nextMode(tab, tab) == prevMode(tab, tab) {
+				t.Errorf("nextMode(%s) and prevMode(%s) both returned %s; they must differ",
+					tab, tab, nextMode(tab, tab))
+			}
 		}
-		// Detail: next→browse (Search when lb=Board), prev→Search — both happen
-		// to return Search when lb=Board, which is expected; the distinguishing
-		// arm is lb=Search where next→Board but prev→Search.
-		if nextMode(mode.Detail, mode.Search) == prevMode(mode.Detail, mode.Search) {
-			t.Errorf("nextMode(Detail,Search) and prevMode(Detail,Search) both returned %s; they must differ",
-				nextMode(mode.Detail, mode.Search))
+	})
+
+	t.Run("unknown_mode_falls_back_to_the_strip", func(t *testing.T) {
+		t.Parallel()
+
+		// Neither current nor lastBrowse is a tab: the cycle still lands on one.
+		if got := nextMode(mode.Detail, mode.Detail); got != mode.Docs {
+			t.Errorf("nextMode(Detail, Detail) = %s; want Docs (fallback to Board, then forward)", got)
 		}
 	})
 }
