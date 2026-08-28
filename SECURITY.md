@@ -30,8 +30,10 @@ back-patched.
 ## Scope
 
 `taskmgr-ui` is a local terminal application that reads and writes a file-based
-`.tasks/` store and can launch external tools configured by the user. Of
-particular relevance:
+task-manager store and can launch external tools configured by the user. That
+store is not always in the project directory: it is either a local `.tasks/`
+directory or a central store under `~/.taskmgr`, selected by `--store-name` or
+by the registry. Of particular relevance:
 
 - **Launcher commands** run external processes using user-provided
   configuration. Treat your config file as trusted input.
