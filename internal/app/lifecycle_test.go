@@ -172,4 +172,55 @@ func TestHealthCheckFailureLogsThroughManagerLogger(t *testing.T) {
 	}
 }
 
+// TestHealthCheckFailureLogsEveryErrorCode covers the failures with no fatal
+// screen. The log call sat inside the NoDatabaseFound branch, so an unreadable
+// store directory or a corrupt store reached neither the log
+// docs/MONITORING.md points a diagnosing agent at nor a toast, and the operator
+// saw only whatever the following Dashboard call rendered.
+func TestHealthCheckFailureLogsEveryErrorCode(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []domain.ErrorCode{
+		domain.ErrorCodeUnknown,
+		domain.ErrorCodeCommandFailed,
+		domain.ErrorCodeValidationFailed,
+	} {
+		t.Run(string(code), func(t *testing.T) {
+			t.Parallel()
+
+			var stderr bytes.Buffer
+			manager := logging.New(logging.Options{
+				Debug:     true,
+				Stderr:    &stderr,
+				StateDir:  t.TempDir(),
+				SessionID: "health-check-code-test",
+			})
+
+			services, err := NewServices(newTestRepository(), config.Default(), t.TempDir())
+			if err != nil {
+				t.Fatalf("NewServices: %v", err)
+			}
+			services.Logger = manager.Logger()
+
+			m := mustNewModel(t, services)
+			next, _ := m.Update(startupHealthCheckMsg{err: domain.RepositoryError{
+				Code:      code,
+				Operation: "health_check",
+				Message:   "permission denied",
+			}})
+			if got := next.(Model).fatalErrTitle; got != "" {
+				t.Fatalf("code %s armed the fatal error screen (%q); only NoDatabaseFound does", code, got)
+			}
+
+			logged, err := os.ReadFile(manager.LogPath())
+			if err != nil {
+				t.Fatalf("reading %q: %v", manager.LogPath(), err)
+			}
+			if !strings.Contains(string(logged), "task-manager health check failed") {
+				t.Errorf("code %s was swallowed; the persistent log holds:\n%s", code, logged)
+			}
+		})
+	}
+}
+
 var _ tea.Cmd = Services{}.SweepStaleTempFiles()

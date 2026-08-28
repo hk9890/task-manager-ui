@@ -106,13 +106,13 @@ func (m Model) renderHeader() string {
 	return left + spacer + context
 }
 
+// renderBody renders the active surface. Like every other renderer here it is
+// pure: sizing runs from the WindowSizeMsg handler and the search preview's
+// detail is synced from Update, because selection/detail sync is event-driven
+// and not polled (docs/CODING.md, Core Architectural Rule 9). Mutating model
+// state from View() worked only for as long as something re-rendered often
+// enough, which is exactly what the always-on spinner tick was doing.
 func (m Model) renderBody() string {
-	workspaceWidth, workspaceHeight := m.workspaceSize()
-	m.board.SetSize(workspaceWidth, workspaceHeight)
-	m.docs.SetSize(workspaceWidth, workspaceHeight)
-	m.search.SetSize(workspaceWidth, workspaceHeight)
-	m.syncSearchPreviewDetailState()
-
 	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
 
 	switch m.active {

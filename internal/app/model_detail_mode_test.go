@@ -901,3 +901,161 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 
 	_ = cmd
 }
+
+// drilledIntoChild opens the epic's detail, drills into its child, and returns
+// the model sitting on the child.
+func drilledIntoChild(t *testing.T, gw *appTestRepository) Model {
+	t.Helper()
+
+	gw.seedReady("tm-epic", "Auth epic", "epic", 1)
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:  domain.IssueSummary{ID: "tm-epic", Title: "Auth epic", Status: "open", Type: "epic", Priority: 1},
+		Children: []domain.IssueReference{{ID: "tm-child", Title: "Login crash", Type: "bug", Priority: 0, Status: "open"}},
+	})
+	gw.seedIssueDetail(domain.IssueDetail{
+		Summary:            domain.IssueSummary{ID: "tm-child", Title: "Login crash", Status: "in_progress", Type: "bug", Priority: 0},
+		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: domain.IssueReference{ID: "tm-epic", Title: "Auth epic", Type: "epic", Priority: 1, Status: "open"}},
+	})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.width = 160
+	m.height = 34
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.detail.Detail.Summary.ID != "tm-child" {
+		t.Fatalf("setup: expected to land on the child, got %q", m.detail.Detail.Summary.ID)
+	}
+	return m
+}
+
+// TestModelShellActionsTargetTheDrilledIssue pins that every shell action acts
+// on the issue Detail is showing.
+//
+// The drill-in handler set detail.SelectionID and TargetID but never the
+// shell's own selection, which only the browse SelectionChangedMsg handler
+// wrote. currentSelection() therefore still returned the board's row, so `e`
+// opened the epic's document, `x` closed the epic, `u` and `a` acted on it, and
+// the launchers interpolated its ID — with nothing on screen to say so, because
+// the follow-up detail load was dropped by the TargetID guard.
+func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	m := drilledIntoChild(t, gw)
+
+	if got := firstSelectionID(m, mode.Board); got != "tm-epic" {
+		t.Fatalf("setup: expected the board row to stay on the epic, got %q", got)
+	}
+
+	id, ok := m.selectedIssueID()
+	if !ok || id != "tm-child" {
+		t.Errorf("selectedIssueID() = %q (ok=%v), want tm-child — this is the id e/x/u/a act on", id, ok)
+	}
+
+	issueContext, ok := m.selectedIssueContext()
+	if !ok || issueContext.Summary.ID != "tm-child" {
+		t.Errorf("selectedIssueContext() = %q, want tm-child — this is what the launchers interpolate", issueContext.Summary.ID)
+	}
+
+	// The close dialog is built synchronously from the selection.
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	closing := next.(Model)
+	if !closing.showActionModal {
+		t.Fatal("expected the close dialog to open")
+	}
+	if closing.actionState.issue.ID != "tm-child" {
+		t.Errorf("close dialog targets %q, want tm-child", closing.actionState.issue.ID)
+	}
+}
+
+// TestModelAutoRefreshKeepsTheDrilledIssueOnScreen pins the same selection
+// against the 60s tick and the focus-regain refresh, which reloaded detail from
+// currentSelection() and so navigated back to the parent on their own.
+func TestModelAutoRefreshKeepsTheDrilledIssueOnScreen(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	m := drilledIntoChild(t, gw)
+
+	cmd := m.refreshActiveSurfaceCmd()
+	if cmd == nil {
+		t.Fatal("expected the detail surface to refresh")
+	}
+	if m.detail.TargetID != "tm-child" {
+		t.Errorf("auto-refresh retargeted detail to %q, want tm-child", m.detail.TargetID)
+	}
+
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.detail.Detail.Summary.ID != "tm-child" {
+		t.Errorf("after the refresh the screen shows %q, want tm-child", m.detail.Detail.Summary.ID)
+	}
+}
+
+// TestModelEscapeFromDrillReturnsTheSelectionToTheBrowseRow is the other half
+// of the contract: once Detail is left, the browse tab owns the selection again.
+func TestModelEscapeFromDrillReturnsTheSelectionToTheBrowseRow(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	m := drilledIntoChild(t, gw)
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if m.active != mode.Board {
+		t.Fatalf("Escape from detail left the app in %s", m.active)
+	}
+	id, ok := m.selectedIssueID()
+	if !ok || id != "tm-epic" {
+		t.Errorf("selectedIssueID() after Escape = %q (ok=%v), want the board row tm-epic", id, ok)
+	}
+}
+
+// TestModelReloadDetailKeyIssuesALoad pins that the reload key reloads.
+//
+// It set detail.Loading and then called ensureDetailForCurrentSelectionCmd,
+// whose first guard returns nil for a target that is already loading: no load
+// was issued, and the header claimed "Loading: detail" for the rest of the
+// session — which, with the spinner armed by the loading state, also meant a
+// frame every 100ms forever.
+func TestModelReloadDetailKeyIssuesALoad(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	m := drilledIntoChild(t, gw)
+
+	mark := gw.resetMark()
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("the reload key produced no command")
+	}
+	m = applyMessages(t, m, runBatch(cmd))
+
+	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+		t.Error("the reload key issued no repository.Issue call")
+	}
+	if m.detail.Loading {
+		t.Error("detail is still loading after the reload resolved")
+	}
+	if m.detail.Detail.Summary.ID != "tm-child" {
+		t.Errorf("reload landed on %q, want tm-child", m.detail.Detail.Summary.ID)
+	}
+}

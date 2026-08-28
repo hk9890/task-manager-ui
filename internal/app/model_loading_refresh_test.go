@@ -907,3 +907,59 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 		t.Fatalf("expected no background refresh of inactive board/search surfaces, calls=%#v", gw.Calls())
 	}
 }
+
+// TestSpinnerTickRunsOnlyWhileSomethingIsLoading pins that an idle app draws no
+// frames.
+//
+// The tick was armed in Init and re-armed unconditionally, so View() ran ten
+// times a second for the life of the process — every frame re-rendering the
+// issue markdown from scratch, and every frame after the first byte-identical
+// and discarded by Bubble Tea's diff.
+func TestSpinnerTickRunsOnlyWhileSomethingIsLoading(t *testing.T) {
+	t.Parallel()
+
+	gw := newTestRepository()
+	gw.seedReady("tm-1", "Ready", "task", 1)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	ticks := 0
+	m.scheduleSpinnerTick = func() tea.Cmd {
+		ticks++
+		return nil
+	}
+
+	// Startup: the board is loading, so the spinner must run.
+	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 40}})
+	if ticks == 0 {
+		t.Fatal("no spinner tick was armed while the board was loading")
+	}
+	if !m.spinnerTicking {
+		t.Fatal("spinnerTicking is false while a tick is outstanding")
+	}
+
+	m = applyMessages(t, m, runBatch(m.Init()))
+	if len(m.loadingStates()) != 0 {
+		t.Fatalf("setup: expected an idle app after the initial load, loading=%v", m.loadingStates())
+	}
+
+	// Idle: the outstanding tick fires once more and is not re-armed.
+	armed := ticks
+	m = applyMessages(t, m, []tea.Msg{loading.TickMsg{}})
+	if ticks != armed {
+		t.Errorf("the spinner re-armed itself while nothing was loading: %d new ticks", ticks-armed)
+	}
+	if m.spinnerTicking {
+		t.Error("spinnerTicking is still set after the last tick fired")
+	}
+
+	// Any further message must not arm it either.
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyDown}})
+	if ticks != armed {
+		t.Errorf("an idle key press armed %d spinner ticks", ticks-armed)
+	}
+}
