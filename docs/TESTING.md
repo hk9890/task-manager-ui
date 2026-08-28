@@ -1,8 +1,8 @@
 # Testing Strategy
 
-This document defines the repository testing vocabulary, commands, and harness conventions for Task Manager UI.
-
-**Automated tests are the primary proof of correctness.** For user-facing behavior, they must be complemented by a reproducible full-app verification run performed by the agent/operator. Do not rely on user confirmation for basic product validation that can be checked directly.
+The testing vocabulary, commands and harness conventions for `taskmgr-ui`. Automated tests are the
+primary proof of correctness; a user-facing change also needs the built binary driven, which
+[RUNNING.md](RUNNING.md) owns.
 
 ## Test Tiers
 
@@ -18,7 +18,7 @@ The repository uses a two-tier model.
 
 ### Tier 2 — Integration (`mise run test:integration`, `//go:build integration`)
 
-- Tagged with `//go:build integration` and built only under `mise run test:integration` (and the `quality` / `test:coverage` gates).
+- Tagged with `//go:build integration` and built only under `mise run test:integration` and the `test:coverage` gate that `ci` runs.
 - These exercise real OS-level seams (for example launcher subprocess execution) that a synchronous fake cannot reach.
 - No external tracker binary is required: the repository backend is the in-process task-manager SDK, and integration tests construct their stores directly.
 - Example: `internal/launcher/process_runner_integration_test.go`.
@@ -45,13 +45,11 @@ mise run test:integration    # integration tests only (build tag: integration)
 mise run test:all            # unit + integration tests
 mise run test:verbose        # unit tests with -v
 mise run test:coverage       # unit + integration tests with the coverage-threshold gate
-mise run quality             # full pre-handoff gate: vet, lint, guardrails, unit + integration tests
+mise run ci                  # the merge gate, and exactly what the linux CI job runs
 mise run quality:fast        # fast pre-commit gate: vet, lint, guardrails, unit tests (skips integration only)
 ```
 
-Run `mise tasks` to see the full list. CI additionally runs `fmt:check`,
-`scripts:check`, and a `test:coverage` threshold gate — see
-`docs/CODING.md` Quality Gates.
+Run `mise tasks` to see the full list.
 
 Harness-focused runs (package-scoped):
 
@@ -63,50 +61,44 @@ go test ./internal/repository/taskmgr/... -v
 ## When to Run Which Gate
 
 - **Per-commit / pre-push (local dev):** `mise run quality:fast` is sufficient.
-- **End-of-change validation (closing an epic, acceptance review, before declaring "done"):** `mise run quality` is required — it adds integration tests, which exercise real OS seams invisible to the unit suite. `quality:fast` is not a substitute.
+- **End-of-change validation (closing an epic, acceptance review, before declaring "done"):** `mise run ci` is required — it adds integration tests, which exercise real OS seams invisible to the unit suite, plus formatting, script and coverage checks. `quality:fast` is not a substitute.
 
-## Runtime UI Verification Workflow (operator runbook)
+## Render-regression guards
 
-Use `docs/RUNTIME_UI_VERIFICATION.md` for the concrete, command-oriented workflow.
+Four packages guard the artifacts a passing state assertion still ships — frame stacking, doubled
+column headers, and log output bleeding into a rendered frame:
 
-- It covers the fast deterministic automated scenario loop and a built-binary manual run.
-- It includes a short checklist for layout, navigation, search behavior, and external-tool flows.
-- Keep this document as policy/strategy; keep step-by-step runtime commands in that runbook.
+| Package | Guards against |
+|---|---|
+| `internal/mode/board/render_regression_test.go` | frame stacking on the board — asserts the border count per rendered frame |
+| `internal/mode/search/render_regression_test.go` | frame stacking in search mode |
+| `internal/logging/render_regression_test.go` | log output bleeding into a rendered frame |
+| `internal/app/render_regression_test.go` | doubled column headers and frame stacking at app-composition level |
 
-## Full-App Verification (required for user-facing changes)
+A failure in any of them is a release blocker: it means a visible artifact, not a style preference.
+So is a failure in the `internal/repository/taskmgr` behavior tests — wrong counts, order or search
+results reach the screen as wrong numbers.
 
-Use the real app when a change affects layout, navigation, startup behavior, or operator-facing workflows.
+A test that prints a `t.Logf` diagnostic and still ends in PASS is advisory. Read the message and
+judge whether to follow up; do not hold a release for it.
 
-Typical workflow — run the built binary against this project's own tracker store via the `taskmgr-ui` task:
+## Runtime UI verification
+
+A change to user-visible behavior — layout, navigation, search, startup shell, editor and launcher
+flows — needs more than a green suite.
+
+**First, the fast deterministic loop.** These are unit tests, no build tag, and they are the default
+quick proof while implementing:
 
 ```bash
-mise run taskmgr-ui
+go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelStartupBoardLayoutSanityAndNoRuntimeErrors' -v
 ```
 
-For a disposable seeded board, run against the JSONL-backed `memory` backend instead:
-
-```bash
-go build -o /tmp/taskmgr-ui ./cmd/taskmgr-ui
-/tmp/taskmgr-ui --repo memory --repo-file path/to/seed.jsonl
-```
-
-During the run, verify the changed behavior directly:
-
-1. The app starts cleanly and renders a usable first screen.
-2. The changed workflow works in the real app, not only in tests.
-3. Core navigation still works for the touched area (for example board/detail/search transitions when relevant).
-4. Layout changes behave correctly at representative terminal sizes.
-5. You can state pass/fail yourself without asking the user to validate basics.
-
-Notes:
-
-- The repository backend is in-process (the task-manager SDK); there is no
-  external tracker subprocess in the product path, so no prompt-suppression env
-  var is needed for a scripted/captured run.
-- Prefer the seeded `memory` backend for repeatable, disposable verification.
-- If terminal capture is needed, use a method that records the visible rendered screen. Alt-screen TUIs may not be proven by raw stdout/transcript output alone.
-- For a repo-local reproducible capture path, use `scripts/capture_taskmgr_ui_screen.py` with `pyte`; see `docs/RUNTIME_UI_VERIFICATION.md`.
-- Full-app verification complements automated tests; it does not replace them.
+**Then the real app.** Automated tests are the primary proof of correctness, and a full-app run
+complements them rather than replacing them — but a user-facing change is not verified until it has
+been driven in the built binary. [RUNNING.md](RUNNING.md) owns launching it, the PTY capture harness,
+and what to check; run it and state pass or fail yourself rather than asking the operator to validate
+basics.
 
 ### Process-level capture policy
 
@@ -172,7 +164,7 @@ Required checks:
 2. Include at least one realistic full-board capture using seeded `memory` fixture data when practical.
 3. Include a board → detail → board runtime round-trip test that verifies rendered layout/focus behavior after returning.
 4. Add at least one density/chrome assertion to prevent regressions that technically pass state checks but degrade visible issue density.
-5. Run the built app against a seeded board and verify the dashboard in a real terminal session.
+5. Drive the built app against a seeded board in a real terminal session ([RUNNING.md](RUNNING.md)).
 
 Example focused runs:
 

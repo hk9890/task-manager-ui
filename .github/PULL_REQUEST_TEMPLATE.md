@@ -13,8 +13,8 @@ Task: bwb-XXXXX
 
 <!-- Which verification depth in docs/CHANGE-WORKFLOW.md you ran. -->
 
-- [ ] `mise run quality` green locally
-- [ ] Touched runtime UI? Ran `docs/RUNTIME_UI_VERIFICATION.md`
+- [ ] `mise run ci` green locally
+- [ ] Touched runtime UI? Drove the built binary per `docs/RUNNING.md`
 - [ ] Touched logging/diagnostics? Cross-checked `docs/MONITORING.md`
 - [ ] Docs-only? Verified affected paths, commands, and links
 

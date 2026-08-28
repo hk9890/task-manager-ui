@@ -29,9 +29,8 @@ open the PR and stop there** unless asked to merge.
 
 ## Pre-handoff gates
 
-- Code: `mise run quality`, then `mise run fmt:check` and `mise run scripts:check` — CI runs a
-  superset of `quality` and fails on those two
-  ([CODING.md → Quality Gates](CODING.md#quality-gates)).
+- Code: `mise run ci` — the merge gate, and exactly what the linux CI job runs
+  ([CODING.md → What the tools enforce](CODING.md#what-the-tools-enforce)).
 - Docs: open every path, command, and link you touched.
 
 `scripts/git-hooks/pre-commit` formats staged `*.go` files and checks nothing else. Install it per

@@ -1,107 +1,78 @@
 # Overview
 
-## Project identity
+The map of this repository: where things live and how to find them fast. Module
+`github.com/hk9890/task-manager-ui`, binary `taskmgr-ui`, entrypoint `cmd/taskmgr-ui/main.go`.
 
-- Module: `github.com/hk9890/task-manager-ui`
-- Binary: `taskmgr-ui`
-- Entrypoint: `cmd/taskmgr-ui/main.go`
-- Primary runtime surfaces: Bubble Tea UI + an in-process task-manager-backed `repository.Repository`
+A Bubble Tea terminal UI over the task-manager Go SDK. There is no server, no database and no tracker
+subprocess — the store is opened in-process and read directly.
 
-## Upstream dependency
+## Repository layout
 
-- task-manager Go SDK: `github.com/hk9890/task-manager/sdk` (imported as
-  `github.com/hk9890/task-manager/sdk/tasks`).
-- taskmgr-ui is a thin TUI over the in-process task-manager store; there is no external
-  backend binary in the product path. The SDK version is pinned in `go.mod`
-  (`require github.com/hk9890/task-manager/sdk vX.Y.Z`). When investigating
-  repository behavior surprises, file bugs upstream or check the SDK
-  source/issues there before patching workarounds in
-  `internal/repository/taskmgr/`.
+```
+cmd/taskmgr-ui/           entrypoint: flags → non-interactive exits → config → logger → repository → tea.NewProgram
+internal/
+  app/                    the root shell: mode lifecycle, routing, selection and detail coordination
+  mode/                   board, docs, search and detail feature models, plus the shell message contracts
+  ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
+    styles/                 every colour and the shared FormSection chrome
+    shared/                 issuerow, markdown, renderhelpers, textutil — reused across modes
+    board/ search/ detail/  one renderer per browse surface
+    modal/ toaster/ overlay/ loading/ scroll/ fatalerror/   shared shell primitives
+  domain/                 issue, query, mutation, catalog and error models
+  repository/             the Repository interface, plus shared errors and types
+    taskmgr/                production backend: in-process adapter over the SDK
+    memory/                 test and --repo memory backend, over filestorage JSONL
+    filestorage/            JSONL load and save for the memory backend
+  dashboard/              Compose: one DashboardData result into the fixed board columns
+  config/                 config model, defaults, YAML loading, keybinding resolution
+  launcher/               external tool launch actions and the process runner; editor/ is the edit handoff
+  logging/                the single logging entrypoint: session IDs, JSON Lines sink, stderr mirroring
+  testing/                repository fakes and the UI test harness
+  version/                build-time injected Version, Commit, Date
+scripts/                  capture_taskmgr_ui_screen.py (PTY capture) and the git hooks
+```
 
-## CLI startup contract
+## Key concepts
 
-`taskmgr-ui` includes a small pre-TUI CLI layer for help/version/config inspection and
-startup overrides. For the full flag list, exit-code contract, and path
-resolution behavior, see `docs/CODING.md`.
+- **One repository abstraction.** Everything goes through `repository.Repository`. `buildRepository`
+  in `cmd/taskmgr-ui/main.go` picks the backend; there is no caching layer and no validating
+  decorator, because the in-process SDK is fast enough.
+- **Store discovery is the SDK's.** `main.go` calls `tasks.Resolve`, so a local `.tasks` directory and
+  a store promoted into the central registry resolve exactly as they do for the `taskmgr` CLI.
+  Nothing below `cmd/` knows where the store lives — the adapter receives an already-open
+  `*tasks.Store`.
+- **The project root is the store's, not the working directory.** They differ whenever the app starts
+  in a subdirectory or against a central store, and it is the root launcher templates interpolate.
+- **Modes own state, the shell owns lifecycle.** `internal/mode/*` emits `SelectionChangedMsg` and
+  `ActionRequestMsg`; `internal/app` decides what switches and what reloads. Synchronization is
+  event-driven — there is no polling loop.
+- **Three browse tabs, and a drill-in.** `mode.BrowseModes` is the header order — Board, Docs,
+  Search. Detail is not a tab: it is entered from a browse tab and left with Escape, and the shell
+  keeps `lastBrowse` on a tab so a selection lookup always resolves.
+- **Docs are not work.** The SDK excludes `doc` issues from the ready and blocked queues, so an open
+  doc reaches no board column. `internal/mode/docs` is where they are browsed — one column from
+  `Repository.Search`, drawn by the board renderer.
+- **Launchers are thin.** They resolve an action to one command template, start a subprocess and
+  return. They never supervise, retry or orchestrate.
+- **Editing is an editor handoff.** Rich issue editing opens `$EDITOR` on a marker-delimited document
+  rather than building inline forms.
 
-## Runtime flow
+## Finding things
 
-1. `cmd/taskmgr-ui/main.go` parses CLI flags and handles non-interactive exits first.
-2. It resolves startup cwd/config options and loads runtime config with
-   `internal/config.LoadWithOptions(...)`.
-3. It initializes centralized runtime logging, then constructs the
-   `repository.Repository` via `constructRepository` in `cmd/taskmgr-ui/main.go`:
-   for the default `taskmgr` backend it opens an in-process store with
-   `tasks.Open(projectRoot)`, wraps it with
-   `repository/taskmgr.New(store, WithAuthor(...))`, and uses that adapter
-   directly (no validating decorator, no caching layer).
-4. It builds shell services with `internal/app.NewServices(...)`.
-5. It starts the TUI with
-   `tea.NewProgram(..., tea.WithAltScreen(), tea.WithReportFocus())`.
+```bash
+rg -n '^\t\w+Action\w+ +=' internal/config/keybindings.go   # every bindable action; DefaultKeyBindings has the keys
+rg -n '^type \w+Msg\b' internal/                           # every Bubble Tea message the shell routes
+rg -n '^\t[A-Z]\w+\(' internal/repository/repository.go    # every repository operation
+rg -n '^func Render' internal/ui/                          # every top-level renderer
+rg -n '^\t\w+Color +=' internal/ui/styles/colors.go        # every colour role
+rg -n '<config-key>' internal/config/                      # where a config key is read
+rg -n 'forbidden' cmd/taskmgr-ui/architecture_guardrails_test.go   # the import bans CI enforces
+```
 
-When `--debug` is enabled, stderr diagnostics are prefixed with `[taskmgr-ui-debug]`
-and include startup resolution events plus in-process repository execution
-traces (there is no external subprocess argv), while the same run also writes
-structured JSON Lines records with `session_id` to the persistent log file. See
-`docs/MONITORING.md` for the logging contract and capture paths.
+## External resources
 
-## Package map
-
-| Path | Responsibility |
-| --- | --- |
-| `cmd/taskmgr-ui` | Binary entrypoint and program bootstrap |
-| `internal/app` | Root shell, mode lifecycle, selection/detail coordination |
-| `internal/config` | Runtime config model, defaults, YAML loading, keybinding resolution |
-| `internal/domain` | Issue, query, mutation, catalog, and error models |
-| `internal/repository` | `Repository` interface and shared error/types helpers |
-| `internal/repository/taskmgr` | Production `repository.Repository` over the in-process task-manager SDK (`sdk/tasks`); maps the SDK's typed model onto taskmgr-ui domain types |
-| `internal/repository/memory` | In-memory `repository.Repository` for tests and `--repo memory`; backed by `internal/repository/filestorage` JSONL load/save |
-| `internal/logging` | Central slog-based logging package used by startup and repository code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
-| `internal/dashboard` | Board column composition (`Compose`) from a `DashboardData` result |
-| `internal/mode/*` | Board, docs, search, and details feature-local state/controllers |
-| `internal/launcher` | External tool launch actions and process runner |
-| `internal/launcher/editor` | Rich issue editor handoff flow |
-| `internal/ui/*` | Reusable rendering components and shared styles |
-| `internal/testing/*` | Repository fakes and UI test harnesses |
-| `internal/version` | Build-time injected `Version`, `Commit`, `Date` symbols (see `docs/CODING.md` Version/build metadata behavior) |
-
-## Architectural boundaries
-
-- Single repository abstraction: active product behavior goes through `repository.Repository`. The production implementation is `internal/repository/taskmgr`, an in-process adapter over the task-manager SDK, composed via `constructRepository` and used directly. There is no tracker-CLI subprocess in the product path and no caching layer (the in-process SDK is fast enough). The only alternate backend is `--repo memory` (file-backed, for tests/inspection).
-- Store discovery is the SDK's, not ours: `cmd/taskmgr-ui/main.go` calls `tasks.Resolve`, so a local `.tasks` store and a central store registered in `~/.taskmgr/mapping.yaml` both resolve exactly as they do for the `taskmgr` CLI. Nothing below `cmd/` knows where the store lives — the repository adapter receives an already-open `*tasks.Store`. See [CODING.md → Store resolution](CODING.md#store-resolution).
-- No direct SQL/database access and no orchestration/control-plane dependencies in the active `./cmd/taskmgr-ui` path; see `cmd/taskmgr-ui/architecture_guardrails_test.go`.
-- Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
-- Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
-- Dashboard columns are composed by `internal/dashboard.Compose` from a single `repository.DashboardData`; the board model owns query routing and calls `Compose`.
-- Browse tabs are `mode.BrowseModes` — Board, Docs, Search, in header order. Detail is not a tab: it is a drill-in entered from a browse tab and left with Escape, and the shell keeps `lastBrowse` pointing at a tab so the selection always resolves. `internal/mode/docs` is the docs tab: one column of `type == doc` issues fetched with `Repository.Search` (docs are excluded from Ready/Blocked by the SDK, so an open doc has no board column), drawn with the board renderer.
-
-## UI component boundaries
-
-Rendering components live under `internal/ui/`:
-
-- `ui/shared/issuerow` is the single compact issue-row renderer for
-  board/search-style lists; keep row rendering shared here.
-- There is intentionally **no shared issue-list component** — board and search
-  containers differ materially (layout, empty-state, focus), so list/panel
-  containers stay mode-specific (`ui/board` columns vs `ui/search` panes). The
-  docs tab is a board column by another name, so it reuses `ui/board` directly
-  rather than growing a renderer of its own.
-  Extract a minimal `internal/ui/shared/` list component only if real
-  duplication appears above the row level.
-- `ui/styles.FormSection` is the shared rounded-border section/container
-  primitive used to frame columns, panes, and detail shells.
-- `ui/detail` is the dedicated issue-detail renderer, separate from compact
-  row/list rendering.
-- `ui/loading`, `ui/toaster`, and `ui/modal` provide shared loading, transient
-  toast, and overlay feedback primitives.
-- `ui/scroll` is the shared `EnsureVisible` viewport/offset helper used by board
-  and details to keep the selected row visible.
-- `ui/overlay` provides ANSI-aware overlay placement used by modal/toaster/app.
-- `ui/fatalerror` is the full-screen startup-failure view used by app.
-
-## Supporting docs
-
-`AGENTS.md` is the single entry point that routes to every doc by topic (coding,
-configuration, testing, monitoring, releasing, change workflow) — see it instead
-of duplicating that index here. Operator keybindings live in
-`docs/user-guide/key-bindings.md`.
+| Resource | Where |
+|---|---|
+| Backing store and SDK | [`github.com/hk9890/task-manager`](https://github.com/hk9890/task-manager) — `sdk/tasks`, pinned in `go.mod`. File repository behavior surprises upstream before working around them in `internal/repository/taskmgr/`. |
+| TUI framework | [Bubble Tea](https://pkg.go.dev/github.com/charmbracelet/bubbletea), with [Lip Gloss](https://pkg.go.dev/github.com/charmbracelet/lipgloss) for styling and [Glamour](https://pkg.go.dev/github.com/charmbracelet/glamour) for markdown |
+| Git remote | https://github.com/hk9890/task-manager-ui |

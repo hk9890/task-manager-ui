@@ -38,29 +38,10 @@ jobs:
           # "latest"; bump deliberately.
           version: 2026.5.15
 
-      - name: Scripts syntax
-        run: mise run scripts:check
-
-      - name: Format check
-        run: mise run fmt:check
-
-      - name: Lint
+      - name: Merge gate (linux)
         if: matrix.os == 'ubuntu-latest'
-        run: mise run lint
+        run: mise run ci
 
-      - name: Build
-        run: mise run build
-
-      - name: Vet
-        run: mise run vet
-
-      - name: Architecture guardrails
-        if: matrix.os == 'ubuntu-latest'
-        run: mise run guardrails
-
-      - name: Unit tests
-        run: mise run test
-
-      - name: Tests + coverage gate
-        if: matrix.os == 'ubuntu-latest'
-        run: mise run test:coverage
+      - name: Merge gate (macOS)
+        if: matrix.os == 'macos-latest'
+        run: mise run ci:portable

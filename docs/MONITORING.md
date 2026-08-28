@@ -159,20 +159,16 @@ Effective capture destinations therefore include:
 
 ## Relevant code paths
 
-- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`constructRepository`: `tasks.Open` → `taskmgr.New`)
+- `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`buildRepository`: `tasks.Resolve` → `taskmgr.New`)
 - `internal/repository/taskmgr/` — in-process task-manager backend (the production repository); behavior tests live alongside it
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
 
 ## Runtime UI evidence
 
-For user-visible runtime capture rather than stderr diagnostics, use the
-verification tooling documented in `docs/RUNTIME_UI_VERIFICATION.md`:
-
-- `scripts/capture_taskmgr_ui_screen.py`
-
-That script captures rendered TUI state; it is not part of the logging
-surface.
+For user-visible runtime capture rather than stderr diagnostics, drive the built
+binary with `scripts/capture_taskmgr_ui_screen.py` ([RUNNING.md](RUNNING.md)).
+That script captures rendered TUI state; it is not part of the logging surface.
 
 ## Current limitations
 

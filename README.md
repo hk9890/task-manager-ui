@@ -41,7 +41,7 @@ Release archives ship with a cosign-signed checksum file — see
 
 Building from source uses [mise](https://mise.jdx.dev/) to provision the pinned
 Go toolchain and dev tools from `.mise.toml`, so a separate Go install is not
-required. See [CONTRIBUTING.md](CONTRIBUTING.md#getting-started) for the
+required. See [CONTRIBUTING.md](CONTRIBUTING.md#set-up) for the
 `mise install` / `mise run build` setup; to install the binary onto your `PATH`,
 run `go install ./cmd/taskmgr-ui`.
 
@@ -81,26 +81,14 @@ taskmgr-ui --check-config
 For exit codes, config details, and centralized debug/logging behavior, see
 `docs/CODING.md` and `docs/MONITORING.md`.
 
-## Developer Tasks
-
-Building, testing, and the pre-handoff quality gates are documented in
-[`CONTRIBUTING.md`](./CONTRIBUTING.md). Run `mise tasks` to list every available
-task; see `docs/CHANGE-WORKFLOW.md` for the landing workflow and `docs/CODING.md`
-for build/test details.
-
 ## Docs
 
-- [`docs/OVERVIEW.md`](./docs/OVERVIEW.md) — runtime flow, package map, architecture boundaries
-- [`docs/CODING.md`](./docs/CODING.md) — build commands, architectural rules, quality gates
-- [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) — runtime config model, keybindings, launcher reference
-- [`docs/TESTING.md`](./docs/TESTING.md) — test policy, fixtures, and runtime verification expectations
-- [`docs/MONITORING.md`](./docs/MONITORING.md) — centralized logging contract and evidence capture points
-- [`docs/RUNTIME_UI_VERIFICATION.md`](./docs/RUNTIME_UI_VERIFICATION.md) — built-binary runtime UI verification runbook
-- [`docs/CHANGE-WORKFLOW.md`](./docs/CHANGE-WORKFLOW.md) — task-manager-first change landing and session completion workflow
-- [`docs/RELEASING.md`](./docs/RELEASING.md) — manually dispatched release workflow
-- [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — default keybindings reference
+- [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — the default keybindings
+- [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) — the config file, keybinding overrides, and launcher templates
+- [`CHANGELOG.md`](./CHANGELOG.md) — release history
 
-See also [`CHANGELOG.md`](./CHANGELOG.md) for the release history.
+Developer and agent documentation lives under [`docs/`](./docs/); [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+is the entry point for humans and [`AGENTS.md`](./AGENTS.md) for AI tools.
 
 ## Contributing
 
