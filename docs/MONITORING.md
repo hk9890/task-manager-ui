@@ -87,6 +87,24 @@ reads fine, while launchers without an explicit `work_dir` exec in a directory
 that is gone. Re-point the entry by running
 `taskmgr store move --relink --to <store>` from the project's new location.
 
+### Runtime failure records
+
+A session that goes right logs nothing after startup. These are what a session
+that went wrong leaves behind, and the first thing to read when a run
+misbehaved — all of them reach the persistent log only, because stderr is
+suppressed for the interactive session:
+
+- `task-manager health check failed` — emitted for every failure code. Only
+  `no_database_found` also draws the fatal-error screen; an unreadable or corrupt
+  store shows nothing on screen and the board simply renders whatever the first
+  `Dashboard` call returned.
+- `failed to prepare the issue edit document`, `failed to apply the issue edit` —
+  an `e` round trip that did not save. The toast carries the same cause.
+- `dashboard refresh failed; keeping the last loaded columns` — the rows on the
+  board are the previous load's.
+- `stale load-more page dropped; a reload superseded it` — a Done-column page
+  discarded because a reload landed first; expected, not a fault.
+
 ## `--debug` coverage
 
 `--debug` mirrors machine-visible startup diagnostics to `stderr`:
@@ -107,7 +125,8 @@ The repository backend is in-process (the task-manager Go SDK,
 `github.com/hk9890/task-manager/sdk/tasks`); there is no external subprocess in
 the product data path and therefore no per-command argv/exit-code/duration
 execution trace. The repository backend emits no diagnostic records of its own,
-so in a healthy session the diagnostics surface is startup-only.
+so in a healthy session the diagnostics surface is startup-only; a session that
+fails leaves the records above.
 
 The startup debug stream also prints the run `session_id` once so operators can
 correlate stderr output with structured log records. This applies equally to
