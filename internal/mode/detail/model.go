@@ -369,7 +369,8 @@ func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	lineIdx := detail.MetadataFieldLineIndex(m.MetadataSelectedField, m.Detail)
 	if lineIdx >= 0 && viewportHeight > 0 {
 		geometry := m.paneGeometry(maxWidth, viewportHeight)
-		m.MetadataScrollOffset = scroll.EnsureVisible(m.MetadataScrollOffset, lineIdx, geometry.MetadataInnerHeight)
+		total := geometry.Metadata + geometry.MetadataInnerHeight
+		m.MetadataScrollOffset = scroll.EnsureVisibleClipped(m.MetadataScrollOffset, lineIdx, geometry.MetadataInnerHeight, total)
 	}
 }
 
@@ -426,7 +427,10 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 		lineIdx := detail.DependencyRefLineIndex(m.BrowserSelectedIndex, m.BrowserItems, m.Detail)
 		if lineIdx >= 0 {
 			geometry := m.paneGeometry(maxWidth, viewportHeight)
-			m.DependenciesScrollOffset = scroll.EnsureVisible(m.DependenciesScrollOffset, lineIdx, geometry.DependenciesInnerHeight)
+			// Bounds are max(0, lines-inner), so lines == bound+inner whenever the
+			// pane clips; when it does not, the sum is inner and nothing scrolls.
+			total := geometry.Dependencies + geometry.DependenciesInnerHeight
+			m.DependenciesScrollOffset = scroll.EnsureVisibleClipped(m.DependenciesScrollOffset, lineIdx, geometry.DependenciesInnerHeight, total)
 		}
 	}
 
