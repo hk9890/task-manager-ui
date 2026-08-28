@@ -843,3 +843,69 @@ func TestBuildRepositoryMemoryKeepsWorkingDirectoryAsProjectRoot(t *testing.T) {
 		t.Errorf("projectRoot: got %q, want %q", projectRoot, dir)
 	}
 }
+
+// TestRun_CheckConfigRejectsUnsafeLauncherDefinition pins that --check-config
+// runs the launcher validation an interactive start runs. It used to print
+// "config OK" for a definition that interpolates an issue field into an
+// argument that is re-parsed as a shell command line.
+func TestRun_CheckConfigRejectsUnsafeLauncherDefinition(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.Launcher.Definitions = append(cfg.Launcher.Definitions, config.LauncherDefinition{
+		Action:  "tmux-note",
+		Command: "tmux",
+		Args:    []string{"new-window", "issue {{issue.title}}"},
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := runWithLogger([]string{"--check-config"}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: cfg, Path: "/tmp/config.yaml"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			t.Error("interactive start must not run for --check-config")
+			return nil
+		},
+		func(opts logging.Options) *logging.Manager { return nil },
+	)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (stdout=%q stderr=%q)", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "config OK") {
+		t.Fatalf("--check-config reported success for an unsafe launcher definition: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid launcher configuration") {
+		t.Fatalf("stderr does not name the launcher failure: %q", stderr.String())
+	}
+}
+
+// TestRun_CheckConfigWarnsAboutUnlaunchableAction covers a definition that is
+// safe but that no keybinding can start.
+func TestRun_CheckConfigWarnsAboutUnlaunchableAction(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.Launcher.Definitions = append(cfg.Launcher.Definitions, config.LauncherDefinition{
+		Action:  "tmux-note",
+		Command: "tmux",
+		Args:    []string{"new-window", "-n", "issues"},
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := runWithLogger([]string{"--check-config"}, &stdout, &stderr,
+		func(opts config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: cfg, Path: "/tmp/config.yaml"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error { return nil },
+		func(opts logging.Options) *logging.Manager { return nil },
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "tmux-note") || !strings.Contains(stderr.String(), "cannot be launched") {
+		t.Fatalf("stderr does not warn about the unlaunchable action: %q", stderr.String())
+	}
+}

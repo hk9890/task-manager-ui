@@ -15,11 +15,28 @@ import (
 // NAME=value where NAME follows POSIX env-variable naming conventions.
 var envEntryRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=.*$`)
 
-// shellBaseNames are the POSIX-shell executables that interpret a -c/-lc script
-// body. A launcher whose command is one of these can re-parse a body argument as
-// code, which is the shell-injection surface the security rule guards.
+// shellBaseNames are the executables that interpret the argument after a
+// -c/-lc-style flag as a command line. A launcher whose argv contains one of
+// these can re-parse a body argument as code, which is the shell-injection
+// surface the security rule guards.
+//
+// The list is not only POSIX shells: `su -c` and `python -c` take an executed
+// string in exactly the same position. Interpreters whose execute flag is not
+// -c (perl -e, ruby -e, node -e) are out of scope of this static check, as is an
+// operator who writes `eval "$VAR"` inside a body.
 var shellBaseNames = map[string]struct{}{
 	"sh": {}, "bash": {}, "dash": {}, "zsh": {}, "ksh": {}, "ash": {}, "busybox": {},
+	"csh": {}, "tcsh": {}, "fish": {}, "su": {}, "python": {}, "python3": {},
+}
+
+// shellDispatchBaseNames are the executables that hand a plain argument to a
+// shell with no -c flag to mark it: tmux joins the trailing arguments of
+// new-window / new-session / split-window / run-shell and parses them with
+// /bin/sh, ssh runs its command string through the remote login shell, and watch
+// runs its argument through sh. There is no fixed body position to check, so
+// every argument of such a command is treated as a shell body.
+var shellDispatchBaseNames = map[string]struct{}{
+	"ssh": {}, "tmux": {}, "watch": {},
 }
 
 // shellCommandFlagRe matches a single-dash shell flag bundle that contains the
@@ -27,21 +44,37 @@ var shellBaseNames = map[string]struct{}{
 // following such a flag is the script body.
 var shellCommandFlagRe = regexp.MustCompile(`^-[a-z]*c[a-z]*$`)
 
-// issueFieldPlaceholders are the operator-untrusted interpolation placeholders.
-// They carry issue content (id, title, labels, assignee) that anyone able to
-// file or edit an issue controls. They must never be interpolated into a shell
-// body; only project.root is operator-trusted. See docs/CODING.md
-// "Shell-launcher security rule".
-var issueFieldPlaceholders = []string{
-	"{{issue.id}}",
-	"{{issue.title}}",
-	"{{issue.labels}}",
-	"{{issue.assignee}}",
+// projectRootPlaceholder is the one operator-trusted placeholder: it resolves to
+// the store's project path, never to issue content.
+const projectRootPlaceholder = "{{project.root}}"
+
+// issueFieldPlaceholders returns the operator-untrusted interpolation
+// placeholders — everything a person able to file or edit an issue controls.
+// They must never be interpolated into a body that is re-parsed as code. See
+// docs/CODING.md "Shell-launcher security rule".
+//
+// Derived from InterpolationContext.Placeholders rather than listed a second
+// time, so a newly supported {{issue.*}} placeholder is guarded the moment it
+// exists.
+func issueFieldPlaceholders() []string {
+	all := InterpolationContext{}.Placeholders()
+	out := make([]string, 0, len(all))
+	for key := range all {
+		if key == projectRootPlaceholder {
+			continue
+		}
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
-// validateShellBodySafety enforces the shell-launcher security invariant: when a
-// launcher invokes a POSIX shell with a -c/-lc body, that body must not contain
-// any issue-field placeholder. Issue fields are operator-untrusted input;
+// validateShellBodySafety enforces the shell-launcher security invariant: an
+// argument a launcher hands to something that re-parses it as a command line
+// must not contain any issue-field placeholder. That covers two shapes — a
+// -c/-lc body (shellBaseNames) and a plain argument dispatched to a shell
+// (shellDispatchBaseNames, e.g. `tmux new-window`, `ssh host`, `watch`).
+// Issue fields are operator-untrusted input;
 // interpolating them into a re-parsed shell body allows command injection / RCE
 // via issue content. Operators must pass issue fields as positional arguments
 // after the body and reference them via $1, $2, … instead. Enforced at
@@ -67,6 +100,18 @@ func validateShellBodySafety(def Definition) error {
 	tokens = append(tokens, def.Args...)
 
 	for i, tok := range tokens {
+		if isShellDispatchCommandName(tok) {
+			// No flag marks the body, so every following argument is one.
+			for _, arg := range tokens[i+1:] {
+				if ph := issuePlaceholderIn(arg); ph != "" {
+					return fmt.Errorf(
+						"launcher action %q: issue-field placeholder %s must not be interpolated into an argument of %q, which re-parses it as a shell command (command-injection risk); pass the issue field through Env instead",
+						strings.TrimSpace(def.Action), ph, strings.TrimSpace(tok),
+					)
+				}
+			}
+			continue
+		}
 		if !isShellCommandName(tok) {
 			continue
 		}
@@ -95,10 +140,19 @@ func validateShellBodySafety(def Definition) error {
 	return nil
 }
 
+// ValidateDefinitions reports whether a launcher definition set is usable and
+// safe, without constructing a service or a process runner. --check-config uses
+// it so the documented validation command rejects exactly what an interactive
+// start rejects.
+func ValidateDefinitions(definitions []Definition) error {
+	_, err := newDefinitionResolver(definitions)
+	return err
+}
+
 // issuePlaceholderIn returns the first issue-field placeholder found in s, or ""
 // when none is present.
 func issuePlaceholderIn(s string) string {
-	for _, ph := range issueFieldPlaceholders {
+	for _, ph := range issueFieldPlaceholders() {
 		if strings.Contains(s, ph) {
 			return ph
 		}
@@ -106,10 +160,21 @@ func issuePlaceholderIn(s string) string {
 	return ""
 }
 
-// isShellCommandName reports whether command names a POSIX shell (by basename),
-// ignoring any directory path. The command template is matched as-is (before
-// interpolation); shell commands in practice are literal (e.g. "sh", "/bin/sh").
+// isShellCommandName reports whether command names an executable that executes
+// the argument after a -c-style flag (by basename), ignoring any directory path.
+// The command template is matched as-is (before interpolation); these commands
+// in practice are literal (e.g. "sh", "/bin/sh").
 func isShellCommandName(command string) bool {
+	return baseNameIn(command, shellBaseNames)
+}
+
+// isShellDispatchCommandName reports whether command names an executable that
+// re-parses a plain argument as a shell command line.
+func isShellDispatchCommandName(command string) bool {
+	return baseNameIn(command, shellDispatchBaseNames)
+}
+
+func baseNameIn(command string, names map[string]struct{}) bool {
 	name := strings.TrimSpace(command)
 	if name == "" {
 		return false
@@ -117,7 +182,7 @@ func isShellCommandName(command string) bool {
 	if idx := strings.LastIndexAny(name, "/\\"); idx >= 0 {
 		name = name[idx+1:]
 	}
-	_, ok := shellBaseNames[name]
+	_, ok := names[name]
 	return ok
 }
 
@@ -170,11 +235,11 @@ type InterpolationContext struct {
 // Placeholders returns the supported interpolation placeholders.
 func (c InterpolationContext) Placeholders() map[string]string {
 	return map[string]string{
-		"{{issue.id}}":       c.IssueID,
-		"{{issue.title}}":    c.IssueTitle,
-		"{{issue.labels}}":   strings.Join(c.IssueLabels, ","),
-		"{{issue.assignee}}": c.IssueAssignee,
-		"{{project.root}}":   c.ProjectRoot,
+		"{{issue.id}}":         c.IssueID,
+		"{{issue.title}}":      c.IssueTitle,
+		"{{issue.labels}}":     strings.Join(c.IssueLabels, ","),
+		"{{issue.assignee}}":   c.IssueAssignee,
+		projectRootPlaceholder: c.ProjectRoot,
 	}
 }
 
