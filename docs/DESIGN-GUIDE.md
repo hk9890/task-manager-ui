@@ -68,9 +68,23 @@ siblings rather than inline at the call site.
   Row rendering stays there.
 - There is intentionally **no shared issue-list component.** Board and search containers differ
   materially in layout, empty state and focus, so the containers stay mode-specific — `ui/board`
-  columns against `ui/search` panes. Extract a shared container only when real duplication appears
-  above the row level.
+  columns against `ui/search` panes. The docs tab is a board column by another name, so it draws
+  through `ui/board` rather than growing a renderer of its own. Extract a shared container only when
+  real duplication appears above the row level.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
+
+## The tab strip
+
+- The header strip is the three browse tabs in `mode.BrowseModes` order — Board, Docs, Search —
+  rendered by `Model.renderHeader` in `internal/app/render.go`. Detail never appears there: it is a
+  drill-in, not a tab.
+- The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
+  `ShellTabInactiveColor`. This is the one place a background carries state instead of a border.
+- A new browse surface is one entry in `mode.BrowseModes` and one `tab(...)` call. Adding it anywhere
+  else puts the strip and the cycle order out of step.
+- `tab` / `shift+tab` belong to the strip everywhere except inside a modal, which consumes keys
+  before the shell sees them. They switch tabs even while the search query field is focused, so a
+  browse surface must not claim either key.
 
 ## Selection and scrolling
 
@@ -109,6 +123,7 @@ siblings rather than inline at the call site.
 - Long work renders the spinner: advance the frame with `loading.NextFrame`, draw it with
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
 - The shell status line comes from `loading.Summary` — `Idle`, or `Loading: ` and the active scopes.
+  A new browse surface needs its own `loading.Scope`, or its work reports as somebody else's.
 - A cold start draws skeleton rows (`issuerow.RenderCompactSkeleton`) rather than an empty frame.
   Their shade cycles through `styles.SkeletonShades` on the phase from `loading.SkeletonPhase`, which
   advances every 4 spinner frames for a ~1.2 s pulse.
