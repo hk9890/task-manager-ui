@@ -17,6 +17,20 @@ does not exist. It runs under `mise run ci`, not the unit suite, because it shel
 - The gate proves cited paths resolve. It cannot prove a *symbol* still exists — `constructRepository`
   outlived its rename in two docs — so read the code when you cite a function.
 
+## The anchor gate
+
+`TestDocsLinkAnchorsResolve`, in the same file, fails when a Markdown link points at a `#fragment`
+that names no heading in the target document. Renaming a heading is a normal edit, and the citation
+gate cannot see the breakage: the target file still exists, so the link resolves and reads as true.
+Two such links shipped on `main` and were found only by reading the docs by hand.
+
+- Fragments are matched against GitHub's slug rules: lowercased, punctuation dropped, spaces
+  hyphenated. `## Launcher interpolation/context surface` is `#launcher-interpolationcontext-surface`
+   — the slash vanishes rather than becoming a separator.
+- `http:`, `https:`, `mailto:` and protocol-relative targets are skipped; an external anchor is not
+  this gate's problem.
+- Links inside fenced code blocks are skipped, so an example link is never a build failure.
+
 ## Doc trees outside the canonical set
 
 - [DESIGN-GUIDE.md](DESIGN-GUIDE.md) owns the visual and interaction law for `internal/ui/` and

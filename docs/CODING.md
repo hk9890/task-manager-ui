@@ -190,7 +190,7 @@ need the exact one.
 | `scripts:check` | shell and Python syntax under `scripts/` | `.mise.toml` |
 | `test` | the unit tier | [TESTING.md](TESTING.md) |
 | `test:coverage` | the unit + integration tiers against a coverage floor — 75 locally, 69 in CI | `.mise.toml`, `.github/workflows/ci.yml` |
-| `test:integration` | the real-OS-seam tier, plus two repo hygiene scans: no leaked tracker IDs, and no stale doc citations ([DOCUMENTING.md](DOCUMENTING.md)) | `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`, `cmd/taskmgr-ui/doc_citation_hygiene_integration_test.go` |
+| `test:integration` | the real-OS-seam tier, plus three repo hygiene scans: no leaked tracker IDs, no stale doc citations, and no dead link anchors ([DOCUMENTING.md](DOCUMENTING.md)) | `cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`, `cmd/taskmgr-ui/doc_citation_hygiene_integration_test.go` |
 
 The guardrail and hygiene scans are ordinary Go tests needing no external service. The two hygiene
 scans are tagged `//go:build integration` because they shell out to `git` — absent `git` would
