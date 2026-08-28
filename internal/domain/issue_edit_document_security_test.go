@@ -166,3 +166,67 @@ func TestSecurityRoundTripFailsClosedForDescriptionWithTaskmgrUIToken(t *testing
 		})
 	}
 }
+
+// TestSecurityAnyFieldBodyCannotHijackALaterField verifies that the marker guard
+// covers every field body, not only the description. Before the field-scanner
+// change, only the description was scanned for TASKMGRUI: tokens, so a forged
+// LABELS block pasted into (for example) the assignee body was returned as the
+// issue's labels — silently replacing them on save.
+func TestSecurityAnyFieldBodyCannotHijackALaterField(t *testing.T) {
+	t.Parallel()
+
+	forgedLabels := issueEditFieldLabelsBegin + "\nstolen\n" + issueEditFieldLabelsEnd
+
+	cases := []struct {
+		name  string
+		begin string
+		end   string
+		body  string
+	}{
+		{"title", issueEditFieldTitleBegin, issueEditFieldTitleEnd, "Hijack source"},
+		{"status", issueEditFieldStatusBegin, issueEditFieldStatusEnd, "open"},
+		{"type", issueEditFieldTypeBegin, issueEditFieldTypeEnd, "task"},
+		{"assignee", issueEditFieldAssigneeBegin, issueEditFieldAssigneeEnd, "alice"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			issue := IssueDetail{Summary: IssueSummary{
+				Title:    "Hijack source",
+				Status:   "open",
+				Type:     "task",
+				Priority: 2,
+				Assignee: "alice",
+				Labels:   []string{"real-label"},
+			}, Description: "safe description"}
+
+			rendered := RenderIssueEditDocument(issue)
+			original := tc.begin + "\n" + tc.body + "\n" + tc.end
+			if !strings.Contains(rendered, original) {
+				t.Fatalf("rendered document does not contain the %s block to tamper with", tc.name)
+			}
+
+			tampered := strings.Replace(
+				rendered,
+				original,
+				tc.begin+"\n"+tc.body+"\n"+forgedLabels+"\n"+tc.end,
+				1,
+			)
+
+			doc, err := ParseIssueEditDocument(tampered)
+			if err != nil {
+				if !strings.Contains(err.Error(), "TASKMGRUI:") {
+					t.Fatalf("expected the error to name the TASKMGRUI: token, got: %v", err)
+				}
+				return
+			}
+
+			// Accepting the document is only safe if the real labels survived.
+			if len(doc.Labels) != 1 || doc.Labels[0] != "real-label" {
+				t.Fatalf("forged markers in the %s body hijacked labels: got %v, want [real-label]", tc.name, doc.Labels)
+			}
+		})
+	}
+}
