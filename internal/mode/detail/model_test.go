@@ -1554,3 +1554,74 @@ func TestDrillFromDepsFocusClearDrillFocusCancels(t *testing.T) {
 		t.Errorf("after ClearDrillFocus: expected FocusPane=Content, got %v", m.FocusPane)
 	}
 }
+
+// TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout pins the
+// chevron to a row the viewer can actually see while the Dependencies pane is
+// clipped, in the responsive (narrow) layout.
+//
+// A clipped pane spends rows on affordances: scrolled off the top it replaces
+// its first row with "… (N earlier)", and with content below it replaces its
+// last row with "… (N more)". EnsureVisible alone only kept the selection
+// inside [offset, offset+height), which is satisfied by exactly those two
+// overwritten rows — so holding "down" slid the window correctly while the
+// chevron marking the selection rendered on no visible row at all.
+//
+// The existing detail tests drive the wide three-pane branch, where the taller
+// pane hides the boundary; this one pins the narrow branch that shipped broken.
+func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing.T) {
+	t.Parallel()
+
+	const (
+		width  = 100 // below detail.InspectorTwoColumnMinWidth: responsive layout
+		height = 30
+	)
+
+	blockers := make([]domain.IssueReference, 0, 18)
+	items := make([]domain.IssueReference, 0, 18)
+	for i := 1; i <= 18; i++ {
+		ref := domain.IssueReference{
+			ID:     fmt.Sprintf("tm-blocker-%02d", i),
+			Title:  fmt.Sprintf("Blocker number %02d", i),
+			Status: "open",
+		}
+		blockers = append(blockers, ref)
+		items = append(items, ref)
+	}
+
+	m := Model{
+		SelectionID:  "tm-epic",
+		TargetID:     "tm-epic",
+		FocusPane:    detail.FocusPaneBrowser,
+		BrowserItems: items,
+		Detail: domain.IssueDetail{
+			Summary:   domain.IssueSummary{ID: "tm-epic", Title: "Epic under test"},
+			BlockedBy: blockers,
+		},
+	}
+
+	// Walk the whole list one row at a time. Every step must leave the chevron
+	// on the selected row; the original defect only showed once the window had
+	// scrolled, so a single move would not have caught it.
+	for step := 0; step < len(items); step++ {
+		selected := items[m.BrowserSelectedIndex]
+		view := m.View(width, height, false, 0)
+
+		var chevronLine string
+		for _, line := range strings.Split(view, "\n") {
+			// Match on Title: the pane elides long IDs ("…-blocker-01"), so the
+			// full ID is not present in the rendered row.
+			if strings.Contains(line, "›") && strings.Contains(line, selected.Title) {
+				chevronLine = line
+				break
+			}
+		}
+		if chevronLine == "" {
+			t.Fatalf("step %d: selection %q (%s, index %d) has no chevron on any visible row; pane rendered:\n%s",
+				step, selected.Title, selected.ID, m.BrowserSelectedIndex, view)
+		}
+
+		if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height); !consumed {
+			t.Fatalf("step %d: expected down to be consumed in the Dependencies pane", step)
+		}
+	}
+}
