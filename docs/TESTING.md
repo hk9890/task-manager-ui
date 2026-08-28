@@ -77,7 +77,7 @@ Use `docs/RUNTIME_UI_VERIFICATION.md` for the concrete, command-oriented workflo
 
 Use the real app when a change affects layout, navigation, startup behavior, or operator-facing workflows.
 
-Typical workflow — run the built binary against this project's own `.tasks` store via the `taskmgr-ui` task:
+Typical workflow — run the built binary against this project's own tracker store via the `taskmgr-ui` task:
 
 ```bash
 mise run taskmgr-ui

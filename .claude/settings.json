@@ -1,7 +1,6 @@
 {
   "worktree": {
-    "baseRef": "head",
-    "symlinkDirectories": [".tasks"]
+    "baseRef": "head"
   },
   "hooks": {
     "PreToolUse": [

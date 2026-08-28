@@ -32,8 +32,4 @@ Read `docs/RELEASING.md` for the manually dispatched (workflow_dispatch) GitHub 
 
 ## Change Workflow
 
-**MUST read `docs/CHANGE-WORKFLOW.md` before any git command that writes** — worktree, commit, branch, push — **or before opening a PR.** Reading it afterwards does not count; read-only git (`status`, `log`, `diff`) is not gated. It owns the worktree-per-change rule, pre-handoff gates, and tracker/PR requirements.
-
-## Issue Tracker (task-manager)
-
-This project tracks its own dev work with **task-manager** (`taskmgr`), the file-based tracker whose store lives in `.tasks/`. Use `taskmgr` for ALL task tracking — do NOT use TodoWrite or ad-hoc markdown TODO lists. Run `taskmgr commands` for the full machine-readable command catalog, and see `docs/CHANGE-WORKFLOW.md` for the tracker-first rule and session-close protocol.
+**MUST read `docs/CHANGE-WORKFLOW.md` before recording any task or TODO, before any git command that writes** — worktree, commit, branch, push — **and before opening a PR.** Reading it afterwards does not count; read-only git (`status`, `log`, `diff`) is not gated. It owns the tracker-first rule (this project tracks its own work in `taskmgr`, never TodoWrite), the worktree-per-change rule, pre-handoff gates, and PR requirements.
