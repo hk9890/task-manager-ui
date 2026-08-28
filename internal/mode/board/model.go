@@ -50,9 +50,15 @@ type dashboardLoadedMsg struct {
 // the Done column. On err != nil the handler clears doneLoadInFlight and
 // surfaces the error on the Done column; on success it merges via
 // dashboard.Compose with PriorClosed set to the current Done issues.
+//
+// offset is the ClosedOffset the page was requested at. It is what lets the
+// handler tell a current page from one a reload has superseded: without it a
+// page fetched at offset 200 merged onto a Done column a fresh Dashboard had
+// just reset to rows 0-30, leaving a permanent hole in the middle of the list.
 type loadMoreClosedDoneMsg struct {
-	data repository.DashboardData
-	err  error
+	offset int
+	data   repository.DashboardData
+	err    error
 }
 
 // columnData holds the loaded data for one board column after composition.
@@ -366,6 +372,12 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	// Reset load-more state before any new full reload so the next compose
 	// sets doneLoadedCount from scratch. This is the "r resets page 1"
 	// contract; this reset is the safety net for all reload modes.
+	//
+	// A load-more this reload did not cancel may still be outstanding. Its
+	// response is dropped by the offset check in applyLoadMoreClosed rather
+	// than merged onto the reloaded list, which is what used to leave a hole in
+	// the middle of the Done column. composeFailed restores doneLoadedCount
+	// when the reload fails, because the old rows stay on screen.
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
 
@@ -388,6 +400,10 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 // settles the focus/selection. It is the single composition entry point for
 // both successful and error dashboard loads.
 func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
+	if loadErr != nil {
+		return m.composeFailed(loadErr)
+	}
+
 	cols := dashboard.Compose(dashboard.Inputs{
 		Ready:         data.ReadyExplain.Ready,
 		Blocked:       data.ReadyExplain.Blocked,
@@ -416,12 +432,11 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	}
 
 	// Build the four fixed columns, clearing loading flags atomically.
-	// On error the same error is shown on all columns; on success err is nil.
 	m.columns = []columnData{
-		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false, err: loadErr},
-		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact, loading: false, err: loadErr},
-		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false, err: loadErr},
-		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false, err: loadErr},
+		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false},
+		{title: sectionTitleReady, issues: cols.Ready.Issues, total: cols.Ready.Total, exact: cols.Ready.TotalIsExact, loading: false},
+		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false},
+		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false},
 	}
 
 	// Ensure selectedRow and scrollOffset maps have an entry for each column.
@@ -445,6 +460,41 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	// (keyboard or auto-refresh) are permitted.
 	m.inflight = false
 	return m.selectionChangedCmd()
+}
+
+// composeFailed keeps the rows, counts and selection the last successful load
+// produced and shows the error over them.
+//
+// The Repository contract guarantees no partial result on error, so composing
+// the zero DashboardData blanks all four columns: one transient auto-refresh
+// failure — a concurrent taskmgr write, a cancelled lifecycle context — used to
+// wipe the board behind an error row, reset doneClosedTotal to 0 (suppressing
+// every later load-more until a reload succeeded) and clear the shell's
+// selection because currentSelection() went nil. Docs mode keeps its stale rows
+// for the same reason; startReload's own comment already says the columns are
+// preserved "for stale rendering".
+func (m *Model) composeFailed(loadErr error) tea.Cmd {
+	if len(m.columns) == 0 {
+		m.columns = initialLoadingColumns()
+	}
+	for i := range m.columns {
+		m.columns[i].loading = false
+		m.columns[i].err = loadErr
+	}
+
+	m.logger.Warn("dashboard refresh failed; keeping the last loaded columns", "err", loadErr)
+
+	// startReload zeroed the load-more counter for the page-1 reset that never
+	// happened. The rows it described are still on screen, so put it back.
+	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
+
+	// A failed refresh restores nothing: the anchor belongs to the state still
+	// on screen, so the selection is already where it should be.
+	m.refreshMode = refreshModeReload
+	m.refreshAnchor = nil
+	m.clampScrollOffsets()
+	m.inflight = false
+	return nil
 }
 
 func (m *Model) currentSelection() *mode.Selection {
@@ -489,6 +539,47 @@ func (m *Model) settleAfterRefreshLoad() {
 	}
 	m.refreshMode = refreshModeReload
 	m.refreshAnchor = nil
+	m.clampScrollOffsets()
+}
+
+// clampScrollOffsets re-derives every column's scroll offset from its selected
+// row, and must run after any change to the row sets.
+//
+// Only moveRow used to write scrollOffset, so a column that shrank under a
+// scrolled offset kept the old one: the renderer clamps the offset to the row
+// count, computes an empty window from it, and the column draws its border and
+// its header count with no rows and no chevron until the operator presses j or
+// k. Docs mode calls EnsureVisible from its own clamp for the same reason.
+func (m *Model) clampScrollOffsets() {
+	capacity := m.sectionItemCapacity()
+	for i := range m.columns {
+		if len(m.columns[i].issues) == 0 {
+			m.scrollOffset[i] = 0
+			continue
+		}
+
+		// The renderer pins an inline error row at the top of a column that
+		// carries one, leaving it one fewer issue row (see internal/ui/board).
+		window := capacity
+		if m.columns[i].err != nil && window > 1 {
+			window--
+		}
+
+		row := m.selectedRow[i]
+		if row < 0 || row >= len(m.columns[i].issues) {
+			row = 0
+		}
+
+		// Pull the window back inside the list first. EnsureVisible only slides
+		// far enough to reveal the selected row, so on its own it would leave a
+		// shrunk column scrolled to its last row with the rows above it
+		// unreachable until the operator pressed k.
+		offset := m.scrollOffset[i]
+		if maxOffset := len(m.columns[i].issues) - window; offset > maxOffset {
+			offset = max(maxOffset, 0)
+		}
+		m.scrollOffset[i] = scroll.EnsureVisible(offset, row, window)
+	}
 }
 
 func (m *Model) captureRefreshAnchor() *refreshAnchor {
@@ -686,6 +777,18 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 		return nil
 	}
 
+	// Drop a page a reload has superseded. A page is only mergeable at the
+	// offset the Done column currently ends at; a reload that landed while this
+	// one was in flight reset that count, and merging anyway concatenates rows
+	// 0-30 with rows 200-249 and leaves a hole no later load-more refills.
+	if msg.offset != m.doneLoadedCount {
+		m.logger.Debug("stale load-more page dropped; a reload superseded it",
+			"page_offset", msg.offset,
+			"loaded", m.doneLoadedCount,
+		)
+		return nil
+	}
+
 	// Capture current Done issues as PriorClosed so Compose can merge.
 	var priorClosed []domain.IssueSummary
 	if len(m.columns) > doneColumnIndex {
@@ -722,6 +825,7 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 	// header, and any open detail pane stay in sync with the highlighted row
 	// rather than referencing a stale issue.
 	m.normalizeSelectionForFocusedColumn()
+	m.clampScrollOffsets()
 	if m.focusedColumn == doneColumnIndex {
 		return m.selectionChangedCmd()
 	}
@@ -760,8 +864,9 @@ func loadDashboardCmd(ctx context.Context, repo repository.Repository, opts repo
 // (offset=doneLoadedCount, limit=pageSize) and wraps the result in a
 // loadMoreClosedDoneMsg.
 func loadMoreClosedCmd(ctx context.Context, repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
+	offset := opts.ClosedOffset
 	return func() tea.Msg {
 		data, err := repo.Dashboard(ctx, opts)
-		return loadMoreClosedDoneMsg{data: data, err: err}
+		return loadMoreClosedDoneMsg{offset: offset, data: data, err: err}
 	}
 }

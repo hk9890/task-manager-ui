@@ -1416,8 +1416,11 @@ func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 		}
 	}
 
-	// Feed the load-more response.
+	// Feed the load-more response. offset is the ClosedOffset the page was
+	// requested at; it has to match doneLoadedCount or the page is treated as
+	// superseded by a reload and dropped.
 	_ = m.Update(loadMoreClosedDoneMsg{
+		offset: priorCount,
 		data: repository.DashboardData{
 			Closed:      incomingIssues,
 			ClosedTotal: 736,
@@ -1821,7 +1824,8 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 	}
 
 	cmd := m.Update(loadMoreClosedDoneMsg{
-		data: repository.DashboardData{Closed: incomingIssues, ClosedTotal: 736},
+		offset: priorCount,
+		data:   repository.DashboardData{Closed: incomingIssues, ClosedTotal: 736},
 	})
 
 	// FIX #7: a non-nil re-sync Cmd must be returned when Done is focused.
@@ -1897,5 +1901,171 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 	}
 	if off == 0 {
 		t.Fatalf("expected scroll offset to advance for a clipped column, got 0")
+	}
+}
+
+// makeOpenIssues returns n open issues with the given ID prefix.
+func makeOpenIssues(prefix string, n int) []domain.IssueSummary {
+	issues := make([]domain.IssueSummary, n)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{
+			ID:     fmt.Sprintf("%s-%d", prefix, i),
+			Title:  fmt.Sprintf("%s issue %d", prefix, i),
+			Status: "in_progress",
+		}
+	}
+	return issues
+}
+
+// TestFailedRefreshKeepsLoadedColumns pins that a transient refresh failure
+// leaves the board readable. The Repository contract guarantees no partial
+// result on error, so composing the zero DashboardData blanked all four
+// columns, reset the closed total (suppressing every later load-more) and
+// dropped the shell's selection, all behind one error row.
+func TestFailedRefreshKeepsLoadedColumns(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(200, 30)
+
+	feedDashboardData(m, repository.DashboardData{
+		InProgress:  makeOpenIssues("wip", 4),
+		Closed:      makeClosedIssues(20),
+		ClosedTotal: 736,
+	})
+
+	inProgressBefore := len(m.columns[2].issues)
+	doneBefore := len(m.columns[doneColumnIndex].issues)
+	m.focusedColumn = 2
+	m.selectedRow[2] = 3
+	selectionBefore := m.currentSelection()
+	if selectionBefore == nil {
+		t.Fatal("test setup: expected a selection before the failed refresh")
+	}
+
+	_ = m.startReload(refreshModeAuto)
+	feedDashboardErr(m, errors.New("taskmgr unavailable"))
+
+	if got := len(m.columns[2].issues); got != inProgressBefore {
+		t.Errorf("In Progress rows after a failed refresh = %d, want %d (stale rows must stay on screen)", got, inProgressBefore)
+	}
+	if got := len(m.columns[doneColumnIndex].issues); got != doneBefore {
+		t.Errorf("Done rows after a failed refresh = %d, want %d", got, doneBefore)
+	}
+	if m.doneClosedTotal != 736 {
+		t.Errorf("doneClosedTotal after a failed refresh = %d, want 736 — resetting it suppresses every later load-more", m.doneClosedTotal)
+	}
+	if m.doneLoadedCount != doneBefore {
+		t.Errorf("doneLoadedCount after a failed refresh = %d, want %d", m.doneLoadedCount, doneBefore)
+	}
+
+	selectionAfter := m.currentSelection()
+	if selectionAfter == nil {
+		t.Fatal("selection lost after a failed refresh")
+	}
+	if selectionAfter.Issue.ID != selectionBefore.Issue.ID {
+		t.Errorf("selection moved after a failed refresh: got %q, want %q", selectionAfter.Issue.ID, selectionBefore.Issue.ID)
+	}
+
+	for i := range m.columns {
+		if m.columns[i].err == nil {
+			t.Errorf("column %d carries no error after a failed refresh", i)
+		}
+		if m.columns[i].loading {
+			t.Errorf("column %d is still loading after a failed refresh", i)
+		}
+	}
+}
+
+// TestRefreshReClampsScrollOffsetOfAShrunkColumn pins that a column whose rows
+// were removed under a scrolled offset still renders them. Only moveRow used to
+// write scrollOffset, so the stale offset survived the refresh, the renderer
+// clamped it to the row count and computed an empty window, and the column drew
+// its border and header count with no rows at all.
+func TestRefreshReClampsScrollOffsetOfAShrunkColumn(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(200, 14)
+
+	feedDashboardData(m, repository.DashboardData{InProgress: makeOpenIssues("wip", 25)})
+
+	m.focusedColumn = 2
+	for range 24 {
+		m.moveRow(1)
+	}
+	if m.scrollOffset[2] == 0 {
+		t.Fatal("test setup: expected a scrolled offset after moving to the last row")
+	}
+
+	// The column shrinks to 5 rows while the offset still points past them.
+	_ = m.startReload(refreshModeAuto)
+	feedDashboardData(m, repository.DashboardData{InProgress: makeOpenIssues("wip", 5)})
+
+	rows := len(m.columns[2].issues)
+	if rows != 5 {
+		t.Fatalf("In Progress rows = %d, want 5", rows)
+	}
+	if m.scrollOffset[2] >= rows {
+		t.Fatalf("scrollOffset = %d for a %d-row column: the window renders no rows", m.scrollOffset[2], rows)
+	}
+
+	if !strings.Contains(m.View(0), "wip-0") {
+		t.Error("the In Progress column rendered no issue rows after the refresh")
+	}
+}
+
+// TestStaleLoadMorePageIsDroppedAfterAReload pins the load-more/reload race. A
+// page fetched at offset 200 that lands after a reload has reset the Done
+// column to rows 0-30 used to be merged anyway, producing rows 0-30 followed by
+// rows 200-249 — a hole no later load-more refilled, because doneLoadedCount
+// then pointed past it.
+func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m.SetSize(200, 30)
+
+	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(200), ClosedTotal: 736})
+	m.doneLoadedCount = 200
+
+	// A load-more for offset 200 is outstanding when the auto-refresh lands.
+	m.doneLoadInFlight = true
+	_ = m.startReload(refreshModeAuto)
+	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(31), ClosedTotal: 736})
+
+	if got := len(m.columns[doneColumnIndex].issues); got != 31 {
+		t.Fatalf("Done rows after the reload = %d, want 31", got)
+	}
+
+	stale := make([]domain.IssueSummary, 50)
+	for i := range stale {
+		stale[i] = domain.IssueSummary{ID: fmt.Sprintf("closed-%d", 200+i), Title: "stale page"}
+	}
+	_ = m.Update(loadMoreClosedDoneMsg{offset: 200, data: repository.DashboardData{Closed: stale, ClosedTotal: 736}})
+
+	if got := len(m.columns[doneColumnIndex].issues); got != 31 {
+		t.Errorf("Done rows after the stale page = %d, want 31 — the page must be dropped, not merged", got)
+	}
+	if m.doneLoadedCount != 31 {
+		t.Errorf("doneLoadedCount = %d, want 31", m.doneLoadedCount)
+	}
+	if m.doneLoadInFlight {
+		t.Error("doneLoadInFlight must be cleared by the response even when its page is dropped")
+	}
+
+	// The next load-more continues from the reloaded count, so no rows are skipped.
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 30
+	cmd := m.dispatchLoadMoreClosed()
+	if cmd == nil {
+		t.Fatal("expected a load-more dispatch after the stale page was dropped")
+	}
+	next, ok := cmd().(loadMoreClosedDoneMsg)
+	if !ok {
+		t.Fatalf("load-more cmd produced %T, want loadMoreClosedDoneMsg", cmd())
+	}
+	if next.offset != 31 {
+		t.Errorf("next load-more offset = %d, want 31 — a gap in the Done column is never refilled", next.offset)
 	}
 }
