@@ -633,4 +633,53 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 			t.Errorf("no re-fired Search for the same queued text %q after error", "task")
 		}
 	})
+
+	// ScopeToggleDuringInFlightSearch_LeavesBadgeMatchingVisibleResults pins
+	// that ctrl+t does not flip the Results header's scope badge when the
+	// re-run it depends on is suppressed. triggerSearchWithAnchor returns nil
+	// while a search is in flight, so the badge used to claim "all" while the
+	// results on screen were the open set, with no key that restored agreement
+	// until the next successful search.
+	t.Run("ScopeToggleDuringInFlightSearch_LeavesBadgeMatchingVisibleResults", func(t *testing.T) {
+		t.Parallel()
+
+		inner := memoryrepo.New()
+		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
+
+		delayed := fakes.NewDelayingSearchRepository(inner)
+		m := NewModel(context.Background(), delayed, nil)
+		m.SetSize(120, 30)
+
+		initCmd := m.Init()
+		if initCmd == nil {
+			t.Fatal("expected non-nil Cmd from Init()")
+		}
+		initMsgCh := runCmdAsync(initCmd)
+
+		if !m.loading {
+			t.Fatal("expected loading=true before Init resolves")
+		}
+		scopeBefore := m.includeClosed
+
+		if cmd := m.Update(tea.KeyMsg{Type: toggleScopeKey}); cmd != nil {
+			t.Fatal("expected nil Cmd from ctrl+t while a search is in flight")
+		}
+		if m.includeClosed != scopeBefore {
+			t.Errorf("scope flipped to %v while the re-run was suppressed: the header would name a scope the visible results did not come from", m.includeClosed)
+		}
+
+		delayed.Release()
+		_ = m.Update(<-initMsgCh)
+
+		// Once the search has settled, the toggle works normally.
+		cmd := m.Update(tea.KeyMsg{Type: toggleScopeKey})
+		if cmd == nil {
+			t.Fatal("expected ctrl+t to re-run the search once nothing is in flight")
+		}
+		if m.includeClosed == scopeBefore {
+			t.Error("scope did not flip when the re-run was dispatched")
+		}
+		delayed.Release()
+		_ = m.Update(<-runCmdAsync(cmd))
+	})
 }
