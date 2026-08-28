@@ -4,62 +4,85 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
 // CreateIssue implements repository.Repository.
 //
-// Returns domain.RepositoryError with ErrorCodeValidationFailed when Title is
-// empty.
+// Field validation, the default priority and the label dedupe mirror the
+// task-manager SDK (see validate.go), so a write this backend accepts is a
+// write the production backend accepts.
 func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.CreateIssueResult{}, err
-	}
-
-	if strings.TrimSpace(input.Title) == "" {
-		return domain.CreateIssueResult{}, domain.RepositoryError{
-			Code:      domain.ErrorCodeValidationFailed,
-			Operation: "create issue",
-			Message:   "title must not be empty",
-		}
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	now := r.clock()
-	id := r.idgen()
 
 	issueType := input.Type
 	if issueType == "" {
 		issueType = "task"
 	}
 
-	priority := 0
+	priority := priorityDefault
 	if input.Priority != nil {
 		priority = *input.Priority
 	}
 
-	labels := make([]string, len(input.Labels))
-	copy(labels, input.Labels)
-
 	si := &storedIssue{
-		id:          id,
-		title:       input.Title,
+		title:       strings.TrimSpace(input.Title),
 		status:      "open",
 		priority:    priority,
 		issueType:   issueType,
 		assignee:    input.Assignee,
-		labels:      labels,
+		labels:      dedupeLabels(input.Labels),
 		description: input.Description,
 		created:     now,
 		updated:     now,
 		comments:    []storedComment{},
 	}
 
+	if err := validateIssueFields("create issue", si); err != nil {
+		return domain.CreateIssueResult{}, err
+	}
+
+	id, err := r.nextUnusedIssueID()
+	if err != nil {
+		return domain.CreateIssueResult{}, err
+	}
+	si.id = id
+
 	r.issues[id] = si
 	return domain.CreateIssueResult{IssueID: id}, nil
+}
+
+// nextUnusedIssueID draws from the ID generator until it yields an ID no issue
+// already holds. A loaded snapshot seeds issues with IDs the default counter has
+// not reached ("mem-1", "mem-2"), so without this the first created issue
+// replaces a loaded one outright and the store silently loses it.
+//
+// Caller must hold the write lock.
+func (r *Repository) nextUnusedIssueID() (string, error) {
+	const maxAttempts = 1000
+	for range maxAttempts {
+		id := r.idgen()
+		if id == "" {
+			break
+		}
+		if _, exists := r.issues[id]; !exists {
+			return id, nil
+		}
+	}
+	return "", domain.RepositoryError{
+		Code:      domain.ErrorCodeCommandFailed,
+		Operation: "create issue",
+		Message:   "id generator produced no unused issue id",
+	}
 }
 
 // UpdateIssue implements repository.Repository.
@@ -85,33 +108,57 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 
 	now := r.clock()
 
+	// Apply to a copy so a rejected update leaves the stored issue untouched.
+	updated := *si
+
 	if input.Title != nil {
-		si.title = *input.Title
+		updated.title = strings.TrimSpace(*input.Title)
 	}
 	if input.Description != nil {
-		si.description = *input.Description
-	}
-	if input.Status != nil {
-		si.status = *input.Status
+		updated.description = *input.Description
 	}
 	if input.Type != nil {
-		si.issueType = *input.Type
+		updated.issueType = *input.Type
 	}
 	if input.Priority != nil {
-		si.priority = *input.Priority
+		updated.priority = *input.Priority
 	}
 	if input.Assignee != nil {
-		si.assignee = *input.Assignee
+		updated.assignee = *input.Assignee
 	}
 	if input.ClearLabels {
-		si.labels = []string{}
+		updated.labels = []string{}
 	} else if len(input.Labels) > 0 {
-		si.labels = make([]string, len(input.Labels))
-		copy(si.labels, input.Labels)
+		updated.labels = make([]string, len(input.Labels))
+		copy(updated.labels, input.Labels)
+	}
+	if input.Status != nil {
+		applyStatusTransition(&updated, *input.Status, now)
 	}
 
-	si.updated = now
+	if err := validateIssueFields("update issue", &updated); err != nil {
+		return err
+	}
+
+	updated.updated = now
+	*si = updated
 	return nil
+}
+
+// applyStatusTransition mirrors the SDK's applyStatus: closing stamps the close
+// time, and reopening clears both the close time and the reason. Assigning the
+// status field alone leaves a reopened issue carrying a closedAt and a close
+// reason, which renders as a live issue that says it was closed.
+func applyStatusTransition(si *storedIssue, status string, now time.Time) {
+	previous := si.status
+	si.status = status
+	switch {
+	case status == "closed" && previous != "closed":
+		si.closed = now
+	case status != "closed" && previous == "closed":
+		si.closed = time.Time{}
+		si.closeReason = ""
+	}
 }
 
 // CloseIssue implements repository.Repository.

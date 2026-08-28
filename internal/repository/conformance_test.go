@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
@@ -451,3 +452,189 @@ func TestOpenDocIsNeitherReadyNorBlocked(t *testing.T) {
 		}
 	}
 }
+
+// freshBackends returns one empty backend of each kind. The conformance seed is
+// deliberately absent: write-path assertions build exactly the state they need.
+func freshBackends(t *testing.T) []struct {
+	name string
+	repo repository.Repository
+} {
+	t.Helper()
+
+	store, err := tasks.Init(t.TempDir(), "tm")
+	if err != nil {
+		t.Fatalf("tasks.Init: %v", err)
+	}
+
+	return []struct {
+		name string
+		repo repository.Repository
+	}{
+		{"memory", memory.New()},
+		{"taskmgr", taskmgr.New(store, taskmgr.WithAuthor("tester"))},
+	}
+}
+
+// TestWriteValidationConformance pins that both backends reject the same
+// invalid writes. The memory backend validated an empty title on create and
+// nothing at all on update, so a UI test seeded with it certified create and
+// update flows that the production backend rejects — an uppercase label from
+// the create dialog being the concrete case.
+func TestWriteValidationConformance(t *testing.T) {
+	invalidPriority := 99
+	longTitle := strings.Repeat("x", 201)
+
+	creates := []struct {
+		name  string
+		input domain.CreateIssueInput
+	}{
+		{"empty title", domain.CreateIssueInput{Title: "   "}},
+		{"multi-line title", domain.CreateIssueInput{Title: "first\nsecond"}},
+		{"over-long title", domain.CreateIssueInput{Title: longTitle}},
+		{"unknown type", domain.CreateIssueInput{Title: "ok", Type: "bogus"}},
+		{"priority out of range", domain.CreateIssueInput{Title: "ok", Priority: &invalidPriority}},
+		{"uppercase label", domain.CreateIssueInput{Title: "ok", Labels: []string{"UI"}}},
+		{"label with a space", domain.CreateIssueInput{Title: "ok", Labels: []string{"needs review"}}},
+		{"multi-line assignee", domain.CreateIssueInput{Title: "ok", Assignee: "a\nb"}},
+	}
+
+	for _, tc := range creates {
+		t.Run("create/"+tc.name, func(t *testing.T) {
+			for _, b := range freshBackends(t) {
+				_, err := b.repo.CreateIssue(context.Background(), tc.input)
+				if err == nil {
+					t.Errorf("%s: CreateIssue(%+v) succeeded, want a validation error", b.name, tc.input)
+					continue
+				}
+				var repoErr domain.RepositoryError
+				if !errors.As(err, &repoErr) || repoErr.Code != domain.ErrorCodeValidationFailed {
+					t.Errorf("%s: CreateIssue error = %v, want ErrorCodeValidationFailed", b.name, err)
+				}
+			}
+		})
+	}
+
+	updates := []struct {
+		name  string
+		input domain.UpdateIssueInput
+	}{
+		{"empty title", domain.UpdateIssueInput{Title: strPtr("  ")}},
+		{"multi-line title", domain.UpdateIssueInput{Title: strPtr("first\nsecond")}},
+		{"unknown status", domain.UpdateIssueInput{Status: strPtr("not-a-status")}},
+		{"unknown type", domain.UpdateIssueInput{Type: strPtr("bogus")}},
+		{"priority out of range", domain.UpdateIssueInput{Priority: &invalidPriority}},
+		{"uppercase label", domain.UpdateIssueInput{Labels: []string{"UI"}}},
+	}
+
+	for _, tc := range updates {
+		t.Run("update/"+tc.name, func(t *testing.T) {
+			for _, b := range freshBackends(t) {
+				created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "subject"})
+				if err != nil {
+					t.Fatalf("%s: CreateIssue: %v", b.name, err)
+				}
+
+				err = b.repo.UpdateIssue(context.Background(), created.IssueID, tc.input)
+				if err == nil {
+					t.Errorf("%s: UpdateIssue(%+v) succeeded, want a validation error", b.name, tc.input)
+					continue
+				}
+				var repoErr domain.RepositoryError
+				if !errors.As(err, &repoErr) || repoErr.Code != domain.ErrorCodeValidationFailed {
+					t.Errorf("%s: UpdateIssue error = %v, want ErrorCodeValidationFailed", b.name, err)
+				}
+
+				// The rejected update must not have landed.
+				detail, err := b.repo.Issue(context.Background(), created.IssueID)
+				if err != nil {
+					t.Fatalf("%s: Issue: %v", b.name, err)
+				}
+				if detail.Summary.Title != "subject" {
+					t.Errorf("%s: rejected update changed the issue: title = %q", b.name, detail.Summary.Title)
+				}
+			}
+		})
+	}
+}
+
+// TestCreateDefaultsConformance pins the create-time defaults. An unset priority
+// stored P0 on the memory backend and P2 on the production one, so a blank
+// Priority field in the create dialog sorted to the top of every column under
+// test and to the middle in reality.
+func TestCreateDefaultsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "defaults"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if detail.Summary.Priority != 2 {
+			t.Errorf("%s: default priority = %d, want 2", b.name, detail.Summary.Priority)
+		}
+		if detail.Summary.Type != "task" {
+			t.Errorf("%s: default type = %q, want task", b.name, detail.Summary.Type)
+		}
+		if detail.Summary.Status != "open" {
+			t.Errorf("%s: default status = %q, want open", b.name, detail.Summary.Status)
+		}
+	}
+}
+
+// TestReopenClearsCloseFieldsConformance pins the reopen invariant. The memory
+// backend assigned the status directly, so a reopened issue kept its closedAt
+// and close reason and rendered as a live issue that says it was closed.
+func TestReopenClearsCloseFieldsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "lifecycle"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.CloseIssue(context.Background(), created.IssueID, domain.CloseIssueInput{Reason: "done"}); err != nil {
+			t.Fatalf("%s: CloseIssue: %v", b.name, err)
+		}
+		if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{Status: strPtr("open")}); err != nil {
+			t.Fatalf("%s: UpdateIssue(reopen): %v", b.name, err)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if detail.Summary.Status != "open" {
+			t.Errorf("%s: status after reopen = %q, want open", b.name, detail.Summary.Status)
+		}
+		if !detail.ClosedAt.IsZero() {
+			t.Errorf("%s: reopened issue still carries ClosedAt = %v", b.name, detail.ClosedAt)
+		}
+		if strings.TrimSpace(detail.CloseReason) != "" {
+			t.Errorf("%s: reopened issue still carries CloseReason = %q", b.name, detail.CloseReason)
+		}
+	}
+}
+
+// TestSearchByIssueIDConformance pins that a full issue ID is a search term on
+// both backends. The SDK's virtual "text" field is lower(id + title +
+// description); the memory backend matched title and description only, so ID
+// search worked in production and silently returned nothing under --repo memory.
+func TestSearchByIssueIDConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "findable by id"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+
+		page, err := b.repo.Search(context.Background(), domain.SearchIssuesQuery{Text: created.IssueID})
+		if err != nil {
+			t.Fatalf("%s: Search: %v", b.name, err)
+		}
+		if len(page.Results) != 1 || page.Results[0].Issue.ID != created.IssueID {
+			t.Errorf("%s: Search(%q) = %d results, want the issue itself", b.name, created.IssueID, len(page.Results))
+		}
+	}
+}
+
+func strPtr(v string) *string { return &v }
