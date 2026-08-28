@@ -35,6 +35,12 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 		}
 		m.markSurfaceRefreshed(mode.Board)
 		return m.board.AutoRefresh()
+	case mode.Docs:
+		if m.docsIsLoading() {
+			return nil
+		}
+		m.markSurfaceRefreshed(mode.Docs)
+		return m.docs.AutoRefresh()
 	case mode.Search:
 		if m.searchIsLoading() {
 			return nil
@@ -62,7 +68,7 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 }
 
 func (m *Model) markBrowseSurfacesDirty() {
-	m.markSurfaceDirty(mode.Board, mode.Search)
+	m.markSurfaceDirty(mode.BrowseModes...)
 }
 
 func (m *Model) markSurfaceDirty(surfaces ...mode.ID) {

@@ -58,7 +58,7 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 | `internal/repository/memory` | In-memory `repository.Repository` for tests and `--repo memory`; backed by `internal/repository/filestorage` JSONL load/save |
 | `internal/logging` | Central slog-based logging package used by startup and repository code; owns session IDs, persistent JSON Lines logs, stderr mirroring, and fallback behavior |
 | `internal/dashboard` | Board column composition (`Compose`) from a `DashboardData` result |
-| `internal/mode/*` | Board, search, and details feature-local state/controllers |
+| `internal/mode/*` | Board, docs, search, and details feature-local state/controllers |
 | `internal/launcher` | External tool launch actions and process runner |
 | `internal/launcher/editor` | Rich issue editor handoff flow |
 | `internal/ui/*` | Reusable rendering components and shared styles |
@@ -74,6 +74,7 @@ structured JSON Lines records with `session_id` to the persistent log file. See
 - Launchers start subprocesses and return immediately; they do not supervise or orchestrate tools. See `internal/launcher/service.go`.
 - Rich issue editing is a separate editor handoff flow under `internal/launcher/editor`.
 - Dashboard columns are composed by `internal/dashboard.Compose` from a single `repository.DashboardData`; the board model owns query routing and calls `Compose`.
+- Browse tabs are `mode.BrowseModes` — Board, Docs, Search, in header order. Detail is not a tab: it is a drill-in entered from a browse tab and left with Escape, and the shell keeps `lastBrowse` pointing at a tab so the selection always resolves. `internal/mode/docs` is the docs tab: one column of `type == doc` issues fetched with `Repository.Search` (docs are excluded from Ready/Blocked by the SDK, so an open doc has no board column), drawn with the board renderer.
 
 ## UI component boundaries
 
@@ -83,7 +84,9 @@ Rendering components live under `internal/ui/`:
   board/search-style lists; keep row rendering shared here.
 - There is intentionally **no shared issue-list component** — board and search
   containers differ materially (layout, empty-state, focus), so list/panel
-  containers stay mode-specific (`ui/board` columns vs `ui/search` panes).
+  containers stay mode-specific (`ui/board` columns vs `ui/search` panes). The
+  docs tab is a board column by another name, so it reuses `ui/board` directly
+  rather than growing a renderer of its own.
   Extract a minimal `internal/ui/shared/` list component only if real
   duplication appears above the row level.
 - `ui/styles.FormSection` is the shared rounded-border section/container

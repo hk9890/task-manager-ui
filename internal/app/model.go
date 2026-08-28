@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
+	docsmode "github.com/hk9890/task-manager-ui/internal/mode/docs"
 	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
@@ -48,6 +49,7 @@ type Model struct {
 	selectedByMode map[mode.ID]*mode.Selection
 
 	board  *boardmode.Model
+	docs   *docsmode.Model
 	search *searchmode.Model
 
 	detail detail.Model
@@ -64,10 +66,12 @@ type Model struct {
 	focusKnown      bool
 	terminalFocused bool
 
-	// searchInitDone tracks whether the first lazy search init has been fired.
-	// Search mode is not pre-loaded at startup; the first mode switch to Search
-	// triggers Init() and sets this flag so subsequent entries do not reload.
+	// searchInitDone and docsInitDone track whether the first lazy init has been
+	// fired for those modes. Neither is pre-loaded at startup; the first mode
+	// switch triggers Init() and sets the flag so subsequent entries do not
+	// reload.
 	searchInitDone bool
+	docsInitDone   bool
 
 	refreshStateBySurface map[mode.ID]surfaceRefreshState
 
@@ -152,6 +156,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		lastBrowse:     mode.Board,
 		selectedByMode: make(map[mode.ID]*mode.Selection),
 		board:          boardmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "board"), keys),
+		docs:           docsmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), keys),
 		search:         searchmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "search"), keys),
 		detail:         detail.Model{Keys: keys},
 		toast:          toaster.New(),
@@ -160,6 +165,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		height:         defaultViewportHeight,
 		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
 			mode.Board:  {lastRefresh: now},
+			mode.Docs:   {lastRefresh: now},
 			mode.Search: {lastRefresh: now},
 			mode.Detail: {},
 		},
@@ -220,6 +226,22 @@ func (m *Model) lazySearchInitCmd() tea.Cmd {
 	m.searchInitDone = true
 	m.markSurfaceRefreshed(mode.Search)
 	return m.search.Init()
+}
+
+// lazyDocsInitCmd fires m.docs.Init() exactly once — the first time the active
+// mode is Docs. It mirrors lazySearchInitCmd: docs are not pre-loaded at
+// startup, and re-entering the tab afterwards goes through the normal
+// auto-refresh path.
+func (m *Model) lazyDocsInitCmd() tea.Cmd {
+	if m.active != mode.Docs {
+		return nil
+	}
+	if m.docsInitDone {
+		return nil
+	}
+	m.docsInitDone = true
+	m.markSurfaceRefreshed(mode.Docs)
+	return m.docs.Init()
 }
 
 // Update handles root-level shell messages.
@@ -405,7 +427,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case mutationResultMsg:
 		return m.handleMutationResult(modeCmd, msg)
 	case mode.SelectionChangedMsg:
-		if msg.Mode != mode.Board && msg.Mode != mode.Search {
+		if !mode.IsBrowse(msg.Mode) {
 			return m, modeCmd
 		}
 		m.selectedByMode[msg.Mode] = msg.Selection
@@ -417,7 +439,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
 		}
-		if msg.Mode == mode.Board || msg.Mode == mode.Search {
+		if mode.IsBrowse(msg.Mode) {
 			m.lastBrowse = msg.Mode
 		}
 		if m.currentSelection() == nil {
@@ -554,6 +576,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.active = mode.Board
 			m.lastBrowse = mode.Board
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
+			m.active = mode.Docs
+			m.lastBrowse = mode.Docs
+			return m, batchCmds(modeCmd, m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
 			m.active = mode.Search
 			m.lastBrowse = mode.Search
@@ -573,7 +599,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastBrowse = mode.Search
 			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
-			if m.active == mode.Board || m.active == mode.Search {
+			if mode.IsBrowse(m.active) {
 				m.lastBrowse = m.active
 			}
 			if m.currentSelection() == nil {
@@ -583,10 +609,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
 			m.applyModeCycle(nextMode(m.active, m.lastBrowse))
-			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
 			m.applyModeCycle(prevMode(m.active, m.lastBrowse))
-			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
 			// If a dialog-open was in flight when ESC arrived, the guard has
 			// already been cleared at the top of this branch. Consume ESC as
@@ -599,7 +625,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.active = m.lastBrowse
 				return m, modeCmd
 			}
-			if m.active == mode.Search {
+			// Board is the home tab: Escape from any other browse tab returns
+			// there before it starts dismissing toasts.
+			if mode.IsBrowse(m.active) && m.active != mode.Board {
 				m.active = mode.Board
 				m.lastBrowse = mode.Board
 				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
@@ -697,6 +725,13 @@ func (m Model) boardIsLoading() bool {
 		return false
 	}
 	return m.board.IsLoading()
+}
+
+func (m Model) docsIsLoading() bool {
+	if m.docs == nil {
+		return false
+	}
+	return m.docs.IsLoading()
 }
 
 func (m Model) searchIsLoading() bool {

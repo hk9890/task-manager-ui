@@ -211,7 +211,7 @@ internal/
 
 ### Constructor names
 
-- **Feature mode models** (`internal/mode/board`, `internal/mode/search`, `internal/app`): use
+- **Feature mode models** (`internal/mode/board`, `internal/mode/docs`, `internal/mode/search`, `internal/app`): use
   `NewModel(...)` returning a named `Model` (or `*Model`). These are stateful Bubble Tea controllers
   with complex dependency injection.
 - **UI leaf components** (`internal/ui/toaster`, `internal/ui/modal`): use `New(...)` returning a

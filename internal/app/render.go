@@ -81,6 +81,8 @@ func (m Model) renderHeader() string {
 		m.headerSpinnerCell(),
 		tab(mode.Board, "Board"),
 		" ",
+		tab(mode.Docs, "Docs"),
+		" ",
 		tab(mode.Search, "Search"),
 	)
 
@@ -107,23 +109,22 @@ func (m Model) renderHeader() string {
 func (m Model) renderBody() string {
 	workspaceWidth, workspaceHeight := m.workspaceSize()
 	m.board.SetSize(workspaceWidth, workspaceHeight)
+	m.docs.SetSize(workspaceWidth, workspaceHeight)
 	m.search.SetSize(workspaceWidth, workspaceHeight)
 	m.syncSearchPreviewDetailState()
 
 	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
 
-	if m.active == mode.Detail {
+	switch m.active {
+	case mode.Detail:
 		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false, skeletonPhase)
+	case mode.Docs:
+		return m.docs.View(skeletonPhase)
+	case mode.Search:
+		return m.search.View(skeletonPhase)
+	default:
+		return m.board.View(skeletonPhase)
 	}
-
-	var browse string
-	if m.active == mode.Board {
-		browse = m.board.View(skeletonPhase)
-	} else {
-		browse = m.search.View(skeletonPhase)
-	}
-
-	return browse
 }
 
 func (m *Model) syncSearchPreviewDetailState() {
@@ -175,6 +176,7 @@ func (m Model) workspaceSize() (int, int) {
 func (m Model) applyWorkspaceSizeToBrowseModes() {
 	workspaceWidth, workspaceHeight := m.workspaceSize()
 	m.board.SetSize(workspaceWidth, workspaceHeight)
+	m.docs.SetSize(workspaceWidth, workspaceHeight)
 	m.search.SetSize(workspaceWidth, workspaceHeight)
 }
 
@@ -187,9 +189,12 @@ func (m Model) renderFooter() string {
 }
 
 func (m Model) loadingStates() []loading.State {
-	loadingStates := make([]loading.State, 0, 3)
+	loadingStates := make([]loading.State, 0, 4)
 	if m.boardIsLoading() {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeBoard})
+	}
+	if m.docsIsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDocs})
 	}
 	if m.searchIsLoading() {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
@@ -236,7 +241,10 @@ func (m Model) headerContextVariants() []string {
 	}
 
 	prefix := "Board"
-	if m.active == mode.Search {
+	switch m.active {
+	case mode.Docs:
+		prefix = "Docs"
+	case mode.Search:
 		prefix = fmt.Sprintf("Search: %d results", m.searchResultCount())
 	}
 
@@ -272,11 +280,13 @@ func (m Model) headerContextVariants() []string {
 func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 	return strings.Join([]string{
 		"Mode switching:",
+		fmt.Sprintf("  %s/%s = next/previous tab (Board, Docs, Search)", keys.DisplayLabel(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayLabel(config.ShellContext, config.ShellActionModeCyclePrev)),
 		fmt.Sprintf("  %s = toggle Board/Search", keys.DisplayLabel(config.ShellContext, config.ShellActionToggleSearch)),
 		fmt.Sprintf("  %s = open selected issue detail", keys.DisplayLabel(config.ShellContext, config.ShellActionModeDetail)),
 		"",
 		"Selection:",
 		fmt.Sprintf("  Board: %s switch columns, %s move within a column", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
+		fmt.Sprintf("  Docs: %s move within the doc list (docs use the board keymap)", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
 		fmt.Sprintf("  Search: type query text, then Enter to search; %s focuses query; %s/%s switch panes; %s/%s moves query/results and result selection; %s/%s cycles focus", keys.DisplayLabel(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusRight), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveDown), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveUp), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusPrev)),
 		"",
 		"Actions:",
@@ -316,6 +326,8 @@ func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, secon
 func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) string {
 	if width < 90 {
 		switch active {
+		case mode.Docs:
+			return fmt.Sprintf("Docs: %s %s %s/%s %s %s", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCyclePrev), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 		case mode.Search:
 			return fmt.Sprintf("Search: type+enter %s %s/%s %s %s %s", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusPrev), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown)+"/"+keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
 		case mode.Detail:
@@ -326,6 +338,8 @@ func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) 
 	}
 
 	switch active {
+	case mode.Docs:
+		return fmt.Sprintf("Docs: %s/%s docs · %s detail · %s/%s switch tabs · %s help · %s quit", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCyclePrev), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
 	case mode.Search:
 		return fmt.Sprintf("Search: type + Enter query · %s focus · %s/%s switch panes · %s/%s query/results · %s detail · %s board", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusRight), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
 	case mode.Detail:

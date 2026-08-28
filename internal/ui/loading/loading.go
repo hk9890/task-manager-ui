@@ -52,6 +52,7 @@ type Scope string
 
 const (
 	ScopeBoard  Scope = "board"
+	ScopeDocs   Scope = "docs"
 	ScopeSearch Scope = "search"
 	ScopeDetail Scope = "detail"
 )

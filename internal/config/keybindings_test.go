@@ -27,8 +27,25 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 	if resolved.Primary(ShellContext, ShellActionToggleSearch) != "ctrl+@" {
 		t.Fatalf("expected search toggle key ctrl+@, got %q", resolved.Primary(ShellContext, ShellActionToggleSearch))
 	}
-	if resolved.Primary(ShellContext, ShellActionModeCycleNext) != "ctrl+pgdown" {
-		t.Fatalf("expected mode cycle next key to be ctrl+pgdown, got %q", resolved.Primary(ShellContext, ShellActionModeCycleNext))
+	if resolved.Primary(ShellContext, ShellActionModeCycleNext) != "tab" {
+		t.Fatalf("expected mode cycle next key to be tab, got %q", resolved.Primary(ShellContext, ShellActionModeCycleNext))
+	}
+	if resolved.Primary(ShellContext, ShellActionModeCyclePrev) != "shift+tab" {
+		t.Fatalf("expected mode cycle prev key to be shift+tab, got %q", resolved.Primary(ShellContext, ShellActionModeCyclePrev))
+	}
+	if resolved.Primary(ShellContext, ShellActionModeDocs) != "4" {
+		t.Fatalf("expected docs mode key to be 4, got %q", resolved.Primary(ShellContext, ShellActionModeDocs))
+	}
+	// tab/shift+tab belong to the shell tab strip: the board must not also
+	// consume them as column movement, and search must not cycle panes with them.
+	if resolved.Match(BoardContext, BoardActionMoveRight, tea.KeyMsg{Type: tea.KeyTab}) {
+		t.Fatal("expected board move-right not to match tab")
+	}
+	if resolved.Match(SearchContext, SearchActionCycleFocusNext, tea.KeyMsg{Type: tea.KeyTab}) {
+		t.Fatal("expected search cycle-focus-next not to match tab")
+	}
+	if resolved.Match(SearchContext, SearchActionCycleFocusPrev, tea.KeyMsg{Type: tea.KeyShiftTab}) {
+		t.Fatal("expected search cycle-focus-prev not to match shift+tab")
 	}
 }
 
@@ -46,7 +63,7 @@ func TestMergeKeyBindingsOverridesPerAction(t *testing.T) {
 	if got := strings.Join(merged.Board[BoardActionMoveLeft], ","); got != "a" {
 		t.Fatalf("expected board move-left override, got %q", got)
 	}
-	if got := strings.Join(merged.Board[BoardActionMoveRight], ","); got != "l,right,tab" {
+	if got := strings.Join(merged.Board[BoardActionMoveRight], ","); got != "l,right" {
 		t.Fatalf("expected unspecified bindings to remain, got %q", got)
 	}
 }
@@ -174,10 +191,10 @@ func TestResolvedKeyBindingsDisplayLabel(t *testing.T) {
 
 	r := resolvedDefault(t)
 
-	// board move-right has keys "l", "right", "tab" → label is "l/right/tab".
+	// board move-right has keys "l", "right" → label is "l/right".
 	got := r.DisplayLabel(BoardContext, BoardActionMoveRight)
-	if got != "l/right/tab" {
-		t.Errorf("DisplayLabel(board, move_right) = %q, want %q", got, "l/right/tab")
+	if got != "l/right" {
+		t.Errorf("DisplayLabel(board, move_right) = %q, want %q", got, "l/right")
 	}
 
 	// Missing context / action must return "".

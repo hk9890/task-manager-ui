@@ -245,15 +245,16 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 	}
 }
 
-// TestModeCyclePrevFromBoardKeepsSelectionAndAllowsEscape is the regression guard
-// for applyModeCycle. prevMode(Board) == Detail, and cycling into Detail must
-// keep lastBrowse a browse mode (Board) so that the selection is preserved and
-// Escape can return to Board.
+// TestModeCycleKeepsSelectionAndAllowsEscape is the regression guard for
+// applyModeCycle. The cycle now traverses the tab strip (Board, Docs, Search),
+// so it no longer lands in Detail on its own — but applyModeCycle still has a
+// Detail arm, and lastBrowse must stay a browse tab through both paths so the
+// selection survives and Escape has somewhere to return to.
 //
 // Pre-fix cycling did `lastBrowse = active` unconditionally, leaving
 // lastBrowse == Detail. That made currentSelection() return nil (blank Detail)
 // and turned Escape (active = lastBrowse) into a no-op (stuck in Detail).
-func TestModeCyclePrevFromBoardKeepsSelectionAndAllowsEscape(t *testing.T) {
+func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 	gw := newTestRepository()
 	gw.seedReady("tm-1", "Ready first", "task", 1)
 	gw.seedInProgress("tm-2", "In progress", "task", 2)
@@ -273,15 +274,38 @@ func TestModeCyclePrevFromBoardKeepsSelectionAndAllowsEscape(t *testing.T) {
 		t.Fatalf("expected board selection tm-1 after init, got %q", got)
 	}
 
-	// ModeCyclePrev (ctrl+pgup): prevMode(Board) == Detail.
+	// ModeCyclePrev (shift+tab / ctrl+pgup): prevMode(Board) == Search, the far
+	// end of the tab strip.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlPgUp})
 	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Search {
+		t.Fatalf("expected ModeCyclePrev from Board to wrap to Search, got %s", m.active)
+	}
+	if m.lastBrowse != mode.Search {
+		t.Fatalf("expected lastBrowse to follow the cycle to Search, got %s", m.lastBrowse)
+	}
+
+	// Back to Board, then drill into Detail: lastBrowse must stay Board so the
+	// board selection is what Detail loads.
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlPgDown})
+	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
+	if m.active != mode.Board {
+		t.Fatalf("expected ModeCycleNext from Search to wrap to Board, got %s", m.active)
+	}
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = next.(Model)
 	if m.active != mode.Detail {
-		t.Fatalf("expected ModeCyclePrev from Board to enter Detail, got %s", m.active)
+		t.Fatalf("expected hotkey 3 to enter Detail, got %s", m.active)
+	}
+	if m.lastBrowse != mode.Board {
+		t.Fatalf("expected lastBrowse to stay Board while in Detail, got %s", m.lastBrowse)
 	}
 	sel := m.currentSelection()
 	if sel == nil || sel.Issue.ID != "tm-1" {
-		t.Fatalf("expected selection preserved as tm-1 after cycling into Detail, got %#v (regression: lastBrowse clobbered to Detail)", sel)
+		t.Fatalf("expected selection preserved as tm-1 in Detail, got %#v (regression: lastBrowse clobbered to Detail)", sel)
 	}
 
 	// Drain the detail load so Detail reflects the preserved selection.
@@ -290,12 +314,12 @@ func TestModeCyclePrevFromBoardKeepsSelectionAndAllowsEscape(t *testing.T) {
 		t.Fatalf("expected Detail to track tm-1 selection, target=%q detail=%q", m.detail.TargetID, m.detail.Detail.Summary.ID)
 	}
 
-	// Escape must return to Board, not stay stuck in Detail.
+	// Escape must return to the tab we drilled in from, not stay stuck in Detail.
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Board {
-		t.Fatalf("expected Escape from cycled Detail to return to Board, got %s", m.active)
+		t.Fatalf("expected Escape from Detail to return to Board, got %s", m.active)
 	}
 }
 
