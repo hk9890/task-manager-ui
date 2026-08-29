@@ -117,12 +117,12 @@ suppressed for the interactive session.
   an `e` round trip that did not save. The toast carries the same cause.
 - `dashboard refresh failed; keeping the last loaded columns` (WARN) — the rows on the
   board are the previous load's.
-- `backend sort assumption broken` (WARN) — the backend returned rows in an order the
-  board did not expect, so column ordering on screen is not the order you asked for.
-- `cardinality threshold exceeded` (WARN) — a column holds more distinct values than the
-  board budgets for; expect truncation in what is drawn.
-- `load-more for Done column failed` (WARN) — a Done page did not arrive, so the column
-  stops growing while the header still names a larger total.
+- `cardinality threshold exceeded` (WARN) — an active group (Ready, Blocked or In Progress)
+  holds more than 500 issues (`dashboard.cardinalityThreshold`). Nothing is truncated and
+  nothing is wrong; it is a signal that the column is unusually large.
+- `load-more for Done column failed` (WARN) — a Done page did not arrive. The error is set
+  on the Done column, so the operator sees it on screen too
+  (`applyLoadMoreClosed`, `internal/mode/board/model.go`).
 - `temp cleanup: glob failed`, `temp cleanup: remove failed` (WARN,
   `internal/app/services.go`) — the sweep could not read or delete a stale edit temp
   file. Nothing on screen changes; the file stays behind.
