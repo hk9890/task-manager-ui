@@ -24,6 +24,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
@@ -35,9 +36,9 @@ import (
 func TestEnterWhileInitInFlight_PendingDraftQueued(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 
 	// Build and Init the model WITHOUT draining the init Cmd — model is in
 	// loading state, simulating the race window.
@@ -84,10 +85,10 @@ func TestEnterWhileInitInFlight_PendingDraftQueued(t *testing.T) {
 func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-4", Title: "another task", Status: "open", Type: "task", Priority: 3})
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-4", Title: "another task", Status: "open", Type: "task", Priority: 3})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 
 	// Build and Init WITHOUT draining — model is loading.
 	m := NewModel(context.Background(), gw, nil)
@@ -167,9 +168,9 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	t.Parallel()
 
-	innerRepo := newSearchRepo()
-	innerRepo.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	innerRepo.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
+	innerRepo := fakes.NewTracked()
+	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 	rec := &queryRecordingRepo{Repository: innerRepo}
 
 	// Build and Init WITHOUT draining.
@@ -217,8 +218,8 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 func TestEnterWhileInitInFlight_PendingDraftNotFiredIfMatchesApplied(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "everything", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "everything", Status: "open", Type: "task", Priority: 1})
 
 	// Build and Init WITHOUT draining.
 	m := NewModel(context.Background(), gw, nil)

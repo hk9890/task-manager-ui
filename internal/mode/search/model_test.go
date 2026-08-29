@@ -22,23 +22,6 @@ import (
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
-// searchRepo bundles the memory repo (for seeding) and the error-injecting
-// wrapper (for call tracking and error injection). It satisfies
-// repository.Repository via the embedded ErrorInjectingRepository.
-type searchRepo struct {
-	repo *memoryrepo.Repository
-	*fakes.ErrorInjectingRepository
-}
-
-// newSearchRepo creates a searchRepo with an empty memory repository.
-func newSearchRepo() *searchRepo {
-	repo := memoryrepo.New()
-	return &searchRepo{
-		repo:                     repo,
-		ErrorInjectingRepository: fakes.NewErrorInjecting(repo),
-	}
-}
-
 // hasSearchCall reports whether any Search call appears in calls.
 func hasSearchCall(calls []fakes.Call) bool {
 	return countSearchCalls(calls) > 0
@@ -50,7 +33,7 @@ func hasSearchCall(calls []fakes.Call) bool {
 // queries could never be typed and the backend's AND-of-words semantics would be
 // unreachable from the UI.
 func TestSearchQueryAcceptsSpaceForMultiWord(t *testing.T) {
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	m := NewModel(context.Background(), gw, nil)
 	m.SetSize(120, 30)
 
@@ -70,8 +53,8 @@ func TestSearchQueryAcceptsSpaceForMultiWord(t *testing.T) {
 func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search", Status: "open", Type: "task", Priority: 1})
 
 	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(context.Background(), gw, nil)}, 120, 30)
 	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -91,8 +74,8 @@ func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
 func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default one", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default one", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	if !hasSearchCall(gw.Calls()) {
@@ -107,8 +90,8 @@ func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
 func TestSearchModeTextQuerySendsRepositorySearch(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "gw test issue", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "gw test issue", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	callsBefore := len(gw.Calls())
@@ -127,10 +110,10 @@ func TestSearchModeTextQuerySendsRepositorySearch(t *testing.T) {
 func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Titles contain "g" so the query "g" matches both.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
@@ -169,10 +152,10 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Titles contain "g" so the query "g" matches both.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
@@ -206,11 +189,11 @@ func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Seed issues: tm-1 and tm-2 match any query (no filter text), tm-9 matches "x".
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-9", Title: "Filtered x only", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-9", Title: "Filtered x only", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
@@ -243,7 +226,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error state", func(t *testing.T) {
-		m := NewModel(context.Background(), newSearchRepo(), nil)
+		m := NewModel(context.Background(), fakes.NewTracked(), nil)
 		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
 
 		view := m.View(0)
@@ -253,7 +236,7 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("no results state", func(t *testing.T) {
-		m := NewModel(context.Background(), newSearchRepo(), nil)
+		m := NewModel(context.Background(), fakes.NewTracked(), nil)
 		m.draftQuery = "xyz"
 		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
 		if cmd != nil {
@@ -266,9 +249,9 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 	})
 
 	t.Run("open detail action from results", func(t *testing.T) {
-		gw := newSearchRepo()
+		gw := fakes.NewTracked()
 		// Title contains "b" so the query "b" returns this result.
-		gw.repo.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Backend result", Status: "open", Type: "task", Priority: 1})
+		gw.Memory.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Backend result", Status: "open", Type: "task", Priority: 1})
 		m := initModel(gw)
 		pressAndResolve(m, testui.SearchTypeTextKeys("b")...)
 		pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -289,9 +272,9 @@ func TestSearchModeRepresentativeStates(t *testing.T) {
 func TestSearchModePaneCycleUsesCtrlJKAndLeavesTabToTheShell(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Title contains "g" so query "g" matches.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Repository result", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Repository result", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
@@ -330,8 +313,8 @@ func TestSearchModePaneCycleUsesCtrlJKAndLeavesTabToTheShell(t *testing.T) {
 func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "jkhlr test issue", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "jkhlr test issue", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	callsBefore := len(gw.Calls())
@@ -349,10 +332,10 @@ func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
 func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Titles contain "x" so the query "x" matches both.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
@@ -389,7 +372,7 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	m := initModel(gw)
 
 	callsBefore := len(gw.Calls())
@@ -424,10 +407,10 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Titles contain "x" so the query "x" matches both.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
@@ -467,8 +450,8 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First abc", Status: "open", Type: "task", Priority: 1,
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First abc", Status: "open", Type: "task", Priority: 1,
 		Description: "abc tag"})
 	m := initModel(gw)
 
@@ -514,7 +497,7 @@ func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t 
 func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	m := initModel(gw)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("foo")...)
@@ -533,8 +516,8 @@ func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
 func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	callsBefore := len(gw.Calls())
@@ -577,10 +560,10 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Titles contain "g" so the query "g" matches both.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
 	m := testui.InitializeController(NewModel(context.Background(), gw, nil, keys)).(*Model)
 
 	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
@@ -632,8 +615,8 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	}
 }
 
-func newSearchFakeRepository() *searchRepo {
-	return newSearchRepo()
+func newSearchFakeRepository() *fakes.TrackedRepository {
+	return fakes.NewTracked()
 }
 
 func initModel(repository repository.Repository) *Model {
@@ -680,8 +663,8 @@ func TestSearchItemCapacity(t *testing.T) {
 func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	// Record call count after init.
@@ -704,8 +687,8 @@ func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
 func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	// After init+resolve, loading should be false.
@@ -732,7 +715,7 @@ func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
 func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	m := NewModel(context.Background(), gw, nil)
 
 	// Manually set loading=true (simulating an in-flight request).
@@ -765,8 +748,8 @@ func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
 func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 
 	// Navigate: Query -> Results -> Content -> Metadata.
@@ -833,9 +816,9 @@ func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
 func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
+	gw := fakes.NewTracked()
 	// Seed an issue matching "backend" so the first search returns a result.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Prior backend result", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Prior backend result", Status: "open", Type: "task", Priority: 1})
 	m := initModel(gw)
 	m.SetSize(120, 28)
 
@@ -929,9 +912,9 @@ func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
 // printable rune is appended to the query, so a letter binding would be typed
 // rather than acted on.
 func TestSearchScopeToggleWidensToClosedAndBack(t *testing.T) {
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "s-1", Title: "widget active", Status: "open"})
-	gw.repo.Seed(memoryrepo.Issue{ID: "s-2", Title: "widget archived", Status: "closed"})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "s-1", Title: "widget active", Status: "open"})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "s-2", Title: "widget archived", Status: "closed"})
 
 	m := NewModel(context.Background(), gw, nil)
 	m.SetSize(120, 30)

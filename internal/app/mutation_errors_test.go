@@ -19,7 +19,7 @@ var errInjected = errors.New("injected mutation failure")
 // newMutationErrorServices returns a minimal Services container backed by the
 // supplied repository. It uses config.Default() and a temp dir so no external
 // editor or launcher process is ever spawned.
-func newMutationErrorServices(t *testing.T, gw *appTestRepository) Services {
+func newMutationErrorServices(t *testing.T, gw *fakes.TrackedRepository) Services {
 	t.Helper()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -34,8 +34,8 @@ func newMutationErrorServices(t *testing.T, gw *appTestRepository) Services {
 func TestMutationUpdateRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
+	gw := fakes.NewTracked()
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
 	gw.SetError(fakes.MethodUpdateIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
@@ -76,8 +76,8 @@ func TestMutationUpdateRepositoryError(t *testing.T) {
 func TestMutationCloseRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
+	gw := fakes.NewTracked()
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
 	gw.SetError(fakes.MethodCloseIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
@@ -111,8 +111,8 @@ func TestMutationCloseRepositoryError(t *testing.T) {
 func TestMutationCommentRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
+	gw := fakes.NewTracked()
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
 	gw.SetError(fakes.MethodAddComment, errInjected)
 
 	services := newMutationErrorServices(t, gw)
@@ -147,8 +147,8 @@ func TestMutationCommentRepositoryError(t *testing.T) {
 func TestMutationStatusRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
+	gw := fakes.NewTracked()
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
 	gw.SetError(fakes.MethodUpdateIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)
@@ -185,8 +185,8 @@ func TestMutationStatusRepositoryError(t *testing.T) {
 func TestMutationPriorityRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
+	gw := fakes.NewTracked()
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1"}})
 	gw.SetError(fakes.MethodUpdateIssue, errInjected)
 
 	services := newMutationErrorServices(t, gw)

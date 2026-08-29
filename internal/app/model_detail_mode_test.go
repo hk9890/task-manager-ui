@@ -24,11 +24,11 @@ import (
 func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}, Description: "detail"})
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-2", Title: "In progress", Status: "in_progress", Type: "task", Priority: 2}, Description: "detail"})
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1}})
 
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
@@ -68,10 +68,10 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 		longLines = append(longLines, "Line "+strconv.Itoa(i))
 	}
 
-	gw := newTestRepository()
-	gw.seedReady("tm-9", "Ninth", "task", 2)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-9", "Ninth", "task", 2)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
 		Description: strings.Join(longLines, "\n"),
 	})
@@ -125,21 +125,21 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-9", "Other", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-9", "Other", "task", 2)
 	// tm-1 (viewed) has a blocker, a downstream issue, and a parent. The
 	// dependency browser lists those deps followed by the parent row — a stable
 	// 3 rows. Parent-only: the parent's other children (siblings) are not
 	// surfaced. Pressing Enter on tm-6 (same shape) keeps the panel at 3 rows.
 	parent := domain.IssueReference{ID: "tm-0", Title: "Parent epic"}
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:            domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
 		BlockedBy:          []domain.IssueReference{{ID: "tm-5", Title: "Upstream"}},
 		Blocks:             []domain.IssueReference{{ID: "tm-6", Title: "Downstream"}},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: parent},
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:            domain.IssueSummary{ID: "tm-6", Title: "Downstream", Status: "in_progress", Type: "bug", Priority: 2},
 		BlockedBy:          []domain.IssueReference{{ID: "tm-7", Title: "Upstream two"}},
 		Blocks:             []domain.IssueReference{{ID: "tm-8", Title: "Downstream two"}},
@@ -171,9 +171,9 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
 	// cmd may be nil or a no-op batch; it must NOT trigger a detail reload.
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected down on browser to NOT trigger repository.Issue call, got calls=%#v", gw.Calls())
 	}
 	if m.detail.BrowserSelectedIndex == prevIndex {
@@ -188,7 +188,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	}
 
 	// (Q6b) Enter triggers OpenRelatedIssueIntent → loadDetailCmd (non-nil cmd).
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -196,7 +196,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	if m.active != mode.Detail {
 		t.Errorf("expected app to remain in detail mode after Enter on browser panel, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected Enter on browser to trigger repository.Issue call (loadDetailCmd), calls=%#v", gw.Calls())
 	}
 	// Scroll must be reset and Loading must have been set (may now be false after applyMessages resolves the load).
@@ -220,10 +220,10 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenEnterLoads(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-9", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-9", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1},
 		BlockedBy: []domain.IssueReference{
 			{ID: "tm-3", Title: "Blocker"},
@@ -235,10 +235,10 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 			{ID: "tm-4", Title: "Related"},
 		},
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-5", Title: "Downstream", Status: "in_progress", Type: "task", Priority: 2},
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-4", Title: "Related", Status: "in_progress", Type: "bug", Priority: 2},
 	})
 
@@ -265,24 +265,24 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	m = applyMessages(t, m, runBatch(cmd))
 
 	// Down twice: moves cursor to index 2 (tm-4 in the Related group). No load occurs.
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected first down to NOT trigger Issue call, calls=%#v", gw.Calls())
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected second down to NOT trigger Issue call, calls=%#v", gw.Calls())
 	}
 
 	// Cursor is now on tm-4 (index 2). Enter triggers reload.
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -290,7 +290,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	if m.active != mode.Detail {
 		t.Errorf("expected app to remain in detail mode after Enter on dependencies pane, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Errorf("expected Enter on dependencies pane to trigger repository.Issue call, calls=%#v", gw.Calls())
 	}
 	// TargetID must point to the cursor row (tm-4).
@@ -313,17 +313,17 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-epic", "Auth epic", "epic", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-epic", "Auth epic", "epic", 1)
 	// Epic's detail lists its child in the Children group.
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:  domain.IssueSummary{ID: "tm-epic", Title: "Auth epic", Status: "open", Type: "epic", Priority: 1},
 		Children: []domain.IssueReference{{ID: "tm-child", Title: "Login crash", Type: "bug", Priority: 0, Status: "open"}},
 	})
 	// Child's detail lists the epic in its Parent group. Seeded in_progress (not
 	// "open" with no deps) so it does not also land in the Ready column — the
 	// epic stays the sole ready issue and thus the default board selection.
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:            domain.IssueSummary{ID: "tm-child", Title: "Login crash", Status: "in_progress", Type: "bug", Priority: 0},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: domain.IssueReference{ID: "tm-epic", Title: "Auth epic", Type: "epic", Priority: 1, Status: "open"}},
 	})
@@ -384,11 +384,11 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-2", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	gw.seedCatalogs(
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-2", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
 		[]domain.TypeOption{{Name: "task"}},
 		[]domain.LabelOption{},
@@ -441,15 +441,15 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if !gw.hasCatalogsCall() {
+	if !gw.HasCall(fakes.MethodCatalogs) {
 		t.Fatalf("expected status catalog query, calls=%#v", gw.Calls())
 	}
-	if !gw.hasUpdateIssueCall() {
+	if !gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Fatalf("expected status update issue call, calls=%#v", gw.Calls())
 	}
 
 	// Verify observable state: tm-1 should now have status "in_progress".
-	updated := gw.issueState("tm-1")
+	updated := issueState(gw, "tm-1")
 	if updated == nil {
 		t.Fatal("expected to find tm-1 in repository after update")
 	}
@@ -461,11 +461,11 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-2", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	gw.seedCatalogs(
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-2", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
 		[]domain.TypeOption{{Name: "task"}},
 		[]domain.LabelOption{},
@@ -519,7 +519,7 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 		t.Fatal("expected escape to close status action modal")
 	}
 
-	if gw.hasUpdateIssueCall() {
+	if gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Fatalf("expected no UpdateIssue call on escape cancel, calls=%#v", gw.Calls())
 	}
 }
@@ -527,11 +527,11 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-2", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	gw.seedCatalogs(
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-2", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
 		[]domain.TypeOption{{Name: "task"}},
 		[]domain.LabelOption{},
@@ -590,7 +590,7 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 		t.Fatal("expected status action modal to close after enter no-op")
 	}
 
-	if gw.hasUpdateIssueCall() {
+	if gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Fatalf("expected no UpdateIssue call on unchanged enter no-op, calls=%#v", gw.Calls())
 	}
 
@@ -602,10 +602,10 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 4)
-	gw.seedInProgress("tm-2", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 4}})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 4)
+	seedInProgress(gw, "tm-2", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 4}})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -653,12 +653,12 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if !gw.hasUpdateIssueCall() {
+	if !gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Fatalf("expected priority cycle update issue call, calls=%#v", gw.Calls())
 	}
 
 	// Verify observable state: tm-1 priority should be 0 after update.
-	updated := gw.issueState("tm-1")
+	updated := issueState(gw, "tm-1")
 	if updated == nil {
 		t.Fatal("expected to find tm-1 in repository after priority update")
 	}
@@ -674,10 +674,10 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-2", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 3}})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-2", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 3}})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -725,7 +725,7 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 		t.Fatal("expected escape to close priority action modal")
 	}
 
-	if gw.hasUpdateIssueCall() {
+	if gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Fatalf("expected no UpdateIssue call on priority escape cancel, calls=%#v", gw.Calls())
 	}
 }
@@ -737,9 +737,9 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 // OpenRelatedIssueIntent via a synthetic KeyMsg that drives the model through
 // the production code path.
 func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Main issue", "epic", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Main issue", "epic", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -774,7 +774,7 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 	m.width = 160
 	m.height = 34
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 
 	// Send Enter: drives HandleKey which should emit OpenRelatedIssueIntent{tm-child}.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -802,7 +802,7 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 
 	// App must have issued a detail load command (Issue call).
 	m = applyMessages(t, m, runBatch(cmd))
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Error("expected repository.Issue call after Enter-reload; handler must dispatch loadDetailCmd")
 	}
 }
@@ -813,14 +813,14 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 //   - Focus is NOT flipped to Content during the optimistic placeholder phase.
 //   - After the real detailLoadedMsg arrives, focus stays on the Dependencies rail.
 func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Main issue", "epic", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Main issue", "epic", 1)
 	// tm-child has its own blockers so it is not a leaf.
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:   domain.IssueSummary{ID: "tm-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2},
 		BlockedBy: []domain.IssueReference{{ID: "tm-blocker", Title: "Blocker"}},
 	})
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-blocker", Title: "Blocker", Status: "open"})
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-blocker", Title: "Blocker", Status: "open"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -873,10 +873,10 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 // presses Enter on a Dependencies pane row to drill into a leaf issue (no deps),
 // focus moves to the Content pane after the real detail loads.
 func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Main issue", "epic", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Main issue", "epic", 1)
 	// tm-leaf has no dependencies.
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-leaf", Title: "Leaf issue", Status: "open", Type: "task", Priority: 2})
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-leaf", Title: "Leaf issue", Status: "open", Type: "task", Priority: 2})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -926,15 +926,15 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 
 // drilledIntoChild opens the epic's detail, drills into its child, and returns
 // the model sitting on the child.
-func drilledIntoChild(t *testing.T, gw *appTestRepository) Model {
+func drilledIntoChild(t *testing.T, gw *fakes.TrackedRepository) Model {
 	t.Helper()
 
-	gw.seedReady("tm-epic", "Auth epic", "epic", 1)
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedReady(gw, "tm-epic", "Auth epic", "epic", 1)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:  domain.IssueSummary{ID: "tm-epic", Title: "Auth epic", Status: "open", Type: "epic", Priority: 1},
 		Children: []domain.IssueReference{{ID: "tm-child", Title: "Login crash", Type: "bug", Priority: 0, Status: "open"}},
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:            domain.IssueSummary{ID: "tm-child", Title: "Login crash", Status: "in_progress", Type: "bug", Priority: 0},
 		ParentGroupBrowser: domain.ParentGroupBrowserContext{Parent: domain.IssueReference{ID: "tm-epic", Title: "Auth epic", Type: "epic", Priority: 1, Status: "open"}},
 	})
@@ -978,7 +978,7 @@ func drilledIntoChild(t *testing.T, gw *appTestRepository) Model {
 func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	m := drilledIntoChild(t, gw)
 
 	if got := firstSelectionID(m, mode.Board); got != "tm-epic" {
@@ -1012,7 +1012,7 @@ func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
 func TestModelAutoRefreshKeepsTheDrilledIssueOnScreen(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	m := drilledIntoChild(t, gw)
 
 	cmd := m.refreshActiveSurfaceCmd()
@@ -1034,7 +1034,7 @@ func TestModelAutoRefreshKeepsTheDrilledIssueOnScreen(t *testing.T) {
 func TestModelEscapeFromDrillReturnsTheSelectionToTheBrowseRow(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	m := drilledIntoChild(t, gw)
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -1060,10 +1060,10 @@ func TestModelEscapeFromDrillReturnsTheSelectionToTheBrowseRow(t *testing.T) {
 func TestModelReloadDetailKeyIssuesALoad(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	m := drilledIntoChild(t, gw)
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	m = next.(Model)
 	if cmd == nil {
@@ -1071,7 +1071,7 @@ func TestModelReloadDetailKeyIssuesALoad(t *testing.T) {
 	}
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Error("the reload key issued no repository.Issue call")
 	}
 	if m.detail.IsLoading() {

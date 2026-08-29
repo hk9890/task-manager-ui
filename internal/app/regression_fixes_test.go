@@ -65,8 +65,8 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 
 	newServices := func(t *testing.T) (*recordingUpdateRepository, Services) {
 		t.Helper()
-		gw := newTestRepository()
-		gw.seedIssueSummary(domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"})
+		gw := fakes.NewTracked()
+		seedIssueSummary(gw, domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"})
 		rec := &recordingUpdateRepository{Repository: gw}
 		services, err := NewServices(rec, config.Default(), t.TempDir())
 		if err != nil {
@@ -144,7 +144,7 @@ func TestMutationCreatePriorityRangeEnforced(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gw := newTestRepository()
+			gw := fakes.NewTracked()
 			services, err := NewServices(gw, config.Default(), t.TempDir())
 			if err != nil {
 				t.Fatalf("NewServices: %v", err)
@@ -163,7 +163,7 @@ func TestMutationCreatePriorityRangeEnforced(t *testing.T) {
 				if res.err != nil {
 					t.Fatalf("expected priority %q to be accepted, got error %v", tc.priority, res.err)
 				}
-				if !gw.hasCreateIssueCall() {
+				if !gw.HasCall(fakes.MethodCreateIssue) {
 					t.Fatalf("expected CreateIssue to be called for accepted priority %q", tc.priority)
 				}
 				return
@@ -175,7 +175,7 @@ func TestMutationCreatePriorityRangeEnforced(t *testing.T) {
 			if !strings.Contains(res.err.Error(), "between 0 and 4") {
 				t.Fatalf("expected error to mention range 'between 0 and 4', got %q", res.err.Error())
 			}
-			if gw.hasCreateIssueCall() {
+			if gw.HasCall(fakes.MethodCreateIssue) {
 				t.Fatalf("expected CreateIssue NOT called for out-of-range priority %q, calls=%#v", tc.priority, gw.Calls())
 			}
 		})
@@ -203,8 +203,8 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gw := newTestRepository()
-			gw.seedIssueSummary(domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task"})
+			gw := fakes.NewTracked()
+			seedIssueSummary(gw, domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task"})
 			services, err := NewServices(gw, config.Default(), t.TempDir())
 			if err != nil {
 				t.Fatalf("NewServices: %v", err)
@@ -226,7 +226,7 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 				if res.err != nil {
 					t.Fatalf("expected priority %q to be accepted, got error %v", tc.priority, res.err)
 				}
-				if !gw.hasUpdateIssueCall() {
+				if !gw.HasCall(fakes.MethodUpdateIssue) {
 					t.Fatalf("expected UpdateIssue to be called for accepted priority %q", tc.priority)
 				}
 				return
@@ -238,7 +238,7 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 			if !strings.Contains(res.err.Error(), "between 0 and 4") {
 				t.Fatalf("expected error to mention range 'between 0 and 4', got %q", res.err.Error())
 			}
-			if gw.hasUpdateIssueCall() {
+			if gw.HasCall(fakes.MethodUpdateIssue) {
 				t.Fatalf("expected UpdateIssue NOT called for out-of-range priority %q, calls=%#v", tc.priority, gw.Calls())
 			}
 		})
@@ -255,10 +255,10 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 // lastBrowse == Detail. That made currentSelection() return nil (blank Detail)
 // and turned Escape (active = lastBrowse) into a no-op (stuck in Detail).
 func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -341,7 +341,7 @@ func (e buildEditorErrEditor) BuildEditorCmd(string) (*exec.Cmd, error) {
 // the stale-temp sweep. Pre-fix this path returned without os.Remove, orphaning
 // the file.
 func TestEditPreparedBuildEditorCmdErrorRemovesTempFile(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -381,7 +381,7 @@ func TestEditPreparedBuildEditorCmdErrorRemovesTempFile(t *testing.T) {
 // ignored. Pre-fix the handler hid unconditionally, so a stale dismiss would
 // hide the newer toast early.
 func TestToastStaleDismissDoesNotHideNewerToast(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -421,7 +421,7 @@ func TestToastStaleDismissDoesNotHideNewerToast(t *testing.T) {
 // the toast would never auto-dismiss. The default test stub ignores its args,
 // so this installs a capturing scheduler to assert the values.
 func TestShowToastSchedulesDismissWithCurrentSeq(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)

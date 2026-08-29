@@ -39,7 +39,7 @@ func TestServiceConstructorsHaveNoFilesystemSideEffects(t *testing.T) {
 		t.Fatalf("Chtimes: %v", err)
 	}
 
-	repo := newTestRepository()
+	repo := fakes.NewTracked()
 
 	if _, err := NewServices(repo, config.Default(), t.TempDir()); err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -72,7 +72,7 @@ func TestInitSchedulesStaleTempFileSweep(t *testing.T) {
 		t.Fatalf("Chtimes: %v", err)
 	}
 
-	services, err := NewServices(newTestRepository(), config.Default(), t.TempDir())
+	services, err := NewServices(fakes.NewTracked(), config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}
@@ -98,8 +98,8 @@ func TestInitSchedulesStaleTempFileSweep(t *testing.T) {
 func TestCancelledLifecycleContextAbandonsRepositoryReads(t *testing.T) {
 	t.Parallel()
 
-	repo := newTestRepository()
-	repo.seedIssueDetail(domain.IssueDetail{
+	repo := fakes.NewTracked()
+	seedIssueDetail(repo, domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-1", Title: "One", Status: "open", Type: "task"},
 	})
 
@@ -148,7 +148,7 @@ func TestHealthCheckFailureLogsThroughManagerLogger(t *testing.T) {
 		SessionID: "health-check-test",
 	})
 
-	services, err := NewServices(newTestRepository(), config.Default(), t.TempDir())
+	services, err := NewServices(fakes.NewTracked(), config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestHealthCheckFailureLogsEveryErrorCode(t *testing.T) {
 				SessionID: "health-check-code-test",
 			})
 
-			services, err := NewServices(newTestRepository(), config.Default(), t.TempDir())
+			services, err := NewServices(fakes.NewTracked(), config.Default(), t.TempDir())
 			if err != nil {
 				t.Fatalf("NewServices: %v", err)
 			}
