@@ -98,7 +98,7 @@ func (r *Repository) matchesSearchLocked(si *storedIssue, q domain.SearchIssuesQ
 	}
 
 	// Scope: closed issues are out of range unless asked for, mirroring the
-	// taskmgr backend's FindOptions.IncludeClosed. An explicit Statuses filter
+	// taskmgr backend's Filter.IncludeClosed. An explicit Statuses filter
 	// still wins, so a caller asking for status "closed" gets it either way.
 	if !q.IncludeClosed && len(q.Statuses) == 0 && si.status == "closed" {
 		return false
