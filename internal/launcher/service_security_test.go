@@ -84,10 +84,10 @@ func TestShellCommandLauncherDoesNotExecuteInjectedTitle(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
-	assertLiteralArg(t, runner.Calls[0].Args, payload, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, payload, sentinel)
 }
 
 func TestShellCommandLauncherDoesNotExecuteInjectedTitleQuotedSemicolon(t *testing.T) {
@@ -109,10 +109,10 @@ func TestShellCommandLauncherDoesNotExecuteInjectedTitleQuotedSemicolon(t *testi
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
-	assertLiteralArg(t, runner.Calls[0].Args, payload, "")
+	assertLiteralArg(t, runner.Calls()[0].Args, payload, "")
 }
 
 func TestShellCommandLauncherDoesNotExecuteBackticksInTitle(t *testing.T) {
@@ -135,10 +135,10 @@ func TestShellCommandLauncherDoesNotExecuteBackticksInTitle(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
-	assertLiteralArg(t, runner.Calls[0].Args, payload, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, payload, sentinel)
 }
 
 func TestShellCommandLauncherDoesNotExecuteAndAndOrInLabels(t *testing.T) {
@@ -164,11 +164,11 @@ func TestShellCommandLauncherDoesNotExecuteAndAndOrInLabels(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// Labels are comma-joined; the injected value should appear verbatim in args.
-	assertLiteralArg(t, runner.Calls[0].Args, label, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, label, sentinel)
 }
 
 // TestNewlineInAssigneeIsStripped asserts that \n in a field value is stripped
@@ -195,12 +195,12 @@ func TestNewlineInAssigneeIsStripped(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// \n must be stripped; the sanitised value must NOT contain a newline.
 	stripped := fmt.Sprintf("hanstouch %s", sentinel)
-	assertLiteralArg(t, runner.Calls[0].Args, stripped, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, stripped, sentinel)
 }
 
 // TestNewlineInTitleIsStrippedFromArgv asserts that a title containing \n has
@@ -223,11 +223,11 @@ func TestNewlineInTitleIsStrippedFromArgv(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// \n is a C0 char and must be stripped; argv receives the joined form.
-	assertLiteralArg(t, runner.Calls[0].Args, "line1line2", "")
+	assertLiteralArg(t, runner.Calls()[0].Args, "line1line2", "")
 }
 
 // TestANSIEscapeInTitleIsStrippedFromArgv asserts that \x1b (ESC) in a field
@@ -250,11 +250,11 @@ func TestANSIEscapeInTitleIsStrippedFromArgv(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// \x1b (ESC, 0x1b) is a C0 control char and must be stripped.
-	assertLiteralArg(t, runner.Calls[0].Args, "danger", "")
+	assertLiteralArg(t, runner.Calls()[0].Args, "danger", "")
 }
 
 // TestEnvEntryMissingEqualsIsRejected asserts that an Env template that
@@ -278,8 +278,8 @@ func TestEnvEntryMissingEqualsIsRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for env entry without '=', got nil")
 	}
-	if len(runner.Calls) != 0 {
-		t.Fatalf("runner must not be called when env validation fails, got %d calls", len(runner.Calls))
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("runner must not be called when env validation fails, got %d calls", len(runner.Calls()))
 	}
 }
 

@@ -19,7 +19,7 @@ type FakeLauncher struct {
 	mu sync.Mutex
 
 	Err   error
-	Calls []LauncherCall
+	calls []LauncherCall
 }
 
 var _ launcher.Service = (*FakeLauncher)(nil)
@@ -29,6 +29,17 @@ func (f *FakeLauncher) Launch(_ context.Context, action string, issue domain.Iss
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.Calls = append(f.Calls, LauncherCall{Action: action, Issue: issue})
+	f.calls = append(f.calls, LauncherCall{Action: action, Issue: issue})
 	return f.Err
+}
+
+// Calls returns a snapshot of the calls recorded so far, in order. It takes
+// the same lock the recording path does, so a test reading it while the
+// component under test is still running cannot race.
+func (f *FakeLauncher) Calls() []LauncherCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]LauncherCall, len(f.calls))
+	copy(out, f.calls)
+	return out
 }

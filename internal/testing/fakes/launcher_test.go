@@ -19,12 +19,12 @@ func TestFakeLauncherRecordsActionAndIssue(t *testing.T) {
 		t.Fatalf("Launch returned error: %v", err)
 	}
 
-	if len(fake.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(fake.Calls))
+	if len(fake.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(fake.Calls()))
 	}
 
-	if fake.Calls[0].Action != "open-editor" || fake.Calls[0].Issue.Summary.ID != "tm-9" {
-		t.Fatalf("unexpected call payload: %#v", fake.Calls[0])
+	if fake.Calls()[0].Action != "open-editor" || fake.Calls()[0].Issue.Summary.ID != "tm-9" {
+		t.Fatalf("unexpected call payload: %#v", fake.Calls()[0])
 	}
 }
 

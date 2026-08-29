@@ -17,6 +17,7 @@ import (
 
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // searchReloadKeyMsg returns a tea.KeyMsg for the 'r' key (the SearchActionReload default).
@@ -90,7 +91,7 @@ func TestSearchManualReloadIgnoredWhileInFlight(t *testing.T) {
 
 	// Execute the first Cmd's closure to record repository calls (but don't apply
 	// the returned messages to the model yet — leaving it "in flight").
-	firstMsgs := drainCmd(firstCmd)
+	firstMsgs := testui.DrainCmd(firstCmd)
 	callsAfterFirst := countSearchCalls(eir.Calls()[callsBefore:])
 	if callsAfterFirst != 1 {
 		t.Fatalf("first reload: expected exactly 1 Search call, got %d", callsAfterFirst)
@@ -109,7 +110,7 @@ func TestSearchManualReloadIgnoredWhileInFlight(t *testing.T) {
 	if callsFromSecond != 0 {
 		// Execute the second batch to count calls.
 		if secondCmd != nil {
-			secondMsgs := drainCmd(secondCmd)
+			secondMsgs := testui.DrainCmd(secondCmd)
 			_ = secondMsgs
 		}
 		t.Errorf("second reload: expected 0 new Search calls while in-flight, got %d", callsFromSecond)
@@ -124,7 +125,7 @@ func TestSearchManualReloadIgnoredWhileInFlight(t *testing.T) {
 
 	// Assert 3: second Update must return nil Cmd (no new repository batch).
 	if secondCmd != nil {
-		secondMsgs := drainCmd(secondCmd)
+		secondMsgs := testui.DrainCmd(secondCmd)
 		_ = secondMsgs
 		t.Errorf("second reload: expected nil Cmd (no new repository batch) while in-flight, got non-nil Cmd")
 	}

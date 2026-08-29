@@ -396,15 +396,15 @@ func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeEditor.Calls) != 1 {
-		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	if len(fakeEditor.Calls()) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls()))
 	}
-	if fakeEditor.Calls[0].IssueID != "tm-1" {
-		t.Fatalf("expected selected issue tm-1, got %q", fakeEditor.Calls[0].IssueID)
+	if fakeEditor.Calls()[0].IssueID != "tm-1" {
+		t.Fatalf("expected selected issue tm-1, got %q", fakeEditor.Calls()[0].IssueID)
 	}
 
-	if len(fakeLauncher.Calls) != 0 {
-		t.Fatalf("expected edit hotkey to avoid launcher service, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 0 {
+		t.Fatalf("expected edit hotkey to avoid launcher service, got %#v", fakeLauncher.Calls())
 	}
 }
 
@@ -439,8 +439,8 @@ func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 		t.Fatalf("expected editor failure toast, got:\n%s", view)
 	}
 
-	if len(fakeLauncher.Calls) != 0 {
-		t.Fatalf("expected no launcher calls when editor fails, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 0 {
+		t.Fatalf("expected no launcher calls when editor fails, got %#v", fakeLauncher.Calls())
 	}
 }
 
@@ -507,11 +507,11 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 	m = applyMessages(t, m, runBatch(applyCmd))
 
-	if len(fakeEditor.Calls) != 1 {
-		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	if len(fakeEditor.Calls()) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls()))
 	}
-	if fakeEditor.Calls[0].IssueID != "tm-9" {
-		t.Fatalf("expected editor call for tm-9, got %q", fakeEditor.Calls[0].IssueID)
+	if fakeEditor.Calls()[0].IssueID != "tm-9" {
+		t.Fatalf("expected editor call for tm-9, got %q", fakeEditor.Calls()[0].IssueID)
 	}
 
 	if !gw.hasCallSince(mark, fakes.MethodIssue) {
@@ -563,15 +563,15 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if len(fakeEditor.Calls) != 1 {
-		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	if len(fakeEditor.Calls()) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls()))
 	}
-	if fakeEditor.Calls[0].IssueID != "tm-9" {
-		t.Fatalf("expected selected detail issue tm-9, got %q", fakeEditor.Calls[0].IssueID)
+	if fakeEditor.Calls()[0].IssueID != "tm-9" {
+		t.Fatalf("expected selected detail issue tm-9, got %q", fakeEditor.Calls()[0].IssueID)
 	}
 
-	if len(fakeLauncher.Calls) != 0 {
-		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 0 {
+		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls())
 	}
 
 	if gw.hasCallSince(mark, fakes.MethodIssue) {
@@ -603,8 +603,8 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeLauncher.Calls) != 1 || fakeLauncher.Calls[0].Action != "nvim" {
-		t.Fatalf("expected nvim launcher call before toast assertion, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 1 || fakeLauncher.Calls()[0].Action != "nvim" {
+		t.Fatalf("expected nvim launcher call before toast assertion, got %#v", fakeLauncher.Calls())
 	}
 
 	next, _ = m.Update(launchActionResultMsg{action: "nvim", err: nil})
@@ -616,11 +616,11 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeLauncher.Calls) != 3 {
-		t.Fatalf("expected 3 launcher calls, got %d", len(fakeLauncher.Calls))
+	if len(fakeLauncher.Calls()) != 3 {
+		t.Fatalf("expected 3 launcher calls, got %d", len(fakeLauncher.Calls()))
 	}
 
-	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
+	actions := []string{fakeLauncher.Calls()[0].Action, fakeLauncher.Calls()[1].Action, fakeLauncher.Calls()[2].Action}
 	if actions[0] != "nvim" || actions[1] != "opencode" || actions[2] != "shell-command" {
 		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
 	}

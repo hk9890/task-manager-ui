@@ -47,11 +47,11 @@ func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
 		t.Fatalf("Launch returned error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected exactly one process run, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected exactly one process run, got %d", len(runner.Calls()))
 	}
 
-	call := runner.Calls[0]
+	call := runner.Calls()[0]
 	if call.Command != "tool-tm-77" {
 		t.Fatalf("expected interpolated command, got %q", call.Command)
 	}
@@ -85,8 +85,8 @@ func TestServiceLaunchDefaultsWorkDirToProjectRoot(t *testing.T) {
 		t.Fatalf("Launch returned error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 || runner.Calls[0].Dir != "/repo/root" {
-		t.Fatalf("expected default workdir /repo/root, got %#v", runner.Calls)
+	if len(runner.Calls()) != 1 || runner.Calls()[0].Dir != "/repo/root" {
+		t.Fatalf("expected default workdir /repo/root, got %#v", runner.Calls())
 	}
 }
 
@@ -147,12 +147,12 @@ func TestServiceBuiltInDefinitionsForV1Actions(t *testing.T) {
 		t.Fatalf("Launch shell-command returned error: %v", err)
 	}
 
-	if len(runner.Calls) != 3 {
-		t.Fatalf("expected three launch calls, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 3 {
+		t.Fatalf("expected three launch calls, got %d", len(runner.Calls()))
 	}
 
-	if runner.Calls[0].Command != "nvim" || runner.Calls[1].Command != "opencode" || runner.Calls[2].Command != "sh" {
-		t.Fatalf("unexpected built-in launcher commands: %#v", runner.Calls)
+	if runner.Calls()[0].Command != "nvim" || runner.Calls()[1].Command != "opencode" || runner.Calls()[2].Command != "sh" {
+		t.Fatalf("unexpected built-in launcher commands: %#v", runner.Calls())
 	}
 }
 

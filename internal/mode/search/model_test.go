@@ -150,7 +150,7 @@ func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
 	}
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = applyMessages(m, drainCmd(cmd))
+	m = applyMessages(m, testui.DrainCmd(cmd))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
 		t.Fatalf("expected down to move selection to tm-2, got %#v", got)
 	}
@@ -189,7 +189,7 @@ func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	if cmd != nil {
-		m = applyMessages(m, drainCmd(cmd))
+		m = applyMessages(m, testui.DrainCmd(cmd))
 	}
 	if m.focus != uisearch.FocusQuery {
 		t.Fatalf("expected up on first result to return focus to query, got %v", m.focus)
@@ -369,7 +369,7 @@ func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
 
 	callsBefore := len(gw.Calls())
 	cmd := m.Reload()
-	m = applyMessages(m, drainCmd(cmd))
+	m = applyMessages(m, testui.DrainCmd(cmd))
 
 	newCalls := gw.Calls()[callsBefore:]
 	if !hasSearchCall(newCalls) {
@@ -411,7 +411,7 @@ func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
 	}
 
 	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = applyMessages(m, drainCmd(cmd))
+	m = applyMessages(m, testui.DrainCmd(cmd))
 	newCalls := gw.Calls()[callsBefore:]
 	if countSearchCalls(newCalls) != 1 {
 		t.Fatalf("expected exactly one enter-triggered search call, got %d (%#v)", countSearchCalls(newCalls), newCalls)
@@ -444,7 +444,7 @@ func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.
 
 	callsBefore := len(gw.Calls())
 	cmd := m.AutoRefresh()
-	m = applyMessages(m, drainCmd(cmd))
+	m = applyMessages(m, testui.DrainCmd(cmd))
 
 	newCalls := gw.Calls()[callsBefore:]
 	if !hasSearchCall(newCalls) {
@@ -591,7 +591,7 @@ func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T)
 	}
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
-	m = applyMessages(m, drainCmd(cmd))
+	m = applyMessages(m, testui.DrainCmd(cmd))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
 		t.Fatalf("expected configured move-down binding to select tm-2, got %#v", got)
 	}
@@ -648,35 +648,11 @@ func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
 func applyMessages(m *Model, msgs []tea.Msg) *Model {
 	for _, msg := range msgs {
 		cmd := m.Update(msg)
-		for _, follow := range drainCmd(cmd) {
+		for _, follow := range testui.DrainCmd(cmd) {
 			_ = m.Update(follow)
 		}
 	}
 	return m
-}
-
-func drainCmd(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-
-	queue := []tea.Msg{cmd()}
-	var out []tea.Msg
-	for len(queue) > 0 {
-		msg := queue[0]
-		queue = queue[1:]
-		if batch, ok := msg.(tea.BatchMsg); ok {
-			for _, nested := range batch {
-				if nested != nil {
-					queue = append(queue, nested())
-				}
-			}
-			continue
-		}
-		out = append(out, msg)
-	}
-
-	return out
 }
 
 func TestSearchItemCapacity(t *testing.T) {

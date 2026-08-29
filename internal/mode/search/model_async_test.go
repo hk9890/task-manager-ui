@@ -42,6 +42,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // ---- queryRecordingRepo ----
@@ -222,7 +223,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		initMsg := <-initMsgCh
 		cmd := m.Update(initMsg)
 		// drain selectionChangedCmd
-		for _, msg := range drainCmd(cmd) {
+		for _, msg := range testui.DrainCmd(cmd) {
 			_ = m.Update(msg)
 		}
 
@@ -370,7 +371,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		taskMsg := <-taskMsgCh
 		// Deliver the result; drain any follow-up Cmds (e.g. selectionChangedCmd).
 		followCmd := m.Update(taskMsg)
-		for _, msg := range drainCmd(followCmd) {
+		for _, msg := range testui.DrainCmd(followCmd) {
 			_ = m.Update(msg)
 		}
 

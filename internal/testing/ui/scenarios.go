@@ -69,20 +69,25 @@ func SearchTypeTextKeys(text string) []tea.KeyMsg {
 
 func applyCmd(model tea.Model, cmd tea.Cmd) tea.Model {
 	current := model
-	queue := drainCmd(cmd)
+	queue := DrainCmd(cmd)
 	for len(queue) > 0 {
 		msg := queue[0]
 		queue = queue[1:]
 
 		next, nested := current.Update(msg)
 		current = next
-		queue = append(queue, drainCmd(nested)...)
+		queue = append(queue, DrainCmd(nested)...)
 	}
 
 	return current
 }
 
-func drainCmd(cmd tea.Cmd) []tea.Msg {
+// DrainCmd runs cmd to completion and returns the flat list of non-batch
+// messages it produced, expanding nested tea.BatchMsg values breadth-first.
+//
+// Exported because two mode test packages cannot reach an unexported helper and
+// had each re-implemented the same queue loop.
+func DrainCmd(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}

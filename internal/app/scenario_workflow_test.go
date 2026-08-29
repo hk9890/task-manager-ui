@@ -108,8 +108,8 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 	}
 
 	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}).(Model)
-	if len(fakeEditor.Calls) != 1 || fakeEditor.Calls[0].IssueID != "tm-1" {
-		t.Fatalf("expected edit seam call for tm-1, got %#v", fakeEditor.Calls)
+	if len(fakeEditor.Calls()) != 1 || fakeEditor.Calls()[0].IssueID != "tm-1" {
+		t.Fatalf("expected edit seam call for tm-1, got %#v", fakeEditor.Calls())
 	}
 
 	m = testui.ApplyKeySequence(m,
@@ -118,10 +118,10 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")},
 	).(Model)
 
-	if len(fakeLauncher.Calls) != 3 {
-		t.Fatalf("expected 3 launcher seam calls, got %d", len(fakeLauncher.Calls))
+	if len(fakeLauncher.Calls()) != 3 {
+		t.Fatalf("expected 3 launcher seam calls, got %d", len(fakeLauncher.Calls()))
 	}
-	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
+	actions := []string{fakeLauncher.Calls()[0].Action, fakeLauncher.Calls()[1].Action, fakeLauncher.Calls()[2].Action}
 	if strings.Join(actions, ",") != "nvim,opencode,shell-command" {
 		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
 	}

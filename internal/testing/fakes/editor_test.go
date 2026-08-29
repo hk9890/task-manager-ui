@@ -25,8 +25,8 @@ func TestFakeEditorPrepareDocumentReturnsConfiguredResult(t *testing.T) {
 		t.Fatalf("expected non-empty TempPath")
 	}
 
-	if len(fake.Calls) != 1 || fake.Calls[0].IssueID != "tm-1" {
-		t.Fatalf("unexpected recorded calls: %#v", fake.Calls)
+	if len(fake.Calls()) != 1 || fake.Calls()[0].IssueID != "tm-1" {
+		t.Fatalf("unexpected recorded calls: %#v", fake.Calls())
 	}
 }
 
