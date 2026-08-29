@@ -20,12 +20,18 @@ import (
 
 // Model is the shell-owned standalone detail presentation state.
 type Model struct {
-	SelectionID           string
-	TargetID              string
+	// selectionID, targetID, loading and errText are the load protocol. They
+	// are written together, in order, and only by BeginLoad and FinishLoad —
+	// unexported so an incomplete fifth copy of that sequence fails to compile
+	// rather than compiling and misbehaving. Read them through SelectionID(),
+	// TargetID(), IsLoading() and Error().
+	selectionID string
+	targetID    string
+	loading     bool
+	errText     string
+
 	Detail                domain.IssueDetail
 	PreviewDetail         domain.IssueDetail
-	Loading               bool
-	Error                 string
 	Keys                  config.ResolvedKeyBindings
 	FocusPane             detail.FocusPane
 	MetadataSelectedField detail.MetadataFieldKey
@@ -56,14 +62,102 @@ type OpenRelatedIssueIntent struct {
 	Ref     domain.IssueReference
 }
 
-// SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation.
-// Call this before applying the optimistic placeholder on an Enter-drill so that:
+// BeginLoadOptions tunes one BeginLoad call.
+type BeginLoadOptions struct {
+	// Ref seeds an optimistic placeholder detail so the header and core
+	// metadata render immediately instead of waiting for the repository. Nil
+	// leaves whatever is on screen in place, which is what a refresh of the
+	// issue already shown wants.
+	Ref *domain.IssueReference
+
+	// Drill marks a drill-in from the Dependencies rail. It keeps focus on that
+	// rail across the placeholder and the real load, and always seeds the
+	// placeholder, because the target is a different issue by definition.
+	Drill bool
+}
+
+// BeginLoad starts a load of issueID and returns whether anything changed.
+//
+// It owns the whole protocol: the selection and target writes, the loading
+// flag, the error clear, the browser-row sync, the drill-focus decision and the
+// placeholder policy. The shell used to perform these five writes in the right
+// order at four call sites, and the copies had already drifted — the drill-in
+// path skipped SelectBrowserIssue.
+//
+// loadingStates() reads the loading flag to drive the header spinner, so
+// BeginLoad must be what precedes every loadDetailCmd.
+func (m *Model) BeginLoad(issueID string, opts BeginLoadOptions) {
+	issueID = strings.TrimSpace(issueID)
+	if issueID == "" {
+		return
+	}
+
+	m.selectionID = issueID
+
+	if opts.Drill {
+		m.targetID = issueID
+		m.loading = true
+		m.errText = ""
+		m.SetDrillFromDepsFocus()
+		if opts.Ref != nil {
+			m.ApplyLoadedDetail(issueID, PlaceholderDetail(issueID, *opts.Ref, true))
+		}
+		return
+	}
+
+	m.SelectBrowserIssue(issueID)
+
+	// Seed the placeholder only when the target issue actually changes, so a
+	// refresh of the issue already on screen keeps its content and scroll
+	// offsets while the spinner runs.
+	if opts.Ref != nil && strings.TrimSpace(m.Detail.Summary.ID) != issueID {
+		// A browse selection change supersedes any pending drill-focus sequence.
+		m.ClearDrillFocus()
+		m.ApplyLoadedDetail(issueID, PlaceholderDetail(issueID, *opts.Ref, true))
+	}
+
+	m.loading = true
+	m.errText = ""
+	m.targetID = issueID
+}
+
+// FinishLoad closes the load BeginLoad opened. err non-nil records the failure
+// and clears the stale detail; nil clears any previous error.
+func (m *Model) FinishLoad(err error) {
+	m.loading = false
+	if err != nil {
+		m.Detail = domain.IssueDetail{}
+		m.errText = err.Error()
+		// Clear any pending drill-focus counter so a later load is not treated
+		// as the real-data leg of a drill sequence.
+		m.ClearDrillFocus()
+		return
+	}
+	m.errText = ""
+}
+
+// SelectionID is the issue the shell considers selected for detail.
+func (m *Model) SelectionID() string { return m.selectionID }
+
+// TargetID is the issue the in-flight load is for.
+func (m *Model) TargetID() string { return m.targetID }
+
+// IsLoading reports whether a detail load is in flight.
+func (m *Model) IsLoading() bool { return m.loading }
+
+// Error is the last load failure, or "" when the last load succeeded.
+func (m *Model) Error() string { return m.errText }
+
+// Reset returns the model to its zero state, dropping any in-flight load.
+func (m *Model) Reset() { *m = Model{Keys: m.Keys} }
+
+// SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation
+// so that:
 //   - the placeholder call does not flip focus away from the Dependencies rail, and
 //   - the real data load sets focus to Dependencies if the rail is non-empty, or to
 //     Content if the drilled issue has no dependencies.
 //
-// The caller must set Loading=true before calling ApplyLoadedDetail with the placeholder
-// so the two-call sequence (placeholder, real data) is correctly distinguished.
+// BeginLoad calls this for a drill; callers go through BeginLoad rather than here.
 func (m *Model) SetDrillFromDepsFocus() {
 	m.drillDepsFocusCalls = 2
 }
@@ -119,7 +213,7 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
 	d := m.RenderDetail()
-	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
+	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
 	// skeleton=true in two cases:
 	// 1. preview path: target differs from selection and preview detail has not yet loaded.
 	// 2. direct-nav path: a load is in flight and only the placeholder summary is
@@ -127,7 +221,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 	//    the user sees "(no description)" / "(none)" fallbacks during the in-flight
 	//    window, which misrepresents loading state as empty content.
 	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
-	directNavSkeleton := m.Loading && !m.isPreviewingTarget() &&
+	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
 		strings.TrimSpace(m.Detail.Description) == "" &&
 		len(m.Detail.Comments) == 0 &&
 		len(m.Detail.BlockedBy) == 0 &&
@@ -137,8 +231,8 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 
 	if compact || viewportHeight <= 0 {
 		return detail.Render(detail.State{
-			SelectionID: m.SelectionID,
-			TargetID:    m.TargetID,
+			SelectionID: m.selectionID,
+			TargetID:    m.targetID,
 			Detail:      d,
 			QuickActions: detail.QuickActionLabels{
 				EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
@@ -150,15 +244,15 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 			Loading:       blockingLoad,
 			Skeleton:      skeletonContent,
 			SkeletonPhase: skeletonPhase,
-			Error:         m.Error,
+			Error:         m.errText,
 			Width:         maxWidth,
 			Compact:       compact,
 		})
 	}
 
 	return detail.Render(detail.State{
-		SelectionID: m.SelectionID,
-		TargetID:    m.TargetID,
+		SelectionID: m.selectionID,
+		TargetID:    m.targetID,
 		Detail:      d,
 		QuickActions: detail.QuickActionLabels{
 			EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
@@ -174,7 +268,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		Loading:                  blockingLoad,
 		Skeleton:                 skeletonContent,
 		SkeletonPhase:            skeletonPhase,
-		Error:                    m.Error,
+		Error:                    m.errText,
 		Width:                    maxWidth,
 		Height:                   viewportHeight,
 		Compact:                  false,
@@ -427,7 +521,7 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 // dependency-browser context anchored to the selected issue.
 func (m *Model) RenderDetail() domain.IssueDetail {
 	content := m.Detail
-	if targetID := strings.TrimSpace(m.TargetID); targetID != "" && targetID != strings.TrimSpace(m.SelectionID) {
+	if targetID := strings.TrimSpace(m.targetID); targetID != "" && targetID != strings.TrimSpace(m.selectionID) {
 		if strings.TrimSpace(m.PreviewDetail.Summary.ID) == targetID {
 			content = m.PreviewDetail
 		} else {
@@ -445,11 +539,11 @@ func (m *Model) RenderDetail() domain.IssueDetail {
 }
 
 func (m *Model) isPreviewingTarget() bool {
-	targetID := strings.TrimSpace(m.TargetID)
+	targetID := strings.TrimSpace(m.targetID)
 	if targetID == "" {
 		return false
 	}
-	return targetID != strings.TrimSpace(m.SelectionID)
+	return targetID != strings.TrimSpace(m.selectionID)
 }
 
 func (m *Model) browserReferenceByID(issueID string) (domain.IssueReference, bool) {

@@ -180,8 +180,8 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 		t.Errorf("expected BrowserSelectedIndex to advance after down, still at %d", prevIndex)
 	}
 	// Selection stays anchored; no TargetID change from the arrow alone.
-	if m.detail.SelectionID != "tm-1" {
-		t.Errorf("expected SelectionID to remain tm-1 after arrow, got %q", m.detail.SelectionID)
+	if m.detail.SelectionID() != "tm-1" {
+		t.Errorf("expected SelectionID to remain tm-1 after arrow, got %q", m.detail.SelectionID())
 	}
 	if got := firstSelectionID(m, mode.Board); got != "tm-1" {
 		t.Errorf("expected board selection to stay anchored on tm-1, got %q", got)
@@ -209,8 +209,8 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "tm-7,tm-8,tm-0" {
 		t.Errorf("expected drilled issue's deps+parent in browser, got %v", got)
 	}
-	if m.detail.SelectionID != "tm-6" {
-		t.Errorf("expected SelectionID to follow the drill to tm-6, got %q", m.detail.SelectionID)
+	if m.detail.SelectionID() != "tm-6" {
+		t.Errorf("expected SelectionID to follow the drill to tm-6, got %q", m.detail.SelectionID())
 	}
 }
 
@@ -294,13 +294,13 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 		t.Errorf("expected Enter on dependencies pane to trigger repository.Issue call, calls=%#v", gw.Calls())
 	}
 	// TargetID must point to the cursor row (tm-4).
-	if m.detail.TargetID != "tm-4" {
-		t.Errorf("expected Enter to set TargetID=tm-4 (cursor row), got %q", m.detail.TargetID)
+	if m.detail.TargetID() != "tm-4" {
+		t.Errorf("expected Enter to set TargetID=tm-4 (cursor row), got %q", m.detail.TargetID())
 	}
 	// Drilling is a full navigation: SelectionID now follows the target so the
 	// Dependencies pane (and all panes) reflect tm-4, not the issue we came from.
-	if m.detail.SelectionID != "tm-4" {
-		t.Errorf("expected SelectionID to follow the drill to tm-4, got %q", m.detail.SelectionID)
+	if m.detail.SelectionID() != "tm-4" {
+		t.Errorf("expected SelectionID to follow the drill to tm-4, got %q", m.detail.SelectionID())
 	}
 }
 
@@ -342,8 +342,8 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.detail.SelectionID != "tm-epic" || m.detail.Detail.Summary.ID != "tm-epic" {
-		t.Fatalf("setup: expected epic detail, got selection=%q detail=%q", m.detail.SelectionID, m.detail.Detail.Summary.ID)
+	if m.detail.SelectionID() != "tm-epic" || m.detail.Detail.Summary.ID != "tm-epic" {
+		t.Fatalf("setup: expected epic detail, got selection=%q detail=%q", m.detail.SelectionID(), m.detail.Detail.Summary.ID)
 	}
 	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "tm-child" {
 		t.Fatalf("expected epic deps pane to list its child, got %v", got)
@@ -357,8 +357,8 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if m.detail.SelectionID != "tm-child" || m.detail.Detail.Summary.ID != "tm-child" {
-		t.Fatalf("expected to land on the child, got selection=%q detail=%q", m.detail.SelectionID, m.detail.Detail.Summary.ID)
+	if m.detail.SelectionID() != "tm-child" || m.detail.Detail.Summary.ID != "tm-child" {
+		t.Fatalf("expected to land on the child, got selection=%q detail=%q", m.detail.SelectionID(), m.detail.Detail.Summary.ID)
 	}
 	// The fix: the child's Dependencies pane now shows its OWN Parent group.
 	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "tm-epic" {
@@ -373,8 +373,8 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if m.detail.SelectionID != "tm-epic" || m.detail.Detail.Summary.ID != "tm-epic" {
-		t.Fatalf("expected round-trip back to the epic, got selection=%q detail=%q", m.detail.SelectionID, m.detail.Detail.Summary.ID)
+	if m.detail.SelectionID() != "tm-epic" || m.detail.Detail.Summary.ID != "tm-epic" {
+		t.Fatalf("expected round-trip back to the epic, got selection=%q detail=%q", m.detail.SelectionID(), m.detail.Detail.Summary.ID)
 	}
 	if got := browserIDs(m.detail.BrowserItems); strings.Join(got, ",") != "tm-child" {
 		t.Fatalf("expected epic deps pane to list its child again after round-trip, got %v", got)
@@ -751,9 +751,7 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 	// Put the model into Detail mode with tm-1 loaded and non-zero scroll offsets.
 	m.active = mode.Detail
 	m.detail = detail.Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
-		FocusPane:   uidetail.FocusPaneDependencies,
+		FocusPane: uidetail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
 			Children: []domain.IssueReference{{ID: "tm-child", Title: "Child issue"}},
@@ -767,6 +765,11 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 		DependenciesScrollOffset: 1,
 		Keys:                     m.keys,
 	}
+	// Stage "tm-1 is loaded" through the real protocol. SelectBrowserIssue does
+	// not find tm-1 among the browser items, so the cursor normalises back to
+	// tm-child, which is what this test drives Enter on.
+	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
+	m.detail.FinishLoad(nil)
 	m.sizeKnown = true
 	m.width = 160
 	m.height = 34
@@ -778,10 +781,10 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 	m = next.(Model)
 
 	// (Q6c) App handler must: set TargetID, Loading=true, reset all scroll offsets.
-	if m.detail.TargetID != "tm-child" {
-		t.Errorf("expected TargetID=tm-child after Enter on dep pane, got %q", m.detail.TargetID)
+	if m.detail.TargetID() != "tm-child" {
+		t.Errorf("expected TargetID=tm-child after Enter on dep pane, got %q", m.detail.TargetID())
 	}
-	if !m.detail.Loading {
+	if !m.detail.IsLoading() {
 		t.Error("expected detail.Loading=true after Enter on dep pane")
 	}
 	if m.detail.ContentScrollOffset != 0 {
@@ -827,9 +830,7 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 	m := mustNewModel(t, services)
 	m.active = mode.Detail
 	m.detail = detail.Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
-		FocusPane:   uidetail.FocusPaneDependencies,
+		FocusPane: uidetail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
 			Children: []domain.IssueReference{{ID: "tm-child", Title: "Child issue"}},
@@ -885,9 +886,7 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 	m := mustNewModel(t, services)
 	m.active = mode.Detail
 	m.detail = detail.Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
-		FocusPane:   uidetail.FocusPaneDependencies,
+		FocusPane: uidetail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-1", Title: "Main issue", Status: "open", Type: "epic", Priority: 1},
 			Children: []domain.IssueReference{{ID: "tm-leaf", Title: "Leaf issue"}},
@@ -1020,8 +1019,8 @@ func TestModelAutoRefreshKeepsTheDrilledIssueOnScreen(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected the detail surface to refresh")
 	}
-	if m.detail.TargetID != "tm-child" {
-		t.Errorf("auto-refresh retargeted detail to %q, want tm-child", m.detail.TargetID)
+	if m.detail.TargetID() != "tm-child" {
+		t.Errorf("auto-refresh retargeted detail to %q, want tm-child", m.detail.TargetID())
 	}
 
 	m = applyMessages(t, m, runBatch(cmd))
@@ -1075,7 +1074,7 @@ func TestModelReloadDetailKeyIssuesALoad(t *testing.T) {
 	if !gw.hasCallSince(mark, fakes.MethodIssue) {
 		t.Error("the reload key issued no repository.Issue call")
 	}
-	if m.detail.Loading {
+	if m.detail.IsLoading() {
 		t.Error("detail is still loading after the reload resolved")
 	}
 	if m.detail.Detail.Summary.ID != "tm-child" {

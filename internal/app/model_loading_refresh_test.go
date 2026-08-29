@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -486,11 +487,10 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 		t.Fatalf("expected board active after init, got %s", m.active)
 	}
 
-	m.detail.SelectionID = "tm-3"
-	m.detail.TargetID = "tm-3"
+	// Stage "a completed load of tm-3 is on screen" through the real protocol.
+	m.detail.BeginLoad("tm-3", detail.BeginLoadOptions{})
 	m.detail.Detail = domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked"}, Description: "cached detail"}
-	m.detail.Error = ""
-	m.detail.Loading = false
+	m.detail.FinishLoad(nil)
 
 	mark := gw.resetMark()
 	next, cmd := m.Update(refreshTickMsg{})
@@ -531,11 +531,10 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 		t.Fatalf("expected search active before refresh, got %s", m.active)
 	}
 
-	m.detail.SelectionID = "tm-9"
-	m.detail.TargetID = "tm-9"
+	// Stage "a completed load of tm-9 is on screen" through the real protocol.
+	m.detail.BeginLoad("tm-9", detail.BeginLoadOptions{})
 	m.detail.Detail = domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "Search result", Status: "open"}, Description: "cached detail"}
-	m.detail.Error = ""
-	m.detail.Loading = false
+	m.detail.FinishLoad(nil)
 
 	mark := gw.resetMark()
 	next, cmd = m.Update(refreshTickMsg{})
@@ -697,8 +696,8 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	mark = gw.resetMark()
 	m.showActionModal = false
 	m.active = mode.Detail
-	m.detail.Loading = true
-	m.detail.TargetID = firstSelectionID(m, mode.Board)
+	// Stage "a detail load is in flight" through the real protocol.
+	m.detail.BeginLoad(firstSelectionID(m, mode.Board), detail.BeginLoadOptions{})
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))

@@ -144,11 +144,11 @@ func (m *Model) syncSearchPreviewDetailState() {
 	}
 
 	selectedID := strings.TrimSpace(selection.Issue.ID)
-	if m.detail.Loading && strings.TrimSpace(m.detail.TargetID) == selectedID {
+	if m.detail.IsLoading() && strings.TrimSpace(m.detail.TargetID()) == selectedID {
 		m.search.SetSelectedDetail(domain.IssueDetail{}, true)
 		return
 	}
-	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.Loading && strings.TrimSpace(m.detail.Error) == "" {
+	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.IsLoading() && strings.TrimSpace(m.detail.Error()) == "" {
 		m.search.SetSelectedDetail(m.detail.Detail, false)
 		return
 	}
@@ -200,8 +200,8 @@ func (m Model) loadingStates() []loading.State {
 	if m.searchIsLoading() {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
 	}
-	if m.detail.Loading {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID})
+	if m.detail.IsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID()})
 	}
 	return loadingStates
 }
@@ -229,7 +229,7 @@ func (m Model) headerContextVariants() []string {
 	if m.active == mode.Detail {
 		id := strings.TrimSpace(m.detail.Detail.Summary.ID)
 		if id == "" {
-			id = strings.TrimSpace(m.detail.SelectionID)
+			id = strings.TrimSpace(m.detail.SelectionID())
 		}
 		status := strings.TrimSpace(m.detail.Detail.Summary.Status)
 		if id != "" && status != "" {

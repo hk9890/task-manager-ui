@@ -84,8 +84,8 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		m = next.(Model)
 	}
 
-	if m.detail.TargetID != "tm-2" {
-		t.Fatalf("expected detail target to track board selection, got %q", m.detail.TargetID)
+	if m.detail.TargetID() != "tm-2" {
+		t.Fatalf("expected detail target to track board selection, got %q", m.detail.TargetID())
 	}
 }
 
@@ -503,8 +503,8 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 	if m.active != mode.Detail {
 		t.Fatalf("expected enter in docs to open detail, got %s", m.active)
 	}
-	if m.detail.TargetID != "tm-9" && m.detail.Detail.Summary.ID != "tm-9" {
-		t.Fatalf("expected detail to track the selected doc, target=%q detail=%q", m.detail.TargetID, m.detail.Detail.Summary.ID)
+	if m.detail.TargetID() != "tm-9" && m.detail.Detail.Summary.ID != "tm-9" {
+		t.Fatalf("expected detail to track the selected doc, target=%q detail=%q", m.detail.TargetID(), m.detail.Detail.Summary.ID)
 	}
 
 	// Escape returns to the tab we drilled in from.

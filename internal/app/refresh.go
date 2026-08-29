@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 )
 
 func (m *Model) maybeAutoRefreshActiveSurfaceCmd() tea.Cmd {
@@ -48,7 +49,7 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 		m.markSurfaceRefreshed(mode.Search)
 		return m.search.AutoRefresh()
 	case mode.Detail:
-		if m.detail.Loading {
+		if m.detail.IsLoading() {
 			return nil
 		}
 		return m.reloadDetailCmd()
@@ -69,11 +70,7 @@ func (m *Model) reloadDetailCmd() tea.Cmd {
 	if selection == nil || selection.Issue.ID == "" {
 		return nil
 	}
-	m.detail.SelectionID = selection.Issue.ID
-	m.detail.SelectBrowserIssue(selection.Issue.ID)
-	m.detail.Loading = true
-	m.detail.Error = ""
-	m.detail.TargetID = selection.Issue.ID
+	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{})
 	m.markSurfaceRefreshed(mode.Detail)
 	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
 }

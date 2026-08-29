@@ -310,8 +310,8 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 
 	// Drain the detail load so Detail reflects the preserved selection.
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.detail.TargetID != "tm-1" && m.detail.Detail.Summary.ID != "tm-1" {
-		t.Fatalf("expected Detail to track tm-1 selection, target=%q detail=%q", m.detail.TargetID, m.detail.Detail.Summary.ID)
+	if m.detail.TargetID() != "tm-1" && m.detail.Detail.Summary.ID != "tm-1" {
+		t.Fatalf("expected Detail to track tm-1 selection, target=%q detail=%q", m.detail.TargetID(), m.detail.Detail.Summary.ID)
 	}
 
 	// Escape must return to the tab we drilled in from, not stay stuck in Detail.

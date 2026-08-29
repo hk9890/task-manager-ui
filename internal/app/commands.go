@@ -9,6 +9,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
@@ -133,11 +134,7 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 		return m, batchCmds(modeCmd, toastCmd)
 	}
 
-	m.detail.SelectionID = selection.Issue.ID
-	m.detail.SelectBrowserIssue(selection.Issue.ID)
-	m.detail.Loading = true
-	m.detail.Error = ""
-	m.detail.TargetID = selection.Issue.ID
+	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{})
 	toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
 	notifyEditResult()
 	return m, batchCmds(modeCmd,

@@ -458,12 +458,13 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	}
 	m.active = mode.Detail
 	m.detail = detail.Model{
-		SelectionID: "tm-1",
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-1", Title: "Issue one", Status: "open", Type: "task", Priority: 1},
 			Description: strings.Join(longLines, "\n"),
 		},
 	}
+	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
+	m.detail.FinishLoad(nil)
 
 	detailBody := m.renderBody()
 	if strings.Contains(detailBody, "Issue Detail") {
@@ -565,8 +566,8 @@ func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 	idleCell := m.headerSpinnerCell()
 	idleWidth := lipgloss.Width(idleCell)
 
-	// simulate a loading state by setting detail.Loading
-	m.detail.Loading = true
+	// simulate a loading state by starting a real load
+	m.detail.BeginLoad("spinner-probe", detail.BeginLoadOptions{})
 	loadingCell := m.headerSpinnerCell()
 	loadingWidth := lipgloss.Width(loadingCell)
 
@@ -593,7 +594,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	expectedGlyph := loading.Glyph(0)
 
 	// loading active — use detail.Loading to avoid triggering repository calls
-	m.detail.Loading = true
+	m.detail.BeginLoad("spinner-probe", detail.BeginLoadOptions{})
 	loadingCell := m.headerSpinnerCell()
 	if !strings.Contains(loadingCell, expectedGlyph) {
 		t.Errorf("headerSpinnerCell when loading does not contain spinner glyph %q: got %q",
@@ -601,7 +602,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	}
 
 	// verify none of the 10 glyphs appear when idle (all loading cleared)
-	m.detail.Loading = false
+	m.detail.FinishLoad(nil)
 	idleCell := m.headerSpinnerCell()
 	for i, r := range loading.SpinnerFrames {
 		g := string(r)

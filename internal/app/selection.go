@@ -1,8 +1,6 @@
 package app
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -48,44 +46,29 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 	selection := m.currentSelection()
 	if selection == nil || selection.Issue.ID == "" {
 		if m.active == mode.Detail {
-			m.detail = detail.Model{}
+			m.detail.Reset()
 		}
 		return nil
 	}
 
-	m.detail.SelectionID = selection.Issue.ID
-	m.detail.SelectBrowserIssue(selection.Issue.ID)
-
-	if m.detail.Loading && m.detail.TargetID == selection.Issue.ID {
+	if m.detail.IsLoading() && m.detail.TargetID() == selection.Issue.ID {
 		return nil
 	}
-	if !m.detail.Loading && m.detail.Detail.Summary.ID == selection.Issue.ID && m.detail.Error == "" && !m.shouldRefreshSurface(mode.Detail) {
+	if !m.detail.IsLoading() && m.detail.Detail.Summary.ID == selection.Issue.ID && m.detail.Error() == "" && !m.shouldRefreshSurface(mode.Detail) {
 		return nil
 	}
 
-	// When the target issue changes (new selection, not just a refresh of the
-	// same issue), synchronously apply a placeholder detail BEFORE issuing the
-	// repository call so that scroll offsets reset immediately rather than waiting
-	// for the ShowIssue response.
-	previousID := strings.TrimSpace(m.detail.Detail.Summary.ID)
-	newID := selection.Issue.ID
-	if previousID != strings.TrimSpace(newID) {
-		// A board/search selection change supersedes any pending drill-focus sequence.
-		m.detail.ClearDrillFocus()
-		ref := domain.IssueReference{
+	// Ref seeds an optimistic placeholder when the target issue changes, so
+	// scroll offsets reset immediately rather than on the ShowIssue response.
+	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{
+		Ref: &domain.IssueReference{
 			ID:       selection.Issue.ID,
 			Title:    selection.Issue.Title,
 			Status:   selection.Issue.Status,
 			Type:     selection.Issue.Type,
 			Priority: selection.Issue.Priority,
-		}
-		m.detail.ApplyLoadedDetail(newID, detail.PlaceholderDetail(newID, ref, true))
-	}
-
-	// Required: loadingStates() reads m.detail.Loading to drive the header spinner — do not remove.
-	m.detail.Loading = true
-	m.detail.Error = ""
-	m.detail.TargetID = selection.Issue.ID
+		},
+	})
 	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
 }
 

@@ -374,23 +374,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
 	case detailLoadedMsg:
-		if msg.issueID != m.detail.TargetID {
+		if msg.issueID != m.detail.TargetID() {
 			return m, modeCmd
 		}
 
-		m.detail.Loading = false
+		m.detail.FinishLoad(msg.err)
 		m.markSurfaceRefreshed(mode.Detail)
 		if msg.err != nil {
-			m.detail.Detail = domain.IssueDetail{}
-			m.detail.Error = msg.err.Error()
-			// Clear any pending drill-focus counter so a subsequent load is not
-			// incorrectly treated as the real-data leg of a drill sequence.
-			m.detail.ClearDrillFocus()
 			return m, batchCmds(modeCmd, m.showToast("Failed to load selected issue details", toaster.StyleError))
 		}
 
-		m.detail.Error = ""
-		if strings.TrimSpace(msg.issueID) == strings.TrimSpace(m.detail.SelectionID) {
+		if strings.TrimSpace(msg.issueID) == strings.TrimSpace(m.detail.SelectionID()) {
 			m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
 		} else {
 			m.detail.ApplyPreviewDetail(msg.detail)
@@ -565,11 +559,6 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 			// flip focus away from the Dependencies pane during the in-flight window.
 			// The real detailLoadedMsg will apply the correct focus decision from
 			// actual rail content via the counter mechanism in ApplyLoadedDetail.
-			m.detail.SelectionID = issueID
-			m.detail.TargetID = issueID
-			// The drilled issue becomes the shell's selection, so e/x/u/a
-			// and the launchers act on what is on screen rather than on the
-			// browse tab's row.
 			m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
 				ID:       issueID,
 				Title:    intent.Ref.Title,
@@ -577,10 +566,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 				Type:     intent.Ref.Type,
 				Priority: intent.Ref.Priority,
 			}}
-			m.detail.Loading = true
-			m.detail.Error = ""
-			m.detail.SetDrillFromDepsFocus()
-			m.detail.ApplyLoadedDetail(issueID, detail.PlaceholderDetail(issueID, intent.Ref, true))
+			m.detail.BeginLoad(issueID, detail.BeginLoadOptions{Ref: &intent.Ref, Drill: true})
 			return m, batchCmds(modeCmd, loadDetailCmd(m.ctx, m.services, issueID))
 		}
 		if consumed {
