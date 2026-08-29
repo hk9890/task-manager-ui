@@ -646,3 +646,33 @@ func assertIDs(t *testing.T, col string, issues []domain.IssueSummary, want []st
 		}
 	}
 }
+
+// TestComposeReturnsAllocatedColumnSlicesForAnEmptyBoard pins the nil-versus-
+// empty contract. Every composer assertion compares length and IDs, which makes
+// nil and an allocated empty slice indistinguishable, so the distinction was
+// free to flip either way.
+//
+// Compose is the board renderer's only input, so the contract is that a column
+// slice is always allocated. Anything downstream that grows a JSON projection, a
+// reflect.DeepEqual golden, or an `if issues == nil` placeholder path can then
+// rely on one shape rather than two.
+func TestComposeReturnsAllocatedColumnSlicesForAnEmptyBoard(t *testing.T) {
+	t.Parallel()
+
+	got := Compose(Inputs{})
+
+	columns := map[string][]domain.IssueSummary{
+		"NotReady":   got.NotReady.Issues,
+		"Ready":      got.Ready.Issues,
+		"InProgress": got.InProgress.Issues,
+		"Done":       got.Done.Issues,
+	}
+	for name, issues := range columns {
+		if issues == nil {
+			t.Errorf("%s.Issues is nil on an empty board, want an allocated empty slice", name)
+		}
+		if len(issues) != 0 {
+			t.Errorf("%s.Issues has %d rows on an empty board, want 0", name, len(issues))
+		}
+	}
+}

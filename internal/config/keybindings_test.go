@@ -85,6 +85,46 @@ func TestResolveKeyBindingsRejectsConflictsAndUnknownActions(t *testing.T) {
 	}
 }
 
+// TestResolveKeyBindingsRejectsAContextMissingARequiredAction pins the
+// fail-fast rule docs/CONFIGURATION.md states: a context that does not bind
+// every action allowed in it fails startup. Without this, an action added to
+// allowedActionsForContext but not to DefaultKeyBindings ships as a key the
+// operator presses to no effect, with no startup error and no failing test.
+func TestResolveKeyBindingsRejectsAContextMissingARequiredAction(t *testing.T) {
+	t.Parallel()
+
+	// One case per context, so a context left out of the completeness check is
+	// itself a failure rather than a silent gap.
+	cases := []struct {
+		context string
+		remove  func(k *KeyBindings) string
+	}{
+		{ShellContext, func(k *KeyBindings) string { delete(k.Shell, ShellActionQuit); return ShellActionQuit }},
+		{BoardContext, func(k *KeyBindings) string { delete(k.Board, BoardActionMoveLeft); return BoardActionMoveLeft }},
+		{SearchContext, func(k *KeyBindings) string { delete(k.Search, SearchActionMoveUp); return SearchActionMoveUp }},
+		{DetailContext, func(k *KeyBindings) string { delete(k.Detail, DetailActionScrollUp); return DetailActionScrollUp }},
+		{ModalContext, func(k *KeyBindings) string { delete(k.Modal, ModalActionEnter); return ModalActionEnter }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.context, func(t *testing.T) {
+			t.Parallel()
+
+			incomplete := DefaultKeyBindings()
+			action := tc.remove(&incomplete)
+
+			_, err := ResolveKeyBindings(incomplete)
+			if err == nil {
+				t.Fatalf("resolving %s without %q succeeded, want a startup failure", tc.context, action)
+			}
+			want := "missing keybinding action \"" + action + "\" in " + tc.context + " context"
+			if err.Error() != want {
+				t.Fatalf("error = %q, want %q", err.Error(), want)
+			}
+		})
+	}
+}
+
 func TestMergeKeyBindingsDoesNotMutateBase(t *testing.T) {
 	t.Parallel()
 

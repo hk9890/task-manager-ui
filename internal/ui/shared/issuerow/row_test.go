@@ -446,3 +446,53 @@ func TestRenderCompactSkeletonPhaseCyclesColor(t *testing.T) {
 		t.Fatalf("expected 3 distinct styled outputs across Phase 0-2, got %d", len(seen))
 	}
 }
+
+// TestRenderCompactKeepsAFullTitleSlotAtTheNarrowestWidthThatShowsATitle pins
+// the narrow-row cutoff at its own boundary. This primitive serves both the
+// board columns and the search results, so a one-off in the threshold blanks
+// issue titles in the narrowest usable column — or keeps an unreadably short
+// one — on both surfaces at once.
+//
+// The width is found by scanning rather than hard-coded: the metadata prefix
+// width depends on CompactIDWidth, which itself varies with the row width.
+func TestRenderCompactKeepsAFullTitleSlotAtTheNarrowestWidthThatShowsATitle(t *testing.T) {
+	t.Parallel()
+
+	// Uppercase ID and lowercase title, so the presence of a lowercase rune
+	// means the title slot rendered and not part of the metadata prefix.
+	issue := domain.IssueSummary{ID: "TM-1", Title: strings.Repeat("z", 40), Type: "task", Priority: 1, Status: "open"}
+	renderAt := func(width int, title string) string {
+		row := issue
+		row.Title = title
+		return RenderCompact(RenderConfig{Issue: row, Width: width})
+	}
+
+	narrowest := -1
+	for width := 1; width <= 120; width++ {
+		if strings.Contains(renderAt(width, issue.Title), "z") {
+			narrowest = width
+			break
+		}
+	}
+	if narrowest < 0 {
+		t.Fatal("no width up to 120 rendered a title")
+	}
+
+	// At that width the slot must be exactly minTitleWidth cells: a title of
+	// that length renders whole, and one rune longer must be truncated. A
+	// cutoff that is off by one satisfies the first check and fails the second.
+	whole := strings.Repeat("z", minTitleWidth)
+	if got := renderAt(narrowest, whole); !strings.Contains(got, whole) {
+		t.Errorf("width %d: a %d-rune title was not rendered whole: %q", narrowest, minTitleWidth, got)
+	}
+	overlong := strings.Repeat("z", minTitleWidth+1)
+	if got := renderAt(narrowest, overlong); strings.Contains(got, overlong) {
+		t.Errorf("width %d: a %d-rune title fitted, so the title slot is wider than minTitleWidth (%d): %q",
+			narrowest, minTitleWidth+1, minTitleWidth, got)
+	}
+
+	// One cell narrower, the row drops the title rather than showing a stub.
+	if got := renderAt(narrowest-1, issue.Title); strings.Contains(got, "z") {
+		t.Errorf("width %d: expected no title below the cutoff, got %q", narrowest-1, got)
+	}
+}

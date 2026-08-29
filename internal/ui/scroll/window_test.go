@@ -89,6 +89,12 @@ func TestEnsureVisibleClipped(t *testing.T) {
 		want                       int
 	}{
 		{"pane fits, no clipping", 0, 3, 10, 5, 0},
+		{"pane exactly fills the window", 0, 5, 10, 10, 0},
+		// A pane that exactly fills its window is not clipped, so the fits-guard
+		// must win over the small-window fallback below it — otherwise a stale
+		// offset survives and the pane scrolls with nothing clipped, pushing its
+		// top line off-screen behind a bogus indicator.
+		{"two-row pane exactly filled drops a stale offset", 1, 1, 2, 2, 0},
 		{"already on a content row", 5, 8, 10, 37, 5},
 		{"scrolling down clears the bottom indicator", 0, 9, 10, 37, 1},
 		{"scrolling up clears the top indicator", 10, 4, 10, 37, 3},

@@ -637,4 +637,48 @@ func TestSearchByIssueIDConformance(t *testing.T) {
 	}
 }
 
+// TestPriorityBoundsConformance pins the 0..4 range at its edges. The
+// out-of-range case in TestWriteValidationConformance uses 99, which leaves the
+// bound itself free to drift: a fixture accepting 5 would certify a create the
+// production store rejects, and the priority picker is the flow that would ship
+// broken.
+func TestPriorityBoundsConformance(t *testing.T) {
+	accepted := []int{0, 4}
+	rejected := []int{-1, 5}
+
+	for _, p := range accepted {
+		t.Run(fmt.Sprintf("accepts/%d", p), func(t *testing.T) {
+			for _, b := range freshBackends(t) {
+				priority := p
+				if _, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+					Title:    "priority edge",
+					Priority: &priority,
+				}); err != nil {
+					t.Errorf("%s: CreateIssue with priority %d failed: %v", b.name, p, err)
+				}
+			}
+		})
+	}
+
+	for _, p := range rejected {
+		t.Run(fmt.Sprintf("rejects/%d", p), func(t *testing.T) {
+			for _, b := range freshBackends(t) {
+				priority := p
+				_, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+					Title:    "priority edge",
+					Priority: &priority,
+				})
+				if err == nil {
+					t.Errorf("%s: CreateIssue with priority %d succeeded, want a validation error", b.name, p)
+					continue
+				}
+				var repoErr domain.RepositoryError
+				if !errors.As(err, &repoErr) || repoErr.Code != domain.ErrorCodeValidationFailed {
+					t.Errorf("%s: CreateIssue error = %v, want ErrorCodeValidationFailed", b.name, err)
+				}
+			}
+		})
+	}
+}
+
 func strPtr(v string) *string { return &v }
