@@ -8,10 +8,10 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
-// Search maps the structured query onto a tasks.Criteria and runs FindPage. The
-// closed partition is always scanned so search spans active and closed work
-// (mirroring the memory backend); status/work predicates in the criteria still
-// narrow the result.
+// Search maps the structured query onto a tasks.Criteria, builds it into a
+// filter expression and runs ListPage. The closed partition is always scanned so
+// search spans active and closed work (mirroring the memory backend);
+// status/work predicates in the criteria still narrow the result.
 //
 // SearchResult.Snippet is left empty: the task-manager backend does not produce
 // match snippets. Result ordering is work order (priority, then created), which
@@ -20,7 +20,7 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 	if err := ctx.Err(); err != nil {
 		return domain.SearchResultPage{}, err
 	}
-	criteria, opt := buildCriteria(query)
+	criteria, filter := buildCriteria(query)
 
 	// If the caller requested a status/type filter but every value was unknown,
 	// nothing can match. Return empty rather than letting the now-empty filter
@@ -31,7 +31,16 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 		return emptySearchPage(query.Limit), nil
 	}
 
-	page, err := r.store.FindPage(criteria, opt)
+	// buildCriteria drops every value Build rejects, so this cannot fail on an
+	// odd filter; the error is still mapped rather than dropped so a future
+	// Criteria field that Build validates surfaces as a search error.
+	expr, err := criteria.Build()
+	if err != nil {
+		return domain.SearchResultPage{}, mapReadErr("search", err)
+	}
+	filter.Expr = expr
+
+	page, err := r.store.ListPage(filter)
 	if err != nil {
 		return domain.SearchResultPage{}, mapReadErr("search", err)
 	}
@@ -73,8 +82,11 @@ func emptySearchPage(limit int) domain.SearchResultPage {
 	}
 }
 
-// buildCriteria translates a SearchIssuesQuery into a tasks.Criteria plus the
-// presentation FindOptions. Label matching defaults to LabelMatchAll.
+// buildCriteria translates a SearchIssuesQuery into a tasks.Criteria plus a
+// tasks.Filter carrying the presentation fields (scope, sort, paging). The
+// caller sets Filter.Expr from Criteria.Build; the selection lives in the
+// criteria, never in the filter this returns. Label matching defaults to
+// LabelMatchAll.
 //
 // Free-text matching uses TextAllWords (AND-of-words): every whitespace-separated
 // word in Text must appear (order-independent, per-word substring), matching the
@@ -86,7 +98,7 @@ func emptySearchPage(limit int) domain.SearchResultPage {
 // without validation rather than surfaced as errors: unknown status/type tokens
 // and negative priority bounds (which Criteria.Build would reject) are dropped so
 // a search never hard-fails on an odd filter.
-func buildCriteria(q domain.SearchIssuesQuery) (tasks.Criteria, tasks.FindOptions) {
+func buildCriteria(q domain.SearchIssuesQuery) (tasks.Criteria, tasks.Filter) {
 	criteria := tasks.Criteria{
 		Text:      q.Text,
 		TextMatch: tasks.TextAllWords,
@@ -118,7 +130,7 @@ func buildCriteria(q domain.SearchIssuesQuery) (tasks.Criteria, tasks.FindOption
 		criteria.Work = tasks.WorkBlocked
 	}
 
-	return criteria, tasks.FindOptions{
+	return criteria, tasks.Filter{
 		IncludeClosed: q.IncludeClosed,
 		Sort:          tasks.SortWork,
 		Offset:        q.Offset,

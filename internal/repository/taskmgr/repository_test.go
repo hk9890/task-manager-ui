@@ -14,9 +14,9 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-func newTestRepo(t *testing.T) (*Repository, *tasks.Store) {
+func newTestRepo(t *testing.T, opts ...tasks.Option) (*Repository, *tasks.Store) {
 	t.Helper()
-	store, err := tasks.Init(t.TempDir(), "tm")
+	store, err := tasks.Init(t.TempDir(), "tm", opts...)
 	if err != nil {
 		t.Fatalf("tasks.Init: %v", err)
 	}
@@ -401,12 +401,14 @@ func TestContextCancellation(t *testing.T) {
 }
 
 func TestDashboardClosedPagingAndOrder(t *testing.T) {
-	r, store := newTestRepo(t)
-	ctx := context.Background()
-	// Deterministic, strictly increasing clock so each close gets a distinct time.
+	// Deterministic, strictly increasing clock so each close gets a distinct
+	// time. The SDK takes a clock at construction only, so it goes to Init.
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var tick int
-	store.SetNow(func() time.Time { tick++; return base.Add(time.Duration(tick) * time.Hour) })
+	clock := func() time.Time { tick++; return base.Add(time.Duration(tick) * time.Hour) }
+
+	r, _ := newTestRepo(t, tasks.WithClock(clock))
+	ctx := context.Background()
 
 	a := mustCreate(t, r, domain.CreateIssueInput{Title: "alpha"})
 	b := mustCreate(t, r, domain.CreateIssueInput{Title: "bravo"})
@@ -557,7 +559,7 @@ func TestSearchInvalidStatusFilter(t *testing.T) {
 }
 
 // TestSearchScopeFollowsIncludeClosed pins that buildCriteria forwards the
-// query's scope into FindOptions.IncludeClosed rather than hardcoding it: a
+// query's scope into Filter.IncludeClosed rather than hardcoding it: a
 // default search returns open work only, and setting IncludeClosed reaches the
 // closed history.
 //

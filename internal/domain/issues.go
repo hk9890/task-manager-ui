@@ -86,7 +86,8 @@ const (
 	SearchResultSourceReadyFilter    SearchResultSource = "bd_ready_filtered"
 	SearchResultSourceBlockedFilter  SearchResultSource = "bd_blocked_filtered"
 	// SearchResultSourceTaskmgrFind identifies a page produced by the in-process
-	// task-manager backend via Store.FindPage.
+	// task-manager backend via Criteria.Build plus Store.ListPage. The value is
+	// part of the recorded search metadata, so it keeps its name.
 	SearchResultSourceTaskmgrFind SearchResultSource = "taskmgr_find"
 )
 
