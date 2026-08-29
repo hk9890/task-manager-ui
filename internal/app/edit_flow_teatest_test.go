@@ -687,3 +687,55 @@ func TestModelEditFailureToastNamesTheCause(t *testing.T) {
 		t.Fatalf("the toast does not name the cause, got:\n%s", view)
 	}
 }
+
+// TestModelEditResultReloadsTheActiveBrowseSurface pins that an edit which
+// changed the issue reloads the browse tab the operator is looking at.
+//
+// The handler marked the browse surfaces dirty and stopped there. Dirty only
+// makes the next refresh tick eligible, and that tick is refreshTickInterval
+// away, so the edited row kept its old title under a toast saying the update
+// succeeded — which reads as a failed edit.
+func TestModelEditResultReloadsTheActiveBrowseSurface(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		tabKey  string
+		reloads fakes.Method
+	}{
+		{name: "board", tabKey: "", reloads: fakes.MethodDashboard},
+		{name: "search", tabKey: "2", reloads: fakes.MethodSearch},
+		{name: "docs", tabKey: "4", reloads: fakes.MethodSearch},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gw := fakes.NewTracked()
+			seedReady(gw, "tm-1", "Ready first", "task", 1)
+
+			services, err := NewServices(gw, config.Default(), t.TempDir())
+			if err != nil {
+				t.Fatalf("NewServices returned error: %v", err)
+			}
+
+			m := mustNewModel(t, services)
+			m = applyMessages(t, m, runBatch(m.Init()))
+
+			if tc.tabKey != "" {
+				next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.tabKey)})
+				m = next.(Model)
+				m = applyMessages(t, m, runBatch(cmd))
+			}
+
+			mark := gw.CallCount()
+			next, cmd := m.Update(editIssueResultMsg{issueID: "tm-1", updated: true})
+			applyMessages(t, next.(Model), runBatch(cmd))
+
+			if !gw.HasCallSince(mark, tc.reloads) {
+				t.Fatalf("expected the active browse surface to reload after an edit, calls=%#v", gw.Calls())
+			}
+		})
+	}
+}

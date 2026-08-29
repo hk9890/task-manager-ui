@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestShowHide(t *testing.T) {
@@ -120,6 +121,19 @@ func TestOverlayUsesProvidedTerminalWidth(t *testing.T) {
 	for i, line := range strings.Split(overlaid, "\n") {
 		if lipgloss.Width(line) != width {
 			t.Fatalf("line %d width mismatch: want %d, got %d", i, width, lipgloss.Width(line))
+		}
+	}
+}
+
+func TestToastGlyphWidthsAgreeWithWcwidth(t *testing.T) {
+	t.Parallel()
+
+	// The frame is sized with lipgloss.Width and drawn by a terminal following
+	// wcwidth. A glyph the two measure differently makes overlay.Place splice
+	// the line short, so the toast renders as a broken box with no message.
+	for _, glyph := range []string{glyphSuccess, glyphError, glyphInfo, glyphWarn} {
+		if got, want := lipgloss.Width(glyph), ansi.StringWidthWc(glyph); got != want {
+			t.Errorf("glyph %q: lipgloss.Width = %d, ansi.StringWidthWc = %d", glyph, got, want)
 		}
 	}
 }

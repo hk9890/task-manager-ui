@@ -11,6 +11,21 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Toast severity glyphs, one per Style.
+//
+// Each is a text-presentation form, carrying no U+FE0F variation selector. The
+// emoji-presentation variants "ℹ️" and "⚠️" measure two cells under
+// lipgloss.Width and one under wcwidth, so the frame was built a cell wider
+// than the terminal drew it and overlay.Place spliced the line short — an info
+// or warning toast rendered as a broken box with no message.
+// TestToastGlyphWidthsAgreeWithWcwidth pins the two measures together.
+const (
+	glyphSuccess = "✅"
+	glyphError   = "❌"
+	glyphInfo    = "ℹ"
+	glyphWarn    = "⚠"
+)
+
 // Style determines toast appearance.
 type Style int
 
@@ -76,17 +91,17 @@ func (m Model) View() string {
 		Padding(0, 1).
 		Border(lipgloss.RoundedBorder())
 
-	content := "✅ " + m.message
+	content := glyphSuccess + " " + m.message
 	switch m.style {
 	case StyleError:
 		s = s.BorderForeground(styles.ToastBorderErrorColor)
-		content = "❌ " + m.message
+		content = glyphError + " " + m.message
 	case StyleInfo:
 		s = s.BorderForeground(styles.ToastBorderInfoColor)
-		content = "ℹ️ " + m.message
+		content = glyphInfo + " " + m.message
 	case StyleWarn:
 		s = s.BorderForeground(styles.ToastBorderWarnColor)
-		content = "⚠️ " + m.message
+		content = glyphWarn + " " + m.message
 	default:
 		s = s.BorderForeground(styles.ToastBorderSuccessColor)
 	}

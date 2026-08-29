@@ -1,7 +1,9 @@
 # Configuration
 
 The runtime config model, keybinding resolution, and the launcher interpolation
-surface — what a `config.yaml` may say and how it is resolved.
+surface — what a `config.yaml` may say and how it is resolved. Two different
+files are in play: taskmgr-ui's own config, and the store's, which the SDK reads
+and which can refuse the app's writes.
 
 ## Runtime configuration
 
@@ -111,6 +113,32 @@ keybindings:
     enter: [space]
     escape: [q]
 ```
+
+## The store's own config
+
+The resolved store's `.tasks/config.yaml` and the per-user `~/.taskmgr/config.yaml`
+belong to task-manager, not to taskmgr-ui. The SDK reads both on every command, so
+a fault in either reaches the operator as a refused write in the UI.
+
+### The withdrawn `hooks:` key
+
+SDK v0.9.0 withdrew `hooks:`. A config no longer declares hooks inline; it lists
+under `use:` the packages it takes them from.
+
+A file still carrying a `hooks:` block is recorded as a config **defect**, and a
+defect fails every mutation while leaving reads intact. The board, detail and
+search render normally and every write is refused — the app looks healthy and is
+read-only. Closing an issue reports:
+
+```
+close issue failed: close issue: unknown: <store>/.tasks/config.yaml: the `hooks:` key was withdrawn: …
+```
+
+Run `taskmgr package list` for the untruncated text: a defect prints as a broken
+row naming the key and the file it is in. The toast clips at terminal width.
+
+Migrate by moving each hook entry into a package directory, adding it with
+`taskmgr package add`, then deleting the `hooks:` block from the file.
 
 ## Keybindings
 

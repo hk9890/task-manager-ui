@@ -55,13 +55,19 @@ The whole vocabulary, and the one place each is defined:
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight, 10 frames | `loading.SpinnerFrames` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
-| `✅ ❌ ℹ️ ⚠️` | toast severity | `toaster.Model.View` |
+| `✅ ❌ ℹ ⚠` | toast severity | `toaster.glyphSuccess` and its siblings |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
 | `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
 | `·` | field separator in a header or status line | inline at the call site |
 
 Spend a new glyph only when an existing one cannot carry the meaning, and define it next to its
 siblings rather than inline at the call site.
+
+Pick the **text-presentation** form of a symbol that has both — `ℹ` and `⚠`, never `ℹ️` and `⚠️`.
+The emoji-presentation variant appends U+FE0F, which `lipgloss.Width` measures as two cells and a
+terminal following wcwidth draws as one. The frame is then built a cell wider than it is drawn and
+`overlay.Place` splices the line short, so the toast rendered as a broken box with no message.
+`toaster.TestToastGlyphWidthsAgreeWithWcwidth` pins the two measures together for the toast set.
 
 ## Build from the shared chrome
 
