@@ -86,8 +86,10 @@ siblings rather than inline at the call site.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
   `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
   a pane or a column it rides the border instead.
-- A new browse surface is one entry in `mode.BrowseModes` and one `tab(...)` call. Adding it anywhere
-  else puts the strip and the cycle order out of step.
+- A new browse surface is one entry in `mode.BrowseModes`, one arm in `Model.browseController`, and
+  one `tab(...)` call. The controller must satisfy `mode.Browse`; registering it there is what wires
+  forwarding, sizing, loading state and auto-refresh at once. Adding it anywhere else puts the strip
+  and the cycle order out of step.
 - `tab` / `shift+tab` belong to the strip everywhere except inside a modal, which consumes keys
   before the shell sees them. They switch tabs even while the search query field is focused, so a
   browse surface must not claim either key.
