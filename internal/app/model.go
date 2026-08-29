@@ -335,60 +335,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		modeCmd = m.forwardModeMessages(msg)
 	}
 
-	if m.showActionModal {
-		if size, ok := msg.(tea.WindowSizeMsg); ok {
-			m.sizeKnown = true
-			m.width = size.Width
-			m.height = size.Height
-			m.actionModal.SetSize(m.width, m.height)
-			return m, modeCmd
-		}
-
-		if _, ok := msg.(modal.CancelMsg); ok {
-			m.showActionModal = false
-			return m, modeCmd
-		}
-
-		if submit, ok := msg.(modal.SubmitMsg); ok {
-			m.showActionModal = false
-			return m, batchCmds(modeCmd, submitMutationCmd(m.services, m.actionState, submit.Values))
-		}
-
-		nextModal, cmd := m.actionModal.Update(msg)
-		m.actionModal = nextModal
-		return m, batchCmds(modeCmd, cmd)
-	}
-
-	if m.showHelp {
-		// Close through the same action that opens it. Matching a literal "?"
-		// made the toggle one-way for anyone who rebound toggle_help — the
-		// example config in docs/CONFIGURATION.md binds it to F1 — leaving
-		// Escape as the only way out.
-		if k, ok := msg.(tea.KeyMsg); ok && m.keys.Match(config.ShellContext, config.ShellActionHelp, k) {
-			m.showHelp = false
-			return m, modeCmd
-		}
-
-		if _, ok := msg.(modal.CancelMsg); ok {
-			m.showHelp = false
-			return m, modeCmd
-		}
-		if _, ok := msg.(modal.SubmitMsg); ok {
-			m.showHelp = false
-			return m, modeCmd
-		}
-
-		nextHelp, cmd := m.help.Update(msg)
-		m.help = nextHelp
-
-		if size, ok := msg.(tea.WindowSizeMsg); ok {
-			m.sizeKnown = true
-			m.width = size.Width
-			m.height = size.Height
-			m.help.SetSize(m.width, m.height)
-		}
-
-		return m, batchCmds(modeCmd, cmd)
+	if model, cmd, handled := m.handleOverlayMessage(msg, modeCmd); handled {
+		return model, cmd
 	}
 
 	switch msg := msg.(type) {
@@ -475,11 +423,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingDialog = pendingDialogGuard{}
 
 		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
-		m.actionState = dialog
-		m.actionModal = mutationModal(dialog, m.keys)
-		m.actionModal.SetSize(m.width, m.height)
-		m.showActionModal = true
-		return m, batchCmds(modeCmd, m.actionModal.Init())
+		return m, batchCmds(modeCmd, m.openMutationModal(dialog))
 	case mutationResultMsg:
 		return m.handleMutationResult(modeCmd, msg)
 	case mode.SelectionChangedMsg:
@@ -515,259 +459,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, modeCmd
 	case tea.KeyMsg:
-		// Single choke point: any key press clears the pending-dialog guard.
-		// The guard is set when an async catalog-load Cmd is dispatched and must
-		// be cleared before the key is processed so that the catalog-loaded
-		// handler (arriving later) sees the guard is gone and drops its result.
-		// We capture the guard state before clearing so ESC can use it to
-		// decide whether to cancel the pending open instead of popping the mode.
-		hadPendingDialog := m.pendingDialog.active
-		m.pendingDialog = pendingDialogGuard{}
-
-		searchCaptured := false
-		if m.active == mode.Search {
-			if m.search.CapturesShellKey(msg) {
-				searchCaptured = true
-			}
-		}
-		if searchCaptured {
-			return m, modeCmd
-		}
-
-		if m.active == mode.Detail {
-			m.detail.Keys = m.keys
-			consumed, intent := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
-			if m.detail.ConsumeOpenStatusDialogIntent() {
-				issue := m.detail.Detail.Summary
-				if strings.TrimSpace(issue.ID) == "" {
-					if selection := m.currentSelection(); selection != nil {
-						issue = selection.Issue
-					}
-				}
-				if strings.TrimSpace(issue.ID) == "" {
-					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
-				}
-				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue))
-			}
-			if m.detail.ConsumeOpenPriorityDialogIntent() {
-				issue := m.detail.Detail.Summary
-				if strings.TrimSpace(issue.ID) == "" {
-					if selection := m.currentSelection(); selection != nil {
-						issue = selection.Issue
-					}
-				}
-				if strings.TrimSpace(issue.ID) == "" {
-					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
-				}
-				dialog := buildMutationDialog(mutationPriority, issue, nil, nil, nil)
-				m.actionState = dialog
-				m.actionModal = mutationModal(dialog, m.keys)
-				m.actionModal.SetSize(m.width, m.height)
-				m.showActionModal = true
-				return m, batchCmds(modeCmd, m.actionModal.Init())
-			}
-			if intent != nil {
-				issueID := strings.TrimSpace(intent.IssueID)
-				if issueID == "" {
-					return m, modeCmd
-				}
-				m.active = mode.Detail
-				// Drilling into a related issue is a full navigation, not a peek:
-				// the target becomes the new detail selection so ALL three panes —
-				// including the Dependencies rail — reflect the target once loaded.
-				// This is what lets you open a child from an epic and then jump
-				// back via the child's own Parent row. Seeding an optimistic
-				// placeholder from the row's known ref renders the header + core
-				// metadata immediately, while the description and Dependencies pane
-				// show their skeleton until the single taskmgr show returns.
-				// ApplyLoadedDetail resets scroll offsets when the issue changes.
-				//
-				// Focus retention: set Loading and the drill-focus counter before the
-				// placeholder ApplyLoadedDetail call so that clearBrowserPanel does not
-				// flip focus away from the Dependencies pane during the in-flight window.
-				// The real detailLoadedMsg will apply the correct focus decision from
-				// actual rail content via the counter mechanism in ApplyLoadedDetail.
-				m.detail.SelectionID = issueID
-				m.detail.TargetID = issueID
-				// The drilled issue becomes the shell's selection, so e/x/u/a
-				// and the launchers act on what is on screen rather than on the
-				// browse tab's row.
-				m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
-					ID:       issueID,
-					Title:    intent.Ref.Title,
-					Status:   intent.Ref.Status,
-					Type:     intent.Ref.Type,
-					Priority: intent.Ref.Priority,
-				}}
-				m.detail.Loading = true
-				m.detail.Error = ""
-				m.detail.SetDrillFromDepsFocus()
-				m.detail.ApplyLoadedDetail(issueID, detail.PlaceholderDetail(issueID, intent.Ref, true))
-				return m, batchCmds(modeCmd, loadDetailCmd(m.ctx, m.services, issueID))
-			}
-			if consumed {
-				return m, modeCmd
-			}
-		}
-
-		if m.active == mode.Search {
-			if m.search.ConsumeOpenStatusDialogIntent() {
-				selection := m.selectedByMode[mode.Search]
-				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
-					return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
-				}
-				m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-				return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, selection.Issue))
-			}
-			if m.search.ConsumeOpenPriorityDialogIntent() {
-				selection := m.selectedByMode[mode.Search]
-				if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
-					return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
-				}
-				dialog := buildMutationDialog(mutationPriority, selection.Issue, nil, nil, nil)
-				m.actionState = dialog
-				m.actionModal = mutationModal(dialog, m.keys)
-				m.actionModal.SetSize(m.width, m.height)
-				m.showActionModal = true
-				return m, batchCmds(modeCmd, m.actionModal.Init())
-			}
-		}
-
-		switch {
-		case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
-			return m, batchCmds(modeCmd, tea.Quit)
-		case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
-			m.showHelp = true
-			m.help.SetSize(m.width, m.height)
-			return m, modeCmd
-		case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
-			m.enterBrowseMode(mode.Board)
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
-			m.enterBrowseMode(mode.Docs)
-			return m, batchCmds(modeCmd, m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
-			m.enterBrowseMode(mode.Search)
-			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
-			if m.active == mode.Detail {
-				m.enterBrowseMode(mode.Board)
-				return m, modeCmd
-			}
-			if m.active == mode.Search {
-				m.enterBrowseMode(mode.Board)
-				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-			}
-			m.enterBrowseMode(mode.Search)
-			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
-			if mode.IsBrowse(m.active) {
-				m.lastBrowse = m.active
-			}
-			if m.currentSelection() == nil {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
-			}
-			// Opening Detail from a browse tab starts from that tab's row, not
-			// from wherever an earlier drill-in ended up.
-			m.clearDrillSelection()
-			m.active = mode.Detail
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
-			m.applyModeCycle(nextMode(m.active, m.lastBrowse))
-			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
-			m.applyModeCycle(prevMode(m.active, m.lastBrowse))
-			return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
-			// If a dialog-open was in flight when ESC arrived, the guard has
-			// already been cleared at the top of this branch. Consume ESC as
-			// "cancel the pending open" and keep the current mode — do NOT pop
-			// Detail → Board (or Search → Board) while the load is in progress.
-			if hadPendingDialog {
-				return m, modeCmd
-			}
-			if m.active == mode.Detail {
-				m.enterBrowseMode(m.lastBrowse)
-				return m, modeCmd
-			}
-			// Board is the home tab: Escape from any other browse tab returns
-			// there before it starts dismissing toasts.
-			if mode.IsBrowse(m.active) && m.active != mode.Board {
-				m.enterBrowseMode(mode.Board)
-				return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-			}
-			m.toast = m.toast.Hide()
-			return m, modeCmd
-		case m.keys.Match(config.ShellContext, config.ShellActionReloadDetail, msg):
-			if m.active != mode.Detail {
-				return m, modeCmd
-			}
-			return m, batchCmds(modeCmd, m.reloadDetailCmd())
-		case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
-			issueID, ok := m.selectedIssueID()
-			if !ok {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
-			}
-			return m, batchCmds(modeCmd, prepareEditCmd(m.ctx, m.services, issueID))
-		case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
-			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
-		case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
-			selection := m.currentSelection()
-			if selection == nil || selection.Issue.ID == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
-			}
-			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, selection.Issue))
-		case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
-			selection := m.currentSelection()
-			if selection == nil || selection.Issue.ID == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
-			}
-			m.actionState = mutationDialogState{kind: mutationClose, issue: selection.Issue}
-			m.actionModal = mutationModal(m.actionState, m.keys)
-			m.actionModal.SetSize(m.width, m.height)
-			m.showActionModal = true
-			return m, batchCmds(modeCmd, m.actionModal.Init())
-		case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
-			selection := m.currentSelection()
-			if selection == nil || selection.Issue.ID == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
-			}
-			m.actionState = mutationDialogState{kind: mutationComment, issue: selection.Issue}
-			m.actionModal = mutationModal(m.actionState, m.keys)
-			m.actionModal.SetSize(m.width, m.height)
-			m.showActionModal = true
-			return m, batchCmds(modeCmd, m.actionModal.Init())
-		case m.keys.Match(config.ShellContext, config.ShellActionLaunchNvim, msg):
-			if m.active != mode.Detail {
-				return m, modeCmd
-			}
-			issueContext, ok := m.selectedIssueContext()
-			if !ok {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "nvim", issueContext))
-		case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
-			if m.active != mode.Detail {
-				return m, modeCmd
-			}
-			issueContext, ok := m.selectedIssueContext()
-			if !ok {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "opencode", issueContext))
-		case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
-			if m.active != mode.Detail {
-				return m, modeCmd
-			}
-			issueContext, ok := m.selectedIssueContext()
-			if !ok {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-			}
-			return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "shell-command", issueContext))
-		}
+		return m.handleShellKey(msg, modeCmd)
 	}
 
 	return m, modeCmd
@@ -801,4 +493,318 @@ func (m Model) searchIsLoading() bool {
 	// Use IsLoading() so both browse modes are queried uniformly (board also
 	// exposes IsLoading()); SessionState() remains for the richer search bundle.
 	return m.search.IsLoading()
+}
+
+// handleShellKey handles one key press for the shell: the pending-dialog
+// choke point, the mode-local capture and intent checks, and the shell
+// keybinding switch. It is split out of update() so that message routing and
+// key handling are readable separately; update() was 483 lines with a
+// fifteen-case message switch and a nineteen-case key switch in one body.
+//
+// It takes the same modeCmd update() would have batched and returns the same
+// (tea.Model, tea.Cmd) pair, so the branch is a move, not a rewrite.
+func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.Cmd) {
+	// Single choke point: any key press clears the pending-dialog guard.
+	// The guard is set when an async catalog-load Cmd is dispatched and must
+	// be cleared before the key is processed so that the catalog-loaded
+	// handler (arriving later) sees the guard is gone and drops its result.
+	// We capture the guard state before clearing so ESC can use it to
+	// decide whether to cancel the pending open instead of popping the mode.
+	hadPendingDialog := m.pendingDialog.active
+	m.pendingDialog = pendingDialogGuard{}
+
+	searchCaptured := false
+	if m.active == mode.Search {
+		if m.search.CapturesShellKey(msg) {
+			searchCaptured = true
+		}
+	}
+	if searchCaptured {
+		return m, modeCmd
+	}
+
+	if m.active == mode.Detail {
+		m.detail.Keys = m.keys
+		consumed, intent := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
+		if m.detail.ConsumeOpenStatusDialogIntent() {
+			issue := m.detail.Detail.Summary
+			if strings.TrimSpace(issue.ID) == "" {
+				if selection := m.currentSelection(); selection != nil {
+					issue = selection.Issue
+				}
+			}
+			if strings.TrimSpace(issue.ID) == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+			}
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue))
+		}
+		if m.detail.ConsumeOpenPriorityDialogIntent() {
+			issue := m.detail.Detail.Summary
+			if strings.TrimSpace(issue.ID) == "" {
+				if selection := m.currentSelection(); selection != nil {
+					issue = selection.Issue
+				}
+			}
+			if strings.TrimSpace(issue.ID) == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+			}
+			dialog := buildMutationDialog(mutationPriority, issue, nil, nil, nil)
+			return m, batchCmds(modeCmd, m.openMutationModal(dialog))
+		}
+		if intent != nil {
+			issueID := strings.TrimSpace(intent.IssueID)
+			if issueID == "" {
+				return m, modeCmd
+			}
+			m.active = mode.Detail
+			// Drilling into a related issue is a full navigation, not a peek:
+			// the target becomes the new detail selection so ALL three panes —
+			// including the Dependencies rail — reflect the target once loaded.
+			// This is what lets you open a child from an epic and then jump
+			// back via the child's own Parent row. Seeding an optimistic
+			// placeholder from the row's known ref renders the header + core
+			// metadata immediately, while the description and Dependencies pane
+			// show their skeleton until the single taskmgr show returns.
+			// ApplyLoadedDetail resets scroll offsets when the issue changes.
+			//
+			// Focus retention: set Loading and the drill-focus counter before the
+			// placeholder ApplyLoadedDetail call so that clearBrowserPanel does not
+			// flip focus away from the Dependencies pane during the in-flight window.
+			// The real detailLoadedMsg will apply the correct focus decision from
+			// actual rail content via the counter mechanism in ApplyLoadedDetail.
+			m.detail.SelectionID = issueID
+			m.detail.TargetID = issueID
+			// The drilled issue becomes the shell's selection, so e/x/u/a
+			// and the launchers act on what is on screen rather than on the
+			// browse tab's row.
+			m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
+				ID:       issueID,
+				Title:    intent.Ref.Title,
+				Status:   intent.Ref.Status,
+				Type:     intent.Ref.Type,
+				Priority: intent.Ref.Priority,
+			}}
+			m.detail.Loading = true
+			m.detail.Error = ""
+			m.detail.SetDrillFromDepsFocus()
+			m.detail.ApplyLoadedDetail(issueID, detail.PlaceholderDetail(issueID, intent.Ref, true))
+			return m, batchCmds(modeCmd, loadDetailCmd(m.ctx, m.services, issueID))
+		}
+		if consumed {
+			return m, modeCmd
+		}
+	}
+
+	if m.active == mode.Search {
+		if m.search.ConsumeOpenStatusDialogIntent() {
+			selection := m.selectedByMode[mode.Search]
+			if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+			}
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, selection.Issue))
+		}
+		if m.search.ConsumeOpenPriorityDialogIntent() {
+			selection := m.selectedByMode[mode.Search]
+			if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+			}
+			dialog := buildMutationDialog(mutationPriority, selection.Issue, nil, nil, nil)
+			return m, batchCmds(modeCmd, m.openMutationModal(dialog))
+		}
+	}
+
+	switch {
+	case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
+		return m, batchCmds(modeCmd, tea.Quit)
+	case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
+		m.showHelp = true
+		m.help.SetSize(m.width, m.height)
+		return m, modeCmd
+	case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
+		m.enterBrowseMode(mode.Board)
+		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
+		m.enterBrowseMode(mode.Docs)
+		return m, batchCmds(modeCmd, m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
+		m.enterBrowseMode(mode.Search)
+		return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
+		if m.active == mode.Detail {
+			m.enterBrowseMode(mode.Board)
+			return m, modeCmd
+		}
+		if m.active == mode.Search {
+			m.enterBrowseMode(mode.Board)
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		}
+		m.enterBrowseMode(mode.Search)
+		return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
+		if mode.IsBrowse(m.active) {
+			m.lastBrowse = m.active
+		}
+		if m.currentSelection() == nil {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
+		}
+		// Opening Detail from a browse tab starts from that tab's row, not
+		// from wherever an earlier drill-in ended up.
+		m.clearDrillSelection()
+		m.active = mode.Detail
+		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
+		m.applyModeCycle(nextMode(m.active, m.lastBrowse))
+		return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionModeCyclePrev, msg):
+		m.applyModeCycle(prevMode(m.active, m.lastBrowse))
+		return m, batchCmds(modeCmd, m.lazySearchInitCmd(), m.lazyDocsInitCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
+		// If a dialog-open was in flight when ESC arrived, the guard has
+		// already been cleared at the top of this branch. Consume ESC as
+		// "cancel the pending open" and keep the current mode — do NOT pop
+		// Detail → Board (or Search → Board) while the load is in progress.
+		if hadPendingDialog {
+			return m, modeCmd
+		}
+		if m.active == mode.Detail {
+			m.enterBrowseMode(m.lastBrowse)
+			return m, modeCmd
+		}
+		// Board is the home tab: Escape from any other browse tab returns
+		// there before it starts dismissing toasts.
+		if mode.IsBrowse(m.active) && m.active != mode.Board {
+			m.enterBrowseMode(mode.Board)
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		}
+		m.toast = m.toast.Hide()
+		return m, modeCmd
+	case m.keys.Match(config.ShellContext, config.ShellActionReloadDetail, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.reloadDetailCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
+		issueID, ok := m.selectedIssueID()
+		if !ok {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
+		}
+		return m, batchCmds(modeCmd, prepareEditCmd(m.ctx, m.services, issueID))
+	case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
+		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
+		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
+	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
+		selection := m.currentSelection()
+		if selection == nil || selection.Issue.ID == "" {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
+		}
+		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
+		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, selection.Issue))
+	case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
+		selection := m.currentSelection()
+		if selection == nil || selection.Issue.ID == "" {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
+		}
+		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationClose, issue: selection.Issue}))
+	case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
+		selection := m.currentSelection()
+		if selection == nil || selection.Issue.ID == "" {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
+		}
+		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationComment, issue: selection.Issue}))
+	case m.keys.Match(config.ShellContext, config.ShellActionLaunchNvim, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		issueContext, ok := m.selectedIssueContext()
+		if !ok {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+		}
+		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "nvim", issueContext))
+	case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		issueContext, ok := m.selectedIssueContext()
+		if !ok {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+		}
+		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "opencode", issueContext))
+	case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		issueContext, ok := m.selectedIssueContext()
+		if !ok {
+			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
+		}
+		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "shell-command", issueContext))
+	}
+
+	return m, modeCmd
+}
+
+// handleOverlayMessage routes msg to whichever overlay is open. handled is
+// false when none is, in which case the caller falls through to the message
+// switch. An open overlay consumes the message: that is why this runs before
+// routing and not inside it.
+func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, tea.Cmd, bool) {
+	if m.showActionModal {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.sizeKnown = true
+			m.width = size.Width
+			m.height = size.Height
+			m.actionModal.SetSize(m.width, m.height)
+			return m, modeCmd, true
+		}
+
+		if _, ok := msg.(modal.CancelMsg); ok {
+			m.showActionModal = false
+			return m, modeCmd, true
+		}
+
+		if submit, ok := msg.(modal.SubmitMsg); ok {
+			m.showActionModal = false
+			return m, batchCmds(modeCmd, submitMutationCmd(m.services, m.actionState, submit.Values)), true
+		}
+
+		nextModal, cmd := m.actionModal.Update(msg)
+		m.actionModal = nextModal
+		return m, batchCmds(modeCmd, cmd), true
+	}
+
+	if m.showHelp {
+		// Close through the same action that opens it. Matching a literal "?"
+		// made the toggle one-way for anyone who rebound toggle_help — the
+		// example config in docs/CONFIGURATION.md binds it to F1 — leaving
+		// Escape as the only way out.
+		if k, ok := msg.(tea.KeyMsg); ok && m.keys.Match(config.ShellContext, config.ShellActionHelp, k) {
+			m.showHelp = false
+			return m, modeCmd, true
+		}
+
+		if _, ok := msg.(modal.CancelMsg); ok {
+			m.showHelp = false
+			return m, modeCmd, true
+		}
+		if _, ok := msg.(modal.SubmitMsg); ok {
+			m.showHelp = false
+			return m, modeCmd, true
+		}
+
+		nextHelp, cmd := m.help.Update(msg)
+		m.help = nextHelp
+
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.sizeKnown = true
+			m.width = size.Width
+			m.height = size.Height
+			m.help.SetSize(m.width, m.height)
+		}
+
+		return m, batchCmds(modeCmd, cmd), true
+	}
+
+	return m, nil, false
 }

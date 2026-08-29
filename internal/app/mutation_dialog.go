@@ -122,6 +122,20 @@ func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses 
 	}
 }
 
+// openMutationModal puts dialog on screen and returns the Cmd that starts it.
+//
+// The four statements it wraps — state, modal, size, visible — were written out
+// at five sites in update(), so a change to modal setup (a new SetSize argument,
+// a focus reset) was five edits with no compiler check that they agreed. Every
+// open goes through here.
+func (m *Model) openMutationModal(dialog mutationDialogState) tea.Cmd {
+	m.actionState = dialog
+	m.actionModal = mutationModal(dialog, m.keys)
+	m.actionModal.SetSize(m.width, m.height)
+	m.showActionModal = true
+	return m.actionModal.Init()
+}
+
 func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) modal.Model {
 	switch state.kind {
 	case mutationCreate:
