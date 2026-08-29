@@ -148,27 +148,3 @@ func TestSplitEditorCommandQuoting(t *testing.T) {
 		})
 	}
 }
-
-func TestEditorCommandUsesExplicitCommandFirst(t *testing.T) {
-	t.Setenv("EDITOR", "nano")
-
-	if got := resolveEditorCommand("nvim -f"); got != "nvim -f" {
-		t.Fatalf("expected explicit editor command, got %q", got)
-	}
-}
-
-func TestEditorCommandUsesEnvWhenExplicitEmpty(t *testing.T) {
-	t.Setenv("EDITOR", "emacs")
-
-	if got := resolveEditorCommand("   "); got != "emacs" {
-		t.Fatalf("expected $EDITOR fallback, got %q", got)
-	}
-}
-
-func TestEditorCommandFallsBackToViWhenUnset(t *testing.T) {
-	t.Setenv("EDITOR", "")
-
-	if got := resolveEditorCommand(""); got != defaultEditorCommand {
-		t.Fatalf("expected default editor %q, got %q", defaultEditorCommand, got)
-	}
-}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
@@ -54,9 +55,18 @@ type IssueEditor struct {
 var _ Service = (*IssueEditor)(nil)
 
 // NewIssueEditor builds the default issue editor flow.
+//
+// editorCommand must be non-empty. internal/config owns the $EDITOR -> vi
+// resolution chain (CONFIGURATION.md) and config.Default() always produces a
+// value, so an empty one here means the caller bypassed config rather than that
+// a fallback is wanted — resolving it a second time is what let the two layers
+// disagree about $EDITOR within one session.
 func NewIssueEditor(repo repository.Repository, editorCommand string) (*IssueEditor, error) {
 	if repo == nil {
 		return nil, fmt.Errorf("repo is required")
+	}
+	if strings.TrimSpace(editorCommand) == "" {
+		return nil, fmt.Errorf("editor command is required (internal/config resolves it)")
 	}
 
 	return &IssueEditor{
@@ -126,7 +136,7 @@ func (e *IssueEditor) BuildEditorCmd(path string) (*exec.Cmd, error) {
 
 // buildEditorCmd parses the editor command string and appends path.
 func buildEditorCmd(editorCommand, path string) (*exec.Cmd, error) {
-	command, args, err := splitEditorCommand(resolveEditorCommand(editorCommand))
+	command, args, err := splitEditorCommand(editorCommand)
 	if err != nil {
 		return nil, err
 	}
