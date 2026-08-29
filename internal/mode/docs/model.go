@@ -93,7 +93,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 
 // Init loads the docs list from the repository.
 func (m *Model) Init() tea.Cmd {
-	return m.startReload(true)
+	return m.startReload(mode.RefreshReload)
 }
 
 // Update processes docs-specific messages and keybindings. Row movement, open
@@ -127,7 +127,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					"trigger", "docs-manual")
 				return nil
 			}
-			return m.startReload(true)
+			return m.startReload(mode.RefreshReload)
 		}
 	}
 
@@ -180,13 +180,13 @@ func (m *Model) AutoRefresh() tea.Cmd {
 	if m.inflight {
 		return nil
 	}
-	return m.startReload(false)
+	return m.startReload(mode.RefreshAuto)
 }
 
 // startReload dispatches the docs Search call. reset clears the cursor (cold
 // start and manual reload); otherwise the current issue is anchored so an
 // auto-refresh does not move the selection under the user.
-func (m *Model) startReload(reset bool) tea.Cmd {
+func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	if m.inflight {
 		m.logger.Debug("startReload re-entry suppressed; docs refresh already in flight")
 		return nil
@@ -196,7 +196,7 @@ func (m *Model) startReload(reset bool) tea.Cmd {
 	m.err = nil
 
 	m.anchorIssueID = ""
-	if reset {
+	if rm == mode.RefreshReload {
 		m.selectedRow = 0
 		m.scrollOffset = 0
 	} else if selection := m.currentSelection(); selection != nil {

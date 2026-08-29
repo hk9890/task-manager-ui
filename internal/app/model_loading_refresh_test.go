@@ -153,7 +153,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	if m.active != mode.Board {
 		t.Fatalf("expected board active after init, got %s", m.active)
 	}
-	if m.boardIsLoading() {
+	if m.board.IsLoading() {
 		t.Fatalf("expected board to have settled after draining init messages")
 	}
 
@@ -186,7 +186,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	m = next.(Model)
 
 	// Board must now be loading (in-flight).
-	if !m.boardIsLoading() {
+	if !m.board.IsLoading() {
 		t.Fatalf("expected board to be loading after refreshTickMsg with dirty surface")
 	}
 
@@ -219,7 +219,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// Now drain the in-flight board refresh (repository responds with same data).
 	m = applyMessages(t, m, runBatch(refreshCmd))
 
-	if m.boardIsLoading() {
+	if m.board.IsLoading() {
 		t.Fatalf("expected board to have settled after draining refresh repository results")
 	}
 

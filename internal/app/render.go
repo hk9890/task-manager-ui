@@ -116,16 +116,15 @@ func (m Model) renderHeader() string {
 func (m Model) renderBody() string {
 	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
 
-	switch m.active {
-	case mode.Detail:
+	if m.active == mode.Detail {
 		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false, skeletonPhase)
-	case mode.Docs:
-		return m.docs.View(skeletonPhase)
-	case mode.Search:
-		return m.search.View(skeletonPhase)
-	default:
-		return m.board.View(skeletonPhase)
 	}
+	if tab := m.browseController(m.active); tab != nil {
+		return tab.View(skeletonPhase)
+	}
+	// Board is the shell's home tab, so an unknown active mode renders it
+	// rather than an empty frame.
+	return m.board.View(skeletonPhase)
 }
 
 func (m *Model) syncSearchPreviewDetailState() {
@@ -176,9 +175,9 @@ func (m Model) workspaceSize() (int, int) {
 
 func (m Model) applyWorkspaceSizeToBrowseModes() {
 	workspaceWidth, workspaceHeight := m.workspaceSize()
-	m.board.SetSize(workspaceWidth, workspaceHeight)
-	m.docs.SetSize(workspaceWidth, workspaceHeight)
-	m.search.SetSize(workspaceWidth, workspaceHeight)
+	for _, entry := range m.browseTabs() {
+		entry.Tab.SetSize(workspaceWidth, workspaceHeight)
+	}
 }
 
 func (m Model) renderFooter() string {
@@ -189,16 +188,27 @@ func (m Model) renderFooter() string {
 	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(footerHelpText(m.active, m.width, m.keys))
 }
 
+// browseLoadingScope maps a browse mode to its loading scope. A new browse
+// surface needs its own scope, or its work reports as somebody else's
+// (DESIGN-GUIDE.md).
+func browseLoadingScope(id mode.ID) loading.Scope {
+	switch id {
+	case mode.Board:
+		return loading.ScopeBoard
+	case mode.Docs:
+		return loading.ScopeDocs
+	case mode.Search:
+		return loading.ScopeSearch
+	}
+	return loading.Scope(id)
+}
+
 func (m Model) loadingStates() []loading.State {
 	loadingStates := make([]loading.State, 0, 4)
-	if m.boardIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeBoard})
-	}
-	if m.docsIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDocs})
-	}
-	if m.searchIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
+	for _, entry := range m.browseTabs() {
+		if entry.Tab.IsLoading() {
+			loadingStates = append(loadingStates, loading.State{Scope: browseLoadingScope(entry.ID)})
+		}
 	}
 	if m.detail.IsLoading() {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID()})

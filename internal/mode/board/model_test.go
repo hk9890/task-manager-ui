@@ -1003,7 +1003,7 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 func TestStartReload_PassesClosedLimit(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []refreshMode{refreshModeReload, refreshModeAuto} {
+	for _, mode := range []mode.RefreshMode{mode.RefreshReload, mode.RefreshAuto} {
 		stub := &optsCaptureRepo{}
 		m := newBoardModel(stub, resolvedBoardKeys(t))
 
@@ -1568,7 +1568,7 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 // resulting dashboard response arrives, doneLoadedCount reflects only the new
 // page (not the stale 85).
 //
-// Audit note: the r key handler calls startReload(refreshModeReload) which
+// Audit note: the r key handler calls startReload(mode.RefreshReload) which
 // already resets doneLoadedCount=0 and doneLoadInFlight=false (lines 383-384
 // of model.go). This test is the explicit regression guard for that
 // path.
@@ -1659,7 +1659,7 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 // Architecture note: focus-regain is handled in internal/app/model.go
 // (tea.FocusMsg → maybeAutoRefreshActiveSurfaceCmdOnFocusRegain →
 // refreshActiveSurfaceCmd → m.board.AutoRefresh). AutoRefresh() calls
-// startReload(refreshModeAuto), which resets doneLoadedCount and
+// startReload(mode.RefreshAuto), which resets doneLoadedCount and
 // doneLoadInFlight via the shared counter-reset block in startReload (lines
 // 383-384 of model.go). This test covers the board.AutoRefresh() entry point
 // directly — the app-level wiring is covered by existing app model tests; the
@@ -1763,9 +1763,9 @@ func TestDoneLoadMore_ReloadResetsState(t *testing.T) {
 	// itself guards on m.inflight (not doneLoadInFlight), so this matches the
 	// real code path where doneLoadInFlight is left over from a prior session.
 	m.inflight = false
-	cmd := m.startReload(refreshModeReload)
+	cmd := m.startReload(mode.RefreshReload)
 	if cmd == nil {
-		t.Fatal("expected non-nil Cmd from startReload(refreshModeReload)")
+		t.Fatal("expected non-nil Cmd from startReload(mode.RefreshReload)")
 	}
 
 	// AC 1: doneLoadedCount reset to 0 synchronously.
@@ -2064,7 +2064,7 @@ func TestFailedRefreshKeepsLoadedColumns(t *testing.T) {
 		t.Fatal("test setup: expected a selection before the failed refresh")
 	}
 
-	_ = m.startReload(refreshModeAuto)
+	_ = m.startReload(mode.RefreshAuto)
 	feedDashboardErr(m, errors.New("taskmgr unavailable"))
 
 	if got := len(m.columns[2].issues); got != inProgressBefore {
@@ -2120,7 +2120,7 @@ func TestRefreshReClampsScrollOffsetOfAShrunkColumn(t *testing.T) {
 	}
 
 	// The column shrinks to 5 rows while the offset still points past them.
-	_ = m.startReload(refreshModeAuto)
+	_ = m.startReload(mode.RefreshAuto)
 	feedDashboardData(m, repository.DashboardData{InProgress: makeOpenIssues("wip", 5)})
 
 	rows := len(m.columns[2].issues)
@@ -2152,7 +2152,7 @@ func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
 
 	// A load-more for offset 200 is outstanding when the auto-refresh lands.
 	m.doneLoadInFlight = true
-	_ = m.startReload(refreshModeAuto)
+	_ = m.startReload(mode.RefreshAuto)
 	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(31), ClosedTotal: 736})
 
 	if got := len(m.columns[doneColumnIndex].issues); got != 31 {

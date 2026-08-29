@@ -29,33 +29,19 @@ func (m *Model) maybeAutoRefreshActiveSurfaceCmdWithPolicy(force bool) tea.Cmd {
 }
 
 func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
-	switch m.active {
-	case mode.Board:
-		if m.boardIsLoading() {
-			return nil
-		}
-		m.markSurfaceRefreshed(mode.Board)
-		return m.board.AutoRefresh()
-	case mode.Docs:
-		if m.docsIsLoading() {
-			return nil
-		}
-		m.markSurfaceRefreshed(mode.Docs)
-		return m.docs.AutoRefresh()
-	case mode.Search:
-		if m.searchIsLoading() {
-			return nil
-		}
-		m.markSurfaceRefreshed(mode.Search)
-		return m.search.AutoRefresh()
-	case mode.Detail:
+	if m.active == mode.Detail {
 		if m.detail.IsLoading() {
 			return nil
 		}
 		return m.reloadDetailCmd()
-	default:
+	}
+
+	tab := m.browseController(m.active)
+	if tab == nil || tab.IsLoading() {
 		return nil
 	}
+	m.markSurfaceRefreshed(m.active)
+	return tab.AutoRefresh()
 }
 
 // reloadDetailCmd issues a detail load for the current selection and marks the

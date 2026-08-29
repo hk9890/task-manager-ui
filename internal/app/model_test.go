@@ -99,8 +99,8 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	if gw.hasSearchCall() {
 		t.Fatalf("expected no Search call during startup; got calls=%#v", gw.Calls())
 	}
-	if m.searchInitDone {
-		t.Fatalf("expected searchInitDone=false after startup")
+	if m.initDone[mode.Search] {
+		t.Fatalf("expected search init=false after startup")
 	}
 
 	// First switch to search mode: lazy init must fire.
@@ -115,8 +115,8 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	if !gw.hasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected Search call on first search mode activation; got calls=%#v", gw.Calls())
 	}
-	if !m.searchInitDone {
-		t.Fatalf("expected searchInitDone=true after first search activation")
+	if !m.initDone[mode.Search] {
+		t.Fatalf("expected search init=true after first search activation")
 	}
 
 	// Return to board and go back to search: should NOT re-trigger Search
@@ -129,10 +129,10 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt}) // toggle to search again
 	m = next.(Model)
 	// Only run the immediate Update result; don't recurse into auto-refresh
-	// commands — we only want to check that lazySearchInitCmd itself is a no-op.
+	// commands — we only want to check that lazyInitActiveTabCmd itself is a no-op.
 	_ = cmd
-	if !m.searchInitDone {
-		t.Fatalf("expected searchInitDone still true on second search activation")
+	if !m.initDone[mode.Search] {
+		t.Fatalf("expected search init still true on second search activation")
 	}
 	// The lazy init flag must be set; subsequent refresh is handled by auto-refresh,
 	// not by Init. Confirm no second Search call came from the lazy path.
@@ -165,7 +165,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 		next, cmd := m.Update(msg)
 		m = next.(Model)
 
-		if !observedVisibleBoardState && !m.boardIsLoading() {
+		if !observedVisibleBoardState && !m.board.IsLoading() {
 			body := m.renderBody()
 			if strings.Contains(body, "Ready first") {
 				header := m.renderHeader()

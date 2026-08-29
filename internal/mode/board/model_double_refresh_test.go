@@ -21,6 +21,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -215,7 +216,7 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	m := newSettledBoardModel(t, repo)
 
 	// === First direct startReload call — must succeed and set inflight=true ===
-	firstCmd := m.startReload(refreshModeReload)
+	firstCmd := m.startReload(mode.RefreshReload)
 	if firstCmd == nil {
 		t.Fatalf("first startReload: expected non-nil Cmd")
 	}
@@ -230,7 +231,7 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	}
 
 	// === Second direct startReload call — must be suppressed by the internal guard ===
-	secondCmd := m.startReload(refreshModeReload)
+	secondCmd := m.startReload(mode.RefreshReload)
 
 	// Assert 1: second call returned nil (internal guard fired).
 	if secondCmd != nil {
