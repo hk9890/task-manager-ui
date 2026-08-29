@@ -4,11 +4,15 @@ The generic standard — which file owns what, and how a project doc is written 
 `instruction-writing:writing-project-docs` skill. This file records only the delta, and wins where
 the two disagree.
 
+All three gates below scan the **git-tracked** set (`git ls-files`), not the working tree, and run
+under `mise run ci` rather than the unit suite because they shell out to `git`. So `git add` a new
+doc before `mise run ci`, or the gates never see it.
+
 ## The citation gate
 
 `TestDocsCiteLivePaths` (`cmd/taskmgr-ui/doc_citation_hygiene_integration_test.go`) fails when a
 tracked Markdown file cites a path under `internal/`, `cmd/`, `scripts/`, `docs/` or `.github/` that
-does not exist. It runs under `mise run ci`, not the unit suite, because it shells out to `git`.
+does not exist.
 
 - **Cite a symbol, never a line number.** `path:42` and `path#L42` both fail the gate. A line anchor
   survives no edit above it, and no check can see that it moved, because the file still exists.
@@ -20,26 +24,37 @@ does not exist. It runs under `mise run ci`, not the unit suite, because it shel
 ## The anchor gate
 
 `TestDocsLinkAnchorsResolve`, in the same file, fails when a Markdown link points at a `#fragment`
-that names no heading in the target document. Renaming a heading is a normal edit, and the citation
-gate cannot see the breakage: the target file still exists, so the link resolves and reads as true.
-Two such links shipped on `main` and were found only by reading the docs by hand.
+that names no heading in the target document — which the citation gate cannot see, because the
+target file still exists.
 
 - Fragments are matched against GitHub's slug rules: lowercased, punctuation dropped, spaces
   hyphenated. `## Launcher interpolation/context surface` is `#launcher-interpolationcontext-surface`
    — the slash vanishes rather than becoming a separator.
-- `http:`, `https:`, `mailto:` and protocol-relative targets are skipped; an external anchor is not
-  this gate's problem.
 - Links inside fenced code blocks are skipped, so an example link is never a build failure.
+
+## The tracker-ID gate
+
+`TestNoLeakedLocalTrackerIDs` (`cmd/taskmgr-ui/tracker_id_hygiene_integration_test.go`) scans tracked
+`*.go` and `*.md` files and fails on a `taskmgr` issue ID.
+
+- Name the behaviour, not the issue key. A reader outside this machine cannot resolve a store-local
+  issue ID, and the store it points into is not in the repository. The gate matches the ID shape
+  itself, so a placeholder in prose fails it too.
 
 ## Doc trees outside the canonical set
 
-- [DESIGN-GUIDE.md](DESIGN-GUIDE.md) owns the visual and interaction law for `internal/ui/` and
-  `internal/mode/`. It sits outside the canonical topic set deliberately: folding the interaction law
-  into [CODING.md](CODING.md) would bury the implementation constraints an agent opens that file for,
-  and this product *is* its terminal surface.
-- [CONFIGURATION.md](CONFIGURATION.md) owns the runtime config model — the config file, keybinding
-  resolution, and the launcher interpolation surface. It is a reference for a data format, so it
-  outranks CODING.md inside `internal/config/`.
+Adding a doc under `docs/` takes two registrations, in this order, or nothing will ever load it:
+
+1. A `MUST read … before <action>` route in [AGENTS.md](../AGENTS.md).
+2. An inline link from [CONTRIBUTING.md](../CONTRIBUTING.md) where a human needs it.
+
+[CODING.md](CODING.md)'s header table states which doc outranks which inside each area.
+
+- [DESIGN-GUIDE.md](DESIGN-GUIDE.md) sits outside the canonical topic set deliberately: folding the
+  interaction law into [CODING.md](CODING.md) would bury the implementation constraints an agent
+  opens that file for, and this product *is* its terminal surface.
+- [CONFIGURATION.md](CONFIGURATION.md) is a reference for a data format — the config file, keybinding
+  resolution, and the launcher interpolation surface — which is why it is separate.
 - [user-guide/](user-guide/) is written for someone who runs `taskmgr-ui` and never opens this
   repository. It may name a source path only where the reader sets the thing themselves — the
   keybinding defaults cite `internal/config/keybindings.go` because that is what a config override

@@ -4,10 +4,17 @@
 
 A standalone terminal UI for browsing and updating task-manager issues.
 
-## Repository Identity
+What it does:
 
-- Module: `github.com/hk9890/task-manager-ui`
-- Binary: `taskmgr-ui`
+- **Board** — issues in Not Ready, Ready, In Progress and Done columns, with the Done column paging
+  in closed history as you scroll.
+- **Docs tab** — every `doc`-type issue, open and closed, in one column.
+- **Search** — query issues, widen to closed work, drill into any result.
+- **Detail** — the full issue with its dependencies, content and metadata panes.
+- **Edit in place** — create, update, close and comment on issues; `e` opens the full issue in
+  `$EDITOR` and applies what you save.
+- **Launch external tools** — run `nvim`, `opencode` or your own command against the selected issue.
+- **No daemon** — the store is opened in-process through the task-manager Go SDK.
 
 ## Getting Started
 
@@ -15,7 +22,7 @@ A standalone terminal UI for browsing and updating task-manager issues.
 
 #### From a release (recommended)
 
-Download a prebuilt, signed archive from the
+Download a prebuilt archive from the
 [releases page](https://github.com/hk9890/task-manager-ui/releases) and put the
 `taskmgr-ui` binary on your `PATH`. Archives are named
 `taskmgr-ui_<version>_<os>_<arch>.tar.gz` (for example
@@ -39,11 +46,7 @@ Release archives ship with a cosign-signed checksum file — see
 
 #### From source
 
-Building from source uses [mise](https://mise.jdx.dev/) to provision the pinned
-Go toolchain and dev tools from `.mise.toml`, so a separate Go install is not
-required. See [CONTRIBUTING.md](CONTRIBUTING.md#set-up) for the
-`mise install` / `mise run build` setup; to install the binary onto your `PATH`,
-run `go install ./cmd/taskmgr-ui`.
+See [CONTRIBUTING.md](CONTRIBUTING.md#set-up).
 
 ### Run
 
@@ -68,7 +71,7 @@ directory found by walking up, otherwise the central registry
 the full flag list.
 
 ```bash
-taskmgr-ui --config "$HOME/.config/taskmgr-ui/config.yaml" --print-config
+taskmgr-ui --print-config
 taskmgr-ui --check-config      # validate the config file and exit
 taskmgr-ui --debug             # mirror startup diagnostics to stderr
 ```
@@ -84,11 +87,6 @@ Configuring it — the config file, keybinding overrides, launcher templates —
 
 Developer and agent documentation lives under [`docs/`](./docs/); [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 is the entry point for humans and [`AGENTS.md`](./AGENTS.md) for AI tools.
-
-## Contributing
-
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how to propose changes and the
-contribution workflow.
 
 ## Security
 

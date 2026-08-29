@@ -1,12 +1,15 @@
 # Design Guide
 
-The interaction and rendering law for every surface under `internal/ui/` and `internal/mode/`. No
-gate enforces it — [REVIEWING.md](REVIEWING.md) is where a change is held against it.
+The interaction and rendering law for every surface under `internal/ui/` and `internal/mode/`.
 
-`internal/ui/` renders; `internal/mode/` owns feature-local state and emits shell contracts. A
-renderer takes a state struct and returns a string — no package under `internal/ui/` reads a
-repository. The three interactive primitives are the exception that carry Bubble Tea state of their
-own: `modal`, `toaster` and `loading` own messages and commands; every other package is pure.
+Two rules here are gated — type/colour parity (`renderhelpers/type_style_parity_test.go`) and the
+tab strip's ownership of `tab`/`shift+tab` (`internal/config/keybindings_test.go`). The rest is held
+at review ([REVIEWING.md](REVIEWING.md)).
+
+[CODING.md](CODING.md)'s rule 8 owns the `internal/ui/` and `internal/mode/` boundary. `modal` and
+`toaster` are the exception to it — they carry Bubble Tea state of their own. `loading` is stateless
+but owns a message and a command (`TickMsg`, `SpinnerTickCmd`); the frame counter lives in the
+shell. Every other package is pure.
 
 ## Colour roles
 
@@ -49,20 +52,21 @@ The whole vocabulary, and the one place each is defined:
 |---|---|---|
 | `› ` / two spaces | the selection gutter, always 2 cells wide | `styles.SelectionPrefix` |
 | `…` | truncated content — one cell, so it keeps more text than `...` | `styles.TruncateString` |
-| `╭ ╮ ╰ ╯ ─ │` | a section border | `styles.FormSection` |
+| `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight, 10 frames | `loading.SpinnerFrames` |
+| `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `✅ ❌ ℹ️ ⚠️` | toast severity | `toaster.Model.View` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
 | `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
+| `·` | field separator in a header or status line | inline at the call site |
 
 Spend a new glyph only when an existing one cannot carry the meaning, and define it next to its
 siblings rather than inline at the call site.
 
 ## Build from the shared chrome
 
-- Frame every column, pane and shell with `styles.FormSection`; do not hand-roll a border. It owns
-  the rounded corners, the title inlays (`TopLeft` / `TopRight`), focus colouring, and padding each
-  line to the inner width.
+- Frame every column, pane and shell with `styles.FormSection`. It owns the rounded corners, the
+  title inlays (`TopLeft` / `TopRight`), focus colouring, and padding each line to the inner width.
 - `FormSection` returns the literal string `too narrow` below width 6. A caller that needs a
   different degraded rendering handles the narrow case before calling.
 - `ui/shared/issuerow` is the single compact issue-row renderer for board- and search-style lists.
@@ -93,12 +97,15 @@ siblings rather than inline at the call site.
 - Take the gutter from `styles.SelectionPrefix(selected, styled)`. It returns both variants: use
   `plain` for width math and truncation, `rendered` for output. Deriving one from the other by
   stripping escapes is what the two return values exist to prevent.
-- A move that changes the selection calls `scroll.EnsureVisible(offset, sel, window)` — the `›`
-  chevron staying on screen is a contract, not a nicety, and it is the first thing a scroll
-  regression breaks.
-- A header whose window clips its list reads `N of M`; once the full list is loaded it reads a plain
-  `N`. `internal/ui/board/board.go` holds the board's, `internal/ui/detail/details.go` the detail
-  panes'.
+- A move that changes the selection calls `scroll.EnsureVisible(offset, sel, window)` — or
+  `scroll.EnsureVisibleClipped(offset, sel, window, total)` when the pane spends its first and last
+  rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The `›` chevron staying on
+  a row that actually renders is a contract; `EnsureVisible` in a clipped pane satisfies the window
+  check and hides the chevron.
+- A header reads a plain `N` only when the whole list is loaded and fits. A clipped window or a
+  paginated column (`TotalIsExact` false, or a load-more in flight) reads `N of M`; a skeleton pane
+  reads `issuerow.SkeletonGlyph`. `internal/ui/board/board.go` holds the board's,
+  `internal/ui/detail/details.go` the detail panes'.
 
 ## Overlays
 
@@ -120,7 +127,7 @@ siblings rather than inline at the call site.
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.
 
-## Nothing waits silently
+## Loading feedback
 
 - Long work renders the spinner: advance the frame with `loading.NextFrame`, draw it with
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
@@ -131,11 +138,10 @@ siblings rather than inline at the call site.
   advances every 4 spinner frames for a ~1.2 s pulse.
 - Launch success and failure both reach the operator as a toast; a launcher never fails silently.
 
-## Words
+## Text and markdown
 
 - Comments render newest-first, against the backend's oldest-first default, and the header says so:
-  `Comments (N · newest first)`. Surfacing recent activity first is what makes triage fast on a long
-  issue; the header exists so the reader is not left inferring the order.
+  `Comments (N · newest first)`.
 - Markdown on a read-only surface goes through `markdown.Renderer.RenderReadOnly`, which degrades
   deterministically: empty input to `(no content)`, plain text and any renderer failure to plain
   wrapped text.

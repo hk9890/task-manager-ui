@@ -13,12 +13,14 @@ trace-export path to reach for. Runtime diagnostics are centralized through
 - all startup paths, including non-interactive `--print-config` and
   `--check-config`, also write diagnostics to the persistent JSON Lines log when
   the sink is available
-- `--debug` enables DEBUG/INFO diagnostic mirroring to `stderr` with the
-  compatibility prefix `[taskmgr-ui-debug]`
 
 ## Centralized logging contract
 
 `internal/logging` is the single logging entrypoint for runtime diagnostics.
+
+**The persistent JSON sink writes INFO and above.** `--debug` lowers it to DEBUG
+(`newJSONFileHandler`). A DEBUG record does not exist in a default run's log file —
+if you are looking for one, relaunch with `--debug`.
 
 Implemented behavior:
 
@@ -53,7 +55,10 @@ Structured records include at least:
 - `session_id`
 - `project_root`
 - `build_version`
-- component-specific fields such as `component` (for example `startup`)
+- `component`, on records emitted through a component logger: `startup`
+  (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search` (`internal/app/model.go`).
+  Shell-level records — the issue-edit failures and the health check below — go through
+  the root logger and carry no `component` key.
 
 To attribute a session safely in a collected set of log files, use `session_id`
 together with `project_root` and `build_version`. Startup records inherit those
@@ -73,8 +78,8 @@ directory from one whose store was promoted with `taskmgr store move --central`,
 and it is the first thing to read when the UI opens a board the `taskmgr` CLI
 does not agree with. Note that `project_root` (the root attribute on every
 record) is the working directory, while `project_path` is the store's project —
-they differ for a central store, and for a run started in a subdirectory.
-`project_path` is the root launcher templates interpolate as `{{project.root}}`.
+they differ for a central store, and for a run started in a subdirectory
+([CONFIGURATION.md](CONFIGURATION.md) covers what a launcher template does with it).
 
 A failure to resolve is reported by the existing `interactive startup failed`
 record instead; it names the working directory, or the store name when
@@ -87,12 +92,22 @@ reads fine, while launchers without an explicit `work_dir` exec in a directory
 that is gone. Re-point the entry by running
 `taskmgr store move --relink --to <store>` from the project's new location.
 
+### What a healthy run logs after startup
+
+Two things, both expected:
+
+- `temp cleanup: removed stale temp file` (INFO, `internal/app/services.go`) — the
+  post-startup sweep armed by `Model.Init` found an old edit temp file and removed it.
+- the Done-column load-more trace (DEBUG, `internal/mode/board/model.go`) — only when the
+  column actually pages, and only under `--debug`.
+
+Anything else after startup means something went wrong.
+
 ### Runtime failure records
 
-A session that goes right logs nothing after startup. These are what a session
-that went wrong leaves behind, and the first thing to read when a run
-misbehaved — all of them reach the persistent log only, because stderr is
-suppressed for the interactive session:
+These are what a session that went wrong leaves behind, and the first thing to read
+when a run misbehaved. All reach the persistent log only, because stderr is
+suppressed for the interactive session.
 
 - `task-manager health check failed` — emitted for every failure code. Only
   `no_database_found` also draws the fatal-error screen; an unreadable or corrupt
@@ -100,14 +115,26 @@ suppressed for the interactive session:
   `Dashboard` call returned.
 - `failed to prepare the issue edit document`, `failed to apply the issue edit` —
   an `e` round trip that did not save. The toast carries the same cause.
-- `dashboard refresh failed; keeping the last loaded columns` — the rows on the
+- `dashboard refresh failed; keeping the last loaded columns` (WARN) — the rows on the
   board are the previous load's.
-- `stale load-more page dropped; a reload superseded it` — a Done-column page
-  discarded because a reload landed first; expected, not a fault.
+- `backend sort assumption broken` (WARN) — the backend returned rows in an order the
+  board did not expect, so column ordering on screen is not the order you asked for.
+- `cardinality threshold exceeded` (WARN) — a column holds more distinct values than the
+  board budgets for; expect truncation in what is drawn.
+- `load-more for Done column failed` (WARN) — a Done page did not arrive, so the column
+  stops growing while the header still names a larger total.
+- `temp cleanup: glob failed`, `temp cleanup: remove failed` (WARN,
+  `internal/app/services.go`) — the sweep could not read or delete a stale edit temp
+  file. Nothing on screen changes; the file stays behind.
+- `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
+  discarded because a reload landed first; expected, not a fault. Visible only under
+  `--debug`.
 
 ## `--debug` coverage
 
-`--debug` mirrors machine-visible startup diagnostics to `stderr`:
+`--debug` does two things: it lowers the persistent sink to DEBUG, and it mirrors
+machine-visible startup diagnostics to `stderr` with the compatibility prefix
+`[taskmgr-ui-debug]`:
 
 - startup resolution lines from `cmd/taskmgr-ui/main.go` for both interactive and
   non-interactive startup paths that load config
@@ -116,68 +143,52 @@ suppressed for the interactive session:
   - auto-refresh enabled/disabled
   - repo backend (`repo`, `repo_file`, and the `--store-name` override
     `store_name`)
+- the run `session_id`, printed once so operators can correlate stderr output with
+  structured log records — for interactive startup and for startup-only commands such
+  as `--check-config` and `--print-config`
 
 The store-resolution record described above is not part of the `stderr` mirror:
 it is emitted after stderr suppression is raised for the interactive session, so
 it reaches the persistent log only.
 
-The repository backend is in-process (the task-manager Go SDK,
-`github.com/hk9890/task-manager/sdk/tasks`); there is no external subprocess in
-the product data path and therefore no per-command argv/exit-code/duration
-execution trace. The repository backend emits no diagnostic records of its own,
-so in a healthy session the diagnostics surface is startup-only; a session that
-fails leaves the records above.
-
-The startup debug stream also prints the run `session_id` once so operators can
-correlate stderr output with structured log records. This applies equally to
-interactive startup and startup-only commands such as `--check-config` and
-`--print-config`.
+The repository backend is in-process, so there is no per-command argv/exit-code/duration
+execution trace, and the backend emits no diagnostic records of its own.
 
 ## Capture commands
 
-Use stderr capture when you need reproducible operator-facing evidence:
+For a non-interactive diagnostics capture:
 
 ```bash
-taskmgr-ui --cwd /path/to/project --debug 2> /tmp/taskmgr-ui-debug.log
 taskmgr-ui --cwd /path/to/project --debug --check-config 2> /tmp/taskmgr-ui-debug-check.log
 ```
 
+Launching the product itself is [RUNNING.md](RUNNING.md)'s subject — a stderr redirect
+around an interactive run captures almost nothing, because stderr is suppressed once the
+TUI starts.
+
 Use the persistent JSON Lines log when you need durable machine-readable
-diagnostics. Each process writes to its own file named after its `session_id`.
-To follow all active sessions at once, use a glob:
+diagnostics. Each process writes to its own file named after its `session_id`
+(printed on `stderr` under `--debug`):
 
 ```bash
-tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-*.log
+tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-*.log            # all sessions
+tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-<session_id>.log # one session
 ```
 
-Or, if `XDG_STATE_HOME` is set:
-
-```bash
-tail -f "$XDG_STATE_HOME"/taskmgr-ui/taskmgr-ui-*.log
-```
-
-To follow a specific session by ID (the `session_id` is printed on `stderr`
-when `--debug` is set):
-
-```bash
-tail -f "$XDG_STATE_HOME/taskmgr-ui/taskmgr-ui-<session_id>.log"
-# e.g.:
-tail -f ~/.local/state/taskmgr-ui/taskmgr-ui-deadbeef.log
-```
+Substitute `"$XDG_STATE_HOME"/taskmgr-ui/` when that variable is set.
 
 When inspecting multiple log files, do not assume adjacent records across files
-came from the same repository or binary. Filter or inspect by `session_id`,
-`project_root`, and `build_version`.
+came from the same repository or binary. Filter by `session_id`, `project_root`,
+and `build_version`.
 
 ## Relevant code paths
 
 - `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`buildRepository`: `tasks.Resolve` → `taskmgr.New`)
-- `internal/repository/taskmgr/` — in-process task-manager backend (the production repository); behavior tests live alongside it
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
-- `internal/logging/logging_test.go` — record-shape, session-id, rotation, and fallback coverage
+- `internal/app/services.go` — the temp-cleanup sweep records
+- `internal/mode/board/model.go` — the dashboard-refresh, sort, cardinality and load-more records
 
 ## Runtime UI evidence
 
-For user-visible runtime capture rather than stderr diagnostics, drive the built
-binary with `scripts/capture_taskmgr_ui_screen.py` ([RUNNING.md](RUNNING.md)).
-That script captures rendered TUI state; it is not part of the logging surface.
+For rendered TUI state rather than diagnostics, drive the built binary with
+`scripts/capture_taskmgr_ui_screen.py` ([RUNNING.md](RUNNING.md)).

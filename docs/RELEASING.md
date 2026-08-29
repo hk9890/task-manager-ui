@@ -8,18 +8,10 @@ used.
 
 - Release artifacts are published by `.github/workflows/release.yml` (the
   `Release` workflow) using `.goreleaser.yaml`. The workflow is triggered
-  manually via `workflow_dispatch` against a release tag (see
-  [Enabling a push-to-release tag trigger](#enabling-a-push-to-release-tag-trigger)).
-- The build depends on the public module
-  `github.com/hk9890/task-manager/sdk`, resolved through the Go module proxy like
-  any other dependency — no credentials or `GOPRIVATE` are required.
+  manually via `workflow_dispatch` against a release tag.
 - Each release run builds, vets, and tests before publishing, so a green run is
   itself release provenance for the commit.
-- Release/snapshot builds inject `taskmgr-ui --version` metadata via GoReleaser
-  ldflags into `github.com/hk9890/task-manager-ui/internal/version` (`Version`,
-  `Commit`, `Date`), while local developer builds keep the fallback `dev` /
-  `unknown` values defined in `internal/version/version.go`. See `docs/CODING.md`
-  Version/build metadata behavior for the full symbol list.
+- Version metadata injection: [CODING.md](CODING.md) → Version/build metadata.
 - Release archives are intentionally named for installer compatibility, for
   example `taskmgr-ui_0.11.0_linux_x64.tar.gz` and
   `taskmgr-ui_0.11.0_macos_arm64.tar.gz`, so tools like `mise` can auto-detect
@@ -39,26 +31,8 @@ used.
 
 ## Prerequisites
 
-Run from the repository root.
-
-1. Confirm a clean working tree:
-
-   ```bash
-   git status
-   ```
-
-2. Sync with remote before release work:
-
-   ```bash
-   git pull --rebase
-   git status
-   ```
-
-3. Run the merge gate (`mise run ci`). The Release run repeats build/vet/test in
-   CI, but running the gate locally first avoids spending a workflow run on an
-   avoidable failure.
-
-4. If the release includes user-facing/runtime behavior changes, drive the built
+1. `mise run ci` is the gate for every step below. Run it before you start.
+2. If the release includes user-facing/runtime behavior changes, drive the built
    binary per [`docs/RUNNING.md`](./RUNNING.md).
 
 ## Release flow (GitHub Actions)
@@ -70,21 +44,22 @@ Run from the repository root.
    git tag --list "v*"
    ```
 
-2. Update `CHANGELOG.md` / release notes for this release and commit the release
-   prep.
+2. Update `CHANGELOG.md` / release notes and land the change like any other:
+   worktree, PR, merge ([CHANGE-WORKFLOW.md](CHANGE-WORKFLOW.md)). There is no
+   release exception to the worktree rule — `main` is not a working branch.
 
-3. Run `mise run ci` on the release commit.
+3. Fast-forward `main` to the merged commit, and run `mise run ci` on it.
 
-4. Create an annotated tag **on the release commit**:
+4. Create an annotated tag **on the merged release-prep commit** now at the tip of
+   `main`:
 
    ```bash
    git tag -a vX.Y.Z -m "taskmgr-ui vX.Y.Z"
    ```
 
-5. Push the commit and the tag:
+5. Push the tag:
 
    ```bash
-   git push origin main
    git push origin vX.Y.Z
    ```
 
@@ -104,15 +79,15 @@ Run from the repository root.
 7. Watch the run complete:
 
    ```bash
-   gh run watch "$(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
+   gh run watch "$(gh run list --workflow=release.yml --branch vX.Y.Z --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
    ```
+
+   The dispatched run takes a few seconds to register; re-run the lookup if it
+   returns nothing.
 
    The run builds/vets/tests, then GoReleaser builds archives, generates SBOMs,
    signs the checksums, and creates/updates the GitHub release with auto-generated
-   notes. Because the repository is public, the SLSA provenance step now succeeds
-   and the attestation is verifiable with `gh attestation verify` (it remains
-   `continue-on-error` as a safety net; see
-   [Scope and current state](#scope-and-current-state)).
+   notes. Verify the attestation with `gh attestation verify`.
 
 8. Post-release verification:
 
@@ -129,29 +104,21 @@ Run from the repository root.
 re-dispatching against an existing tag/release overwrites its assets instead of
 erroring.
 
-### Enabling a push-to-release tag trigger
-
-`release.yml` runs on `workflow_dispatch` only, by deliberate choice: it keeps
-re-tagging and history maintenance from firing unintended releases. If you want
-pushing a `vX.Y.Z` tag to release automatically, add a `push: tags: ['v*']`
-trigger to `release.yml`. Until then, use the manual `workflow_dispatch` step
-above.
-
 ## Local release fallback
 
 When GitHub Actions can't be used, build and publish locally from the same
 `.goreleaser.yaml`. This path produces binaries + checksums but **no signing,
-SBOMs, or SLSA provenance** (cosign keyless signing needs the workflow's
-interactive OIDC; SBOMs need `syft`). The substitute provenance is the local
-`mise run ci` output on the release commit.
+SBOMs, or SLSA provenance** (cosign keyless signing locally needs an interactive
+Sigstore flow; the workflow signs with its OIDC token. SBOMs need `syft`). The
+substitute provenance is the local `mise run ci` output on the release commit.
 
 Prerequisites: `goreleaser` v2 in PATH
 (`go install github.com/goreleaser/goreleaser/v2@latest`), a `GITHUB_TOKEN` with
 `repo` scope (typically `gh auth token`), and a clean working tree on the tagged
 release commit.
 
-1. Confirm `mise run ci` passes on the release commit (substitutes for the
-   CI provenance gate).
+1. Confirm the gate passes on the release commit (it substitutes for the CI
+   provenance gate).
 2. Create and push the annotated tag:
 
    ```bash

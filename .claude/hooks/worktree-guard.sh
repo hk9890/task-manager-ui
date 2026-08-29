@@ -18,6 +18,6 @@ if printf '%s' "$cmd" | grep -qE 'scratchpad|/tmp/|/private/tmp/|mktemp|\$\{?TMP
   exit 0
 fi
 
-reason='Create a persistent worktree with the EnterWorktree tool, not `git worktree add` — it enters the worktree and symlinks the shared .tasks store in, which taskmgr needs (docs/CHANGE-WORKFLOW.md → Worktrees). Put a throwaway clean-build probe in /tmp or the scratchpad instead, where `git worktree add --detach` is allowed. If EnterWorktree cannot express what you need, say so rather than hand-rolling.'
+reason='Create a persistent worktree with the EnterWorktree tool, not `git worktree add` — it creates the worktree under .claude/worktrees/ and switches the session into it, where the central taskmgr store still resolves by ancestor path (docs/CHANGE-WORKFLOW.md → Worktrees). Put a throwaway clean-build probe in /tmp or the scratchpad instead, where `git worktree add --detach` is allowed. If EnterWorktree cannot express what you need, say so rather than hand-rolling.'
 jq -cn --arg r "$reason" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
 exit 0
