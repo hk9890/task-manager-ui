@@ -171,7 +171,7 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	innerRepo := fakes.NewTracked()
 	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
 	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
-	rec := &queryRecordingRepo{Repository: innerRepo}
+	rec := fakes.NewErrorInjecting(innerRepo)
 
 	// Build and Init WITHOUT draining.
 	m := NewModel(context.Background(), rec, nil)
@@ -197,7 +197,7 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	}
 
 	// Verify no "all" status was passed.
-	queries := rec.Queries()
+	queries := searchQueries(t, rec)
 	foundTextSearch := false
 	for _, q := range queries {
 		if q.Text == "task" {

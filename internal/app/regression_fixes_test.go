@@ -10,7 +10,6 @@ package app
 //   - TestToastStaleDismissDoesNotHideNewerToast (dismiss identity)
 
 import (
-	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -25,25 +24,9 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
-
-// recordingUpdateRepository wraps a repository.Repository and captures the exact
-// UpdateIssueInput passed to UpdateIssue. The package's standard test repo
-// (ErrorInjectingRepository) records only method names, so this thin wrapper is
-// needed to assert on the pointer-valued fields the shell builds — specifically
-// the Assignee unassign semantics.
-type recordingUpdateRepository struct {
-	repository.Repository
-	updateCalls []domain.UpdateIssueInput
-}
-
-func (r *recordingUpdateRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
-	r.updateCalls = append(r.updateCalls, input)
-	return r.Repository.UpdateIssue(ctx, id, input)
-}
 
 // TestMutationUpdateClearingAssigneeUnassigns is the regression guard for the
 // mutationUpdate assignee diff. Clearing a pre-filled assignee must send an
@@ -63,16 +46,32 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 		issue: domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"},
 	}
 
-	newServices := func(t *testing.T) (*recordingUpdateRepository, Services) {
+	newServices := func(t *testing.T) (*fakes.TrackedRepository, Services) {
 		t.Helper()
 		gw := fakes.NewTracked()
 		seedIssueSummary(gw, domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"})
-		rec := &recordingUpdateRepository{Repository: gw}
-		services, err := NewServices(rec, config.Default(), t.TempDir())
+		services, err := NewServices(gw, config.Default(), t.TempDir())
 		if err != nil {
 			t.Fatalf("NewServices: %v", err)
 		}
-		return rec, services
+		return gw, services
+	}
+
+	// updateInputs reads the UpdateIssueInput values off the recorded calls.
+	// These assertions are about pointer-valued fields — an unassign is a
+	// pointer to "" and "no change" is nil — so the arguments, not just the
+	// method name, are the subject.
+	updateInputs := func(t *testing.T, rec *fakes.TrackedRepository) []domain.UpdateIssueInput {
+		t.Helper()
+		var out []domain.UpdateIssueInput
+		for _, c := range rec.CallsFor(fakes.MethodUpdateIssue) {
+			input, ok := c.Args.(domain.UpdateIssueInput)
+			if !ok {
+				t.Fatalf("expected an UpdateIssueInput in Call.Args, got %T", c.Args)
+			}
+			out = append(out, input)
+		}
+		return out
 	}
 
 	t.Run("cleared_field_sends_unassign", func(t *testing.T) {
@@ -88,10 +87,10 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 		if res, ok := submitMutationCmd(services, state, values)().(mutationResultMsg); ok && res.err != nil {
 			t.Fatalf("unexpected mutation error: %v", res.err)
 		}
-		if len(rec.updateCalls) != 1 {
-			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(rec.updateCalls))
+		if len(updateInputs(t, rec)) != 1 {
+			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(updateInputs(t, rec)))
 		}
-		got := rec.updateCalls[0].Assignee
+		got := updateInputs(t, rec)[0].Assignee
 		if got == nil {
 			t.Fatal("expected non-nil Assignee pointer (unassign) after clearing a pre-filled assignee; got nil (regression: gated on non-empty)")
 		}
@@ -113,10 +112,10 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 		if res, ok := submitMutationCmd(services, state, values)().(mutationResultMsg); ok && res.err != nil {
 			t.Fatalf("unexpected mutation error: %v", res.err)
 		}
-		if len(rec.updateCalls) != 1 {
-			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(rec.updateCalls))
+		if len(updateInputs(t, rec)) != 1 {
+			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(updateInputs(t, rec)))
 		}
-		if got := rec.updateCalls[0].Assignee; got != nil {
+		if got := updateInputs(t, rec)[0].Assignee; got != nil {
 			t.Fatalf("expected nil Assignee when value unchanged, got pointer to %q", *got)
 		}
 	})

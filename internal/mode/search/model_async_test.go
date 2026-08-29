@@ -33,7 +33,6 @@ package search
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -45,29 +44,19 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// ---- queryRecordingRepo ----
-
-// queryRecordingRepo wraps a repository.Repository and records all Search
-// queries for inspection in assertions. All calls are delegated to the inner
-// repository.
-type queryRecordingRepo struct {
-	repository.Repository
-	mu      sync.Mutex
-	queries []domain.SearchIssuesQuery
-}
-
-func (r *queryRecordingRepo) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	r.mu.Lock()
-	r.queries = append(r.queries, query)
-	r.mu.Unlock()
-	return r.Repository.Search(ctx, query)
-}
-
-func (r *queryRecordingRepo) Queries() []domain.SearchIssuesQuery {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]domain.SearchIssuesQuery, len(r.queries))
-	copy(out, r.queries)
+// searchQueries returns the SearchIssuesQuery of every recorded Search call.
+// fakes.Call carries the operation's typed input, so no per-package capture
+// stub is needed to assert on the query contract.
+func searchQueries(t *testing.T, rec *fakes.ErrorInjectingRepository) []domain.SearchIssuesQuery {
+	t.Helper()
+	var out []domain.SearchIssuesQuery
+	for _, c := range rec.CallsFor(fakes.MethodSearch) {
+		query, ok := c.Args.(domain.SearchIssuesQuery)
+		if !ok {
+			t.Fatalf("expected a SearchIssuesQuery in Call.Args, got %T", c.Args)
+		}
+		out = append(out, query)
+	}
 	return out
 }
 
@@ -413,7 +402,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Stack: inner → queryRecordingRepo → delayed.
 		// Assertions check query-shape (no forced Statuses) and that Enter was not
 		// silently dropped (the typed "task" query was executed).
-		recording := &queryRecordingRepo{Repository: inner}
+		recording := fakes.NewErrorInjecting(inner)
 		delayed := fakes.NewDelayingSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
@@ -448,7 +437,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// non-empty Statuses. The model must not inject a forced status filter
 		// — that responsibility belongs to the repository layer (taskmgr sets
 		// IncludeClosed:true unconditionally, including closed issues by default).
-		queries := recording.Queries()
+		queries := searchQueries(t, recording)
 		if len(queries) == 0 {
 			t.Fatal("expected at least one recorded Search query")
 		}
@@ -510,7 +499,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		// Stack: inner → erroring (every Search fails) → recording (observe queries) → delayed (gate).
 		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
-		recording := &queryRecordingRepo{Repository: erroring}
+		recording := fakes.NewErrorInjecting(erroring)
 		delayed := fakes.NewDelayingSearchRepository(recording)
 
 		m := NewModel(context.Background(), delayed, nil)
@@ -569,7 +558,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		_ = m.Update(pendingMsg)
 
 		// A second Search call for the queued text must have been issued.
-		queries := recording.Queries()
+		queries := searchQueries(t, recording)
 		foundTask := false
 		for _, q := range queries {
 			if q.Text == "task" {
@@ -597,7 +586,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		inner := memoryrepo.New()
 		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
 		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
-		recording := &queryRecordingRepo{Repository: erroring}
+		recording := fakes.NewErrorInjecting(erroring)
 
 		m := NewModel(context.Background(), recording, nil)
 		m.SetSize(120, 30)
@@ -625,7 +614,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Drain the re-fired search so the recording repo observes the retry.
 		_ = m.Update(cmd())
 		foundTask := false
-		for _, q := range recording.Queries() {
+		for _, q := range searchQueries(t, recording) {
 			if q.Text == "task" {
 				foundTask = true
 			}

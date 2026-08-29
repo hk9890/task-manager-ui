@@ -62,11 +62,7 @@ func newPopulatedRepo() *memoryrepo.Repository {
 // (inflight=false, all 4 columns loaded).
 func newSettledBoardModel(t *testing.T, repo repository.Repository) *Model {
 	t.Helper()
-	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
-	if err != nil {
-		t.Fatalf("ResolveKeyBindings: %v", err)
-	}
-	m := NewModel(context.Background(), repo, slog.Default(), keys)
+	m := newBoardModel(repo, resolvedBoardKeys(t))
 	initCmd := m.Init()
 	boardApplyMessages(t, m, testui.DrainCmd(initCmd))
 	if m.inflight {

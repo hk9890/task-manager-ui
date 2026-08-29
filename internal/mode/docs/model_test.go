@@ -11,7 +11,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -84,30 +83,21 @@ func TestDocsModeListsOnlyDocsIncludingOpenAndClosed(t *testing.T) {
 	testui.AssertNotContainsAny(t, view, "tm-3", "Wire the tab strip")
 }
 
-// queryCaptureRepo records the SearchIssuesQuery each Search call receives.
-// fakes.Call records the method but not its arguments, so the query contract —
-// a type filter, not a text query — needs its own stub.
-type queryCaptureRepo struct {
-	repository.Repository
-	queries []domain.SearchIssuesQuery
-}
-
-func (r *queryCaptureRepo) Search(_ context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	r.queries = append(r.queries, query)
-	return domain.SearchResultPage{}, nil
-}
-
 func TestDocsModeQueriesTheRepositoryWithTheDocTypeFilter(t *testing.T) {
-	repo := &queryCaptureRepo{}
+	repo := fakes.NewTracked()
 	m := NewModel(context.Background(), repo, nil)
 	m.SetSize(120, 30)
 
 	resolve(t, m, m.Init())
 
-	if len(repo.queries) != 1 {
-		t.Fatalf("expected exactly one Search call, got %d", len(repo.queries))
+	searches := repo.CallsFor(fakes.MethodSearch)
+	if len(searches) != 1 {
+		t.Fatalf("expected exactly one Search call, got %d", len(searches))
 	}
-	query := repo.queries[0]
+	query, ok := searches[0].Args.(domain.SearchIssuesQuery)
+	if !ok {
+		t.Fatalf("expected a SearchIssuesQuery in Call.Args, got %T", searches[0].Args)
+	}
 	if len(query.Types) != 1 || query.Types[0] != "doc" {
 		t.Fatalf("expected a doc type filter, got %#v", query.Types)
 	}
