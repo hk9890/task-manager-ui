@@ -39,6 +39,23 @@ var shellDispatchBaseNames = map[string]struct{}{
 	"ssh": {}, "tmux": {}, "watch": {},
 }
 
+// exCommandEditorBaseNames are the editors that re-parse a +cmd, -c or --cmd
+// argument as an Ex command line rather than as data. Ex chains on "|" and
+// reaches a login shell through ":!", so an interpolated issue field in one of
+// those arguments is executable text, exactly as a shell body is. A file
+// argument to the same editor is data and is not checked.
+//
+// Editors whose execute flag is neither -c nor +cmd (emacs --eval, for example)
+// are out of scope of this static check, as are the interpreters named in the
+// shellBaseNames comment.
+var exCommandEditorBaseNames = map[string]struct{}{
+	"vi": {}, "vim": {}, "nvim": {}, "view": {}, "vimdiff": {}, "ex": {},
+}
+
+// exCommandFlagRe matches the flags whose following argument nvim and vim
+// execute as an Ex command line.
+var exCommandFlagRe = regexp.MustCompile(`^(-c|--cmd)$`)
+
 // shellCommandFlagRe matches a single-dash shell flag bundle that contains the
 // "command" option (c), e.g. -c, -lc, -ic, -lic. The argument immediately
 // following such a flag is the script body.
@@ -100,6 +117,30 @@ func validateShellBodySafety(def Definition) error {
 	tokens = append(tokens, def.Args...)
 
 	for i, tok := range tokens {
+		if isExCommandEditorName(tok) {
+			// Only the Ex-command arguments are code: a "+cmd" argument carries
+			// its body inline, and -c/--cmd take it as the next argument.
+			for j := i + 1; j < len(tokens); j++ {
+				t := strings.TrimSpace(tokens[j])
+				body := ""
+				switch {
+				case strings.HasPrefix(t, "+"):
+					body = t
+				case exCommandFlagRe.MatchString(t) && j+1 < len(tokens):
+					body = tokens[j+1]
+					j++
+				default:
+					continue
+				}
+				if ph := issuePlaceholderIn(body); ph != "" {
+					return fmt.Errorf(
+						"launcher action %q: issue-field placeholder %s must not be interpolated into an Ex-command argument of %q, which re-parses it as an editor command line (command-injection risk); pass the issue field through Env and read it back as $VAR instead",
+						strings.TrimSpace(def.Action), ph, strings.TrimSpace(tok),
+					)
+				}
+			}
+			continue
+		}
 		if isShellDispatchCommandName(tok) {
 			// No flag marks the body, so every following argument is one.
 			for _, arg := range tokens[i+1:] {
@@ -172,6 +213,12 @@ func isShellCommandName(command string) bool {
 // re-parses a plain argument as a shell command line.
 func isShellDispatchCommandName(command string) bool {
 	return baseNameIn(command, shellDispatchBaseNames)
+}
+
+// isExCommandEditorName reports whether command names an editor that executes
+// its +cmd, -c and --cmd arguments as an Ex command line.
+func isExCommandEditorName(command string) bool {
+	return baseNameIn(command, exCommandEditorBaseNames)
 }
 
 func baseNameIn(command string, names map[string]struct{}) bool {

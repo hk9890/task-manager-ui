@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -279,5 +280,74 @@ func TestEnvEntryMissingEqualsIsRejected(t *testing.T) {
 	}
 	if len(runner.Calls) != 0 {
 		t.Fatalf("runner must not be called when env validation fails, got %d calls", len(runner.Calls))
+	}
+}
+
+// --- Ex-command editors -----------------------------------------------------
+//
+// nvim re-parses a "+cmd" argument as an Ex command line. Ex chains on "|" and
+// reaches a login shell through ":!", so an interpolated issue field there is
+// executable text, exactly as a shell body is. These tests pin the validator
+// against that shape; the shipped default is pinned in the config package.
+
+func TestValidateRejectsIssueFieldInNvimExCommandArgument(t *testing.T) {
+	def := launcher.Definition{
+		Action:  "nvim",
+		Command: "nvim",
+		Args:    []string{`+call append(0, ["Title: {{issue.title}}"])`},
+	}
+
+	err := launcher.ValidateDefinitions([]launcher.Definition{def})
+	if err == nil {
+		t.Fatal("expected an error for an issue field in an nvim +cmd argument, got nil")
+	}
+	if !strings.Contains(err.Error(), "{{issue.title}}") {
+		t.Errorf("error should name the offending placeholder, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Ex-command") {
+		t.Errorf("error should say the argument is an Ex command line, got: %v", err)
+	}
+}
+
+func TestValidateRejectsIssueFieldAfterEditorCommandFlag(t *testing.T) {
+	for _, flag := range []string{"-c", "--cmd"} {
+		t.Run(flag, func(t *testing.T) {
+			def := launcher.Definition{
+				Action:  "nvim",
+				Command: "nvim",
+				Args:    []string{flag, `call append(0, ["{{issue.id}}"])`},
+			}
+			if err := launcher.ValidateDefinitions([]launcher.Definition{def}); err == nil {
+				t.Fatalf("expected an error for an issue field after %s, got nil", flag)
+			}
+		})
+	}
+}
+
+func TestValidateAllowsIssueFieldInEditorFileArgument(t *testing.T) {
+	// A file argument is data, not an Ex command line. Rejecting it would
+	// forbid opening a per-issue file, which the rule does not intend.
+	def := launcher.Definition{
+		Action:  "nvim",
+		Command: "nvim",
+		Args:    []string{"/tmp/{{issue.id}}.md"},
+	}
+	if err := launcher.ValidateDefinitions([]launcher.Definition{def}); err != nil {
+		t.Errorf("a file argument must be allowed, got: %v", err)
+	}
+}
+
+func TestValidateChecksEveryExCommandEditorAlias(t *testing.T) {
+	for _, name := range []string{"vi", "vim", "nvim", "view", "vimdiff", "ex", "/usr/bin/nvim"} {
+		t.Run(name, func(t *testing.T) {
+			def := launcher.Definition{
+				Action:  "editor-like",
+				Command: name,
+				Args:    []string{`+call append(0, ["{{issue.title}}"])`},
+			}
+			if err := launcher.ValidateDefinitions([]launcher.Definition{def}); err == nil {
+				t.Fatalf("expected %s to be checked for Ex-command injection", name)
+			}
+		})
 	}
 }

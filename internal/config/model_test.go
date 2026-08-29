@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDefault_UsesEditorEnvForEditorAndLauncher(t *testing.T) {
 	t.Setenv("EDITOR", "nvim")
@@ -71,5 +74,51 @@ func TestCloneStringSlice(t *testing.T) {
 
 	if cloneStringSlice(nil) != nil {
 		t.Fatal("expected nil clone for nil input")
+	}
+}
+
+// TestDefault_NvimLauncherPassesIssueFieldsThroughEnv pins the shipped nvim
+// definition against the shell-launcher security rule. nvim re-parses a "+cmd"
+// argument as an Ex command line, so an issue placeholder in one is executable
+// text; the fields must travel through Env and be read back as $VAR.
+func TestDefault_NvimLauncherPassesIssueFieldsThroughEnv(t *testing.T) {
+	cfg := Default()
+
+	var nvim LauncherDefinition
+	for _, def := range cfg.Launcher.Definitions {
+		if def.Action == "nvim" {
+			nvim = def
+			break
+		}
+	}
+	if nvim.Action == "" {
+		t.Fatal("expected a built-in nvim launcher definition")
+	}
+
+	for _, arg := range nvim.Args {
+		for _, placeholder := range []string{"{{issue.id}}", "{{issue.title}}", "{{issue.assignee}}", "{{issue.labels}}"} {
+			if strings.Contains(arg, placeholder) {
+				t.Errorf("nvim arg %q must not interpolate %s — nvim re-parses it as an Ex command line", arg, placeholder)
+			}
+		}
+	}
+
+	wantEnv := []string{
+		"TASKMGR_UI_ISSUE_ID={{issue.id}}",
+		"TASKMGR_UI_ISSUE_TITLE={{issue.title}}",
+		"TASKMGR_UI_ISSUE_ASSIGNEE={{issue.assignee}}",
+		"TASKMGR_UI_ISSUE_LABELS={{issue.labels}}",
+	}
+	for _, want := range wantEnv {
+		found := false
+		for _, got := range nvim.Env {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("nvim definition must carry env entry %q, got %#v", want, nvim.Env)
+		}
 	}
 }

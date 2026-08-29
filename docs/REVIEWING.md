@@ -30,7 +30,7 @@ Everything else this file raises is a suggestion.
 
 ## Shell-launcher security
 
-Blocking. [CODING.md](CODING.md)'s Shell-launcher security rule states the two forbidden shapes;
+Blocking. [CODING.md](CODING.md)'s Shell-launcher security rule states the forbidden shapes;
 check the change against it, not against memory.
 
 `app.ValidateLauncherDefinitions` runs at every start and under `--check-config`, so an unsafe

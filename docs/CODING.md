@@ -44,7 +44,7 @@ mise run ci          # the merge gate; see What the tools enforce
    launcher template MUST NOT place one where it is re-parsed as a command line.
    `launcher.ValidateDefinitions` (`internal/launcher/service.go`) rejects such a
    definition at startup and under `--check-config`.
-   [CONFIGURATION.md](CONFIGURATION.md#writing-a-launcher-template-safely) has the two
+   [CONFIGURATION.md](CONFIGURATION.md#writing-a-launcher-template-safely) has the
    forbidden shapes and the safe form a config author writes.
 
 7. **Create vs edit ownership boundary is explicit.** The rich marker-based document flow owns **issue editing** (the shell `edit_issue` binding, default `e`, acting on the current selection from any browse tab or detail). Issue creation remains on the existing create/update task boundary and is not coupled to this editor document contract.
