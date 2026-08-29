@@ -8,6 +8,92 @@ via the manually dispatched Release workflow).
 This file exists as a stable entry point; for the per-release detail, see the
 Releases page above.
 
+## v0.16.0
+
+- **Security:** the built-in `nvim` launcher ran a crafted issue title as an Ex
+  command. The definition interpolated four issue fields into a `+cmd` argument,
+  which nvim re-parses as an Ex command line; Ex chains on `|` and `:!` reaches a
+  login shell, so pressing `n` on a hostile issue executed it — with the shipped
+  defaults and no operator customisation. The fields now travel through `env` and
+  are read back as `$VAR`, which is data. The launcher guard was widened from a
+  `sh -c` body to any argument that is re-parsed as a command line — `tmux
+  new-window`, `ssh`, `watch`, `su`, `python`, and the Ex-command editors — so an
+  operator config with the same shape is rejected at startup and under
+  `--check-config`. The `tmux` example previously shipped in
+  [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) was itself unsafe.
+- **Changed (action required):** upgraded the task-manager SDK from v0.8.0 to
+  v0.9.0, which withdraws the store-config `hooks:` key in favour of `use:`
+  package references. A store whose `.tasks/config.yaml` — or the per-user
+  `~/.taskmgr/config.yaml` — still carries a `hooks:` block makes taskmgr-ui
+  **silently read-only**: the board, detail and search render normally, and every
+  write is refused with the config file named. Migrate by moving each hook entry
+  into a package directory, adding it with `taskmgr package add`, then deleting
+  the `hooks:` block. `taskmgr package list` prints the untruncated diagnostic;
+  [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) has the detail.
+- Fixed: info and warning toasts rendered as a broken frame with no message. `ℹ️`
+  and `⚠️` carry a U+FE0F variation selector, which lipgloss measures as two cells
+  and a terminal following wcwidth draws as one, so the frame was built a cell
+  wider than it drew and the message was spliced away. Every launcher result,
+  every "No changes saved" and every "no selected issue" warning reached the
+  operator through one of those two styles. They now use the text-presentation
+  forms `ℹ` and `⚠`.
+- Fixed: a board row kept its old title after an `e` edit until the next
+  auto-refresh tick — a minute away — or a manual `r`, under a toast saying the
+  update had succeeded. The edit result now reloads the active browse surface, as
+  the close, comment, status and priority dialogs already did.
+- Fixed: the editor round-trip could return one field's text as another's. Fields
+  after the description were located by first occurrence in a slice that never
+  advanced, so a `TASKMGRUI:FIELD:*` marker pair pasted into any body was read as
+  the later field's value and written to the store under a "Updated issue X"
+  toast. Fields are now consumed in document order, every body is checked for
+  markers, and CRLF is normalised — an editor set to `fileformat=dos` used to
+  report a change for an untouched document and write the carriage returns in.
+- Fixed: an issue could be drawn in two board columns at once and counted in both
+  headers. The Blocked and In Progress queries overlap by construction, so an
+  `in_progress` issue with an open blocker came back from both; the auto-refresh
+  cursor then jumped out of In Progress. Not Ready now excludes what In Progress
+  claims.
+- Fixed: one transient auto-refresh failure wiped the board behind an error row,
+  reset the closed total to `0` — suppressing every later load-more — and dropped
+  the selection. The error is now shown over the rows already on screen. Two
+  further defects in the same path: a column that shrank under a scrolled offset
+  drew its border and header with no rows until a `j`/`k`, and a load-more page
+  that landed after a reload was merged anyway, leaving a hole no later
+  load-more refilled.
+- Fixed: `ctrl+t` flipped the search scope badge even when the re-run was not
+  dispatched, so the Results header named "all" while the rows on screen were the
+  open set, with no key to restore agreement.
+- Fixed: the Update Status and Update Priority dialogs raced their own inputs — a
+  keystroke landing between submit and the shell clearing the modal could be read
+  by the submit closure. The values are now snapshotted on the update goroutine.
+- Fixed: rendered markdown was hard-pinned to the dark theme, so every
+  description, note and comment rendered in dark-theme colours on a light
+  terminal. It now follows the terminal background, as every other colour in the
+  app does. The plain-text fallback wrapped by rune count, so a CJK or emoji line
+  was truncated instead of wrapped; it now wraps on cells.
+- Fixed: drilling from Dependencies into a child issue left the shell's selection
+  on the parent, so `e`, `x`, `u`, `a` and the launchers all acted on the parent
+  with nothing on screen to say so. A drill-in is now the shell's selection while
+  detail shows it.
+- Fixed: `r` in detail mode issued no load and left the header claiming
+  "Loading: detail" for the rest of the session.
+- Fixed: an unreadable or corrupt store reached neither the log nor a toast, and
+  an editor round-trip failure surfaced as a bare "Failed to edit issue X" with
+  the cause discarded — after the document the operator had just written was
+  already deleted. Both now name the cause.
+- Fixed: a failed stderr write stopped the record reaching the persistent JSON
+  Lines sink, which is the diagnostics surface that matters most when the
+  terminal is already misbehaving. Every enabled handler now runs.
+- Fixed: the search skeleton did not pulse on a cold start, and the `ready`
+  status rendered in the muted unknown-status colour.
+- Changed: detail mode no longer re-renders the issue markdown ten times a second
+  for the life of the process. The renderer and its output are memoized, and the
+  spinner tick is armed only while something is loading.
+- Fixed: several `--repo memory` divergences from the real store — field
+  validation on create and update, the default priority for a blank field,
+  `closedAt` surviving a reopen, a created issue overwriting a loaded one, and
+  search not matching an issue ID.
+
 ## v0.15.0
 
 - Added: a Docs tab listing every `doc`-type issue in one column. It is the only

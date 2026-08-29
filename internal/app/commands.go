@@ -125,21 +125,28 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 		return m, batchCmds(modeCmd, toastCmd)
 	}
 
+	// Marking the surfaces dirty only makes the *next* refresh tick reload
+	// them, and that tick is a minute away — so the edited row kept its old
+	// title under a toast saying the update succeeded, which reads as a failed
+	// edit. handleMutationResult pairs the two calls for the same reason.
 	m.markBrowseSurfacesDirty()
 
 	selection := m.currentSelection()
 	if selection == nil || selection.Issue.ID == "" {
 		toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
 		notifyEditResult()
-		return m, batchCmds(modeCmd, toastCmd)
+		return m, batchCmds(modeCmd, toastCmd, m.maybeAutoRefreshActiveSurfaceCmd())
 	}
 
 	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{})
 	toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
 	notifyEditResult()
+	// After BeginLoad, so the detail-is-loading guard in refreshActiveSurfaceCmd
+	// suppresses a second load of the detail this path already issues.
 	return m, batchCmds(modeCmd,
 		toastCmd,
 		loadDetailCmd(m.ctx, m.services, selection.Issue.ID),
+		m.maybeAutoRefreshActiveSurfaceCmd(),
 	)
 }
 
