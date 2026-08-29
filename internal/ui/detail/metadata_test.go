@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/testing/ui"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 var metadataANSIPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -447,5 +447,5 @@ func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
 		},
 	}, 44, MetadataFieldNone, false)
 
-	ui.AssertMatchesGolden(t, []byte(strings.Join(lines, "\n")), "metadata_with_children_w44.golden")
+	testui.AssertMatchesGolden(t, []byte(strings.Join(lines, "\n")), "metadata_with_children_w44.golden")
 }

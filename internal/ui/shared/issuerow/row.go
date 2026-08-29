@@ -10,6 +10,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/renderhelpers"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -168,10 +169,10 @@ func RenderCompact(config RenderConfig) string {
 	titlePrefix := prefixPlain + metaPlain + " "
 	titleWidth := config.Width - lipgloss.Width(titlePrefix)
 	if titleWidth < minTitleWidth {
-		return styles.TruncateString(prefixPlain+metaPlain, config.Width)
+		return textutil.TruncateString(prefixPlain+metaPlain, config.Width)
 	}
 
-	content := metaStyled + " " + styles.TruncateString(title, titleWidth)
+	content := metaStyled + " " + textutil.TruncateString(title, titleWidth)
 	if config.Dim && config.Styled {
 		// Apply a SkeletonShades foreground tint to the row content only.
 		// Selection-conflict rule: the prefix (prefixStyled) is left unchanged so
@@ -210,10 +211,10 @@ func RenderReferenceCompact(config ReferenceRenderConfig) string {
 	titlePrefix := prefixPlain + metaPlain + " "
 	titleWidth := config.Width - lipgloss.Width(titlePrefix)
 	if titleWidth < minNarrowTitleWidth {
-		return styles.TruncateString(prefixPlain+metaPlain, config.Width)
+		return textutil.TruncateString(prefixPlain+metaPlain, config.Width)
 	}
 
-	return prefixStyled + metaStyled + " " + styles.TruncateString(title, titleWidth)
+	return prefixStyled + metaStyled + " " + textutil.TruncateString(title, titleWidth)
 }
 
 // CompactIDWidth returns the shared max width for compact issue IDs.

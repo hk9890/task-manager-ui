@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
@@ -24,9 +25,9 @@ import (
 func TestSearchPostSubmitState_StaleMarkersClearedWhenAppliedQueryMatches(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search candidate", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Backend implementation", Status: "open", Type: "task", Priority: 2})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search candidate", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Backend implementation", Status: "open", Type: "task", Priority: 2})
 
 	m := initModel(gw)
 
@@ -64,8 +65,8 @@ func TestSearchPostSubmitState_StaleMarkersClearedWhenAppliedQueryMatches(t *tes
 func TestSearchPostSubmitState_StaleMarkerReappearsWhenUserTypesAfterSubmit(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search candidate", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search candidate", Status: "open", Type: "task", Priority: 1})
 
 	m := initModel(gw)
 

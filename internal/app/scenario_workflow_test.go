@@ -18,14 +18,14 @@ import (
 func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 	// Seed the search result so typing "jkhlr" still matches via text search.
 	// Memory repo Search() matches on Title, Description, Notes.
 	// We include the fragile query runes in Description so memory repo's
 	// text search returns tm-1 for that query.
-	gw.seedSearchResult(memoryrepo.Issue{
+	seedSearchResult(gw, memoryrepo.Issue{
 		ID:          "tm-1",
 		Title:       "Ready first",
 		Status:      "open",
@@ -33,7 +33,7 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 		Priority:    1,
 		Description: testui.SearchFragileQueryRunes(),
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
 		Description: longScenarioDetail(90),
 	})
@@ -85,10 +85,10 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
 		Description: "detail",
 	})
@@ -108,8 +108,8 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 	}
 
 	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}).(Model)
-	if len(fakeEditor.Calls) != 1 || fakeEditor.Calls[0].IssueID != "tm-1" {
-		t.Fatalf("expected edit seam call for tm-1, got %#v", fakeEditor.Calls)
+	if len(fakeEditor.Calls()) != 1 || fakeEditor.Calls()[0].IssueID != "tm-1" {
+		t.Fatalf("expected edit seam call for tm-1, got %#v", fakeEditor.Calls())
 	}
 
 	m = testui.ApplyKeySequence(m,
@@ -118,10 +118,10 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")},
 	).(Model)
 
-	if len(fakeLauncher.Calls) != 3 {
-		t.Fatalf("expected 3 launcher seam calls, got %d", len(fakeLauncher.Calls))
+	if len(fakeLauncher.Calls()) != 3 {
+		t.Fatalf("expected 3 launcher seam calls, got %d", len(fakeLauncher.Calls()))
 	}
-	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
+	actions := []string{fakeLauncher.Calls()[0].Action, fakeLauncher.Calls()[1].Action, fakeLauncher.Calls()[2].Action}
 	if strings.Join(actions, ",") != "nvim,opencode,shell-command" {
 		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
 	}

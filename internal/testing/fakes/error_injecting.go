@@ -27,6 +27,19 @@ const (
 // Call records a single invocation of a Repository method.
 type Call struct {
 	Method Method
+
+	// IssueID is the issue the call targeted, or "" for methods that take no
+	// issue ID (Dashboard, Search, CreateIssue, HealthCheck, Catalogs).
+	IssueID string
+
+	// Args is the operation's typed input - repository.DashboardOptions,
+	// domain.SearchIssuesQuery, domain.CreateIssueInput, domain.UpdateIssueInput,
+	// domain.CloseIssueInput, domain.AddCommentInput - or nil for the methods
+	// that take none.
+	//
+	// Recording arguments is what stops each package writing its own capture
+	// stub: four of them existed because this type carried only the method name.
+	Args any
 }
 
 // ErrorInjectingRepository wraps any repository.Repository and allows tests to
@@ -78,7 +91,16 @@ func (e *ErrorInjectingRepository) Calls() []Call {
 }
 
 func (e *ErrorInjectingRepository) record(m Method) {
-	e.calls = append(e.calls, Call{Method: m})
+	e.recordCall(Call{Method: m})
+}
+
+// recordArgs records a call together with its issue ID and typed input.
+func (e *ErrorInjectingRepository) recordArgs(m Method, issueID string, args any) {
+	e.recordCall(Call{Method: m, IssueID: issueID, Args: args})
+}
+
+func (e *ErrorInjectingRepository) recordCall(c Call) {
+	e.calls = append(e.calls, c)
 }
 
 func (e *ErrorInjectingRepository) injected(m Method) error {
@@ -88,7 +110,7 @@ func (e *ErrorInjectingRepository) injected(m Method) error {
 // Dashboard implements repository.Repository.
 func (e *ErrorInjectingRepository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	e.mu.Lock()
-	e.record(MethodDashboard)
+	e.recordArgs(MethodDashboard, "", opts)
 	err := e.injected(MethodDashboard)
 	e.mu.Unlock()
 	if err != nil {
@@ -100,7 +122,7 @@ func (e *ErrorInjectingRepository) Dashboard(ctx context.Context, opts repositor
 // Issue implements repository.Repository.
 func (e *ErrorInjectingRepository) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
 	e.mu.Lock()
-	e.record(MethodIssue)
+	e.recordArgs(MethodIssue, id, nil)
 	err := e.injected(MethodIssue)
 	e.mu.Unlock()
 	if err != nil {
@@ -112,7 +134,7 @@ func (e *ErrorInjectingRepository) Issue(ctx context.Context, id string) (domain
 // Search implements repository.Repository.
 func (e *ErrorInjectingRepository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	e.mu.Lock()
-	e.record(MethodSearch)
+	e.recordArgs(MethodSearch, "", query)
 	err := e.injected(MethodSearch)
 	e.mu.Unlock()
 	if err != nil {
@@ -124,7 +146,7 @@ func (e *ErrorInjectingRepository) Search(ctx context.Context, query domain.Sear
 // CreateIssue implements repository.Repository.
 func (e *ErrorInjectingRepository) CreateIssue(ctx context.Context, input domain.CreateIssueInput) (domain.CreateIssueResult, error) {
 	e.mu.Lock()
-	e.record(MethodCreateIssue)
+	e.recordArgs(MethodCreateIssue, "", input)
 	err := e.injected(MethodCreateIssue)
 	e.mu.Unlock()
 	if err != nil {
@@ -136,7 +158,7 @@ func (e *ErrorInjectingRepository) CreateIssue(ctx context.Context, input domain
 // UpdateIssue implements repository.Repository.
 func (e *ErrorInjectingRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
 	e.mu.Lock()
-	e.record(MethodUpdateIssue)
+	e.recordArgs(MethodUpdateIssue, id, input)
 	err := e.injected(MethodUpdateIssue)
 	e.mu.Unlock()
 	if err != nil {
@@ -148,7 +170,7 @@ func (e *ErrorInjectingRepository) UpdateIssue(ctx context.Context, id string, i
 // CloseIssue implements repository.Repository.
 func (e *ErrorInjectingRepository) CloseIssue(ctx context.Context, id string, input domain.CloseIssueInput) error {
 	e.mu.Lock()
-	e.record(MethodCloseIssue)
+	e.recordArgs(MethodCloseIssue, id, input)
 	err := e.injected(MethodCloseIssue)
 	e.mu.Unlock()
 	if err != nil {
@@ -160,7 +182,7 @@ func (e *ErrorInjectingRepository) CloseIssue(ctx context.Context, id string, in
 // AddComment implements repository.Repository.
 func (e *ErrorInjectingRepository) AddComment(ctx context.Context, id string, input domain.AddCommentInput) error {
 	e.mu.Lock()
-	e.record(MethodAddComment)
+	e.recordArgs(MethodAddComment, id, input)
 	err := e.injected(MethodAddComment)
 	e.mu.Unlock()
 	if err != nil {
@@ -191,4 +213,62 @@ func (e *ErrorInjectingRepository) Catalogs(ctx context.Context) (repository.Cat
 		return repository.Catalogs{}, err
 	}
 	return e.inner.Catalogs(ctx)
+}
+
+// HasCall reports whether method appears anywhere in the recorded calls.
+func (e *ErrorInjectingRepository) HasCall(method Method) bool {
+	for _, c := range e.Calls() {
+		if c.Method == method {
+			return true
+		}
+	}
+	return false
+}
+
+// HasCallSince reports whether method appears at or after index start. Take
+// start from CallCount() before the action you want to measure.
+func (e *ErrorInjectingRepository) HasCallSince(start int, method Method) bool {
+	return e.CallCountSince(start, method) > 0
+}
+
+// CallCount is the number of calls recorded so far. It is the marker to pass to
+// HasCallSince and CallCountSince.
+func (e *ErrorInjectingRepository) CallCount() int { return len(e.Calls()) }
+
+// CallCountSince counts calls to method recorded at or after index start.
+func (e *ErrorInjectingRepository) CallCountSince(start int, method Method) int {
+	all := e.Calls()
+	if start < 0 {
+		start = 0
+	}
+	n := 0
+	for i := start; i < len(all); i++ {
+		if all[i].Method == method {
+			n++
+		}
+	}
+	return n
+}
+
+// CallsFor returns every recorded call to method, in order. Read Call.Args for
+// the operation's typed input — this is what replaced the per-package capture
+// stubs.
+func (e *ErrorInjectingRepository) CallsFor(method Method) []Call {
+	var out []Call
+	for _, c := range e.Calls() {
+		if c.Method == method {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// LastArgs returns the Args of the most recent call to method, and whether such
+// a call exists.
+func (e *ErrorInjectingRepository) LastArgs(method Method) (any, bool) {
+	calls := e.CallsFor(method)
+	if len(calls) == 0 {
+		return nil, false
+	}
+	return calls[len(calls)-1].Args, true
 }

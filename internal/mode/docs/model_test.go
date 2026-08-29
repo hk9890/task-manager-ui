@@ -11,37 +11,20 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// docsRepo bundles the memory repo (for seeding) with the error-injecting
-// wrapper (for call tracking and error injection), mirroring the search-mode
-// harness.
-type docsRepo struct {
-	repo *memoryrepo.Repository
-	*fakes.ErrorInjectingRepository
-}
-
-func newDocsRepo() *docsRepo {
-	repo := memoryrepo.New()
-	return &docsRepo{
-		repo:                     repo,
-		ErrorInjectingRepository: fakes.NewErrorInjecting(repo),
-	}
-}
-
 // seedMixed seeds two docs and one task so every assertion also proves the
 // type filter is doing its job.
-func seedMixed(gw *docsRepo) {
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Session notes", Status: "closed", Type: "doc", Priority: 2})
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Wire the tab strip", Status: "open", Type: "task", Priority: 1})
+func seedMixed(gw *fakes.TrackedRepository) {
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Session notes", Status: "closed", Type: "doc", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Wire the tab strip", Status: "open", Type: "task", Priority: 1})
 }
 
-func newModel(t *testing.T, gw *docsRepo) *Model {
+func newModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
 	t.Helper()
 
 	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
@@ -64,7 +47,7 @@ func resolve(t *testing.T, m *Model, cmd tea.Cmd) tea.Cmd {
 	return m.Update(cmd())
 }
 
-func loadedModel(t *testing.T, gw *docsRepo) *Model {
+func loadedModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
 	t.Helper()
 
 	m := newModel(t, gw)
@@ -73,7 +56,7 @@ func loadedModel(t *testing.T, gw *docsRepo) *Model {
 }
 
 func TestDocsModeListsOnlyDocsIncludingOpenAndClosed(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
@@ -100,30 +83,21 @@ func TestDocsModeListsOnlyDocsIncludingOpenAndClosed(t *testing.T) {
 	testui.AssertNotContainsAny(t, view, "tm-3", "Wire the tab strip")
 }
 
-// queryCaptureRepo records the SearchIssuesQuery each Search call receives.
-// fakes.Call records the method but not its arguments, so the query contract —
-// a type filter, not a text query — needs its own stub.
-type queryCaptureRepo struct {
-	repository.Repository
-	queries []domain.SearchIssuesQuery
-}
-
-func (r *queryCaptureRepo) Search(_ context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	r.queries = append(r.queries, query)
-	return domain.SearchResultPage{}, nil
-}
-
 func TestDocsModeQueriesTheRepositoryWithTheDocTypeFilter(t *testing.T) {
-	repo := &queryCaptureRepo{}
+	repo := fakes.NewTracked()
 	m := NewModel(context.Background(), repo, nil)
 	m.SetSize(120, 30)
 
 	resolve(t, m, m.Init())
 
-	if len(repo.queries) != 1 {
-		t.Fatalf("expected exactly one Search call, got %d", len(repo.queries))
+	searches := repo.CallsFor(fakes.MethodSearch)
+	if len(searches) != 1 {
+		t.Fatalf("expected exactly one Search call, got %d", len(searches))
 	}
-	query := repo.queries[0]
+	query, ok := searches[0].Args.(domain.SearchIssuesQuery)
+	if !ok {
+		t.Fatalf("expected a SearchIssuesQuery in Call.Args, got %T", searches[0].Args)
+	}
 	if len(query.Types) != 1 || query.Types[0] != "doc" {
 		t.Fatalf("expected a doc type filter, got %#v", query.Types)
 	}
@@ -136,7 +110,7 @@ func TestDocsModeQueriesTheRepositoryWithTheDocTypeFilter(t *testing.T) {
 }
 
 func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
@@ -175,7 +149,7 @@ func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
 }
 
 func TestDocsModeAutoRefreshKeepsTheSelectedDocUnderTheCursor(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
@@ -186,7 +160,7 @@ func TestDocsModeAutoRefreshKeepsTheSelectedDocUnderTheCursor(t *testing.T) {
 
 	// A doc sorting ahead of the selected one arrives between refreshes: the
 	// cursor must follow tm-2 rather than stay on row 1.
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-0", Title: "Handover", Status: "open", Type: "doc", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-0", Title: "Handover", Status: "open", Type: "doc", Priority: 2})
 	resolve(t, m, m.AutoRefresh())
 
 	if len(m.issues) != 3 {
@@ -198,7 +172,7 @@ func TestDocsModeAutoRefreshKeepsTheSelectedDocUnderTheCursor(t *testing.T) {
 }
 
 func TestDocsModeReloadKeyResetsTheCursorToTheTop(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
@@ -211,7 +185,7 @@ func TestDocsModeReloadKeyResetsTheCursorToTheTop(t *testing.T) {
 }
 
 func TestDocsModeShowsTheRepositoryErrorAndKeepsStaleRows(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
@@ -232,8 +206,8 @@ func TestDocsModeShowsTheRepositoryErrorAndKeepsStaleRows(t *testing.T) {
 }
 
 func TestDocsModeEmptyStateHasNoSelection(t *testing.T) {
-	gw := newDocsRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Wire the tab strip", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Wire the tab strip", Status: "open", Type: "task", Priority: 1})
 
 	m := loadedModel(t, gw)
 
@@ -251,7 +225,7 @@ func TestDocsModeEmptyStateHasNoSelection(t *testing.T) {
 }
 
 func TestDocsModeIsLazyUntilInit(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := newModel(t, gw)
@@ -272,7 +246,7 @@ func TestDocsModeIsLazyUntilInit(t *testing.T) {
 }
 
 func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
@@ -302,7 +276,7 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 func TestItemCapacityReservesOneRowForAnInlineError(t *testing.T) {
 	t.Parallel()
 
-	gw := newDocsRepo()
+	gw := fakes.NewTracked()
 	seedMixed(gw)
 
 	cases := []struct {

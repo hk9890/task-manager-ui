@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -90,13 +91,15 @@ func renderMetadataPrefixedLine(content string, width int, selected bool) string
 			return strings.Repeat(" ", width)
 		}
 		if width == 1 {
-			return styles.SelectionIndicatorStyle.Render("›")
+			// One cell leaves no room for the gutter's trailing space. Trim it
+			// off the styled prefix rather than respelling the glyph here.
+			return strings.TrimSuffix(prefixStyled, " ")
 		}
 		return prefixStyled
 	}
 
 	contentWidth := width - gutterWidth
-	return prefixStyled + styles.TruncateString(content, contentWidth)
+	return prefixStyled + textutil.TruncateString(content, contentWidth)
 }
 
 func metadataFields(detail domain.IssueDetail) []metadataField {

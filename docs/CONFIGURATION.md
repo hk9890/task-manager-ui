@@ -36,8 +36,10 @@ The model is intentionally small and only covers app-shell concerns:
 - `Launcher.Definitions`
   - Defaults to four built-in launcher actions:
     - `editor` → mirrors `editor.command`.
-    - `nvim` → launches `nvim` with a read-only issue context buffer seeded from
-      interpolation placeholders.
+    - `nvim` → launches `nvim` with a read-only issue context buffer. The issue fields
+      reach it through `env` as `TASKMGR_UI_ISSUE_*` and the Ex commands read them back
+      as `$VAR`; a `+cmd` argument is an Ex command line, so a placeholder there would be
+      executable text.
     - `opencode` → launches `opencode run` with issue metadata args/env.
     - `shell-command` → launches `sh -lc` with a simple formatted issue-context
       print command.
@@ -176,16 +178,23 @@ Notes:
 Issue fields are operator-untrusted input. [CODING.md](CODING.md)'s Shell-launcher
 security rule states the invariant; this is how a config author satisfies it.
 
-Two shapes re-parse an argument as a command line, and neither may carry an interpolated
+Three shapes re-parse an argument as a command line, and none may carry an interpolated
 issue field:
 
 - the body after a `-c` / `-lc`-style flag (`sh`, `bash`, `su`, `python`, …)
 - a plain argument handed to a command that dispatches it to a shell (`tmux new-window`,
   `ssh host`, `watch`)
+- a `+cmd`, `-c` or `--cmd` argument to an Ex-command editor (`vi`, `vim`, `nvim`,
+  `view`, `vimdiff`, `ex`) — Ex chains on `|` and reaches a login shell through `:!`
 
 For the first, pass the placeholders as positional arguments after the body and reference
-them as `$0`, `$1`, `$2` inside the script. For the second, pass the field through `env`,
-which is not re-parsed.
+them as `$0`, `$1`, `$2` inside the script. For the other two, pass the field through
+`env`, which is not re-parsed. Inside an Ex command read it back as `$VAR`, and set a
+buffer name with `nvim_buf_set_name()` rather than `:execute`, which re-parses its
+argument.
+
+A file argument to the same editor is data, not code, so `nvim /tmp/{{issue.id}}.md` is
+allowed.
 
 ```yaml
 # SAFE — issue fields are positional args, never re-parsed as code

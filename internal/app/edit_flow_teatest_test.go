@@ -49,7 +49,7 @@ const editFlowTimeout = 5 * time.Second
 // RunErr and inspect RunCalled after the program settles.
 func buildEditFlowServices(
 	t *testing.T,
-	gw *appTestRepository,
+	gw *fakes.TrackedRepository,
 	fakeCmd *fakes.FakeExecCommand,
 ) Services {
 	t.Helper()
@@ -64,10 +64,10 @@ func buildEditFlowServices(
 
 // seedEditIssue seeds an issue into the repository and returns it. It also
 // pre-seeds the board state so the initial board load succeeds.
-func seedEditIssue(t *testing.T, gw *appTestRepository, issue domain.IssueDetail) {
+func seedEditIssue(t *testing.T, gw *fakes.TrackedRepository, issue domain.IssueDetail) {
 	t.Helper()
-	gw.seedIssueDetail(issue)
-	gw.seedReady(issue.Summary.ID, issue.Summary.Title, issue.Summary.Type, issue.Summary.Priority)
+	seedIssueDetail(gw, issue)
+	seedReady(gw, issue.Summary.ID, issue.Summary.Title, issue.Summary.Type, issue.Summary.Priority)
 }
 
 // editableDocWithTitle builds a minimal but syntactically valid edit document
@@ -116,7 +116,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	seedEditIssue(t, gw, issue)
 
 	// Pre-configure the fake ExecCommand with content that changes the title.
@@ -155,7 +155,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	// the last observable side-effect before editIssueResultMsg is returned
 	// from the closure to the BubbleTea msg loop.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
-		return gw.hasUpdateIssueCall()
+		return gw.HasCall(fakes.MethodUpdateIssue)
 	})
 	// Gate 3: editIssueResultMsg was processed by Update and the toast set.
 	// The onEditIssueResult hook fires synchronously after showToast, so this
@@ -185,7 +185,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
-	if !gw.hasUpdateIssueCall() {
+	if !gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Errorf("expected UpdateIssue call on repository after successful edit, calls=%#v", gw.Calls())
 	}
 }
@@ -214,7 +214,7 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	seedEditIssue(t, gw, issue)
 
 	// EditedContent is the exact same rendered document — no changes.
@@ -270,7 +270,7 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
-	if gw.hasUpdateIssueCall() {
+	if gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Errorf("expected no UpdateIssue call when document is unchanged, calls=%#v", gw.Calls())
 	}
 }
@@ -299,7 +299,7 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 		BlockedBy: []domain.IssueReference{},
 	}
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	seedEditIssue(t, gw, issue)
 
 	// RunErr simulates the editor exiting with a non-zero status.
@@ -355,7 +355,7 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 	if n := fakeCmd.RunCount(); n != 1 {
 		t.Errorf("expected FakeExecCommand.Run called once, got %d", n)
 	}
-	if gw.hasUpdateIssueCall() {
+	if gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Errorf("expected no UpdateIssue call when editor returns error, calls=%#v", gw.Calls())
 	}
 }
@@ -374,12 +374,12 @@ var _ = teatest.WaitFor
 
 func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) {
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) {
 		i.Assignee = "hans"
 		i.Labels = []string{"infra"}
 	})
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	fakeEditor := &fakes.FakeEditor{}
@@ -396,22 +396,22 @@ func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeEditor.Calls) != 1 {
-		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	if len(fakeEditor.Calls()) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls()))
 	}
-	if fakeEditor.Calls[0].IssueID != "tm-1" {
-		t.Fatalf("expected selected issue tm-1, got %q", fakeEditor.Calls[0].IssueID)
+	if fakeEditor.Calls()[0].IssueID != "tm-1" {
+		t.Fatalf("expected selected issue tm-1, got %q", fakeEditor.Calls()[0].IssueID)
 	}
 
-	if len(fakeLauncher.Calls) != 0 {
-		t.Fatalf("expected edit hotkey to avoid launcher service, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 0 {
+		t.Fatalf("expected edit hotkey to avoid launcher service, got %#v", fakeLauncher.Calls())
 	}
 }
 
 func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	fakeEditor := &fakes.FakeEditor{PrepareErr: errors.New("editor boom")}
@@ -439,20 +439,20 @@ func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 		t.Fatalf("expected editor failure toast, got:\n%s", view)
 	}
 
-	if len(fakeLauncher.Calls) != 0 {
-		t.Fatalf("expected no launcher calls when editor fails, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 0 {
+		t.Fatalf("expected no launcher calls when editor fails, got %#v", fakeLauncher.Calls())
 	}
 }
 
 func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-9", "Ninth", "task", 2)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-9", "Ninth", "task", 2)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 	// Seed initial detail (before edit) — memory repo returns last-seeded for a given ID,
 	// so we seed "after edit" after Init() has loaded the "before" state.
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
 		Description: "detail before edit",
 	})
@@ -474,11 +474,11 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 
 	// Re-seed with the "after edit" detail so subsequent Issue() call returns updated data.
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth edited", Status: "open", Type: "task", Priority: 2},
 		Description: "detail after edit",
 	})
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 
 	// Phase 1: press 'e' → prepareEditCmd.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
@@ -507,14 +507,14 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 	m = applyMessages(t, m, runBatch(applyCmd))
 
-	if len(fakeEditor.Calls) != 1 {
-		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	if len(fakeEditor.Calls()) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls()))
 	}
-	if fakeEditor.Calls[0].IssueID != "tm-9" {
-		t.Fatalf("expected editor call for tm-9, got %q", fakeEditor.Calls[0].IssueID)
+	if fakeEditor.Calls()[0].IssueID != "tm-9" {
+		t.Fatalf("expected editor call for tm-9, got %q", fakeEditor.Calls()[0].IssueID)
 	}
 
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected detail reload via Issue after successful update, calls=%#v", gw.Calls())
 	}
 
@@ -529,10 +529,10 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-9", "Ninth", "task", 2)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-9", "Ninth", "task", 2)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
 		Description: "detail before edit",
 	})
@@ -552,7 +552,7 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 	m = next.(Model)
 
@@ -563,18 +563,18 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if len(fakeEditor.Calls) != 1 {
-		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls))
+	if len(fakeEditor.Calls()) != 1 {
+		t.Fatalf("expected one editor call, got %d", len(fakeEditor.Calls()))
 	}
-	if fakeEditor.Calls[0].IssueID != "tm-9" {
-		t.Fatalf("expected selected detail issue tm-9, got %q", fakeEditor.Calls[0].IssueID)
-	}
-
-	if len(fakeLauncher.Calls) != 0 {
-		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls)
+	if fakeEditor.Calls()[0].IssueID != "tm-9" {
+		t.Fatalf("expected selected detail issue tm-9, got %q", fakeEditor.Calls()[0].IssueID)
 	}
 
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if len(fakeLauncher.Calls()) != 0 {
+		t.Fatalf("expected no launcher calls for edit hotkey, got %#v", fakeLauncher.Calls())
+	}
+
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("did not expect issue reload from launcher action, calls=%#v", gw.Calls())
 	}
 }
@@ -582,9 +582,9 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
@@ -603,8 +603,8 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeLauncher.Calls) != 1 || fakeLauncher.Calls[0].Action != "nvim" {
-		t.Fatalf("expected nvim launcher call before toast assertion, got %#v", fakeLauncher.Calls)
+	if len(fakeLauncher.Calls()) != 1 || fakeLauncher.Calls()[0].Action != "nvim" {
+		t.Fatalf("expected nvim launcher call before toast assertion, got %#v", fakeLauncher.Calls())
 	}
 
 	next, _ = m.Update(launchActionResultMsg{action: "nvim", err: nil})
@@ -616,11 +616,11 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if len(fakeLauncher.Calls) != 3 {
-		t.Fatalf("expected 3 launcher calls, got %d", len(fakeLauncher.Calls))
+	if len(fakeLauncher.Calls()) != 3 {
+		t.Fatalf("expected 3 launcher calls, got %d", len(fakeLauncher.Calls()))
 	}
 
-	actions := []string{fakeLauncher.Calls[0].Action, fakeLauncher.Calls[1].Action, fakeLauncher.Calls[2].Action}
+	actions := []string{fakeLauncher.Calls()[0].Action, fakeLauncher.Calls()[1].Action, fakeLauncher.Calls()[2].Action}
 	if actions[0] != "nvim" || actions[1] != "opencode" || actions[2] != "shell-command" {
 		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
 	}
@@ -629,9 +629,9 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)
@@ -660,8 +660,8 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 func TestModelEditFailureToastNamesTheCause(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
 
 	fakeLauncher := &fakes.FakeLauncher{}
 	services, err := NewServicesWithLauncher(gw, config.Default(), fakeLauncher)

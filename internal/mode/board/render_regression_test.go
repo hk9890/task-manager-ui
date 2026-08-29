@@ -13,13 +13,10 @@ package board
 // countColumnTopBorders helper would catch it immediately.
 
 import (
-	"context"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
@@ -84,17 +81,7 @@ func newRegressionBoard(t *testing.T) *Model {
 	closedAt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	repo.Seed(memoryrepo.Issue{ID: "reg-4", Title: "Done", Status: "closed", Priority: 3})
 	repo.SeedClosed("reg-4", closedAt, "done")
-	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
-	if err != nil {
-		t.Fatalf("ResolveKeyBindings: %v", err)
-	}
-	return NewModel(context.Background(), repo, slog.Default(), keys)
-}
-
-// feedDashboard feeds a dashboardLoadedMsg to the model, simulating a
-// completed board load.
-func feedDashboard(m *Model, data repository.DashboardData) {
-	_ = m.Update(dashboardLoadedMsg{data: data})
+	return newBoardModel(repo, resolvedBoardKeys(t))
 }
 
 // regressionDashboardData returns a DashboardData value with all 4 board
@@ -144,7 +131,7 @@ func TestBoardRenderColumnTopBordersAfterData(t *testing.T) {
 
 	m := newRegressionBoard(t)
 	m.SetSize(180, 30)
-	feedDashboard(m, regressionDashboardData())
+	feedDashboardData(m, regressionDashboardData())
 
 	view := m.View(0)
 	assertColumnTopCount(t, "after SetSize(180,30) + data", view, 4)
@@ -163,7 +150,7 @@ func TestBoardRenderColumnTopBordersSmallToLargeResize(t *testing.T) {
 
 	// Small terminal: not all 4 columns visible (width=80 shows ~3 columns).
 	m.SetSize(80, 20)
-	feedDashboard(m, regressionDashboardData())
+	feedDashboardData(m, regressionDashboardData())
 	viewSmall := m.View(0)
 	// At 80 wide we may only see 3 columns — don't assert count here.
 	_ = viewSmall
@@ -171,7 +158,7 @@ func TestBoardRenderColumnTopBordersSmallToLargeResize(t *testing.T) {
 	// Wide terminal: all 4 columns visible.
 	m.SetSize(200, 60)
 	// Feed fresh data at the new size.
-	feedDashboard(m, regressionDashboardData())
+	feedDashboardData(m, regressionDashboardData())
 	viewLarge := m.View(0)
 	assertColumnTopCount(t, "after resize to 200x60 + fresh data", viewLarge, 4)
 }
@@ -190,7 +177,7 @@ func TestBoardRenderColumnTopBordersPresizeDataResize(t *testing.T) {
 	assertColumnTopCount(t, "step 1: SetSize before data (180x30)", m.View(0), 4)
 
 	// Step 2: load data.
-	feedDashboard(m, regressionDashboardData())
+	feedDashboardData(m, regressionDashboardData())
 	assertColumnTopCount(t, "step 2: after data at 180x30", m.View(0), 4)
 
 	// Step 3: resize.
@@ -198,12 +185,12 @@ func TestBoardRenderColumnTopBordersPresizeDataResize(t *testing.T) {
 	assertColumnTopCount(t, "step 3: after resize to 200x60", m.View(0), 4)
 
 	// Step 4: load fresh data after resize.
-	feedDashboard(m, regressionDashboardData())
+	feedDashboardData(m, regressionDashboardData())
 	assertColumnTopCount(t, "step 4: after data at 200x60", m.View(0), 4)
 
 	// Step 5: resize again to a different wide size (must be ≥180 for all 4
 	// columns to fit; at 160 the renderer shows only 3).
 	m.SetSize(180, 40)
-	feedDashboard(m, regressionDashboardData())
+	feedDashboardData(m, regressionDashboardData())
 	assertColumnTopCount(t, "step 5: after data at 180x40", m.View(0), 4)
 }

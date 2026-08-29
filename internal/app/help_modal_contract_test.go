@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // These tests pin documented help-modal behavior surfaced by the
@@ -21,8 +22,8 @@ import (
 
 func openHelpModal(t *testing.T) Model {
 	t.Helper()
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -103,8 +104,8 @@ func TestHelpModal_RenderedContentVisible(t *testing.T) {
 func TestHelpModal_ReboundToggleClosesModal(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
 
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{

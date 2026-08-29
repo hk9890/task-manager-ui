@@ -29,9 +29,7 @@ package board
 // would fail.
 
 import (
-	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -79,94 +77,6 @@ func startCmdSubcmdsAsync(cmd tea.Cmd) <-chan loadMoreClosedDoneMsg {
 	}
 	return ch
 }
-
-// fixedDashboardRepo always returns a configured DashboardData regardless of
-// opts. Used as the inner repo for the delayed wrapper so load-more responses
-// contain predictable data.
-type fixedDashboardRepo struct {
-	resp repository.DashboardData
-}
-
-func (r *fixedDashboardRepo) Dashboard(_ context.Context, _ repository.DashboardOptions) (repository.DashboardData, error) {
-	return r.resp, nil
-}
-func (r *fixedDashboardRepo) Issue(_ context.Context, _ string) (domain.IssueDetail, error) {
-	return domain.IssueDetail{}, nil
-}
-func (r *fixedDashboardRepo) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	return domain.SearchResultPage{}, nil
-}
-func (r *fixedDashboardRepo) CreateIssue(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return domain.CreateIssueResult{}, nil
-}
-func (r *fixedDashboardRepo) UpdateIssue(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
-	return nil
-}
-func (r *fixedDashboardRepo) CloseIssue(_ context.Context, _ string, _ domain.CloseIssueInput) error {
-	return nil
-}
-func (r *fixedDashboardRepo) AddComment(_ context.Context, _ string, _ domain.AddCommentInput) error {
-	return nil
-}
-func (r *fixedDashboardRepo) HealthCheck(_ context.Context) error { return nil }
-func (r *fixedDashboardRepo) Catalogs(_ context.Context) (repository.Catalogs, error) {
-	return repository.Catalogs{}, nil
-}
-
-var _ repository.Repository = (*fixedDashboardRepo)(nil)
-
-// dashboardCallCounter wraps a repository.Repository and counts completed
-// Dashboard calls. The counter increments after the inner.Dashboard returns
-// (i.e., after the delayed gate has been passed), not when enqueued.
-type dashboardCallCounter struct {
-	mu    sync.Mutex
-	n     int
-	inner repository.Repository
-}
-
-func newDashboardCallCounter(inner repository.Repository) *dashboardCallCounter {
-	return &dashboardCallCounter{inner: inner}
-}
-
-func (c *dashboardCallCounter) count() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.n
-}
-
-func (c *dashboardCallCounter) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
-	data, err := c.inner.Dashboard(ctx, opts)
-	c.mu.Lock()
-	c.n++
-	c.mu.Unlock()
-	return data, err
-}
-func (c *dashboardCallCounter) Issue(ctx context.Context, id string) (domain.IssueDetail, error) {
-	return c.inner.Issue(ctx, id)
-}
-func (c *dashboardCallCounter) Search(ctx context.Context, q domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	return c.inner.Search(ctx, q)
-}
-func (c *dashboardCallCounter) CreateIssue(ctx context.Context, inp domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return c.inner.CreateIssue(ctx, inp)
-}
-func (c *dashboardCallCounter) UpdateIssue(ctx context.Context, id string, inp domain.UpdateIssueInput) error {
-	return c.inner.UpdateIssue(ctx, id, inp)
-}
-func (c *dashboardCallCounter) CloseIssue(ctx context.Context, id string, inp domain.CloseIssueInput) error {
-	return c.inner.CloseIssue(ctx, id, inp)
-}
-func (c *dashboardCallCounter) AddComment(ctx context.Context, id string, inp domain.AddCommentInput) error {
-	return c.inner.AddComment(ctx, id, inp)
-}
-func (c *dashboardCallCounter) HealthCheck(ctx context.Context) error {
-	return c.inner.HealthCheck(ctx)
-}
-func (c *dashboardCallCounter) Catalogs(ctx context.Context) (repository.Catalogs, error) {
-	return c.inner.Catalogs(ctx)
-}
-
-var _ repository.Repository = (*dashboardCallCounter)(nil)
 
 // waitForInFlight polls delayed.InFlight() until it reaches want or the
 // deadline expires. Returns the final InFlight() value.
@@ -243,8 +153,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 
 	// Stack: fixedDashboardRepo → counter → delayed.
 	// counter records completed Dashboard calls (resolved through the delay gate).
-	inner := &fixedDashboardRepo{resp: loadMoreResp}
-	counter := newDashboardCallCounter(inner)
+	counter := newDashboardStub(loadMoreResp)
 	delayed := fakes.NewDelayingDashboardRepository(counter)
 
 	m := newBoardModel(delayed, resolvedBoardKeys(t))
@@ -310,7 +219,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 		t.Error("step 3: expected doneLoadInFlight=true throughout the in-flight window")
 	}
 	// No completed calls yet (delayed gate not released).
-	if n := counter.count(); n != 0 {
+	if n := counter.dashboardCallCount(); n != 0 {
 		t.Errorf("step 3: expected 0 completed Dashboard calls before release, got %d", n)
 	}
 
@@ -339,7 +248,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 		t.Errorf("step 5: Done column issue count: got %d, want %d", got, wantLoaded)
 	}
 	// Exactly 1 completed Dashboard call (the single released load-more).
-	if n := counter.count(); n != 1 {
+	if n := counter.dashboardCallCount(); n != 1 {
 		t.Errorf("step 5: expected 1 completed Dashboard call total, got %d", n)
 	}
 
@@ -371,12 +280,12 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 	// Wait for counter to reflect the second completed call.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if counter.count() == 2 {
+		if counter.dashboardCallCount() == 2 {
 			break
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if n := counter.count(); n != 2 {
+	if n := counter.dashboardCallCount(); n != 2 {
 		t.Errorf("step 6: expected 2 total Dashboard calls (first + second load-more), got %d", n)
 	}
 }

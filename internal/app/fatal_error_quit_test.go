@@ -28,7 +28,7 @@ import (
 // fatal state, ready to receive key messages.
 func enterFatalErrorState(t *testing.T) Model {
 	t.Helper()
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -102,7 +102,7 @@ func TestFatalErrorScreen_CtrlCQuits(t *testing.T) {
 func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -121,7 +121,7 @@ func TestModelStartupHealthCheckClearsPathOnSuccess(t *testing.T) {
 func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeNoDatabaseFound,
 		Message: "no task-manager store found",
@@ -156,7 +156,7 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:    domain.ErrorCodeNoDatabaseFound,
 		Message: "no task-manager store found",
@@ -202,7 +202,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	gw.SetError(fakes.MethodHealthCheck, domain.RepositoryError{
 		Code:      domain.ErrorCodeNoDatabaseFound,
 		Operation: "health check",
@@ -233,7 +233,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 func TestModelFatalErrIgnoresNonRepositoryError(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	gw.SetError(fakes.MethodHealthCheck, errors.New("some plain error"))
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())

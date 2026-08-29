@@ -10,6 +10,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
@@ -120,6 +121,48 @@ func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses 
 		typeList:    strings.Join(typeList, ", "),
 		labelList:   strings.Join(labelList, ", "),
 	}
+}
+
+// dialogTargetIssue resolves the issue a metadata quick-edit dialog acts on for
+// the mode that asked for it. ok is false when nothing is selected.
+//
+// One place decides this, keyed off the requesting mode, rather than each
+// polling site knowing where its mode keeps a selection.
+func (m Model) dialogTargetIssue(requester mode.ID) (domain.IssueSummary, bool) {
+	var issue domain.IssueSummary
+
+	switch requester {
+	case mode.Detail:
+		issue = m.detail.Detail.Summary
+		if strings.TrimSpace(issue.ID) == "" {
+			if selection := m.currentSelection(); selection != nil {
+				issue = selection.Issue
+			}
+		}
+	default:
+		if selection := m.selectedByMode[requester]; selection != nil {
+			issue = selection.Issue
+		}
+	}
+
+	if strings.TrimSpace(issue.ID) == "" {
+		return domain.IssueSummary{}, false
+	}
+	return issue, true
+}
+
+// openMutationModal puts dialog on screen and returns the Cmd that starts it.
+//
+// The four statements it wraps — state, modal, size, visible — were written out
+// at five sites in update(), so a change to modal setup (a new SetSize argument,
+// a focus reset) was five edits with no compiler check that they agreed. Every
+// open goes through here.
+func (m *Model) openMutationModal(dialog mutationDialogState) tea.Cmd {
+	m.actionState = dialog
+	m.actionModal = mutationModal(dialog, m.keys)
+	m.actionModal.SetSize(m.width, m.height)
+	m.showActionModal = true
+	return m.actionModal.Init()
 }
 
 func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) modal.Model {

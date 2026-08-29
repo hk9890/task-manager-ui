@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -68,7 +69,7 @@ func TestSkeletonPhasePulse(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
 	// Empty repository — board stays in loading=true, cold-start.
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -132,12 +133,12 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// Install deterministic tick schedulers — no real time passes.
 
 	// Configure the repository with known, distinguishable issue IDs.
-	gw := newTestRepository()
-	gw.seedReady("tm-10", "Ready issue alpha", "task", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-11", Title: "Blocked issue beta", Status: "blocked", Priority: 2})
-	gw.seedInProgress("tm-12", "In Progress gamma", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-10", "Ready issue alpha", "task", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-11", Title: "Blocked issue beta", Status: "blocked", Priority: 2})
+	seedInProgress(gw, "tm-12", "In Progress gamma", "task", 1)
 	// Seed a search result so the search mode body renders something.
-	gw.seedSearchResult(memoryrepo.Issue{ID: "tm-20", Title: "Search result delta", Status: "open", Priority: 1})
+	seedSearchResult(gw, memoryrepo.Issue{ID: "tm-20", Title: "Search result delta", Status: "open", Priority: 1})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -152,7 +153,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	if m.active != mode.Board {
 		t.Fatalf("expected board active after init, got %s", m.active)
 	}
-	if m.boardIsLoading() {
+	if m.board.IsLoading() {
 		t.Fatalf("expected board to have settled after draining init messages")
 	}
 
@@ -185,7 +186,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	m = next.(Model)
 
 	// Board must now be loading (in-flight).
-	if !m.boardIsLoading() {
+	if !m.board.IsLoading() {
 		t.Fatalf("expected board to be loading after refreshTickMsg with dirty surface")
 	}
 
@@ -218,7 +219,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// Now drain the in-flight board refresh (repository responds with same data).
 	m = applyMessages(t, m, runBatch(refreshCmd))
 
-	if m.boardIsLoading() {
+	if m.board.IsLoading() {
 		t.Fatalf("expected board to have settled after draining refresh repository results")
 	}
 
@@ -280,7 +281,7 @@ func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
 	// Empty repository — board stays in loading=true, cold-start.
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -321,9 +322,9 @@ func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
 func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing.T) {
 	withModelNow(t, time.Unix(0, 0))
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -337,21 +338,21 @@ func TestModelRefreshTickFallbackWithoutFocusEventsReloadsActiveBoard(t *testing
 	}
 
 	withModelNow(t, time.Unix(61, 0))
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if !gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected board refresh from tick fallback without focus events, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -361,11 +362,11 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected initial focus event not to force refresh, calls=%#v", gw.Calls())
 	}
 
@@ -374,29 +375,29 @@ func TestModelFocusRegainRefreshesOnceAndSkipsRepeatedFocus(t *testing.T) {
 	m = applyMessages(t, m, runBatch(cmd))
 
 	m.markSurfaceRefreshed(mode.Board)
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if !gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected focus regain to refresh active board, calls=%#v", gw.Calls())
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected repeated focus while focused to avoid refresh spam, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -414,7 +415,7 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	}
 
 	m.markSurfaceRefreshed(mode.Detail)
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 
 	next, cmd = m.Update(tea.BlurMsg{})
 	m = next.(Model)
@@ -424,19 +425,19 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected focus regain to refresh active detail immediately, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodSearch) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) || gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected focus regain in detail to refresh only active detail surface, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -455,25 +456,25 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 
 	m.markSurfaceDirty(mode.Search)
 	m.markSurfaceDirty(mode.Search)
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodSearch) {
+	if !gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected search surface refresh on tick when search is active, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) || gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected tick refresh to target only active search surface, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked", Priority: 0})
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked", Priority: 0})
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -486,13 +487,12 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 		t.Fatalf("expected board active after init, got %s", m.active)
 	}
 
-	m.detail.SelectionID = "tm-3"
-	m.detail.TargetID = "tm-3"
+	// Stage "a completed load of tm-3 is on screen" through the real protocol.
+	m.detail.BeginLoad("tm-3", detail.BeginLoadOptions{})
 	m.detail.Detail = domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked"}, Description: "cached detail"}
-	m.detail.Error = ""
-	m.detail.Loading = false
+	m.detail.FinishLoad(nil)
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -503,18 +503,18 @@ func TestModelRefreshTickBoardAutoRefreshDoesNotSwitchModeOrClearDetailState(t *
 	if m.detail.Detail.Summary.ID != "tm-3" || m.detail.Detail.Description != "cached detail" {
 		t.Fatalf("expected board auto-refresh not to clear shell detail cache, got %#v", m.detail.Detail)
 	}
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected board auto-refresh not to force detail reload when selection remains, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 	// tm-9 appears in search results (empty-query matches all).
-	gw.seedReady("tm-9", "Search result", "task", 1)
+	seedReady(gw, "tm-9", "Search result", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -531,13 +531,12 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 		t.Fatalf("expected search active before refresh, got %s", m.active)
 	}
 
-	m.detail.SelectionID = "tm-9"
-	m.detail.TargetID = "tm-9"
+	// Stage "a completed load of tm-9 is on screen" through the real protocol.
+	m.detail.BeginLoad("tm-9", detail.BeginLoadOptions{})
 	m.detail.Detail = domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "Search result", Status: "open"}, Description: "cached detail"}
-	m.detail.Error = ""
-	m.detail.Loading = false
+	m.detail.FinishLoad(nil)
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -548,16 +547,16 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	if m.detail.Detail.Summary.ID != "tm-9" || m.detail.Detail.Description != "cached detail" {
 		t.Fatalf("expected search auto-refresh not to clear shell detail cache, got %#v", m.detail.Detail)
 	}
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected search auto-refresh not to force detail reload when selection remains, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -574,11 +573,11 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 		t.Fatalf("expected active mode search before focus refresh, got %s", m.active)
 	}
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.callCountSince(mark, fakes.MethodSearch) != 0 {
+	if gw.CallCountSince(mark, fakes.MethodSearch) != 0 {
 		t.Fatalf("expected query edit not to search before enter, got %#v", gw.Calls())
 	}
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -588,7 +587,7 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 		t.Fatalf("expected applied search query %q, got %q", "x", got)
 	}
 	m.markSurfaceRefreshed(mode.Search)
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 
 	next, cmd = m.Update(tea.BlurMsg{})
 	m = next.(Model)
@@ -598,10 +597,10 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodSearch) {
+	if !gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected focus regain in search to refresh immediately, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) || gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected search focus regain to refresh only active search surface, calls=%#v", gw.Calls())
 	}
 	if got := m.search.SessionState().AppliedQuery; got != "x" {
@@ -611,9 +610,9 @@ func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
 
 func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -630,7 +629,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 		t.Fatalf("expected search active before typing suppression test, got %s", m.active)
 	}
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
 	m = next.(Model)
 	if cmd != nil {
@@ -644,7 +643,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(tickCmd))
 
-	if gw.callCountSince(mark, fakes.MethodSearch) != 0 {
+	if gw.CallCountSince(mark, fakes.MethodSearch) != 0 {
 		t.Fatalf("expected no repository calls before queued typing command resolves, got %#v", gw.Calls())
 	}
 
@@ -652,7 +651,7 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	calls := gw.Calls()
-	if gw.callCountSince(mark, fakes.MethodSearch) != 1 {
+	if gw.CallCountSince(mark, fakes.MethodSearch) != 1 {
 		t.Fatalf("expected only one enter-triggered search call while auto-refresh is suppressed, got %#v", calls)
 	}
 	if m.search.IsLoading() {
@@ -662,10 +661,10 @@ func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
 
 func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -675,44 +674,44 @@ func TestModelRefreshTickSkipsWhileModalsOpenAndDetailLoading(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	m.showHelp = true
 	next, cmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.callCountSince(mark, fakes.MethodDashboard)+gw.callCountSince(mark, fakes.MethodSearch)+gw.callCountSince(mark, fakes.MethodIssue) != 0 {
+	if gw.CallCountSince(mark, fakes.MethodDashboard)+gw.CallCountSince(mark, fakes.MethodSearch)+gw.CallCountSince(mark, fakes.MethodIssue) != 0 {
 		t.Fatalf("expected no auto-refresh while help modal is open, calls=%#v", gw.Calls())
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	m.showHelp = false
 	m.showActionModal = true
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.callCountSince(mark, fakes.MethodDashboard)+gw.callCountSince(mark, fakes.MethodSearch)+gw.callCountSince(mark, fakes.MethodIssue) != 0 {
+	if gw.CallCountSince(mark, fakes.MethodDashboard)+gw.CallCountSince(mark, fakes.MethodSearch)+gw.CallCountSince(mark, fakes.MethodIssue) != 0 {
 		t.Fatalf("expected no auto-refresh while action modal is open, calls=%#v", gw.Calls())
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	m.showActionModal = false
 	m.active = mode.Detail
-	m.detail.Loading = true
-	m.detail.TargetID = firstSelectionID(m, mode.Board)
+	// Stage "a detail load is in flight" through the real protocol.
+	m.detail.BeginLoad(firstSelectionID(m, mode.Board), detail.BeginLoadOptions{})
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if gw.hasCallSince(mark, fakes.MethodIssue) {
+	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected duplicate detail reload suppression while loading, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -722,18 +721,18 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(mutationResultMsg{kind: mutationStatus, issueID: "tm-1"})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if !gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected board to refresh immediately when active and dirty after write, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, fakes.MethodSearch) {
+	if gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected hidden search surface not to refresh from board-active write, calls=%#v", gw.Calls())
 	}
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected write flow to keep immediate detail reload, calls=%#v", gw.Calls())
 	}
 
@@ -744,7 +743,7 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 		t.Fatalf("expected inactive search to remain dirty until next eligible refresh")
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -752,10 +751,10 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	if m.active != mode.Search {
 		t.Fatalf("expected active mode search after toggle, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, fakes.MethodSearch) {
+	if !gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected dirty search to refresh on activation, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected only newly active search to refresh on activation, calls=%#v", gw.Calls())
 	}
 	if state := m.refreshStateBySurface[mode.Search]; state.dirty {
@@ -766,9 +765,9 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	withModelNow(t, time.Unix(0, 0))
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -779,23 +778,23 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m.markSurfaceRefreshed(mode.Board)
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	withModelNow(t, time.Unix(59, 0))
 	next, cmd := m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected no board refresh before stale interval elapses, calls=%#v", gw.Calls())
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	withModelNow(t, time.Unix(60, 0))
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if !gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected board refresh at ~60s stale threshold, calls=%#v", gw.Calls())
 	}
 }
@@ -803,9 +802,9 @@ func TestModelRefreshTickHonorsStaleCadenceForActiveSurface(t *testing.T) {
 func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 	refreshMarkerSeen := false
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -831,9 +830,9 @@ func TestModelWithNoAutoRefreshSkipsTickSchedulingInInit(t *testing.T) {
 
 func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -843,7 +842,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	m := mustNewModelWithOptions(t, services, RuntimeOptions{DisableAutoRefresh: true})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(tea.FocusMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -857,26 +856,26 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if gw.callCountSince(mark, fakes.MethodDashboard)+gw.callCountSince(mark, fakes.MethodSearch)+gw.callCountSince(mark, fakes.MethodIssue) != 0 {
+	if gw.CallCountSince(mark, fakes.MethodDashboard)+gw.CallCountSince(mark, fakes.MethodSearch)+gw.CallCountSince(mark, fakes.MethodIssue) != 0 {
 		t.Fatalf("expected no auto-refresh side effects from focus/tick when disabled, calls=%#v", gw.Calls())
 	}
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodDashboard) {
+	if !gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected manual reload to include board data refresh, calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -895,15 +894,15 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 
 	m.markBrowseSurfacesDirty()
 	m.markSurfaceDirty(mode.Detail)
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if !gw.hasCallSince(mark, fakes.MethodIssue) {
+	if !gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected active detail to refresh when eligible, calls=%#v", gw.Calls())
 	}
-	if gw.hasCallSince(mark, fakes.MethodDashboard) || gw.hasCallSince(mark, fakes.MethodSearch) {
+	if gw.HasCallSince(mark, fakes.MethodDashboard) || gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected no background refresh of inactive board/search surfaces, calls=%#v", gw.Calls())
 	}
 }
@@ -918,8 +917,8 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 func TestSpinnerTickRunsOnlyWhileSomethingIsLoading(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {

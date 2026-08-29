@@ -6,7 +6,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
-	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 // relationshipGroup is shared relation rendering input used by multiple rails.
@@ -65,7 +65,7 @@ func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID string, 
 			out = append(out, "")
 		}
 		if skeleton {
-			out = append(out, styles.TruncateString(fmt.Sprintf("%s (%s)", group.Label, issuerow.SkeletonGlyph), width))
+			out = append(out, textutil.TruncateString(fmt.Sprintf("%s (%s)", group.Label, issuerow.SkeletonGlyph), width))
 			out = append(out, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 				Width:  width,
 				Seed:   len(out),
@@ -74,9 +74,9 @@ func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID string, 
 			}))
 			continue
 		}
-		out = append(out, styles.TruncateString(fmt.Sprintf("%s (%d)", group.Label, len(ordered)), width))
+		out = append(out, textutil.TruncateString(fmt.Sprintf("%s (%d)", group.Label, len(ordered)), width))
 		if len(ordered) == 0 {
-			out = append(out, styles.TruncateString("(none)", width))
+			out = append(out, textutil.TruncateString("(none)", width))
 			continue
 		}
 		for _, ref := range ordered {

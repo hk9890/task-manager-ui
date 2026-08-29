@@ -10,9 +10,11 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 func TestModelViewRendersRepresentativeStates(t *testing.T) {
@@ -33,7 +35,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 
 		// Cold-start: Loading=true, no prior detail (Detail.Summary.ID == "").
 		// Expect skeleton placeholder, NOT a full-screen loading takeover.
-		m := Model{SelectionID: "tm-2", TargetID: "tm-2", Loading: true}
+		m := Model{selectionID: "tm-2", targetID: "tm-2", loading: true}
 		view := m.View(100, 20, false, 0)
 		if strings.Contains(view, "Loading details for") {
 			t.Fatalf("cold-start loading should NOT show full-screen takeover, got:\n%s", view)
@@ -46,7 +48,7 @@ func TestModelViewRendersRepresentativeStates(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		t.Parallel()
 
-		m := Model{SelectionID: "tm-2", Error: "boom"}
+		m := Model{selectionID: "tm-2", errText: "boom"}
 		view := m.View(100, 20, false, 0)
 		if !strings.Contains(view, "Failed to load details for tm-2") || !strings.Contains(view, "boom") {
 			t.Fatalf("expected detail error state, got:\n%s", view)
@@ -58,8 +60,8 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID:  "tm-2",
-		TargetID:     "tm-2",
+		selectionID:  "tm-2",
+		targetID:     "tm-2",
 		Keys:         mustResolveDetailKeys(t, nil),
 		BrowserItems: []domain.IssueReference{{ID: "tm-2", Title: "Second issue"}},
 		Detail: domain.IssueDetail{
@@ -73,8 +75,8 @@ func TestModelViewSelectionChangeRendersSelectedIssueDetail(t *testing.T) {
 	}
 
 	// Simulate shell selection change to a different issue and loaded detail update.
-	m.SelectionID = "tm-4"
-	m.TargetID = "tm-4"
+	m.selectionID = "tm-4"
+	m.targetID = "tm-4"
 	m.BrowserItems = []domain.IssueReference{{ID: "tm-4", Title: "Fourth issue"}}
 	m.Detail = domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-4", Title: "Fourth issue", Status: "open", Type: "bug", Priority: 1},
@@ -93,8 +95,8 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-2",
-		TargetID:    "tm-2",
+		selectionID: "tm-2",
+		targetID:    "tm-2",
 		Keys: mustResolveDetailKeys(t, &config.KeyBindingOverride{
 			Detail: map[string][]string{
 				config.DetailActionScrollDown: {"n"},
@@ -111,19 +113,19 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		},
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
 		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ContentScrollOffset)
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
 		t.Fatal("expected configured scroll-up key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
 		t.Fatal("expected configured page-down key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
 		t.Fatal("expected configured end key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
 		t.Fatalf("expected configured home key to reset offset, got %d", m.ContentScrollOffset)
 	}
 }
@@ -146,8 +148,8 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 	}
 
 	m := Model{
-		SelectionID: "tm-2",
-		TargetID:    "tm-2",
+		selectionID: "tm-2",
+		targetID:    "tm-2",
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-2", Title: "Long issue", Status: "open", Type: "task", Priority: 1},
 			Description: strings.Join(descriptionLines, "\n"),
@@ -163,7 +165,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected top-of-detail content (meta row) in initial viewport, got:\n%s", initial)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
 		t.Fatalf("expected page down to be consumed")
 	}
 	after := m.View(80, 10, false, 0)
@@ -171,7 +173,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected viewport output to change after page down")
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
 		t.Fatalf("expected end key to be consumed")
 	}
 	endView := m.View(80, 10, false, 0)
@@ -179,7 +181,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
 		t.Fatalf("expected home key to be consumed")
 	}
 	homeView := m.View(80, 10, false, 0)
@@ -194,8 +196,8 @@ func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-2",
-		TargetID:    "tm-2",
+		selectionID: "tm-2",
+		targetID:    "tm-2",
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-2", Title: "Width sensitive markdown", Status: "open", Type: "task", Priority: 1},
 			Description: strings.Repeat("wrap-me ", 80),
@@ -203,12 +205,12 @@ func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
 	}
 
 	_ = m.View(120, 10, false, 0)
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
 		t.Fatal("expected end key at wide width to be consumed")
 	}
 	wideOffset := m.ContentScrollOffset
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
 		t.Fatal("expected end key at narrow width to be consumed")
 	}
 
@@ -226,7 +228,7 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 		t.Fatalf("expected default focus pane content, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed in detail mode")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneDependencies {
@@ -234,35 +236,35 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	}
 
 	m.BrowserItems = []domain.IssueReference{{ID: "tm-1"}, {ID: "tm-2"}}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from content to focus browser when present, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from browser to stay on browser, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneContent {
 		t.Fatalf("expected right from browser to focus content, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneMetadata {
 		t.Fatalf("expected right from content to focus metadata, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneMetadata {
@@ -278,8 +280,8 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
+		selectionID: "tm-1",
+		targetID:    "tm-1",
 		FocusPane:   detail.FocusPaneBrowser,
 		BrowserItems: []domain.IssueReference{
 			{ID: "tm-1", Title: "One"},
@@ -292,7 +294,7 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 	}
 
 	// (Q6a) Arrow moves BrowserSelectedIndex; intent must be nil (no reload).
-	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed {
 		t.Fatal("expected down to be consumed in Dependencies pane")
 	}
@@ -306,7 +308,7 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 		t.Fatalf("expected selected related issue tm-2 after down, got %q", selected.ID)
 	}
 
-	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
 	if !consumed {
 		t.Fatal("expected up to be consumed in Dependencies pane")
 	}
@@ -326,8 +328,8 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent(t *testing.T) 
 	t.Parallel()
 
 	m := Model{
-		SelectionID:          "tm-1",
-		TargetID:             "tm-1",
+		selectionID:          "tm-1",
+		targetID:             "tm-1",
 		FocusPane:            detail.FocusPaneBrowser,
 		BrowserSelectedIndex: 1,
 		BrowserItems: []domain.IssueReference{
@@ -339,7 +341,7 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent(t *testing.T) 
 		},
 	}
 
-	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 80, 10)
+	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 80, 10)
 	if !consumed {
 		t.Fatal("expected enter on Dependencies pane to be consumed")
 	}
@@ -355,8 +357,8 @@ func TestModelRenderDetailUsesLoadingPreviewStubUntilPreviewDetailArrives(t *tes
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-2",
+		selectionID: "tm-1",
+		targetID:    "tm-2",
 		Detail: domain.IssueDetail{
 			Summary:   domain.IssueSummary{ID: "tm-1", Title: "Anchor", Status: "open", Type: "task", Priority: 1},
 			BlockedBy: []domain.IssueReference{{ID: "tm-2", Title: "Preview candidate", Status: "blocked", Type: "bug", Priority: 2}},
@@ -403,9 +405,9 @@ func TestRenderDetailOptimisticallyShowsTargetHeaderWhileLoading(t *testing.T) {
 
 	target := domain.IssueReference{ID: "tm-2", Title: "Investigate cache stampede", Status: "in_progress", Type: "bug", Priority: 0}
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-2", // drilled target differs from the anchored selection
-		Loading:     true,
+		selectionID: "tm-1",
+		targetID:    "tm-2", // drilled target differs from the anchored selection
+		loading:     true,
 		Detail: domain.IssueDetail{
 			Summary:   domain.IssueSummary{ID: "tm-1", Title: "Anchor", Status: "open", Type: "task", Priority: 1},
 			BlockedBy: []domain.IssueReference{target},
@@ -444,8 +446,8 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
+		selectionID: "tm-1",
+		targetID:    "tm-1",
 		FocusPane:   detail.FocusPaneMetadata,
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-1", Title: "One"},
@@ -453,7 +455,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 		},
 	}
 
-	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed {
 		t.Fatal("expected metadata pane to consume scroll bindings")
 	}
@@ -464,7 +466,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 		t.Fatalf("expected metadata down to select priority after status, got %q", m.MetadataSelectedField)
 	}
 
-	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed || intent != nil {
 		t.Fatalf("expected metadata down to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
 	}
@@ -472,7 +474,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 		t.Fatalf("expected metadata selection clamped to priority, got %q", m.MetadataSelectedField)
 	}
 
-	consumed, intent = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
 	if !consumed || intent != nil {
 		t.Fatalf("expected metadata up to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
 	}
@@ -485,26 +487,30 @@ func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
+		selectionID: "tm-1",
+		targetID:    "tm-1",
 		FocusPane:   detail.FocusPaneMetadata,
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Status: "open"},
 		},
 	}
 
-	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
+	consumed, intent, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
 	if !consumed {
 		t.Fatal("expected enter in metadata pane to be consumed")
 	}
 	if intent != nil {
 		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
 	}
-	if !m.ConsumeOpenStatusDialogIntent() {
-		t.Fatal("expected metadata enter to raise open-status-dialog intent")
+	if cmd == nil {
+		t.Fatal("expected metadata enter to emit an action request")
 	}
-	if m.ConsumeOpenStatusDialogIntent() {
-		t.Fatal("expected status-dialog intent to be consumed once")
+	req, ok := cmd().(mode.ActionRequestMsg)
+	if !ok {
+		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
+	}
+	if req.Mode != mode.Detail || req.Action != mode.ActionOpenStatusDialog {
+		t.Fatalf("expected detail/open_status_dialog, got %s/%s", req.Mode, req.Action)
 	}
 }
 
@@ -512,8 +518,8 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 	t.Parallel()
 
 	m := Model{
-		SelectionID:           "tm-1",
-		TargetID:              "tm-1",
+		selectionID:           "tm-1",
+		targetID:              "tm-1",
 		FocusPane:             detail.FocusPaneMetadata,
 		MetadataSelectedField: detail.MetadataFieldPriority,
 		Detail: domain.IssueDetail{
@@ -521,18 +527,22 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 		},
 	}
 
-	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
+	consumed, intent, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
 	if !consumed {
 		t.Fatal("expected enter in metadata pane to be consumed")
 	}
 	if intent != nil {
 		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
 	}
-	if !m.ConsumeOpenPriorityDialogIntent() {
-		t.Fatal("expected metadata enter on priority to raise open-priority-dialog intent")
+	if cmd == nil {
+		t.Fatal("expected metadata enter on priority to emit an action request")
 	}
-	if m.ConsumeOpenPriorityDialogIntent() {
-		t.Fatal("expected open-priority-dialog intent to be consumed once")
+	req, ok := cmd().(mode.ActionRequestMsg)
+	if !ok {
+		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
+	}
+	if req.Mode != mode.Detail || req.Action != mode.ActionOpenPriorityDialog {
+		t.Fatalf("expected detail/open_priority_dialog, got %s/%s", req.Mode, req.Action)
 	}
 }
 
@@ -803,9 +813,9 @@ func TestColdStartViewRendersSkeleton(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-5",
-		TargetID:    "tm-5",
-		Loading:     true,
+		selectionID: "tm-5",
+		targetID:    "tm-5",
+		loading:     true,
 		// Detail.Summary.ID is "", simulating cold-start.
 	}
 
@@ -829,9 +839,9 @@ func TestRefreshSameIssueKeepsStaleContent(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-7",
-		TargetID:    "tm-7",
-		Loading:     true,
+		selectionID: "tm-7",
+		targetID:    "tm-7",
+		loading:     true,
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-7", Title: "Stale issue", Status: "open", Type: "task", Priority: 2},
 			Description: "Stale description visible during refresh",
@@ -863,9 +873,9 @@ func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 	// after ApplyLoadedDetail(placeholder), it holds the placeholder which has
 	// Summary.ID == "tm-B". Either way, Loading=true and Summary.ID != "".
 	m := Model{
-		SelectionID: "tm-B",
-		TargetID:    "tm-B",
-		Loading:     true,
+		selectionID: "tm-B",
+		targetID:    "tm-B",
+		loading:     true,
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-A", Title: "Previous issue A", Status: "open", Type: "task", Priority: 1},
 			Description: "Previous issue A description",
@@ -900,8 +910,8 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	}
 
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-1",
+		selectionID: "tm-1",
+		targetID:    "tm-1",
 	}
 	m.ApplyLoadedDetail("tm-1", issueA)
 
@@ -912,9 +922,9 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 
 	// Simulate app-level selection change to tm-2: synchronously apply placeholder
 	// BEFORE the repository response arrives (this is the mechanism from app/model.go).
-	m.Loading = true
-	m.SelectionID = "tm-2"
-	m.TargetID = "tm-2"
+	m.loading = true
+	m.selectionID = "tm-2"
+	m.targetID = "tm-2"
 	ref := domain.IssueReference{ID: "tm-2", Title: "Issue B"}
 	m.ApplyLoadedDetail("tm-2", PlaceholderDetail("tm-2", ref, true))
 
@@ -958,8 +968,8 @@ func TestPlaceholderDetailHasEmptyDescriptionAndSkeletonSeamRendersGlyph(t *test
 	// A model that is previewing a target (TargetID != SelectionID, no preview
 	// loaded) should render skeleton glyphs via the Skeleton seam in View().
 	m := Model{
-		SelectionID: "tm-1",
-		TargetID:    "tm-10",
+		selectionID: "tm-1",
+		targetID:    "tm-10",
 		BrowserItems: []domain.IssueReference{
 			{ID: "tm-10", Title: "Some issue", Status: "open", Type: "task", Priority: 1},
 		},
@@ -1082,9 +1092,9 @@ func TestClampOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := clampOffset(tc.value, tc.maxOffset)
+			got := textutil.Clamp(tc.value, 0, tc.maxOffset)
 			if got != tc.want {
-				t.Fatalf("clampOffset(%d, %d) = %d, want %d", tc.value, tc.maxOffset, got, tc.want)
+				t.Fatalf("textutil.Clamp(%d, 0, %d) = %d, want %d", tc.value, tc.maxOffset, got, tc.want)
 			}
 		})
 	}
@@ -1105,8 +1115,8 @@ func TestClampScroll(t *testing.T) {
 		t.Parallel()
 
 		m := Model{
-			SelectionID:         "tm-1",
-			TargetID:            "tm-1",
+			selectionID:         "tm-1",
+			targetID:            "tm-1",
 			ContentScrollOffset: 2,
 			Detail: domain.IssueDetail{
 				Summary:     domain.IssueSummary{ID: "tm-1", Title: "issue"},
@@ -1123,8 +1133,8 @@ func TestClampScroll(t *testing.T) {
 		t.Parallel()
 
 		m := Model{
-			SelectionID:         "tm-1",
-			TargetID:            "tm-1",
+			selectionID:         "tm-1",
+			targetID:            "tm-1",
 			ContentScrollOffset: 9999,
 			Detail: domain.IssueDetail{
 				Summary:     domain.IssueSummary{ID: "tm-1", Title: "issue"},
@@ -1145,8 +1155,8 @@ func TestClampScroll(t *testing.T) {
 		t.Parallel()
 
 		m := Model{
-			SelectionID:              "tm-1",
-			TargetID:                 "tm-1",
+			selectionID:              "tm-1",
+			targetID:                 "tm-1",
 			ContentScrollOffset:      -5,
 			DependenciesScrollOffset: -3,
 			MetadataScrollOffset:     -1,
@@ -1171,7 +1181,7 @@ func TestClampScroll(t *testing.T) {
 		t.Parallel()
 
 		m := Model{
-			SelectionID:         "tm-1",
+			selectionID:         "tm-1",
 			ContentScrollOffset: 9999,
 			Detail: domain.IssueDetail{
 				Summary:     domain.IssueSummary{ID: "tm-1", Title: "issue"},
@@ -1256,8 +1266,8 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 	}
 
 	m := Model{
-		SelectionID: "tm-main",
-		TargetID:    "tm-main",
+		selectionID: "tm-main",
+		targetID:    "tm-main",
 		FocusPane:   detail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:   domain.IssueSummary{ID: "tm-main", Title: "Main"},
@@ -1274,7 +1284,7 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 
 	// Press j 15 times on the Dependencies pane.
 	for i := 0; i < 15; i++ {
-		consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height)
+		consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height)
 		if !consumed {
 			t.Fatalf("expected j key to be consumed on step %d", i+1)
 		}
@@ -1302,8 +1312,8 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID:           "tm-1",
-		TargetID:              "tm-1",
+		selectionID:           "tm-1",
+		targetID:              "tm-1",
 		FocusPane:             detail.FocusPaneMetadata,
 		MetadataSelectedField: detail.MetadataFieldStatus,
 		Keys:                  mustResolveDetailKeys(t, nil),
@@ -1315,7 +1325,7 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	// Only two editable metadata fields (Status, Priority). Moving down from
 	// Status to Priority doesn't scroll when the pane is tall enough. This test
 	// verifies the model doesn't panic and the field advances correctly.
-	consumed, intent := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 160, 10)
+	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 160, 10)
 	if !consumed {
 		t.Fatal("expected j to be consumed in metadata pane")
 	}
@@ -1342,9 +1352,9 @@ func TestRenderDetailChildrenAnchoredToBaseDetail(t *testing.T) {
 
 	m := Model{
 		// Anchor issue (SelectionID) has two children.
-		SelectionID: "tm-anchor",
+		selectionID: "tm-anchor",
 		// TargetID differs: we are previewing tm-target.
-		TargetID: "tm-target",
+		targetID: "tm-target",
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-anchor", Title: "Anchor epic", Status: "open", Type: "epic", Priority: 1},
 			Children: anchorChildren,
@@ -1444,8 +1454,8 @@ func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
 
 	// Start: tm-parent is loaded, cursor is on the Dependencies pane.
 	m := Model{
-		SelectionID: "tm-parent",
-		TargetID:    "tm-parent",
+		selectionID: "tm-parent",
+		targetID:    "tm-parent",
 		FocusPane:   detail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-parent"},
@@ -1456,9 +1466,9 @@ func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
 	}
 
 	// Simulate the app drill-handler sequence: set Loading and drill-focus before placeholder.
-	m.Loading = true
-	m.SelectionID = "tm-child"
-	m.TargetID = "tm-child"
+	m.loading = true
+	m.selectionID = "tm-child"
+	m.targetID = "tm-child"
 	m.SetDrillFromDepsFocus()
 	m.ApplyLoadedDetail("tm-child", PlaceholderDetail("tm-child", domain.IssueReference{ID: "tm-child"}, true))
 
@@ -1468,7 +1478,7 @@ func TestDrillFromDepsFocusRetainedOnRealLoadWithDeps(t *testing.T) {
 	}
 
 	// Simulate real data arriving: Loading cleared first, then ApplyLoadedDetail.
-	m.Loading = false
+	m.loading = false
 	m.ApplyLoadedDetail("tm-child", domain.IssueDetail{
 		Summary:   domain.IssueSummary{ID: "tm-child"},
 		BlockedBy: []domain.IssueReference{{ID: "tm-blocker"}},
@@ -1491,8 +1501,8 @@ func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		SelectionID: "tm-parent",
-		TargetID:    "tm-parent",
+		selectionID: "tm-parent",
+		targetID:    "tm-parent",
 		FocusPane:   detail.FocusPaneDependencies,
 		Detail: domain.IssueDetail{
 			Summary:  domain.IssueSummary{ID: "tm-parent"},
@@ -1502,9 +1512,9 @@ func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
 		BrowserSelectedIndex: 0,
 	}
 
-	m.Loading = true
-	m.SelectionID = "tm-leaf"
-	m.TargetID = "tm-leaf"
+	m.loading = true
+	m.selectionID = "tm-leaf"
+	m.targetID = "tm-leaf"
 	m.SetDrillFromDepsFocus()
 	m.ApplyLoadedDetail("tm-leaf", PlaceholderDetail("tm-leaf", domain.IssueReference{ID: "tm-leaf"}, true))
 
@@ -1514,7 +1524,7 @@ func TestDrillFromDepsFocusMovesToContentOnLeafLoad(t *testing.T) {
 	}
 
 	// Real load: leaf has no dependencies.
-	m.Loading = false
+	m.loading = false
 	m.ApplyLoadedDetail("tm-leaf", domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-leaf"},
 	})
@@ -1538,14 +1548,14 @@ func TestDrillFromDepsFocusClearDrillFocusCancels(t *testing.T) {
 		FocusPane: detail.FocusPaneDependencies,
 	}
 
-	m.Loading = true
+	m.loading = true
 	m.SetDrillFromDepsFocus()
 
 	// Cancel before real load (e.g. load error or selection superseded).
 	m.ClearDrillFocus()
 
 	// ApplyLoadedDetail on a leaf should now flip focus to Content normally.
-	m.Loading = false
+	m.loading = false
 	m.ApplyLoadedDetail("tm-x", domain.IssueDetail{
 		Summary: domain.IssueSummary{ID: "tm-x"},
 	})
@@ -1589,8 +1599,8 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 	}
 
 	m := Model{
-		SelectionID:  "tm-epic",
-		TargetID:     "tm-epic",
+		selectionID:  "tm-epic",
+		targetID:     "tm-epic",
 		FocusPane:    detail.FocusPaneBrowser,
 		BrowserItems: items,
 		Detail: domain.IssueDetail{
@@ -1620,7 +1630,7 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 				step, selected.Title, selected.ID, m.BrowserSelectedIndex, view)
 		}
 
-		if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height); !consumed {
+		if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height); !consumed {
 			t.Fatalf("step %d: expected down to be consumed in the Dependencies pane", step)
 		}
 	}

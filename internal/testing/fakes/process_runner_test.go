@@ -15,11 +15,11 @@ func TestFakeProcessRunnerRecordsLaunchIntent(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	if len(fake.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(fake.Calls))
+	if len(fake.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(fake.Calls()))
 	}
 
-	call := fake.Calls[0]
+	call := fake.Calls()[0]
 	if call.Command != "opencode" || len(call.Args) != 3 || call.Dir != "/tmp/work" {
 		t.Fatalf("unexpected call record: %#v", call)
 	}

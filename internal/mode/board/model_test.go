@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,54 +28,6 @@ func resolvedBoardKeys(t *testing.T) config.ResolvedKeyBindings {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 	return keys
-}
-
-// optsCaptureRepo is a minimal recording stub that captures the DashboardOptions
-// passed to each Dashboard call. Used by tests that assert the ClosedLimit /
-// ClosedOffset windowing, where ErrorInjectingRepository (which records only
-// Method, not args) is insufficient.
-type optsCaptureRepo struct {
-	mu            sync.Mutex
-	dashboardOpts []repository.DashboardOptions
-}
-
-func (r *optsCaptureRepo) Dashboard(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
-	r.mu.Lock()
-	r.dashboardOpts = append(r.dashboardOpts, opts)
-	r.mu.Unlock()
-	return repository.DashboardData{}, nil
-}
-
-func (r *optsCaptureRepo) capturedOpts() []repository.DashboardOptions {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]repository.DashboardOptions, len(r.dashboardOpts))
-	copy(out, r.dashboardOpts)
-	return out
-}
-
-// Remaining Repository methods are no-ops.
-func (r *optsCaptureRepo) Issue(_ context.Context, _ string) (domain.IssueDetail, error) {
-	return domain.IssueDetail{}, nil
-}
-func (r *optsCaptureRepo) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	return domain.SearchResultPage{}, nil
-}
-func (r *optsCaptureRepo) CreateIssue(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return domain.CreateIssueResult{}, nil
-}
-func (r *optsCaptureRepo) UpdateIssue(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
-	return nil
-}
-func (r *optsCaptureRepo) CloseIssue(_ context.Context, _ string, _ domain.CloseIssueInput) error {
-	return nil
-}
-func (r *optsCaptureRepo) AddComment(_ context.Context, _ string, _ domain.AddCommentInput) error {
-	return nil
-}
-func (r *optsCaptureRepo) HealthCheck(_ context.Context) error { return nil }
-func (r *optsCaptureRepo) Catalogs(_ context.Context) (repository.Catalogs, error) {
-	return repository.Catalogs{}, nil
 }
 
 // newBoardModel builds a test board model with a no-op logger.
@@ -1003,8 +954,8 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 func TestStartReload_PassesClosedLimit(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []refreshMode{refreshModeReload, refreshModeAuto} {
-		stub := &optsCaptureRepo{}
+	for _, mode := range []mode.RefreshMode{mode.RefreshReload, mode.RefreshAuto} {
+		stub := newDashboardStub(repository.DashboardData{})
 		m := newBoardModel(stub, resolvedBoardKeys(t))
 
 		cmd := m.startReload(mode)
@@ -1202,53 +1153,6 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 
 // --- Done column load-more tests ---
 
-// loadMoreCapture is a minimal stub repository that records all Dashboard opts
-// and returns a configurable canned response for each call.
-type loadMoreCapture struct {
-	mu   sync.Mutex
-	opts []repository.DashboardOptions
-	resp repository.DashboardData // returned for every Dashboard call
-}
-
-func (r *loadMoreCapture) Dashboard(_ context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
-	r.mu.Lock()
-	r.opts = append(r.opts, opts)
-	r.mu.Unlock()
-	return r.resp, nil
-}
-
-func (r *loadMoreCapture) capturedOpts() []repository.DashboardOptions {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]repository.DashboardOptions, len(r.opts))
-	copy(out, r.opts)
-	return out
-}
-
-// Remaining Repository methods are no-ops.
-func (r *loadMoreCapture) Issue(_ context.Context, _ string) (domain.IssueDetail, error) {
-	return domain.IssueDetail{}, nil
-}
-func (r *loadMoreCapture) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	return domain.SearchResultPage{}, nil
-}
-func (r *loadMoreCapture) CreateIssue(_ context.Context, _ domain.CreateIssueInput) (domain.CreateIssueResult, error) {
-	return domain.CreateIssueResult{}, nil
-}
-func (r *loadMoreCapture) UpdateIssue(_ context.Context, _ string, _ domain.UpdateIssueInput) error {
-	return nil
-}
-func (r *loadMoreCapture) CloseIssue(_ context.Context, _ string, _ domain.CloseIssueInput) error {
-	return nil
-}
-func (r *loadMoreCapture) AddComment(_ context.Context, _ string, _ domain.AddCommentInput) error {
-	return nil
-}
-func (r *loadMoreCapture) HealthCheck(_ context.Context) error { return nil }
-func (r *loadMoreCapture) Catalogs(_ context.Context) (repository.Catalogs, error) {
-	return repository.Catalogs{}, nil
-}
-
 // makeClosedIssues returns n synthesised closed IssueSummary values.
 func makeClosedIssues(n int) []domain.IssueSummary {
 	issues := make([]domain.IssueSummary, n)
@@ -1270,7 +1174,7 @@ func makeClosedIssues(n int) []domain.IssueSummary {
 func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
 	t.Parallel()
 
-	stub := &loadMoreCapture{}
+	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	m.SetSize(120, 25) // sectionItemCapacity = 22; closedPageSize = max(44,50) = 50
 
@@ -1371,7 +1275,7 @@ func TestDoneLoadMore_ThresholdBoundary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			stub := &loadMoreCapture{}
+			stub := newDashboardStub(repository.DashboardData{})
 			m := newBoardModel(stub, resolvedBoardKeys(t))
 			m.SetSize(120, 25)
 
@@ -1407,7 +1311,7 @@ func TestDoneLoadMore_ThresholdBoundary(t *testing.T) {
 func TestDoneLoadMore_NoDispatchAtSliceEnd(t *testing.T) {
 	t.Parallel()
 
-	stub := &loadMoreCapture{}
+	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	m.SetSize(120, 25)
 
@@ -1520,7 +1424,7 @@ func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 	t.Parallel()
 
-	stub := &loadMoreCapture{}
+	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	m.SetSize(120, 25)
 
@@ -1568,7 +1472,7 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 // resulting dashboard response arrives, doneLoadedCount reflects only the new
 // page (not the stale 85).
 //
-// Audit note: the r key handler calls startReload(refreshModeReload) which
+// Audit note: the r key handler calls startReload(mode.RefreshReload) which
 // already resets doneLoadedCount=0 and doneLoadInFlight=false (lines 383-384
 // of model.go). This test is the explicit regression guard for that
 // path.
@@ -1579,12 +1483,11 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	// doneLoadedCount is set from the new page, not the stale 85.
 	const freshPageSize = 20
 	freshClosed := makeClosedIssues(freshPageSize)
-	stub := &loadMoreCapture{
-		resp: repository.DashboardData{
-			Closed:      freshClosed,
-			ClosedTotal: 736,
-		},
-	}
+	stub := newDashboardStub(repository.DashboardData{
+		Closed:      freshClosed,
+		ClosedTotal: 736,
+	},
+	)
 
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	// height=23 → sectionItemCapacity()=20.
@@ -1659,7 +1562,7 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 // Architecture note: focus-regain is handled in internal/app/model.go
 // (tea.FocusMsg → maybeAutoRefreshActiveSurfaceCmdOnFocusRegain →
 // refreshActiveSurfaceCmd → m.board.AutoRefresh). AutoRefresh() calls
-// startReload(refreshModeAuto), which resets doneLoadedCount and
+// startReload(mode.RefreshAuto), which resets doneLoadedCount and
 // doneLoadInFlight via the shared counter-reset block in startReload (lines
 // 383-384 of model.go). This test covers the board.AutoRefresh() entry point
 // directly — the app-level wiring is covered by existing app model tests; the
@@ -1669,12 +1572,11 @@ func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
 
 	const freshPageSize = 20
 	freshClosed := makeClosedIssues(freshPageSize)
-	stub := &loadMoreCapture{
-		resp: repository.DashboardData{
-			Closed:      freshClosed,
-			ClosedTotal: 736,
-		},
-	}
+	stub := newDashboardStub(repository.DashboardData{
+		Closed:      freshClosed,
+		ClosedTotal: 736,
+	},
+	)
 
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	// height=23 → sectionItemCapacity()=20.
@@ -1749,7 +1651,7 @@ func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
 func TestDoneLoadMore_ReloadResetsState(t *testing.T) {
 	t.Parallel()
 
-	stub := &loadMoreCapture{}
+	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	m.SetSize(120, 25) // sectionItemCapacity=22
 
@@ -1763,9 +1665,9 @@ func TestDoneLoadMore_ReloadResetsState(t *testing.T) {
 	// itself guards on m.inflight (not doneLoadInFlight), so this matches the
 	// real code path where doneLoadInFlight is left over from a prior session.
 	m.inflight = false
-	cmd := m.startReload(refreshModeReload)
+	cmd := m.startReload(mode.RefreshReload)
 	if cmd == nil {
-		t.Fatal("expected non-nil Cmd from startReload(refreshModeReload)")
+		t.Fatal("expected non-nil Cmd from startReload(mode.RefreshReload)")
 	}
 
 	// AC 1: doneLoadedCount reset to 0 synchronously.
@@ -1806,7 +1708,7 @@ func TestDoneLoadMore_ReloadResetsState(t *testing.T) {
 func TestDoneLoadMore_EmptyDoneColumnNoDispatch(t *testing.T) {
 	t.Parallel()
 
-	stub := &loadMoreCapture{}
+	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
 	m.SetSize(120, 25)
 
@@ -2064,7 +1966,7 @@ func TestFailedRefreshKeepsLoadedColumns(t *testing.T) {
 		t.Fatal("test setup: expected a selection before the failed refresh")
 	}
 
-	_ = m.startReload(refreshModeAuto)
+	_ = m.startReload(mode.RefreshAuto)
 	feedDashboardErr(m, errors.New("taskmgr unavailable"))
 
 	if got := len(m.columns[2].issues); got != inProgressBefore {
@@ -2120,7 +2022,7 @@ func TestRefreshReClampsScrollOffsetOfAShrunkColumn(t *testing.T) {
 	}
 
 	// The column shrinks to 5 rows while the offset still points past them.
-	_ = m.startReload(refreshModeAuto)
+	_ = m.startReload(mode.RefreshAuto)
 	feedDashboardData(m, repository.DashboardData{InProgress: makeOpenIssues("wip", 5)})
 
 	rows := len(m.columns[2].issues)
@@ -2152,7 +2054,7 @@ func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
 
 	// A load-more for offset 200 is outstanding when the auto-refresh lands.
 	m.doneLoadInFlight = true
-	_ = m.startReload(refreshModeAuto)
+	_ = m.startReload(mode.RefreshAuto)
 	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(31), ClosedTotal: 736})
 
 	if got := len(m.columns[doneColumnIndex].issues); got != 31 {

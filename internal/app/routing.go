@@ -6,51 +6,68 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 )
 
+// browseTab pairs a browse mode with its controller.
+type browseTab struct {
+	ID  mode.ID
+	Tab mode.Browse
+}
+
+// browseTabs returns the browse controllers in BrowseModes order. Registering a
+// tab is what wires it into forwarding, sizing, loading state and auto-refresh
+// at once; before the mode.Browse interface existed the shell hand-wrote each of
+// those once per tab, at eight sites in all.
+//
+// A tab the shell has not constructed yet is skipped rather than dereferenced.
+func (m *Model) browseTabs() []browseTab {
+	out := make([]browseTab, 0, len(mode.BrowseModes))
+	for _, id := range mode.BrowseModes {
+		if tab := m.browseController(id); tab != nil {
+			out = append(out, browseTab{ID: id, Tab: tab})
+		}
+	}
+	return out
+}
+
+// browseController returns the controller for id, or nil when there is none. The
+// typed-nil check matters: a nil *board.Model stored in a mode.Browse is a
+// non-nil interface, which would turn a skipped tab into a panic.
+func (m *Model) browseController(id mode.ID) mode.Browse {
+	switch id {
+	case mode.Board:
+		if m.board == nil {
+			return nil
+		}
+		return m.board
+	case mode.Docs:
+		if m.docs == nil {
+			return nil
+		}
+		return m.docs
+	case mode.Search:
+		if m.search == nil {
+			return nil
+		}
+		return m.search
+	}
+	return nil
+}
+
 func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
-	boardCmd := m.forwardBoardMessage(msg)
-	docsCmd := m.forwardDocsMessage(msg)
-	searchCmd := m.forwardSearchMessage(msg)
-	return batchCmds(boardCmd, docsCmd, searchCmd)
-}
-
-func (m *Model) forwardBoardMessage(msg tea.Msg) tea.Cmd {
-	if m.board == nil || !m.shouldForwardToBoard(msg) {
-		return nil
+	cmds := make([]tea.Cmd, 0, len(mode.BrowseModes))
+	for _, entry := range m.browseTabs() {
+		if !m.shouldForwardTo(entry.ID, msg) {
+			continue
+		}
+		cmds = append(cmds, entry.Tab.Update(msg))
 	}
-	return m.board.Update(msg)
+	return batchCmds(cmds...)
 }
 
-func (m *Model) forwardDocsMessage(msg tea.Msg) tea.Cmd {
-	if m.docs == nil || !m.shouldForwardToDocs(msg) {
-		return nil
-	}
-	return m.docs.Update(msg)
-}
-
-func (m *Model) forwardSearchMessage(msg tea.Msg) tea.Cmd {
-	if m.search == nil || !m.shouldForwardToSearch(msg) {
-		return nil
-	}
-	return m.search.Update(msg)
-}
-
-func (m Model) shouldForwardToBoard(msg tea.Msg) bool {
+// shouldForwardTo reports whether msg goes to the tab with this id. A key
+// belongs to the active tab alone; everything else reaches all of them.
+func (m Model) shouldForwardTo(id mode.ID, msg tea.Msg) bool {
 	if _, isKey := msg.(tea.KeyMsg); isKey {
-		return m.active == mode.Board
-	}
-	return true
-}
-
-func (m Model) shouldForwardToDocs(msg tea.Msg) bool {
-	if _, isKey := msg.(tea.KeyMsg); isKey {
-		return m.active == mode.Docs
-	}
-	return true
-}
-
-func (m Model) shouldForwardToSearch(msg tea.Msg) bool {
-	if _, isKey := msg.(tea.KeyMsg); isKey {
-		return m.active == mode.Search
+		return m.active == id
 	}
 	return true
 }

@@ -71,18 +71,6 @@ type columnData struct {
 	err     error
 }
 
-type refreshMode int
-
-const (
-	// refreshModeReload performs a full reset of board state (focus, selection,
-	// scroll, columns). It is used for the cold-start load (Init) and the
-	// user-initiated reload (r key).
-	refreshModeReload refreshMode = iota
-	// refreshModeAuto is a background refresh that preserves the current
-	// selection anchor instead of resetting board state.
-	refreshModeAuto
-)
-
 type refreshAnchor struct {
 	focusedColumn   int
 	focusedRow      int
@@ -114,7 +102,7 @@ type Model struct {
 	// the selected row is always within the visible window.
 	scrollOffset map[int]int
 
-	refreshMode   refreshMode
+	refreshMode   mode.RefreshMode
 	refreshAnchor *refreshAnchor
 
 	// --- Done column load-more state ---
@@ -161,7 +149,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		keys:         keys,
 		selectedRow:  map[int]int{},
 		scrollOffset: map[int]int{},
-		refreshMode:  refreshModeReload,
+		refreshMode:  mode.RefreshReload,
 	}
 	m.columns = initialLoadingColumns()
 	return m
@@ -180,7 +168,7 @@ func initialLoadingColumns() []columnData {
 
 // Init loads board data from the repository via a single Dashboard call.
 func (m *Model) Init() tea.Cmd {
-	return m.startReload(refreshModeReload)
+	return m.startReload(mode.RefreshReload)
 }
 
 // Update processes board-specific messages and keybindings.
@@ -245,7 +233,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 					"trigger", "board-manual")
 				return nil
 			}
-			return m.startReload(refreshModeReload)
+			return m.startReload(mode.RefreshReload)
 		case m.keys.Match(config.BoardContext, config.BoardActionLoadMore, msg):
 			// Explicit load-more: dispatch regardless of cursor proximity,
 			// but still respect the in-flight guard and "nothing more" check.
@@ -335,13 +323,13 @@ func (m *Model) AutoRefresh() tea.Cmd {
 	if m.inflight {
 		return nil
 	}
-	return m.startReload(refreshModeAuto)
+	return m.startReload(mode.RefreshAuto)
 }
 
 // startReload captures the selection anchor (if auto), marks all columns
 // loading, and dispatches a single Dashboard repository call. It is
 // the single entry point for initial load, manual reload, and auto-refresh.
-func (m *Model) startReload(rm refreshMode) tea.Cmd {
+func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that
 	// may not check IsLoading() at the call site. The call-site guards in the
 	// keyboard handler and AutoRefresh are the primary protection; this
@@ -356,7 +344,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 
 	// Capture anchor before clearing state so it reflects the current selection.
 	var anchor *refreshAnchor
-	if rm == refreshModeAuto {
+	if rm == mode.RefreshAuto {
 		anchor = m.captureRefreshAnchor()
 	}
 
@@ -381,7 +369,7 @@ func (m *Model) startReload(rm refreshMode) tea.Cmd {
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
 
-	if rm == refreshModeReload {
+	if rm == mode.RefreshReload {
 		// Full reset: move focus to col 0, clear selection and scroll maps, reset columns.
 		m.focusedColumn = 0
 		m.selectedRow = map[int]int{}
@@ -490,7 +478,7 @@ func (m *Model) composeFailed(loadErr error) tea.Cmd {
 
 	// A failed refresh restores nothing: the anchor belongs to the state still
 	// on screen, so the selection is already where it should be.
-	m.refreshMode = refreshModeReload
+	m.refreshMode = mode.RefreshReload
 	m.refreshAnchor = nil
 	m.clampScrollOffsets()
 	m.inflight = false
@@ -532,12 +520,12 @@ func (m *Model) normalizeFocus() {
 }
 
 func (m *Model) settleAfterRefreshLoad() {
-	if m.refreshMode == refreshModeAuto {
+	if m.refreshMode == mode.RefreshAuto {
 		m.restoreFromAnchor(m.refreshAnchor)
 	} else {
 		m.normalizeFocus()
 	}
-	m.refreshMode = refreshModeReload
+	m.refreshMode = mode.RefreshReload
 	m.refreshAnchor = nil
 	m.clampScrollOffsets()
 }

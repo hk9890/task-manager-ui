@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -99,11 +98,7 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 
 	si, ok := r.issues[id]
 	if !ok {
-		return domain.RepositoryError{
-			Code:      domain.ErrorCodeCommandFailed,
-			Operation: "update issue",
-			Message:   fmt.Sprintf("command exited with code 1: Error resolving %q: no issue found", id),
-		}
+		return notFoundError("update issue", id)
 	}
 
 	now := r.clock()
@@ -175,11 +170,7 @@ func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.Clo
 
 	si, ok := r.issues[id]
 	if !ok {
-		return domain.RepositoryError{
-			Code:      domain.ErrorCodeCommandFailed,
-			Operation: "close issue",
-			Message:   fmt.Sprintf("command exited with code 1: Error resolving %q: no issue found", id),
-		}
+		return notFoundError("close issue", id)
 	}
 
 	now := r.clock()
@@ -211,11 +202,7 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 
 	si, ok := r.issues[id]
 	if !ok {
-		return domain.RepositoryError{
-			Code:      domain.ErrorCodeCommandFailed,
-			Operation: "add comment",
-			Message:   fmt.Sprintf("command exited with code 1: unknown issue %q", id),
-		}
+		return notFoundError("add comment", id)
 	}
 
 	now := r.clock()

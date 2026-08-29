@@ -10,7 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/testing/ui"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
@@ -32,7 +32,7 @@ func TestRenderMinimalGolden(t *testing.T) {
 		Width: 120,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "minimal_w120.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "minimal_w120.golden")
 }
 
 func TestRenderFullGolden(t *testing.T) {
@@ -67,7 +67,7 @@ func TestRenderFullGolden(t *testing.T) {
 		Width: 120,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "full_w120.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "full_w120.golden")
 }
 
 func TestRenderCommentsGolden(t *testing.T) {
@@ -93,7 +93,7 @@ func TestRenderCommentsGolden(t *testing.T) {
 		Width: 100,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "comments_w100.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "comments_w100.golden")
 }
 
 func TestRenderDependencyRichGolden(t *testing.T) {
@@ -126,7 +126,7 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 		Width: 100,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "dependency_rich_w100.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "dependency_rich_w100.golden")
 }
 
 func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
@@ -148,7 +148,7 @@ func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 	})
 
 	// The movable cursor row uses the app-wide "› " selection prefix.
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "› ") {
 		t.Fatalf("expected cursor row to carry the › selection prefix, got:\n%s", plain)
 	}
@@ -182,7 +182,7 @@ func TestRenderCompactGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "compact_w56.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "compact_w56.golden")
 }
 
 func TestRenderCompactClosedDurationGolden(t *testing.T) {
@@ -209,7 +209,7 @@ func TestRenderCompactClosedDurationGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "compact_closed_duration_w56.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "compact_closed_duration_w56.golden")
 }
 
 func TestRenderCompactWithChildrenGolden(t *testing.T) {
@@ -238,7 +238,7 @@ func TestRenderCompactWithChildrenGolden(t *testing.T) {
 		Compact: true,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "compact_with_children_w56.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "compact_with_children_w56.golden")
 }
 
 func TestRenderWideThreeColumnGolden(t *testing.T) {
@@ -282,7 +282,7 @@ func TestRenderWideThreeColumnGolden(t *testing.T) {
 		Width:                  InspectorThreeColumnMinWidth,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "wide_three_column_w3col.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "wide_three_column_w3col.golden")
 }
 
 func TestRenderFallbackKeepsInlineRelatedWorkGolden(t *testing.T) {
@@ -306,7 +306,7 @@ func TestRenderFallbackKeepsInlineRelatedWorkGolden(t *testing.T) {
 		Width: InspectorThreeColumnMinWidth - 1,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "fallback_inline_related_work_w3col_less1.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "fallback_inline_related_work_w3col_less1.golden")
 }
 
 func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
@@ -566,7 +566,7 @@ func TestRenderUsesMarkdownRendererForDescriptionAndNotes(t *testing.T) {
 		Height: 40,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	for _, want := range []string{"Ship markdown", "first", "Follow up", "link"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected %q in rendered markdown detail:\n%s", want, plain)
@@ -590,7 +590,7 @@ func TestRenderUsesMarkdownRendererForCommentBodies(t *testing.T) {
 		Height: 40,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "literal markdown-like bullet") {
 		t.Fatalf("expected markdown-rendered comment text to be present, got:\n%s", plain)
 	}
@@ -706,11 +706,11 @@ func TestRenderCommentHeavyMarkdownStaysPaneBounded(t *testing.T) {
 	lines := strings.Split(view, "\n")
 	for i, line := range lines {
 		if got := lipgloss.Width(line); got > state.Width {
-			t.Fatalf("line %d exceeds detail width (%d > %d): %q", i+1, got, state.Width, ui.AnsiEscapePattern.ReplaceAllString(line, ""))
+			t.Fatalf("line %d exceeds detail width (%d > %d): %q", i+1, got, state.Width, testui.AnsiEscapePattern.ReplaceAllString(line, ""))
 		}
 	}
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "Comments (1 · newest first)") {
 		t.Fatalf("expected comments section to render, got:\n%s", plain)
 	}
@@ -734,7 +734,7 @@ func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
 		Width: 120,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	for _, want := range []string{"ctrl+e Edit issue", "ctrl+u Update issue", "ctrl+a Add comment", "ctrl+x Close issue", "ctrl+r Reload detail"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected configured quick action label %q in view:\n%s", want, plain)
@@ -1168,7 +1168,7 @@ func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
 		Height: 24,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "Stale Detail Title") {
 		t.Fatalf("stale detail title not visible (ANSI-stripped), got:\n%s", plain)
 	}
@@ -1198,7 +1198,7 @@ func TestSkeletonRenderDoesNotShowLiteralZeroOrNoneInCountsAndDeps(t *testing.T)
 		Height:      30,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	// Counts panel must not show literal "0" values for any count field.
 	for _, forbidden := range []string{"Comments: 0", "Blocked by: 0", "Blocks: 0", "Related: 0"} {
@@ -1237,7 +1237,7 @@ func TestSkeletonRenderAtTwoColumnWidthDoesNotShowLiteralZeroOrNone(t *testing.T
 		Height:      30,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	for _, forbidden := range []string{"Comments: 0", "Blocked by: 0", "Blocks: 0", "Related: 0"} {
 		if strings.Contains(plain, forbidden) {
@@ -1273,7 +1273,7 @@ func TestSkeletonFalseStillShowsRealCountsAndDeps(t *testing.T) {
 		Height: 30,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	// Counts section uses aligned label format, e.g. "Comments  : 2" — check label and value separately.
 	if !strings.Contains(plain, "Comments") || !strings.Contains(plain, ": 2") {
@@ -1328,14 +1328,14 @@ func TestRenderLongDepsWindowGolden(t *testing.T) {
 		Height:                   15,
 	})
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 
 	// Header must show "N of M" since the window clips.
 	if !strings.Contains(plain, "of") {
 		t.Fatalf("expected 'N of M' in Dependencies header when window clips, got:\n%s", plain)
 	}
 
-	ui.AssertMatchesGolden(t, []byte(view), "long_deps_window_w3col.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "long_deps_window_w3col.golden")
 }
 
 // TestDependencyRefLineIndexChildrenConsistency asserts that BrowserSelectedIndex
@@ -1443,7 +1443,7 @@ func TestRenderChildrenGroupGolden(t *testing.T) {
 		Height: 24,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "children_group_w2col.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "children_group_w2col.golden")
 }
 
 // --- Browser-panel cursor golden assertions ---
@@ -1480,10 +1480,10 @@ func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 		Height:                 18,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "cursor_row_selection_prefix_w2col.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "cursor_row_selection_prefix_w2col.golden")
 
 	// The cursor row must carry the › selection prefix.
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	if !strings.Contains(plain, "›") {
 		t.Errorf("expected cursor row to carry the › selection prefix, got:\n%s", plain)
 	}
@@ -1517,9 +1517,9 @@ func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 		Height:                 18,
 	})
 
-	ui.AssertMatchesGolden(t, []byte(view), "epic_children_cursor_w3col.golden")
+	testui.AssertMatchesGolden(t, []byte(view), "epic_children_cursor_w3col.golden")
 
-	plain := ui.AnsiEscapePattern.ReplaceAllString(view, "")
+	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
 	// The cursor row (tm-child1) must carry the › selection prefix.
 	if !strings.Contains(plain, "›") {
 		t.Errorf("expected cursor row (tm-child1) to carry the › selection prefix, got:\n%s", plain)

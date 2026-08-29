@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // TestHelpModal_RenderedFrameHasClosingBottomBorder pins the visual rendering
@@ -29,8 +30,8 @@ func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
 		{name: "160x40", width: 160, height: 40},
 	} {
 		t.Run(size.name, func(t *testing.T) {
-			gw := newTestRepository()
-			gw.seedReady("tm-1", "Ready", "task", 1)
+			gw := fakes.NewTracked()
+			seedReady(gw, "tm-1", "Ready", "task", 1)
 			services, err := NewServices(gw, config.Default(), t.TempDir())
 			if err != nil {
 				t.Fatalf("NewServices: %v", err)
@@ -72,8 +73,8 @@ func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
 // Uses a viewport height small enough to guarantee overflow regardless of
 // how many keybinding lines are in the help text.
 func TestHelpModal_OverflowIndicatorAppearsInsideFrame(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)

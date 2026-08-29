@@ -10,6 +10,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -302,7 +303,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int) []strin
 
 	// Inline error row at the top (if any).
 	if strings.TrimSpace(col.Error) != "" {
-		errRow := styles.TruncateString("⚠ load failed: "+col.Error, maxWidth)
+		errRow := textutil.TruncateString("⚠ load failed: "+col.Error, maxWidth)
 		rows = append(rows, errRow)
 	}
 

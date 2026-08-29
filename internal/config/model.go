@@ -54,13 +54,26 @@ func defaultLauncherDefinitions(editor string) []LauncherDefinition {
 			Args:    nil,
 		},
 		{
+			// The issue fields travel through Env, never through an argument.
+			// nvim re-parses a +cmd argument as an Ex command line, so an
+			// interpolated field there is executable text (CODING.md's
+			// shell-launcher security rule). Inside the Ex commands the fields
+			// are read back as $VAR references, which evaluate to data and are
+			// never re-parsed; the buffer name goes through nvim_buf_set_name
+			// rather than :execute for the same reason.
 			Action:  "nvim",
 			Command: "nvim",
 			Args: []string{
-				"+normal! gg",
+				`+call append(0, ["Issue: " . $TASKMGR_UI_ISSUE_ID, "Title: " . $TASKMGR_UI_ISSUE_TITLE, "Assignee: " . $TASKMGR_UI_ISSUE_ASSIGNEE, "Labels: " . $TASKMGR_UI_ISSUE_LABELS])`,
+				`+call nvim_buf_set_name(0, "[Issue " . $TASKMGR_UI_ISSUE_ID . "]")`,
 				"+setlocal nomodifiable",
-				"+file [Issue {{issue.id}}]",
-				"+call append(0, [\"Issue: {{issue.id}}\", \"Title: {{issue.title}}\", \"Assignee: {{issue.assignee}}\", \"Labels: {{issue.labels}}\"])",
+				"+normal! gg",
+			},
+			Env: []string{
+				"TASKMGR_UI_ISSUE_ID={{issue.id}}",
+				"TASKMGR_UI_ISSUE_TITLE={{issue.title}}",
+				"TASKMGR_UI_ISSUE_ASSIGNEE={{issue.assignee}}",
+				"TASKMGR_UI_ISSUE_LABELS={{issue.labels}}",
 			},
 		},
 		{

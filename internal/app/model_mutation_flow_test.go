@@ -14,16 +14,17 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 func TestModelCreateIssueFlowUsesRepositoryCatalogsAndCreateIssue(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedCatalogs(
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
 		[]domain.TypeOption{{Name: "task"}, {Name: "bug"}},
 		[]domain.LabelOption{{Name: "ui"}, {Name: "infra"}},
@@ -67,11 +68,11 @@ func TestModelCreateIssueFlowUsesRepositoryCatalogsAndCreateIssue(t *testing.T) 
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if !gw.hasCatalogsCall() {
+	if !gw.HasCall(fakes.MethodCatalogs) {
 		t.Fatalf("expected catalogs to be queried, calls=%#v", gw.Calls())
 	}
 
-	if !gw.hasCreateIssueCall() {
+	if !gw.HasCall(fakes.MethodCreateIssue) {
 		t.Fatalf("expected create issue repository call, calls=%#v", gw.Calls())
 	}
 }
@@ -79,11 +80,11 @@ func TestModelCreateIssueFlowUsesRepositoryCatalogsAndCreateIssue(t *testing.T) 
 func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}})
-	gw.seedCatalogs(
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1, func(i *memoryrepo.Issue) { i.Labels = []string{"ui"} })
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1, Labels: []string{"ui"}}})
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
 		[]domain.TypeOption{{Name: "task"}, {Name: "bug"}},
 		[]domain.LabelOption{{Name: "ui"}, {Name: "infra"}},
@@ -146,13 +147,13 @@ func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	if !gw.hasUpdateIssueCall() {
+	if !gw.HasCall(fakes.MethodUpdateIssue) {
 		t.Fatalf("expected update issue call, calls=%#v", gw.Calls())
 	}
-	if !gw.hasCloseIssueCall() {
+	if !gw.HasCall(fakes.MethodCloseIssue) {
 		t.Fatalf("expected close issue call, calls=%#v", gw.Calls())
 	}
-	if !gw.hasAddCommentCall() {
+	if !gw.HasCall(fakes.MethodAddComment) {
 		t.Fatalf("expected add comment call, calls=%#v", gw.Calls())
 	}
 }
@@ -163,13 +164,13 @@ func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 // TestModelEmbeddedFixtureMutationModalsOpenWithoutCatalogDecodeToast
 // (which used real taskmgr+fixture).
 func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedIssueSummary(domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0})
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedIssueSummary(gw, domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0})
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob"},
 		Description: "Used to validate blocked/ready and dependency reads.",
 	})
-	gw.seedCatalogs(
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "blocked"}, {Name: "in_progress"}},
 		[]domain.TypeOption{{Name: "task"}, {Name: "bug"}, {Name: "chore"}},
 		[]domain.LabelOption{{Name: "fixture"}, {Name: "blocking"}},
@@ -274,11 +275,11 @@ func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
 func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Root", "task", 1)
-	gw.seedInProgress("tm-2", "Other", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	gw.seedCatalogs(
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Root", "task", 1)
+	seedInProgress(gw, "tm-2", "Other", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
+	seedCatalogs(gw,
 		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
 		[]domain.TypeOption{{Name: "task"}},
 		[]domain.LabelOption{},
@@ -308,12 +309,19 @@ func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	// Press Enter on the Status row — this dispatches the async catalog load and
-	// sets the pending-dialog guard. Capture the Cmd but do NOT execute it yet.
-	next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Press Enter on the Status row. The mode asks the shell for the dialog
+	// through mode.ActionRequestMsg, and it is delivering that request which
+	// dispatches the async catalog load and arms the pending-dialog guard.
+	// Capture the catalog-load Cmd but do NOT execute it yet.
+	next, actionRequestCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if actionRequestCmd == nil {
+		t.Fatal("expected an action request after Enter on Status row")
+	}
+	next, catalogLoadCmd := m.Update(actionRequestCmd())
 	m = next.(Model)
 	if catalogLoadCmd == nil {
-		t.Fatal("expected async catalog-load Cmd after Enter on Status row")
+		t.Fatal("expected async catalog-load Cmd after the action request")
 	}
 	if !m.pendingDialog.active {
 		t.Fatal("expected pending-dialog guard to be active after dispatching catalog load")
@@ -371,9 +379,9 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		t.Parallel()
 
-		gw := newTestRepository()
-		gw.seedReady("tm-1", "Root", "task", 1)
-		gw.seedCatalogs(
+		gw := fakes.NewTracked()
+		seedReady(gw, "tm-1", "Root", "task", 1)
+		seedCatalogs(gw,
 			[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
 			[]domain.TypeOption{{Name: "task"}, {Name: "bug"}},
 			[]domain.LabelOption{},
@@ -436,9 +444,9 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 	t.Run("update", func(t *testing.T) {
 		t.Parallel()
 
-		gw := newTestRepository()
-		gw.seedReady("tm-1", "Root", "task", 1)
-		gw.seedCatalogs(
+		gw := fakes.NewTracked()
+		seedReady(gw, "tm-1", "Root", "task", 1)
+		seedCatalogs(gw,
 			[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}},
 			[]domain.TypeOption{{Name: "task"}, {Name: "bug"}},
 			[]domain.LabelOption{},
@@ -559,8 +567,8 @@ func openDialog(t *testing.T, m Model, hotkey rune) Model {
 func TestCommentDialogKeyboardPathWritesTypedBody(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -575,7 +583,7 @@ func TestCommentDialogKeyboardPathWritesTypedBody(t *testing.T) {
 	// First Enter advances off the input. Nothing may be written yet — this is
 	// the contract that cost a manual verification run to discover.
 	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if gw.hasAddCommentCall() {
+	if gw.HasCall(fakes.MethodAddComment) {
 		t.Fatal("Enter on the focused input must not submit the comment dialog")
 	}
 	if !m.showActionModal {
@@ -587,11 +595,11 @@ func TestCommentDialogKeyboardPathWritesTypedBody(t *testing.T) {
 	if m.showActionModal {
 		t.Fatal("expected the dialog to close after submitting")
 	}
-	if !gw.hasAddCommentCall() {
+	if !gw.HasCall(fakes.MethodAddComment) {
 		t.Fatalf("expected AddComment after the submitting Enter, calls=%#v", gw.Calls())
 	}
 
-	detail, err := gw.repo.Issue(t.Context(), "tm-1")
+	detail, err := gw.Memory.Issue(t.Context(), "tm-1")
 	if err != nil {
 		t.Fatalf("reading tm-1 back: %v", err)
 	}
@@ -606,8 +614,8 @@ func TestCommentDialogKeyboardPathWritesTypedBody(t *testing.T) {
 func TestCreateDialogKeyboardPathWritesTypedTitle(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -623,16 +631,16 @@ func TestCreateDialogKeyboardPathWritesTypedTitle(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyTab})
 	}
-	if gw.hasCreateIssueCall() {
+	if gw.HasCall(fakes.MethodCreateIssue) {
 		t.Fatal("walking the fields must not create the issue")
 	}
 
 	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if !gw.hasCreateIssueCall() {
+	if !gw.HasCall(fakes.MethodCreateIssue) {
 		t.Fatalf("expected CreateIssue after submitting, calls=%#v", gw.Calls())
 	}
 
-	page, err := gw.repo.Search(t.Context(), domain.SearchIssuesQuery{Text: "Typed"})
+	page, err := gw.Memory.Search(t.Context(), domain.SearchIssuesQuery{Text: "Typed"})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -648,8 +656,8 @@ func TestCreateDialogKeyboardPathWritesTypedTitle(t *testing.T) {
 func TestMutationDialogEscapeWritesNothing(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -665,11 +673,11 @@ func TestMutationDialogEscapeWritesNothing(t *testing.T) {
 	if m.showActionModal {
 		t.Fatal("expected Escape to close the dialog")
 	}
-	if gw.hasAddCommentCall() {
+	if gw.HasCall(fakes.MethodAddComment) {
 		t.Fatalf("Escape must not write, calls=%#v", gw.Calls())
 	}
 
-	detail, err := gw.repo.Issue(t.Context(), "tm-1")
+	detail, err := gw.Memory.Issue(t.Context(), "tm-1")
 	if err != nil {
 		t.Fatalf("reading tm-1 back: %v", err)
 	}

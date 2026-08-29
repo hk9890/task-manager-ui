@@ -20,11 +20,11 @@ import (
 )
 
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
 	// tm-3 has status="blocked" → goes into DashboardData.Blocked → NotReady column.
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked", Priority: 1})
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked", Priority: 1})
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -48,7 +48,7 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 		t.Fatalf("expected board selection from board controller, got %q", got)
 	}
 
-	if !gw.hasDashboardCall() {
+	if !gw.HasCall(fakes.MethodDashboard) {
 		t.Fatalf("expected Dashboard call from board controller")
 	}
 
@@ -61,9 +61,9 @@ func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
 // SearchIssues call.  Search init is deferred until the user first activates
 // search mode (ticket t8kp).
 func TestModelInitDoesNotPreloadSearch(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -73,7 +73,7 @@ func TestModelInitDoesNotPreloadSearch(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	if gw.hasSearchCall() {
+	if gw.HasCall(fakes.MethodSearch) {
 		t.Fatalf("expected no Search call during startup; got calls=%#v", gw.Calls())
 	}
 }
@@ -83,9 +83,9 @@ func TestModelInitDoesNotPreloadSearch(t *testing.T) {
 // and that a second transition does NOT fire another SearchIssues call.
 func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -96,15 +96,15 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Startup must not have triggered search.
-	if gw.hasSearchCall() {
+	if gw.HasCall(fakes.MethodSearch) {
 		t.Fatalf("expected no Search call during startup; got calls=%#v", gw.Calls())
 	}
-	if m.searchInitDone {
-		t.Fatalf("expected searchInitDone=false after startup")
+	if m.initDone[mode.Search] {
+		t.Fatalf("expected search init=false after startup")
 	}
 
 	// First switch to search mode: lazy init must fire.
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -112,11 +112,11 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	if m.active != mode.Search {
 		t.Fatalf("expected search active after toggle, got %s", m.active)
 	}
-	if !gw.hasCallSince(mark, fakes.MethodSearch) {
+	if !gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected Search call on first search mode activation; got calls=%#v", gw.Calls())
 	}
-	if !m.searchInitDone {
-		t.Fatalf("expected searchInitDone=true after first search activation")
+	if !m.initDone[mode.Search] {
+		t.Fatalf("expected search init=true after first search activation")
 	}
 
 	// Return to board and go back to search: should NOT re-trigger Search
@@ -125,29 +125,29 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	mark = gw.resetMark()
+	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt}) // toggle to search again
 	m = next.(Model)
 	// Only run the immediate Update result; don't recurse into auto-refresh
-	// commands — we only want to check that lazySearchInitCmd itself is a no-op.
+	// commands — we only want to check that lazyInitActiveTabCmd itself is a no-op.
 	_ = cmd
-	if !m.searchInitDone {
-		t.Fatalf("expected searchInitDone still true on second search activation")
+	if !m.initDone[mode.Search] {
+		t.Fatalf("expected search init still true on second search activation")
 	}
 	// The lazy init flag must be set; subsequent refresh is handled by auto-refresh,
 	// not by Init. Confirm no second Search call came from the lazy path.
 	// (Auto-refresh may or may not fire depending on stale cadence; we apply no
 	// messages to avoid triggering it.)
-	if gw.hasCallSince(mark, fakes.MethodSearch) {
+	if gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected lazy init NOT to re-fire Search on second search activation; got calls=%#v", gw.Calls())
 	}
 }
 
 func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "startup detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "startup detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -165,7 +165,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 		next, cmd := m.Update(msg)
 		m = next.(Model)
 
-		if !observedVisibleBoardState && !m.boardIsLoading() {
+		if !observedVisibleBoardState && !m.board.IsLoading() {
 			body := m.renderBody()
 			if strings.Contains(body, "Ready first") {
 				header := m.renderHeader()
@@ -199,7 +199,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 func TestNewModelWithOptionsReturnsErrorOnInvalidKeyBindings(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	cfg := config.Default()
 	// Inject an invalid keybinding: empty key slice for a required action.
 	cfg.KeyBindings.Shell[config.ShellActionQuit] = []string{}

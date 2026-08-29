@@ -51,7 +51,7 @@ The whole vocabulary, and the one place each is defined:
 | Glyph | Means | Defined in |
 |---|---|---|
 | `› ` / two spaces | the selection gutter, always 2 cells wide | `styles.SelectionPrefix` |
-| `…` | truncated content — one cell, so it keeps more text than `...` | `styles.TruncateString` |
+| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString` |
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight, 10 frames | `loading.SpinnerFrames` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
@@ -86,8 +86,10 @@ siblings rather than inline at the call site.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
   `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
   a pane or a column it rides the border instead.
-- A new browse surface is one entry in `mode.BrowseModes` and one `tab(...)` call. Adding it anywhere
-  else puts the strip and the cycle order out of step.
+- A new browse surface is one entry in `mode.BrowseModes`, one arm in `Model.browseController`, and
+  one `tab(...)` call. The controller must satisfy `mode.Browse`; registering it there is what wires
+  forwarding, sizing, loading state and auto-refresh at once. Adding it anywhere else puts the strip
+  and the cycle order out of step.
 - `tab` / `shift+tab` belong to the strip everywhere except inside a modal, which consumes keys
   before the shell sees them. They switch tabs even while the search query field is focused, so a
   browse surface must not claim either key.
@@ -122,8 +124,9 @@ siblings rather than inline at the call site.
 
 - Measure rendered width with `lipgloss.Width`, never `len` — a styled string carries escape bytes
   and a wide rune covers two cells.
-- Truncate with `styles.TruncateString`, wrap with `styles.WrapLines`, right-pad with
-  `textutil.PadToWidth`. Each is ANSI-aware; the `strings` equivalents are not.
+- Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`, `WrapLines`,
+  `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
+  `styles` owns colour and chrome, not text math.
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.
 

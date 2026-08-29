@@ -21,34 +21,11 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
-
-// boardDrainCmd runs a Cmd to completion, expanding BatchMsgs into individual
-// messages. Returns the flat list of non-batch messages produced.
-func boardDrainCmd(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-	var msgs []tea.Msg
-	queue := []tea.Msg{cmd()}
-	for len(queue) > 0 {
-		msg := queue[0]
-		queue = queue[1:]
-		switch v := msg.(type) {
-		case tea.BatchMsg:
-			for _, c := range v {
-				if c != nil {
-					queue = append(queue, c())
-				}
-			}
-		default:
-			msgs = append(msgs, msg)
-		}
-	}
-	return msgs
-}
 
 // boardApplyMessages drives model.Update for each msg in sequence and expands
 // any returned Cmds into follow-up messages, settling the model fully.
@@ -59,7 +36,7 @@ func boardApplyMessages(t *testing.T, m *Model, msgs []tea.Msg) {
 		msg := queue[0]
 		queue = queue[1:]
 		cmd := m.Update(msg)
-		queue = append(queue, boardDrainCmd(cmd)...)
+		queue = append(queue, testui.DrainCmd(cmd)...)
 	}
 }
 
@@ -85,13 +62,9 @@ func newPopulatedRepo() *memoryrepo.Repository {
 // (inflight=false, all 4 columns loaded).
 func newSettledBoardModel(t *testing.T, repo repository.Repository) *Model {
 	t.Helper()
-	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
-	if err != nil {
-		t.Fatalf("ResolveKeyBindings: %v", err)
-	}
-	m := NewModel(context.Background(), repo, slog.Default(), keys)
+	m := newBoardModel(repo, resolvedBoardKeys(t))
 	initCmd := m.Init()
-	boardApplyMessages(t, m, boardDrainCmd(initCmd))
+	boardApplyMessages(t, m, testui.DrainCmd(initCmd))
 	if m.inflight {
 		t.Fatalf("setup: expected inflight=false after settle, got true")
 	}
@@ -131,7 +104,7 @@ func TestBoardManualReloadIgnoredWhileInFlight(t *testing.T) {
 	}
 
 	// Execute the first cmd to obtain the dashboardLoadedMsg but do NOT apply it.
-	firstMsgs := boardDrainCmd(firstCmd)
+	firstMsgs := testui.DrainCmd(firstCmd)
 	if len(firstMsgs) != 1 {
 		t.Fatalf("first reload: expected 1 message from Dashboard cmd, got %d", len(firstMsgs))
 	}
@@ -185,7 +158,7 @@ func TestBoardPendingResultsNeverGoesNegativeUnderKeySpam(t *testing.T) {
 	}
 
 	// Execute the Dashboard closure to collect the result message.
-	firstMsgs := boardDrainCmd(firstCmd)
+	firstMsgs := testui.DrainCmd(firstCmd)
 	if len(firstMsgs) != 1 {
 		t.Fatalf("expected 1 message from first Dashboard cmd, got %d", len(firstMsgs))
 	}
@@ -239,7 +212,7 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	m := newSettledBoardModel(t, repo)
 
 	// === First direct startReload call — must succeed and set inflight=true ===
-	firstCmd := m.startReload(refreshModeReload)
+	firstCmd := m.startReload(mode.RefreshReload)
 	if firstCmd == nil {
 		t.Fatalf("first startReload: expected non-nil Cmd")
 	}
@@ -248,13 +221,13 @@ func TestBoardInternalStartReloadGuardedByInflightFlag(t *testing.T) {
 	}
 
 	// Execute the Dashboard closure to collect the result message, but do NOT apply.
-	firstMsgs := boardDrainCmd(firstCmd)
+	firstMsgs := testui.DrainCmd(firstCmd)
 	if len(firstMsgs) != 1 {
 		t.Fatalf("first startReload: expected 1 Dashboard result message, got %d", len(firstMsgs))
 	}
 
 	// === Second direct startReload call — must be suppressed by the internal guard ===
-	secondCmd := m.startReload(refreshModeReload)
+	secondCmd := m.startReload(mode.RefreshReload)
 
 	// Assert 1: second call returned nil (internal guard fired).
 	if secondCmd != nil {
@@ -304,7 +277,7 @@ func TestBoardAutoRefreshInflightGuard(t *testing.T) {
 	}
 
 	// Drain first cmd to settle.
-	for _, msg := range boardDrainCmd(firstCmd) {
+	for _, msg := range testui.DrainCmd(firstCmd) {
 		_ = m.Update(msg)
 	}
 	if m.inflight {

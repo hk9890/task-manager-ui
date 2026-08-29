@@ -26,13 +26,13 @@ func ApplyControllerKeySequence(controller Controller, keys ...tea.KeyMsg) Contr
 
 func applyControllerCmd(controller Controller, cmd tea.Cmd) Controller {
 	current := controller
-	queue := drainCmd(cmd)
+	queue := DrainCmd(cmd)
 	for len(queue) > 0 {
 		msg := queue[0]
 		queue = queue[1:]
 
 		nested := current.Update(msg)
-		queue = append(queue, drainCmd(nested)...)
+		queue = append(queue, DrainCmd(nested)...)
 	}
 
 	return current

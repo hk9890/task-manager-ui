@@ -2,27 +2,8 @@ package editor
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
-
-const defaultEditorCommand = "vi"
-
-// resolveEditorCommand returns the effective editor command: the configured
-// value if non-empty, then EDITOR env var, then the built-in default.
-func resolveEditorCommand(configured string) string {
-	cmd := strings.TrimSpace(configured)
-	if cmd != "" {
-		return cmd
-	}
-
-	env := strings.TrimSpace(os.Getenv("EDITOR"))
-	if env != "" {
-		return env
-	}
-
-	return defaultEditorCommand
-}
 
 // splitEditorCommand parses a shell-like command string into an executable and
 // argument list. It supports single-quoted and double-quoted tokens (including

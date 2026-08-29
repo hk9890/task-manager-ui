@@ -27,7 +27,7 @@ func TestIssueEditorAppliesRepositoryUpdateFromEditedDocument(t *testing.T) {
 		Description: "old desc",
 	})
 
-	service, err := launchereditor.NewIssueEditor(repo, "")
+	service, err := launchereditor.NewIssueEditor(repo, "vi")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestIssueEditorNoChangesSkipsRepositoryUpdate(t *testing.T) {
 		Description: "same",
 	})
 
-	service, err := launchereditor.NewIssueEditor(repo, "")
+	service, err := launchereditor.NewIssueEditor(repo, "vi")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestIssueEditorApplyEditsReturnsParseError(t *testing.T) {
 		Type:   "task",
 	})
 
-	service, err := launchereditor.NewIssueEditor(repo, "")
+	service, err := launchereditor.NewIssueEditor(repo, "vi")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestIssueEditorTempFileRemovedAfterApplyEdits(t *testing.T) {
 		Description: "desc",
 	})
 
-	service, err := launchereditor.NewIssueEditor(repo, "")
+	service, err := launchereditor.NewIssueEditor(repo, "vi")
 	if err != nil {
 		t.Fatalf("NewIssueEditor returned error: %v", err)
 	}
@@ -190,6 +190,22 @@ func TestIssueEditorTempFileRemovedAfterApplyEdits(t *testing.T) {
 	// The temp file must be removed after apply.
 	if _, statErr := os.Stat(prepared.TempPath); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("expected temp file to be removed after ApplyEdits: %s", prepared.TempPath)
+	}
+}
+
+// TestIssueEditorRequiresAnEditorCommand pins the ownership boundary:
+// internal/config resolves $EDITOR -> vi, and this package no longer resolves it
+// a second time. An empty command is a caller that bypassed config, not a
+// request for a fallback.
+func TestIssueEditorRequiresAnEditorCommand(t *testing.T) {
+	// Not parallel: t.Setenv is incompatible with t.Parallel. $EDITOR is set to
+	// prove this package no longer consults it.
+	t.Setenv("EDITOR", "emacs")
+
+	for _, empty := range []string{"", "   "} {
+		if _, err := launchereditor.NewIssueEditor(memoryrepo.New(), empty); err == nil {
+			t.Fatalf("expected an error for editor command %q, got nil", empty)
+		}
 	}
 }
 

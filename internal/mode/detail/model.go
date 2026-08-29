@@ -12,18 +12,26 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 // Model is the shell-owned standalone detail presentation state.
 type Model struct {
-	SelectionID           string
-	TargetID              string
+	// selectionID, targetID, loading and errText are the load protocol. They
+	// are written together, in order, and only by BeginLoad and FinishLoad —
+	// unexported so an incomplete fifth copy of that sequence fails to compile
+	// rather than compiling and misbehaving. Read them through SelectionID(),
+	// TargetID(), IsLoading() and Error().
+	selectionID string
+	targetID    string
+	loading     bool
+	errText     string
+
 	Detail                domain.IssueDetail
 	PreviewDetail         domain.IssueDetail
-	Loading               bool
-	Error                 string
 	Keys                  config.ResolvedKeyBindings
 	FocusPane             detail.FocusPane
 	MetadataSelectedField detail.MetadataFieldKey
@@ -35,9 +43,6 @@ type Model struct {
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
-
-	pendingOpenStatusDialog   bool
-	pendingOpenPriorityDialog bool
 
 	// drillDepsFocusCalls counts remaining ApplyLoadedDetail calls that belong to a
 	// drill-from-Dependencies sequence. Set to 2 (placeholder + real data) by
@@ -57,14 +62,102 @@ type OpenRelatedIssueIntent struct {
 	Ref     domain.IssueReference
 }
 
-// SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation.
-// Call this before applying the optimistic placeholder on an Enter-drill so that:
+// BeginLoadOptions tunes one BeginLoad call.
+type BeginLoadOptions struct {
+	// Ref seeds an optimistic placeholder detail so the header and core
+	// metadata render immediately instead of waiting for the repository. Nil
+	// leaves whatever is on screen in place, which is what a refresh of the
+	// issue already shown wants.
+	Ref *domain.IssueReference
+
+	// Drill marks a drill-in from the Dependencies rail. It keeps focus on that
+	// rail across the placeholder and the real load, and always seeds the
+	// placeholder, because the target is a different issue by definition.
+	Drill bool
+}
+
+// BeginLoad starts a load of issueID and returns whether anything changed.
+//
+// It owns the whole protocol: the selection and target writes, the loading
+// flag, the error clear, the browser-row sync, the drill-focus decision and the
+// placeholder policy. The shell used to perform these five writes in the right
+// order at four call sites, and the copies had already drifted — the drill-in
+// path skipped SelectBrowserIssue.
+//
+// loadingStates() reads the loading flag to drive the header spinner, so
+// BeginLoad must be what precedes every loadDetailCmd.
+func (m *Model) BeginLoad(issueID string, opts BeginLoadOptions) {
+	issueID = strings.TrimSpace(issueID)
+	if issueID == "" {
+		return
+	}
+
+	m.selectionID = issueID
+
+	if opts.Drill {
+		m.targetID = issueID
+		m.loading = true
+		m.errText = ""
+		m.SetDrillFromDepsFocus()
+		if opts.Ref != nil {
+			m.ApplyLoadedDetail(issueID, PlaceholderDetail(issueID, *opts.Ref, true))
+		}
+		return
+	}
+
+	m.SelectBrowserIssue(issueID)
+
+	// Seed the placeholder only when the target issue actually changes, so a
+	// refresh of the issue already on screen keeps its content and scroll
+	// offsets while the spinner runs.
+	if opts.Ref != nil && strings.TrimSpace(m.Detail.Summary.ID) != issueID {
+		// A browse selection change supersedes any pending drill-focus sequence.
+		m.ClearDrillFocus()
+		m.ApplyLoadedDetail(issueID, PlaceholderDetail(issueID, *opts.Ref, true))
+	}
+
+	m.loading = true
+	m.errText = ""
+	m.targetID = issueID
+}
+
+// FinishLoad closes the load BeginLoad opened. err non-nil records the failure
+// and clears the stale detail; nil clears any previous error.
+func (m *Model) FinishLoad(err error) {
+	m.loading = false
+	if err != nil {
+		m.Detail = domain.IssueDetail{}
+		m.errText = err.Error()
+		// Clear any pending drill-focus counter so a later load is not treated
+		// as the real-data leg of a drill sequence.
+		m.ClearDrillFocus()
+		return
+	}
+	m.errText = ""
+}
+
+// SelectionID is the issue the shell considers selected for detail.
+func (m *Model) SelectionID() string { return m.selectionID }
+
+// TargetID is the issue the in-flight load is for.
+func (m *Model) TargetID() string { return m.targetID }
+
+// IsLoading reports whether a detail load is in flight.
+func (m *Model) IsLoading() bool { return m.loading }
+
+// Error is the last load failure, or "" when the last load succeeded.
+func (m *Model) Error() string { return m.errText }
+
+// Reset returns the model to its zero state, dropping any in-flight load.
+func (m *Model) Reset() { *m = Model{Keys: m.Keys} }
+
+// SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation
+// so that:
 //   - the placeholder call does not flip focus away from the Dependencies rail, and
 //   - the real data load sets focus to Dependencies if the rail is non-empty, or to
 //     Content if the drilled issue has no dependencies.
 //
-// The caller must set Loading=true before calling ApplyLoadedDetail with the placeholder
-// so the two-call sequence (placeholder, real data) is correctly distinguished.
+// BeginLoad calls this for a drill; callers go through BeginLoad rather than here.
 func (m *Model) SetDrillFromDepsFocus() {
 	m.drillDepsFocusCalls = 2
 }
@@ -120,7 +213,7 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
 	d := m.RenderDetail()
-	blockingLoad := m.Loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
+	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
 	// skeleton=true in two cases:
 	// 1. preview path: target differs from selection and preview detail has not yet loaded.
 	// 2. direct-nav path: a load is in flight and only the placeholder summary is
@@ -128,7 +221,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 	//    the user sees "(no description)" / "(none)" fallbacks during the in-flight
 	//    window, which misrepresents loading state as empty content.
 	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
-	directNavSkeleton := m.Loading && !m.isPreviewingTarget() &&
+	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
 		strings.TrimSpace(m.Detail.Description) == "" &&
 		len(m.Detail.Comments) == 0 &&
 		len(m.Detail.BlockedBy) == 0 &&
@@ -138,8 +231,8 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 
 	if compact || viewportHeight <= 0 {
 		return detail.Render(detail.State{
-			SelectionID: m.SelectionID,
-			TargetID:    m.TargetID,
+			SelectionID: m.selectionID,
+			TargetID:    m.targetID,
 			Detail:      d,
 			QuickActions: detail.QuickActionLabels{
 				EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
@@ -151,15 +244,15 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 			Loading:       blockingLoad,
 			Skeleton:      skeletonContent,
 			SkeletonPhase: skeletonPhase,
-			Error:         m.Error,
+			Error:         m.errText,
 			Width:         maxWidth,
 			Compact:       compact,
 		})
 	}
 
 	return detail.Render(detail.State{
-		SelectionID: m.SelectionID,
-		TargetID:    m.TargetID,
+		SelectionID: m.selectionID,
+		TargetID:    m.targetID,
 		Detail:      d,
 		QuickActions: detail.QuickActionLabels{
 			EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
@@ -175,7 +268,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		Loading:                  blockingLoad,
 		Skeleton:                 skeletonContent,
 		SkeletonPhase:            skeletonPhase,
-		Error:                    m.Error,
+		Error:                    m.errText,
 		Width:                    maxWidth,
 		Height:                   viewportHeight,
 		Compact:                  false,
@@ -193,15 +286,20 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 		return
 	}
 	bounds := m.paneGeometry(maxWidth, viewportHeight)
-	m.ContentScrollOffset = clampOffset(m.ContentScrollOffset, bounds.Content)
-	m.DependenciesScrollOffset = clampOffset(m.DependenciesScrollOffset, bounds.Dependencies)
-	m.MetadataScrollOffset = clampOffset(m.MetadataScrollOffset, bounds.Metadata)
+	m.ContentScrollOffset = textutil.Clamp(m.ContentScrollOffset, 0, bounds.Content)
+	m.DependenciesScrollOffset = textutil.Clamp(m.DependenciesScrollOffset, 0, bounds.Dependencies)
+	m.MetadataScrollOffset = textutil.Clamp(m.MetadataScrollOffset, 0, bounds.Metadata)
 }
 
 // HandleKey updates detail-mode scroll state and reports whether it consumed the key.
-func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *OpenRelatedIssueIntent) {
+// HandleKey processes one key for detail mode. It reports whether the key was
+// consumed, an optional drill-in intent, and an optional Cmd carrying a
+// mode.ActionRequestMsg for a shell-owned action (the metadata quick-edit
+// dialogs). The Cmd replaces a pair of flags the shell used to poll after every
+// key press; see internal/mode/contracts.go.
+func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *OpenRelatedIssueIntent, tea.Cmd) {
 	if viewportHeight <= 0 {
-		return false, nil
+		return false, nil, nil
 	}
 	m.normalizeRelatedSelection()
 	m.ensureMetadataSelection()
@@ -215,10 +313,10 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	switch msg.Type {
 	case tea.KeyLeft:
 		m.moveFocusLeft()
-		return true, nil
+		return true, nil, nil
 	case tea.KeyRight:
 		m.moveFocusRight()
-		return true, nil
+		return true, nil, nil
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneDependencies {
@@ -226,19 +324,19 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
 		// special case, consistent with how Enter in the Metadata pane works.
 		if ref, ok := m.selectedRelatedIssue(); ok {
-			return true, &OpenRelatedIssueIntent{IssueID: ref.ID, Ref: ref}
+			return true, &OpenRelatedIssueIntent{IssueID: ref.ID, Ref: ref}, nil
 		}
-		return true, nil
+		return true, nil, nil
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneMetadata {
 		switch m.metadataSelectedField() {
 		case detail.MetadataFieldStatus:
-			m.pendingOpenStatusDialog = true
+			return true, nil, actionRequestCmd(mode.ActionOpenStatusDialog)
 		case detail.MetadataFieldPriority:
-			m.pendingOpenPriorityDialog = true
+			return true, nil, actionRequestCmd(mode.ActionOpenPriorityDialog)
 		}
-		return true, nil
+		return true, nil, nil
 	}
 
 	bounds := m.paneGeometry(maxWidth, viewportHeight)
@@ -263,7 +361,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	case m.Keys.Match(config.DetailContext, config.DetailActionEnd, msg):
 		action = config.DetailActionEnd
 	default:
-		return false, nil
+		return false, nil, nil
 	}
 
 	switch m.focusPane() {
@@ -272,30 +370,30 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
 			// The full detail reloads only when the user presses Enter (Q5).
 			m.moveRelatedSelection(-1, maxWidth, viewportHeight)
-			return true, nil
+			return true, nil, nil
 		}
 		if action == config.DetailActionScrollDown {
 			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
 			// The full detail reloads only when the user presses Enter (Q5).
 			m.moveRelatedSelection(1, maxWidth, viewportHeight)
-			return true, nil
+			return true, nil, nil
 		}
 		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
-		return true, nil
+		return true, nil, nil
 	case detail.FocusPaneMetadata:
 		if action == config.DetailActionScrollUp {
 			m.moveMetadataSelection(-1, maxWidth, viewportHeight)
-			return true, nil
+			return true, nil, nil
 		}
 		if action == config.DetailActionScrollDown {
 			m.moveMetadataSelection(1, maxWidth, viewportHeight)
-			return true, nil
+			return true, nil, nil
 		}
 		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, action, move)
-		return true, nil
+		return true, nil, nil
 	default:
 		m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, action, move)
-		return true, nil
+		return true, nil, nil
 	}
 }
 
@@ -387,24 +485,6 @@ func isEditableMetadataField(key detail.MetadataFieldKey) bool {
 	return false
 }
 
-// ConsumeOpenStatusDialogIntent reports and clears pending status-dialog intent.
-func (m *Model) ConsumeOpenStatusDialogIntent() bool {
-	if !m.pendingOpenStatusDialog {
-		return false
-	}
-	m.pendingOpenStatusDialog = false
-	return true
-}
-
-// ConsumeOpenPriorityDialogIntent reports and clears pending priority-dialog intent.
-func (m *Model) ConsumeOpenPriorityDialogIntent() bool {
-	if !m.pendingOpenPriorityDialog {
-		return false
-	}
-	m.pendingOpenPriorityDialog = false
-	return true
-}
-
 func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 	refs := m.browserIssues()
 	if len(refs) == 0 {
@@ -441,7 +521,7 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 // dependency-browser context anchored to the selected issue.
 func (m *Model) RenderDetail() domain.IssueDetail {
 	content := m.Detail
-	if targetID := strings.TrimSpace(m.TargetID); targetID != "" && targetID != strings.TrimSpace(m.SelectionID) {
+	if targetID := strings.TrimSpace(m.targetID); targetID != "" && targetID != strings.TrimSpace(m.selectionID) {
 		if strings.TrimSpace(m.PreviewDetail.Summary.ID) == targetID {
 			content = m.PreviewDetail
 		} else {
@@ -459,11 +539,11 @@ func (m *Model) RenderDetail() domain.IssueDetail {
 }
 
 func (m *Model) isPreviewingTarget() bool {
-	targetID := strings.TrimSpace(m.TargetID)
+	targetID := strings.TrimSpace(m.targetID)
 	if targetID == "" {
 		return false
 	}
-	return targetID != strings.TrimSpace(m.SelectionID)
+	return targetID != strings.TrimSpace(m.selectionID)
 }
 
 func (m *Model) browserReferenceByID(issueID string) (domain.IssueReference, bool) {
@@ -653,12 +733,9 @@ func applyScrollAction(current, maxOffset int, action string, move int) int {
 	}
 }
 
-func clampOffset(value, maxOffset int) int {
-	if value < 0 {
-		return 0
+// actionRequestCmd asks the shell for a shell-owned action.
+func actionRequestCmd(action mode.Action) tea.Cmd {
+	return func() tea.Msg {
+		return mode.ActionRequestMsg{Mode: mode.Detail, Action: action}
 	}
-	if value > maxOffset {
-		return maxOffset
-	}
-	return value
 }

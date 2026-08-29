@@ -24,6 +24,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
@@ -34,9 +36,9 @@ import (
 func TestEnterWhileInitInFlight_PendingDraftQueued(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 
 	// Build and Init the model WITHOUT draining the init Cmd — model is in
 	// loading state, simulating the race window.
@@ -83,10 +85,10 @@ func TestEnterWhileInitInFlight_PendingDraftQueued(t *testing.T) {
 func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-4", Title: "another task", Status: "open", Type: "task", Priority: 3})
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-4", Title: "another task", Status: "open", Type: "task", Priority: 3})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 
 	// Build and Init WITHOUT draining — model is loading.
 	m := NewModel(context.Background(), gw, nil)
@@ -111,7 +113,7 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 	// Now resolve the Init search: execute the initCmd to get the searchLoadedMsg,
 	// then deliver it to the model. The handler should find pendingDraft and fire
 	// a new search.
-	initMsgs := drainCmd(initCmd)
+	initMsgs := testui.DrainCmd(initCmd)
 	if len(initMsgs) != 1 {
 		t.Fatalf("expected exactly 1 msg from Init cmd, got %d", len(initMsgs))
 	}
@@ -129,7 +131,7 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 	}
 
 	// Drain the pending search Cmd (this is the "task" text search).
-	pendingMsgs := drainCmd(pendingCmd)
+	pendingMsgs := testui.DrainCmd(pendingCmd)
 	if len(pendingMsgs) != 1 {
 		t.Fatalf("expected exactly 1 msg from pending search cmd, got %d: %v", len(pendingMsgs), pendingMsgs)
 	}
@@ -166,10 +168,10 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	t.Parallel()
 
-	innerRepo := newSearchRepo()
-	innerRepo.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	innerRepo.repo.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
-	rec := &queryRecordingRepo{Repository: innerRepo}
+	innerRepo := fakes.NewTracked()
+	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
+	rec := fakes.NewErrorInjecting(innerRepo)
 
 	// Build and Init WITHOUT draining.
 	m := NewModel(context.Background(), rec, nil)
@@ -183,9 +185,9 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Drain Init.
-	for _, msg := range drainCmd(initCmd) {
+	for _, msg := range testui.DrainCmd(initCmd) {
 		pendingCmd := m.Update(msg)
-		for _, pending := range drainCmd(pendingCmd) {
+		for _, pending := range testui.DrainCmd(pendingCmd) {
 			_ = m.Update(pending)
 		}
 	}
@@ -195,7 +197,7 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	}
 
 	// Verify no "all" status was passed.
-	queries := rec.Queries()
+	queries := searchQueries(t, rec)
 	foundTextSearch := false
 	for _, q := range queries {
 		if q.Text == "task" {
@@ -216,8 +218,8 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 func TestEnterWhileInitInFlight_PendingDraftNotFiredIfMatchesApplied(t *testing.T) {
 	t.Parallel()
 
-	gw := newSearchRepo()
-	gw.repo.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "everything", Status: "open", Type: "task", Priority: 1})
+	gw := fakes.NewTracked()
+	gw.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "everything", Status: "open", Type: "task", Priority: 1})
 
 	// Build and Init WITHOUT draining.
 	m := NewModel(context.Background(), gw, nil)
@@ -237,7 +239,7 @@ func TestEnterWhileInitInFlight_PendingDraftNotFiredIfMatchesApplied(t *testing.
 	}
 
 	// Resolve Init.
-	initMsgs := drainCmd(initCmd)
+	initMsgs := testui.DrainCmd(initCmd)
 	pendingCmd := m.Update(initMsgs[0])
 
 	// After Init resolves with appliedQuery="" and pendingDraft="", the

@@ -1,10 +1,13 @@
-// Package filestorage provides Save and Load for persisting a
-// memory.Repository to disk and restoring it. It backs the `--repo memory
-// --repo-file <path>` inspection flag.
+// Package filestorage loads a memory.Repository from disk. It backs the
+// `--repo memory --repo-file <path>` inspection flag.
+//
+// Loading is the whole shipped surface: nothing this project ships writes the
+// file. internal/testing/repofixture writes it, for tests and for building a
+// fixture by hand (docs/RUNNING.md).
 //
 // # File format
 //
-// Save writes two files:
+// The fixture is two files:
 //
 //   - path — one JSON object per line (JSONL); each line is a
 //     [memory.SnapshotIssue] record.
@@ -13,13 +16,6 @@
 // Load reads the manifest first. If schema_version does not match
 // [SchemaVersion] it returns [repository.ErrSchemaMismatch] without attempting
 // to parse the JSONL.
-//
-// # Signature constraints
-//
-// Save accepts *memory.Repository (not the generic repository.Repository
-// interface) so the serialiser can call Snapshot() directly rather than going
-// through the Search-based API. This keeps the surface small and avoids
-// coupling to the full Repository interface.
 //
 // # Why a separate package
 //
@@ -34,14 +30,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 )
 
-// SchemaVersion is the JSONL schema version written by Save.
+// SchemaVersion is the JSONL schema version Load accepts.
 // Load returns repository.ErrSchemaMismatch when the manifest's schema_version
 // differs from this constant.
 //
@@ -59,80 +54,6 @@ const SchemaVersion = 3
 type Manifest struct {
 	SchemaVersion int       `json:"schema_version"`
 	SyncedAt      time.Time `json:"synced_at"`
-}
-
-// Save writes r's contents to path (JSONL) and path+".manifest.json".
-//
-// path is the JSONL file; the manifest is written as a sibling named
-// path+".manifest.json". Both files are written atomically (write to temp,
-// then rename) so a concurrent Load does not read a partial write.
-func Save(r *memory.Repository, path string) error {
-	return saveSnapshot(r.Snapshot(), path)
-}
-
-// saveSnapshot writes a pre-captured snapshot slice to path (JSONL) and
-// path+".manifest.json".
-func saveSnapshot(issues []memory.SnapshotIssue, path string) error {
-	// Write JSONL to a temp file in the same directory as the destination so
-	// that os.Rename never crosses a filesystem boundary (avoids EXDEV on
-	// Linux systems where /tmp is tmpfs and ~/.cache is on the root FS).
-	tmpJSONL, err := os.CreateTemp(filepath.Dir(path), "taskmgr-ui-repo-*.jsonl")
-	if err != nil {
-		return fmt.Errorf("filestorage.Save: create temp jsonl: %w", err)
-	}
-	tmpJSONLPath := tmpJSONL.Name()
-	defer func() { _ = os.Remove(tmpJSONLPath) }()
-
-	w := bufio.NewWriter(tmpJSONL)
-	enc := json.NewEncoder(w)
-
-	for _, iss := range issues {
-		if err := enc.Encode(iss); err != nil {
-			_ = tmpJSONL.Close()
-			return fmt.Errorf("filestorage.Save: encode issue %q: %w", iss.ID, err)
-		}
-	}
-	if err := w.Flush(); err != nil {
-		_ = tmpJSONL.Close()
-		return fmt.Errorf("filestorage.Save: flush jsonl: %w", err)
-	}
-	if err := tmpJSONL.Close(); err != nil {
-		return fmt.Errorf("filestorage.Save: close temp jsonl: %w", err)
-	}
-	if err := os.Rename(tmpJSONLPath, path); err != nil {
-		return fmt.Errorf("filestorage.Save: rename jsonl to %q: %w", path, err)
-	}
-
-	// Write manifest.
-	m := Manifest{
-		SchemaVersion: SchemaVersion,
-		SyncedAt:      time.Now().UTC(),
-	}
-	mBytes, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return fmt.Errorf("filestorage.Save: marshal manifest: %w", err)
-	}
-
-	manifestPath := path + ".manifest.json"
-	tmpManifest, err := os.CreateTemp(filepath.Dir(manifestPath), "taskmgr-ui-manifest-*.json")
-	if err != nil {
-		return fmt.Errorf("filestorage.Save: create temp manifest: %w", err)
-	}
-	tmpManifestPath := tmpManifest.Name()
-	defer func() { _ = os.Remove(tmpManifestPath) }()
-
-	if _, err := tmpManifest.Write(mBytes); err != nil {
-		_ = tmpManifest.Close()
-		return fmt.Errorf("filestorage.Save: write manifest: %w", err)
-	}
-	if err := tmpManifest.Close(); err != nil {
-		return fmt.Errorf("filestorage.Save: close temp manifest: %w", err)
-	}
-	if err := os.Rename(tmpManifestPath, manifestPath); err != nil {
-		return fmt.Errorf("filestorage.Save: rename manifest to %q: %w", manifestPath, err)
-	}
-
-	return nil
 }
 
 // Load reads a JSONL file from path and returns a populated *memory.Repository.

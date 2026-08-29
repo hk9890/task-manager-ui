@@ -139,7 +139,9 @@ Shared helpers live under `internal/testing/ui`:
 - `WaitForOutputContainsAll`: waits for real runtime output containing required UI snippets before assertions.
 
 Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `BoardToSearchKeys` /
-`OpenDetailKeys` / `DetailBackKeys` / `SearchTypeTextKeys` instead of literal key structs.
+`OpenDetailKeys` / `DetailBackKeys` / `SearchTypeTextKeys` instead of literal key structs, and
+`DrainCmd` to run a `tea.Cmd` to completion with nested `tea.BatchMsg` values flattened. Draining is
+not always what you want: an open modal schedules a repeating tick, so step those flows by hand.
 
 Screen assertions (`internal/testing/ui/assertions.go`): `AssertContainsAll`,
 `AssertStartupBoardLayoutSanity`, `AssertNoObviousRuntimeErrorPanels`, `AssertActionRequest`.
@@ -206,3 +208,8 @@ required to use them.
 
 - Failure-path tests wrap any `repository.Repository` in `fakes.NewErrorInjecting`
   (`internal/testing/fakes/error_injecting.go`); do not hand-roll an error-returning stub.
+- A controller test that needs to seed fixtures *and* inspect calls takes
+  `fakes.NewTracked()` (`internal/testing/fakes/tracked.go`): a `memory.Repository` to seed through
+  `Memory`, wrapped by the recorder. Do not rebuild that pair per package.
+- `fakes.Call` carries the operation's typed `Args` and `IssueID`, so assert on what a call received
+  through `CallsFor` / `LastArgs` rather than writing a stub to capture arguments.

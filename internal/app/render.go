@@ -11,6 +11,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -98,7 +99,7 @@ func (m Model) renderHeader() string {
 		if available <= 0 {
 			return left
 		}
-		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(styles.TruncateString(m.headerContext(), available))
+		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(textutil.TruncateString(m.headerContext(), available))
 		contextWidth = lipgloss.Width(context)
 	}
 
@@ -115,16 +116,15 @@ func (m Model) renderHeader() string {
 func (m Model) renderBody() string {
 	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
 
-	switch m.active {
-	case mode.Detail:
+	if m.active == mode.Detail {
 		return m.detail.View(m.detailViewportWidth(), m.detailViewportHeight(), false, skeletonPhase)
-	case mode.Docs:
-		return m.docs.View(skeletonPhase)
-	case mode.Search:
-		return m.search.View(skeletonPhase)
-	default:
-		return m.board.View(skeletonPhase)
 	}
+	if tab := m.browseController(m.active); tab != nil {
+		return tab.View(skeletonPhase)
+	}
+	// Board is the shell's home tab, so an unknown active mode renders it
+	// rather than an empty frame.
+	return m.board.View(skeletonPhase)
 }
 
 func (m *Model) syncSearchPreviewDetailState() {
@@ -143,11 +143,11 @@ func (m *Model) syncSearchPreviewDetailState() {
 	}
 
 	selectedID := strings.TrimSpace(selection.Issue.ID)
-	if m.detail.Loading && strings.TrimSpace(m.detail.TargetID) == selectedID {
+	if m.detail.IsLoading() && strings.TrimSpace(m.detail.TargetID()) == selectedID {
 		m.search.SetSelectedDetail(domain.IssueDetail{}, true)
 		return
 	}
-	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.Loading && strings.TrimSpace(m.detail.Error) == "" {
+	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.IsLoading() && strings.TrimSpace(m.detail.Error()) == "" {
 		m.search.SetSelectedDetail(m.detail.Detail, false)
 		return
 	}
@@ -175,9 +175,9 @@ func (m Model) workspaceSize() (int, int) {
 
 func (m Model) applyWorkspaceSizeToBrowseModes() {
 	workspaceWidth, workspaceHeight := m.workspaceSize()
-	m.board.SetSize(workspaceWidth, workspaceHeight)
-	m.docs.SetSize(workspaceWidth, workspaceHeight)
-	m.search.SetSize(workspaceWidth, workspaceHeight)
+	for _, entry := range m.browseTabs() {
+		entry.Tab.SetSize(workspaceWidth, workspaceHeight)
+	}
 }
 
 func (m Model) renderFooter() string {
@@ -188,19 +188,30 @@ func (m Model) renderFooter() string {
 	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(footerHelpText(m.active, m.width, m.keys))
 }
 
+// browseLoadingScope maps a browse mode to its loading scope. A new browse
+// surface needs its own scope, or its work reports as somebody else's
+// (DESIGN-GUIDE.md).
+func browseLoadingScope(id mode.ID) loading.Scope {
+	switch id {
+	case mode.Board:
+		return loading.ScopeBoard
+	case mode.Docs:
+		return loading.ScopeDocs
+	case mode.Search:
+		return loading.ScopeSearch
+	}
+	return loading.Scope(id)
+}
+
 func (m Model) loadingStates() []loading.State {
 	loadingStates := make([]loading.State, 0, 4)
-	if m.boardIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeBoard})
+	for _, entry := range m.browseTabs() {
+		if entry.Tab.IsLoading() {
+			loadingStates = append(loadingStates, loading.State{Scope: browseLoadingScope(entry.ID)})
+		}
 	}
-	if m.docsIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDocs})
-	}
-	if m.searchIsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeSearch})
-	}
-	if m.detail.Loading {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID})
+	if m.detail.IsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID()})
 	}
 	return loadingStates
 }
@@ -228,7 +239,7 @@ func (m Model) headerContextVariants() []string {
 	if m.active == mode.Detail {
 		id := strings.TrimSpace(m.detail.Detail.Summary.ID)
 		if id == "" {
-			id = strings.TrimSpace(m.detail.SelectionID)
+			id = strings.TrimSpace(m.detail.SelectionID())
 		}
 		status := strings.TrimSpace(m.detail.Detail.Summary.Status)
 		if id != "" && status != "" {
@@ -245,7 +256,13 @@ func (m Model) headerContextVariants() []string {
 	case mode.Docs:
 		prefix = "Docs"
 	case mode.Search:
-		prefix = fmt.Sprintf("Search: %d results", m.searchResultCount())
+		// Ask the mode directly: SessionState() deep-copies the whole result
+		// page, which is not worth doing on the render path for one integer.
+		count := 0
+		if m.search != nil {
+			count = m.search.ResultCount()
+		}
+		prefix = fmt.Sprintf("Search: %d results", count)
 	}
 
 	selectedLong, selectedShort := "Selected: none", "Sel: none"

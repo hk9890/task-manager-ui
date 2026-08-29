@@ -22,97 +22,17 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
-// appTestRepository bundles a memory repository (for seeding) and an
-// ErrorInjectingRepository (for call tracking). It satisfies
-// repository.Repository via the embedded *ErrorInjectingRepository.
-type appTestRepository struct {
-	repo *memoryrepo.Repository
-	*fakes.ErrorInjectingRepository
-}
-
-// newTestRepository creates an appTestRepository with an empty memory repository.
-func newTestRepository() *appTestRepository {
-	repo := memoryrepo.New()
-	return &appTestRepository{
-		repo:                     repo,
-		ErrorInjectingRepository: fakes.NewErrorInjecting(repo),
-	}
-}
-
-// hasCall reports whether the given method appears in the recorded calls.
-func (g *appTestRepository) hasCall(m fakes.Method) bool {
-	for _, c := range g.ErrorInjectingRepository.Calls() {
-		if c.Method == m {
-			return true
-		}
-	}
-	return false
-}
-
-// callCountSince returns the number of calls to method m recorded after
-// index start (inclusive). Use len(g.Calls()) as the start marker before an
-// action to measure only the calls produced by that action.
-func (g *appTestRepository) callCountSince(start int, m fakes.Method) int {
-	all := g.ErrorInjectingRepository.Calls()
-	n := 0
-	for i := start; i < len(all); i++ {
-		if all[i].Method == m {
-			n++
-		}
-	}
-	return n
-}
-
-// hasDashboardCall reports whether a Dashboard call appears in the recorded calls.
-func (g *appTestRepository) hasDashboardCall() bool { return g.hasCall(fakes.MethodDashboard) }
-
-// hasIssueCall reports whether an Issue (detail fetch) call appears.
-func (g *appTestRepository) hasIssueCall() bool { return g.hasCall(fakes.MethodIssue) }
-
-// hasSearchCall reports whether a Search call appears.
-func (g *appTestRepository) hasSearchCall() bool { return g.hasCall(fakes.MethodSearch) }
-
-// hasUpdateIssueCall reports whether an UpdateIssue call appears.
-func (g *appTestRepository) hasUpdateIssueCall() bool { return g.hasCall(fakes.MethodUpdateIssue) }
-
-// hasCatalogsCall reports whether a Catalogs call appears.
-func (g *appTestRepository) hasCatalogsCall() bool { return g.hasCall(fakes.MethodCatalogs) }
-
-// hasCreateIssueCall reports whether a CreateIssue call appears.
-func (g *appTestRepository) hasCreateIssueCall() bool { return g.hasCall(fakes.MethodCreateIssue) }
-
-// hasCloseIssueCall reports whether a CloseIssue call appears.
-func (g *appTestRepository) hasCloseIssueCall() bool { return g.hasCall(fakes.MethodCloseIssue) }
-
-// hasAddCommentCall reports whether an AddComment call appears.
-func (g *appTestRepository) hasAddCommentCall() bool { return g.hasCall(fakes.MethodAddComment) }
-
-// hasHealthCheckCall reports whether a HealthCheck call appears.
-func (g *appTestRepository) hasHealthCheckCall() bool { return g.hasCall(fakes.MethodHealthCheck) }
-
 // seedSearchResult seeds an issue so it will be found by the memory repo's
 // text-matching search. The issue must have the search term in title,
 // description, or notes.
-func (g *appTestRepository) seedSearchResult(iss memoryrepo.Issue) {
-	g.repo.Seed(iss)
-}
-
-// callCount returns the total number of recorded calls.
-func (g *appTestRepository) callCount() int { return len(g.ErrorInjectingRepository.Calls()) }
-
-// resetMark returns the current call count as a "reset mark" for measuring
-// subsequent calls via callCountSince/hasCallSince.
-func (g *appTestRepository) resetMark() int { return len(g.ErrorInjectingRepository.Calls()) }
-
-// hasCallSince reports whether method m was called after the given mark.
-func (g *appTestRepository) hasCallSince(mark int, m fakes.Method) bool {
-	return g.callCountSince(mark, m) > 0
+func seedSearchResult(g *fakes.TrackedRepository, iss memoryrepo.Issue) {
+	g.Memory.Seed(iss)
 }
 
 // seedIssueSummary seeds an issue from a domain.IssueSummary into the memory
 // repository. Use this to translate old FakeRepo response-field patterns.
-func (g *appTestRepository) seedIssueSummary(s domain.IssueSummary) {
-	g.repo.Seed(memoryrepo.Issue{
+func seedIssueSummary(g *fakes.TrackedRepository, s domain.IssueSummary) {
+	g.Memory.Seed(memoryrepo.Issue{
 		ID:       s.ID,
 		Title:    s.Title,
 		Status:   s.Status,
@@ -127,7 +47,7 @@ func (g *appTestRepository) seedIssueSummary(s domain.IssueSummary) {
 // It propagates BlockedBy → DependsOn, Blocks → BlocksIDs, Related → Related
 // IDs, and ParentGroupBrowser → ParentID so memory repo's
 // toDetailLocked can project them back correctly.
-func (g *appTestRepository) seedIssueDetail(d domain.IssueDetail) {
+func seedIssueDetail(g *fakes.TrackedRepository, d domain.IssueDetail) {
 	dependsOn := make([]string, 0, len(d.BlockedBy))
 	for _, ref := range d.BlockedBy {
 		if ref.ID != "" {
@@ -149,7 +69,7 @@ func (g *appTestRepository) seedIssueDetail(d domain.IssueDetail) {
 		}
 	}
 
-	g.repo.Seed(memoryrepo.Issue{
+	g.Memory.Seed(memoryrepo.Issue{
 		ID:          d.Summary.ID,
 		Title:       d.Summary.Title,
 		Status:      d.Summary.Status,
@@ -167,8 +87,8 @@ func (g *appTestRepository) seedIssueDetail(d domain.IssueDetail) {
 }
 
 // seedCatalogs seeds catalog data into the repository.
-func (g *appTestRepository) seedCatalogs(statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) {
-	g.repo.SeedCatalogs(repository.Catalogs{
+func seedCatalogs(g *fakes.TrackedRepository, statuses []domain.StatusOption, types []domain.TypeOption, labels []domain.LabelOption) {
+	g.Memory.SeedCatalogs(repository.Catalogs{
 		Statuses: statuses,
 		Types:    types,
 		Labels:   labels,
@@ -177,8 +97,8 @@ func (g *appTestRepository) seedCatalogs(statuses []domain.StatusOption, types [
 
 // issueState fetches the current state of an issue from the memory repo.
 // Returns nil if not found.
-func (g *appTestRepository) issueState(id string) *domain.IssueDetail {
-	d, err := g.repo.Issue(context.Background(), id)
+func issueState(g *fakes.TrackedRepository, id string) *domain.IssueDetail {
+	d, err := g.Memory.Issue(context.Background(), id)
 	if err != nil {
 		return nil
 	}
@@ -188,34 +108,34 @@ func (g *appTestRepository) issueState(id string) *domain.IssueDetail {
 // seedDepBlocked seeds id as dep-blocked by a fresh open blocker so that it
 // appears in the NotReady (dep-blocked) column of the board. Use this for issues
 // that the old FakeRepo placed in ReadyExplainResponse.Blocked.
-func (g *appTestRepository) seedDepBlocked(id, title string, issueType string, priority int, extra ...func(*memoryrepo.Issue)) {
+func seedDepBlocked(g *fakes.TrackedRepository, id, title string, issueType string, priority int, extra ...func(*memoryrepo.Issue)) {
 	blockerID := id + "-blocker"
 	// Status "deferred": not "closed" so depStateLocked treats it as an open dep,
 	// but not "open" so the blocker itself won't appear in the Ready lane.
-	g.repo.Seed(memoryrepo.Issue{ID: blockerID, Title: "blocker for " + id, Status: "deferred"})
+	g.Memory.Seed(memoryrepo.Issue{ID: blockerID, Title: "blocker for " + id, Status: "deferred"})
 	iss := memoryrepo.Issue{ID: id, Title: title, Status: "open", Type: issueType, Priority: priority, DependsOn: []string{blockerID}}
 	for _, fn := range extra {
 		fn(&iss)
 	}
-	g.repo.Seed(iss)
+	g.Memory.Seed(iss)
 }
 
 // seedReady seeds an open issue with no deps so it appears in the Ready column.
-func (g *appTestRepository) seedReady(id, title string, issueType string, priority int, extra ...func(*memoryrepo.Issue)) {
+func seedReady(g *fakes.TrackedRepository, id, title string, issueType string, priority int, extra ...func(*memoryrepo.Issue)) {
 	iss := memoryrepo.Issue{ID: id, Title: title, Status: "open", Type: issueType, Priority: priority}
 	for _, fn := range extra {
 		fn(&iss)
 	}
-	g.repo.Seed(iss)
+	g.Memory.Seed(iss)
 }
 
 // seedInProgress seeds an in-progress issue (appears in InProgress column).
-func (g *appTestRepository) seedInProgress(id, title string, issueType string, priority int, extra ...func(*memoryrepo.Issue)) {
+func seedInProgress(g *fakes.TrackedRepository, id, title string, issueType string, priority int, extra ...func(*memoryrepo.Issue)) {
 	iss := memoryrepo.Issue{ID: id, Title: title, Status: "in_progress", Type: issueType, Priority: priority}
 	for _, fn := range extra {
 		fn(&iss)
 	}
-	g.repo.Seed(iss)
+	g.Memory.Seed(iss)
 }
 
 // mustNewModel wraps NewModel and fails the test if an error is returned.

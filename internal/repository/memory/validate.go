@@ -41,6 +41,18 @@ func validationError(operation, format string, args ...any) domain.RepositoryErr
 	}
 }
 
+// notFoundError builds the error the write path returns when the target issue
+// ID resolves to nothing. It mirrors the taskmgr backend, which surfaces the
+// CLI's resolve failure, so the two backends stay in step on one template
+// rather than three copies that drift apart.
+func notFoundError(operation, id string) domain.RepositoryError {
+	return domain.RepositoryError{
+		Code:      domain.ErrorCodeCommandFailed,
+		Operation: operation,
+		Message:   fmt.Sprintf("command exited with code 1: Error resolving %q: no issue found", id),
+	}
+}
+
 func hasControlChar(s string) bool {
 	for _, r := range s {
 		if unicode.IsControl(r) {

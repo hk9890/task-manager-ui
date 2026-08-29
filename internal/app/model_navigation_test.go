@@ -18,13 +18,13 @@ import (
 )
 
 func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress one", "task", 2)
-	gw.seedInProgress("tm-4", "In progress two", "task", 1)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-4", Title: "In progress two", Status: "in_progress", Priority: 1}, Description: "detail for tm-4"})
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-2", Title: "In progress one", Status: "in_progress", Priority: 2}, Description: "detail for tm-2"})
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress one", "task", 2)
+	seedInProgress(gw, "tm-4", "In progress two", "task", 1)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-4", Title: "In progress two", Status: "in_progress", Priority: 1}, Description: "detail for tm-4"})
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-2", Title: "In progress one", Status: "in_progress", Priority: 2}, Description: "detail for tm-2"})
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -84,15 +84,15 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		m = next.(Model)
 	}
 
-	if m.detail.TargetID != "tm-2" {
-		t.Fatalf("expected detail target to track board selection, got %q", m.detail.TargetID)
+	if m.detail.TargetID() != "tm-2" {
+		t.Fatalf("expected detail target to track board selection, got %q", m.detail.TargetID())
 	}
 }
 
 func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -110,7 +110,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 		t.Fatalf("expected active mode search before typing, got %s", m.active)
 	}
 
-	mark := gw.resetMark()
+	mark := gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
@@ -118,7 +118,7 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 	if m.active != mode.Search {
 		t.Fatalf("expected active mode to stay search while typing, got %s", m.active)
 	}
-	if gw.callCountSince(mark, fakes.MethodSearch) != 0 {
+	if gw.CallCountSince(mark, fakes.MethodSearch) != 0 {
 		t.Fatalf("expected typing in search query not to run search until enter, got %#v", gw.Calls())
 	}
 
@@ -131,9 +131,9 @@ func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
 }
 
 func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -180,9 +180,9 @@ func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
 }
 
 func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -213,11 +213,11 @@ func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
 func TestModelSearchEscFromResultsFocusReturnsToBoard(t *testing.T) {
 	// Regression: Esc must trigger shell escape (return to board) even when
 	// search focus is on Results / Content / Metadata, not just on Query.
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 	// tm-3 seeded so empty-query search returns it in the results panel.
-	gw.seedReady("tm-3", "Search result", "task", 1)
+	seedReady(gw, "tm-3", "Search result", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -260,11 +260,11 @@ func TestModelSearchEscFromResultsFocusReturnsToBoard(t *testing.T) {
 
 func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 	// Seed tm-9 with "x" in title so the query "x" matches it.
-	gw.seedReady("tm-9", "x Search result", "task", 1)
+	seedReady(gw, "tm-9", "x Search result", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -304,11 +304,11 @@ func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
 
 func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *testing.T) {
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 	// tm-9 with "x" in title so query "x" finds it.
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1}, Description: "cached detail"})
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1}, Description: "cached detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -364,9 +364,9 @@ func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *tes
 func TestSearchPreviewIsSyncedFromUpdateNotFromView(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1},
 		Description: "detail from the message path",
 	})
@@ -409,10 +409,10 @@ func TestSearchPreviewIsSyncedFromUpdateNotFromView(t *testing.T) {
 // mode.BrowseModes order. Detail is not a tab, so cycling out of it steps onto
 // the strip rather than staying put.
 func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -463,10 +463,10 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 // The docs tab is the only surface that can show an open doc: task-manager
 // excludes docs from the ready queue, so one never reaches a board column.
 func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2})
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2}, Description: "doc body"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2})
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2}, Description: "doc body"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -503,8 +503,8 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 	if m.active != mode.Detail {
 		t.Fatalf("expected enter in docs to open detail, got %s", m.active)
 	}
-	if m.detail.TargetID != "tm-9" && m.detail.Detail.Summary.ID != "tm-9" {
-		t.Fatalf("expected detail to track the selected doc, target=%q detail=%q", m.detail.TargetID, m.detail.Detail.Summary.ID)
+	if m.detail.TargetID() != "tm-9" && m.detail.Detail.Summary.ID != "tm-9" {
+		t.Fatalf("expected detail to track the selected doc, target=%q detail=%q", m.detail.TargetID(), m.detail.Detail.Summary.ID)
 	}
 
 	// Escape returns to the tab we drilled in from.
@@ -517,10 +517,10 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 }
 
 func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-2", Title: "In progress", Status: "in_progress", Priority: 2}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-2", Title: "In progress", Status: "in_progress", Priority: 2}, Description: "detail"})
 
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{

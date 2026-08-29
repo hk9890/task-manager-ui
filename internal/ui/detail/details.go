@@ -219,9 +219,26 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 	contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
 	dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
 
-	contentBox := RenderContentPane(detail, width, contentHeight, state.FocusPane == FocusPaneContent, state.ContentScrollOffset, state.Skeleton, state.SkeletonPhase)
+	contentBox := RenderContentPane(ContentPaneState{
+		Detail:        detail,
+		Width:         width,
+		Height:        contentHeight,
+		Focused:       state.FocusPane == FocusPaneContent,
+		ScrollOffset:  state.ContentScrollOffset,
+		Skeleton:      state.Skeleton,
+		SkeletonPhase: state.SkeletonPhase,
+	})
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
-	metadataBox := RenderMetadataPane(detail, metadataWidth, bottomHeight, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, state.MetadataSelectedField, state.QuickActions, state.Skeleton)
+	metadataBox := RenderMetadataPane(MetadataPaneState{
+		Detail:        detail,
+		Width:         metadataWidth,
+		Height:        bottomHeight,
+		Focused:       state.FocusPane == FocusPaneMetadata,
+		ScrollOffset:  state.MetadataScrollOffset,
+		SelectedField: state.MetadataSelectedField,
+		QuickActions:  state.QuickActions,
+		Skeleton:      state.Skeleton,
+	})
 
 	contentLines := strings.Split(contentBox, "\n")
 	dependencyLines := strings.Split(dependenciesBox, "\n")
@@ -339,13 +356,30 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 
-	contentBox := RenderContentPane(detail, contentWidth, height, state.FocusPane == FocusPaneContent, state.ContentScrollOffset, state.Skeleton, state.SkeletonPhase)
+	contentBox := RenderContentPane(ContentPaneState{
+		Detail:        detail,
+		Width:         contentWidth,
+		Height:        height,
+		Focused:       state.FocusPane == FocusPaneContent,
+		ScrollOffset:  state.ContentScrollOffset,
+		Skeleton:      state.Skeleton,
+		SkeletonPhase: state.SkeletonPhase,
+	})
 
 	selectedField := MetadataFieldNone
 	if state.FocusPane == FocusPaneMetadata {
 		selectedField = state.MetadataSelectedField
 	}
-	metaBox := RenderMetadataPane(detail, metadataWidth, height, state.FocusPane == FocusPaneMetadata, state.MetadataScrollOffset, selectedField, state.QuickActions, state.Skeleton)
+	metaBox := RenderMetadataPane(MetadataPaneState{
+		Detail:        detail,
+		Width:         metadataWidth,
+		Height:        height,
+		Focused:       state.FocusPane == FocusPaneMetadata,
+		ScrollOffset:  state.MetadataScrollOffset,
+		SelectedField: selectedField,
+		QuickActions:  state.QuickActions,
+		Skeleton:      state.Skeleton,
+	})
 
 	leftLines := strings.Split(leftBox, "\n")
 	contentLines := strings.Split(contentBox, "\n")
@@ -375,11 +409,25 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	return strings.Join(out, "\n")
 }
 
+// ContentPaneState is the state RenderContentPane draws from.
+type ContentPaneState struct {
+	Detail       domain.IssueDetail
+	Width        int
+	Height       int
+	Focused      bool
+	ScrollOffset int
+	// Skeleton renders ▓-filled placeholder rows instead of the real
+	// description, bypassing markdown rendering.
+	Skeleton bool
+	// SkeletonPhase is the colour-cycle index for the skeleton pulse; see
+	// loading.SkeletonPhase.
+	SkeletonPhase int
+}
+
 // RenderContentPane renders the shared detail Content pane section.
-// When skeleton is true, the body renders ▓-filled placeholder rows instead of
-// the real description, bypassing markdown rendering. skeletonPhase is the
-// color-cycle index for the skeleton pulse (see loading.SkeletonPhase).
-func RenderContentPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, skeleton bool, skeletonPhase int) string {
+func RenderContentPane(state ContentPaneState) string {
+	detail := state.Detail
+	width, height := state.Width, state.Height
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
@@ -388,10 +436,10 @@ func RenderContentPane(detail domain.IssueDetail, width, height int, focused boo
 	}
 
 	innerHeight := max(1, height-2)
-	content := renderContentPaneLines(detail, width-2, innerHeight, skeleton, skeletonPhase)
-	contentView, _ := sliceWithOffset(content, scrollOffset, innerHeight, width-2)
+	content := renderContentPaneLines(detail, width-2, innerHeight, state.Skeleton, state.SkeletonPhase)
+	contentView, _ := sliceWithOffset(content, state.ScrollOffset, innerHeight, width-2)
 	commentsTopRight := fmt.Sprintf("%d comments", len(detail.Comments))
-	if skeleton {
+	if state.Skeleton {
 		commentsTopRight = issuerow.SkeletonGlyph + issuerow.SkeletonGlyph + " comments"
 	}
 	return styles.FormSection(styles.FormSectionConfig{
@@ -400,15 +448,31 @@ func RenderContentPane(detail domain.IssueDetail, width, height int, focused boo
 		TopLeft:            "Content",
 		TopRight:           commentsTopRight,
 		Content:            contentView,
-		Focused:            focused,
+		Focused:            state.Focused,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 }
 
+// MetadataPaneState is the state RenderMetadataPane draws from.
+type MetadataPaneState struct {
+	Detail        domain.IssueDetail
+	Width         int
+	Height        int
+	Focused       bool
+	ScrollOffset  int
+	SelectedField MetadataFieldKey
+	QuickActions  QuickActionLabels
+	// Skeleton renders the Counts group as placeholder glyphs instead of real
+	// numeric values, matching the Content pane's loading-state treatment.
+	Skeleton bool
+}
+
 // RenderMetadataPane renders the shared detail Metadata pane section.
-// When skeleton is true, the Counts group renders placeholder glyphs instead of
-// real numeric values, matching the Description pane's loading-state treatment.
-func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bool, scrollOffset int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) string {
+func RenderMetadataPane(state MetadataPaneState) string {
+	detail := state.Detail
+	width, height := state.Width, state.Height
+	skeleton := state.Skeleton
+	quickActions := state.QuickActions
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
@@ -416,19 +480,20 @@ func RenderMetadataPane(detail domain.IssueDetail, width, height int, focused bo
 		height = defaultDetailHeight
 	}
 
-	if !focused {
+	selectedField := state.SelectedField
+	if !state.Focused {
 		selectedField = MetadataFieldNone
 	}
 
 	innerHeight := max(1, height-2)
 	metadata := renderMetadataPaneLines(detail, width-2, selectedField, quickActions, skeleton)
-	metaView, _ := sliceWithOffset(metadata, scrollOffset, innerHeight, width-2)
+	metaView, _ := sliceWithOffset(metadata, state.ScrollOffset, innerHeight, width-2)
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
 		Height:             height,
 		TopLeft:            "Metadata",
 		Content:            metaView,
-		Focused:            focused,
+		Focused:            state.Focused,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 }
@@ -498,11 +563,14 @@ func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) i
 	// starts with (before the Quick actions block). We scan renderMetadataRail
 	// output with an arbitrary width of 80 (width does not affect line count).
 	lines := renderMetadataRail(detail, 80, field, false)
+	// Take the gutter from styles.SelectionPrefix rather than spelling the
+	// glyph here: DESIGN-GUIDE.md makes that function the one definition, and
+	// the plain variant is the one that survives ANSI stripping.
+	selectedPrefix, _ := styles.SelectionPrefix(true, false)
 	for i, line := range lines {
-		// The selected field line is prefixed with the selection indicator.
-		// We detect it by checking for the "› " prefix after ANSI stripping.
 		stripped := textutil.StripANSI(line)
-		if strings.HasPrefix(stripped, "› ") || strings.HasPrefix(stripped, "›") {
+		if strings.HasPrefix(stripped, selectedPrefix) ||
+			strings.HasPrefix(stripped, strings.TrimRight(selectedPrefix, " ")) {
 			return i
 		}
 	}
@@ -532,7 +600,7 @@ func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
 			renderhelpers.CompactIssueState(summary.Status),
 			emptyFallback(summary.ID, "(unknown)"),
 		}, " ")
-		return styles.TruncateString(plain, width)
+		return textutil.TruncateString(plain, width)
 	}
 	return meta
 }
@@ -560,7 +628,7 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	if isPlaceholderSummary(detail.Summary) {
 		// Placeholder case (search "no selection"): suppress the meta row and
 		// thin rule; render only the title line so the pane stays clean.
-		upper = append(upper, styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
+		upper = append(upper, textutil.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
 		upper = append(upper, renderMarkdownMultiline(detail.Description, "(no description)", width)...)
 		return upper
 	}
@@ -568,7 +636,7 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
 	// title, then a thin rule that visually separates the header from the body below.
 	upper = append(upper, contentHeaderMetaRow(detail.Summary, width))
-	upper = append(upper, styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
+	upper = append(upper, textutil.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
 	upper = append(upper, contentHeaderRule(width))
 	upper = append(upper, "Description")
 
@@ -670,10 +738,10 @@ func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) 
 	window := append([]string(nil), lines[start:end]...)
 
 	if offset > 0 && len(window) > 0 {
-		window[0] = styles.TruncateString(fmt.Sprintf("… (%d earlier)", offset), width)
+		window[0] = textutil.TruncateString(fmt.Sprintf("… (%d earlier)", offset), width)
 	}
 	if end < len(lines) && len(window) > 0 {
-		window[len(window)-1] = styles.TruncateString(fmt.Sprintf("… (%d more)", len(lines)-end), width)
+		window[len(window)-1] = textutil.TruncateString(fmt.Sprintf("… (%d more)", len(lines)-end), width)
 	}
 
 	for len(window) < height {
@@ -686,8 +754,8 @@ func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) 
 func renderCompact(detail domain.IssueDetail, width int) string {
 	out := make([]string, 0, 28)
 	out = append(out,
-		styles.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width),
-		styles.TruncateString(fmt.Sprintf("%s · %s", detail.Summary.ID, emptyFallback(detail.Summary.Status, "(unknown)")), width),
+		textutil.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width),
+		textutil.TruncateString(fmt.Sprintf("%s · %s", detail.Summary.ID, emptyFallback(detail.Summary.Status, "(unknown)")), width),
 	)
 	metadata := renderMetadataRail(detail, width, MetadataFieldNone, false)
 	if len(metadata) > 0 {
@@ -714,13 +782,13 @@ func renderMarkdownPreviewLines(text, fallback string, width, maxLines int) []st
 	}
 
 	trimmed := append([]string(nil), lines[:maxLines-1]...)
-	trimmed = append(trimmed, styles.TruncateString("…", width))
+	trimmed = append(trimmed, textutil.TruncateString("…", width))
 	return trimmed
 }
 
 func summarizeReferences(detail domain.IssueDetail, width int) []string {
 	line := fmt.Sprintf("Blocked by: %d  Blocks: %d  Related: %d  Children: %d", len(detail.BlockedBy), len(detail.Blocks), len(detail.Related), len(detail.Children))
-	return []string{styles.TruncateString(line, width)}
+	return []string{textutil.TruncateString(line, width)}
 }
 
 func renderMultiline(text, fallback string, width int) []string {
@@ -736,7 +804,7 @@ func renderMultiline(text, fallback string, width int) []string {
 			continue
 		}
 		cleaned := strings.TrimRight(line, " \t")
-		out = append(out, styles.TruncateString(cleaned, width))
+		out = append(out, textutil.TruncateString(cleaned, width))
 	}
 	if len(out) == 0 {
 		return []string{fallback}
@@ -760,7 +828,7 @@ func renderMarkdownMultiline(text, fallback string, width int) []string {
 			out = append(out, "")
 			continue
 		}
-		out = append(out, styles.TruncateString(strings.TrimRight(line, " \t"), width))
+		out = append(out, textutil.TruncateString(strings.TrimRight(line, " \t"), width))
 	}
 	if len(out) == 0 {
 		return []string{fallback}

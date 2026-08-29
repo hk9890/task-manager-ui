@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -83,10 +84,10 @@ func TestShellCommandLauncherDoesNotExecuteInjectedTitle(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
-	assertLiteralArg(t, runner.Calls[0].Args, payload, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, payload, sentinel)
 }
 
 func TestShellCommandLauncherDoesNotExecuteInjectedTitleQuotedSemicolon(t *testing.T) {
@@ -108,10 +109,10 @@ func TestShellCommandLauncherDoesNotExecuteInjectedTitleQuotedSemicolon(t *testi
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
-	assertLiteralArg(t, runner.Calls[0].Args, payload, "")
+	assertLiteralArg(t, runner.Calls()[0].Args, payload, "")
 }
 
 func TestShellCommandLauncherDoesNotExecuteBackticksInTitle(t *testing.T) {
@@ -134,10 +135,10 @@ func TestShellCommandLauncherDoesNotExecuteBackticksInTitle(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
-	assertLiteralArg(t, runner.Calls[0].Args, payload, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, payload, sentinel)
 }
 
 func TestShellCommandLauncherDoesNotExecuteAndAndOrInLabels(t *testing.T) {
@@ -163,11 +164,11 @@ func TestShellCommandLauncherDoesNotExecuteAndAndOrInLabels(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// Labels are comma-joined; the injected value should appear verbatim in args.
-	assertLiteralArg(t, runner.Calls[0].Args, label, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, label, sentinel)
 }
 
 // TestNewlineInAssigneeIsStripped asserts that \n in a field value is stripped
@@ -194,12 +195,12 @@ func TestNewlineInAssigneeIsStripped(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// \n must be stripped; the sanitised value must NOT contain a newline.
 	stripped := fmt.Sprintf("hanstouch %s", sentinel)
-	assertLiteralArg(t, runner.Calls[0].Args, stripped, sentinel)
+	assertLiteralArg(t, runner.Calls()[0].Args, stripped, sentinel)
 }
 
 // TestNewlineInTitleIsStrippedFromArgv asserts that a title containing \n has
@@ -222,11 +223,11 @@ func TestNewlineInTitleIsStrippedFromArgv(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// \n is a C0 char and must be stripped; argv receives the joined form.
-	assertLiteralArg(t, runner.Calls[0].Args, "line1line2", "")
+	assertLiteralArg(t, runner.Calls()[0].Args, "line1line2", "")
 }
 
 // TestANSIEscapeInTitleIsStrippedFromArgv asserts that \x1b (ESC) in a field
@@ -249,11 +250,11 @@ func TestANSIEscapeInTitleIsStrippedFromArgv(t *testing.T) {
 		t.Fatalf("Launch error: %v", err)
 	}
 
-	if len(runner.Calls) != 1 {
-		t.Fatalf("expected one call, got %d", len(runner.Calls))
+	if len(runner.Calls()) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.Calls()))
 	}
 	// \x1b (ESC, 0x1b) is a C0 control char and must be stripped.
-	assertLiteralArg(t, runner.Calls[0].Args, "danger", "")
+	assertLiteralArg(t, runner.Calls()[0].Args, "danger", "")
 }
 
 // TestEnvEntryMissingEqualsIsRejected asserts that an Env template that
@@ -277,7 +278,76 @@ func TestEnvEntryMissingEqualsIsRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for env entry without '=', got nil")
 	}
-	if len(runner.Calls) != 0 {
-		t.Fatalf("runner must not be called when env validation fails, got %d calls", len(runner.Calls))
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("runner must not be called when env validation fails, got %d calls", len(runner.Calls()))
+	}
+}
+
+// --- Ex-command editors -----------------------------------------------------
+//
+// nvim re-parses a "+cmd" argument as an Ex command line. Ex chains on "|" and
+// reaches a login shell through ":!", so an interpolated issue field there is
+// executable text, exactly as a shell body is. These tests pin the validator
+// against that shape; the shipped default is pinned in the config package.
+
+func TestValidateRejectsIssueFieldInNvimExCommandArgument(t *testing.T) {
+	def := launcher.Definition{
+		Action:  "nvim",
+		Command: "nvim",
+		Args:    []string{`+call append(0, ["Title: {{issue.title}}"])`},
+	}
+
+	err := launcher.ValidateDefinitions([]launcher.Definition{def})
+	if err == nil {
+		t.Fatal("expected an error for an issue field in an nvim +cmd argument, got nil")
+	}
+	if !strings.Contains(err.Error(), "{{issue.title}}") {
+		t.Errorf("error should name the offending placeholder, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Ex-command") {
+		t.Errorf("error should say the argument is an Ex command line, got: %v", err)
+	}
+}
+
+func TestValidateRejectsIssueFieldAfterEditorCommandFlag(t *testing.T) {
+	for _, flag := range []string{"-c", "--cmd"} {
+		t.Run(flag, func(t *testing.T) {
+			def := launcher.Definition{
+				Action:  "nvim",
+				Command: "nvim",
+				Args:    []string{flag, `call append(0, ["{{issue.id}}"])`},
+			}
+			if err := launcher.ValidateDefinitions([]launcher.Definition{def}); err == nil {
+				t.Fatalf("expected an error for an issue field after %s, got nil", flag)
+			}
+		})
+	}
+}
+
+func TestValidateAllowsIssueFieldInEditorFileArgument(t *testing.T) {
+	// A file argument is data, not an Ex command line. Rejecting it would
+	// forbid opening a per-issue file, which the rule does not intend.
+	def := launcher.Definition{
+		Action:  "nvim",
+		Command: "nvim",
+		Args:    []string{"/tmp/{{issue.id}}.md"},
+	}
+	if err := launcher.ValidateDefinitions([]launcher.Definition{def}); err != nil {
+		t.Errorf("a file argument must be allowed, got: %v", err)
+	}
+}
+
+func TestValidateChecksEveryExCommandEditorAlias(t *testing.T) {
+	for _, name := range []string{"vi", "vim", "nvim", "view", "vimdiff", "ex", "/usr/bin/nvim"} {
+		t.Run(name, func(t *testing.T) {
+			def := launcher.Definition{
+				Action:  "editor-like",
+				Command: name,
+				Args:    []string{`+call append(0, ["{{issue.title}}"])`},
+			}
+			if err := launcher.ValidateDefinitions([]launcher.Definition{def}); err == nil {
+				t.Fatalf("expected %s to be checked for Ex-command injection", name)
+			}
+		})
 	}
 }

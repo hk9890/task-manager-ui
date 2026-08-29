@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 const (
@@ -41,30 +41,30 @@ func renderComments(comments []domain.IssueComment, width int) []string {
 		author := emptyFallback(comment.Author, "unknown")
 		timestamp := formatTime(comment.CreatedAt)
 		commentHeader := fmt.Sprintf("[%d/%d] %s · %s", i+1, len(ordered), author, timestamp)
-		out = append(out, styles.TruncateString(commentHeader, width))
+		out = append(out, textutil.TruncateString(commentHeader, width))
 
 		body, logLike := renderCommentBody(comment.Body, width)
 		if logLike {
-			out = append(out, styles.TruncateString("  ├─ output", width))
+			out = append(out, textutil.TruncateString("  ├─ output", width))
 			for _, line := range body {
 				if line == "" {
-					out = append(out, styles.TruncateString("  │", width))
+					out = append(out, textutil.TruncateString("  │", width))
 					continue
 				}
-				out = append(out, styles.TruncateString("  │ "+line, width))
+				out = append(out, textutil.TruncateString("  │ "+line, width))
 			}
-			out = append(out, styles.TruncateString("  └─", width))
+			out = append(out, textutil.TruncateString("  └─", width))
 		} else {
 			for _, line := range body {
 				if line == "" {
 					out = append(out, "")
 					continue
 				}
-				out = append(out, styles.TruncateString("  "+line, width))
+				out = append(out, textutil.TruncateString("  "+line, width))
 			}
 		}
 		if i < len(ordered)-1 {
-			out = append(out, styles.TruncateString(strings.Repeat("─", max(8, width)), width))
+			out = append(out, textutil.TruncateString(strings.Repeat("─", max(8, width)), width))
 		}
 	}
 
@@ -91,7 +91,7 @@ func applyCommentElision(lines []string, maxLines, width int) []string {
 	}
 	kept := append([]string(nil), lines[:maxLines-1]...)
 	elided := len(lines) - (maxLines - 1)
-	kept = append(kept, styles.TruncateString(fmt.Sprintf("… (+%d lines elided)", elided), width))
+	kept = append(kept, textutil.TruncateString(fmt.Sprintf("… (+%d lines elided)", elided), width))
 	return kept
 }
 

@@ -10,7 +10,6 @@ package app
 //   - TestToastStaleDismissDoesNotHideNewerToast (dismiss identity)
 
 import (
-	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -25,25 +24,9 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
-
-// recordingUpdateRepository wraps a repository.Repository and captures the exact
-// UpdateIssueInput passed to UpdateIssue. The package's standard test repo
-// (ErrorInjectingRepository) records only method names, so this thin wrapper is
-// needed to assert on the pointer-valued fields the shell builds — specifically
-// the Assignee unassign semantics.
-type recordingUpdateRepository struct {
-	repository.Repository
-	updateCalls []domain.UpdateIssueInput
-}
-
-func (r *recordingUpdateRepository) UpdateIssue(ctx context.Context, id string, input domain.UpdateIssueInput) error {
-	r.updateCalls = append(r.updateCalls, input)
-	return r.Repository.UpdateIssue(ctx, id, input)
-}
 
 // TestMutationUpdateClearingAssigneeUnassigns is the regression guard for the
 // mutationUpdate assignee diff. Clearing a pre-filled assignee must send an
@@ -63,16 +46,32 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 		issue: domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"},
 	}
 
-	newServices := func(t *testing.T) (*recordingUpdateRepository, Services) {
+	newServices := func(t *testing.T) (*fakes.TrackedRepository, Services) {
 		t.Helper()
-		gw := newTestRepository()
-		gw.seedIssueSummary(domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"})
-		rec := &recordingUpdateRepository{Repository: gw}
-		services, err := NewServices(rec, config.Default(), t.TempDir())
+		gw := fakes.NewTracked()
+		seedIssueSummary(gw, domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task", Assignee: "alice"})
+		services, err := NewServices(gw, config.Default(), t.TempDir())
 		if err != nil {
 			t.Fatalf("NewServices: %v", err)
 		}
-		return rec, services
+		return gw, services
+	}
+
+	// updateInputs reads the UpdateIssueInput values off the recorded calls.
+	// These assertions are about pointer-valued fields — an unassign is a
+	// pointer to "" and "no change" is nil — so the arguments, not just the
+	// method name, are the subject.
+	updateInputs := func(t *testing.T, rec *fakes.TrackedRepository) []domain.UpdateIssueInput {
+		t.Helper()
+		var out []domain.UpdateIssueInput
+		for _, c := range rec.CallsFor(fakes.MethodUpdateIssue) {
+			input, ok := c.Args.(domain.UpdateIssueInput)
+			if !ok {
+				t.Fatalf("expected an UpdateIssueInput in Call.Args, got %T", c.Args)
+			}
+			out = append(out, input)
+		}
+		return out
 	}
 
 	t.Run("cleared_field_sends_unassign", func(t *testing.T) {
@@ -88,10 +87,10 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 		if res, ok := submitMutationCmd(services, state, values)().(mutationResultMsg); ok && res.err != nil {
 			t.Fatalf("unexpected mutation error: %v", res.err)
 		}
-		if len(rec.updateCalls) != 1 {
-			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(rec.updateCalls))
+		if len(updateInputs(t, rec)) != 1 {
+			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(updateInputs(t, rec)))
 		}
-		got := rec.updateCalls[0].Assignee
+		got := updateInputs(t, rec)[0].Assignee
 		if got == nil {
 			t.Fatal("expected non-nil Assignee pointer (unassign) after clearing a pre-filled assignee; got nil (regression: gated on non-empty)")
 		}
@@ -113,10 +112,10 @@ func TestMutationUpdateClearingAssigneeUnassigns(t *testing.T) {
 		if res, ok := submitMutationCmd(services, state, values)().(mutationResultMsg); ok && res.err != nil {
 			t.Fatalf("unexpected mutation error: %v", res.err)
 		}
-		if len(rec.updateCalls) != 1 {
-			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(rec.updateCalls))
+		if len(updateInputs(t, rec)) != 1 {
+			t.Fatalf("expected exactly one UpdateIssue call, got %d", len(updateInputs(t, rec)))
 		}
-		if got := rec.updateCalls[0].Assignee; got != nil {
+		if got := updateInputs(t, rec)[0].Assignee; got != nil {
 			t.Fatalf("expected nil Assignee when value unchanged, got pointer to %q", *got)
 		}
 	})
@@ -144,7 +143,7 @@ func TestMutationCreatePriorityRangeEnforced(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gw := newTestRepository()
+			gw := fakes.NewTracked()
 			services, err := NewServices(gw, config.Default(), t.TempDir())
 			if err != nil {
 				t.Fatalf("NewServices: %v", err)
@@ -163,7 +162,7 @@ func TestMutationCreatePriorityRangeEnforced(t *testing.T) {
 				if res.err != nil {
 					t.Fatalf("expected priority %q to be accepted, got error %v", tc.priority, res.err)
 				}
-				if !gw.hasCreateIssueCall() {
+				if !gw.HasCall(fakes.MethodCreateIssue) {
 					t.Fatalf("expected CreateIssue to be called for accepted priority %q", tc.priority)
 				}
 				return
@@ -175,7 +174,7 @@ func TestMutationCreatePriorityRangeEnforced(t *testing.T) {
 			if !strings.Contains(res.err.Error(), "between 0 and 4") {
 				t.Fatalf("expected error to mention range 'between 0 and 4', got %q", res.err.Error())
 			}
-			if gw.hasCreateIssueCall() {
+			if gw.HasCall(fakes.MethodCreateIssue) {
 				t.Fatalf("expected CreateIssue NOT called for out-of-range priority %q, calls=%#v", tc.priority, gw.Calls())
 			}
 		})
@@ -203,8 +202,8 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gw := newTestRepository()
-			gw.seedIssueSummary(domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task"})
+			gw := fakes.NewTracked()
+			seedIssueSummary(gw, domain.IssueSummary{ID: "tm-1", Title: "Task", Status: "open", Type: "task"})
 			services, err := NewServices(gw, config.Default(), t.TempDir())
 			if err != nil {
 				t.Fatalf("NewServices: %v", err)
@@ -226,7 +225,7 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 				if res.err != nil {
 					t.Fatalf("expected priority %q to be accepted, got error %v", tc.priority, res.err)
 				}
-				if !gw.hasUpdateIssueCall() {
+				if !gw.HasCall(fakes.MethodUpdateIssue) {
 					t.Fatalf("expected UpdateIssue to be called for accepted priority %q", tc.priority)
 				}
 				return
@@ -238,7 +237,7 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 			if !strings.Contains(res.err.Error(), "between 0 and 4") {
 				t.Fatalf("expected error to mention range 'between 0 and 4', got %q", res.err.Error())
 			}
-			if gw.hasUpdateIssueCall() {
+			if gw.HasCall(fakes.MethodUpdateIssue) {
 				t.Fatalf("expected UpdateIssue NOT called for out-of-range priority %q, calls=%#v", tc.priority, gw.Calls())
 			}
 		})
@@ -255,10 +254,10 @@ func TestMutationUpdatePriorityRangeEnforced(t *testing.T) {
 // lastBrowse == Detail. That made currentSelection() return nil (blank Detail)
 // and turned Escape (active = lastBrowse) into a no-op (stuck in Detail).
 func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Priority: 1}, Description: "detail"})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -310,8 +309,8 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 
 	// Drain the detail load so Detail reflects the preserved selection.
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.detail.TargetID != "tm-1" && m.detail.Detail.Summary.ID != "tm-1" {
-		t.Fatalf("expected Detail to track tm-1 selection, target=%q detail=%q", m.detail.TargetID, m.detail.Detail.Summary.ID)
+	if m.detail.TargetID() != "tm-1" && m.detail.Detail.Summary.ID != "tm-1" {
+		t.Fatalf("expected Detail to track tm-1 selection, target=%q detail=%q", m.detail.TargetID(), m.detail.Detail.Summary.ID)
 	}
 
 	// Escape must return to the tab we drilled in from, not stay stuck in Detail.
@@ -341,7 +340,7 @@ func (e buildEditorErrEditor) BuildEditorCmd(string) (*exec.Cmd, error) {
 // the stale-temp sweep. Pre-fix this path returned without os.Remove, orphaning
 // the file.
 func TestEditPreparedBuildEditorCmdErrorRemovesTempFile(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -381,7 +380,7 @@ func TestEditPreparedBuildEditorCmdErrorRemovesTempFile(t *testing.T) {
 // ignored. Pre-fix the handler hid unconditionally, so a stale dismiss would
 // hide the newer toast early.
 func TestToastStaleDismissDoesNotHideNewerToast(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)
@@ -421,7 +420,7 @@ func TestToastStaleDismissDoesNotHideNewerToast(t *testing.T) {
 // the toast would never auto-dismiss. The default test stub ignores its args,
 // so this installs a capturing scheduler to assert the values.
 func TestShowToastSchedulesDismissWithCurrentSeq(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices: %v", err)

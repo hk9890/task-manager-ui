@@ -44,8 +44,8 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 	t.Parallel()
 
 	m := &Model{}
-	m.SelectionID = "tm-1"
-	m.TargetID = "tm-1"
+	m.selectionID = "tm-1"
+	m.targetID = "tm-1"
 	m.ApplyLoadedDetail("tm-1", issueWithLongContent("tm-1", "Issue A"))
 
 	const (
@@ -123,8 +123,8 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 	t.Parallel()
 
 	m := &Model{}
-	m.SelectionID = "tm-1"
-	m.TargetID = "tm-1"
+	m.selectionID = "tm-1"
+	m.targetID = "tm-1"
 	issueA := issueWithLongContent("tm-1", "Issue A")
 	m.ApplyLoadedDetail("tm-1", issueA)
 

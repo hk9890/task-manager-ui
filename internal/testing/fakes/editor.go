@@ -42,8 +42,8 @@ type FakeEditor struct {
 	// ApplyErr, when non-nil, is returned by ApplyEdits.
 	ApplyErr error
 
-	// Calls records each PrepareDocument invocation (IssueID).
-	Calls []EditorCall
+	// calls records each PrepareDocument invocation (IssueID).
+	calls []EditorCall
 }
 
 var _ launchereditor.Service = (*FakeEditor)(nil)
@@ -53,7 +53,7 @@ func (f *FakeEditor) PrepareDocument(_ context.Context, issueID string) (launche
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.Calls = append(f.Calls, EditorCall{IssueID: issueID})
+	f.calls = append(f.calls, EditorCall{IssueID: issueID})
 	if f.PrepareErr != nil {
 		return launchereditor.Prepared{}, f.PrepareErr
 	}
@@ -165,3 +165,14 @@ func (f *FakeExecCommand) SetStdout(_ io.Writer) {}
 
 // SetStderr is a no-op; Bubble Tea calls it before Run.
 func (f *FakeExecCommand) SetStderr(_ io.Writer) {}
+
+// Calls returns a snapshot of the calls recorded so far, in order. It takes
+// the same lock the recording path does, so a test reading it while the
+// component under test is still running cannot race.
+func (f *FakeEditor) Calls() []EditorCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]EditorCall, len(f.calls))
+	copy(out, f.calls)
+	return out
+}

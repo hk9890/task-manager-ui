@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
@@ -214,9 +215,9 @@ func TestNoDoubledColumnHeadersPresizeDataResize(t *testing.T) {
 }
 
 func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	cfg := config.Default()
 	cfg.UI.ShowModeSwitcherHelp = false
@@ -237,10 +238,10 @@ func TestModelShowModeSwitcherHelpControlsFooterVisibility(t *testing.T) {
 func TestModelDetailModeRendersConfigurableFooterHelp(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-9", "Ninth", "task", 2)
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
-	gw.seedIssueDetail(domain.IssueDetail{
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-9", "Ninth", "task", 2)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-9", Title: "Ninth", Status: "open", Type: "task", Priority: 2},
 		Description: "Ninth detail",
 	})
@@ -266,14 +267,14 @@ func TestModelDetailModeRendersConfigurableFooterHelp(t *testing.T) {
 func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("task-manager-ui-yze.4.2", "Implement create update close and comment actions in the app", "task", 1, func(iss *memoryrepo.Issue) {
+	gw := fakes.NewTracked()
+	seedReady(gw, "task-manager-ui-yze.4.2", "Implement create update close and comment actions in the app", "task", 1, func(iss *memoryrepo.Issue) {
 		iss.Assignee = "alice"
 		iss.Labels = []string{"ui", "shell"}
 	})
-	gw.seedIssueSummary(domain.IssueSummary{ID: "task-manager-ui-yze.4.5", Title: "Add editor and launcher integration tests", Status: "blocked", Type: "task", Priority: 1})
-	gw.seedInProgress("task-manager-ui-yze.4.3", "Implement launcher framework with issue-context interpolation", "task", 1)
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueSummary(gw, domain.IssueSummary{ID: "task-manager-ui-yze.4.5", Title: "Add editor and launcher integration tests", Status: "blocked", Type: "task", Priority: 1})
+	seedInProgress(gw, "task-manager-ui-yze.4.3", "Implement launcher framework with issue-context interpolation", "task", 1)
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary: domain.IssueSummary{
 			ID:       "task-manager-ui-yze.4.2",
 			Title:    "Implement create update close and comment actions in the app",
@@ -315,10 +316,10 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked", Type: "bug", Priority: 0})
-	gw.seedInProgress("tm-2", "In progress", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-3", Title: "Blocked", Status: "blocked", Type: "bug", Priority: 0})
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -347,16 +348,16 @@ func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T)
 func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "tm-3", Title: "Blocked now", Status: "blocked", Type: "bug", Priority: 0})
-	gw.seedInProgress("tm-2", "In progress one", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-3", Title: "Blocked now", Status: "blocked", Type: "bug", Priority: 0})
+	seedInProgress(gw, "tm-2", "In progress one", "task", 1)
 	// Pre-seed detail for both issues used during the round-trip.
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
 		Description: "detail for ready issue",
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-2", Title: "In progress one", Status: "in_progress", Type: "task", Priority: 1},
 		Description: "detail for in-progress issue",
 	})
@@ -423,11 +424,11 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready first", "task", 1)
-	gw.seedInProgress("tm-2", "In progress one", "task", 2)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress one", "task", 2)
 	// Seed a search result so the search mode body renders something.
-	gw.seedSearchResult(memoryrepo.Issue{ID: "tm-2", Title: "In progress one", Status: "in_progress", Priority: 2})
+	seedSearchResult(gw, memoryrepo.Issue{ID: "tm-2", Title: "In progress one", Status: "in_progress", Priority: 2})
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewServices returned error: %v", err)
@@ -458,12 +459,13 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	}
 	m.active = mode.Detail
 	m.detail = detail.Model{
-		SelectionID: "tm-1",
 		Detail: domain.IssueDetail{
 			Summary:     domain.IssueSummary{ID: "tm-1", Title: "Issue one", Status: "open", Type: "task", Priority: 1},
 			Description: strings.Join(longLines, "\n"),
 		},
 	}
+	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
+	m.detail.FinishLoad(nil)
 
 	detailBody := m.renderBody()
 	if strings.Contains(detailBody, "Issue Detail") {
@@ -485,18 +487,18 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 // match the same bwf-1/bwf-2 fixture shape. This replaces
 // TestModelEmbeddedFixtureFullBoardCaptureGolden (which used real taskmgr+fixture).
 func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	// Match fixture shape: bwf-2 is Blocked (Not Ready lane), bwf-1 is Ready, no InProgress.
-	gw.seedReady("bwf-1", "Seed fixture root task", "task", 1, func(iss *memoryrepo.Issue) {
+	seedReady(gw, "bwf-1", "Seed fixture root task", "task", 1, func(iss *memoryrepo.Issue) {
 		iss.Assignee = "alice"
 		iss.Labels = []string{"fixture", "ui"}
 	})
-	gw.seedIssueSummary(domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob", Labels: []string{"fixture", "blocking"}})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueSummary(gw, domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob", Labels: []string{"fixture", "blocking"}})
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0, Assignee: "bob"},
 		Description: "Used to validate blocked/ready and dependency reads.",
 	})
-	gw.seedIssueDetail(domain.IssueDetail{
+	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "bwf-1", Title: "Seed fixture root task", Status: "open", Type: "task", Priority: 1, Assignee: "alice"},
 		Description: "Root task used by integration and e2e smoke tests.",
 	})
@@ -530,9 +532,9 @@ func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
 // TestModelEmbeddedFixtureStartupLoadsBoardWithoutRepositorySectionErrors
 // (which used real taskmgr+fixture).
 func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
-	gw := newTestRepository()
-	gw.seedReady("bwf-1", "Seed fixture root task", "task", 1)
-	gw.seedIssueSummary(domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0})
+	gw := fakes.NewTracked()
+	seedReady(gw, "bwf-1", "Seed fixture root task", "task", 1)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "bwf-2", Title: "Blocked bug for fixture", Status: "blocked", Type: "bug", Priority: 0})
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -555,7 +557,7 @@ func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
 func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services := Services{Repo: gw, Config: config.Default()}
 	m := mustNewModel(t, services)
 	// Drain Init so board loading completes and all surfaces are idle.
@@ -565,8 +567,8 @@ func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 	idleCell := m.headerSpinnerCell()
 	idleWidth := lipgloss.Width(idleCell)
 
-	// simulate a loading state by setting detail.Loading
-	m.detail.Loading = true
+	// simulate a loading state by starting a real load
+	m.detail.BeginLoad("spinner-probe", detail.BeginLoadOptions{})
 	loadingCell := m.headerSpinnerCell()
 	loadingWidth := lipgloss.Width(loadingCell)
 
@@ -582,7 +584,7 @@ func TestHeaderSpinnerCellWidthInvariance(t *testing.T) {
 func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
+	gw := fakes.NewTracked()
 	services := Services{Repo: gw, Config: config.Default()}
 	m := mustNewModel(t, services)
 	// Drain Init so board loading completes and all surfaces are idle.
@@ -593,7 +595,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	expectedGlyph := loading.Glyph(0)
 
 	// loading active — use detail.Loading to avoid triggering repository calls
-	m.detail.Loading = true
+	m.detail.BeginLoad("spinner-probe", detail.BeginLoadOptions{})
 	loadingCell := m.headerSpinnerCell()
 	if !strings.Contains(loadingCell, expectedGlyph) {
 		t.Errorf("headerSpinnerCell when loading does not contain spinner glyph %q: got %q",
@@ -601,7 +603,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	}
 
 	// verify none of the 10 glyphs appear when idle (all loading cleared)
-	m.detail.Loading = false
+	m.detail.FinishLoad(nil)
 	idleCell := m.headerSpinnerCell()
 	for i, r := range loading.SpinnerFrames {
 		g := string(r)

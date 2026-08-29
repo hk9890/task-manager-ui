@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // TestHeaderContextPicksTheLongestVariantInsideItsBudget pins the header
@@ -19,8 +20,8 @@ import (
 func TestHeaderContextPicksTheLongestVariantInsideItsBudget(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "A ready issue with a reasonably long title", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "A ready issue with a reasonably long title", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
@@ -74,8 +75,8 @@ func TestHeaderContextPicksTheLongestVariantInsideItsBudget(t *testing.T) {
 func TestHeaderContextFallsBackToTheFirstVariantAtAnUnknownWidth(t *testing.T) {
 	t.Parallel()
 
-	gw := newTestRepository()
-	gw.seedReady("tm-1", "Ready", "task", 1)
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready", "task", 1)
 
 	services, err := NewServices(gw, config.Default(), t.TempDir())
 	if err != nil {
