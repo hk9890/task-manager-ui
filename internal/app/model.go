@@ -438,6 +438,21 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearDrillSelection()
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case mode.ActionRequestMsg:
+		switch msg.Action {
+		case mode.ActionOpenStatusDialog:
+			issue, ok := m.dialogTargetIssue(msg.Mode)
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
+			}
+			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
+			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue))
+		case mode.ActionOpenPriorityDialog:
+			issue, ok := m.dialogTargetIssue(msg.Mode)
+			if !ok {
+				return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
+			}
+			return m, batchCmds(modeCmd, m.openMutationModal(buildMutationDialog(mutationPriority, issue, nil, nil, nil)))
+		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
 		}
@@ -525,32 +540,9 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 
 	if m.active == mode.Detail {
 		m.detail.Keys = m.keys
-		consumed, intent := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
-		if m.detail.ConsumeOpenStatusDialogIntent() {
-			issue := m.detail.Detail.Summary
-			if strings.TrimSpace(issue.ID) == "" {
-				if selection := m.currentSelection(); selection != nil {
-					issue = selection.Issue
-				}
-			}
-			if strings.TrimSpace(issue.ID) == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
-			}
-			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue))
-		}
-		if m.detail.ConsumeOpenPriorityDialogIntent() {
-			issue := m.detail.Detail.Summary
-			if strings.TrimSpace(issue.ID) == "" {
-				if selection := m.currentSelection(); selection != nil {
-					issue = selection.Issue
-				}
-			}
-			if strings.TrimSpace(issue.ID) == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
-			}
-			dialog := buildMutationDialog(mutationPriority, issue, nil, nil, nil)
-			return m, batchCmds(modeCmd, m.openMutationModal(dialog))
+		consumed, intent, actionCmd := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
+		if actionCmd != nil {
+			return m, batchCmds(modeCmd, actionCmd)
 		}
 		if intent != nil {
 			issueID := strings.TrimSpace(intent.IssueID)
@@ -593,25 +585,6 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 		if consumed {
 			return m, modeCmd
-		}
-	}
-
-	if m.active == mode.Search {
-		if m.search.ConsumeOpenStatusDialogIntent() {
-			selection := m.selectedByMode[mode.Search]
-			if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
-			}
-			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, selection.Issue))
-		}
-		if m.search.ConsumeOpenPriorityDialogIntent() {
-			selection := m.selectedByMode[mode.Search]
-			if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
-			}
-			dialog := buildMutationDialog(mutationPriority, selection.Issue, nil, nil, nil)
-			return m, batchCmds(modeCmd, m.openMutationModal(dialog))
 		}
 	}
 

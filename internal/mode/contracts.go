@@ -52,4 +52,11 @@ type Action string
 
 const (
 	ActionOpenDetail Action = "open_detail"
+
+	// ActionOpenStatusDialog and ActionOpenPriorityDialog are the metadata
+	// quick-edit entry points. The shell owns the dialogs, so a mode asks for
+	// one through this contract rather than parking a flag for the shell to
+	// poll after every key press.
+	ActionOpenStatusDialog   Action = "open_status_dialog"
+	ActionOpenPriorityDialog Action = "open_priority_dialog"
 )

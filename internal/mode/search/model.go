@@ -72,11 +72,9 @@ type Model struct {
 	selectedRow int
 	typing      bool
 
-	selectedDetail            domain.IssueDetail
-	selectedDetailLoading     bool
-	metadataSelectedField     detail.MetadataFieldKey
-	pendingOpenStatusDialog   bool
-	pendingOpenPriorityDialog bool
+	selectedDetail        domain.IssueDetail
+	selectedDetailLoading bool
+	metadataSelectedField detail.MetadataFieldKey
 
 	pendingSelectionAnchor *selectionAnchor
 
@@ -252,16 +250,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusMetadata:
 		switch m.metadataSelectedField {
 		case detail.MetadataFieldStatus:
-			m.pendingOpenStatusDialog = true
+			return actionRequestCmd(mode.ActionOpenStatusDialog)
 		case detail.MetadataFieldPriority:
-			m.pendingOpenPriorityDialog = true
+			return actionRequestCmd(mode.ActionOpenPriorityDialog)
 		}
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionOpenDetail, msg):
 		if m.focus == uisearch.FocusResults && m.currentSelection() != nil {
-			return func() tea.Msg {
-				return mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionOpenDetail}
-			}
+			return actionRequestCmd(mode.ActionOpenDetail)
 		}
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveUp, msg):
@@ -704,20 +700,10 @@ func cloneSearchResultPage(page domain.SearchResultPage) domain.SearchResultPage
 	return domain.SearchResultPage{Results: results, Metadata: page.Metadata}
 }
 
-// ConsumeOpenStatusDialogIntent reports and clears pending status-dialog intent.
-func (m *Model) ConsumeOpenStatusDialogIntent() bool {
-	if !m.pendingOpenStatusDialog {
-		return false
+// actionRequestCmd asks the shell for a shell-owned action. Every mode-to-shell
+// event travels this way; see internal/mode/contracts.go.
+func actionRequestCmd(action mode.Action) tea.Cmd {
+	return func() tea.Msg {
+		return mode.ActionRequestMsg{Mode: mode.Search, Action: action}
 	}
-	m.pendingOpenStatusDialog = false
-	return true
-}
-
-// ConsumeOpenPriorityDialogIntent reports and clears pending priority-dialog intent.
-func (m *Model) ConsumeOpenPriorityDialogIntent() bool {
-	if !m.pendingOpenPriorityDialog {
-		return false
-	}
-	m.pendingOpenPriorityDialog = false
-	return true
 }

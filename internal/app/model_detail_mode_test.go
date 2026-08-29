@@ -418,6 +418,12 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 		t.Fatal("expected status catalog load command after enter on metadata status")
 	}
 
+	// The dialog intent now travels as a mode.ActionRequestMsg command, so the
+	// open takes one extra hop: request -> catalog load -> modal. Step it by
+	// hand rather than draining, because the open modal schedules a repeating
+	// tick that a full drain would never finish.
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
 	next, cmd = m.Update(cmd())
 	m = next.(Model)
 	_ = cmd
@@ -489,6 +495,12 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 		t.Fatal("expected status catalog load command after enter on metadata status")
 	}
 
+	// The dialog intent now travels as a mode.ActionRequestMsg command, so the
+	// open takes one extra hop: request -> catalog load -> modal. Step it by
+	// hand rather than draining, because the open modal schedules a repeating
+	// tick that a full drain would never finish.
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
 	next, cmd = m.Update(cmd())
 	m = next.(Model)
 	_ = cmd
@@ -546,11 +558,15 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("expected status catalog load command after enter on metadata status")
+		t.Fatal("expected an action request after enter on metadata status")
 	}
 
+	// request -> catalog load -> modal.
 	next, cmd = m.Update(cmd())
 	m = next.(Model)
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	_ = cmd
 	if !m.showActionModal {
 		t.Fatal("expected status action modal to open")
 	}
@@ -616,8 +632,12 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("expected priority dialog init command after enter on metadata priority")
+		t.Fatal("expected an action request after enter on metadata priority")
 	}
+	// The priority dialog needs no catalog load, so the request opens it
+	// directly: one hop from key to modal.
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
 	_ = cmd
 
 	if !m.showActionModal {
@@ -684,8 +704,11 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatal("expected priority dialog init command")
+		t.Fatal("expected an action request after enter on metadata priority")
 	}
+	// The priority dialog needs no catalog load: one hop from key to modal.
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
 	_ = cmd
 
 	if !m.showActionModal {

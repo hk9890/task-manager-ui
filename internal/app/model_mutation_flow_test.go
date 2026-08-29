@@ -308,12 +308,19 @@ func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	// Press Enter on the Status row — this dispatches the async catalog load and
-	// sets the pending-dialog guard. Capture the Cmd but do NOT execute it yet.
-	next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Press Enter on the Status row. The mode asks the shell for the dialog
+	// through mode.ActionRequestMsg, and it is delivering that request which
+	// dispatches the async catalog load and arms the pending-dialog guard.
+	// Capture the catalog-load Cmd but do NOT execute it yet.
+	next, actionRequestCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if actionRequestCmd == nil {
+		t.Fatal("expected an action request after Enter on Status row")
+	}
+	next, catalogLoadCmd := m.Update(actionRequestCmd())
 	m = next.(Model)
 	if catalogLoadCmd == nil {
-		t.Fatal("expected async catalog-load Cmd after Enter on Status row")
+		t.Fatal("expected async catalog-load Cmd after the action request")
 	}
 	if !m.pendingDialog.active {
 		t.Fatal("expected pending-dialog guard to be active after dispatching catalog load")
