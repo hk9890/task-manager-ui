@@ -13,6 +13,7 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 func TestModelViewRendersRepresentativeStates(t *testing.T) {
@@ -1082,9 +1083,9 @@ func TestClampOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := clampOffset(tc.value, tc.maxOffset)
+			got := textutil.Clamp(tc.value, 0, tc.maxOffset)
 			if got != tc.want {
-				t.Fatalf("clampOffset(%d, %d) = %d, want %d", tc.value, tc.maxOffset, got, tc.want)
+				t.Fatalf("textutil.Clamp(%d, 0, %d) = %d, want %d", tc.value, tc.maxOffset, got, tc.want)
 			}
 		})
 	}

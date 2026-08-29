@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 // Model is the shell-owned standalone detail presentation state.
@@ -193,9 +194,9 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 		return
 	}
 	bounds := m.paneGeometry(maxWidth, viewportHeight)
-	m.ContentScrollOffset = clampOffset(m.ContentScrollOffset, bounds.Content)
-	m.DependenciesScrollOffset = clampOffset(m.DependenciesScrollOffset, bounds.Dependencies)
-	m.MetadataScrollOffset = clampOffset(m.MetadataScrollOffset, bounds.Metadata)
+	m.ContentScrollOffset = textutil.Clamp(m.ContentScrollOffset, 0, bounds.Content)
+	m.DependenciesScrollOffset = textutil.Clamp(m.DependenciesScrollOffset, 0, bounds.Dependencies)
+	m.MetadataScrollOffset = textutil.Clamp(m.MetadataScrollOffset, 0, bounds.Metadata)
 }
 
 // HandleKey updates detail-mode scroll state and reports whether it consumed the key.
@@ -651,14 +652,4 @@ func applyScrollAction(current, maxOffset int, action string, move int) int {
 		}
 		return next
 	}
-}
-
-func clampOffset(value, maxOffset int) int {
-	if value < 0 {
-		return 0
-	}
-	if value > maxOffset {
-		return maxOffset
-	}
-	return value
 }
