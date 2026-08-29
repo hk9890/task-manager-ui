@@ -15,8 +15,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/repository"
-	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/repofixture"
 )
 
 // --- resolveAndValidateCWD tests ---
@@ -456,7 +456,7 @@ func TestParseCLIRepoFlags(t *testing.T) {
 }
 
 // TestRunRepoMemoryLoadsFromFile exercises the full run() path with --repo=memory
-// and a valid fixture file produced by filestorage.Save, using a stub start that
+// and a valid fixture file produced by repofixture.Save, using a stub start that
 // asserts the startupOptions have the correct repoFlag and repoFile set.
 func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
 	t.Parallel()
@@ -472,8 +472,8 @@ func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
 
 	dir := t.TempDir()
 	repoFile := filepath.Join(dir, "repo.jsonl")
-	if err := filestorage.Save(r, repoFile); err != nil {
-		t.Fatalf("filestorage.Save: %v", err)
+	if err := repofixture.Save(r, repoFile); err != nil {
+		t.Fatalf("repofixture.Save: %v", err)
 	}
 
 	var seenOpts startupOptions
@@ -827,8 +827,8 @@ func TestBuildRepositoryMemoryKeepsWorkingDirectoryAsProjectRoot(t *testing.T) {
 
 	dir := t.TempDir()
 	repoFile := filepath.Join(dir, "repo.jsonl")
-	if err := filestorage.Save(r, repoFile); err != nil {
-		t.Fatalf("filestorage.Save: %v", err)
+	if err := repofixture.Save(r, repoFile); err != nil {
+		t.Fatalf("repofixture.Save: %v", err)
 	}
 
 	_, projectRoot, err := buildRepository(startupOptions{

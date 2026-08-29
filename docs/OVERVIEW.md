@@ -28,7 +28,8 @@ internal/
   config/                 config model, defaults, YAML loading, keybinding resolution
   launcher/               external tool launch actions and the process runner; editor/ is the edit handoff
   logging/                the single logging entrypoint: session IDs, JSON Lines sink, stderr mirroring
-  testing/                repository fakes and the UI test harness
+  testing/                repository fakes, the UI test harness, and repofixture — the writer for
+                          the `--repo-file` JSONL that filestorage only reads
   version/                build-time injected Version, Commit, Date
 scripts/                  capture_taskmgr_ui_screen.py (PTY capture) and the git hooks
 ```

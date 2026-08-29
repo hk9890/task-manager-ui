@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/repofixture"
 )
 
 func TestSaveLoadRoundTrip(t *testing.T) {
@@ -78,7 +79,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "repo.jsonl")
 
 	// Save.
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: unexpected error: %v", err)
 	}
 
@@ -229,7 +230,7 @@ func TestSaveEmptyRepository(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.jsonl")
 
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save empty repo: unexpected error: %v", err)
 	}
 
@@ -260,7 +261,7 @@ func TestSaveWritesManifest(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "repo.jsonl")
 
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: unexpected error: %v", err)
 	}
 
@@ -331,7 +332,7 @@ func TestSave_TempInDestinationDir(t *testing.T) {
 		Type:   "task",
 	})
 
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: unexpected error (TMPDIR was overridden to non-existent path — check that both CreateTemp calls use filepath.Dir): %v", err)
 	}
 
@@ -369,7 +370,7 @@ func TestSaveLoadLegacyAPIUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "legacy.jsonl")
 
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: unexpected error: %v", err)
 	}
 
@@ -406,7 +407,7 @@ func TestSnapshotRoundTrip_ReResolvesRefsAfterLoad(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "reresolution.jsonl")
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -448,7 +449,7 @@ func TestLoad_LargeIssueLine(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "large.jsonl")
 
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: unexpected error: %v", err)
 	}
 
@@ -480,7 +481,7 @@ func TestLoadedIDsSurviveACreate(t *testing.T) {
 	r.Seed(memory.Issue{ID: "mem-2", Title: "Loaded two", Status: "open"})
 
 	path := filepath.Join(t.TempDir(), "store.jsonl")
-	if err := filestorage.Save(r, path); err != nil {
+	if err := repofixture.Save(r, path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
