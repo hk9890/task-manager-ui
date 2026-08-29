@@ -802,14 +802,3 @@ func (m Model) searchIsLoading() bool {
 	// exposes IsLoading()); SessionState() remains for the richer search bundle.
 	return m.search.IsLoading()
 }
-
-func (m Model) searchResultCount() int {
-	if m.search == nil {
-		return 0
-	}
-	session := m.search.SessionState()
-	if session.Page.Metadata.ReturnedCount > 0 {
-		return session.Page.Metadata.ReturnedCount
-	}
-	return len(session.Page.Results)
-}

@@ -245,7 +245,13 @@ func (m Model) headerContextVariants() []string {
 	case mode.Docs:
 		prefix = "Docs"
 	case mode.Search:
-		prefix = fmt.Sprintf("Search: %d results", m.searchResultCount())
+		// Ask the mode directly: SessionState() deep-copies the whole result
+		// page, which is not worth doing on the render path for one integer.
+		count := 0
+		if m.search != nil {
+			count = m.search.ResultCount()
+		}
+		prefix = fmt.Sprintf("Search: %d results", count)
 	}
 
 	selectedLong, selectedShort := "Selected: none", "Sel: none"
