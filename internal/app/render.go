@@ -11,6 +11,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -98,7 +99,7 @@ func (m Model) renderHeader() string {
 		if available <= 0 {
 			return left
 		}
-		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(styles.TruncateString(m.headerContext(), available))
+		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(textutil.TruncateString(m.headerContext(), available))
 		contextWidth = lipgloss.Width(context)
 	}
 

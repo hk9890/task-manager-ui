@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -98,7 +99,7 @@ func renderMetadataPrefixedLine(content string, width int, selected bool) string
 	}
 
 	contentWidth := width - gutterWidth
-	return prefixStyled + styles.TruncateString(content, contentWidth)
+	return prefixStyled + textutil.TruncateString(content, contentWidth)
 }
 
 func metadataFields(detail domain.IssueDetail) []metadataField {

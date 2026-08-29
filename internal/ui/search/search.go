@@ -260,7 +260,7 @@ func selectedSummary(results []domain.IssueSummary, selectedID string) (domain.I
 
 func renderQueryContent(state State, width int) []string {
 	return []string{
-		styles.TruncateString(renderQueryInputLine(state.Query, state.Focus == FocusQuery), width),
+		textutil.TruncateString(renderQueryInputLine(state.Query, state.Focus == FocusQuery), width),
 	}
 }
 
@@ -327,7 +327,7 @@ func renderResultsContent(state State, width int) []string {
 
 func renderResultsBanner(state State, width int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) > 0 {
-		return []string{styles.TruncateString(state.Error, width)}
+		return []string{textutil.TruncateString(state.Error, width)}
 	}
 	// Show a stale-results hint when the typed draft differs from the last
 	// applied query and a search is not already in flight (in-flight case has
@@ -335,9 +335,9 @@ func renderResultsBanner(state State, width int) []string {
 	if hasDraftChanges(state) && !isInlineReload(state) && len(state.Results) > 0 {
 		draft := strings.TrimSpace(state.Query)
 		if draft == "" {
-			return []string{styles.TruncateString("Results below are from a previous query. Press Enter to clear.", width)}
+			return []string{textutil.TruncateString("Results below are from a previous query. Press Enter to clear.", width)}
 		}
-		return []string{styles.TruncateString(fmt.Sprintf("Results below are stale. Press Enter to search for %q.", draft), width)}
+		return []string{textutil.TruncateString(fmt.Sprintf("Results below are stale. Press Enter to search for %q.", draft), width)}
 	}
 	return nil
 }
@@ -345,9 +345,9 @@ func renderResultsBanner(state State, width int) []string {
 func renderResultsBody(state State, width int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
 		lines := []string{"Search failed."}
-		lines = append(lines, styles.WrapLines(state.Error, width)...)
+		lines = append(lines, textutil.WrapLines(state.Error, width)...)
 		lines = append(lines, "")
-		lines = append(lines, styles.WrapLines("Edit the query, then press Enter to retry.", width)...)
+		lines = append(lines, textutil.WrapLines("Edit the query, then press Enter to retry.", width)...)
 		return lines
 	}
 
@@ -366,13 +366,13 @@ func renderResultsBody(state State, width int) []string {
 func renderEmptyResultsBody(state State, width int) []string {
 	if strings.TrimSpace(state.AppliedQuery) == "" {
 		lines := []string{"No search has run yet.", ""}
-		lines = append(lines, styles.WrapLines("Type query text, then press Enter to search.", width)...)
+		lines = append(lines, textutil.WrapLines("Type query text, then press Enter to search.", width)...)
 		return lines
 	}
 
-	lines := styles.WrapLines(fmt.Sprintf("No matches for %q.", strings.TrimSpace(state.AppliedQuery)), width)
+	lines := textutil.WrapLines(fmt.Sprintf("No matches for %q.", strings.TrimSpace(state.AppliedQuery)), width)
 	lines = append(lines, "")
-	lines = append(lines, styles.WrapLines("Try broader terms or clear the query, then press Enter.", width)...)
+	lines = append(lines, textutil.WrapLines("Try broader terms or clear the query, then press Enter.", width)...)
 	return lines
 }
 

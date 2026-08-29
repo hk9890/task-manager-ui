@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -138,7 +139,7 @@ func CompactIssueID(id string, maxWidth int) string {
 	}
 
 	if maxWidth <= 1 {
-		return styles.TruncateString(trimmed, maxWidth)
+		return textutil.TruncateString(trimmed, maxWidth)
 	}
 
 	runes := []rune(trimmed)
