@@ -55,13 +55,7 @@ func setReaperHook(h chan<- struct{}) {
 //     exit status from the kernel, preventing the child from becoming a zombie in
 //     taskmgr-ui's process table for the duration of the session.
 func (execProcessRunner) Run(_ context.Context, command string, args []string, dir string, env []string) error {
-	cmd := exec.Command(command, args...) //nolint:gosec // command comes from operator-controlled config, not user input
-	cmd.Dir = dir
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
-
-	setSysProcAttr(cmd)
+	cmd := newDetachedCommand(command, args, dir, env)
 
 	if err := cmd.Start(); err != nil {
 		return err
@@ -77,6 +71,22 @@ func (execProcessRunner) Run(_ context.Context, command string, args []string, d
 	}()
 
 	return nil
+}
+
+// newDetachedCommand builds the *exec.Cmd that Run starts. It exists as its own
+// function so a unit test can assert what Run hands to the kernel — detachment
+// in particular has no observable effect until a signal arrives, so without
+// this seam the only proof available is a real signal test in Tier 2.
+func newDetachedCommand(command string, args []string, dir string, env []string) *exec.Cmd {
+	cmd := exec.Command(command, args...) //nolint:gosec // command comes from operator-controlled config, not user input
+	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+
+	setSysProcAttr(cmd)
+
+	return cmd
 }
 
 // setSysProcAttr configures the subprocess to start in a new session (setsid),

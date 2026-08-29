@@ -257,6 +257,50 @@ func TestANSIEscapeInTitleIsStrippedFromArgv(t *testing.T) {
 	assertLiteralArg(t, runner.Calls()[0].Args, "danger", "")
 }
 
+// TestC0StrippingBoundary pins the exact cut-off of the control-character
+// filter. The other sanitisation tests sample points well inside the range
+// (\n at 0x0a, ESC at 0x1b) and well outside it, so the boundary itself is the
+// one value they never exercise — and it is the value an off-by-one moves.
+//
+// U+001F is the last C0 control character and must be stripped; U+0020 is the
+// space and must survive, or every multi-word issue title reaches the child
+// process mangled.
+func TestC0StrippingBoundary(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		title string
+		want  string
+	}{
+		{"last control character is stripped", "before\x1fafter", "beforeafter"},
+		{"space is kept", "before after", "before after"},
+		{"first control character is stripped", "before\x00after", "beforeafter"},
+		{"printable above the boundary is kept", "before!after", "before!after"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			runner := &fakes.FakeProcessRunner{}
+			svc, err := launcher.NewService([]launcher.Definition{shellCommandDefinition()}, "/tmp", runner)
+			if err != nil {
+				t.Fatalf("NewService error: %v", err)
+			}
+
+			issue := domain.IssueDetail{Summary: domain.IssueSummary{ID: "sec-08", Title: tc.title}}
+			if err := svc.Launch(context.Background(), "shell-command", issue); err != nil {
+				t.Fatalf("Launch error: %v", err)
+			}
+			if len(runner.Calls()) != 1 {
+				t.Fatalf("expected one call, got %d", len(runner.Calls()))
+			}
+			assertLiteralArg(t, runner.Calls()[0].Args, tc.want, "")
+		})
+	}
+}
+
 // TestEnvEntryMissingEqualsIsRejected asserts that an Env template that
 // produces no "=" after interpolation causes Launch to return an error.
 func TestEnvEntryMissingEqualsIsRejected(t *testing.T) {

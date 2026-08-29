@@ -68,3 +68,31 @@ func TestFakeEditorApplyEditsReturnsConfiguredError(t *testing.T) {
 		t.Fatalf("expected configured error, got %v", err)
 	}
 }
+
+// TestFakeEditorBuildEditorCmdReturnsARunnableNoOp pins the fake's documented
+// contract: a real, runnable *exec.Cmd that does nothing. Returning nil left
+// the whole repository green, because the seam is consumed from internal/app
+// and no test there runs the command it is handed — so the nil would surface
+// later, as a dereference inside the app, looking like an app bug rather than
+// a harness one.
+func TestFakeEditorBuildEditorCmdReturnsARunnableNoOp(t *testing.T) {
+	t.Parallel()
+
+	fake := &FakeEditor{}
+
+	cmd, err := fake.BuildEditorCmd("/tmp/issue-edit.md")
+	if err != nil {
+		t.Fatalf("BuildEditorCmd returned error: %v", err)
+	}
+	if cmd == nil {
+		t.Fatal("BuildEditorCmd returned a nil command: the caller would dereference it through tea.Exec")
+	}
+	if cmd.Path == "" {
+		t.Error("command has no resolved path")
+	}
+	// It must actually run, and do nothing: that is what makes it safe for a
+	// test to execute the editor handoff end to end.
+	if err := cmd.Run(); err != nil {
+		t.Errorf("the no-op editor command failed to run: %v", err)
+	}
+}
