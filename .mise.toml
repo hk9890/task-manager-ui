@@ -67,6 +67,34 @@ fi
 [tasks."test:coverage".env]
 CGO_ENABLED = "1"
 
+[tasks."test:coverage:report"]
+description = "Per-file coverage, least-covered first (run by hand; gates nothing)"
+run = """
+# LC_ALL=C so awk prints a decimal point rather than the locale's comma, which
+# would otherwise make `sort -n` order the table wrongly.
+export LC_ALL=C
+go test -race -tags=integration -coverprofile=coverage.out -covermode=atomic ./... >/dev/null
+go tool cover -func=coverage.out > coverage-func.out
+
+printf 'coverage per file, least covered first\\n\\n'
+# `go tool cover -func` prints "<file>:<line>: <func> <pct>%" per function.
+# Average the per-function percentages within each file.
+awk '$1 != "total:" {
+  split($1, loc, ":")
+  pct = $NF; sub(/%$/, "", pct)
+  covered[loc[1]] += pct
+  funcs[loc[1]]++
+}
+END { for (f in funcs) printf "%6.1f%%  %4d funcs  %s\\n", covered[f] / funcs[f], funcs[f], f }
+' coverage-func.out | sort -n
+
+printf '\\n%s\\n' "$(grep '^total:' coverage-func.out | awk '{print "total: " $NF}')"
+printf 'No threshold here — test:coverage is the gate.\\n'
+rm -f coverage-func.out
+"""
+[tasks."test:coverage:report".env]
+CGO_ENABLED = "1"
+
 [tasks."test:all"]
 description = "Run unit + integration tests"
 depends = ["test", "test:integration"]

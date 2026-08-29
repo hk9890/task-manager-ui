@@ -101,6 +101,12 @@ func TestCompactIssueState(t *testing.T) {
 		{name: "ready", status: "ready", want: "RDY"},
 		{name: "blank", status: "   ", want: "---"},
 		{name: "unknown truncated", status: "something", want: "SOM"},
+		// The 3-versus-4 rune edge decides whether the fixed three-cell status
+		// slot overflows and shifts every row's title. "sm" and "spec" straddle
+		// it; the existing cases are all far from it.
+		{name: "unknown of exactly three runes is kept whole", status: "spk", want: "SPK"},
+		{name: "unknown of exactly four runes is truncated", status: "spec", want: "SPE"},
+		{name: "unknown shorter than the slot is kept whole", status: "sm", want: "SM"},
 	}
 
 	for _, tc := range tests {

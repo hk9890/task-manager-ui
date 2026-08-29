@@ -200,6 +200,56 @@ func TestSearch(t *testing.T) {
 	if page.Metadata.Source != domain.SearchResultSourceTaskmgrFind {
 		t.Errorf("Source = %q", page.Metadata.Source)
 	}
+	if page.Metadata.Completeness != domain.SearchResultCompletenessExact {
+		t.Errorf("Completeness = %v, want exact for an unbounded query", page.Metadata.Completeness)
+	}
+}
+
+// TestSearchCompleteness pins the paging signal the search view reads to decide
+// whether to offer another page. It is computed on every Search against this
+// backend — the one the shipped binary uses — and was asserted nowhere.
+//
+// Three matching issues make the boundary explicit: a window ending exactly at
+// the last match is Exact, one stopping short of it is MaybeMore, and Limit 0
+// means unbounded and is always Exact.
+func TestSearchCompleteness(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	for _, title := range []string{"Widget alpha", "Widget beta", "Widget gamma"} {
+		_ = mustCreate(t, r, domain.CreateIssueInput{Title: title})
+	}
+
+	cases := []struct {
+		name   string
+		limit  int
+		offset int
+		want   domain.SearchResultCompleteness
+	}{
+		{"unbounded", 0, 0, domain.SearchResultCompletenessExact},
+		{"window shorter than the match set", 2, 0, domain.SearchResultCompletenessMaybeMore},
+		{"window exactly the match set", 3, 0, domain.SearchResultCompletenessExact},
+		{"window longer than the match set", 4, 0, domain.SearchResultCompletenessExact},
+		{"offset window ending at the last match", 2, 1, domain.SearchResultCompletenessExact},
+		{"offset window stopping one short", 1, 1, domain.SearchResultCompletenessMaybeMore},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := r.Search(ctx, domain.SearchIssuesQuery{
+				Text:   "widget",
+				Limit:  tc.limit,
+				Offset: tc.offset,
+			})
+			if err != nil {
+				t.Fatalf("Search: %v", err)
+			}
+			if page.Metadata.Completeness != tc.want {
+				t.Errorf("Completeness = %v, want %v (limit=%d offset=%d, %d results)",
+					page.Metadata.Completeness, tc.want, tc.limit, tc.offset, len(page.Results))
+			}
+		})
+	}
 }
 
 // TestSearchAllWordsAndSemantics verifies the taskmgr backend matches free text

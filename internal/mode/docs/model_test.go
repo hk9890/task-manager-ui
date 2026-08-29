@@ -290,3 +290,50 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 		t.Fatalf("expected the cursor to clamp onto tm-1, got %#v", got)
 	}
 }
+
+// TestItemCapacityReservesOneRowForAnInlineError is the docs twin of the
+// board's TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow. The renderer
+// pins an inline error row above the issue rows, so the scroll window must lose
+// exactly one row while an error is shown — and must lose it only then.
+//
+// Reserving unconditionally scrolls the docs viewport one row early on every
+// render; dropping the reservation clips the selected row off-screen while an
+// error banner is up. Both pass every other assertion in this package.
+func TestItemCapacityReservesOneRowForAnInlineError(t *testing.T) {
+	t.Parallel()
+
+	gw := newDocsRepo()
+	seedMixed(gw)
+
+	cases := []struct {
+		name   string
+		height int
+		// wantWithoutErr is the row window with no error shown; the window with
+		// an error must be exactly one smaller, until the floor of one row.
+		wantWithoutErr int
+		wantWithErr    int
+	}{
+		{"roomy column", 30, 27, 26},
+		{"two rows leaves one for the error", 5, 2, 1},
+		{"single row cannot reserve and keeps its row", 4, 1, 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newModel(t, gw)
+			m.SetSize(120, tc.height)
+
+			m.err = nil
+			if got := m.itemCapacity(); got != tc.wantWithoutErr {
+				t.Errorf("itemCapacity with no error = %d, want %d", got, tc.wantWithoutErr)
+			}
+
+			m.err = errors.New("load failed")
+			if got := m.itemCapacity(); got != tc.wantWithErr {
+				t.Errorf("itemCapacity with an inline error = %d, want %d", got, tc.wantWithErr)
+			}
+		})
+	}
+}

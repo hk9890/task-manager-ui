@@ -1327,9 +1327,78 @@ func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
 	if opts[0].ClosedOffset != loaded {
 		t.Errorf("expected ClosedOffset=%d, got %d", loaded, opts[0].ClosedOffset)
 	}
-	wantLimit := m.closedPageSize()
+	// Literal, not m.closedPageSize(): comparing the captured value against the
+	// same call that produced it passes for any page size, including a broken
+	// one. At SetSize(120, 25) the page size is max(2*22, 50) = 50.
+	const wantLimit = 50
 	if opts[0].ClosedLimit != wantLimit {
 		t.Errorf("expected ClosedLimit=%d, got %d", wantLimit, opts[0].ClosedLimit)
+	}
+}
+
+// TestDoneLoadMore_ThresholdBoundary pins the exact cursor distance at which
+// background paging starts. The threshold is a tunable constant, and the tests
+// around it exercise remaining=3 and the everything-loaded case, so it could
+// drift either way undetected: down to 1, which stalls visibly at the end of
+// the Done column, or up to 30, which pages the backend continuously.
+//
+// The distances below are literal on purpose. Deriving them from
+// loadMoreThreshold would make the table move with the constant and assert
+// nothing about its value — the same tautology that let the constant drift in
+// the first place. Retuning the trigger is expected to fail this test: update
+// the numbers deliberately.
+func TestDoneLoadMore_ThresholdBoundary(t *testing.T) {
+	t.Parallel()
+
+	if loadMoreThreshold != 5 {
+		t.Fatalf("loadMoreThreshold = %d, but this test's distances are written for 5", loadMoreThreshold)
+	}
+
+	// The rule is `remaining >= loadMoreThreshold` returns nil, so 5 is the
+	// last distance that does not page and 4 is the first that does.
+	cases := []struct {
+		name         string
+		remaining    int
+		wantDispatch bool
+	}{
+		{"six rows from the end", 6, false},
+		{"five rows from the end", 5, false},
+		{"four rows from the end", 4, true},
+		{"cursor on the last loaded row", 0, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			stub := &loadMoreCapture{}
+			m := newBoardModel(stub, resolvedBoardKeys(t))
+			m.SetSize(120, 25)
+
+			const loaded = 35
+			m.columns = []columnData{
+				{title: sectionTitleNotReady},
+				{title: sectionTitleReady},
+				{title: sectionTitleInProgress},
+				{title: sectionTitleDone, issues: makeClosedIssues(loaded), total: 736, exact: false},
+			}
+			m.doneLoadedCount = loaded
+			m.doneClosedTotal = 736
+			m.focusedColumn = doneColumnIndex
+			m.selectedRow[doneColumnIndex] = loaded - tc.remaining
+
+			cmd := m.maybeLoadMoreClosed()
+
+			if tc.wantDispatch && cmd == nil {
+				t.Fatalf("remaining=%d dispatched no load-more, want one", tc.remaining)
+			}
+			if !tc.wantDispatch && cmd != nil {
+				t.Fatalf("remaining=%d dispatched a load-more, want none", tc.remaining)
+			}
+			if m.doneLoadInFlight != tc.wantDispatch {
+				t.Fatalf("doneLoadInFlight = %v at remaining=%d, want %v", m.doneLoadInFlight, tc.remaining, tc.wantDispatch)
+			}
+		})
 	}
 }
 
@@ -1901,6 +1970,58 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 	}
 	if off == 0 {
 		t.Fatalf("expected scroll offset to advance for a clipped column, got 0")
+	}
+}
+
+// TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow pins the offset
+// clampScrollOffsets writes. It runs on every compose, but only its side effect
+// matters and nothing read it, so the anchor it scrolls to — and the argument
+// order it passes to scroll.EnsureVisible — were free to change silently. The
+// visible consequence is the board jumping the viewport away from the
+// highlighted row after an auto-refresh or a load-more merge.
+func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
+	t.Parallel()
+
+	const n = 40
+	cases := []struct {
+		name           string
+		selected       int
+		startingOffset int
+	}{
+		{"selection far below a stale top offset", 30, 0},
+		{"selection above a stale bottom offset", 2, 25},
+		{"offset past the end of a shrunk column", 30, 9},
+		{"selection already visible keeps its offset", 12, 9},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+			m.SetSize(120, 25)
+			m.columns[doneColumnIndex] = columnData{
+				title:  sectionTitleDone,
+				issues: makeClosedIssues(n),
+				total:  n,
+				exact:  true,
+			}
+			m.selectedRow[doneColumnIndex] = tc.selected
+			m.scrollOffset[doneColumnIndex] = tc.startingOffset
+
+			m.clampScrollOffsets()
+
+			offset := m.scrollOffset[doneColumnIndex]
+			window := m.sectionItemCapacity()
+			if offset < 0 || offset > n-window {
+				t.Fatalf("offset %d is outside [0, %d] for a %d-row column with a %d-row window",
+					offset, n-window, n, window)
+			}
+			if tc.selected < offset || tc.selected >= offset+window {
+				t.Fatalf("selected row %d is outside the window [%d, %d)",
+					tc.selected, offset, offset+window)
+			}
+		})
 	}
 }
 

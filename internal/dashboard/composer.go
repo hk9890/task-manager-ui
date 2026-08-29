@@ -96,10 +96,12 @@ func issueSort(issues []domain.IssueSummary) {
 
 // mapBlockedToSummaries extracts the IssueSummary from each BlockedIssueView
 // so the NotReady column rows are uniform with other active columns.
+//
+// The result is always allocated, never nil: the In Progress column is built
+// with make and so is never nil either, and a column whose emptiness is
+// sometimes nil and sometimes an empty slice is a distinction no caller should
+// have to know about.
 func mapBlockedToSummaries(blocked []domain.BlockedIssueView) []domain.IssueSummary {
-	if len(blocked) == 0 {
-		return nil
-	}
 	out := make([]domain.IssueSummary, len(blocked))
 	for i, b := range blocked {
 		out[i] = b.Issue

@@ -413,3 +413,75 @@ func TestParseIssueEditDocumentNormalizesCRLFBodies(t *testing.T) {
 		t.Fatal("an unedited CRLF round trip reported a change")
 	}
 }
+
+// TestRenderIssueEditDocumentIncludesTheReadOnlyContext asserts the block below
+// the editable markers. The round-trip test parses only the editable fields
+// back, so everything the operator reads for context — dependencies, timestamps,
+// notes and the comment count — was rendered but never inspected.
+//
+// That block is what the operator reads before changing status, so a helper
+// collapsing to its empty-value constant would report an issue as having no
+// blockers when it has two.
+func TestRenderIssueEditDocumentIncludesTheReadOnlyContext(t *testing.T) {
+	t.Parallel()
+
+	created := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	updated := created.Add(48 * time.Hour)
+	detail := IssueDetail{
+		Summary: IssueSummary{
+			ID:        "tm-42",
+			Title:     "Subject",
+			Status:    "open",
+			Type:      "task",
+			Priority:  1,
+			CreatedAt: created,
+			UpdatedAt: updated,
+		},
+		Notes:     "first line\nsecond line",
+		BlockedBy: []IssueReference{{ID: "tm-1", Title: "Upstream"}, {ID: "tm-2"}},
+		Blocks:    []IssueReference{{ID: "tm-9", Title: "Downstream"}},
+		Related:   []IssueReference{{ID: "tm-7", Title: "Sibling"}},
+		Comments:  []IssueComment{{Body: "one"}, {Body: "two"}, {Body: "three"}},
+	}
+
+	doc := RenderIssueEditDocument(detail)
+
+	wants := []string{
+		// Dependencies, with and without a title.
+		"tm-1 (Upstream)",
+		"tm-2",
+		"tm-9 (Downstream)",
+		"tm-7 (Sibling)",
+		// Timestamps, in the form the reader is shown.
+		issueEditFormatTime(created),
+		issueEditFormatTime(updated),
+		// Notes flattened to one line, and the comment count.
+		"first line second line",
+		"3",
+	}
+	for _, want := range wants {
+		if !strings.Contains(doc, want) {
+			t.Errorf("rendered document is missing %q:\n%s", want, doc)
+		}
+	}
+
+	// "none" is the empty-value constant of three of those helpers. A populated
+	// issue must not render it, which is what catches a helper that collapses.
+	if strings.Contains(doc, "none") {
+		t.Errorf("rendered document reports an empty context for a populated issue:\n%s", doc)
+	}
+}
+
+func TestRenderIssueEditDocumentReportsAnEmptyContextForABareIssue(t *testing.T) {
+	t.Parallel()
+
+	doc := RenderIssueEditDocument(IssueDetail{Summary: IssueSummary{ID: "tm-1", Title: "Bare"}})
+
+	// Notes, blocked-by, blocks and related all render their empty constant.
+	if got := strings.Count(doc, "none"); got != 4 {
+		t.Errorf("expected four empty-context values, got %d:\n%s", got, doc)
+	}
+	if !strings.Contains(doc, "unknown") {
+		t.Errorf("expected a zero timestamp to render as unknown:\n%s", doc)
+	}
+}

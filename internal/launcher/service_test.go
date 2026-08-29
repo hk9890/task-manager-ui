@@ -197,9 +197,14 @@ func TestNewServiceRejectsIssueFieldInShellBody(t *testing.T) {
 		{Action: "danger", Command: "sh", Args: []string{"-l", "-c", "echo {{issue.labels}}"}},
 		// /bin/bash by absolute path (basename match).
 		{Action: "danger", Command: "/bin/bash", Args: []string{"-c", "echo {{issue.title}}"}},
+		// Root-level shell path: the only separator sits at index 0, so the
+		// basename normalisation must treat index 0 as a separator like any
+		// other. Every other path form here has its separator further along.
+		{Action: "danger", Command: "/sh", Args: []string{"-lc", "grep {{issue.title}} log"}},
 		// Exec wrappers fronting the shell must not bypass the guard (argv scan).
 		{Action: "danger", Command: "env", Args: []string{"sh", "-c", "echo {{issue.title}}"}},
 		{Action: "danger", Command: "/usr/bin/env", Args: []string{"bash", "-lc", "run {{issue.assignee}}"}},
+		{Action: "danger", Command: "env", Args: []string{"/sh", "-lc", "echo {{issue.title}}"}},
 		{Action: "danger", Command: "timeout", Args: []string{"10", "sh", "-c", "grep {{issue.id}} log"}},
 		{Action: "danger", Command: "nice", Args: []string{"-n5", "sh", "-c", "echo {{issue.labels}}"}},
 	}
@@ -242,6 +247,8 @@ func TestNewServiceRejectsIssueFieldInShellDispatchArgument(t *testing.T) {
 		{Action: "danger", Command: "tmux", Args: []string{"new-session", "-d", "edit {{issue.title}}"}},
 		{Action: "danger", Command: "ssh", Args: []string{"build-host", "grep {{issue.title}} log"}},
 		{Action: "danger", Command: "/usr/bin/ssh", Args: []string{"host", "{{issue.assignee}}"}},
+		// Root-level dispatch path: separator at index 0 (see the shell-body case).
+		{Action: "danger", Command: "/ssh", Args: []string{"host", "grep {{issue.title}} log"}},
 		{Action: "danger", Command: "watch", Args: []string{"status {{issue.id}}"}},
 		// An exec wrapper in front must not smuggle it past the argv scan.
 		{Action: "danger", Command: "env", Args: []string{"tmux", "new-window", "note {{issue.labels}}"}},

@@ -1665,3 +1665,53 @@ func TestMaxScrollOffsetsReportsPaneInnerHeights(t *testing.T) {
 		}
 	})
 }
+
+// TestSliceWithOffsetDrawsTheScrolledOffIndicatorFromTheFirstStep pins the
+// first scroll step of every detail and search pane. Offset 1 is the most
+// common scroll position, and it is the case commit 286a3d8 ("keep the
+// selection off a pane's scroll-indicator rows") exists to protect: without the
+// indicator at offset 1 the scrolled-off affordance silently disappears and the
+// selection can land on a row the viewer reads as content.
+func TestSliceWithOffsetDrawsTheScrolledOffIndicatorFromTheFirstStep(t *testing.T) {
+	t.Parallel()
+
+	lines := []string{"one", "two", "three", "four", "five", "six"}
+	const height, width = 3, 40
+
+	cases := []struct {
+		name          string
+		offset        int
+		wantFirstRow  string
+		wantRemaining string
+	}{
+		{"unscrolled pane shows real content on its first row", 0, "one", "… (3 more)"},
+		{"first scroll step shows the one-earlier indicator", 1, "… (1 earlier)", "… (2 more)"},
+		{"second scroll step counts two earlier", 2, "… (2 earlier)", "… (1 more)"},
+		{"last window shows no more-indicator", 3, "… (3 earlier)", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			window, gotOffset := sliceWithOffset(lines, tc.offset, height, width)
+			if gotOffset != tc.offset {
+				t.Fatalf("offset = %d, want %d", gotOffset, tc.offset)
+			}
+			if len(window) != height {
+				t.Fatalf("window height = %d, want %d", len(window), height)
+			}
+			if window[0] != tc.wantFirstRow {
+				t.Errorf("first row = %q, want %q", window[0], tc.wantFirstRow)
+			}
+			last := window[len(window)-1]
+			if tc.wantRemaining == "" {
+				if strings.Contains(last, "more)") {
+					t.Errorf("last row = %q, want no more-indicator", last)
+				}
+			} else if last != tc.wantRemaining {
+				t.Errorf("last row = %q, want %q", last, tc.wantRemaining)
+			}
+		})
+	}
+}
