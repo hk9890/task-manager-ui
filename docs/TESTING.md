@@ -55,6 +55,7 @@ mise run test:all            # unit + integration tests
 mise run test:verbose        # unit tests with -v
 mise run test:coverage       # unit + integration tests with the coverage-threshold gate
 mise run test:coverage:report # per-file coverage, least covered first; no threshold, gates nothing
+mise run test:coverage:uncovered # the line ranges no test executes; no threshold, gates nothing
 mise run ci                  # the merge gate, and exactly what the linux CI job runs
 mise run quality:fast        # ~15s pre-commit subset; ci adds format, scripts, build, integration and coverage
 ```

@@ -337,6 +337,30 @@ func TestRenderColdStartLoadingShowsSkeletonAndInput(t *testing.T) {
 	if !strings.Contains(view, issuerow.SkeletonGlyph) {
 		t.Fatalf("expected skeleton glyph %q in cold-start loading state, got:\n%s", issuerow.SkeletonGlyph, view)
 	}
+
+	// Row count, not merely presence: DESIGN-GUIDE requires the wait state to
+	// fill the surface it stands in for, and "at least one glyph" is satisfied
+	// by a single line as much as by a full rail.
+	if got := countSkeletonRows(plain); got != coldStartSkeletonRows {
+		t.Fatalf("cold start drew %d skeleton rows, want %d:\n%s", got, coldStartSkeletonRows, plain)
+	}
+}
+
+// coldStartSkeletonRows is the number of placeholder rows the cold-start rail
+// draws. Written as a literal rather than read from the renderer, so a change
+// to the constant fails this test instead of moving with it.
+const coldStartSkeletonRows = 6
+
+// countSkeletonRows counts rendered lines carrying the skeleton glyph.
+func countSkeletonRows(plain string) int {
+	n := 0
+	for _, line := range strings.Split(plain, "\n") {
+		if strings.Contains(line, issuerow.SkeletonGlyph) {
+			n++
+		}
+	}
+
+	return n
 }
 
 // TestRenderRefreshKeepsStaleResults verifies that when Loading is true and

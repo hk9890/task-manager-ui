@@ -408,15 +408,41 @@ func TestRun_VersionUsesFallback(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
+	// Literals, not appversion.Version: comparing the output against the
+	// variable that produced it is a tautology that holds for any value,
+	// including the empty string a broken -X link stamp would leave behind.
+	// These are the unstamped defaults declared in internal/version/version.go,
+	// which is what a plain `go build` and therefore `go test` produces.
 	got := stdout.String()
-	if !strings.Contains(got, appversion.Version) {
-		t.Fatalf("expected version output to contain %q, got %q", appversion.Version, got)
-	}
-	if !strings.HasPrefix(got, "taskmgr-ui ") {
-		t.Fatalf("expected version output to start with %q, got %q", "taskmgr-ui ", got)
+	want := "taskmgr-ui dev (commit unknown, built unknown)\n"
+	if got != want {
+		t.Fatalf("version output = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+// TestVersionDefaultsAreNonEmpty pins the three link-stamped symbols at their
+// source. The --version test above covers them through the rendered line; this
+// one fails on the symbol itself, so a blanked default is attributed to
+// internal/version rather than to the command's formatting.
+//
+// An empty Version also empties the build_version field on every session log
+// record (cmd/taskmgr-ui/main.go passes it to the logger), so the blast radius
+// is wider than the one command.
+func TestVersionDefaultsAreNonEmpty(t *testing.T) {
+	t.Parallel()
+
+	defaults := map[string]string{
+		"Version": appversion.Version,
+		"Commit":  appversion.Commit,
+		"Date":    appversion.Date,
+	}
+	for name, value := range defaults {
+		if strings.TrimSpace(value) == "" {
+			t.Errorf("version.%s is empty: a build with no -X link stamp must still carry a placeholder", name)
+		}
 	}
 }
 

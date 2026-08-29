@@ -6,6 +6,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -142,5 +145,63 @@ func TestExecProcessRunnerPreservesParentEnvWhenLauncherEnvSet(t *testing.T) {
 			t.Fatalf("timed out waiting for process output files in %s", tmpDir)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestExecProcessRunnerDetachesChildIntoItsOwnProcessGroup proves the effect
+// the setsid flag exists for: the launched tool leaves taskmgr-ui's process
+// group, so a SIGHUP or SIGINT delivered to that group never reaches it.
+//
+// It asserts the process group rather than sending a real signal. A signal test
+// would have to deliver SIGINT to this test binary's own process group to be
+// meaningful, which would take the test runner down with it; delivering it
+// anywhere else proves nothing. The process group is what the kernel uses to
+// decide who receives that signal, so comparing it establishes the same fact
+// without the self-inflicted kill — and it is deterministic, where a
+// signal-then-check-alive test races against process teardown.
+func TestExecProcessRunnerDetachesChildIntoItsOwnProcessGroup(t *testing.T) {
+	runner := NewExecProcessRunner()
+	pgidFile := filepath.Join(t.TempDir(), "child-pgid")
+
+	// Not parallel: setReaperHook is process-global, so a concurrent launch in
+	// another test would consume this hook signal.
+	hook := make(chan struct{}, 1)
+	setReaperHook(hook)
+	t.Cleanup(func() { setReaperHook(nil) })
+
+	// The child reports its own process group. `ps -o pgid= -p $$` is POSIX and
+	// prints the group with no header on both Linux and macOS. The path travels
+	// as a positional argument, never interpolated into the body (security rule).
+	err := runner.Run(context.Background(), "sh", []string{
+		"-c",
+		"ps -o pgid= -p $$ > \"$0\"",
+		pgidFile,
+	}, "", nil)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	select {
+	case <-hook:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the child to exit")
+	}
+
+	raw, err := os.ReadFile(pgidFile)
+	if err != nil {
+		t.Fatalf("read child pgid: %v", err)
+	}
+	childPgid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatalf("parse child pgid from %q: %v", raw, err)
+	}
+
+	ownPgid, err := syscall.Getpgid(os.Getpid())
+	if err != nil {
+		t.Fatalf("read own pgid: %v", err)
+	}
+
+	if childPgid == ownPgid {
+		t.Fatalf("child stayed in this process group (%d): a signal to taskmgr-ui's group would reach the launched tool", childPgid)
 	}
 }
