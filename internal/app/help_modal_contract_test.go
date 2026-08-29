@@ -13,8 +13,8 @@ import (
 // project-explore epic.
 //
 // docs/user-guide/key-bindings.md states:
-//   - "? — toggle help"           (shell context)
-//   - "esc — cancel when the modal is not required"  (modal context)
+//   - "? — toggle help"      (shell context)
+//   - "esc — cancel any modal"  (modal context)
 //
 // Both bindings target the keyboard-help modal opened by `?`. The model
 // behavior is observable as `m.showHelp` toggling between true and false.

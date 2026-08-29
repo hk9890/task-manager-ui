@@ -10,7 +10,8 @@ The repository uses a two-tier model.
 
 ### Tier 1 — Unit (`mise run test`, fast, no external processes)
 
-- Fast, deterministic. No external processes. No `git` or `jq`.
+- Fast, deterministic, in-process. A test that shells out to `git` belongs in Tier 2 — that is why
+  the hygiene scans are tagged.
 - Uses a stub `repository.Repository` or the in-process `memory.Repository` for repository-backed assertions.
 - Asserts app behavior: model logic, view rendering, key handling.
 - Live in `*_test.go` files alongside the package under test (no build tag required).
@@ -25,7 +26,11 @@ The repository uses a two-tier model.
 
 ### Backend behavior tests
 
-The active repository backend (`internal/repository/taskmgr`, built on the task-manager Go SDK) carries its own package-level behavior tests in `internal/repository/taskmgr/repository_test.go`. These build a fresh store with `tasks.Init(t.TempDir(), ...)` and assert dashboard sections, search, mutation effects, write-path error codes, time-field semantics, catalogs, and context cancellation — directly against the in-process backend, no subprocess and no build tag. The cross-backend conformance suite (`internal/repository/conformance_test.go`) builds its `taskmgr` backend the same way (`tasks.Init(t.TempDir(), ...)`) to assert parity with `memory.Repository`, and likewise stays untagged. The in-repo `memory.Repository` (`internal/repository/memory`) is the unit-test fixture and has its own behavior tests in `internal/repository/memory/repository_test.go`.
+- `internal/repository/taskmgr/repository_test.go` asserts the active backend directly: dashboard
+  sections, search, mutation effects, write-path error codes, time-field semantics, catalogs and
+  context cancellation. `internal/repository/conformance_test.go` asserts parity with
+  `memory.Repository`. Both stay untagged.
+- `internal/repository/memory/repository_test.go` covers the in-repo fixture backend.
 
 ## Where Does My New Test Go?
 
@@ -34,6 +39,10 @@ The active repository backend (`internal/repository/taskmgr`, built on the task-
 | App behavior given any repository state (model logic, view rendering, key handling) | Tier 1 — unit | hand-rolled stub `repository.Repository` or `memory.New()` seeded via `Seed` / `SeedComments` / `SeedClosed` / `SeedCatalogs` |
 | `taskmgr` backend semantics (reads, mutations, write-path error mapping) | `internal/repository/taskmgr/repository_test.go` | a real `tasks.Store` via `tasks.Init(t.TempDir(), ...)` wrapped by `taskmgr.New` |
 | A real OS seam (subprocess execution, filesystem) | Tier 2 — a `//go:build integration` test | real process/filesystem, run under `mise run test:integration` |
+
+- Build a `memory.Repository` with `memory.New(...)`; use `WithClock` / `WithIDGenerator` for
+  deterministic timestamps and IDs.
+- Keep seeded data small and focused so each test states one intent clearly.
 
 Decision rule: if the test does not touch a real OS seam (subprocess, filesystem) and costs <100ms, it is a unit test; otherwise tag it `integration`. The in-process task-manager SDK store built via `tasks.Init(t.TempDir(), ...)` counts as a unit seam (in-process, <100ms), not an OS seam — so the backend behavior and conformance tests that use it stay untagged.
 
@@ -46,10 +55,14 @@ mise run test:all            # unit + integration tests
 mise run test:verbose        # unit tests with -v
 mise run test:coverage       # unit + integration tests with the coverage-threshold gate
 mise run ci                  # the merge gate, and exactly what the linux CI job runs
-mise run quality:fast        # fast pre-commit gate: vet, lint, guardrails, unit tests (skips integration only)
+mise run quality:fast        # ~15s pre-commit subset; ci adds format, scripts, build, integration and coverage
 ```
 
 Run `mise tasks` to see the full list.
+
+Package-scoped `go test` runs without the race detector — the gates add `-race`. To reproduce a gate
+race locally use `CGO_ENABLED=1 go test -race ./internal/<pkg>`; the repo default is
+`CGO_ENABLED=0`, which makes a bare `-race` fail.
 
 Harness-focused runs (package-scoped):
 
@@ -94,24 +107,16 @@ quick proof while implementing:
 go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelStartupBoardLayoutSanityAndNoRuntimeErrors' -v
 ```
 
-**Then the real app.** Automated tests are the primary proof of correctness, and a full-app run
-complements them rather than replacing them — but a user-facing change is not verified until it has
-been driven in the built binary. [RUNNING.md](RUNNING.md) owns launching it, the PTY capture harness,
+**Then the real app.** A user-facing change is not verified until it has been driven in the built
+binary. [RUNNING.md](RUNNING.md) owns launching it, the PTY capture harness,
 and what to check; run it and state pass or fail yourself rather than asking the operator to validate
 basics.
 
 ### Process-level capture policy
 
-**No new default process-level capture harness is added.** The in-process fixtures
-cover the runtime UI risk surface deterministically, and the built-binary run covers
-the rest without fragile transcript automation.
-
-Add process-level automation only when a concrete bug class cannot be proven
-in-process. Any such path defines all three up front:
-
-1. **Readiness signal** (what visible state means the app is ready for assertion/capture).
-2. **Hard timeout** (must fail explicitly rather than hang; startup-to-capture budget under 2s for the seeded fixture path unless documented otherwise).
-3. **Cleanup behavior** (guaranteed child-process termination on success, timeout, and failure).
+Process-level capture stays manual — the in-process fixtures plus the built-binary run cover the
+risk. Automate one only for a bug class that cannot be proven in-process, and only with a readiness
+signal, a hard timeout, and guaranteed child-process cleanup.
 
 ## Bubble Tea UI Testing Strategy (default)
 
@@ -128,8 +133,15 @@ Shared helpers live under `internal/testing/ui`:
 - `AssertMatchesGoldenNormalized`: **the default.** Compares with trailing-space normalization, colour codes kept.
 - `AssertMatchesGoldenStripANSI`: same, with colour escapes removed. Use only where the golden pins column geometry and colour would be noise.
 - `AssertMatchesGolden`: byte-for-byte comparison. Trailing spaces are invisible in a diff and this helper fails on them, so prefer the normalized variant for rendered layout.
-- `AssertModelViewMatchesGolden`: convenience for comparing `tea.Model.View()` output.
+- `AssertModelViewMatchesGolden`: `tea.Model.View()` through the byte-for-byte comparator — for
+  rendered layout call `AssertMatchesGoldenNormalized(tb, []byte(m.View()), name)` instead.
 - `WaitForOutputContainsAll`: waits for real runtime output containing required UI snippets before assertions.
+
+Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `BoardToSearchKeys` /
+`OpenDetailKeys` / `DetailBackKeys` / `SearchTypeTextKeys` instead of literal key structs.
+
+Screen assertions (`internal/testing/ui/assertions.go`): `AssertContainsAll`,
+`AssertStartupBoardLayoutSanity`, `AssertNoObviousRuntimeErrorPanels`, `AssertActionRequest`.
 
 Golden file convention:
 
@@ -186,14 +198,10 @@ If a surface is not practical for teatest+golden (for example, highly volatile A
 
 ## Shared fake seams
 
-Fake only what this repository does not own. The three seams in
-`internal/testing/fakes` exist so a test never launches a real editor or spawns a
-real process: `FakeEditor`, `FakeLauncher`, and `FakeProcessRunner`. Each returns
-what you configure and records its calls for assertions. A test that touches an
-editor, a launcher, or a subprocess is required to use them.
+An editor, a launcher and a subprocess are the only external things you may fake:
+`FakeEditor`, `FakeLauncher`, `FakeProcessRunner` (`internal/testing/fakes`). Each returns what you
+configure and records its calls. A test that touches an editor, a launcher, or a subprocess is
+required to use them.
 
-## Repository Fixture Conventions (unit)
-
-- The in-process `memory.Repository` (`internal/repository/memory`) is the in-repo fixture for unit tests. Build one with `memory.New(...)` and populate it via `Seed` / `SeedComments` / `SeedClosed` / `SeedCatalogs`. Use `WithClock` / `WithIDGenerator` options for deterministic timestamps and IDs.
-- The `taskmgr` backend is exercised directly in `internal/repository/taskmgr/repository_test.go` against a real `tasks.Store` from `tasks.Init(t.TempDir(), ...)` — no fixture files, the store is built per-test.
-- Keep seeded data small and focused so each test states one intent clearly.
+- Failure-path tests wrap any `repository.Repository` in `fakes.NewErrorInjecting`
+  (`internal/testing/fakes/error_injecting.go`); do not hand-roll an error-returning stub.

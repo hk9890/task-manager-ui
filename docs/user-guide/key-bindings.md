@@ -8,11 +8,11 @@ overridden through runtime config.
 
 ## Shell / Global
 
-- `ctrl+q` — quit
+- `ctrl+q`, `ctrl+c` — quit
 - `?` — toggle help
 - `tab`, `ctrl+pgdown` — next tab in the header strip (Board → Docs → Search → Board)
 - `shift+tab`, `ctrl+pgup` — previous tab in the header strip
-- `ctrl+space` (`ctrl+@`) — toggle between board and search modes (from detail mode, returns to board)
+- `ctrl+space` (`ctrl+@`) — go to search from any other tab; from search or detail, return to board
 - `1` — switch to board mode
 - `2` — switch to search mode
 - `3` — switch to detail mode
@@ -40,9 +40,9 @@ overridden through runtime config.
 
 ## Docs Mode
 
-One column listing every `doc`-type issue, open ones included. Docs are not
-work, so task-manager keeps them out of the Ready and Blocked board columns —
-this tab is where they are browsed. Docs mode reuses the board keymap:
+One column listing every `doc`-type issue, open and closed — closing a doc
+archives it. Docs are not work, so they never reach the Ready or In Progress
+columns; this tab is where they are browsed. Docs mode reuses the board keymap:
 
 - `k`, `up` — move up
 - `j`, `down` — move down
@@ -63,21 +63,27 @@ the last applied query, the Results pane marks the displayed rows as stale.
 - `r` — manually reload the current search immediately
 - `enter` (query field focused) — submit the draft query and run the search
 - `enter` (results focused) — open selected result in detail mode
-- `ctrl+j` — cycle focus to next search pane
-- `ctrl+k` — cycle focus to previous search pane
-- `backspace` — delete previous query character when query is focused (built-in behavior, not part of the configurable search keymap)
-- `ctrl+u` — clear query when query is focused (built-in behavior, not part of the configurable search keymap)
-- `ctrl+t` — widen the search to closed issues, or narrow it back to open work (built-in, works in
+- `enter` (metadata focused) — edit the selected Status or Priority field
+- `ctrl+j` — cycle focus to the next of the four panes (Query, Results, Content, Metadata)
+- `ctrl+k` — cycle focus to the previous pane
+- `backspace` — delete previous query character when query is focused
+- `ctrl+u` — clear query when query is focused
+- `ctrl+t` — widen the search to closed issues, or narrow it back to open work (works in
   any focus state). Search starts on open work only; the Results header shows `open` or `all`
+
+`backspace`, `ctrl+u` and `ctrl+t` are built in and cannot be rebound.
 
 ## Detail Mode
 
-- `k`, `up` — scroll up one line
-- `j`, `down` — scroll down one line
+- `left`, `right` — move focus between the Dependencies, Content and Metadata panes
+- `k`, `up` — scroll up one line in the focused pane; in Dependencies and Metadata, move the cursor
+- `j`, `down` — scroll down one line in the focused pane; in Dependencies and Metadata, move the cursor
 - `pgup` — page up
 - `pgdown` — page down
 - `home` — jump to top
 - `end` — jump to bottom
+- `enter` (Dependencies focused) — open the highlighted related issue
+- `enter` (Metadata focused) — edit the selected Status or Priority field
 
 ## Modal Dialogs
 
@@ -85,16 +91,15 @@ the last applied query, the Results pane marks the displayed rows as stale.
 - `shift+tab`, `up` — move to previous field
 - `left` — move button focus left
 - `right` — move button focus right
-- `enter` — advance from input focus or confirm on button focus
-- `esc` — cancel when the modal is not required
+- `enter` — submit in the Status and Priority dialogs; otherwise advance from input focus, or confirm on button focus
+- `esc` — cancel any modal
 - `y` — submit when button row is focused
-- `n` — cancel when button row is focused
+- `n` — cancel when the button row is focused, except in the Status and Priority dialogs, which require a value
 
 ## Notes
 
 - Keybindings are context-specific. The same key may do different things in
-  shell, board, search, detail, and modal contexts. Docs mode has no context of
-  its own: it reads the `board` keymap.
+  shell, board, search, detail, and modal contexts.
 - `ctrl+space` may be reported by some terminals as `ctrl+@`; both refer to the
   same default toggle-search binding.
 - `tab`/`shift+tab` belong to the shell tab strip everywhere except in a modal,
@@ -104,5 +109,6 @@ the last applied query, the Results pane marks the displayed rows as stale.
 - Search mode intentionally captures normal text entry while the query field is
   focused.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.
+- The startup-error screen also quits on `q`.
 - Data views also auto-refresh when the app regains focus and on a low-frequency
   background schedule. Use `r` when you want an immediate manual refresh.
