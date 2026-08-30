@@ -21,6 +21,14 @@ Releases page above.
   operator config with the same shape is rejected at startup and under
   `--check-config`. The `tmux` example previously shipped in
   [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) was itself unsafe.
+- **Security:** a launcher whose `command` or `workdir` began with an issue
+  placeholder left the program — or the directory it runs in — entirely to issue
+  content: `command: "{{issue.assignee}}"` exec'd whatever that resolved to on
+  `PATH`. Both are now refused at startup and under `--check-config` when the
+  template starts with an issue field, and a launch is refused when an
+  interpolated issue field would introduce a path separator or a parent segment —
+  an issue titled `../../bin/sh` used to walk out of the operator's directory. The
+  documented `tool-{{issue.id}}` shape is unaffected.
 - **Changed (action required):** upgraded the task-manager SDK from v0.8.0 to
   v0.9.0, which withdraws the store-config `hooks:` key in favour of `use:`
   package references. A store whose `.tasks/config.yaml` — or the per-user
@@ -30,6 +38,15 @@ Releases page above.
   into a package directory, adding it with `taskmgr package add`, then deleting
   the `hooks:` block. `taskmgr package list` prints the untruncated diagnostic;
   [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) has the detail.
+- Fixed: the Update dialog prefilled from the board selection rather than the
+  issue on screen, so a drilled-in issue — reached through a reference that
+  carries neither labels nor assignee — opened the dialog with both fields empty,
+  and submitting it cleared the real values. The dialog now resolves its target
+  from the loaded detail, and an empty labels field clears the set only when the
+  dialog was opened showing one.
+- Fixed: an editor round-trip whose document failed to parse deleted the document
+  anyway, losing what the operator had just written. The temp file is now kept and
+  the error leads with its path, so the toast still names it when clipped.
 - Fixed: info and warning toasts rendered as a broken frame with no message. `ℹ️`
   and `⚠️` carry a U+FE0F variation selector, which lipgloss measures as two cells
   and a terminal following wcwidth draws as one, so the frame was built a cell
@@ -89,10 +106,32 @@ Releases page above.
 - Changed: detail mode no longer re-renders the issue markdown ten times a second
   for the life of the process. The renderer and its output are memoized, and the
   spinner tick is armed only while something is loading.
+- Fixed: an open dialog swallowed the tick and resize messages the shell needs.
+  The spinner froze, auto-refresh ended for the rest of the session, and a
+  terminal resized behind a dialog left every browse tab drawn at the old size.
+- Fixed: a toast wider than the terminal was drawn past the right edge instead of
+  clipped, and the board and docs lists kept a scroll offset past the end of a
+  list that had shrunk or a pane that had been resized, drawing an empty column
+  until a `j`/`k`.
+- Fixed: `deferred` — a status the Update Status dialog offers — had no colour or
+  token of its own, so it rendered in the muted unknown-status colour under a
+  derived token. It now has both, `DFR` and `D` in the narrow column.
+- Fixed: memoizing the markdown renderer left one glamour renderer shared across
+  goroutines, and its render context is mutable — two documents rendering at once
+  interleaved, or panicked in the walk. Rendering is now serialised per width and
+  background, so different widths still render in parallel.
+- Fixed: the plain-text markdown fallback measured a TAB as zero cells, so a
+  tabbed line — pasted Go source, a Makefile, a TSV table — was never wrapped and
+  bled past the pane border. Tabs are expanded to four-column stops before
+  measuring, and a wrapped chunk keeps its leading space instead of being
+  re-indented against the lines around it.
 - Fixed: several `--repo memory` divergences from the real store — field
   validation on create and update, the default priority for a blank field,
   `closedAt` surviving a reopen, a created issue overwriting a loaded one, and
-  search not matching an issue ID.
+  search not matching an issue ID. An update is now refused only for a violation
+  the write itself introduces, catalogs are resolved from the repository, labels
+  are deduped, and closing an already-closed issue is a no-op that invents no
+  reason.
 
 ## v0.15.0
 
