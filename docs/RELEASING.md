@@ -44,9 +44,28 @@ used.
    git tag --list "v*"
    ```
 
-2. Update `CHANGELOG.md` / release notes and land the change like any other:
-   worktree, PR, merge ([CHANGE-WORKFLOW.md](CHANGE-WORKFLOW.md)). There is no
-   release exception to the worktree rule — `main` is not a working branch.
+2. Update `CHANGELOG.md` and land the change like any other: worktree, PR, merge
+   ([CHANGE-WORKFLOW.md](CHANGE-WORKFLOW.md)). There is no release exception to
+   the worktree rule — `main` is not a working branch.
+
+   **Write the section for the operator, not for this repository.** Its reader
+   runs `taskmgr-ui` and has never opened the source. An entry earns its place by
+   telling them what they must do, what they will see that they did not see
+   before, or what was wrong that is now fixed. State the symptom; the cause
+   belongs in the commit message.
+
+   - Never name an internal symbol, a Go package, a third-party library, or a
+     test. `lipgloss measured the U+FE0F variation selector as two cells` is a
+     commit message; `info and warning toasts drew an empty box with no text` is
+     an entry.
+   - A change with no user-visible effect gets no entry — a refactor, added
+     coverage, a doc fix, a dependency bump nobody has to act on. `git log`
+     already holds it.
+   - A security entry leads with exposure: what it let an attacker do, and
+     whether the shipped defaults were enough. That bullet is what an operator
+     reads to decide whether to upgrade today.
+   - An entry for something that now refuses a config, a store or a habit the
+     operator already has leads with **Action required** and names the fix.
 
 3. Fast-forward `main` to the merged commit, and run `mise run ci` on it.
 
