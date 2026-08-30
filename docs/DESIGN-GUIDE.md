@@ -34,12 +34,14 @@ An issue's type, priority and status each render as a compact token plus a colou
 |---|---|---|
 | Type | `B` bug, `T` task, `F` feature, `E` epic, `C` chore, `D` doc, `?` unknown | `renderhelpers.CompactIssueType` |
 | Priority | `P0`–`P3` | `renderhelpers.CompactPriority` |
-| Status | `OPN`, `IP`, `BLK`, `CLS`, `RDY` | `renderhelpers.CompactIssueState` |
-| Status (dense rows) | `O`, `I`, `B`, `C`, `R` | `renderhelpers.CompactIssueStateNarrow` |
+| Status | `OPN`, `IP`, `BLK`, `CLS`, `RDY`, `DFR` | `renderhelpers.CompactIssueState` |
+| Status (dense rows) | `O`, `I`, `B`, `C`, `R`, `D` | `renderhelpers.CompactIssueStateNarrow` |
 
-Adding an issue type takes a token **and** a colour: a type with a distinct glyph but no distinct
-colour reads as unrecognised on the board. `internal/ui/shared/renderhelpers/type_style_parity_test.go`
-pins the two sets together.
+Adding an issue type or status takes a token **and** a colour: one with a distinct glyph but no
+distinct colour reads as unrecognised on the board.
+`internal/ui/shared/renderhelpers/type_style_parity_test.go` pins both sets together — the status
+half reads an explicit case in `CompactIssueState` as the signal, so a token that matches what its
+default branch would derive counts as no token at all.
 
 Reach for the `*Styled` variant (`CompactIssueTypeStyled`, `CompactPriorityStyled`, …) to render, and
 the plain one for width math — a styled token carries escape bytes that break `len`-based arithmetic.

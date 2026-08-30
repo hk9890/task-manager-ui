@@ -47,10 +47,24 @@ need none of them.
 
 ## Where things live
 
-[AGENTS.md](AGENTS.md) is the full route list — which doc owns what. The three you are most likely
-to need are [docs/CODING.md](docs/CODING.md) for a code change,
-[docs/TESTING.md](docs/TESTING.md) for the tiers behind `mise run ci`, and
-[docs/RUNNING.md](docs/RUNNING.md) for driving the built binary.
+[AGENTS.md](AGENTS.md) is the route list agents follow, and it is the authority on which doc owns
+what. Read the one that matches what you are about to do:
+
+| You are | Read |
+|---|---|
+| finding your way around the packages | [docs/OVERVIEW.md](docs/OVERVIEW.md) |
+| changing code under `cmd/`, `internal/` or `scripts/` | [docs/CODING.md](docs/CODING.md) |
+| changing a screen, a key, a glyph or a colour | [docs/DESIGN-GUIDE.md](docs/DESIGN-GUIDE.md) |
+| adding a config key, a keybinding or a launcher template | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
+| writing a test, or running a gate | [docs/TESTING.md](docs/TESTING.md) |
+| driving the built binary by hand | [docs/RUNNING.md](docs/RUNNING.md) |
+| reading a log after a run went wrong | [docs/MONITORING.md](docs/MONITORING.md) |
+| reviewing someone's diff | [docs/REVIEWING.md](docs/REVIEWING.md) |
+| editing any tracked Markdown file | [docs/DOCUMENTING.md](docs/DOCUMENTING.md) |
+| cutting a release (maintainers) | [docs/RELEASING.md](docs/RELEASING.md) |
+
+[docs/user-guide/](docs/user-guide/) is for someone who runs `taskmgr-ui` and never opens this
+repository.
 
 ## Reporting bugs and security issues
 

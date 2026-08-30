@@ -95,6 +95,18 @@ type ActionRequestMsg struct {
 	Action Action
 }
 
+// RequestActionCmd returns the Cmd that asks the shell for a shell-owned action
+// on behalf of the mode with this id.
+//
+// One constructor for the whole contract: detail and search each carried a
+// private copy of it, and board and docs built the message inline, so four
+// packages spelled the same two lines four ways.
+func RequestActionCmd(id ID, action Action) tea.Cmd {
+	return func() tea.Msg {
+		return ActionRequestMsg{Mode: id, Action: action}
+	}
+}
+
 // Action identifies a shell-level action entry point.
 type Action string
 

@@ -126,9 +126,28 @@ suppressed for the interactive session.
 - `temp cleanup: glob failed`, `temp cleanup: remove failed` (WARN,
   `internal/app/services.go`) — the sweep could not read or delete a stale edit temp
   file. Nothing on screen changes; the file stays behind.
+- `backend sort assumption broken` (WARN) — a dashboard group came back in an order
+  `internal/dashboard` does not expect (`Warning.Threshold == -1`). The column still
+  renders; its order is the backend's, not the composed one.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.
+
+### Guard traces
+
+Every surface suppresses work that arrives while its own is still in flight and records
+why, at DEBUG, so a run that looks idle can be told from one that is guarding. None is a
+fault, and none reaches the log without `--debug`:
+
+| Record | Emitted by |
+|---|---|
+| `manual <surface> refresh suppressed; refresh already in flight` | board, docs, search, and detail (`internal/app/refresh.go`) |
+| `startReload re-entry suppressed`, `triggerSearchWithAnchor re-entry suppressed` | the same reload paths, one level in |
+| `load-more suppressed; already in flight`, `load-more suppressed; all closed issues loaded` | `internal/mode/board/model.go` |
+| `search scope toggle suppressed; search already in flight`, `search scope toggled` | `internal/mode/search/model.go` |
+
+Repeats of one of these under a key held down are the guard working. The Done-column
+runbook in [RUNNING.md](RUNNING.md) reads them that way.
 
 ## `--debug` coverage
 
@@ -187,6 +206,8 @@ and `build_version`.
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/app/services.go` — the temp-cleanup sweep records
 - `internal/mode/board/model.go` — the dashboard-refresh, sort, cardinality and load-more records
+- `internal/mode/search/model.go`, `internal/mode/docs/model.go`, `internal/app/refresh.go` — the
+  guard traces above
 
 ## Runtime UI evidence
 

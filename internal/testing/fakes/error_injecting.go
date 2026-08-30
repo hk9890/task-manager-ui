@@ -263,12 +263,6 @@ func (e *ErrorInjectingRepository) CallsFor(method Method) []Call {
 	return out
 }
 
-// LastArgs returns the Args of the most recent call to method, and whether such
-// a call exists.
-func (e *ErrorInjectingRepository) LastArgs(method Method) (any, bool) {
-	calls := e.CallsFor(method)
-	if len(calls) == 0 {
-		return nil, false
-	}
-	return calls[len(calls)-1].Args, true
-}
+// ErrorInjectingRepository is a repository.Repository. DelayingRepository asserts
+// the same thing; this one relied on its users failing to compile instead.
+var _ repository.Repository = (*ErrorInjectingRepository)(nil)

@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -13,7 +12,7 @@ func clearMarkdownCaches() {
 	markdownCacheMu.Lock()
 	defer markdownCacheMu.Unlock()
 	markdownCache = map[markdownCacheKey]string{}
-	termRenderers = map[markdownCacheKey]*glamour.TermRenderer{}
+	termRenderers = map[markdownCacheKey]*lockedRenderer{}
 }
 
 // TestRenderReadOnlyMemoizesRenderedMarkdown proves the memo is actually

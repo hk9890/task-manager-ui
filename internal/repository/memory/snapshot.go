@@ -1,6 +1,9 @@
 package memory
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // SnapshotIssue is a read-only exported view of a storedIssue for use by
 // file persistence (Save). It preserves all fields, including timestamps and
@@ -34,10 +37,15 @@ type SnapshotComment struct {
 	CreatedAt time.Time
 }
 
-// Snapshot returns a read-only copy of all issues in the store. The slice is
-// safe to use after the call without holding any lock. It is used by
-// [repository.Save] to serialize the in-memory store; callers outside the
+// Snapshot returns a read-only copy of all issues in the store, ordered by ID.
+// The slice is safe to use after the call without holding any lock. It is used
+// by [repository.Save] to serialize the in-memory store; callers outside the
 // persistence layer should prefer the normal Repository interface.
+//
+// The order is what makes a saved fixture reproducible: the issues live in a
+// map, so an unsorted snapshot wrote its JSONL lines in a different order on
+// every run — a fixture meant to pin a board order pinned nothing, and a diff of
+// two saves of the same store was noise.
 func (r *Repository) Snapshot() []SnapshotIssue {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -84,6 +92,8 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			CloseReason: si.closeReason,
 		})
 	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 

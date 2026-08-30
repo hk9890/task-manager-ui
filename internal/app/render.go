@@ -131,8 +131,9 @@ func (m *Model) syncSearchPreviewDetailState() {
 	if m.search == nil {
 		return
 	}
-	session := m.search.SessionState()
-	if len(session.Page.Results) == 0 {
+	// ResultCount, not SessionState().Page: this runs on every Update, and
+	// SessionState deep-copies the whole result page to answer "is it empty".
+	if m.search.ResultCount() == 0 {
 		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
 		return
 	}

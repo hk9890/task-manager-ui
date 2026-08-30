@@ -168,10 +168,11 @@ func TestEnterWhileInitInFlight_PendingDraftFiredOnResolution(t *testing.T) {
 func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	t.Parallel()
 
-	innerRepo := fakes.NewTracked()
-	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
-	innerRepo.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
-	rec := fakes.NewErrorInjecting(innerRepo)
+	// NewTracked already IS a recorder over a memory repository; wrapping it in
+	// a second one recorded every call twice.
+	rec := fakes.NewTracked()
+	rec.Memory.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task one", Status: "open", Type: "task", Priority: 1})
+	rec.Memory.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 2})
 
 	// Build and Init WITHOUT draining.
 	m := NewModel(context.Background(), rec, nil)
@@ -197,7 +198,7 @@ func TestEnterWhileInitInFlight_SearchQueryPassesNoStatusFilter(t *testing.T) {
 	}
 
 	// Verify no "all" status was passed.
-	queries := searchQueries(t, rec)
+	queries := searchQueries(t, rec.ErrorInjectingRepository)
 	foundTextSearch := false
 	for _, q := range queries {
 		if q.Text == "task" {

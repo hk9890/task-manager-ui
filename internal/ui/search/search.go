@@ -398,8 +398,8 @@ func renderResultRows(state State, width int) []string {
 // loading state. Each row uses RenderCompactSkeleton shaped like a real issue row.
 //
 // phase is what makes the rows pulse: it indexes styles.SkeletonShades and
-// advances every 4 spinner frames (docs/DESIGN-GUIDE.md, Nothing waits
-// silently). Omitting it pinned every row to shade 0, so a stalled search
+// advances every 4 spinner frames (docs/DESIGN-GUIDE.md, Loading feedback).
+// Omitting it pinned every row to shade 0, so a stalled search
 // looked exactly like a fast one.
 func renderSkeletonRows(width, n, phase int) []string {
 	lines := make([]string, n)

@@ -2074,7 +2074,10 @@ func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
 		t.Errorf("doneLoadedCount = %d, want 31", m.doneLoadedCount)
 	}
 	if m.doneLoadInFlight {
-		t.Error("doneLoadInFlight must be cleared by the response even when its page is dropped")
+		// The reload cleared the latch; the dropped page must not have set it
+		// again, and must not clear a latch a later dispatch is holding either
+		// (TestStaleLoadMorePageDoesNotReleaseTheLatch pins that side).
+		t.Error("doneLoadInFlight is set after a reload and a dropped page")
 	}
 
 	// The next load-more continues from the reloaded count, so no rows are skipped.

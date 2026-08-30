@@ -81,8 +81,11 @@ type BeginLoadOptions struct {
 // It owns the whole protocol: the selection and target writes, the loading
 // flag, the error clear, the browser-row sync, the drill-focus decision and the
 // placeholder policy. The shell used to perform these five writes in the right
-// order at four call sites, and the copies had already drifted — the drill-in
-// path skipped SelectBrowserIssue.
+// order at four call sites, and the copies had already drifted.
+//
+// The Drill branch does not call SelectBrowserIssue: the rail it would anchor
+// belongs to the issue being navigated away from. The placeholder
+// ApplyLoadedDetail below rebuilds the rail from the target and anchors it.
 //
 // loadingStates() reads the loading flag to drive the header spinner, so
 // BeginLoad must be what precedes every loadDetailCmd.
@@ -210,6 +213,24 @@ func (m *Model) SelectBrowserIssue(issueID string) {
 	m.selectBrowserIssue(issueID)
 }
 
+// AnchorSelection records issueID as the shell's selected issue and re-anchors
+// the dependency rail on it, without starting a load.
+//
+// BeginLoad does both as part of the load protocol. The shell calls this on the
+// two paths where it skips the load — the target is already loading, or is
+// already loaded and not due for a refresh — because the rail would otherwise
+// stay on whatever row the operator last moved the cursor to, and
+// isPreviewingTarget() decides preview-vs-full rendering by comparing targetID
+// against this selection id.
+func (m *Model) AnchorSelection(issueID string) {
+	issueID = strings.TrimSpace(issueID)
+	if issueID == "" {
+		return
+	}
+	m.selectionID = issueID
+	m.selectBrowserIssue(issueID)
+}
+
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
 	d := m.RenderDetail()
@@ -332,9 +353,9 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneMetadata {
 		switch m.metadataSelectedField() {
 		case detail.MetadataFieldStatus:
-			return true, nil, actionRequestCmd(mode.ActionOpenStatusDialog)
+			return true, nil, mode.RequestActionCmd(mode.Detail, mode.ActionOpenStatusDialog)
 		case detail.MetadataFieldPriority:
-			return true, nil, actionRequestCmd(mode.ActionOpenPriorityDialog)
+			return true, nil, mode.RequestActionCmd(mode.Detail, mode.ActionOpenPriorityDialog)
 		}
 		return true, nil, nil
 	}
@@ -730,12 +751,5 @@ func applyScrollAction(current, maxOffset int, action string, move int) int {
 			next = maxOffset
 		}
 		return next
-	}
-}
-
-// actionRequestCmd asks the shell for a shell-owned action.
-func actionRequestCmd(action mode.Action) tea.Cmd {
-	return func() tea.Msg {
-		return mode.ActionRequestMsg{Mode: mode.Detail, Action: action}
 	}
 }

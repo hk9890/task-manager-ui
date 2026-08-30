@@ -23,7 +23,7 @@ internal/
   repository/             the Repository interface, plus shared errors and types
     taskmgr/                production backend: in-process adapter over the SDK
     memory/                 test and --repo memory backend, over filestorage JSONL
-    filestorage/            JSONL load and save for the memory backend
+    filestorage/            the JSONL fixture format and its loader; nothing here writes one
   dashboard/              Compose: dashboard.Inputs in, dashboard.Columns out
   config/                 config model, defaults, YAML loading, keybinding resolution
   launcher/               external tool launch actions and the process runner; editor/ is the edit handoff

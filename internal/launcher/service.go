@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -98,11 +100,14 @@ func issueFieldPlaceholders() []string {
 // definition-build time so a dangerous config fails fast at startup rather than
 // silently shelling out attacker-controlled issue content at launch.
 //
-// The whole argv (command + args) is scanned, not just the leading command, so
-// an exec wrapper that fronts the shell — e.g. `env sh -c …`, `/usr/bin/env bash
-// -lc …`, `timeout 10 sh -c …`, `nice -n5 sh -c …` — cannot smuggle the same
-// injection past a command-only check. Anywhere a shell token is followed by a
-// -c-style flag, the body argument after that flag is checked.
+// The whole argv (command + args) is scanned for a shell token, not just the
+// leading command, so an exec wrapper that fronts the shell — e.g. `env sh -c …`,
+// `/usr/bin/env bash -lc …`, `timeout 10 sh -c …`, `nice -n5 sh -c …` — cannot
+// smuggle the same injection past a command-only check. Anywhere a shell token
+// is followed by a -c-style flag, the body argument after that flag is checked.
+//
+// What the executable itself is named is a separate question, and
+// validateExecTargetSafety below answers it.
 //
 // Note: issue-field placeholders inside Env entries are intentionally NOT
 // rejected — passing issue data through environment variables is a documented
@@ -179,6 +184,87 @@ func validateShellBodySafety(def Definition) error {
 		}
 	}
 	return nil
+}
+
+// validateExecTargetSafety enforces the other half of the shell-launcher
+// security rule: an issue field may help NAME the program and its working
+// directory — `command` and `workdir` are part of the documented interpolation
+// surface (docs/CONFIGURATION.md) — but it must not be what CHOOSES them.
+//
+// Neither value is a body another program re-parses, so validateShellBodySafety
+// never looked at either, and Launch interpolates both before exec.Command. The
+// rule here is that the operator writes the literal that fixes the directory and
+// the start of the name: a template that *begins* with an issue placeholder
+// leaves the whole target to issue content — `command: "{{issue.assignee}}"`
+// execs whatever that resolves to on PATH. Its other half is enforced at launch
+// by interpolateExecTarget, which refuses a value that would introduce a path
+// separator and walk out of the operator's directory.
+func validateExecTargetSafety(def Definition) error {
+	action := strings.TrimSpace(def.Action)
+
+	if ph := leadingIssuePlaceholder(def.Command); ph != "" {
+		return fmt.Errorf(
+			"launcher action %q: command %q starts with the issue-field placeholder %s, which leaves the program itself to issue content (arbitrary-execution risk); write the literal program or directory first, as in \"/opt/tools/prefix-%s\"",
+			action, strings.TrimSpace(def.Command), ph, ph,
+		)
+	}
+
+	if ph := leadingIssuePlaceholder(def.WorkDir); ph != "" {
+		return fmt.Errorf(
+			"launcher action %q: workdir %q starts with the issue-field placeholder %s, which leaves the working directory to issue content (arbitrary-execution risk); start it with %s or a literal path",
+			action, strings.TrimSpace(def.WorkDir), ph, projectRootPlaceholder,
+		)
+	}
+
+	return nil
+}
+
+// leadingIssuePlaceholder returns the issue-field placeholder s starts with, or
+// "" when it starts with anything else.
+func leadingIssuePlaceholder(s string) string {
+	trimmed := strings.TrimSpace(s)
+	for _, ph := range issueFieldPlaceholders() {
+		if strings.HasPrefix(trimmed, ph) {
+			return ph
+		}
+	}
+	return ""
+}
+
+// interpolateExecTarget interpolates a command or workdir template and refuses
+// the launch when an issue field would introduce a path separator or a parent
+// segment into it.
+//
+// The operator's literal prefix is what confines the target; without this an
+// issue titled "../../bin/sh" walks straight out of it. Only the two exec
+// targets are checked: an argument is data the program reads, not a path the
+// kernel resolves.
+func interpolateExecTarget(interpolator templateInterpolator, field, template string, ctx InterpolationContext) (string, error) {
+	for placeholder, value := range ctx.Placeholders() {
+		if placeholder == projectRootPlaceholder || !strings.Contains(template, placeholder) {
+			continue
+		}
+		if escape := pathEscapeIn(value); escape != "" {
+			return "", fmt.Errorf(
+				"%s %q: issue field %s is %q, which contains %q — an issue must not redirect the program outside the path the launcher template names",
+				field, template, placeholder, value, escape,
+			)
+		}
+	}
+	return interpolator.Interpolate(template, ctx), nil
+}
+
+// pathEscapeIn returns the first path-escaping element in value, or "".
+func pathEscapeIn(value string) string {
+	switch {
+	case strings.ContainsRune(value, '/'):
+		return "/"
+	case strings.ContainsRune(value, '\\'):
+		return "\\"
+	case slices.Contains(strings.Split(value, string(filepath.Separator)), ".."):
+		return ".."
+	}
+	return ""
 }
 
 // ValidateDefinitions reports whether a launcher definition set is usable and
@@ -306,6 +392,9 @@ func newDefinitionResolver(definitions []Definition) (definitionResolver, error)
 		if strings.TrimSpace(definition.Command) == "" {
 			return definitionResolver{}, fmt.Errorf("launcher command is required for action %q", action)
 		}
+		if err := validateExecTargetSafety(definition); err != nil {
+			return definitionResolver{}, err
+		}
 		if err := validateShellBodySafety(definition); err != nil {
 			return definitionResolver{}, err
 		}
@@ -389,7 +478,10 @@ func (s launcherService) Launch(ctx context.Context, action string, issue domain
 		ProjectRoot:   s.projectRoot,
 	}
 
-	command := s.interpolator.Interpolate(definition.Command, interpolationContext)
+	command, err := interpolateExecTarget(s.interpolator, "command", definition.Command, interpolationContext)
+	if err != nil {
+		return fmt.Errorf("launcher action %q: %w", action, err)
+	}
 	args := make([]string, 0, len(definition.Args))
 	for _, arg := range definition.Args {
 		args = append(args, s.interpolator.Interpolate(arg, interpolationContext))
@@ -408,7 +500,10 @@ func (s launcherService) Launch(ctx context.Context, action string, issue domain
 	if dir == "" {
 		dir = s.projectRoot
 	} else {
-		dir = s.interpolator.Interpolate(dir, interpolationContext)
+		dir, err = interpolateExecTarget(s.interpolator, "workdir", dir, interpolationContext)
+		if err != nil {
+			return fmt.Errorf("launcher action %q: %w", action, err)
+		}
 	}
 
 	return s.runner.Run(ctx, command, args, dir, env)

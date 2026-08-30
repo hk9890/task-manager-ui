@@ -71,8 +71,32 @@ const markdownCacheMaxEntries = 64
 var (
 	markdownCacheMu sync.Mutex
 	markdownCache   = map[markdownCacheKey]string{}
-	termRenderers   = map[markdownCacheKey]*glamour.TermRenderer{}
+	termRenderers   = map[markdownCacheKey]*lockedRenderer{}
 )
+
+// lockedRenderer pairs a memoized glamour renderer with the mutex that
+// serialises it.
+//
+// glamour's ANSIRenderer carries a mutable RenderContext — a block stack and a
+// table accumulator — that every Render mutates, so one shared renderer is not
+// safe for concurrent use: two goroutines rendering different bodies interleave
+// pushes and pops on that stack, which surfaces as output interleaved between
+// two documents, or a panic in the walk. Building a renderer per call was what
+// used to keep them apart; memoizing it removed that isolation.
+//
+// The mutex is per (width, background), so renders at different widths still
+// run in parallel, and the memo above means a repeated body does not reach here
+// at all.
+type lockedRenderer struct {
+	mu       sync.Mutex
+	renderer *glamour.TermRenderer
+}
+
+func (l *lockedRenderer) Render(content string) (string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.renderer.Render(content)
+}
 
 func lookupRenderedMarkdown(content string, width int, dark bool) (string, bool) {
 	markdownCacheMu.Lock()
@@ -98,7 +122,7 @@ func storeRenderedMarkdown(content string, width int, dark bool, rendered string
 // AdaptiveColor in this app does. It was pinned to "dark", so on a light
 // terminal every description, note and comment rendered in dark-theme colours
 // while the chrome around them adapted (docs/DESIGN-GUIDE.md, Colour roles).
-func termRendererFor(width int, dark bool) (*glamour.TermRenderer, error) {
+func termRendererFor(width int, dark bool) (*lockedRenderer, error) {
 	key := markdownCacheKey{width: width, dark: dark}
 
 	markdownCacheMu.Lock()
@@ -116,10 +140,11 @@ func termRendererFor(width int, dark bool) (*glamour.TermRenderer, error) {
 	}
 
 	if len(termRenderers) >= markdownCacheMaxEntries {
-		termRenderers = map[markdownCacheKey]*glamour.TermRenderer{}
+		termRenderers = map[markdownCacheKey]*lockedRenderer{}
 	}
-	termRenderers[key] = renderer
-	return renderer, nil
+	locked := &lockedRenderer{renderer: renderer}
+	termRenderers[key] = locked
+	return locked, nil
 }
 
 // glamourStyleName maps the terminal background to a glamour standard style,
@@ -226,7 +251,7 @@ func renderPlain(value string, width int) string {
 	lines := strings.Split(strings.Trim(value, "\n"), "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		trimmedRight := strings.TrimRight(line, " \t")
+		trimmedRight := expandTabs(strings.TrimRight(line, " \t"))
 		if strings.TrimSpace(trimmedRight) == "" {
 			out = append(out, "")
 			continue
@@ -241,12 +266,49 @@ func renderPlain(value string, width int) string {
 	return strings.Join(out, "\n")
 }
 
+// tabWidth is the column stop expandTabs lays a TAB out on. Four rather than
+// eight because the panes these lines render into are narrow, and an eight-cell
+// indent spends most of a column on a nested code block.
+const tabWidth = 4
+
+// expandTabs replaces every TAB with the spaces that reach the next tab stop.
+//
+// ansi.StringWidth measures a TAB as zero cells, so a tab-bearing line measured
+// as narrow, was never wrapped, and then bled past the pane border while
+// lipgloss.Width agreed it fitted — pasted Go source, a Makefile and a TSV table
+// all hit it. Expanding first makes the measurement and what the terminal draws
+// the same thing, because what is drawn is now spaces.
+func expandTabs(line string) string {
+	if !strings.ContainsRune(line, '\t') {
+		return line
+	}
+
+	var b strings.Builder
+	b.Grow(len(line) + tabWidth)
+	column := 0
+	for _, r := range line {
+		if r == '\t' {
+			pad := tabWidth - column%tabWidth
+			b.WriteString(strings.Repeat(" ", pad))
+			column += pad
+			continue
+		}
+		b.WriteRune(r)
+		column += ansi.StringWidth(string(r))
+	}
+	return b.String()
+}
+
 // wrapLine hard-wraps one line to width terminal cells.
 //
 // Cells, not runes: a CJK ideograph or an emoji covers two cells, so counting
 // runes produced lines up to twice the requested width, which the width-correct
 // renderer downstream then truncated — losing text instead of wrapping it
 // (docs/DESIGN-GUIDE.md, Width and height).
+//
+// Leading space is preserved on every wrapped chunk. Dropping it re-indented
+// only the lines that happened to wrap, which reads as corrupted output rather
+// than as wrapping.
 func wrapLine(line string, width int) []string {
 	if width <= 0 {
 		return []string{line}
@@ -255,7 +317,7 @@ func wrapLine(line string, width int) []string {
 		return []string{line}
 	}
 
-	wrapped := strings.Split(ansi.Hardwrap(line, width, false), "\n")
+	wrapped := strings.Split(ansi.Hardwrap(line, width, true), "\n")
 	for i, chunk := range wrapped {
 		wrapped[i] = strings.TrimRight(chunk, " \t")
 	}

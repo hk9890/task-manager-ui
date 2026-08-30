@@ -213,4 +213,4 @@ required to use them.
   `fakes.NewTracked()` (`internal/testing/fakes/tracked.go`): a `memory.Repository` to seed through
   `Memory`, wrapped by the recorder. Do not rebuild that pair per package.
 - `fakes.Call` carries the operation's typed `Args` and `IssueID`, so assert on what a call received
-  through `CallsFor` / `LastArgs` rather than writing a stub to capture arguments.
+  through `CallsFor` rather than writing a stub to capture arguments.

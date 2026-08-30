@@ -77,8 +77,8 @@ func NewIssueEditor(repo repository.Repository, editorCommand string) (*IssueEdi
 }
 
 // PrepareDocument fetches the issue, renders its edit document, and writes a
-// temp file. The caller must eventually pass TempPath to ApplyEdits (which
-// removes the file).
+// temp file. The caller must eventually pass TempPath to ApplyEdits, which
+// removes the file unless it is still holding unsaved operator edits.
 func (e *IssueEditor) PrepareDocument(ctx context.Context, issueID string) (Prepared, error) {
 	issue, err := e.repo.Issue(ctx, issueID)
 	if err != nil {
@@ -100,31 +100,43 @@ func (e *IssueEditor) PrepareDocument(ctx context.Context, issueID string) (Prep
 }
 
 // ApplyEdits reads the edited temp file, parses it, diffs against the original,
-// and calls UpdateIssue when changed. The temp file is removed on all paths.
+// and calls UpdateIssue when changed.
+//
+// The temp file is removed once its content has been dealt with — saved, or
+// found unchanged. It is deliberately kept when the document does not parse or
+// the write fails, because it is then the only copy of what the operator wrote.
+// Removing it on every path meant a misplaced marker — a reordered field block
+// is enough, the field scanner reads them in document order — silently
+// destroyed a rewritten description. A kept file is swept after 24 hours by
+// Services.SweepStaleTempFiles.
+//
+// The error leads with the path, because that is what the operator acts on and
+// a toast is clipped to the terminal width; the cause follows it and always
+// reaches the log in full (docs/MONITORING.md).
 func (e *IssueEditor) ApplyEdits(ctx context.Context, issueID string, issue domain.IssueDetail, path string) (Result, error) {
-	defer func() {
-		_ = os.Remove(path)
-	}()
-
 	content, err := os.ReadFile(path)
 	if err != nil {
+		// Nothing readable to preserve.
+		_ = os.Remove(path)
 		return Result{}, fmt.Errorf("read edited document: %w", err)
 	}
 
 	edited, err := domain.ParseIssueEditDocument(string(content))
 	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("edits kept at %s: %w", path, err)
 	}
 
 	input, changed := domain.BuildIssueUpdateInput(issue, edited)
 	if !changed {
+		_ = os.Remove(path)
 		return Result{Updated: false}, nil
 	}
 
 	if err := e.repo.UpdateIssue(ctx, issueID, input); err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("edits kept at %s: %w", path, err)
 	}
 
+	_ = os.Remove(path)
 	return Result{Updated: true}, nil
 }
 

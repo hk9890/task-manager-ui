@@ -250,14 +250,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusMetadata:
 		switch m.metadataSelectedField {
 		case detail.MetadataFieldStatus:
-			return actionRequestCmd(mode.ActionOpenStatusDialog)
+			return mode.RequestActionCmd(mode.Search, mode.ActionOpenStatusDialog)
 		case detail.MetadataFieldPriority:
-			return actionRequestCmd(mode.ActionOpenPriorityDialog)
+			return mode.RequestActionCmd(mode.Search, mode.ActionOpenPriorityDialog)
 		}
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionOpenDetail, msg):
 		if m.focus == uisearch.FocusResults && m.currentSelection() != nil {
-			return actionRequestCmd(mode.ActionOpenDetail)
+			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
 		}
 		return nil
 	case m.keys.Match(config.SearchContext, config.SearchActionMoveUp, msg):
@@ -640,6 +640,14 @@ func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
 		// Owned by search in every focus state, not just the query box.
 		return true
 	}
+	if msg.Type == tea.KeyEnter && (m.focus == uisearch.FocusMetadata || m.focus == uisearch.FocusResults) {
+		// Enter on a result row or a metadata row is search's own: it has
+		// already returned the action request the shell will answer. Detail
+		// short-circuits the shell switch for the same key; letting it fall
+		// through here meant an operator who bound a shell action to enter got
+		// that action as well, on one of the two surfaces only.
+		return true
+	}
 
 	if m.focus != uisearch.FocusQuery {
 		return false
@@ -698,12 +706,4 @@ func (m *Model) hasResults() bool {
 func cloneSearchResultPage(page domain.SearchResultPage) domain.SearchResultPage {
 	results := append([]domain.SearchResult(nil), page.Results...)
 	return domain.SearchResultPage{Results: results, Metadata: page.Metadata}
-}
-
-// actionRequestCmd asks the shell for a shell-owned action. Every mode-to-shell
-// event travels this way; see internal/mode/contracts.go.
-func actionRequestCmd(action mode.Action) tea.Cmd {
-	return func() tea.Msg {
-		return mode.ActionRequestMsg{Mode: mode.Search, Action: action}
-	}
 }

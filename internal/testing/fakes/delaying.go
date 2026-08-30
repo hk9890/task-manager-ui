@@ -53,13 +53,18 @@ func NewDelayingSearchRepository(inner repository.Repository) *DelayingRepositor
 
 // Release unblocks exactly one in-flight gated call (or permits one future gated
 // call to pass through immediately).
+//
+// The send happens under the lock. Checking d.released and then sending outside
+// it left a window in which ReleaseAll closed the channel in between, and the
+// send then panicked with "send on closed channel" inside whichever test
+// happened to be running. The channel buffer is what keeps this from blocking a
+// caller that holds the lock.
 func (d *DelayingRepository) Release() {
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.released {
-		d.mu.Unlock()
 		return
 	}
-	d.mu.Unlock()
 	d.release <- struct{}{}
 }
 

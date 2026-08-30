@@ -73,27 +73,32 @@ var (
 	IssueStatusInProgressColor = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
 	IssueStatusBlockedColor    = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
 	IssueStatusClosedColor     = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
+	// Deferred is a real status the store offers in the status dialog. Without a
+	// role of its own its token fell to TextMutedColor and read as an
+	// unrecognised status.
+	IssueStatusDeferredColor = lipgloss.AdaptiveColor{Light: "#8A6BBF", Dark: "#B39DDB"}
 
 	baseButtonStyle = lipgloss.NewStyle().Padding(0, 2).Bold(true)
 
 	SelectionIndicatorStyle = lipgloss.NewStyle().Bold(true).Foreground(BorderHighlightFocusColor)
 	IssueIDMutedStyle       = lipgloss.NewStyle().Foreground(TextSecondaryColor)
 
-	IssuePriorityP0Style    = lipgloss.NewStyle().Foreground(IssuePriorityP0Color).Bold(true)
-	IssuePriorityP1Style    = lipgloss.NewStyle().Foreground(IssuePriorityP1Color)
-	IssuePriorityP2Style    = lipgloss.NewStyle().Foreground(IssuePriorityP2Color)
-	IssuePriorityP3Style    = lipgloss.NewStyle().Foreground(IssuePriorityP3Color)
-	IssueStatusOpenStyle    = lipgloss.NewStyle().Foreground(IssueStatusOpenColor)
-	IssueStatusReadyStyle   = lipgloss.NewStyle().Foreground(IssueStatusReadyColor)
-	IssueStatusIPStyle      = lipgloss.NewStyle().Foreground(IssueStatusInProgressColor)
-	IssueStatusBlockedStyle = lipgloss.NewStyle().Foreground(IssueStatusBlockedColor)
-	IssueStatusClosedStyle  = lipgloss.NewStyle().Foreground(IssueStatusClosedColor)
-	IssueTypeBugStyle       = lipgloss.NewStyle().Foreground(IssueTypeBugColor)
-	IssueTypeTaskStyle      = lipgloss.NewStyle().Foreground(IssueTypeTaskColor)
-	IssueTypeFeatureStyle   = lipgloss.NewStyle().Foreground(IssueTypeFeatureColor)
-	IssueTypeEpicStyle      = lipgloss.NewStyle().Foreground(IssueTypeEpicColor)
-	IssueTypeChoreStyle     = lipgloss.NewStyle().Foreground(IssueTypeChoreColor)
-	IssueTypeDocStyle       = lipgloss.NewStyle().Foreground(IssueTypeDocColor)
+	IssuePriorityP0Style     = lipgloss.NewStyle().Foreground(IssuePriorityP0Color).Bold(true)
+	IssuePriorityP1Style     = lipgloss.NewStyle().Foreground(IssuePriorityP1Color)
+	IssuePriorityP2Style     = lipgloss.NewStyle().Foreground(IssuePriorityP2Color)
+	IssuePriorityP3Style     = lipgloss.NewStyle().Foreground(IssuePriorityP3Color)
+	IssueStatusOpenStyle     = lipgloss.NewStyle().Foreground(IssueStatusOpenColor)
+	IssueStatusReadyStyle    = lipgloss.NewStyle().Foreground(IssueStatusReadyColor)
+	IssueStatusIPStyle       = lipgloss.NewStyle().Foreground(IssueStatusInProgressColor)
+	IssueStatusBlockedStyle  = lipgloss.NewStyle().Foreground(IssueStatusBlockedColor)
+	IssueStatusClosedStyle   = lipgloss.NewStyle().Foreground(IssueStatusClosedColor)
+	IssueStatusDeferredStyle = lipgloss.NewStyle().Foreground(IssueStatusDeferredColor)
+	IssueTypeBugStyle        = lipgloss.NewStyle().Foreground(IssueTypeBugColor)
+	IssueTypeTaskStyle       = lipgloss.NewStyle().Foreground(IssueTypeTaskColor)
+	IssueTypeFeatureStyle    = lipgloss.NewStyle().Foreground(IssueTypeFeatureColor)
+	IssueTypeEpicStyle       = lipgloss.NewStyle().Foreground(IssueTypeEpicColor)
+	IssueTypeChoreStyle      = lipgloss.NewStyle().Foreground(IssueTypeChoreColor)
+	IssueTypeDocStyle        = lipgloss.NewStyle().Foreground(IssueTypeDocColor)
 
 	PrimaryButtonStyle = baseButtonStyle.
 				Foreground(ButtonTextColor).
@@ -175,6 +180,8 @@ func IssueStatusStyle(status string) lipgloss.Style {
 		return IssueStatusBlockedStyle
 	case "closed":
 		return IssueStatusClosedStyle
+	case "deferred":
+		return IssueStatusDeferredStyle
 	default:
 		return lipgloss.NewStyle().Foreground(TextMutedColor)
 	}

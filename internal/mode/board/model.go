@@ -224,9 +224,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.currentSelection() == nil {
 				return nil
 			}
-			return func() tea.Msg {
-				return mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionOpenDetail}
-			}
+			return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			if m.inflight {
 				m.logger.Debug("manual board refresh suppressed; refresh already in flight",
@@ -286,9 +284,15 @@ func (m *Model) View(skeletonPhase int) string {
 }
 
 // SetSize updates render dimensions.
+//
+// The scroll window is derived from the height, so a resize that shrinks the
+// terminal shrinks the window under an offset that was valid for the old one:
+// without the clamp the selected row and its chevron sit below the last drawn
+// row until the operator presses j or k.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+	m.clampScrollOffsets()
 }
 
 // sectionItemCapacity returns the number of issue rows that fit in a section
@@ -482,7 +486,12 @@ func (m *Model) composeFailed(loadErr error) tea.Cmd {
 	m.refreshAnchor = nil
 	m.clampScrollOffsets()
 	m.inflight = false
-	return nil
+	// Report the selection, exactly as the success path does. A manual reload
+	// (mode.RefreshReload) cleared the columns and the selection maps before
+	// the load, so on failure currentSelection() is nil; staying silent left
+	// the shell holding the pre-reload issue, which the header still named and
+	// which e, x, a and u still acted on. Docs mode reports for the same reason.
+	return m.selectionChangedCmd()
 }
 
 func (m *Model) currentSelection() *mode.Selection {
@@ -754,6 +763,24 @@ func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
 // in-flight flag, surfaces errors on the Done column, and on success merges
 // the new page into Done.Issues via dashboard.Compose with PriorClosed set.
 func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
+	// Drop a page a reload has superseded, before touching the latch. A page is
+	// only mergeable at the offset the Done column currently ends at; a reload
+	// that landed while this one was in flight reset that count, and merging
+	// anyway concatenates rows 0-30 with rows 200-249 and leaves a hole no
+	// later load-more refills.
+	//
+	// The latch is not this response's to release either: startReload already
+	// cleared it, and a dispatch made after that reload may be holding it. The
+	// error path below is reached only by a response that is still current, so
+	// it releases the latch it actually owns.
+	if msg.offset != m.doneLoadedCount {
+		m.logger.Debug("stale load-more page dropped; a reload superseded it",
+			"page_offset", msg.offset,
+			"loaded", m.doneLoadedCount,
+		)
+		return nil
+	}
+
 	m.doneLoadInFlight = false
 
 	if msg.err != nil {
@@ -762,18 +789,6 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 		if len(m.columns) > doneColumnIndex {
 			m.columns[doneColumnIndex].err = msg.err
 		}
-		return nil
-	}
-
-	// Drop a page a reload has superseded. A page is only mergeable at the
-	// offset the Done column currently ends at; a reload that landed while this
-	// one was in flight reset that count, and merging anyway concatenates rows
-	// 0-30 with rows 200-249 and leaves a hole no later load-more refills.
-	if msg.offset != m.doneLoadedCount {
-		m.logger.Debug("stale load-more page dropped; a reload superseded it",
-			"page_offset", msg.offset,
-			"loaded", m.doneLoadedCount,
-		)
 		return nil
 	}
 

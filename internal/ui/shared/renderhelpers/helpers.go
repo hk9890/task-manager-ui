@@ -57,6 +57,11 @@ func CompactIssueState(status string) string {
 		return "CLS"
 	case "ready":
 		return "RDY"
+	case "deferred":
+		// DFR, not the DEF the default branch would derive: the parity test
+		// reads an explicit token as the signal that a status is recognised,
+		// and a status that carries a colour must carry one.
+		return "DFR"
 	default:
 		tok := NormalizeToken(status)
 		if tok == "" {
@@ -84,6 +89,8 @@ func CompactIssueStateNarrow(status string) string {
 		return "C"
 	case "ready":
 		return "R"
+	case "deferred":
+		return "D"
 	default:
 		tok := NormalizeToken(status)
 		if tok == "" {
