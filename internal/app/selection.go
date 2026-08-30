@@ -51,6 +51,12 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 		return nil
 	}
 
+	// Anchor above the guards. Both of them skip BeginLoad, which is where the
+	// selection id and the rail anchor are written, so without this a re-fired
+	// selection for the row already on screen leaves the rail highlighting
+	// whichever dependency row the operator last moved the cursor to.
+	m.detail.AnchorSelection(selection.Issue.ID)
+
 	if m.detail.IsLoading() && m.detail.TargetID() == selection.Issue.ID {
 		return nil
 	}

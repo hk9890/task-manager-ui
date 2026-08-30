@@ -20,6 +20,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // seedSearchResult seeds an issue so it will be found by the memory repo's
@@ -174,30 +175,11 @@ func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOpt
 	return m
 }
 
+// runBatch runs cmd to completion, flattening nested tea.BatchMsg values. It is
+// the shared testui.DrainCmd under the name 230 call sites in this package
+// already use; the flattening loop lived here in a second copy.
 func runBatch(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-
-	var msgs []tea.Msg
-	queue := []tea.Msg{cmd()}
-	for len(queue) > 0 {
-		msg := queue[0]
-		queue = queue[1:]
-		switch v := msg.(type) {
-		case tea.BatchMsg:
-			for _, c := range v {
-				if c == nil {
-					continue
-				}
-				queue = append(queue, c())
-			}
-		default:
-			msgs = append(msgs, msg)
-		}
-	}
-
-	return msgs
+	return testui.DrainCmd(cmd)
 }
 
 func applyMessages(t *testing.T, model Model, msgs []tea.Msg) Model {

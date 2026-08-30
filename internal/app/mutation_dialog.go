@@ -11,6 +11,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
@@ -151,6 +152,40 @@ func (m Model) dialogTargetIssue(requester mode.ID) (domain.IssueSummary, bool) 
 	return issue, true
 }
 
+// mutationTargetIssue resolves the issue the update, close and comment dialogs
+// act on. ok is false when nothing is selected.
+//
+// It prefers the loaded detail over the shell selection when the two are the
+// same issue. A drill-in selection is synthesised from a domain.IssueReference,
+// which carries neither labels nor assignee, so a dialog prefilled from it
+// showed an empty labels field for an issue that has labels and an empty
+// assignee for one that is assigned.
+func (m Model) mutationTargetIssue() (domain.IssueSummary, bool) {
+	selection := m.currentSelection()
+	if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
+		return domain.IssueSummary{}, false
+	}
+
+	issue := selection.Issue
+	if loaded := m.detail.Detail.Summary; strings.TrimSpace(loaded.ID) == strings.TrimSpace(issue.ID) {
+		issue = loaded
+	}
+	return issue, true
+}
+
+// reloadDetailAfterMutationCmd starts the post-mutation detail reload, pairing
+// BeginLoad with loadDetailCmd as every other load site does. Without the
+// pairing the header shows neither the spinner nor "Loading: detail" while the
+// read runs, and a browse selection that moves in that window makes the
+// response fail the target-id guard in update() and be discarded.
+func (m *Model) reloadDetailAfterMutationCmd(issueID string) tea.Cmd {
+	if strings.TrimSpace(issueID) == "" {
+		return nil
+	}
+	m.detail.BeginLoad(issueID, detail.BeginLoadOptions{})
+	return loadDetailCmd(m.ctx, m.services, issueID)
+}
+
 // openMutationModal puts dialog on screen and returns the Cmd that starts it.
 //
 // The four statements it wraps — state, modal, size, visible — were written out
@@ -251,7 +286,11 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 	}
 }
 
-// handleMutationResult processes mutationResultMsg in Update.
+// handleMutationResult processes mutationResultMsg in Update. The receiver stays
+// a value, as every other handler's does — Update type-asserts the returned
+// tea.Model back to Model — and the BeginLoad that
+// reloadDetailAfterMutationCmd performs lands on this copy, which is what is
+// returned.
 func (m Model) handleMutationResult(modeCmd tea.Cmd, msg mutationResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, batchCmds(modeCmd, m.showToast(msg.err.Error(), toaster.StyleError))
@@ -272,31 +311,31 @@ func (m Model) handleMutationResult(modeCmd tea.Cmd, msg mutationResultMsg) (tea
 	case mutationUpdate:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.ctx, m.services, msg.issueID),
+			m.reloadDetailAfterMutationCmd(msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationClose:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Closed issue %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.ctx, m.services, msg.issueID),
+			m.reloadDetailAfterMutationCmd(msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationComment:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.ctx, m.services, msg.issueID),
+			m.reloadDetailAfterMutationCmd(msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationStatus:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.ctx, m.services, msg.issueID),
+			m.reloadDetailAfterMutationCmd(msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	case mutationPriority:
 		return m, batchCmds(modeCmd,
 			m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
-			loadDetailCmd(m.ctx, m.services, msg.issueID),
+			m.reloadDetailAfterMutationCmd(msg.issueID),
 			m.maybeAutoRefreshActiveSurfaceCmd(),
 		)
 	default:
@@ -380,9 +419,14 @@ func submitMutationCmd(services Services, state mutationDialogState, values map[
 			if assignee != strings.TrimSpace(state.issue.Assignee) {
 				input.Assignee = &assignee
 			}
+			// Diff against the original labels, for the same reason as assignee
+			// above: an empty field clears the set only when the dialog was
+			// opened showing one. Treating "empty" as "clear" unconditionally
+			// deleted the labels of any issue whose summary reached the dialog
+			// without them.
 			if len(labels) > 0 {
 				input.Labels = labels
-			} else {
+			} else if len(state.issue.Labels) > 0 {
 				input.ClearLabels = true
 			}
 

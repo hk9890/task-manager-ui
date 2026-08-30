@@ -682,3 +682,91 @@ func TestPriorityBoundsConformance(t *testing.T) {
 }
 
 func strPtr(v string) *string { return &v }
+
+// TestCloseWithEmptyReasonConformance pins what an empty close reason stores.
+// The SDK writes CloseReason only when the reason is non-empty
+// (Store.applyStatus); the memory backend wrote the literal "Closed", so a
+// fixture-backed run showed a close reason the production backend never stores.
+func TestCloseWithEmptyReasonConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "closes quietly"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.CloseIssue(context.Background(), created.IssueID, domain.CloseIssueInput{}); err != nil {
+			t.Fatalf("%s: CloseIssue: %v", b.name, err)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if detail.Summary.Status != "closed" {
+			t.Errorf("%s: status after close = %q, want closed", b.name, detail.Summary.Status)
+		}
+		if strings.TrimSpace(detail.CloseReason) != "" {
+			t.Errorf("%s: close reason after an empty-reason close = %q, want empty", b.name, detail.CloseReason)
+		}
+	}
+}
+
+// TestClosingAnAlreadyClosedIssueIsANoOpConformance pins close idempotence. The
+// SDK returns a successful no-op for an issue already in closed/ (Store.Close),
+// writing nothing; the memory backend re-stamped both the close time and the
+// updated time, so a second close looked like a fresh one.
+func TestClosingAnAlreadyClosedIssueIsANoOpConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "closed twice"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.CloseIssue(context.Background(), created.IssueID, domain.CloseIssueInput{Reason: "first"}); err != nil {
+			t.Fatalf("%s: CloseIssue: %v", b.name, err)
+		}
+		first, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+
+		if err := b.repo.CloseIssue(context.Background(), created.IssueID, domain.CloseIssueInput{Reason: "second"}); err != nil {
+			t.Fatalf("%s: CloseIssue(again): %v", b.name, err)
+		}
+		second, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+
+		if !second.ClosedAt.Equal(first.ClosedAt) {
+			t.Errorf("%s: second close re-stamped ClosedAt: %v -> %v", b.name, first.ClosedAt, second.ClosedAt)
+		}
+		if second.CloseReason != first.CloseReason {
+			t.Errorf("%s: second close rewrote the reason: %q -> %q", b.name, first.CloseReason, second.CloseReason)
+		}
+	}
+}
+
+// TestUpdateDedupesLabelsConformance pins the label dedupe on update. Both
+// backends dedupe on create; the memory backend copied an update's labels
+// verbatim, so a duplicate reached the board that production would have
+// collapsed.
+func TestUpdateDedupesLabelsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "labelled"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{
+			Labels: []string{"alpha", "beta", "alpha"},
+		}); err != nil {
+			t.Fatalf("%s: UpdateIssue: %v", b.name, err)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if got := detail.Summary.Labels; !equalStrings(got, []string{"alpha", "beta"}) {
+			t.Errorf("%s: labels after update = %v, want [alpha beta]", b.name, got)
+		}
+	}
+}

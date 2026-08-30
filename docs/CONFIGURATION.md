@@ -196,6 +196,10 @@ Notes:
 - Unsupported placeholders are passed through literally.
 - Empty issue fields interpolate as empty strings.
 - `workdir` falls back to project root when blank.
+- In `command` and `workdir` an issue field may only *extend* what the operator wrote: the value
+  must not start with one, and at launch a field carrying `/`, `\` or a `..` segment refuses the
+  launch. `command: "/opt/tools/run-{{issue.id}}"` is fine; `command: "{{issue.assignee}}"` is
+  rejected at startup, because the issue would then name the program outright.
 - `{{project.root}}` is the resolved store's project path, not the directory
   `taskmgr-ui` was started in: the root of the project holding the local `.tasks`
   store, or the project path registered for a central store. See
@@ -205,6 +209,9 @@ Notes:
 
 Issue fields are operator-untrusted input. [CODING.md](CODING.md)'s Shell-launcher
 security rule states the invariant; this is how a config author satisfies it.
+
+Two questions decide whether a template is safe: what re-parses an issue field as code, and what
+lets an issue field choose the program.
 
 Three shapes re-parse an argument as a command line, and none may carry an interpolated
 issue field:
@@ -223,6 +230,11 @@ argument.
 
 A file argument to the same editor is data, not code, so `nvim /tmp/{{issue.id}}.md` is
 allowed.
+
+For `command` and `workdir` the rule is the one in the Notes above: the operator's literal fixes the
+program and the directory, and the issue field only extends it. Both halves are enforced —
+`ValidateDefinitions` rejects a leading placeholder at startup and under `--check-config`, and
+`Launch` refuses a value that would walk out of the path with a separator or a `..`.
 
 ```yaml
 # SAFE — issue fields are positional args, never re-parsed as code

@@ -46,7 +46,7 @@ func (r *Repository) CreateIssue(ctx context.Context, input domain.CreateIssueIn
 		comments:    []storedComment{},
 	}
 
-	if err := validateIssueFields("create issue", si); err != nil {
+	if err := validateIssueFields("create issue", r.catalogs, si); err != nil {
 		return domain.CreateIssueResult{}, err
 	}
 
@@ -124,14 +124,16 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 	if input.ClearLabels {
 		updated.labels = []string{}
 	} else if len(input.Labels) > 0 {
-		updated.labels = make([]string, len(input.Labels))
-		copy(updated.labels, input.Labels)
+		// Dedupe, as CreateIssue does and as the SDK does on every label write
+		// (Store.applyLabels). Without it the fixture stored a duplicate set the
+		// production backend would have collapsed.
+		updated.labels = dedupeLabels(input.Labels)
 	}
 	if input.Status != nil {
 		applyStatusTransition(&updated, *input.Status, now)
 	}
 
-	if err := validateIssueFields("update issue", &updated); err != nil {
+	if err := validateIssueWrite("update issue", r.catalogs, si, &updated); err != nil {
 		return err
 	}
 
@@ -173,18 +175,33 @@ func (r *Repository) CloseIssue(ctx context.Context, id string, input domain.Clo
 		return notFoundError("close issue", id)
 	}
 
-	now := r.clock()
-
-	si.status = "closed"
-	si.closed = now
-	si.updated = now
-
-	if input.Reason != "" {
-		si.closeReason = input.Reason
-	} else {
-		si.closeReason = "Closed"
+	// Closing an already-closed issue is a successful no-op in the SDK
+	// (Store.Close): no re-stamped close time, no updated bump, no hooks. The
+	// fixture used to re-stamp both, so a test could not tell a second close
+	// from a first.
+	if si.status == "closed" {
+		return nil
 	}
 
+	now := r.clock()
+
+	closed := *si
+	closed.status = "closed"
+	closed.closed = now
+	closed.updated = now
+
+	// An empty reason leaves the stored reason alone, as Store.applyStatus does.
+	// Writing the literal "Closed" for it put a reason on screen that nobody
+	// typed and that the production backend never stores.
+	if input.Reason != "" {
+		closed.closeReason = input.Reason
+	}
+
+	if err := validateIssueWrite("close issue", r.catalogs, si, &closed); err != nil {
+		return err
+	}
+
+	*si = closed
 	return nil
 }
 

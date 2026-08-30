@@ -118,9 +118,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if m.currentSelection() == nil {
 				return nil
 			}
-			return func() tea.Msg {
-				return mode.ActionRequestMsg{Mode: mode.Docs, Action: mode.ActionOpenDetail}
-			}
+			return mode.RequestActionCmd(mode.Docs, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			if m.inflight {
 				m.logger.Debug("manual docs refresh suppressed; refresh already in flight",
@@ -164,9 +162,13 @@ func (m *Model) View(skeletonPhase int) string {
 }
 
 // SetSize updates render dimensions.
+// SetSize updates render dimensions. The clamp is what board's SetSize does and
+// for the same reason: itemCapacity() is derived from the height, so a resize
+// leaves an offset that was valid for the old window.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+	m.clampSelection()
 }
 
 // IsLoading reports whether the column is in its loading state.
@@ -264,7 +266,16 @@ func (m *Model) clampSelection() {
 	if m.selectedRow >= len(m.issues) {
 		m.selectedRow = len(m.issues) - 1
 	}
-	m.scrollOffset = scroll.EnsureVisible(m.scrollOffset, m.selectedRow, m.itemCapacity())
+	// Pull the window back inside the list first, as board's clampScrollOffsets
+	// does. EnsureVisible only slides far enough to reveal the selected row, so
+	// on its own a list that shrank under a scrolled offset keeps the offset and
+	// draws its last rows with the ones above unreachable until the operator
+	// presses k.
+	capacity := m.itemCapacity()
+	if maxOffset := len(m.issues) - capacity; m.scrollOffset > maxOffset {
+		m.scrollOffset = max(maxOffset, 0)
+	}
+	m.scrollOffset = scroll.EnsureVisible(m.scrollOffset, m.selectedRow, capacity)
 }
 
 func (m *Model) moveRow(delta int) tea.Cmd {

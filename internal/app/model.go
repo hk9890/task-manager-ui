@@ -265,8 +265,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // ensureSpinnerTickCmd arms the spinner tick when work is in flight and no tick
-// is already scheduled. Nothing waits silently (docs/DESIGN-GUIDE.md), and
-// nothing spins while nothing waits.
+// is already scheduled: long work renders the spinner (docs/DESIGN-GUIDE.md,
+// Loading feedback), and nothing spins while nothing waits.
 func (m *Model) ensureSpinnerTickCmd() tea.Cmd {
 	if m.spinnerTicking || len(m.loadingStates()) == 0 {
 		return nil
@@ -356,7 +356,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.applyWorkspaceSizeToBrowseModes()
+		// Both overlays are sized here, open or not: handleOverlayMessage
+		// passes a resize through rather than consuming it.
 		m.help.SetSize(m.width, m.height)
+		m.actionModal.SetSize(m.width, m.height)
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
 	case detailLoadedMsg:
@@ -414,10 +417,23 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Mode == m.active {
 			m.lastBrowse = msg.Mode
 		}
-		// A browse tab moving its own selection supersedes any drill-in.
-		m.clearDrillSelection()
+		// A browse tab moving its own selection supersedes any drill-in — but
+		// only the tab the operator is actually on. A background load
+		// completing in another tab used to clear the drill selection too,
+		// silently retargeting every shell mutation at that tab's row while
+		// Detail still showed the drilled-in issue.
+		if msg.Mode == m.active {
+			m.clearDrillSelection()
+		}
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case mode.ActionRequestMsg:
+		// The request travels as a Cmd, so the operator can leave the
+		// requesting mode before it arrives. Answering it then resolves the
+		// target from a surface that is no longer on screen — and an ESC that
+		// left the mode is what cancels the request.
+		if msg.Mode != m.active {
+			return m, modeCmd
+		}
 		switch msg.Action {
 		case mode.ActionOpenStatusDialog:
 			issue, ok := m.dialogTargetIssue(msg.Mode)
@@ -617,24 +633,24 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
 		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
 	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
-		selection := m.currentSelection()
-		if selection == nil || selection.Issue.ID == "" {
+		issue, ok := m.mutationTargetIssue()
+		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
 		}
 		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
-		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, selection.Issue))
+		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, issue))
 	case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
-		selection := m.currentSelection()
-		if selection == nil || selection.Issue.ID == "" {
+		issue, ok := m.mutationTargetIssue()
+		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
 		}
-		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationClose, issue: selection.Issue}))
+		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationClose, issue: issue}))
 	case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
-		selection := m.currentSelection()
-		if selection == nil || selection.Issue.ID == "" {
+		issue, ok := m.mutationTargetIssue()
+		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
 		}
-		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationComment, issue: selection.Issue}))
+		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationComment, issue: issue}))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchNvim, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
@@ -643,7 +659,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "nvim", issueContext))
+		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionNvim, issueContext))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
@@ -652,7 +668,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "opencode", issueContext))
+		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionOpencode, issueContext))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
@@ -661,7 +677,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
 		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, "shell-command", issueContext))
+		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionShellCommand, issueContext))
 	}
 
 	return m, modeCmd
@@ -672,15 +688,19 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 // switch. An open overlay consumes the message: that is why this runs before
 // routing and not inside it.
 func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, tea.Cmd, bool) {
-	if m.showActionModal {
-		if size, ok := msg.(tea.WindowSizeMsg); ok {
-			m.sizeKnown = true
-			m.width = size.Width
-			m.height = size.Height
-			m.actionModal.SetSize(m.width, m.height)
-			return m, modeCmd, true
-		}
+	// Three message types are the shell's own and an overlay never consumes
+	// them. Both tick chains re-arm only from their own handlers in update(),
+	// so a swallowed tick froze the spinner and stopped auto-refresh for the
+	// rest of the session; and the shell's resize case is the only caller of
+	// applyWorkspaceSizeToBrowseModes and detail.ClampScroll, so a swallowed
+	// resize left every browse tab sized to the raw terminal until the next
+	// resize with no overlay open. That case sizes the overlays too.
+	switch msg.(type) {
+	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg:
+		return m, nil, false
+	}
 
+	if m.showActionModal {
 		if _, ok := msg.(modal.CancelMsg); ok {
 			m.showActionModal = false
 			return m, modeCmd, true

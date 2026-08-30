@@ -56,6 +56,15 @@ func (m *Model) reloadDetailCmd() tea.Cmd {
 	if selection == nil || selection.Issue.ID == "" {
 		return nil
 	}
+	// Every browse tab suppresses a manual refresh that arrives while its own
+	// is still in flight; Detail did not. Each repeat press issued another read
+	// against the store, and each extra ApplyLoadedDetail decremented the live
+	// drill-focus counter, so holding r moved focus off the Dependencies rail.
+	if m.detail.IsLoading() && m.detail.TargetID() == selection.Issue.ID {
+		m.logger().Debug("manual detail refresh suppressed; refresh already in flight",
+			"issue_id", selection.Issue.ID)
+		return nil
+	}
 	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{})
 	m.markSurfaceRefreshed(mode.Detail)
 	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)

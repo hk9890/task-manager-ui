@@ -512,14 +512,72 @@ func TestCloseIssue_HappyPath(t *testing.T) {
 	}
 }
 
-func TestCloseIssue_DefaultReason(t *testing.T) {
+// TestCloseIssue_EmptyReasonStoresNothing pins the SDK's rule: an empty reason
+// leaves the stored reason alone (Store.applyStatus writes CloseReason only when
+// reason != ""). This fixture used to store the literal "Closed", putting a
+// reason on the detail pane that nobody typed and that production never stores.
+func TestCloseIssue_EmptyReasonStoresNothing(t *testing.T) {
 	r := memory.New()
 	r.Seed(memory.Issue{ID: "taskmgr-5", Title: "t"})
 	_ = r.CloseIssue(context.Background(), "taskmgr-5", domain.CloseIssueInput{})
 
 	detail, _ := r.Issue(context.Background(), "taskmgr-5")
-	if detail.CloseReason != "Closed" {
-		t.Errorf("CloseReason: want Closed, got %s", detail.CloseReason)
+	if detail.CloseReason != "" {
+		t.Errorf("CloseReason: want empty, got %q", detail.CloseReason)
+	}
+	if detail.Summary.Status != "closed" {
+		t.Errorf("Status: want closed, got %s", detail.Summary.Status)
+	}
+}
+
+// TestUpdateGrandfathersAPreexistingViolation pins the SDK's write rule — "a
+// write checks what it introduces, not what it finds" (validateWrite in
+// sdk@v0.9.0/tasks/mutation.go). Seed bypasses validation, so a hand-built
+// fixture can carry an invalid field; refusing every later write for it left the
+// issue permanently un-editable from the UI, with an error naming a field the
+// caller never sent.
+func TestUpdateGrandfathersAPreexistingViolation(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "mem-1", Title: "t", Status: "open", Labels: []string{"Bug"}})
+
+	inProgress := "in_progress"
+	if err := r.UpdateIssue(context.Background(), "mem-1", domain.UpdateIssueInput{Status: &inProgress}); err != nil {
+		t.Fatalf("UpdateIssue(status): want the pre-existing label violation grandfathered, got %v", err)
+	}
+
+	detail, _ := r.Issue(context.Background(), "mem-1")
+	if detail.Summary.Status != "in_progress" {
+		t.Errorf("Status: want in_progress, got %s", detail.Summary.Status)
+	}
+
+	// A violation the write introduces is still refused.
+	if err := r.UpdateIssue(context.Background(), "mem-1", domain.UpdateIssueInput{Labels: []string{"Also-Bad"}}); err == nil {
+		t.Error("UpdateIssue(labels): want the introduced label violation refused, got nil")
+	}
+}
+
+// TestUpdateAcceptsASeededCatalogStatus pins that the write path accepts what
+// Catalogs() offers. knownStatus read the package-level DefaultCatalogs() only,
+// so the status dialog listed a seeded status that the same repository then
+// refused to store.
+func TestUpdateAcceptsASeededCatalogStatus(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "mem-1", Title: "t", Status: "open"})
+	r.SeedCatalogs(repository.Catalogs{
+		Statuses: []domain.StatusOption{{Name: "open"}, {Name: "in_review"}},
+		Types:    []domain.TypeOption{{Name: "task"}},
+	})
+
+	inReview := "in_review"
+	if err := r.UpdateIssue(context.Background(), "mem-1", domain.UpdateIssueInput{Status: &inReview}); err != nil {
+		t.Fatalf("UpdateIssue(seeded status): %v", err)
+	}
+
+	// The SDK's own statuses stay valid: a seeded catalog narrows what the
+	// fixture advertises, not what the store accepts.
+	blocked := "blocked"
+	if err := r.UpdateIssue(context.Background(), "mem-1", domain.UpdateIssueInput{Status: &blocked}); err != nil {
+		t.Fatalf("UpdateIssue(default status under a seeded catalog): %v", err)
 	}
 }
 

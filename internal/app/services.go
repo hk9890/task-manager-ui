@@ -71,11 +71,26 @@ type Services struct {
 	Logger *slog.Logger
 }
 
-// LaunchableActions are the launcher action names the shell can actually start:
-// "editor" through the edit keybinding, and one per launch keybinding. The
-// keybinding action set is fixed (see internal/config), so a definition with any
-// other action name is configured but unreachable.
-var LaunchableActions = []string{"editor", "nvim", "opencode", "shell-command"}
+// The launcher action names the shell can actually start: "editor" through the
+// edit keybinding, and one per launch keybinding. The key handlers in model.go
+// name these constants rather than their own string literals, so the list below
+// and the keys that reach it cannot drift apart.
+const (
+	LaunchActionEditor       = "editor"
+	LaunchActionNvim         = "nvim"
+	LaunchActionOpencode     = "opencode"
+	LaunchActionShellCommand = "shell-command"
+)
+
+// LaunchableActions is that set as a list. The keybinding action set is fixed
+// (see internal/config), so a definition with any other action name is
+// configured but unreachable.
+var LaunchableActions = []string{
+	LaunchActionEditor,
+	LaunchActionNvim,
+	LaunchActionOpencode,
+	LaunchActionShellCommand,
+}
 
 // LauncherDefinitions converts the configured launcher definitions into the
 // launcher package's own type. Exported so --check-config validates exactly the
