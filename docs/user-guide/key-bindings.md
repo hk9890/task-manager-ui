@@ -24,6 +24,7 @@ overridden through runtime config.
 - `u` — update selected issue metadata
 - `x` — close selected issue
 - `a` — add comment to selected issue
+- `s` — open the store picker: every central task store on this machine
 - `n` — launch `nvim` action in detail mode
 - `p` — launch `opencode` action in detail mode
 - `l` — launch `shell-command` action in detail mode
@@ -84,6 +85,17 @@ the last applied query, the Results pane marks the displayed rows as stale.
 - `end` — jump to bottom
 - `enter` (Dependencies focused) — open the highlighted related issue
 - `enter` (Metadata focused) — edit the selected Status or Priority field
+
+## Store Picker
+
+The full-screen list of every central task store registered on this machine,
+opened with `s` from any tab. A local `.tasks` store is not listed: open one by
+starting `taskmgr-ui` in its project. The picker reuses the board keymap:
+
+- `k`, `up` — move up
+- `j`, `down` — move down
+- `r` — re-read the registry
+- `esc` — return to the tab you opened it from
 
 ## Modal Dialogs
 

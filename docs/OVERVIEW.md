@@ -11,19 +11,23 @@ cmd/taskmgr-ui/           entrypoint: flag parsing, config resolution, logging s
                           where the store lives — the adapter receives an already-open *tasks.Store
 internal/
   app/                    the root shell: mode lifecycle, routing, selection and detail coordination
-  mode/                   board, docs, search and detail feature models, plus the shell message
-                          contracts. Type.IsWork() is false for doc, so doc issues reach no board
-                          column — docs/ is the tab that browses them
+  mode/                   board, docs, search, detail and storepicker feature models, plus the
+                          shell message contracts. Type.IsWork() is false for doc, so doc issues
+                          reach no board column — docs/ is the tab that browses them
   ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
     styles/                 every colour and the shared FormSection chrome
     shared/                 issuerow, markdown, renderhelpers, textutil — reused across modes
     board/ search/ detail/  one renderer per browse surface
+    storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
     modal/ toaster/ overlay/ loading/ scroll/ fatalerror/   shared shell primitives
   domain/                 issue, query, mutation, catalog and error models
   repository/             the Repository interface, plus shared errors and types
     taskmgr/                production backend: in-process adapter over the SDK
     memory/                 test and --repo memory backend, over filestorage JSONL
     filestorage/            the JSONL fixture format and its loader; nothing here writes one
+  storecatalog/           the port for the central store registry — which stores exist, against
+                          repository/, which reads the issues inside one. taskmgr/ is the SDK
+                          implementation over tasks.Stores
   dashboard/              Compose: dashboard.Inputs in, dashboard.Columns out
   config/                 config model, defaults, YAML loading, keybinding resolution
   launcher/               external tool launch actions and the process runner; editor/ is the edit handoff

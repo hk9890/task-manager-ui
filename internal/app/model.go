@@ -18,6 +18,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	docsmode "github.com/hk9890/task-manager-ui/internal/mode/docs"
 	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
+	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -59,6 +60,12 @@ type Model struct {
 	board  *boardmode.Model
 	docs   *docsmode.Model
 	search *searchmode.Model
+
+	// storePicker is the full-screen store list. pickerReturn is the mode the
+	// operator opened it from, so Escape puts them back exactly where they
+	// were rather than on the home tab.
+	storePicker  *storepickermode.Model
+	pickerReturn mode.ID
 
 	detail detail.Model
 
@@ -175,11 +182,14 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		board:    boardmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "board"), keys),
 		docs:     docsmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), keys),
 		search:   searchmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "search"), keys),
-		detail:   detail.Model{Keys: keys},
-		toast:    toaster.New(),
-		help:     help,
-		width:    defaultViewportWidth,
-		height:   defaultViewportHeight,
+		storePicker: storepickermode.NewModel(ctx, services.StoreCatalog,
+			logging.WithComponent(services.Logger, "storepicker"), keys),
+		pickerReturn: mode.Board,
+		detail:       detail.Model{Keys: keys},
+		toast:        toaster.New(),
+		help:         help,
+		width:        defaultViewportWidth,
+		height:       defaultViewportHeight,
 		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
 			mode.Board:  {lastRefresh: now},
 			mode.Docs:   {lastRefresh: now},
@@ -360,8 +370,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// passes a resize through rather than consuming it.
 		m.help.SetSize(m.width, m.height)
 		m.actionModal.SetSize(m.width, m.height)
+		// The picker renders instead of the shell, so it takes the whole
+		// terminal rather than the workspace the browse tabs share.
+		m.storePicker.SetSize(m.width, m.height)
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
+	case storepickermode.StoresLoadedMsg:
+		return m, batchCmds(modeCmd, m.storePicker.Update(msg))
 	case detailLoadedMsg:
 		if msg.issueID != m.detail.TargetID() {
 			return m, modeCmd
@@ -511,6 +526,14 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		return m, modeCmd
 	}
 
+	// The picker gets first refusal on a key while it is up, then the shell
+	// switch below still sees Escape, quit and help.
+	if m.active == mode.StorePicker {
+		if consumed, pickerCmd := m.storePicker.HandleKey(msg); consumed {
+			return m, batchCmds(modeCmd, pickerCmd)
+		}
+	}
+
 	if m.active == mode.Detail {
 		m.detail.Keys = m.keys
 		consumed, intent, actionCmd := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
@@ -560,6 +583,17 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		m.showHelp = true
 		m.help.SetSize(m.width, m.height)
 		return m, modeCmd
+	case m.keys.Match(config.ShellContext, config.ShellActionStorePicker, msg):
+		if m.active == mode.StorePicker {
+			return m, modeCmd
+		}
+		m.pickerReturn = m.active
+		m.active = mode.StorePicker
+		m.storePicker.SetSize(m.width, m.height)
+		m.storePicker.SetActiveStorePath(m.services.ActiveStorePath)
+		// Re-listed on every open, not cached: a store registered from another
+		// terminal since the last look must appear without a restart.
+		return m, batchCmds(modeCmd, m.storePicker.Init())
 	case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
 		m.enterBrowseMode(mode.Board)
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
@@ -604,6 +638,14 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		// "cancel the pending open" and keep the current mode — do NOT pop
 		// Detail → Board (or Search → Board) while the load is in progress.
 		if hadPendingDialog {
+			return m, modeCmd
+		}
+		// The picker is a surface above the shell, so leaving it restores the
+		// mode it was opened from — including Detail — rather than popping to
+		// the home tab. Nothing below it was touched, so its selection and
+		// scroll position are still where the operator left them.
+		if m.active == mode.StorePicker {
+			m.active = m.pickerReturn
 			return m, modeCmd
 		}
 		if m.active == mode.Detail {

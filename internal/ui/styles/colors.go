@@ -55,6 +55,13 @@ var (
 	ToastBorderInfoColor    = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
 	ToastBorderWarnColor    = lipgloss.AdaptiveColor{Light: "#FECA57", Dark: "#FECA57"}
 
+	// Store picker colors. The picker lists stores, not issues, so it names its
+	// own roles rather than borrowing the issue vocabulary below — but it takes
+	// their values, so the palette stays one palette.
+	StoreActiveColor   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+	StoreDanglingColor = lipgloss.AdaptiveColor{Light: "#FF9F43", Dark: "#FF9F43"}
+	StoreBrokenColor   = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
+
 	// Compact board issue metadata colors.
 	IssueTypeBugColor     = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
 	IssueTypeTaskColor    = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}

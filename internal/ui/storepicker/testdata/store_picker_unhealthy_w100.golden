@@ -1,0 +1,16 @@
+╭─ Task Stores ──────────────────────────────────────────────────────────────────────────────── 3 ─╮
+│› task-manager-ui /home/hans/dev/github/task-manager-ui                                     active│
+│  moved-away      /home/hans/dev/moved-away                                               dangling│
+│  half-made       /home/hans/dev/half-made                                                  broken│
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+Stores: j/k move · r reload · esc back · ctrl+q quit
