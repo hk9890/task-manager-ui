@@ -148,10 +148,10 @@ func TestCompose(t *testing.T) {
 			wantDoneLen:          2,
 			wantDoneTotalIsExact: true,
 			wantWarnings:         nil,
-			// ready: r1 (priority 1) before r2 (priority 2)
-			wantReadyIDs: []string{"r1", "r2"},
-			// inProgress: p2 (priority 1) before p1 (priority 3)
-			wantInProgressIDs: []string{"p2", "p1"},
+			// ready: r2 (t1) changed after r1 (t0)
+			wantReadyIDs: []string{"r2", "r1"},
+			// inProgress: p1 (t3) changed after p2 (t1)
+			wantInProgressIDs: []string{"p1", "p2"},
 			// done: preserves backend order
 			wantDoneIDs: []string{"c1", "c2"},
 		},
@@ -288,22 +288,23 @@ func TestCompose(t *testing.T) {
 			wantWarnings:         nil,
 		},
 
-		// ---- stable sort ordering when priorities tie ----
+		// ---- stable sort ordering when timestamps tie ----
 		{
-			name: "Ready sort: priority asc, then UpdatedAt desc, then ID asc",
+			name: "Ready sort: UpdatedAt desc, then priority asc, then ID asc",
 			in: Inputs{
 				Ready: []domain.IssueSummary{
-					makeSummary("b", 1, t1), // pri=1, newer
-					makeSummary("a", 1, t2), // pri=1, newest
-					makeSummary("c", 2, t3), // pri=2 (lower priority)
-					makeSummary("d", 1, t1), // pri=1, same time as "b" → id "d" > "b"
+					makeSummary("b", 1, t1), // t1, pri=1
+					makeSummary("a", 1, t2), // t2
+					makeSummary("c", 2, t3), // t3, newest despite the lower priority
+					makeSummary("d", 0, t1), // t1, pri=0 outranks "b" on the tie
+					makeSummary("e", 1, t1), // t1, pri=1, same as "b" → id "b" < "e"
 				},
 				ClosedLimit: 10,
 			},
-			wantReadyLen:         4,
+			wantReadyLen:         5,
 			wantDoneTotalIsExact: true,
-			// sort: pri=1 first → among pri=1: t2>t1 so "a" first, then t1 tie → "b"<"d", then pri=2 "c"
-			wantReadyIDs: []string{"a", "b", "d", "c"},
+			// sort: t3 "c", t2 "a", then the t1 tie by priority "d", then by ID "b" < "e"
+			wantReadyIDs: []string{"c", "a", "d", "b", "e"},
 		},
 		{
 			name: "NotReady sort: same rules as Ready, mapped from BlockedIssueView",
@@ -317,7 +318,7 @@ func TestCompose(t *testing.T) {
 			},
 			wantNotReadyLen:      3,
 			wantDoneTotalIsExact: true,
-			// pri=1: t1>t0, "a"<"m" by ID; then pri=2 "z"
+			// t1: "a"<"m" by ID; then t0 "z"
 			wantNotReadyIDs: []string{"a", "m", "z"},
 		},
 		{
@@ -332,8 +333,8 @@ func TestCompose(t *testing.T) {
 			},
 			wantInProgressLen:    3,
 			wantDoneTotalIsExact: true,
-			// pri=1: z (t1) > y (t0); then pri=3: x
-			wantInProgressIDs: []string{"z", "y", "x"},
+			// t3 "x", then t1 "z", then t0 "y": priority never outranks the change date
+			wantInProgressIDs: []string{"x", "z", "y"},
 		},
 
 		// ---- Done column: no sort warning emitted (check removed in kh54) ----

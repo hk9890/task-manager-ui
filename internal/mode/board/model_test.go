@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -50,7 +51,7 @@ func feedDashboardErr(m *Model, err error) {
 func TestBoardModeInitDispatchesSingleDashboardCall(t *testing.T) {
 	t.Parallel()
 
-	repo := fakes.NewErrorInjecting(memoryrepo.New())
+	repo := fakes.NewErrorInjecting(memoryrepo.New(fakes.FrozenClock()))
 	m := newBoardModel(repo, resolvedBoardKeys(t))
 
 	cmd := m.Init()
@@ -74,7 +75,7 @@ func TestBoardModeInitDispatchesSingleDashboardCall(t *testing.T) {
 func TestBoardModeInitProducesNonBatchCmd(t *testing.T) {
 	t.Parallel()
 
-	repo := memoryrepo.New()
+	repo := memoryrepo.New(fakes.FrozenClock())
 	m := newBoardModel(repo, resolvedBoardKeys(t))
 
 	cmd := m.Init()
@@ -96,7 +97,7 @@ func TestBoardModeInitProducesNonBatchCmd(t *testing.T) {
 func TestBoardModeAllEmptyLoad(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	// Use a wide enough terminal so all 4 columns are visible.
 	m.SetSize(200, 30)
 
@@ -129,7 +130,7 @@ func TestBoardModeAllEmptyLoad(t *testing.T) {
 func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 	t.Parallel()
 
-	repo := memoryrepo.New()
+	repo := memoryrepo.New(fakes.FrozenClock())
 	repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"})
 	repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Ready second", Priority: 2, Status: "open", Type: "task"})
 	repo.Seed(memoryrepo.Issue{ID: "tm-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"})
@@ -170,7 +171,7 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 func TestBoardModeLoadErrorAffectsAllColumns(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	loadErr := errors.New("network timeout")
@@ -203,7 +204,7 @@ func TestBoardModeLoadErrorAffectsAllColumns(t *testing.T) {
 func TestBoardModeLoadErrorSingleErrorOnAllColumns(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	loadErr := errors.New("taskmgr unavailable")
@@ -228,7 +229,7 @@ func TestBoardModeLoadErrorSingleErrorOnAllColumns(t *testing.T) {
 func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "tm-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "tm-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "tm-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
@@ -297,7 +298,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	m := newBoardModel(memoryrepo.New(), keys)
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), keys)
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "tm-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "tm-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "tm-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
@@ -362,7 +363,7 @@ func feedAllResults(m *Model, readyExplain domain.ReadyExplainResult, inProgress
 func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testing.T) {
 	t.Parallel()
 
-	m := populatedModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := populatedModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
 	cmd := m.AutoRefresh()
 	if cmd == nil {
@@ -396,7 +397,7 @@ func TestBoardModeAutoRefreshPreservesFocusedIssueSelectionWhenPresent(t *testin
 func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t *testing.T) {
 	t.Parallel()
 
-	m := populatedModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := populatedModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
 	cmd := m.AutoRefresh()
 	if cmd == nil {
@@ -429,7 +430,7 @@ func TestBoardModeAutoRefreshDeterministicFallbackWhenSelectedIssueDisappears(t 
 func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 	t.Parallel()
 
-	m := populatedModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := populatedModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
 	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	if cmd == nil {
@@ -463,7 +464,7 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 func TestBoardModePerColumnLoadingState(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	// Phase 1: initial loading state — all 4 columns are loading.
@@ -506,7 +507,7 @@ func TestBoardModePerColumnLoadingState(t *testing.T) {
 func TestBoardModeColdStartAllColumnsLoading(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
 	if !m.IsLoading() {
 		t.Fatal("expected IsLoading()=true immediately after NewModel")
@@ -532,7 +533,7 @@ func TestBoardModeColdStartAllColumnsLoading(t *testing.T) {
 func TestBoardModeAtomicSwapAllColumnsAfterDashboard(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
 	feedDashboardData(m, repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{
@@ -560,7 +561,7 @@ func TestBoardModeAtomicSwapAllColumnsAfterDashboard(t *testing.T) {
 func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	// All columns are in cold-start loading state with no issues.
@@ -594,7 +595,7 @@ func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
 func TestBoardModeRefreshKeepsStaleIssuesVisible(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
 	// Seed the model with loaded data as if a prior load already completed.
 	m.columns = []columnData{
@@ -660,7 +661,7 @@ func TestBoardModeComposerWarningsEmittedToSlog(t *testing.T) {
 	handler := &captureHandler{capture: &capturedMessages}
 	logger := slog.New(handler)
 
-	m := NewModel(context.Background(), memoryrepo.New(), logger, resolvedBoardKeys(t))
+	m := NewModel(context.Background(), memoryrepo.New(fakes.FrozenClock()), logger, resolvedBoardKeys(t))
 
 	// Feed empty dashboard result. No warnings expected from empty inputs.
 	feedDashboardData(m, repository.DashboardData{})
@@ -682,7 +683,7 @@ func TestBoardModeWarningLogNoDuplicateComponentKey(t *testing.T) {
 	// Simulate what main.go does: attach component=dashboard to the parent logger.
 	logger := slog.New(jsonHandler).With("component", "dashboard")
 
-	m := NewModel(context.Background(), memoryrepo.New(), logger, resolvedBoardKeys(t))
+	m := NewModel(context.Background(), memoryrepo.New(fakes.FrozenClock()), logger, resolvedBoardKeys(t))
 
 	// Build 501 ready issues — enough to exceed the 500-item cardinality threshold
 	// and trigger a "cardinality threshold exceeded" warning from dashboard.Compose.
@@ -722,7 +723,7 @@ func TestBoardModeLogCarriesComponentBoard(t *testing.T) {
 	rootLogger := slog.New(jsonHandler)
 	boardLogger := rootLogger.With("component", "board")
 
-	m := NewModel(context.Background(), memoryrepo.New(), boardLogger, resolvedBoardKeys(t))
+	m := NewModel(context.Background(), memoryrepo.New(fakes.FrozenClock()), boardLogger, resolvedBoardKeys(t))
 
 	// 501 ready issues exceeds the 500-item cardinality threshold.
 	ready := make([]domain.IssueSummary, 501)
@@ -772,21 +773,26 @@ func (h *captureHandler) WithGroup(_ string) slog.Handler      { return h }
 func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 	t.Parallel()
 
+	// Ages straddle both marker thresholds in Ready and In Progress, and only
+	// the 1-week one in Not Ready. Done reuses the In Progress slice and must
+	// draw no marker: its order is the backend's close date, not UpdatedAt.
+	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	ago := func(d time.Duration) time.Time { return now.Add(-d) }
 	readyExplain := domain.ReadyExplainResult{
 		Ready: []domain.IssueSummary{
-			{ID: "tm-1", Title: "Ready fix login prompt", Priority: 1, Status: "open", Type: "task"},
-			{ID: "tm-5", Title: "Ready improve docs outline", Priority: 2, Status: "open", Type: "task"},
-			{ID: "tm-6", Title: "Ready triage inbox", Priority: 2, Status: "open", Type: "chore"},
+			{ID: "tm-1", Title: "Ready fix login prompt", Priority: 1, Status: "open", Type: "task", UpdatedAt: ago(2 * time.Hour)},
+			{ID: "tm-5", Title: "Ready improve docs outline", Priority: 2, Status: "open", Type: "task", UpdatedAt: ago(3 * 24 * time.Hour)},
+			{ID: "tm-6", Title: "Ready triage inbox", Priority: 2, Status: "open", Type: "chore", UpdatedAt: ago(30 * 24 * time.Hour)},
 		},
 		Blocked: []domain.BlockedIssueView{
-			{Issue: domain.IssueSummary{ID: "tm-3", Title: "Blocked: API contract pending", Priority: 0, Status: "blocked", Type: "bug"}},
-			{Issue: domain.IssueSummary{ID: "tm-9", Title: "Blocked: migration sequencing", Priority: 1, Status: "blocked", Type: "task"}},
+			{Issue: domain.IssueSummary{ID: "tm-3", Title: "Blocked: API contract pending", Priority: 0, Status: "blocked", Type: "bug", UpdatedAt: ago(10 * 24 * time.Hour)}},
+			{Issue: domain.IssueSummary{ID: "tm-9", Title: "Blocked: migration sequencing", Priority: 1, Status: "blocked", Type: "task", UpdatedAt: ago(1 * time.Hour)}},
 		},
 	}
 	inProgress := []domain.IssueSummary{
-		{ID: "tm-2", Title: "Implement board keyboard shortcuts", Priority: 1, Status: "in_progress", Type: "feature"},
-		{ID: "tm-7", Title: "Wire detail reload behavior", Priority: 1, Status: "in_progress", Type: "task"},
-		{ID: "tm-8", Title: "Polish header help copy", Priority: 2, Status: "in_progress", Type: "docs"},
+		{ID: "tm-2", Title: "Implement board keyboard shortcuts", Priority: 1, Status: "in_progress", Type: "feature", UpdatedAt: ago(5 * time.Hour)},
+		{ID: "tm-7", Title: "Wire detail reload behavior", Priority: 1, Status: "in_progress", Type: "task", UpdatedAt: ago(26 * time.Hour)},
+		{ID: "tm-8", Title: "Polish header help copy", Priority: 2, Status: "in_progress", Type: "docs", UpdatedAt: ago(20 * 24 * time.Hour)},
 	}
 
 	tests := []struct {
@@ -813,7 +819,8 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+			m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
+			m.now = func() time.Time { return now }
 			m.SetSize(tc.width, tc.height)
 			_ = m.Update(dashboardLoadedMsg{data: data})
 
@@ -835,7 +842,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 func TestBoardModeStoredBlockedNoDependencyVisibleInNotReadyColumn(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	data := repository.DashboardData{
@@ -985,7 +992,7 @@ func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
 	t.Parallel()
 
 	keys := resolvedBoardKeys(t)
-	m := newBoardModel(memoryrepo.New(), keys)
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), keys)
 
 	// Synthesize 80 Ready issues.
 	const rowCount = 80
@@ -1036,7 +1043,7 @@ func TestBoardModeScrollWindowRendererSlicesRows(t *testing.T) {
 	t.Parallel()
 
 	keys := resolvedBoardKeys(t)
-	m := newBoardModel(memoryrepo.New(), keys)
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), keys)
 
 	const rowCount = 80
 	issues := make([]domain.IssueSummary, rowCount)
@@ -1083,7 +1090,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	t.Parallel()
 
 	// Seed the memory repo with 80 ready issues so Init loads them.
-	repo := memoryrepo.New()
+	repo := memoryrepo.New(fakes.FrozenClock())
 	const rowCount = 80
 	for i := 0; i < rowCount; i++ {
 		repo.Seed(memoryrepo.Issue{
@@ -1363,7 +1370,7 @@ func TestDoneLoadMore_NoDispatchAtSliceEnd(t *testing.T) {
 func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(120, 25)
 
 	const priorCount = 35
@@ -1765,7 +1772,7 @@ func TestDoneLoadMore_EmptyDoneColumnNoDispatch(t *testing.T) {
 func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(120, 25)
 
 	const priorCount = 35
@@ -1839,7 +1846,7 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 // Without that reservation the selected bottom row lands at offset+capacity-1 —
 // exactly the row the renderer drops — and clips off-screen.
 func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(40, 13) // sectionItemCapacity() == 13-3 == 10
 
 	const n = 20
@@ -1900,7 +1907,7 @@ func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+			m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 			m.SetSize(120, 25)
 			m.columns[doneColumnIndex] = columnData{
 				title:  sectionTitleDone,
@@ -1948,7 +1955,7 @@ func makeOpenIssues(prefix string, n int) []domain.IssueSummary {
 func TestFailedRefreshKeepsLoadedColumns(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	feedDashboardData(m, repository.DashboardData{
@@ -2008,7 +2015,7 @@ func TestFailedRefreshKeepsLoadedColumns(t *testing.T) {
 func TestRefreshReClampsScrollOffsetOfAShrunkColumn(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 14)
 
 	feedDashboardData(m, repository.DashboardData{InProgress: makeOpenIssues("wip", 25)})
@@ -2046,7 +2053,7 @@ func TestRefreshReClampsScrollOffsetOfAShrunkColumn(t *testing.T) {
 func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
 	t.Parallel()
 
-	m := newBoardModel(memoryrepo.New(), resolvedBoardKeys(t))
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.SetSize(200, 30)
 
 	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(200), ClosedTotal: 736})

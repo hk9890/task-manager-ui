@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -86,6 +87,10 @@ type Model struct {
 	width  int
 	height int
 
+	// now is the clock the age markers measure against. Tests replace it so a
+	// golden pins which rows fall on which side of a divider.
+	now func() time.Time
+
 	// columns holds the four fixed board columns after composition.
 	columns []columnData
 
@@ -147,6 +152,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		repo:         repo,
 		logger:       logger,
 		keys:         keys,
+		now:          time.Now,
 		selectedRow:  map[int]int{},
 		scrollOffset: map[int]int{},
 		refreshMode:  mode.RefreshReload,
@@ -270,6 +276,7 @@ func (m *Model) View(skeletonPhase int) string {
 			TotalIsExact: col.exact,
 			Loading:      col.loading,
 			Error:        errStr,
+			AgeMarkers:   colIdx != doneColumnIndex,
 		})
 	}
 
@@ -280,6 +287,7 @@ func (m *Model) View(skeletonPhase int) string {
 		Width:          m.width,
 		Height:         m.height,
 		SkeletonPhase:  skeletonPhase,
+		Now:            m.now(),
 	})
 }
 
@@ -555,12 +563,7 @@ func (m *Model) clampScrollOffsets() {
 			continue
 		}
 
-		// The renderer pins an inline error row at the top of a column that
-		// carries one, leaving it one fewer issue row (see internal/ui/board).
-		window := capacity
-		if m.columns[i].err != nil && window > 1 {
-			window--
-		}
+		window := m.issueWindow(i, capacity)
 
 		row := m.selectedRow[i]
 		if row < 0 || row >= len(m.columns[i].issues) {
@@ -681,20 +684,28 @@ func (m *Model) moveRow(delta int) {
 		idx = len(issues) - 1
 	}
 	m.selectedRow[m.focusedColumn] = idx
-	capacity := m.sectionItemCapacity()
-	// When the focused column carries an inline error, the renderer pins that
-	// error row at the top of the column and shows one fewer issue row (see
-	// internal/ui/board Render). Reserve that row here so EnsureVisible keeps the
-	// selected row inside the renderer's actual issue window rather than letting
-	// the bottom row clip off-screen.
-	if m.columns[m.focusedColumn].err != nil && capacity > 1 {
-		capacity--
-	}
 	m.scrollOffset[m.focusedColumn] = scroll.EnsureVisible(
 		m.scrollOffset[m.focusedColumn],
 		idx,
-		capacity,
+		m.issueWindow(m.focusedColumn, m.sectionItemCapacity()),
 	)
+}
+
+// issueWindow is the number of issue rows the renderer can show in column i
+// when the section fits capacity rows. The renderer pins an inline error row
+// at the top of a column that carries one, and inserts one divider per age
+// threshold the column crosses (see internal/ui/board); both take a row from
+// the issues. Reserving them here keeps EnsureVisible inside the renderer's
+// actual issue window, so the selected row cannot clip off-screen.
+func (m *Model) issueWindow(i, capacity int) int {
+	window := capacity
+	if m.columns[i].err != nil {
+		window--
+	}
+	if i != doneColumnIndex {
+		window -= uiboard.AgeMarkerCount(m.columns[i].issues, m.now())
+	}
+	return max(window, 1)
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {
