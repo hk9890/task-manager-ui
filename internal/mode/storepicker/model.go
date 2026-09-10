@@ -29,6 +29,11 @@ const defaultItemCapacity = 20
 type StoresLoadedMsg struct {
 	Entries []storecatalog.Entry
 	Err     error
+	// Generation is the listing this result belongs to. A Bubble Tea command
+	// cannot be cancelled, so a listing dispatched for an earlier open of the
+	// picker still delivers after the picker has been closed and reopened;
+	// comparing the generation is what drops it instead of rendering it.
+	Generation int
 }
 
 // Model is the store-picker controller.
@@ -48,9 +53,12 @@ type Model struct {
 	// marks one row as the active store; empty when no store is open.
 	activeStorePath string
 
-	// loading is the visual loading state; inflight guards concurrent reloads.
-	loading  bool
-	inflight bool
+	// loading is the visual loading state; inflight guards a manual reload
+	// against a listing already on its way. generation identifies the listing
+	// each result belongs to.
+	loading    bool
+	inflight   bool
+	generation int
 
 	selectedRow  int
 	scrollOffset int
@@ -81,9 +89,11 @@ func NewModel(ctx context.Context, catalog storecatalog.Catalog, logger *slog.Lo
 	}
 }
 
-// Init loads the store list.
+// Init loads the store list. Every open lists again: a store registered from
+// another terminal must appear without restarting the app, so an open is never
+// suppressed by a listing left in flight from an earlier one.
 func (m *Model) Init() tea.Cmd {
-	return m.startReload()
+	return m.startListing()
 }
 
 // Update processes picker messages other than keys.
@@ -113,7 +123,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.moveRow(1)
 		return true, nil
 	case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
-		return true, m.startReload()
+		return true, m.reload()
 	}
 	return false, nil
 }
@@ -188,18 +198,32 @@ func (m *Model) SelectedEntry() (storecatalog.Entry, bool) {
 	return m.entries[row], true
 }
 
-func (m *Model) startReload() tea.Cmd {
+// reload answers the manual reload key. A second read while one is in flight
+// would return the same registry, so it is suppressed rather than dispatched.
+func (m *Model) reload() tea.Cmd {
 	if m.inflight {
-		m.logger.Debug("startReload re-entry suppressed; store listing already in flight")
+		m.logger.Debug("store listing re-entry suppressed; one is already in flight")
 		return nil
 	}
+	return m.startListing()
+}
+
+func (m *Model) startListing() tea.Cmd {
+	m.generation++
 	m.inflight = true
 	m.loading = true
 	m.err = nil
-	return loadStoresCmd(m.ctx, m.catalog)
+	return loadStoresCmd(m.ctx, m.catalog, m.generation)
 }
 
 func (m *Model) apply(msg StoresLoadedMsg) {
+	// A result from a listing this picker has moved on from carries stale
+	// entries; dropping it also leaves the current listing's in-flight state
+	// intact.
+	if msg.Generation != m.generation {
+		return
+	}
+
 	m.loading = false
 	m.inflight = false
 	m.err = msg.Err
@@ -207,11 +231,13 @@ func (m *Model) apply(msg StoresLoadedMsg) {
 	if msg.Err != nil {
 		m.logger.Error("failed to list central task-manager stores", "error", msg.Err)
 		// Keep the stale rows on screen; the inline error row says why they may
-		// be out of date.
-		return
+		// be out of date. The clamp below still runs: the error row costs one
+		// store row, so the scroll window narrows even though the rows did not
+		// change.
+	} else {
+		m.entries = msg.Entries
 	}
 
-	m.entries = msg.Entries
 	m.clampSelection()
 }
 
@@ -253,14 +279,14 @@ func (m *Model) itemCapacity() int {
 	return uistorepicker.RowCapacity(m.height, m.err != nil)
 }
 
-func loadStoresCmd(ctx context.Context, catalog storecatalog.Catalog) tea.Cmd {
+func loadStoresCmd(ctx context.Context, catalog storecatalog.Catalog, generation int) tea.Cmd {
 	return func() tea.Msg {
 		// A programmatic embed can build the shell without a catalog. Report
 		// that on the picker rather than panicking on the first listing.
 		if catalog == nil {
-			return StoresLoadedMsg{Err: errors.New("no store catalog is configured for this session")}
+			return StoresLoadedMsg{Err: errors.New("no store catalog is configured for this session"), Generation: generation}
 		}
 		entries, err := catalog.Stores(ctx)
-		return StoresLoadedMsg{Entries: entries, Err: err}
+		return StoresLoadedMsg{Entries: entries, Err: err, Generation: generation}
 	}
 }

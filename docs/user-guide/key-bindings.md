@@ -97,6 +97,11 @@ starting `taskmgr-ui` in its project. The picker reuses the board keymap:
 - `r` — re-read the registry
 - `esc` — return to the tab you opened it from
 
+`s` was unbound in the shell context before this binding existed. A config that
+already binds `s` to another shell action now fails startup with `key "s"
+conflicts between actions ... in shell context`; rebind one of the two, for
+example `keybindings: {shell: {open_store_picker: [S]}}`.
+
 ## Modal Dialogs
 
 - `tab`, `down` — move to next field

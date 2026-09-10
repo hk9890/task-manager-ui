@@ -49,5 +49,10 @@ type Entry struct {
 type Catalog interface {
 	// Stores returns every central-registry entry, in the order the registry
 	// reports them. An absent registry is an empty slice, not an error.
+	//
+	// The listing is all-or-nothing: the SDK abandons it when a single entry's
+	// store directory cannot be stat'd, so one unreadable directory costs every
+	// other store on the machine. That is the SDK's behaviour and this port
+	// reports it rather than working around it (docs/OVERVIEW.md).
 	Stores(ctx context.Context) ([]Entry, error)
 }

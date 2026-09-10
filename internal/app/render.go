@@ -36,25 +36,11 @@ func (m Model) View() string {
 		})
 	}
 
-	// The picker is not a tab and not a drill-in: it renders instead of the
-	// shell, so the tab strip and footer are absent while it is up and it
-	// draws its own help line (docs/DESIGN-GUIDE.md).
-	if m.active == mode.StorePicker {
-		view := m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys))
-		if m.toast.Visible() {
-			view = m.toast.Overlay(view, m.width, m.height)
-		}
-		if m.showHelp {
-			view = m.help.Overlay(view)
-		}
-		return view
-	}
+	view := m.renderSurface()
 
-	header := m.renderHeader()
-	body := m.renderBody()
-	footer := m.renderFooter()
-
-	view := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	// Every overlay is applied in one place, for whatever surface is underneath.
+	// An overlay that renders for the shell and not for the picker is still live
+	// and still holds the keyboard — invisible, and with no way out.
 	if m.toast.Visible() {
 		view = m.toast.Overlay(view, m.width, m.height)
 	}
@@ -66,6 +52,19 @@ func (m Model) View() string {
 	}
 
 	return view
+}
+
+// renderSurface renders whatever surface is active, without overlays.
+//
+// The picker is not a tab and not a drill-in: it renders instead of the shell,
+// so the tab strip and footer are absent while it is up and it draws its own
+// help line (docs/DESIGN-GUIDE.md).
+func (m Model) renderSurface() string {
+	if m.active == mode.StorePicker {
+		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
 }
 
 // headerSpinnerCell returns a fixed 2-cell string: the current braille spinner
@@ -229,8 +228,10 @@ func (m Model) loadingStates() []loading.State {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID()})
 	}
 	// The picker draws its own spinner, and this is what arms the tick that
-	// advances it.
-	if m.storePicker != nil && m.storePicker.IsLoading() {
+	// advances it. Reported only while the picker is on screen: a listing still
+	// in flight after the operator switched to a browse tab would otherwise spin
+	// that tab's header for a surface nobody is looking at.
+	if m.active == mode.StorePicker && m.storePicker != nil && m.storePicker.IsLoading() {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeStores})
 	}
 	return loadingStates

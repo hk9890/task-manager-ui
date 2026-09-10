@@ -149,6 +149,12 @@ func renderRows(state State, innerWidth, capacity int) []string {
 		return skeletonRows(innerWidth, capacity)
 	}
 	if len(state.Rows) == 0 {
+		// With an error above them, no rows means the read failed, not that the
+		// registry is empty. Saying "no stores are registered" here is the one
+		// wrong answer, so the error line is left to speak alone.
+		if state.Error != "" {
+			return blankRows(capacity)
+		}
 		return emptyState(innerWidth, capacity)
 	}
 
@@ -164,7 +170,10 @@ func renderRows(state State, innerWidth, capacity int) []string {
 		visible = visible[:capacity]
 	}
 
-	nameWidth := nameColumnWidth(visible)
+	// Measured across every row, not just the visible ones: a column sized to
+	// the window shifts every path and token sideways as a long name scrolls in
+	// or out of view.
+	nameWidth := nameColumnWidth(state.Rows)
 	out := make([]string, 0, capacity)
 	for idx, row := range visible {
 		out = append(out, renderRow(row, offset+idx == state.SelectedRow, nameWidth, innerWidth))
@@ -190,18 +199,22 @@ func renderRow(row Row, selected bool, nameWidth, innerWidth int) string {
 		tokenWidth = lipgloss.Width(token) + 1
 	}
 
-	pathWidth := innerWidth - lipgloss.Width(plainPrefix) - nameWidth - 1 - tokenWidth
-	path := ""
-	if pathWidth >= minPathWidth {
-		path = " " + textutil.PadToWidth(textutil.TruncateString(row.ProjectPath, pathWidth), pathWidth)
-	}
-
 	var b strings.Builder
 	b.WriteString(renderedPrefix)
 	b.WriteString(nameStyle.Render(name))
-	if path != "" {
+
+	// The path is dropped rather than truncated to a few unreadable cells. The
+	// token still lands flush right either way: a token that follows the name on
+	// some rows and the right edge on others makes the frame ragged at exactly
+	// the widths where it is already tightest.
+	pathWidth := innerWidth - lipgloss.Width(plainPrefix) - nameWidth - 1 - tokenWidth
+	if pathWidth >= minPathWidth {
+		path := " " + textutil.PadToWidth(textutil.TruncateString(row.ProjectPath, pathWidth), pathWidth)
 		b.WriteString(lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(path))
+	} else if pad := innerWidth - lipgloss.Width(plainPrefix) - nameWidth - tokenWidth; pad > 0 {
+		b.WriteString(strings.Repeat(" ", pad))
 	}
+
 	if token != "" {
 		b.WriteString(" ")
 		b.WriteString(tokenStyle.Render(token))
@@ -210,22 +223,24 @@ func renderRow(row Row, selected bool, nameWidth, innerWidth int) string {
 	return textutil.TruncateString(b.String(), innerWidth)
 }
 
-// statusToken returns the one token a row may carry on its right. "active"
-// wins over a health token: an entry the app has open is by construction
-// usable, so the two cannot both apply.
+// statusToken returns the one token a row may carry on its right.
+//
+// Health outranks "active". A store can be opened and then have its directory
+// removed from under the running app, and that row is the one the operator most
+// needs told: reporting it as a healthy active store is the one answer that
+// helps nobody.
 func statusToken(row Row) (string, lipgloss.Style) {
+	if !row.Usable {
+		style := lipgloss.NewStyle().Foreground(styles.StoreBrokenColor)
+		if row.Health == "dangling" {
+			style = lipgloss.NewStyle().Foreground(styles.StoreDanglingColor)
+		}
+		return row.Health, style
+	}
 	if row.Active {
 		return "active", lipgloss.NewStyle().Foreground(styles.StoreActiveColor).Bold(true)
 	}
-	if row.Usable {
-		return "", lipgloss.NewStyle()
-	}
-	switch row.Health {
-	case "dangling":
-		return row.Health, lipgloss.NewStyle().Foreground(styles.StoreDanglingColor)
-	default:
-		return row.Health, lipgloss.NewStyle().Foreground(styles.StoreBrokenColor)
-	}
+	return "", lipgloss.NewStyle()
 }
 
 func nameColumnWidth(rows []Row) int {
@@ -242,6 +257,14 @@ func nameColumnWidth(rows []Row) int {
 		width = 1
 	}
 	return width
+}
+
+func blankRows(capacity int) []string {
+	out := make([]string, 0, capacity)
+	for i := 0; i < capacity; i++ {
+		out = append(out, "")
+	}
+	return out
 }
 
 func skeletonRows(innerWidth, capacity int) []string {

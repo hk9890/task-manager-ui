@@ -440,6 +440,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Mode == m.active {
 			m.clearDrillSelection()
 		}
+		// The picker is not a browse tab and shows no detail, so a selection
+		// landing under it must not start a detail load: currentSelection() would
+		// answer from lastBrowse, retargeting the Detail surface the operator
+		// returns to and raising its failure toast over the store list.
+		if m.active == mode.StorePicker {
+			return m, modeCmd
+		}
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case mode.ActionRequestMsg:
 		// The request travels as a Cmd, so the operator can leave the
@@ -498,6 +505,17 @@ func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())
 }
 
+// issueScopedShellActions are the shell actions that act on the currently
+// selected issue. A surface that has no issue selection swallows them rather
+// than letting currentSelection() answer from a tab that is not on screen.
+var issueScopedShellActions = []string{
+	config.ShellActionEditIssue,
+	config.ShellActionCreateIssue,
+	config.ShellActionUpdateIssue,
+	config.ShellActionCloseIssue,
+	config.ShellActionCommentIssue,
+}
+
 // handleShellKey handles one key press for the shell: the pending-dialog
 // choke point, the mode-local capture and intent checks, and the shell
 // keybinding switch. It is split out of update() so that message routing and
@@ -527,10 +545,20 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 	}
 
 	// The picker gets first refusal on a key while it is up, then the shell
-	// switch below still sees Escape, quit and help.
+	// switch below still sees Escape, quit, help and the tab keys.
 	if m.active == mode.StorePicker {
 		if consumed, pickerCmd := m.storePicker.HandleKey(msg); consumed {
 			return m, batchCmds(modeCmd, pickerCmd)
+		}
+		// Every action below acts on "the selected issue", which the picker does
+		// not have: currentSelection() would answer with a browse row that is not
+		// on screen, and the picker's help line names none of them. Editing,
+		// closing or commenting on an issue the operator cannot see is the worst
+		// available outcome, so the picker swallows them.
+		for _, action := range issueScopedShellActions {
+			if m.keys.Match(config.ShellContext, action, msg) {
+				return m, modeCmd
+			}
 		}
 	}
 
@@ -730,15 +758,20 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 // switch. An open overlay consumes the message: that is why this runs before
 // routing and not inside it.
 func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, tea.Cmd, bool) {
-	// Three message types are the shell's own and an overlay never consumes
+	// Four message types are the shell's own and an overlay never consumes
 	// them. Both tick chains re-arm only from their own handlers in update(),
 	// so a swallowed tick froze the spinner and stopped auto-refresh for the
 	// rest of the session; and the shell's resize case is the only caller of
 	// applyWorkspaceSizeToBrowseModes and detail.ClampScroll, so a swallowed
 	// resize left every browse tab sized to the raw terminal until the next
 	// resize with no overlay open. That case sizes the overlays too.
+	//
+	// A swallowed store listing is the same shape of bug: the picker's in-flight
+	// state is cleared only by its own result, so losing one leaves it reading
+	// "Reading the central store registry…" and spinning for the rest of the
+	// session.
 	switch msg.(type) {
-	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg:
+	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg, storepickermode.StoresLoadedMsg:
 		return m, nil, false
 	}
 
