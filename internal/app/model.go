@@ -373,13 +373,19 @@ func (m Model) logger() *slog.Logger {
 func (m Model) Init() tea.Cmd {
 	if !m.storeOpen {
 		// Nothing to health-check and no board to load: the app opens on the
-		// picker and says why it is there.
+		// picker and says why it is there. The refresh tick is still armed: it
+		// re-arms only from its own handler, so a store opened from here would
+		// otherwise never auto-refresh. While the picker is up it reads nothing.
 		reason := m.runtime.UnresolvedStore
-		return tea.Batch(
+		cmds := []tea.Cmd{
 			m.storePicker.Init(),
 			func() tea.Msg { return unresolvedStoreMsg{reason: reason} },
 			m.services.SweepStaleTempFiles(),
-		)
+		}
+		if !m.runtime.DisableAutoRefresh {
+			cmds = append(cmds, m.scheduleRefreshTick())
+		}
+		return tea.Batch(cmds...)
 	}
 
 	m.applyWorkspaceSizeToBrowseModes()
@@ -969,9 +975,10 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 	// session. A swallowed open request or opened store silently drops a switch
 	// the operator asked for. A created store arrives while its form is still
 	// open, by design, so swallowing it would leave the form stuck on
-	// "creating" for good.
+	// "creating" for good. The store form also raises toasts while it stays
+	// open; a swallowed dismiss timer leaves that toast on screen for good.
 	switch msg.(type) {
-	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg,
+	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg, toaster.DismissMsg,
 		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg,
 		storepickermode.CreateMsg, storeCreatedMsg:
 		return m, nil, false

@@ -18,6 +18,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
 const storelessDir = "/home/hans/dev/widget"
@@ -239,6 +240,28 @@ func TestAnEmptyPrefixIsRejectedBeforeCreating(t *testing.T) {
 	}
 	if !m.toast.Visible() || !strings.Contains(m.toast.View(), "prefix") {
 		t.Errorf("expected a toast asking for a prefix, got %q", m.toast.View())
+	}
+}
+
+// The form stays open after it raises a toast, so the toast's dismiss timer
+// fires while the form's overlay is up. Swallowed there, the toast stays on
+// screen after the form is closed, with no key left to clear it.
+func TestAToastRaisedByTheFormStillDismisses(t *testing.T) {
+	s := newStorelessStart(t)
+
+	m := openForm(t, s.m, 0)
+	m = submit(t, m, map[string]string{"prefix": ""})
+	if !m.toast.Visible() {
+		t.Fatal("fixture: the rejected prefix raised no toast")
+	}
+
+	next, _ := m.Update(toaster.DismissMsg{Seq: m.toast.Seq()})
+	m = next.(Model)
+	if m.toast.Visible() {
+		t.Errorf("the form's overlay swallowed the toast's dismiss timer; still showing %q", m.toast.View())
+	}
+	if !m.showActionModal {
+		t.Error("the dismiss timer closed the form")
 	}
 }
 

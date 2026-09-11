@@ -98,6 +98,40 @@ func TestNoStoreStartReadsNoStore(t *testing.T) {
 	}
 }
 
+// The refresh tick re-arms only from its own handler. A no-store start that did
+// not arm it left every store opened afterwards without auto-refresh for the
+// rest of the session.
+func TestNoStoreStartArmsTheRefreshTick(t *testing.T) {
+	services, err := NewServices(nostore.New(), config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	services.StoreCatalog = &fakes.FakeStoreCatalog{}
+
+	for _, tc := range []struct {
+		name      string
+		disabled  bool
+		wantArmed int
+	}{
+		{"auto-refresh on", false, 1},
+		{"auto-refresh off", true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := mustNewModelWithOptions(t, services, RuntimeOptions{UnresolvedStore: "no store", DisableAutoRefresh: tc.disabled})
+			armed := 0
+			m.scheduleRefreshTick = func() tea.Cmd {
+				armed++
+				return nil
+			}
+			m.Init()
+
+			if armed != tc.wantArmed {
+				t.Errorf("refresh tick armed %d times, want %d", armed, tc.wantArmed)
+			}
+		})
+	}
+}
+
 // There is nothing below the picker, so Escape leaves the app rather than
 // returning to a board that does not exist.
 func TestNoStoreStartEscapeQuits(t *testing.T) {
