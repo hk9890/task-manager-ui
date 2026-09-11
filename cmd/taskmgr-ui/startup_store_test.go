@@ -31,6 +31,10 @@ func TestStartupWithNoStoreStartsOnThePicker(t *testing.T) {
 	if selected.storePath != "" {
 		t.Errorf("storePath: got %q, want none with no store open", selected.storePath)
 	}
+	// The picker offers to create a store where none resolved.
+	if selected.createDir != dir {
+		t.Errorf("createDir: got %q, want the storeless working directory %q", selected.createDir, dir)
+	}
 }
 
 // --store-name naming no registered store is the same situation: the picker is
@@ -50,6 +54,11 @@ func TestStartupWithAnUnregisteredStoreNameStartsOnThePicker(t *testing.T) {
 		t.Errorf("reason should name the store, got %q", reason)
 	}
 	assertNoStoreRepository(t, selected)
+	// The working directory may have a store of its own; offering to create
+	// one there could only collide with it.
+	if selected.createDir != "" {
+		t.Errorf("createDir: got %q, want no create offer for an unregistered store name", selected.createDir)
+	}
 }
 
 func TestStartupWithAResolvedStoreHasNoReason(t *testing.T) {
