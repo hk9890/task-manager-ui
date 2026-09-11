@@ -46,6 +46,11 @@ type Model struct {
 	ctx         context.Context
 	cancelStore context.CancelFunc
 
+	// storeOpen is false only when the app started without a store to open. The
+	// operator is held on the picker until one is opened: there is no board to
+	// return to and no tab worth switching to.
+	storeOpen bool
+
 	// storeEpoch identifies the active store. Work issued against a store
 	// carries it (see scoped), and a result that arrives after the store it was
 	// issued against was switched away is dropped instead of rendered:
@@ -199,6 +204,10 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
 	}
 	m.bindStore(services)
+	if runtime.UnresolvedStore != "" {
+		m.storeOpen = false
+		m.active = mode.StorePicker
+	}
 	return m, nil
 }
 
@@ -216,6 +225,7 @@ func (m *Model) bindStore(services Services) {
 	m.ctx, m.cancelStore = context.WithCancel(m.appCtx)
 	m.storeEpoch++
 	m.services = services
+	m.storeOpen = true
 
 	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
@@ -334,6 +344,17 @@ func (m Model) logger() *slog.Logger {
 // Update). Search is deferred further until the user first switches to search
 // mode; see lazyInitActiveTabCmd.
 func (m Model) Init() tea.Cmd {
+	if !m.storeOpen {
+		// Nothing to health-check and no board to load: the app opens on the
+		// picker and says why it is there.
+		reason := m.runtime.UnresolvedStore
+		return tea.Batch(
+			m.storePicker.Init(),
+			func() tea.Msg { return unresolvedStoreMsg{reason: reason} },
+			m.services.SweepStaleTempFiles(),
+		)
+	}
+
 	m.applyWorkspaceSizeToBrowseModes()
 	healthCheckCmd := m.scoped(func() tea.Msg {
 		err := m.services.Repo.HealthCheck(m.ctx)
@@ -500,6 +521,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, modeCmd
 	case storepickermode.StoresLoadedMsg:
 		return m, batchCmds(modeCmd, m.storePicker.Update(msg))
+	case unresolvedStoreMsg:
+		return m, batchCmds(modeCmd, m.showToast(msg.reason, toaster.StyleWarn))
 	case storepickermode.OpenMsg:
 		entry := msg.Entry
 		if !entry.Health.Usable() {
@@ -699,6 +722,19 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		// available outcome, so the picker swallows them.
 		for _, action := range issueScopedShellActions {
 			if m.keys.Match(config.ShellContext, action, msg) {
+				return m, modeCmd
+			}
+		}
+
+		// With no store open there is nothing below the picker: no board to
+		// return to and no tab to switch to. Escape leaves the app, quit and
+		// help keep working, and every other key is inert.
+		if !m.storeOpen {
+			if m.keys.Match(config.ShellContext, config.ShellActionEscape, msg) {
+				return m, batchCmds(modeCmd, tea.Quit)
+			}
+			if !m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) &&
+				!m.keys.Match(config.ShellContext, config.ShellActionHelp, msg) {
 				return m, modeCmd
 			}
 		}

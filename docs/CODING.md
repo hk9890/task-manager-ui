@@ -77,8 +77,11 @@ discovery only, so a project whose store was promoted with `taskmgr store move -
 would report "no .tasks directory found". `Resolve` applies the same precedence as the
 `taskmgr` CLI — see the SDK for the order.
 
-Nothing resolving is an error: startup fails with exit code `1` rather than booting
-against an empty board.
+Nothing resolving is not an error. When `tasks.Resolve` reports `ErrNoStore`, or
+`ErrStoreNotRegistered` for a `--store-name`, `resolveStartupStore` starts the app on the store
+picker with the `nostore` repository, and the operator stays there until a store is open. Every
+other resolution failure — a store that exists but cannot be opened — still exits `1`: starting on
+the picker would hide it.
 
 The project root the app runs with is the active store's project path, not the target
 directory. That is what `{{project.root}}` interpolates to

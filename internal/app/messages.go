@@ -42,6 +42,10 @@ type editorExitedMsg struct {
 	execErr  error
 }
 
+// unresolvedStoreMsg reports, once the program runs, why it started without a
+// store.
+type unresolvedStoreMsg struct{ reason string }
+
 // storeOpenedMsg carries the result of opening a store the picker asked for.
 type storeOpenedMsg struct {
 	name   string
@@ -64,6 +68,11 @@ type surfaceRefreshState struct {
 // RuntimeOptions carries toggles that alter runtime behaviour without touching config.
 type RuntimeOptions struct {
 	DisableAutoRefresh bool
+
+	// UnresolvedStore is why startup found no store to open. Non-empty starts
+	// the app on the store picker instead of a board, holds the operator there
+	// until a store is open, and says why in a toast.
+	UnresolvedStore string
 
 	// Ctx is the application lifecycle context. Each store the app opens gets
 	// a context derived from it, and repository reads use that one, so both

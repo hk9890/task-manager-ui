@@ -61,7 +61,7 @@ func (m Model) View() string {
 // help line (docs/DESIGN-GUIDE.md).
 func (m Model) renderSurface() string {
 	if m.active == mode.StorePicker {
-		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys))
+		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys, m.storeOpen))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
@@ -372,14 +372,18 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 
 // storePickerHelpText is the picker's own footer. The shell footer is not
 // rendered while the picker is up, so this line is the only place its keys are
-// named on screen.
-func storePickerHelpText(keys config.ResolvedKeyBindings) string {
-	return fmt.Sprintf("Stores: %s/%s move · %s open · %s reload · %s back · %s quit",
+// named on screen. With no store open, Escape quits rather than going back.
+func storePickerHelpText(keys config.ResolvedKeyBindings, storeOpen bool) string {
+	escape := "back"
+	if !storeOpen {
+		escape = "quit"
+	}
+	return fmt.Sprintf("Stores: %s/%s move · %s open · %s reload · %s %s · %s quit",
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown),
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp),
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail),
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionReload),
-		keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape),
+		keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), escape,
 		keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit),
 	)
 }

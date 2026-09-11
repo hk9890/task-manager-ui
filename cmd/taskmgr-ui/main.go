@@ -25,6 +25,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
+	"github.com/hk9890/task-manager-ui/internal/repository/nostore"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
 	storecatalogtaskmgr "github.com/hk9890/task-manager-ui/internal/storecatalog/taskmgr"
 	appversion "github.com/hk9890/task-manager-ui/internal/version"
@@ -120,13 +121,45 @@ func buildRepository(opts startupOptions) (backend, error) {
 	}
 }
 
+// resolveStartupStore opens the store the app starts on. When there is none to
+// open — nothing resolves for the working directory, or --store-name names no
+// registered store — it returns the no-store repository and the reason instead
+// of an error, and the app starts on the store picker. Every other failure is
+// still an error: a store that exists but cannot be read is not a store the
+// operator can pick around.
+func resolveStartupStore(opts startupOptions) (backend, string, error) {
+	selected, err := buildRepository(opts)
+	if err == nil {
+		return selected, "", nil
+	}
+
+	var reason string
+	switch {
+	case errors.Is(err, tasks.ErrStoreNotRegistered):
+		reason = fmt.Sprintf("No central store is registered as %q", opts.storeName)
+	case errors.Is(err, tasks.ErrNoStore):
+		reason = fmt.Sprintf("No task-manager store for %s", opts.projectRoot)
+	default:
+		return backend{}, "", err
+	}
+
+	if opts.logManager != nil {
+		opts.logManager.Component("startup").Info("no task-manager store resolved; starting on the store picker",
+			"reason", reason,
+			"cwd", opts.projectRoot,
+			"store_name", opts.storeName,
+		)
+	}
+	return backend{repo: nostore.New(), projectRoot: opts.projectRoot}, reason, nil
+}
+
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	// Cancelled when program.Run returns, so repository reads still in flight at
 	// shutdown are abandoned rather than waited on.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	selected, err := buildRepository(opts)
+	selected, unresolved, err := resolveStartupStore(opts)
 	if err != nil {
 		return err
 	}
@@ -146,6 +179,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
 		DisableAutoRefresh: !opts.autoRefresh,
+		UnresolvedStore:    unresolved,
 		Ctx:                ctx,
 	})
 	if err != nil {

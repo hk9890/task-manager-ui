@@ -82,9 +82,12 @@ record) is the working directory, while `project_path` is the store's project �
 they differ for a central store, and for a run started in a subdirectory
 ([CONFIGURATION.md](CONFIGURATION.md) covers what a launcher template does with it).
 
-A failure to resolve is reported by the existing `interactive startup failed`
-record instead; it names the working directory, or the store name when
-`--store-name` was given.
+When nothing resolves — no store for the working directory, or no registered store
+under `--store-name` — the app starts on the store picker instead, and the `startup`
+record is `no task-manager store resolved; starting on the store picker`, carrying
+`reason`, `cwd` and `store_name`. Any other failure to resolve is reported by the
+existing `interactive startup failed` record; it names the working directory, or the
+store name when `--store-name` was given.
 
 A `WARN` follows the record when `project_path` is not accessible. Resolution
 checks the store directory, never the project path recorded for it, so a

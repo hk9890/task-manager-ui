@@ -116,7 +116,11 @@ The shell actions that act on the selected issue are inert there: the picker has
 selection, and the answer `currentSelection()` would give is a row that is not on screen.
 
 Opening a store from the picker lands on the new store's Board, whatever mode the picker was
-opened from — the previous store's Detail and selection are gone. The header's context text leads
+opened from — the previous store's Detail and selection are gone.
+
+The picker is also the start screen when no store resolves. With no store open there is nothing
+below it, so the operator is held there: Escape quits, quit and help work, and every other shell
+key is inert until a store is opened. The header's context text leads
 with the active store's name and keeps it until only the surface name still fits.
 
 ## Selection and scrolling
