@@ -112,6 +112,12 @@ absent from `mode.BrowseModes` and never appears in the tab cycle.
 A surface above the shell takes keys before the shell key switch and reports whether it consumed
 each one — `Model.HandleKey` returns `(consumed, cmd)` — so Escape, quit and help keep working
 without it re-implementing them. Escape returns to the mode it was opened from, including Detail.
+The shell actions that act on the selected issue are inert there: the picker has no issue
+selection, and the answer `currentSelection()` would give is a row that is not on screen.
+
+Opening a store from the picker lands on the new store's Board, whatever mode the picker was
+opened from — the previous store's Detail and selection are gone. The header's context text leads
+with the active store's name and keeps it until only the surface name still fits.
 
 ## Selection and scrolling
 

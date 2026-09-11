@@ -145,7 +145,7 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 	// suppresses a second load of the detail this path already issues.
 	return m, batchCmds(modeCmd,
 		toastCmd,
-		loadDetailCmd(m.ctx, m.services, selection.Issue.ID),
+		m.loadDetail(selection.Issue.ID),
 		m.maybeAutoRefreshActiveSurfaceCmd(),
 	)
 }

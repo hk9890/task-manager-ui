@@ -36,6 +36,13 @@ type StoresLoadedMsg struct {
 	Generation int
 }
 
+// OpenMsg asks the shell to make Entry the active store. The picker emits it
+// rather than opening the store itself: which store is active is the shell's
+// state, and the picker only knows which row the operator chose.
+type OpenMsg struct {
+	Entry storecatalog.Entry
+}
+
 // Model is the store-picker controller.
 type Model struct {
 	ctx     context.Context
@@ -111,11 +118,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // An unconsumed key falls through to the shell, which is how Escape, quit and
 // help keep working while the picker is up.
 //
-// Row movement and reload read the board keybinding context: the picker is a
-// single scrolling list of rows, the same shape a board column is, and a
+// Row movement, open and reload read the board keybinding context: the picker
+// is a single scrolling list of rows, the same shape a board column is, and a
 // context of its own would ask the operator to rebind the same movement twice.
 func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	switch {
+	case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
+		entry, ok := m.SelectedEntry()
+		if !ok {
+			return true, nil
+		}
+		return true, func() tea.Msg { return OpenMsg{Entry: entry} }
 	case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 		m.moveRow(-1)
 		return true, nil

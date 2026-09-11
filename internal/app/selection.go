@@ -75,7 +75,7 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 			Priority: selection.Issue.Priority,
 		},
 	})
-	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
+	return m.loadDetail(selection.Issue.ID)
 }
 
 func (m Model) selectedIssueID() (string, bool) {

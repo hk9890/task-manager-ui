@@ -7,8 +7,8 @@ The map of this repository: where things live and how to find them fast. Module
 
 ```
 cmd/taskmgr-ui/           entrypoint: flag parsing, config resolution, logging setup, repository
-                          backend selection. Calls tasks.Resolve, so nothing below cmd/ knows
-                          where the store lives — the adapter receives an already-open *tasks.Store
+                          backend selection. Resolves the store the app starts on; every later
+                          store is opened through storecatalog/ from the picker
 internal/
   app/                    the root shell: mode lifecycle, routing, selection and detail coordination
   mode/                   board, docs, search, detail and storepicker feature models, plus the

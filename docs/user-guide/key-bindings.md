@@ -94,6 +94,7 @@ starting `taskmgr-ui` in its project. The picker reuses the board keymap:
 
 - `k`, `up` — move up
 - `j`, `down` — move down
+- `enter`, `o` — open the highlighted store; the app switches to it and shows its board
 - `r` — re-read the registry
 - `esc` — return to the tab you opened it from
 

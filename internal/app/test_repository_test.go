@@ -182,6 +182,16 @@ func runBatch(cmd tea.Cmd) []tea.Msg {
 	return testui.DrainCmd(cmd)
 }
 
+// unscoped returns the message a store-bound command produced, without the
+// store-epoch tag the shell puts on it. For a test that runs one command by hand
+// and asserts on what came back.
+func unscoped(msg tea.Msg) tea.Msg {
+	if scoped, ok := msg.(scopedMsg); ok {
+		return scoped.msg
+	}
+	return msg
+}
+
 func applyMessages(t *testing.T, model Model, msgs []tea.Msg) Model {
 	t.Helper()
 

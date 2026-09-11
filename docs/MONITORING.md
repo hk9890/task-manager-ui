@@ -130,6 +130,9 @@ suppressed for the interactive session.
 - `failed to list central task-manager stores` (`storepicker`) — the store picker could
   not read the central registry. The picker shows the cause inline and keeps whatever it
   listed before; on a first open it has nothing to keep and shows the error alone.
+- `failed to open task-manager store`, `failed to switch task-manager store` — a store
+  chosen in the picker did not become active. The app stays on the store it was on, and
+  the toast carries the same cause.
 - `backend sort assumption broken` (WARN) — a dashboard group came back in an order
   `internal/dashboard` does not expect (`Warning.Threshold == -1`). The column still
   renders; its order is the backend's, not the composed one.

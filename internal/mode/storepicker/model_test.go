@@ -363,7 +363,7 @@ func TestUnclaimedKeysFallThroughToTheShell(t *testing.T) {
 	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries("alpha")})
 	run(t, m, m.Init())
 
-	for _, k := range []tea.KeyMsg{{Type: tea.KeyEsc}, key("?"), key("s"), {Type: tea.KeyEnter}} {
+	for _, k := range []tea.KeyMsg{{Type: tea.KeyEsc}, key("?"), key("s"), key("1"), {Type: tea.KeyTab}} {
 		if consumed, _ := m.HandleKey(k); consumed {
 			t.Errorf("picker consumed %q; it must reach the shell", k.String())
 		}

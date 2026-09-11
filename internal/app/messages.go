@@ -6,6 +6,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
 // refreshTickMsg triggers periodic surface auto-refresh.
@@ -41,6 +42,13 @@ type editorExitedMsg struct {
 	execErr  error
 }
 
+// storeOpenedMsg carries the result of opening a store the picker asked for.
+type storeOpenedMsg struct {
+	name   string
+	opened storecatalog.Opened
+	err    error
+}
+
 // launchActionResultMsg carries the result of a background launcher action.
 type launchActionResultMsg struct {
 	action string
@@ -57,8 +65,9 @@ type surfaceRefreshState struct {
 type RuntimeOptions struct {
 	DisableAutoRefresh bool
 
-	// Ctx is the application lifecycle context. Repository reads issued by the
-	// shell and by both browse modes derive from it, so quitting abandons work
-	// in flight instead of waiting for it. Nil means context.Background().
+	// Ctx is the application lifecycle context. Each store the app opens gets
+	// a context derived from it, and repository reads use that one, so both
+	// quitting and switching stores abandon work in flight instead of waiting
+	// for it. Nil means context.Background().
 	Ctx context.Context
 }

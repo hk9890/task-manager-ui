@@ -35,13 +35,15 @@ var configLoad = func(opts config.LoadOptions) (config.Result, error) {
 }
 
 // backend is what startInteractive needs from a resolved repository: the
-// repository itself, the project root launchers interpolate, and the store
-// directory the picker marks as active. The memory backend leaves storePath
-// empty — a JSONL fixture is not a store in the registry.
+// repository itself, the project root launchers interpolate, the store
+// directory the picker marks as active, and the name the header shows. The
+// memory backend leaves storePath and storeName empty — a JSONL fixture is not
+// a store in the registry.
 type backend struct {
 	repo        repository.Repository
 	projectRoot string
 	storePath   string
+	storeName   string
 }
 
 type startupOptions struct {
@@ -113,6 +115,7 @@ func buildRepository(opts startupOptions) (backend, error) {
 			repo:        repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())),
 			projectRoot: info.ProjectPath,
 			storePath:   info.StorePath,
+			storeName:   storecatalogtaskmgr.StoreName(info),
 		}, nil
 	}
 }
@@ -137,8 +140,9 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	}
 	// The catalog is machine-wide and independent of the repository backend: it
 	// answers which stores exist, not what is inside the one now open.
-	services.StoreCatalog = storecatalogtaskmgr.New()
+	services.StoreCatalog = storecatalogtaskmgr.New(resolveAuthor())
 	services.ActiveStorePath = selected.storePath
+	services.StoreName = selected.storeName
 
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
 		DisableAutoRefresh: !opts.autoRefresh,
