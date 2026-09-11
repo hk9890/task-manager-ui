@@ -14,6 +14,7 @@ const (
 	ErrorCodeUnauthorized     ErrorCode = "unauthorized"
 	ErrorCodeTimeout          ErrorCode = "timeout"
 	ErrorCodeConflict         ErrorCode = "conflict"
+	ErrorCodeHookDenied       ErrorCode = "hook_denied"
 	ErrorCodeUnknown          ErrorCode = "unknown"
 )
 
