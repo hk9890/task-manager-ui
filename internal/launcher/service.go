@@ -63,9 +63,9 @@ var exCommandFlagRe = regexp.MustCompile(`^(-c|--cmd)$`)
 // following such a flag is the script body.
 var shellCommandFlagRe = regexp.MustCompile(`^-[a-z]*c[a-z]*$`)
 
-// projectRootPlaceholder is the one operator-trusted placeholder: it resolves to
+// ProjectRootPlaceholder is the one operator-trusted placeholder: it resolves to
 // the store's project path, never to issue content.
-const projectRootPlaceholder = "{{project.root}}"
+const ProjectRootPlaceholder = "{{project.root}}"
 
 // issueFieldPlaceholders returns the operator-untrusted interpolation
 // placeholders — everything a person able to file or edit an issue controls.
@@ -79,7 +79,7 @@ func issueFieldPlaceholders() []string {
 	all := InterpolationContext{}.Placeholders()
 	out := make([]string, 0, len(all))
 	for key := range all {
-		if key == projectRootPlaceholder {
+		if key == ProjectRootPlaceholder {
 			continue
 		}
 		out = append(out, key)
@@ -212,7 +212,7 @@ func validateExecTargetSafety(def Definition) error {
 	if ph := leadingIssuePlaceholder(def.WorkDir); ph != "" {
 		return fmt.Errorf(
 			"launcher action %q: workdir %q starts with the issue-field placeholder %s, which leaves the working directory to issue content (arbitrary-execution risk); start it with %s or a literal path",
-			action, strings.TrimSpace(def.WorkDir), ph, projectRootPlaceholder,
+			action, strings.TrimSpace(def.WorkDir), ph, ProjectRootPlaceholder,
 		)
 	}
 
@@ -241,7 +241,7 @@ func leadingIssuePlaceholder(s string) string {
 // kernel resolves.
 func interpolateExecTarget(interpolator templateInterpolator, field, template string, ctx InterpolationContext) (string, error) {
 	for placeholder, value := range ctx.Placeholders() {
-		if placeholder == projectRootPlaceholder || !strings.Contains(template, placeholder) {
+		if placeholder == ProjectRootPlaceholder || !strings.Contains(template, placeholder) {
 			continue
 		}
 		if escape := pathEscapeIn(value); escape != "" {
@@ -372,7 +372,7 @@ func (c InterpolationContext) Placeholders() map[string]string {
 		"{{issue.title}}":      c.IssueTitle,
 		"{{issue.labels}}":     strings.Join(c.IssueLabels, ","),
 		"{{issue.assignee}}":   c.IssueAssignee,
-		projectRootPlaceholder: c.ProjectRoot,
+		ProjectRootPlaceholder: c.ProjectRoot,
 	}
 }
 

@@ -200,6 +200,11 @@ Notes:
 - Unsupported placeholders are passed through literally.
 - Empty issue fields interpolate as empty strings.
 - `workdir` falls back to project root when blank.
+- When the active store's project path does not exist, a launcher whose `workdir` is
+  blank or uses `{{project.root}}` is refused with a toast rather than exec'd in a
+  directory that is gone, and the Detail footer says the launchers are off. A launcher
+  with a `workdir` of its own still runs. The edit key is unaffected: it writes a temp
+  document and runs the editor there.
 - In `command` and `workdir` an issue field may only *extend* what the operator wrote: the value
   must not start with one, and at launch a field carrying `/`, `\` or a `..` segment refuses the
   launch. `command: "/opt/tools/run-{{issue.id}}"` is fine; `command: "{{issue.assignee}}"` is

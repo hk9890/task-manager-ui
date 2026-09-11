@@ -91,9 +91,10 @@ store name when `--store-name` was given.
 
 A `WARN` follows the record when `project_path` is not accessible. Resolution
 checks the store directory, never the project path recorded for it, so a
-registry entry outliving a moved or deleted project opens normally — the board
-reads fine, while launchers without an explicit `work_dir` exec in a directory
-that is gone. Re-point the entry by running
+registry entry outliving a moved or deleted project opens normally and the board
+reads fine. The app refuses the launchers that would run there, with a toast, and
+the Detail footer reads `launchers off: project path missing`; the refusal writes
+no record. Re-point the entry by running
 `taskmgr store move --relink --to <store>` from the project's new location.
 
 ### What a healthy run logs after startup

@@ -29,6 +29,10 @@ overridden through runtime config.
 - `p` — launch `opencode` action in detail mode
 - `l` — launch `shell-command` action in detail mode
 
+`n`, `p` and `l` run in the store's project directory. When that directory is
+gone — the project was moved or deleted — they are refused with a message, and
+the detail footer reads `launchers off`.
+
 ## Board Mode
 
 - `h`, `left` — move to previous column

@@ -51,6 +51,11 @@ type Model struct {
 	// return to and no tab worth switching to.
 	storeOpen bool
 
+	// projectRootMissing is true when the active store's project path does not
+	// stat. Launchers that run there are refused with the reason instead of
+	// failing at exec time. Recomputed on every store bind.
+	projectRootMissing bool
+
 	// storeEpoch identifies the active store. Work issued against a store
 	// carries it (see scoped), and a result that arrives after the store it was
 	// issued against was switched away is dropped instead of rendered:
@@ -228,6 +233,7 @@ func (m *Model) bindStore(services Services) {
 	m.storeEpoch++
 	m.services = services
 	m.storeOpen = true
+	m.projectRootMissing = projectRootMissing(services.ProjectRoot)
 
 	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
@@ -910,29 +916,17 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		issueContext, ok := m.selectedIssueContext()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionNvim, issueContext))
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionNvim))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		issueContext, ok := m.selectedIssueContext()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionOpencode, issueContext))
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionOpencode))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		issueContext, ok := m.selectedIssueContext()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionShellCommand, issueContext))
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionShellCommand))
 	}
 
 	return m, modeCmd

@@ -199,7 +199,14 @@ func (m Model) renderFooter() string {
 		return ""
 	}
 
-	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(footerHelpText(m.active, m.width, m.keys))
+	text := footerHelpText(m.active, m.width, m.keys)
+	// Detail is where the launch keys work, so it is where their being off is
+	// said, before the operator presses one. Truncated rather than wrapped: the
+	// workspace height is computed from a one-line footer.
+	if m.active == mode.Detail && m.projectRootMissing {
+		text = textutil.TruncateString(text+" · launchers off: project path missing", max(1, m.width))
+	}
+	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(text)
 }
 
 // browseLoadingScope maps a browse mode to its loading scope. A new browse
