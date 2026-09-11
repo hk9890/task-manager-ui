@@ -421,21 +421,13 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 		ClosedTotal:   data.ClosedTotal,
 	})
 
-	// Emit warnings to slog.
+	// Emit warnings to slog. Compose produces exactly one kind.
 	for _, w := range cols.Warnings {
-		if w.Threshold == -1 {
-			m.logger.Warn("backend sort assumption broken",
-				"group", w.Group,
-				"count", w.Count,
-				"threshold", w.Threshold,
-			)
-		} else {
-			m.logger.Warn("cardinality threshold exceeded",
-				"group", w.Group,
-				"count", w.Count,
-				"threshold", w.Threshold,
-			)
-		}
+		m.logger.Warn("cardinality threshold exceeded",
+			"group", w.Group,
+			"count", w.Count,
+			"threshold", w.Threshold,
+		)
 	}
 
 	// Build the four fixed columns, clearing loading flags atomically.

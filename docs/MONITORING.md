@@ -143,9 +143,6 @@ suppressed for the interactive session.
 - `failed to create task-manager store` — creating a store from the picker failed, most
   often on a registry name already taken. The form stays open with what was typed, and
   the toast carries the same cause.
-- `backend sort assumption broken` (WARN) — a dashboard group came back in an order
-  `internal/dashboard` does not expect (`Warning.Threshold == -1`). The column still
-  renders; its order is the backend's, not the composed one.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.
@@ -223,7 +220,7 @@ and `build_version`.
 - `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`buildRepository`: `tasks.Resolve` → `taskmgr.New`)
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
 - `internal/app/services.go` — the temp-cleanup sweep records
-- `internal/mode/board/model.go` — the dashboard-refresh, sort, cardinality and load-more records
+- `internal/mode/board/model.go` — the dashboard-refresh, cardinality and load-more records
 - `internal/mode/search/model.go`, `internal/mode/docs/model.go`, `internal/app/refresh.go` — the
   guard traces above
 

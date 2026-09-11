@@ -53,16 +53,22 @@ func mapReadErr(op string, err error) error {
 // domain.ErrorCodeCommandFailed rather than the ErrIssueNotFound sentinel. An
 // in-place edit of a closed issue (tasks.ErrImmutable) becomes
 // domain.ErrorCodeConflict — a taskmgr-only outcome the memory backend lacks.
+// A write a lifecycle hook refuses becomes domain.ErrorCodeHookDenied, also
+// taskmgr-only: a policy said no, which is not a fault in the app and must not
+// reach the operator as "unknown".
 func mapWriteErr(op string, err error) error {
 	if err == nil {
 		return nil
 	}
 	var ve *tasks.ValidationError
+	var hde *tasks.HookDeniedError
 	switch {
 	case errors.Is(err, tasks.ErrNotFound):
 		return repoError(domain.ErrorCodeCommandFailed, op, "issue not found", err)
 	case errors.As(err, &ve):
 		return repoError(domain.ErrorCodeValidationFailed, op, ve.Message, err)
+	case errors.As(err, &hde):
+		return repoError(domain.ErrorCodeHookDenied, op, hde.Reason, err)
 	case errors.Is(err, tasks.ErrImmutable):
 		return repoError(domain.ErrorCodeConflict, op, "issue is closed; reopen it before editing", err)
 	case errors.Is(err, tasks.ErrNoStore):

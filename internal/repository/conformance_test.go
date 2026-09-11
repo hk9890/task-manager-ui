@@ -771,3 +771,58 @@ func TestUpdateDedupesLabelsConformance(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchCompletenessConformance pins what a paged search reports about the
+// matches it did not return. The memory backend applied Limit and Offset and
+// still reported every window Exact, so a fixture-backed search view was told a
+// truncated page was the whole result set and offered no further page. The rule
+// belongs to both backends or the parity claim in repository.go is prose.
+func TestSearchCompletenessConformance(t *testing.T) {
+	const matches = 3
+
+	cases := []struct {
+		name         string
+		limit        int
+		offset       int
+		wantResults  int
+		wantComplete domain.SearchResultCompleteness
+	}{
+		{"no limit returns every match", 0, 0, matches, domain.SearchResultCompletenessExact},
+		{"window shorter than the match set", 2, 0, 2, domain.SearchResultCompletenessMaybeMore},
+		{"offset window stopping one short", 1, 1, 1, domain.SearchResultCompletenessMaybeMore},
+		{"window exactly the match set", matches, 0, matches, domain.SearchResultCompletenessExact},
+		{"last window reaching the end", 2, 2, 1, domain.SearchResultCompletenessExact},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, b := range freshBackends(t) {
+				for i := 0; i < matches; i++ {
+					if _, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+						Title: fmt.Sprintf("sprocket %d", i+1),
+					}); err != nil {
+						t.Fatalf("%s: CreateIssue: %v", b.name, err)
+					}
+				}
+
+				page, err := b.repo.Search(context.Background(), domain.SearchIssuesQuery{
+					Text:   "sprocket",
+					Limit:  tc.limit,
+					Offset: tc.offset,
+				})
+				if err != nil {
+					t.Fatalf("%s: Search: %v", b.name, err)
+				}
+
+				if len(page.Results) != tc.wantResults {
+					t.Errorf("%s: Search(limit=%d offset=%d) returned %d results, want %d",
+						b.name, tc.limit, tc.offset, len(page.Results), tc.wantResults)
+				}
+				if got := page.Metadata.Completeness; got != tc.wantComplete {
+					t.Errorf("%s: Completeness = %v, want %v (limit=%d offset=%d, %d results)",
+						b.name, got, tc.wantComplete, tc.limit, tc.offset, len(page.Results))
+				}
+			}
+		})
+	}
+}
