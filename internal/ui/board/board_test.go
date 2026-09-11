@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -29,7 +30,7 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 			Priority: 0,
 		}},
 		SelectedRow: 0,
-	}, 72, 0, 0)[0]
+	}, 72, 0, 0, time.Time{}).rows[0]
 
 	if !strings.Contains(line, "\x1b[") {
 		t.Fatalf("expected ANSI styling in rendered row, got: %q", line)
@@ -51,7 +52,7 @@ func TestRenderColumnRowsUsesSharedIssueRowRenderer(t *testing.T) {
 	t.Parallel()
 
 	issue := domain.IssueSummary{ID: "task-manager-ui-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
-	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0, 0)
+	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0, 0, time.Time{}).rows
 	if len(rows) != 1 {
 		t.Fatalf("expected exactly one rendered row, got %d", len(rows))
 	}
@@ -172,7 +173,7 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 			{ID: "tm-1", Title: "Stale Board Issue", Status: "open", Type: "task", Priority: 1},
 		},
 		SelectedRow: -1,
-	}, 80, phase, 0)
+	}, 80, phase, 0, time.Time{}).rows
 
 	if len(rows) == 0 {
 		t.Fatal("expected at least one rendered row")

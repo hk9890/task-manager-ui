@@ -5,6 +5,7 @@ package board
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -51,6 +52,11 @@ type Column struct {
 	// "+" suffix to avoid misrepresenting an exact count.
 	Total        int
 	TotalIsExact bool
+	// AgeMarkers draws a divider row before the first issue whose last change
+	// is older than each age threshold (see agemarker.go). Only meaningful for
+	// a column ordered by UpdatedAt descending; the Done column, ordered by
+	// close date, leaves it false.
+	AgeMarkers bool
 }
 
 // State is the full board renderer input.
@@ -61,6 +67,8 @@ type State struct {
 	Width          int
 	Height         int
 	SkeletonPhase  int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
+	// Now is the instant the age markers measure against. Zero disables them.
+	Now time.Time
 }
 
 // Render renders a multi-column board dashboard using section borders.
@@ -105,44 +113,54 @@ func Render(state State) string {
 		isLoadMore := col.Loading && len(col.Rows) > 0 && col.ScrollOffset > 0
 
 		// Build all rendered rows for this column.
-		rows := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx)
+		rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx, state.Now)
+		rows := rendered.rows
 
-		// Apply scroll window: slice to [offset : offset+innerHeight] so that
-		// the selected row is always visible. Only slice when not loading (skeleton
-		// / stale-refresh paths manage their own row counts), or when a load-more
-		// is in flight (offset > 0 indicates deep navigation with a pending page fetch).
+		// Apply scroll window so that the selected row is always visible. Only
+		// slice when not loading (skeleton / stale-refresh paths manage their own
+		// row counts), or when a load-more is in flight (offset > 0 indicates deep
+		// navigation with a pending page fetch).
+		//
+		// renderColumnRows pins an inline error row (when col.Error is set) above
+		// the issue rows, and may insert age-marker dividers between them.
+		// ScrollOffset is an issue index, so the window starts at that issue's
+		// first row (a divider drawn directly above it included) and spans the
+		// remaining height; the error row counts against innerHeight.
 		displayRows := rows
-		if (!col.Loading || isLoadMore) && len(rows) > 0 {
-			// renderColumnRows prepends an inline error row (when col.Error is set)
-			// above the issue rows. ScrollOffset is an issue index, so the window
-			// must be applied to the issue rows only; the error row is pinned at the
-			// top and counts against innerHeight. Without this the window shifts by
-			// the prefix length and clips the wrong issue (the selected row can fall
-			// off-screen) whenever an error and issues coexist (e.g. a failed Done
-			// load-more that keeps its rows).
-			prefix := 0
-			if strings.TrimSpace(col.Error) != "" {
-				prefix = 1
-			}
+		visibleIssues := len(col.Rows)
+		if (!col.Loading || isLoadMore) && len(col.Rows) > 0 {
+			prefix := rendered.prefix
 			issueRows := rows[prefix:]
 			offset := col.ScrollOffset
 			if offset < 0 {
 				offset = 0
 			}
-			if offset > len(issueRows) {
-				offset = len(issueRows)
+			if offset > len(col.Rows) {
+				offset = len(col.Rows)
 			}
-			end := offset + innerHeight - prefix
-			if end < offset {
-				end = offset
+			startRow := len(issueRows)
+			if offset < len(col.Rows) {
+				startRow = rendered.issueStart[offset]
+			}
+			end := startRow + innerHeight - prefix
+			if end < startRow {
+				end = startRow
 			}
 			if end > len(issueRows) {
 				end = len(issueRows)
 			}
-			windowed := issueRows[offset:end]
+			windowed := issueRows[startRow:end]
 			displayRows = make([]string, 0, prefix+len(windowed))
 			displayRows = append(displayRows, rows[:prefix]...)
 			displayRows = append(displayRows, windowed...)
+
+			visibleIssues = 0
+			for _, row := range rendered.issueRow[offset:] {
+				if row >= end {
+					break
+				}
+				visibleIssues++
+			}
 		}
 
 		// Compute header badge.
@@ -154,14 +172,13 @@ func Render(state State) string {
 		//     sees real pagination progress, not the window size. The chevron
 		//     visibility property implicitly communicates window clip.
 		//
-		// (2) TotalIsExact=true and window clips (visibleCount < len(rows)):
-		//     show "visible of total" — visibleCount / col.Total — so the user
+		// (2) TotalIsExact=true and window clips (visibleIssues < len(col.Rows)):
+		//     show "visible of total" — visibleIssues / col.Total — so the user
 		//     knows the rendered window is smaller than the loaded slice. This
 		//     is the honesty path for Ready / NotReady / InProgress.
 		//
 		// (3) TotalIsExact=true and everything fits: just col.Total.
 		var topRight string
-		visibleCount := len(displayRows)
 		switch {
 		case isLoadMore:
 			// Load-more in flight: show loaded count against the known total
@@ -170,9 +187,9 @@ func Render(state State) string {
 		case !col.TotalIsExact:
 			// Paginated column: show loaded vs. real DB total.
 			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Total)
-		case !col.Loading && visibleCount < len(rows):
+		case !col.Loading && visibleIssues < len(col.Rows):
 			// Non-paginated but window clips: show visible vs. DB total.
-			topRight = fmt.Sprintf("%d of %d", visibleCount, col.Total)
+			topRight = fmt.Sprintf("%d of %d", visibleIssues, col.Total)
 		default:
 			// All loaded and all fit.
 			topRight = fmt.Sprintf("%d", col.Total)
@@ -298,72 +315,90 @@ func skeletonRows(maxWidth, phase, colIndex int) []string {
 	return rows
 }
 
-func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int) []string {
-	var rows []string
+// columnRows is the rendered content of one column. rows holds every line in
+// draw order. prefix is the number of pinned rows (the inline error row) ahead
+// of the issue rows. issueStart[i] and issueRow[i], both relative to
+// rows[prefix:], are where issue i begins once any divider drawn directly
+// above it is included, and the line of the issue itself. Both are nil for the
+// skeleton path, which draws no issues.
+type columnRows struct {
+	rows       []string
+	prefix     int
+	issueStart []int
+	issueRow   []int
+}
+
+func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now time.Time) columnRows {
+	var out columnRows
 
 	// Inline error row at the top (if any).
 	if strings.TrimSpace(col.Error) != "" {
 		errRow := textutil.TruncateString("⚠ load failed: "+col.Error, maxWidth)
-		rows = append(rows, errRow)
+		out.rows = append(out.rows, errRow)
+		out.prefix = 1
+	}
+
+	if !col.AgeMarkers {
+		now = time.Time{}
 	}
 
 	if col.Loading {
 		if len(col.Rows) == 0 {
 			// Cold-start: no data yet — show skeleton rows.
-			rows = append(rows, skeletonRows(maxWidth, skeletonPhase, colIndex)...)
-			return rows
+			out.rows = append(out.rows, skeletonRows(maxWidth, skeletonPhase, colIndex)...)
+			return out
 		}
 		if col.ScrollOffset > 0 {
 			// Load-more in flight: the user has scrolled deep and a background page
 			// fetch is in progress. Render rows normally (not dimmed) and append a
 			// single skeleton row at the end as a load-in-flight affordance.
-			for idx, issue := range col.Rows {
-				rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
-					Issue:    issue,
-					Selected: idx == col.SelectedRow,
-					Width:    maxWidth,
-					Styled:   true,
-				}))
-			}
-			rows = append(rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+			out.appendIssueRows(col, maxWidth, false, skeletonPhase, now)
+			out.rows = append(out.rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 				Width:  maxWidth,
 				Seed:   0,
 				Phase:  skeletonPhase,
 				Styled: true,
 			}))
-			return rows
+			return out
 		}
 		// Refresh: stale rows on screen while new data is in flight.
 		// Dim the foreground with the current skeleton phase to signal motion.
-		for idx, issue := range col.Rows {
-			rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
-				Issue:    issue,
-				Selected: idx == col.SelectedRow,
-				Width:    maxWidth,
-				Styled:   true,
-				Dim:      true,
-				Phase:    skeletonPhase,
-			}))
-		}
-		return rows
+		out.appendIssueRows(col, maxWidth, true, skeletonPhase, now)
+		return out
 	}
 
 	// Not loading — render normally.
-	if len(rows) == 0 && len(col.Rows) == 0 {
-		rows = append(rows, "(no issues)")
-		return rows
+	if out.prefix == 0 && len(col.Rows) == 0 {
+		out.rows = append(out.rows, "(no issues)")
+		return out
 	}
 
+	out.appendIssueRows(col, maxWidth, false, skeletonPhase, now)
+	return out
+}
+
+// appendIssueRows renders every issue of col, inserting the age-marker
+// dividers ahead of the issues they precede, and records the index maps.
+func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase int, now time.Time) {
+	markers := ageMarkers(col.Rows, now)
+	out.issueStart = make([]int, len(col.Rows))
+	out.issueRow = make([]int, len(col.Rows))
 	for idx, issue := range col.Rows {
-		rows = append(rows, issuerow.RenderCompact(issuerow.RenderConfig{
+		out.issueStart[idx] = len(out.rows) - out.prefix
+		for len(markers) > 0 && markers[0].Before == idx {
+			out.rows = append(out.rows, renderAgeMarker(markers[0], maxWidth, true))
+			markers = markers[1:]
+		}
+		out.issueRow[idx] = len(out.rows) - out.prefix
+		out.rows = append(out.rows, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,
 			Selected: idx == col.SelectedRow,
 			Width:    maxWidth,
 			Styled:   true,
+			Dim:      dim,
+			Phase:    phase,
 		}))
 	}
-
-	return rows
 }
 
 func joinWithGap(parts []string, gap string) []string {

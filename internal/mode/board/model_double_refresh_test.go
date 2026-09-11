@@ -24,6 +24,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
@@ -47,7 +48,7 @@ func reloadKeyMsg() tea.KeyMsg {
 
 // newPopulatedRepo returns a memory repository with enough data for all 4 columns.
 func newPopulatedRepo() *memoryrepo.Repository {
-	repo := memoryrepo.New()
+	repo := memoryrepo.New(fakes.FrozenClock())
 	repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Ready one", Status: "open", Priority: 1})
 	repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Blocked one", Status: "blocked", Priority: 2})
 	repo.Seed(memoryrepo.Issue{ID: "tm-3", Title: "In Progress one", Status: "in_progress", Priority: 1})
@@ -290,7 +291,7 @@ func TestBoardAutoRefreshInflightGuard(t *testing.T) {
 func TestBoardDashboardMsgProcessed(t *testing.T) {
 	t.Parallel()
 
-	repo := memoryrepo.New()
+	repo := memoryrepo.New(fakes.FrozenClock())
 	repo.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Ready one", Status: "open", Priority: 1})
 	repo.Seed(memoryrepo.Issue{ID: "tm-2", Title: "In progress", Status: "in_progress", Priority: 2})
 
