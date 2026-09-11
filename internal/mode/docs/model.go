@@ -14,12 +14,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
-	"github.com/hk9890/task-manager-ui/internal/dashboard"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
-	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 )
 
 const (
@@ -141,33 +139,39 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the docs column.
 func (m *Model) View(skeletonPhase int) string {
-	errText := ""
-	if m.err != nil {
-		errText = m.err.Error()
-	}
-
 	// No dashboard title: with a single column the tab chip and the column
 	// header already name the surface, so the board's title line would only
 	// repeat them. The renderer omits the line when the title is empty (it
 	// still reserves the row, so the column height is unchanged).
 	return uiboard.Render(uiboard.State{
-		Columns: []uiboard.Column{{
-			Title:        columnTitle,
-			Rows:         m.issues,
-			SelectedRow:  m.selectedRow,
-			ScrollOffset: m.scrollOffset,
-			Total:        m.total,
-			TotalIsExact: true,
-			Loading:      m.loading,
-			Error:        errText,
-			AgeMarkers:   true,
-		}},
+		Columns:       []uiboard.Column{m.uiColumn()},
 		FocusedColumn: 0,
 		Width:         m.width,
 		Height:        m.height,
 		SkeletonPhase: skeletonPhase,
 		Now:           m.now(),
 	})
+}
+
+// uiColumn is the docs column as the renderer sees it. View and clampSelection
+// build the same value, so the stored offset is computed against the rows
+// View draws.
+func (m *Model) uiColumn() uiboard.Column {
+	errText := ""
+	if m.err != nil {
+		errText = m.err.Error()
+	}
+	return uiboard.Column{
+		Title:        columnTitle,
+		Rows:         m.issues,
+		SelectedRow:  m.selectedRow,
+		ScrollOffset: m.scrollOffset,
+		Total:        m.total,
+		TotalIsExact: true,
+		Loading:      m.loading,
+		Error:        errText,
+		AgeMarkers:   true,
+	}
 }
 
 // SetSize updates render dimensions.
@@ -240,7 +244,7 @@ func (m *Model) apply(msg docsLoadedMsg) tea.Cmd {
 	for _, result := range msg.page.Results {
 		issues = append(issues, result.Issue)
 	}
-	dashboard.SortByLastChange(issues)
+	domain.SortByLastChange(issues)
 	m.issues = issues
 	m.total = len(issues)
 
@@ -285,7 +289,7 @@ func (m *Model) clampSelection() {
 	if maxOffset := len(m.issues) - capacity; m.scrollOffset > maxOffset {
 		m.scrollOffset = max(maxOffset, 0)
 	}
-	m.scrollOffset = scroll.EnsureVisible(m.scrollOffset, m.selectedRow, capacity)
+	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, m.now())
 }
 
 func (m *Model) moveRow(delta int) tea.Cmd {
@@ -303,25 +307,14 @@ func (m *Model) moveRow(delta int) tea.Cmd {
 	return m.selectionChangedCmd()
 }
 
-// itemCapacity returns the number of issue rows that fit in the column at the
-// current terminal height. It mirrors the board's section capacity so the
-// scroll window matches what internal/ui/board actually draws.
+// itemCapacity returns the number of content rows the column holds at the
+// current terminal height. It mirrors the board's section capacity; which of
+// those rows are issues is uiboard.EnsureVisible's business.
 func (m *Model) itemCapacity() int {
 	if m.height == 0 {
 		return defaultItemCapacity
 	}
-	rows := m.height - 3
-	if rows < 1 {
-		rows = 1
-	}
-	// The renderer pins an inline error row above the issue rows, and inserts
-	// one divider per age threshold the list crosses (see internal/ui/board);
-	// each takes a row from the issues.
-	if m.err != nil {
-		rows--
-	}
-	rows -= uiboard.AgeMarkerCount(m.issues, m.now())
-	return max(rows, 1)
+	return max(m.height-3, 1)
 }
 
 func (m *Model) currentSelection() *mode.Selection {

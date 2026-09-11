@@ -310,7 +310,7 @@ func TestCompose(t *testing.T) {
 			name: "NotReady sort: same rules as Ready, mapped from BlockedIssueView",
 			in: Inputs{
 				Blocked: []domain.BlockedIssueView{
-					makeBlocked("z", 2, t0),
+					makeBlocked("z", 2, t2), // newest, lowest priority
 					makeBlocked("m", 1, t1),
 					makeBlocked("a", 1, t1),
 				},
@@ -318,8 +318,8 @@ func TestCompose(t *testing.T) {
 			},
 			wantNotReadyLen:      3,
 			wantDoneTotalIsExact: true,
-			// t1: "a"<"m" by ID; then t0 "z"
-			wantNotReadyIDs: []string{"a", "m", "z"},
+			// t2 "z" first despite its priority; then the t1 tie "a"<"m" by ID
+			wantNotReadyIDs: []string{"z", "a", "m"},
 		},
 		{
 			name: "InProgress sort: same rules",

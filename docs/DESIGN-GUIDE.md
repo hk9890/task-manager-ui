@@ -115,9 +115,11 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 - A column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
   issue older than a day and another before the first older than a week, each carrying the count
   of issues below it (`internal/ui/board/agemarker.go`). A divider is a row, not an issue:
-  `ScrollOffset` and `SelectedRow` stay issue indices, and a mode model subtracts
-  `board.AgeMarkerCount` from its window the way it reserves the inline error row, or the chevron
-  drops off the last line. Done keeps the backend's close-date order and draws none.
+  `ScrollOffset` and `SelectedRow` stay issue indices. A mode model that draws through `ui/board`
+  takes its offset from `board.EnsureVisible`, not `scroll.EnsureVisible` — it reserves the inline
+  error row and the dividers between the offset and the selection, and the renderer slides the
+  window itself when a divider appears between the key press and the draw. Done keeps the
+  backend's close-date order and draws none.
 - A header reads a plain `N` only when the whole list is loaded and fits. A clipped window or a
   paginated column (`TotalIsExact` false, or a load-more in flight) reads `N of M`; a skeleton pane
   reads `issuerow.SkeletonGlyph`. `internal/ui/board/board.go` holds the board's,
