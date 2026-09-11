@@ -1,8 +1,6 @@
 package dashboard
 
 import (
-	"sort"
-
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
@@ -75,25 +73,6 @@ type CardinalityWarning struct {
 	Group     string // "Ready", "Blocked", "InProgress", "Closed"
 	Count     int
 	Threshold int
-}
-
-// SortByLastChange sorts issues in place using the standard active-column
-// ordering: UpdatedAt descending, then Priority ascending, then ID ascending.
-// The most recently changed work sits at the top of every column, and the
-// board's age markers (internal/ui/board) rely on this order to draw one
-// divider per threshold. A stable sort keeps equal items in their original
-// relative order. Docs mode shares it so the docs column reads the same way.
-func SortByLastChange(issues []domain.IssueSummary) {
-	sort.SliceStable(issues, func(i, j int) bool {
-		a, b := issues[i], issues[j]
-		if !a.UpdatedAt.Equal(b.UpdatedAt) {
-			return a.UpdatedAt.After(b.UpdatedAt)
-		}
-		if a.Priority != b.Priority {
-			return a.Priority < b.Priority
-		}
-		return a.ID < b.ID
-	})
 }
 
 // mapBlockedToSummaries extracts the IssueSummary from each BlockedIssueView
@@ -252,7 +231,7 @@ func Compose(in Inputs) Columns {
 	// --- build InProgress column ---
 	inProgressIssues := make([]domain.IssueSummary, len(in.InProgress))
 	copy(inProgressIssues, in.InProgress)
-	SortByLastChange(inProgressIssues)
+	domain.SortByLastChange(inProgressIssues)
 	inProgress := ColumnData{
 		Issues:       inProgressIssues,
 		Total:        len(inProgressIssues),
@@ -268,7 +247,7 @@ func Compose(in Inputs) Columns {
 	// columns and counted it in both headers. A status the operator set outranks
 	// a state derived from the dependency graph, so In Progress wins.
 	notReadyIssues := excludeIDs(mergeNotReadyIssues(in.Blocked, in.StoredBlocked), inProgressIssues)
-	SortByLastChange(notReadyIssues)
+	domain.SortByLastChange(notReadyIssues)
 	notReady := ColumnData{
 		Issues:       notReadyIssues,
 		Total:        len(notReadyIssues),
@@ -280,7 +259,7 @@ func Compose(in Inputs) Columns {
 	// unblocked issues there, so it cannot overlap the other three.
 	readyIssues := make([]domain.IssueSummary, len(in.Ready))
 	copy(readyIssues, in.Ready)
-	SortByLastChange(readyIssues)
+	domain.SortByLastChange(readyIssues)
 	ready := ColumnData{
 		Issues:       readyIssues,
 		Total:        len(readyIssues),

@@ -18,7 +18,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
-	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
@@ -258,26 +257,12 @@ func (m *Model) View(skeletonPhase int) string {
 	}
 
 	uiColumns := make([]uiboard.Column, 0, len(m.columns))
-	for colIdx, col := range m.columns {
+	for colIdx := range m.columns {
 		selectedRow := -1
 		if colIdx == m.focusedColumn {
 			selectedRow = m.selectedRow[colIdx]
 		}
-		errStr := ""
-		if col.err != nil {
-			errStr = col.err.Error()
-		}
-		uiColumns = append(uiColumns, uiboard.Column{
-			Title:        col.title,
-			Rows:         col.issues,
-			SelectedRow:  selectedRow,
-			ScrollOffset: m.scrollOffset[colIdx],
-			Total:        col.total,
-			TotalIsExact: col.exact,
-			Loading:      col.loading,
-			Error:        errStr,
-			AgeMarkers:   colIdx != doneColumnIndex,
-		})
+		uiColumns = append(uiColumns, m.uiColumn(colIdx, selectedRow))
 	}
 
 	return uiboard.Render(uiboard.State{
@@ -289,6 +274,28 @@ func (m *Model) View(skeletonPhase int) string {
 		SkeletonPhase:  skeletonPhase,
 		Now:            m.now(),
 	})
+}
+
+// uiColumn is column colIdx as the renderer sees it, with selectedRow as its
+// selection (-1 for none). View and the scroll helpers build the same value,
+// so the offset a key press stores is computed against the rows View draws.
+func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
+	col := m.columns[colIdx]
+	errStr := ""
+	if col.err != nil {
+		errStr = col.err.Error()
+	}
+	return uiboard.Column{
+		Title:        col.title,
+		Rows:         col.issues,
+		SelectedRow:  selectedRow,
+		ScrollOffset: m.scrollOffset[colIdx],
+		Total:        col.total,
+		TotalIsExact: col.exact,
+		Loading:      col.loading,
+		Error:        errStr,
+		AgeMarkers:   colIdx != doneColumnIndex,
+	}
 }
 
 // SetSize updates render dimensions.
@@ -563,8 +570,6 @@ func (m *Model) clampScrollOffsets() {
 			continue
 		}
 
-		window := m.issueWindow(i, capacity)
-
 		row := m.selectedRow[i]
 		if row < 0 || row >= len(m.columns[i].issues) {
 			row = 0
@@ -574,11 +579,10 @@ func (m *Model) clampScrollOffsets() {
 		// far enough to reveal the selected row, so on its own it would leave a
 		// shrunk column scrolled to its last row with the rows above it
 		// unreachable until the operator pressed k.
-		offset := m.scrollOffset[i]
-		if maxOffset := len(m.columns[i].issues) - window; offset > maxOffset {
-			offset = max(maxOffset, 0)
+		if maxOffset := len(m.columns[i].issues) - capacity; m.scrollOffset[i] > maxOffset {
+			m.scrollOffset[i] = max(maxOffset, 0)
 		}
-		m.scrollOffset[i] = scroll.EnsureVisible(offset, row, window)
+		m.scrollOffset[i] = uiboard.EnsureVisible(m.uiColumn(i, row), capacity, m.now())
 	}
 }
 
@@ -684,28 +688,11 @@ func (m *Model) moveRow(delta int) {
 		idx = len(issues) - 1
 	}
 	m.selectedRow[m.focusedColumn] = idx
-	m.scrollOffset[m.focusedColumn] = scroll.EnsureVisible(
-		m.scrollOffset[m.focusedColumn],
-		idx,
-		m.issueWindow(m.focusedColumn, m.sectionItemCapacity()),
+	m.scrollOffset[m.focusedColumn] = uiboard.EnsureVisible(
+		m.uiColumn(m.focusedColumn, idx),
+		m.sectionItemCapacity(),
+		m.now(),
 	)
-}
-
-// issueWindow is the number of issue rows the renderer can show in column i
-// when the section fits capacity rows. The renderer pins an inline error row
-// at the top of a column that carries one, and inserts one divider per age
-// threshold the column crosses (see internal/ui/board); both take a row from
-// the issues. Reserving them here keeps EnsureVisible inside the renderer's
-// actual issue window, so the selected row cannot clip off-screen.
-func (m *Model) issueWindow(i, capacity int) int {
-	window := capacity
-	if m.columns[i].err != nil {
-		window--
-	}
-	if i != doneColumnIndex {
-		window -= uiboard.AgeMarkerCount(m.columns[i].issues, m.now())
-	}
-	return max(window, 1)
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {

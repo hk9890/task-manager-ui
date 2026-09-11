@@ -1,5 +1,3 @@
-// Package board renders the dashboard columns: headers, row windows, and the
-// responsive width split that decides how many columns fit.
 package board
 
 import (
@@ -31,10 +29,10 @@ type Column struct {
 	Title       string
 	Rows        []domain.IssueSummary
 	SelectedRow int
-	// ScrollOffset is the index of the first row that should appear at the top
-	// of the visible window. The renderer slices Rows[ScrollOffset:] before
-	// passing to FormSection so the selection is always in view. When zero the
-	// behaviour is identical to the pre-scroll implementation.
+	// ScrollOffset is the index of the issue the visible window opens on. It
+	// is an issue index, not a line: the renderer maps it through the column's
+	// row layout, so a divider drawn directly above that issue opens the
+	// window with it. Take it from EnsureVisible.
 	ScrollOffset int
 	// Error is a non-empty string when a repository call for this column failed.
 	// The renderer shows an inline error row at the top of the column content.
@@ -67,7 +65,7 @@ type State struct {
 	Width          int
 	Height         int
 	SkeletonPhase  int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
-	// Now is the instant the age markers measure against. Zero disables them.
+	// Now is the instant the age markers measure against.
 	Now time.Time
 }
 
@@ -116,50 +114,26 @@ func Render(state State) string {
 		rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx, state.Now)
 		rows := rendered.rows
 
-		// Apply scroll window so that the selected row is always visible. Only
-		// slice when not loading (skeleton / stale-refresh paths manage their own
-		// row counts), or when a load-more is in flight (offset > 0 indicates deep
-		// navigation with a pending page fetch).
-		//
-		// renderColumnRows pins an inline error row (when col.Error is set) above
-		// the issue rows, and may insert age-marker dividers between them.
-		// ScrollOffset is an issue index, so the window starts at that issue's
-		// first row (a divider drawn directly above it included) and spans the
-		// remaining height; the error row counts against innerHeight.
+		// Apply the scroll window. Only when not loading (skeleton / stale-refresh
+		// paths manage their own row counts), or when a load-more is in flight
+		// (offset > 0 indicates deep navigation with a pending page fetch). The
+		// pinned error row counts against innerHeight; rowLayout.window says
+		// which lines of the issue area are drawn.
 		displayRows := rows
 		visibleIssues := len(col.Rows)
 		if (!col.Loading || isLoadMore) && len(col.Rows) > 0 {
 			prefix := rendered.prefix
 			issueRows := rows[prefix:]
-			offset := col.ScrollOffset
-			if offset < 0 {
-				offset = 0
-			}
-			if offset > len(col.Rows) {
-				offset = len(col.Rows)
-			}
-			startRow := len(issueRows)
-			if offset < len(col.Rows) {
-				startRow = rendered.issueStart[offset]
-			}
-			end := startRow + innerHeight - prefix
-			if end < startRow {
-				end = startRow
-			}
-			if end > len(issueRows) {
-				end = len(issueRows)
-			}
-			windowed := issueRows[startRow:end]
-			displayRows = make([]string, 0, prefix+len(windowed))
+			startRow, endRow := rendered.layout.window(col, innerHeight-prefix, len(issueRows))
+			displayRows = make([]string, 0, prefix+endRow-startRow)
 			displayRows = append(displayRows, rows[:prefix]...)
-			displayRows = append(displayRows, windowed...)
+			displayRows = append(displayRows, issueRows[startRow:endRow]...)
 
 			visibleIssues = 0
-			for _, row := range rendered.issueRow[offset:] {
-				if row >= end {
-					break
+			for _, row := range rendered.layout.issueRow {
+				if row >= startRow && row < endRow {
+					visibleIssues++
 				}
-				visibleIssues++
 			}
 		}
 
@@ -317,29 +291,31 @@ func skeletonRows(maxWidth, phase, colIndex int) []string {
 
 // columnRows is the rendered content of one column. rows holds every line in
 // draw order. prefix is the number of pinned rows (the inline error row) ahead
-// of the issue rows. issueStart[i] and issueRow[i], both relative to
-// rows[prefix:], are where issue i begins once any divider drawn directly
-// above it is included, and the line of the issue itself. Both are nil for the
-// skeleton path, which draws no issues.
+// of the issue rows, and layout is where each issue landed among rows[prefix:].
+// layout is empty for the skeleton path, which draws no issues.
 type columnRows struct {
-	rows       []string
-	prefix     int
-	issueStart []int
-	issueRow   []int
+	rows   []string
+	prefix int
+	layout rowLayout
+}
+
+// errorRows is the number of lines the inline error row pins at the top of
+// col: one when the column carries an error, else zero.
+func errorRows(col Column) int {
+	if strings.TrimSpace(col.Error) != "" {
+		return 1
+	}
+	return 0
 }
 
 func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now time.Time) columnRows {
 	var out columnRows
 
 	// Inline error row at the top (if any).
-	if strings.TrimSpace(col.Error) != "" {
+	if errorRows(col) > 0 {
 		errRow := textutil.TruncateString("⚠ load failed: "+col.Error, maxWidth)
 		out.rows = append(out.rows, errRow)
 		out.prefix = 1
-	}
-
-	if !col.AgeMarkers {
-		now = time.Time{}
 	}
 
 	if col.Loading {
@@ -377,19 +353,16 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 	return out
 }
 
-// appendIssueRows renders every issue of col, inserting the age-marker
-// dividers ahead of the issues they precede, and records the index maps.
+// appendIssueRows renders every issue of col in the order layoutRows placed
+// them, drawing each age-marker divider ahead of the issue it precedes.
 func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase int, now time.Time) {
-	markers := ageMarkers(col.Rows, now)
-	out.issueStart = make([]int, len(col.Rows))
-	out.issueRow = make([]int, len(col.Rows))
+	out.layout = layoutRows(col, now)
+	markers := out.layout.markers
 	for idx, issue := range col.Rows {
-		out.issueStart[idx] = len(out.rows) - out.prefix
 		for len(markers) > 0 && markers[0].Before == idx {
 			out.rows = append(out.rows, renderAgeMarker(markers[0], maxWidth, true))
 			markers = markers[1:]
 		}
-		out.issueRow[idx] = len(out.rows) - out.prefix
 		out.rows = append(out.rows, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,
 			Selected: idx == col.SelectedRow,

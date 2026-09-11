@@ -3,6 +3,7 @@ package docs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -265,48 +266,53 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 	}
 }
 
-// TestItemCapacityReservesOneRowForAnInlineError is the docs twin of the
-// board's TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow. The renderer
-// pins an inline error row above the issue rows, so the scroll window must lose
-// exactly one row while an error is shown — and must lose it only then.
-//
-// Reserving unconditionally scrolls the docs viewport one row early on every
-// render; dropping the reservation clips the selected row off-screen while an
-// error banner is up. Both pass every other assertion in this package.
-func TestItemCapacityReservesOneRowForAnInlineError(t *testing.T) {
+// TestScrollOffsetReservesOneRowForAnInlineError: internal/ui/board pins an
+// inline error row above the issue rows, so the offset the model stores must
+// leave exactly one row for it while an error is shown — and only then.
+// itemCapacity itself stays the section height; uiboard.EnsureVisible does
+// the reserving so it matches what the renderer draws.
+func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 	t.Parallel()
 
 	gw := fakes.NewTracked()
-	seedMixed(gw)
+	for i := range 10 {
+		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("Doc %02d", i), Type: "doc"})
+	}
 
 	cases := []struct {
 		name   string
 		height int
-		// wantWithoutErr is the row window with no error shown; the window with
-		// an error must be exactly one smaller, until the floor of one row.
+		// wantWithoutErr is the offset that keeps the last row visible with no
+		// error shown; with an error it must be exactly one larger, until the
+		// floor of one row.
 		wantWithoutErr int
 		wantWithErr    int
 	}{
-		{"roomy column", 30, 27, 26},
-		{"two rows leaves one for the error", 5, 2, 1},
-		{"single row cannot reserve and keeps its row", 4, 1, 1},
+		{"roomy column", 8, 5, 6},
+		{"two rows leaves one for the error", 5, 8, 9},
+		{"single row cannot reserve and keeps its row", 4, 9, 9},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			m := newModel(t, gw)
+			m := loadedModel(t, gw)
 			m.SetSize(120, tc.height)
+			m.selectedRow = 9
 
 			m.err = nil
-			if got := m.itemCapacity(); got != tc.wantWithoutErr {
-				t.Errorf("itemCapacity with no error = %d, want %d", got, tc.wantWithoutErr)
+			m.scrollOffset = 0
+			m.clampSelection()
+			if m.scrollOffset != tc.wantWithoutErr {
+				t.Errorf("offset with no error = %d, want %d", m.scrollOffset, tc.wantWithoutErr)
 			}
 
 			m.err = errors.New("load failed")
-			if got := m.itemCapacity(); got != tc.wantWithErr {
-				t.Errorf("itemCapacity with an inline error = %d, want %d", got, tc.wantWithErr)
+			m.scrollOffset = 0
+			m.clampSelection()
+			if m.scrollOffset != tc.wantWithErr {
+				t.Errorf("offset with an inline error = %d, want %d", m.scrollOffset, tc.wantWithErr)
 			}
 		})
 	}
