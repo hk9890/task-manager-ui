@@ -16,6 +16,7 @@ func ptr[T any](v T) *T { return &v }
 
 func newTestRepo(t *testing.T, opts ...tasks.Option) (*Repository, *tasks.Store) {
 	t.Helper()
+	t.Setenv("TASKMGR_HOME", t.TempDir()) // keep the developer's global packages out of the store
 	store, err := tasks.Init(t.TempDir(), "tm", opts...)
 	if err != nil {
 		t.Fatalf("tasks.Init: %v", err)

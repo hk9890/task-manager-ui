@@ -78,7 +78,7 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if _, err := r.store.AddComment(id, r.author, input.Body); err != nil {
+	if _, err := r.store.AddComment(id, tasks.Actor{Name: r.author}, input.Body); err != nil {
 		return mapWriteErr("add comment", err)
 	}
 	return nil
