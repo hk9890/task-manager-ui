@@ -36,7 +36,9 @@ well when the release changes runtime behaviour.
 
 5. Dispatch the workflow and watch it. The run takes a few seconds to register;
    re-run the lookup if it returns nothing. GoReleaser creates or updates the
-   GitHub release itself, with notes generated from the commits.
+   GitHub release itself; its notes are the tag's `CHANGELOG.md` section, which
+   `scripts/release-notes.sh` extracts. A tag with no section fails the run
+   before anything is published.
 
    ```bash
    gh workflow run release.yml --ref vX.Y.Z
@@ -58,9 +60,9 @@ commit to be the tagged one. A `release.yml` change that a release needs must
 live in the tagged commit — commit it, then move the tag
 (`git tag -f -a vX.Y.Z -m … && git push -f origin vX.Y.Z`).
 
-Re-dispatching against an existing tag overwrites its assets instead of failing
-(`release.replace_existing_artifacts`). To add a missing asset without a new tag:
-`gh release upload vX.Y.Z dist/* --clobber`.
+Re-dispatching against an existing tag overwrites its assets and its notes
+instead of failing (`release.replace_existing_artifacts`, `release.mode`). To add
+a missing asset without a new tag: `gh release upload vX.Y.Z dist/* --clobber`.
 
 ## What goes in the CHANGELOG section
 
@@ -87,7 +89,9 @@ tagged commit, and `mise run ci` green there — that run substitutes for the CI
 provenance.
 
 ```bash
-GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --skip=sign --skip=sbom
+scripts/release-notes.sh vX.Y.Z > /tmp/release-notes.md
+GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --skip=sign --skip=sbom \
+  --release-notes /tmp/release-notes.md
 ```
 
 This produces binaries and checksums but no signing, SBOMs or provenance. Drop
