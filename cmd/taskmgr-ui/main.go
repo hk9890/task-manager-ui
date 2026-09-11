@@ -26,11 +26,22 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
+	storecatalogtaskmgr "github.com/hk9890/task-manager-ui/internal/storecatalog/taskmgr"
 	appversion "github.com/hk9890/task-manager-ui/internal/version"
 )
 
 var configLoad = func(opts config.LoadOptions) (config.Result, error) {
 	return config.LoadWithOptions(opts)
+}
+
+// backend is what startInteractive needs from a resolved repository: the
+// repository itself, the project root launchers interpolate, and the store
+// directory the picker marks as active. The memory backend leaves storePath
+// empty — a JSONL fixture is not a store in the registry.
+type backend struct {
+	repo        repository.Repository
+	projectRoot string
+	storePath   string
 }
 
 type startupOptions struct {
@@ -53,14 +64,14 @@ type startupOptions struct {
 // even a local store resolves by walking up, so both differ from the working
 // directory when the app is started from a subdirectory. The memory backend has
 // no store to ask, so it keeps the working directory.
-func buildRepository(opts startupOptions) (repository.Repository, string, error) {
+func buildRepository(opts startupOptions) (backend, error) {
 	switch opts.repoFlag {
 	case "memory":
 		loaded, err := filestorage.Load(opts.repoFile)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
+			return backend{}, fmt.Errorf("failed to load memory repository from %q: %w", opts.repoFile, err)
 		}
-		return loaded, opts.projectRoot, nil
+		return backend{repo: loaded, projectRoot: opts.projectRoot}, nil
 
 	default: // "taskmgr" (default) or unset
 		// Resolve, not Open: Open performs local discovery only, so a project
@@ -73,9 +84,9 @@ func buildRepository(opts startupOptions) (repository.Repository, string, error)
 		})
 		if err != nil {
 			if opts.storeName != "" {
-				return nil, "", fmt.Errorf("failed to open central task-manager store %q: %w", opts.storeName, err)
+				return backend{}, fmt.Errorf("failed to open central task-manager store %q: %w", opts.storeName, err)
 			}
-			return nil, "", fmt.Errorf("failed to open task-manager store for %q: %w", opts.projectRoot, err)
+			return backend{}, fmt.Errorf("failed to open task-manager store for %q: %w", opts.projectRoot, err)
 		}
 		if opts.logManager != nil {
 			startup := opts.logManager.Component("startup")
@@ -98,7 +109,11 @@ func buildRepository(opts startupOptions) (repository.Repository, string, error)
 				)
 			}
 		}
-		return repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())), info.ProjectPath, nil
+		return backend{
+			repo:        repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())),
+			projectRoot: info.ProjectPath,
+			storePath:   info.StorePath,
+		}, nil
 	}
 }
 
@@ -108,18 +123,22 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	repo, projectRoot, err := buildRepository(opts)
+	selected, err := buildRepository(opts)
 	if err != nil {
 		return err
 	}
 
-	services, err := app.NewServices(repo, cfg, projectRoot)
+	services, err := app.NewServices(selected.repo, cfg, selected.projectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to initialize services: %w", err)
 	}
 	if opts.logManager != nil {
 		services.Logger = opts.logManager.Logger()
 	}
+	// The catalog is machine-wide and independent of the repository backend: it
+	// answers which stores exist, not what is inside the one now open.
+	services.StoreCatalog = storecatalogtaskmgr.New()
+	services.ActiveStorePath = selected.storePath
 
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
 		DisableAutoRefresh: !opts.autoRefresh,

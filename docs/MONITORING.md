@@ -56,7 +56,8 @@ Structured records include at least:
 - `project_root`
 - `build_version`
 - `component`, on records emitted through a component logger: `startup`
-  (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search` (`internal/app/model.go`).
+  (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search`, `storepicker`
+  (`internal/app/model.go`).
   Shell-level records — the issue-edit failures and the health check below — go through
   the root logger and carry no `component` key.
 
@@ -126,6 +127,9 @@ suppressed for the interactive session.
 - `temp cleanup: glob failed`, `temp cleanup: remove failed` (WARN,
   `internal/app/services.go`) — the sweep could not read or delete a stale edit temp
   file. Nothing on screen changes; the file stays behind.
+- `failed to list central task-manager stores` (`storepicker`) — the store picker could
+  not read the central registry. The picker shows the cause inline and keeps whatever it
+  listed before; on a first open it has nothing to keep and shows the error alone.
 - `backend sort assumption broken` (WARN) — a dashboard group came back in an order
   `internal/dashboard` does not expect (`Warning.Threshold == -1`). The column still
   renders; its order is the backend's, not the composed one.
@@ -143,6 +147,7 @@ fault, and none reaches the log without `--debug`:
 |---|---|
 | `manual <surface> refresh suppressed; refresh already in flight` | board, docs, search, and detail (`internal/app/refresh.go`) |
 | `startReload re-entry suppressed`, `triggerSearchWithAnchor re-entry suppressed` | the same reload paths, one level in |
+| `store listing re-entry suppressed; one is already in flight` | the store picker's reload key (`internal/mode/storepicker/model.go`). Opening the picker is never suppressed — it always lists again |
 | `load-more suppressed; already in flight`, `load-more suppressed; all closed issues loaded` | `internal/mode/board/model.go` |
 | `search scope toggle suppressed; search already in flight`, `search scope toggled` | `internal/mode/search/model.go` |
 

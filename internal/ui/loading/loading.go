@@ -55,6 +55,7 @@ const (
 	ScopeDocs   Scope = "docs"
 	ScopeSearch Scope = "search"
 	ScopeDetail Scope = "detail"
+	ScopeStores Scope = "stores"
 )
 
 // State describes one loading state for shared rendering.

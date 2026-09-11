@@ -102,6 +102,17 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   before the shell sees them. They switch tabs even while the search query field is focused, so a
   browse surface must not claim either key.
 
+## Surfaces above the shell
+
+The store picker (`internal/mode/storepicker`, `internal/ui/storepicker`) is neither a tab nor a
+drill-in: it renders **instead of** the shell, as `fatalerror` does, so the tab strip and the footer
+are absent while it is up and it draws its own help line in the footer's place. It is therefore
+absent from `mode.BrowseModes` and never appears in the tab cycle.
+
+A surface above the shell takes keys before the shell key switch and reports whether it consumed
+each one — `Model.HandleKey` returns `(consumed, cmd)` — so Escape, quit and help keep working
+without it re-implementing them. Escape returns to the mode it was opened from, including Detail.
+
 ## Selection and scrolling
 
 - Take the gutter from `styles.SelectionPrefix(selected, styled)`. It returns both variants: use

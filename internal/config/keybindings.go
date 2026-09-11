@@ -36,6 +36,7 @@ const (
 	ShellActionLaunchNvim     = "launch_nvim"
 	ShellActionLaunchOpencode = "launch_opencode"
 	ShellActionLaunchShell    = "launch_shell_command"
+	ShellActionStorePicker    = "open_store_picker"
 
 	BoardActionMoveLeft   = "move_left"
 	BoardActionMoveRight  = "move_right"
@@ -123,6 +124,7 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionLaunchNvim:     {"n"},
 			ShellActionLaunchOpencode: {"p"},
 			ShellActionLaunchShell:    {"l"},
+			ShellActionStorePicker:    {"s"},
 		},
 		Board: map[string][]string{
 			BoardActionMoveLeft:   {"h", "left"},
@@ -394,6 +396,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionLaunchNvim,
 			ShellActionLaunchOpencode,
 			ShellActionLaunchShell,
+			ShellActionStorePicker,
 		} {
 			allowed[action] = struct{}{}
 		}

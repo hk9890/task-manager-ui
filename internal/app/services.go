@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/launcher"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
 // execCmdWrapper wraps an *exec.Cmd so it satisfies the tea.ExecCommand interface.
@@ -64,6 +65,15 @@ type Services struct {
 	// stdin/stdout/stderr semantics. Tests can inject a no-op implementation to
 	// avoid launching real editor processes.
 	ExecCommandFactory func(*exec.Cmd) tea.ExecCommand
+	// StoreCatalog lists the central task-manager stores on this machine for
+	// the store picker. Like Logger it is injected after construction, because
+	// which catalog implementation to use is a backend choice and cmd/ owns
+	// backend selection. A nil catalog reports as an error on the picker
+	// rather than panicking.
+	StoreCatalog storecatalog.Catalog
+	// ActiveStorePath is the store directory Repo reads, used to mark the
+	// active row in the picker. Empty when the caller did not resolve one.
+	ActiveStorePath string
 	// Logger is the optional root runtime logger. It must NOT carry a
 	// "component" attribute; NewModelWithOptions derives per-mode loggers
 	// (component=board, component=search, …) via logging.WithComponent. When

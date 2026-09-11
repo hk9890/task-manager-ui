@@ -24,6 +24,7 @@ overridden through runtime config.
 - `u` — update selected issue metadata
 - `x` — close selected issue
 - `a` — add comment to selected issue
+- `s` — open the store picker: every central task store on this machine
 - `n` — launch `nvim` action in detail mode
 - `p` — launch `opencode` action in detail mode
 - `l` — launch `shell-command` action in detail mode
@@ -84,6 +85,22 @@ the last applied query, the Results pane marks the displayed rows as stale.
 - `end` — jump to bottom
 - `enter` (Dependencies focused) — open the highlighted related issue
 - `enter` (Metadata focused) — edit the selected Status or Priority field
+
+## Store Picker
+
+The full-screen list of every central task store registered on this machine,
+opened with `s` from any tab. A local `.tasks` store is not listed: open one by
+starting `taskmgr-ui` in its project. The picker reuses the board keymap:
+
+- `k`, `up` — move up
+- `j`, `down` — move down
+- `r` — re-read the registry
+- `esc` — return to the tab you opened it from
+
+`s` was unbound in the shell context before this binding existed. A config that
+already binds `s` to another shell action now fails startup with `key "s"
+conflicts between actions ... in shell context`; rebind one of the two, for
+example `keybindings: {shell: {open_store_picker: [S]}}`.
 
 ## Modal Dialogs
 

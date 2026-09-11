@@ -659,18 +659,18 @@ func TestBuildRepositoryResolvesLocalStoreFromSubdirectory(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
-	repo, projectRoot, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: sub})
+	selected, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: sub})
 	if err != nil {
 		t.Fatalf("buildRepository: %v", err)
 	}
-	assertReadsIssue(t, repo, id, "local store issue")
+	assertReadsIssue(t, selected.repo, id, "local store issue")
 
 	// The walk-up root, not the directory the app was started from: launcher
 	// templates interpolate this as {{project.root}}. Compared unresolved — a
 	// local walk-up reports the path it walked, so on macOS this stays under
 	// /var rather than becoming /private/var.
-	if projectRoot != project {
-		t.Errorf("projectRoot: got %q, want %q", projectRoot, project)
+	if selected.projectRoot != project {
+		t.Errorf("projectRoot: got %q, want %q", selected.projectRoot, project)
 	}
 }
 
@@ -690,19 +690,19 @@ func TestBuildRepositoryResolvesCentralStore(t *testing.T) {
 		t.Fatalf("central fixture unexpectedly has a local .tasks (stat err=%v)", err)
 	}
 
-	repo, projectRoot, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: project})
+	selected, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: project})
 	if err != nil {
 		t.Fatalf("buildRepository: %v", err)
 	}
-	assertReadsIssue(t, repo, id, "central store issue")
+	assertReadsIssue(t, selected.repo, id, "central store issue")
 
-	if want := canonicalPath(t, project); projectRoot != want {
-		t.Errorf("projectRoot: got %q, want %q", projectRoot, want)
+	if want := canonicalPath(t, project); selected.projectRoot != want {
+		t.Errorf("projectRoot: got %q, want %q", selected.projectRoot, want)
 	}
 
 	// Writes must land in the central store too, and must not materialize a
 	// second, local store beside the project.
-	created, err := repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+	created, err := selected.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
 		Title: "written to the central store",
 		Type:  "task",
 	})
@@ -727,7 +727,7 @@ func TestBuildRepositoryStoreNameOpensRegisteredStoreFromUnrelatedDirectory(t *t
 	}
 	id := seedIssue(t, store, "named store issue")
 
-	repo, projectRoot, err := buildRepository(startupOptions{
+	selected, err := buildRepository(startupOptions{
 		repoFlag:    "taskmgr",
 		projectRoot: t.TempDir(), // unrelated to the registered project
 		storeName:   "named-fixture",
@@ -735,12 +735,12 @@ func TestBuildRepositoryStoreNameOpensRegisteredStoreFromUnrelatedDirectory(t *t
 	if err != nil {
 		t.Fatalf("buildRepository: %v", err)
 	}
-	assertReadsIssue(t, repo, id, "named store issue")
+	assertReadsIssue(t, selected.repo, id, "named store issue")
 
 	// The override wins over the working directory, and the project root follows
 	// the store rather than the directory the app was started from.
-	if want := canonicalPath(t, project); projectRoot != want {
-		t.Errorf("projectRoot: got %q, want %q", projectRoot, want)
+	if want := canonicalPath(t, project); selected.projectRoot != want {
+		t.Errorf("projectRoot: got %q, want %q", selected.projectRoot, want)
 	}
 }
 
@@ -768,7 +768,7 @@ func TestBuildRepositoryWarnsWhenProjectPathIsGone(t *testing.T) {
 	manager := logging.New(logging.Options{Stderr: &stderr, StateDir: t.TempDir()})
 	t.Cleanup(func() { _ = manager.Close() })
 
-	repo, projectRoot, err := buildRepository(startupOptions{
+	selected, err := buildRepository(startupOptions{
 		repoFlag:    "taskmgr",
 		projectRoot: t.TempDir(),
 		storeName:   "orphan-fixture",
@@ -777,13 +777,13 @@ func TestBuildRepositoryWarnsWhenProjectPathIsGone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRepository: %v", err)
 	}
-	if repo == nil {
+	if selected.repo == nil {
 		t.Fatal("expected the store to open despite the missing project path")
 	}
 	// No silent substitution: launchers are told the registered path, and the
 	// warning is what explains the failure they will hit.
-	if projectRoot != registered {
-		t.Errorf("projectRoot: got %q, want the registered project path %q", projectRoot, registered)
+	if selected.projectRoot != registered {
+		t.Errorf("projectRoot: got %q, want the registered project path %q", selected.projectRoot, registered)
 	}
 	if !strings.Contains(stderr.String(), "project path is not accessible") {
 		t.Errorf("expected a startup warning naming the inaccessible project path, got: %q", stderr.String())
@@ -793,7 +793,7 @@ func TestBuildRepositoryWarnsWhenProjectPathIsGone(t *testing.T) {
 func TestBuildRepositoryUnknownStoreNameFails(t *testing.T) {
 	isolateCentralHome(t)
 
-	_, _, err := buildRepository(startupOptions{
+	_, err := buildRepository(startupOptions{
 		repoFlag:    "taskmgr",
 		projectRoot: t.TempDir(),
 		storeName:   "not-registered",
@@ -810,7 +810,7 @@ func TestBuildRepositoryNoStoreAnywhereFails(t *testing.T) {
 	isolateCentralHome(t)
 
 	dir := t.TempDir()
-	_, _, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: dir})
+	_, err := buildRepository(startupOptions{repoFlag: "taskmgr", projectRoot: dir})
 	if err == nil {
 		t.Fatal("expected an error when neither a local nor a central store resolves")
 	}
@@ -831,7 +831,7 @@ func TestBuildRepositoryMemoryKeepsWorkingDirectoryAsProjectRoot(t *testing.T) {
 		t.Fatalf("repofixture.Save: %v", err)
 	}
 
-	_, projectRoot, err := buildRepository(startupOptions{
+	selected, err := buildRepository(startupOptions{
 		repoFlag:    "memory",
 		repoFile:    repoFile,
 		projectRoot: dir,
@@ -839,8 +839,12 @@ func TestBuildRepositoryMemoryKeepsWorkingDirectoryAsProjectRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRepository: %v", err)
 	}
-	if projectRoot != dir {
-		t.Errorf("projectRoot: got %q, want %q", projectRoot, dir)
+	if selected.projectRoot != dir {
+		t.Errorf("projectRoot: got %q, want %q", selected.projectRoot, dir)
+	}
+	// A JSONL fixture is not a registry store, so the picker marks no row.
+	if selected.storePath != "" {
+		t.Errorf("storePath: got %q, want empty for the memory backend", selected.storePath)
 	}
 }
 

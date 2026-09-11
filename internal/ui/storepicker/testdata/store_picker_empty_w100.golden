@@ -1,0 +1,16 @@
+╭─ Task Stores ──────────────────────────────────────────────────────────────────────────────── 0 ─╮
+│No central task-manager stores are registered on this machine.                                    │
+│                                                                                                  │
+│A store created with 'taskmgr init --central' is listed here.                                     │
+│A local .tasks store is not: open it by starting taskmgr-ui in its project.                       │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+Stores: j/k move · r reload · esc back · ctrl+q quit

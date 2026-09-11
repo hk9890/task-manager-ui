@@ -36,11 +36,11 @@ func (m Model) View() string {
 		})
 	}
 
-	header := m.renderHeader()
-	body := m.renderBody()
-	footer := m.renderFooter()
+	view := m.renderSurface()
 
-	view := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	// Every overlay is applied in one place, for whatever surface is underneath.
+	// An overlay that renders for the shell and not for the picker is still live
+	// and still holds the keyboard — invisible, and with no way out.
 	if m.toast.Visible() {
 		view = m.toast.Overlay(view, m.width, m.height)
 	}
@@ -52,6 +52,19 @@ func (m Model) View() string {
 	}
 
 	return view
+}
+
+// renderSurface renders whatever surface is active, without overlays.
+//
+// The picker is not a tab and not a drill-in: it renders instead of the shell,
+// so the tab strip and footer are absent while it is up and it draws its own
+// help line (docs/DESIGN-GUIDE.md).
+func (m Model) renderSurface() string {
+	if m.active == mode.StorePicker {
+		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
 }
 
 // headerSpinnerCell returns a fixed 2-cell string: the current braille spinner
@@ -214,6 +227,13 @@ func (m Model) loadingStates() []loading.State {
 	if m.detail.IsLoading() {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID()})
 	}
+	// The picker draws its own spinner, and this is what arms the tick that
+	// advances it. Reported only while the picker is on screen: a listing still
+	// in flight after the operator switched to a browse tab would otherwise spin
+	// that tab's header for a surface nobody is looking at.
+	if m.active == mode.StorePicker && m.storePicker != nil && m.storePicker.IsLoading() {
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeStores})
+	}
 	return loadingStates
 }
 
@@ -320,6 +340,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  detail scroll: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
 		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
 		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
+		fmt.Sprintf("  %s = list the central task stores on this machine", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
@@ -327,6 +348,19 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		"  - Board/Search prioritize overview triage density",
 		fmt.Sprintf("  - %s opens full issue detail view", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
 	}, "\n")
+}
+
+// storePickerHelpText is the picker's own footer. The shell footer is not
+// rendered while the picker is up, so this line is the only place its keys are
+// named on screen.
+func storePickerHelpText(keys config.ResolvedKeyBindings) string {
+	return fmt.Sprintf("Stores: %s/%s move · %s reload · %s back · %s quit",
+		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown),
+		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp),
+		keys.DisplayPrimary(config.BoardContext, config.BoardActionReload),
+		keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape),
+		keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit),
+	)
 }
 
 func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, second string) string {

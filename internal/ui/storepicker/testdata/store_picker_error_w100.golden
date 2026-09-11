@@ -1,0 +1,16 @@
+╭─ Task Stores ──────────────────────────────────────────────────────────────────────────────── 3 ─╮
+│Store listing failed: failed to read the central store registry: yaml: line 3: mapping values are…│
+│› task-manager-ui /home/hans/dev/github/task-manager-ui                                     active│
+│  task-manager    /home/hans/dev/github/task-manager                                              │
+│  sandbox         /home/hans/dev/sandbox                                                          │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+Stores: j/k move · r reload · esc back · ctrl+q quit
