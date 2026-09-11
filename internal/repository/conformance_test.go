@@ -44,12 +44,22 @@ func buildMemoryBackend(t *testing.T) repository.Repository {
 	return r
 }
 
-func buildTaskmgrBackend(t *testing.T) repository.Repository {
+// newTaskmgrStore builds an empty SDK store under a private taskmgr home. The
+// SDK inherits the per-user config's packages on the first write, so without the
+// pin a body gate installed on the developer's machine would fail these tests.
+func newTaskmgrStore(t *testing.T) *tasks.Store {
 	t.Helper()
+	t.Setenv("TASKMGR_HOME", t.TempDir())
 	store, err := tasks.Init(t.TempDir(), "tm")
 	if err != nil {
 		t.Fatalf("tasks.Init: %v", err)
 	}
+	return store
+}
+
+func buildTaskmgrBackend(t *testing.T) repository.Repository {
+	t.Helper()
+	store := newTaskmgrStore(t)
 	r := taskmgr.New(store, taskmgr.WithAuthor("tester"))
 	for _, s := range conformanceSeed {
 		if _, err := r.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -114,10 +124,7 @@ func buildMemoryBackendWithClosed(t *testing.T) repository.Repository {
 // standard conformanceSeed plus one closed issue whose title contains "archived".
 func buildTaskmgrBackendWithClosed(t *testing.T) repository.Repository {
 	t.Helper()
-	store, err := tasks.Init(t.TempDir(), "tm")
-	if err != nil {
-		t.Fatalf("tasks.Init: %v", err)
-	}
+	store := newTaskmgrStore(t)
 	r := taskmgr.New(store, taskmgr.WithAuthor("tester"))
 	for _, s := range conformanceSeed {
 		if _, err := r.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -371,10 +378,7 @@ func buildMemoryBackendWithDoc(t *testing.T) repository.Repository {
 // conformanceSeed plus one open, dependency-free issue of type "doc".
 func buildTaskmgrBackendWithDoc(t *testing.T) repository.Repository {
 	t.Helper()
-	store, err := tasks.Init(t.TempDir(), "tm")
-	if err != nil {
-		t.Fatalf("tasks.Init: %v", err)
-	}
+	store := newTaskmgrStore(t)
 	r := taskmgr.New(store, taskmgr.WithAuthor("tester"))
 	for _, s := range conformanceSeed {
 		if _, err := r.CreateIssue(context.Background(), domain.CreateIssueInput{
@@ -461,10 +465,7 @@ func freshBackends(t *testing.T) []struct {
 } {
 	t.Helper()
 
-	store, err := tasks.Init(t.TempDir(), "tm")
-	if err != nil {
-		t.Fatalf("tasks.Init: %v", err)
-	}
+	store := newTaskmgrStore(t)
 
 	return []struct {
 		name string
