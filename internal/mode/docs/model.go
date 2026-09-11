@@ -9,10 +9,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/dashboard"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
@@ -46,6 +48,10 @@ type Model struct {
 	keys   config.ResolvedKeyBindings
 	width  int
 	height int
+
+	// now is the clock the age markers measure against. Tests replace it so a
+	// golden pins which rows fall on which side of a divider.
+	now func() time.Time
 
 	issues []domain.IssueSummary
 	total  int
@@ -88,6 +94,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		repo:   repo,
 		logger: logger,
 		keys:   keys,
+		now:    time.Now,
 	}
 }
 
@@ -153,11 +160,13 @@ func (m *Model) View(skeletonPhase int) string {
 			TotalIsExact: true,
 			Loading:      m.loading,
 			Error:        errText,
+			AgeMarkers:   true,
 		}},
 		FocusedColumn: 0,
 		Width:         m.width,
 		Height:        m.height,
 		SkeletonPhase: skeletonPhase,
+		Now:           m.now(),
 	})
 }
 
@@ -231,6 +240,7 @@ func (m *Model) apply(msg docsLoadedMsg) tea.Cmd {
 	for _, result := range msg.page.Results {
 		issues = append(issues, result.Issue)
 	}
+	dashboard.SortByLastChange(issues)
 	m.issues = issues
 	m.total = len(issues)
 
@@ -304,12 +314,14 @@ func (m *Model) itemCapacity() int {
 	if rows < 1 {
 		rows = 1
 	}
-	// The renderer pins an inline error row above the issue rows, so one fewer
-	// issue is visible while an error is shown.
-	if m.err != nil && rows > 1 {
+	// The renderer pins an inline error row above the issue rows, and inserts
+	// one divider per age threshold the list crosses (see internal/ui/board);
+	// each takes a row from the issues.
+	if m.err != nil {
 		rows--
 	}
-	return rows
+	rows -= uiboard.AgeMarkerCount(m.issues, m.now())
+	return max(rows, 1)
 }
 
 func (m *Model) currentSelection() *mode.Selection {

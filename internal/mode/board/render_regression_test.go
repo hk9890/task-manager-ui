@@ -20,6 +20,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
 // countColumnTopBorders counts occurrences of the box-drawing top-left corner
@@ -74,7 +75,7 @@ func itoa(n int) string {
 // newRegressionBoard builds a board model with all 4 columns populated.
 func newRegressionBoard(t *testing.T) *Model {
 	t.Helper()
-	repo := memoryrepo.New()
+	repo := memoryrepo.New(fakes.FrozenClock())
 	repo.Seed(memoryrepo.Issue{ID: "reg-1", Title: "Ready issue", Status: "open", Priority: 1})
 	repo.Seed(memoryrepo.Issue{ID: "reg-2", Title: "Blocked", Status: "blocked", Priority: 2})
 	repo.Seed(memoryrepo.Issue{ID: "reg-3", Title: "In Progress", Status: "in_progress", Priority: 1})
