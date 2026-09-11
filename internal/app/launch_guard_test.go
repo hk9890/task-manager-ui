@@ -151,3 +151,27 @@ func TestSwitchingToAStoreWithAProjectReEnablesLaunchers(t *testing.T) {
 		t.Errorf("calls: got %+v, want one run in the switched-to project %q", calls, present)
 	}
 }
+
+// The project coming back while its store stays open re-enables the launchers
+// at the next press, with no switch needed, and the footer follows.
+func TestRestoringTheProjectPathReEnablesLaunchers(t *testing.T) {
+	gone := goneDir(t)
+	m, runner := launcherModel(t, config.Default(), gone, nil)
+
+	m = press(t, m, "l")
+	if len(runner.Calls()) != 0 {
+		t.Fatal("fixture: the launcher ran while the project path was gone")
+	}
+
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	m = press(t, m, "l")
+
+	if calls := runner.Calls(); len(calls) != 1 || calls[0].Dir != gone {
+		t.Errorf("calls: got %+v, want one run in the restored project %q", calls, gone)
+	}
+	if strings.Contains(pickerView(m), "launchers off") {
+		t.Error("the footer still flags launchers off after the project came back")
+	}
+}

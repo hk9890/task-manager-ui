@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
+	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/logging"
 )
 
 // Nothing resolving for the working directory used to exit 1. It now starts the
@@ -131,5 +134,43 @@ func assertNoStoreRepository(t *testing.T, selected backend) {
 	var repoErr domain.RepositoryError
 	if err := selected.repo.HealthCheck(context.Background()); !errors.As(err, &repoErr) || repoErr.Code != domain.ErrorCodeNoDatabaseFound {
 		t.Errorf("HealthCheck: got %v, want the no-store repository's %q", err, domain.ErrorCodeNoDatabaseFound)
+	}
+}
+
+// Starting without a store opens the picker, but only "no store" does. A config
+// that fails to load, and a launcher definition that fails validation, still
+// exit 1 on an interactive start — before any store is looked for.
+func TestInteractiveStartStillExitsOneOnConfigAndLauncherFailures(t *testing.T) {
+	t.Parallel()
+
+	unsafe := config.Default()
+	unsafe.Launcher.Definitions = append(unsafe.Launcher.Definitions, config.LauncherDefinition{
+		Action:  "tmux-note",
+		Command: "tmux",
+		Args:    []string{"new-window", "issue {{issue.title}}"},
+	})
+
+	cases := map[string]func(config.LoadOptions) (config.Result, error){
+		"malformed config": func(config.LoadOptions) (config.Result, error) {
+			return config.Result{}, errors.New("yaml: line 3: mapping values are not allowed")
+		},
+		"unsafe launcher": func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: unsafe, Path: "/tmp/config.yaml"}, nil
+		},
+	}
+	for name, load := range cases {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runWithLogger([]string{"--cwd", t.TempDir()}, &stdout, &stderr, load,
+				func(config.Model, startupOptions) error {
+					t.Error("the interactive start ran despite the failure")
+					return nil
+				},
+				func(logging.Options) *logging.Manager { return nil },
+			)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1 (stderr=%q)", code, stderr.String())
+			}
+		})
 	}
 }

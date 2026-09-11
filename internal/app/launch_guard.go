@@ -49,6 +49,10 @@ func (m *Model) launchCmd(action string) tea.Cmd {
 	if !ok {
 		return m.showToast("No selected issue for launcher", toaster.StyleWarn)
 	}
+	// Checked again at the press, not only when the store was bound: a project
+	// restored while its store stays open must launch again without a switch,
+	// and the footer follows from here on.
+	m.projectRootMissing = projectRootMissing(m.services.ProjectRoot)
 	if m.projectRootMissing && m.launchNeedsProjectRoot(action) {
 		// The reason leads and the path trails: a toast clips at terminal
 		// width, and a project path is long enough to push the reason off it.

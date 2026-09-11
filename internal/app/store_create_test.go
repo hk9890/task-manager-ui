@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository/nostore"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
@@ -196,6 +197,31 @@ func TestAFailedCreateKeepsTheFormOpen(t *testing.T) {
 	}
 	if m.active != mode.StorePicker {
 		t.Errorf("active mode: got %q, want the picker", m.active)
+	}
+	// The same form, with what it held, not a fresh one.
+	if form := pickerView(m); !strings.Contains(form, "Create Central Store") || !strings.Contains(form, "widget") {
+		t.Errorf("the form lost its inputs after the failure:\n%s", form)
+	}
+}
+
+// The form over the picker, in both shapes. Width is fixed because it decides
+// where the modal lands over the picker behind it.
+func TestStoreFormGoldens(t *testing.T) {
+	for _, tc := range []struct {
+		rows   int
+		golden string
+	}{
+		{0, "store_form_local_w100.golden"},
+		{1, "store_form_central_w100.golden"},
+	} {
+		t.Run(tc.golden, func(t *testing.T) {
+			s := newStorelessStart(t)
+			next, _ := s.m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+			m := openForm(t, next.(Model), tc.rows)
+			m.toast = m.toast.Hide() // the start's "no store" toast, not the form under test
+
+			testui.AssertMatchesGoldenNormalized(t, []byte(m.View()), tc.golden)
+		})
 	}
 }
 
