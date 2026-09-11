@@ -15,6 +15,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 func pickerServices(t *testing.T, catalog *fakes.FakeStoreCatalog, activeStorePath string) Services {
@@ -229,11 +230,28 @@ func TestOverlaysRenderOverThePicker(t *testing.T) {
 		t.Errorf("the help overlay is open but not drawn over the picker:\n%s", pickerView(m))
 	}
 
-	// The same must hold for the action modal, whichever surface armed it.
+}
+
+// The same must hold for the action modal. The shell no longer arms one from the
+// picker — the issue actions are inert there — but View() must not depend on
+// that: an overlay flag set with nothing drawn is a keyboard trap with no
+// visible cause, and this is the render path every future surface inherits.
+func TestActionModalRendersOverThePicker(t *testing.T) {
+	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
+	m = applyMessages(t, m, runBatch(m.Init()))
+	m = openPicker(t, m)
+
+	// A title no other overlay renders, so the help modal cannot satisfy this.
 	m.showActionModal = true
-	m.actionModal = m.help
-	if !strings.Contains(pickerView(m), "Keyboard Help") {
-		t.Error("an open action modal is not drawn over the picker")
+	m.actionModal = modal.New(modal.Config{Title: "Close Issue", Message: "Close tm-1?", MinWidth: 40})
+	m.actionModal.SetSize(m.width, m.height)
+
+	view := pickerView(m)
+	if m.showHelp {
+		t.Fatal("the help overlay is open; this test would pass on its output instead")
+	}
+	if !strings.Contains(view, "Close Issue") {
+		t.Errorf("an open action modal is not drawn over the picker:\n%s", view)
 	}
 }
 
