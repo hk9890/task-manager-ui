@@ -38,8 +38,10 @@ checksum:
 
 release:
   # Allow re-running the release workflow against an existing tag/release
-  # without manually deleting assets first.
+  # without manually deleting assets first. `replace` also rewrites the release
+  # body, so a corrected CHANGELOG.md section lands on re-dispatch.
   replace_existing_artifacts: true
+  mode: replace
 
 signs:
   - cmd: cosign
