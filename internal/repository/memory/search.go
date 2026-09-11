@@ -19,8 +19,9 @@ import (
 // from dep-closure state (not stored status). Limit and Offset apply after all
 // filters.
 //
-// The returned Metadata.Completeness is always SearchResultCompletenessExact
-// because memory always returns the full result set.
+// The returned Metadata.Completeness is Exact unless a positive Limit left
+// matches beyond the window, which is MaybeMore — the same rule the taskmgr
+// backend applies, so the two agree on a truncated page.
 func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.SearchResultPage{}, err
@@ -48,6 +49,11 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 		return results[i].Issue.ID < results[j].Issue.ID
 	})
 
+	// total counts every match in scope, before Offset and Limit cut the
+	// window, so it is the memory equivalent of the taskmgr backend's
+	// Page.Total and feeds the same completeness rule below.
+	total := len(results)
+
 	// Apply offset and limit.
 	if query.Offset > 0 && query.Offset < len(results) {
 		results = results[query.Offset:]
@@ -63,12 +69,19 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 		results = []domain.SearchResult{}
 	}
 
+	// The window is complete unless a positive Limit truncated matches that lie
+	// beyond it.
+	completeness := domain.SearchResultCompletenessExact
+	if query.Limit > 0 && total > query.Offset+len(results) {
+		completeness = domain.SearchResultCompletenessMaybeMore
+	}
+
 	return domain.SearchResultPage{
 		Results: results,
 		Metadata: domain.SearchResultMetadata{
 			ReturnedCount:  len(results),
 			RequestedLimit: query.Limit,
-			Completeness:   domain.SearchResultCompletenessExact,
+			Completeness:   completeness,
 			Source:         domain.SearchResultSourceBDSearch,
 		},
 	}, nil
