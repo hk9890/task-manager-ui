@@ -207,6 +207,11 @@ An editor, a launcher and a subprocess are the only external things you may fake
 configure and records its calls. A test that touches an editor, a launcher, or a subprocess is
 required to use them.
 
+The central store registry is the one more: an app or picker test takes `FakeStoreCatalog`, because
+the real catalog reads and writes the registry of whoever runs the suite. The SDK implementation
+itself is tested against a real registry in `internal/storecatalog/taskmgr`, under a
+`TASKMGR_HOME` of the test's own.
+
 - Failure-path tests wrap any `repository.Repository` in `fakes.NewErrorInjecting`
   (`internal/testing/fakes/error_injecting.go`); do not hand-roll an error-returning stub.
 - A controller test that needs to seed fixtures *and* inspect calls takes

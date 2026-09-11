@@ -267,3 +267,21 @@ func TestThePickerMarksTheOpenedStoreActive(t *testing.T) {
 		}
 	}
 }
+
+// Scoping tags a command's result for the store it was issued against. Bubble
+// Tea's own messages are instructions to the runtime and must reach it
+// untagged: a tagged QuitMsg would be delivered to update, and quit would do
+// nothing.
+func TestScopingLeavesRuntimeMessagesAlone(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := scopeCmd(1, tea.Quit)().(tea.QuitMsg); !ok {
+		t.Error("a scoped tea.Quit no longer reaches the runtime as a QuitMsg")
+	}
+
+	type storeResult struct{}
+	scoped, ok := scopeCmd(7, func() tea.Msg { return storeResult{} })().(scopedMsg)
+	if !ok || scoped.epoch != 7 {
+		t.Errorf("a store result was not tagged with its epoch: %#v", scoped)
+	}
+}

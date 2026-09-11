@@ -14,6 +14,8 @@ What it does:
 - **Edit in place** — create, update, close and comment on issues; `e` opens the full issue in
   `$EDITOR` and applies what you save.
 - **Launch external tools** — run `nvim`, `opencode` or your own command against the selected issue.
+- **Stores** — `s` lists every central task store on the machine and switches to one in place;
+  started somewhere with no store, it opens there instead of exiting and offers to create one.
 - **No daemon** — the store is opened in-process through the task-manager Go SDK.
 
 ## Getting Started
@@ -63,7 +65,9 @@ taskmgr-ui --store-name acme        # run against a central store, by registry n
 The store is resolved the way the `taskmgr` CLI resolves it: a local `.tasks/`
 directory found by walking up, otherwise the central registry
 (`taskmgr store list`). A project whose store was promoted with
-`taskmgr store move --central` needs no flag.
+`taskmgr store move --central` needs no flag. When nothing resolves, the app opens
+on the store picker, where you can open a registered store or create one for the
+directory.
 
 ## CLI surface
 

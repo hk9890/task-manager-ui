@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 
@@ -274,6 +275,13 @@ func (m *Model) switchStore(opened storecatalog.Opened) tea.Cmd {
 		return m.showToast(fmt.Sprintf("Failed to open store %s: %v", opened.Name, err), toaster.StyleError)
 	}
 	m.bindStore(services)
+	// The startup resolution record names the store the app began on. After a
+	// switch it no longer describes the store in use, so the switch says so.
+	m.logger().Info("switched task-manager store",
+		"store", opened.Name,
+		"store_path", opened.StorePath,
+		"project_path", opened.ProjectPath,
+	)
 	return batchCmds(
 		m.scoped(m.board.Init()),
 		m.showToast(fmt.Sprintf("Opened store %s", opened.Name), toaster.StyleSuccess),
@@ -314,10 +322,20 @@ func scopeCmd(epoch int, cmd tea.Cmd) tea.Cmd {
 			}
 			return out
 		default:
+			// Bubble Tea's own messages — quit, exec, screen control — are
+			// instructions to the runtime, which acts on them only if it can see
+			// them. A tagged one would be delivered to update instead, and quit
+			// would silently do nothing.
+			if reflect.TypeOf(msg).PkgPath() == bubbleteaPkgPath {
+				return msg
+			}
 			return scopedMsg{epoch: epoch, msg: msg}
 		}
 	}
 }
+
+// bubbleteaPkgPath is the import path of Bubble Tea's own message types.
+var bubbleteaPkgPath = reflect.TypeOf(tea.QuitMsg{}).PkgPath()
 
 // loadDetail loads one issue's detail from the active store.
 func (m Model) loadDetail(issueID string) tea.Cmd {
