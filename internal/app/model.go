@@ -97,6 +97,7 @@ type Model struct {
 	actionModal     modal.Model
 	showActionModal bool
 	actionState     mutationDialogState
+	storeForm       storeForm
 
 	focusKnown      bool
 	terminalFocused bool
@@ -204,6 +205,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
 	}
 	m.bindStore(services)
+	m.storePicker.SetCreateTarget(runtime.StorelessDir)
 	if runtime.UnresolvedStore != "" {
 		m.storeOpen = false
 		m.active = mode.StorePicker
@@ -240,6 +242,7 @@ func (m *Model) bindStore(services Services) {
 	m.drillSelection = nil
 	m.pendingDialog = pendingDialogGuard{}
 	m.showActionModal = false
+	m.storeForm = storeForm{}
 	m.fatalErrTitle, m.fatalErrBody = "", ""
 	// Board is initialised eagerly — by Init at startup, by switchStore after a
 	// switch — so it starts marked done and a later switch back to it does not
@@ -536,6 +539,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, openStoreCmd(m.appCtx, m.services.StoreCatalog, entry.Name))
+	case storepickermode.CreateMsg:
+		return m, batchCmds(modeCmd, m.openStoreForm(msg.Kind, msg.Dir))
+	case storeCreatedMsg:
+		return m, batchCmds(modeCmd, m.handleStoreCreated(msg))
 	case storeOpenedMsg:
 		if msg.err != nil {
 			m.logger().Error("failed to open task-manager store", "store", msg.name, "error", msg.err.Error())
@@ -948,20 +955,27 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 	// state is cleared only by its own result, so losing one leaves it reading
 	// "Reading the central store registry…" and spinning for the rest of the
 	// session. A swallowed open request or opened store silently drops a switch
-	// the operator asked for.
+	// the operator asked for. A created store arrives while its form is still
+	// open, by design, so swallowing it would leave the form stuck on
+	// "creating" for good.
 	switch msg.(type) {
 	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg,
-		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg:
+		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg,
+		storepickermode.CreateMsg, storeCreatedMsg:
 		return m, nil, false
 	}
 
 	if m.showActionModal {
 		if _, ok := msg.(modal.CancelMsg); ok {
 			m.showActionModal = false
+			m.storeForm = storeForm{}
 			return m, modeCmd, true
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
+			if m.storeForm.kind != 0 {
+				return m, batchCmds(modeCmd, m.submitStoreForm(submit.Values)), true
+			}
 			m.showActionModal = false
 			return m, batchCmds(modeCmd, m.scoped(submitMutationCmd(m.services, m.actionState, submit.Values))), true
 		}

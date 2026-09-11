@@ -70,6 +70,17 @@ type Catalog interface {
 	// Open opens the central store registered under name.
 	Open(ctx context.Context, name string) (Opened, error)
 
+	// CreateLocal creates a .tasks store in dir and opens it.
+	CreateLocal(ctx context.Context, dir, prefix string) (Opened, error)
+
+	// CreateCentral registers a central store named name for the project at
+	// dir and opens it.
+	CreateCentral(ctx context.Context, dir, name, prefix string) (Opened, error)
+
+	// DerivePrefix is the issue-ID prefix a store created for dir gets by
+	// default, the one `taskmgr init` would choose.
+	DerivePrefix(dir string) string
+
 	// Stores returns every central-registry entry, in the order the registry
 	// reports them. An absent registry is an empty slice, not an error.
 	//

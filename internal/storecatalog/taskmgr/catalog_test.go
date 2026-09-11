@@ -188,3 +188,74 @@ func TestStoreNameForLocalAndCentralStores(t *testing.T) {
 		}
 	}
 }
+
+// A local store created from the picker is the store a later start in that
+// directory finds — what `taskmgr where` would report there.
+func TestCreateLocalMakesTheStoreADirectoryResolvesTo(t *testing.T) {
+	isolateCentralHome(t)
+
+	dir := t.TempDir()
+	opened, err := New("tester").CreateLocal(context.Background(), dir, "loc")
+	if err != nil {
+		t.Fatalf("CreateLocal: %v", err)
+	}
+
+	_, info, err := tasks.Resolve(tasks.ResolveOptions{WorkDir: dir})
+	if err != nil {
+		t.Fatalf("the created store does not resolve from its directory: %v", err)
+	}
+	if info.Kind != tasks.ResolvedLocal || info.StorePath != opened.StorePath {
+		t.Errorf("resolved %v store at %q, want the local store created at %q", info.Kind, info.StorePath, opened.StorePath)
+	}
+	if opened.Name != filepath.Base(dir) {
+		t.Errorf("Name: got %q, want the directory's name", opened.Name)
+	}
+}
+
+func TestCreateCentralRegistersTheStore(t *testing.T) {
+	isolateCentralHome(t)
+
+	dir := t.TempDir()
+	opened, err := New("tester").CreateCentral(context.Background(), dir, "created-central", "cen")
+	if err != nil {
+		t.Fatalf("CreateCentral: %v", err)
+	}
+	if opened.Name != "created-central" {
+		t.Errorf("Name: got %q, want the registry name", opened.Name)
+	}
+
+	entries, err := New("tester").Stores(context.Background())
+	if err != nil {
+		t.Fatalf("Stores: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name != "created-central" {
+		t.Errorf("registry after the create: got %+v, want the one store just created", entries)
+	}
+}
+
+// A second central store under a name already taken fails, and the error says
+// which name — it is what the operator has to change in the form.
+func TestCreateCentralWithATakenNameFails(t *testing.T) {
+	isolateCentralHome(t)
+
+	catalog := New("tester")
+	if _, err := catalog.CreateCentral(context.Background(), t.TempDir(), "taken", "tkn"); err != nil {
+		t.Fatalf("first CreateCentral: %v", err)
+	}
+
+	_, err := catalog.CreateCentral(context.Background(), t.TempDir(), "taken", "tkn")
+	if err == nil {
+		t.Fatal("expected a second store under the same name to fail")
+	}
+	if !strings.Contains(err.Error(), "taken") {
+		t.Errorf("error should name the store, got: %v", err)
+	}
+}
+
+func TestDerivePrefixIsTheSDKDefault(t *testing.T) {
+	t.Parallel()
+
+	if got, want := New("tester").DerivePrefix("/home/hans/dev/widget"), tasks.DerivePrefix("/home/hans/dev/widget"); got != want {
+		t.Errorf("DerivePrefix: got %q, want the SDK's %q", got, want)
+	}
+}

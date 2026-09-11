@@ -100,7 +100,9 @@ starting `taskmgr-ui` in its project. The picker reuses the board keymap:
 
 When `taskmgr-ui` starts somewhere with no task store, it opens on the picker
 instead of exiting. Until you open a store from it, only `esc`, quit and help
-do anything.
+do anything. Two rows at the top of the list offer to create a local or a
+central store for that directory: select one and press `enter` to fill in its
+name and ID prefix.
 
 `s` was unbound in the shell context before this binding existed. A config that
 already binds `s` to another shell action now fails startup with `key "s"

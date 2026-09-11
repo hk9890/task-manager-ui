@@ -45,6 +45,9 @@ type backend struct {
 	projectRoot string
 	storePath   string
 	storeName   string
+	// createDir is the directory the picker may create a store for. It is set
+	// only when nothing resolved for the working directory.
+	createDir string
 }
 
 type startupOptions struct {
@@ -133,12 +136,16 @@ func resolveStartupStore(opts startupOptions) (backend, string, error) {
 		return selected, "", nil
 	}
 
+	none := backend{repo: nostore.New(), projectRoot: opts.projectRoot}
 	var reason string
 	switch {
 	case errors.Is(err, tasks.ErrStoreNotRegistered):
+		// The working directory may have a store of its own, so offering to
+		// create one there could only collide with it.
 		reason = fmt.Sprintf("No central store is registered as %q", opts.storeName)
 	case errors.Is(err, tasks.ErrNoStore):
 		reason = fmt.Sprintf("No task-manager store for %s", opts.projectRoot)
+		none.createDir = opts.projectRoot
 	default:
 		return backend{}, "", err
 	}
@@ -150,7 +157,7 @@ func resolveStartupStore(opts startupOptions) (backend, string, error) {
 			"store_name", opts.storeName,
 		)
 	}
-	return backend{repo: nostore.New(), projectRoot: opts.projectRoot}, reason, nil
+	return none, reason, nil
 }
 
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
@@ -180,6 +187,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
 		DisableAutoRefresh: !opts.autoRefresh,
 		UnresolvedStore:    unresolved,
+		StorelessDir:       selected.createDir,
 		Ctx:                ctx,
 	})
 	if err != nil {

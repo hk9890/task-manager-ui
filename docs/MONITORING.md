@@ -136,6 +136,9 @@ suppressed for the interactive session.
 - `failed to open task-manager store`, `failed to switch task-manager store` — a store
   chosen in the picker did not become active. The app stays on the store it was on, and
   the toast carries the same cause.
+- `failed to create task-manager store` — creating a store from the picker failed, most
+  often on a registry name already taken. The form stays open with what was typed, and
+  the toast carries the same cause.
 - `backend sort assumption broken` (WARN) — a dashboard group came back in an order
   `internal/dashboard` does not expect (`Warning.Threshold == -1`). The column still
   renders; its order is the backend's, not the composed one.

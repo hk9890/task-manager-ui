@@ -369,3 +369,58 @@ func TestUnclaimedKeysFallThroughToTheShell(t *testing.T) {
 		}
 	}
 }
+
+// The create rows sit above the stores. Enter on one asks to create that kind
+// of store for the directory; it is not a store and must not open as one.
+func TestCreateRowsAskToCreateAStore(t *testing.T) {
+	t.Parallel()
+
+	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries("alpha")})
+	m.SetSize(100, 24)
+	m.SetCreateTarget("/home/hans/dev/widget")
+	run(t, m, m.Init())
+
+	for row, want := range []StoreKind{LocalStore, CentralStore} {
+		m.selectedRow = row
+		if _, ok := m.SelectedEntry(); ok {
+			t.Errorf("row %d is a create row but reports a selected store", row)
+		}
+		consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		if !consumed || cmd == nil {
+			t.Fatalf("row %d: Enter was not handled", row)
+		}
+		create, ok := cmd().(CreateMsg)
+		if !ok || create.Kind != want || create.Dir != "/home/hans/dev/widget" {
+			t.Errorf("row %d: got %+v, want a %v create for the directory", row, cmd(), want)
+		}
+	}
+
+	// The first store is below the create rows, and still opens as a store.
+	m.selectedRow = 2
+	_, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if open, ok := cmd().(OpenMsg); !ok || open.Entry.Name != "alpha" {
+		t.Errorf("the first store below the create rows: got %+v, want it opened", cmd())
+	}
+}
+
+// Withdrawing the offer — a store now exists for the directory — removes the
+// rows, and a selection that sat on one lands back inside the list.
+func TestWithdrawingTheCreateOfferKeepsTheSelectionOnARow(t *testing.T) {
+	t.Parallel()
+
+	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries("alpha")})
+	m.SetSize(100, 24)
+	m.SetCreateTarget("/home/hans/dev/widget")
+	run(t, m, m.Init())
+	m.HandleKey(key("j"))
+	m.HandleKey(key("j")) // on alpha, the third row
+
+	m.SetCreateTarget("")
+
+	if strings.Contains(ansi.ReplaceAllString(m.View(0, "help"), ""), "Create a") {
+		t.Error("the create rows are still drawn after the offer was withdrawn")
+	}
+	if _, ok := m.SelectedEntry(); !ok {
+		t.Error("the selection fell off the list when the create rows went away")
+	}
+}

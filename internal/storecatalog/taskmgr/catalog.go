@@ -62,20 +62,51 @@ func (c Catalog) Open(ctx context.Context, name string) (storecatalog.Opened, er
 		return storecatalog.Opened{}, err
 	}
 
-	store, info, err := tasks.Resolve(tasks.ResolveOptions{StoreName: name})
+	opened, err := c.resolve(tasks.ResolveOptions{StoreName: name})
 	if err != nil {
 		return storecatalog.Opened{}, fmt.Errorf("failed to open central task-manager store %q: %w", name, err)
 	}
-	return c.opened(store, info), nil
+	return opened, nil
 }
 
-func (c Catalog) opened(store *tasks.Store, info tasks.ResolveInfo) storecatalog.Opened {
+// CreateLocal implements storecatalog.Catalog. The new store is opened by
+// resolving dir afterwards, so it is reported exactly as a later start in dir
+// would find it.
+func (c Catalog) CreateLocal(ctx context.Context, dir, prefix string) (storecatalog.Opened, error) {
+	if err := ctx.Err(); err != nil {
+		return storecatalog.Opened{}, err
+	}
+	if _, err := tasks.Init(dir, prefix); err != nil {
+		return storecatalog.Opened{}, fmt.Errorf("failed to create a local store in %s: %w", dir, err)
+	}
+	return c.resolve(tasks.ResolveOptions{WorkDir: dir})
+}
+
+// CreateCentral implements storecatalog.Catalog.
+func (c Catalog) CreateCentral(ctx context.Context, dir, name, prefix string) (storecatalog.Opened, error) {
+	if err := ctx.Err(); err != nil {
+		return storecatalog.Opened{}, err
+	}
+	if _, err := tasks.InitCentral(dir, name, prefix); err != nil {
+		return storecatalog.Opened{}, fmt.Errorf("failed to create central store %q for %s: %w", name, dir, err)
+	}
+	return c.resolve(tasks.ResolveOptions{StoreName: name})
+}
+
+// DerivePrefix implements storecatalog.Catalog.
+func (c Catalog) DerivePrefix(dir string) string { return tasks.DerivePrefix(dir) }
+
+func (c Catalog) resolve(opts tasks.ResolveOptions) (storecatalog.Opened, error) {
+	store, info, err := tasks.Resolve(opts)
+	if err != nil {
+		return storecatalog.Opened{}, err
+	}
 	return storecatalog.Opened{
 		Repo:        repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(c.author)),
 		Name:        StoreName(info),
 		ProjectPath: info.ProjectPath,
 		StorePath:   info.StorePath,
-	}
+	}, nil
 }
 
 // StoreName is what the header calls a resolved store. A central store is its

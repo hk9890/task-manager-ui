@@ -23,8 +23,23 @@ type FakeStoreCatalog struct {
 	Opens   map[string]storecatalog.Opened
 	OpenErr error
 
-	calls  int
-	opened []string
+	// Created is what CreateLocal and CreateCentral return; CreateErr fails
+	// them instead.
+	Created   storecatalog.Opened
+	CreateErr error
+
+	calls   int
+	opened  []string
+	creates []StoreCreateCall
+}
+
+// StoreCreateCall records one CreateLocal or CreateCentral call. Name is empty
+// for a local store.
+type StoreCreateCall struct {
+	Central bool
+	Dir     string
+	Name    string
+	Prefix  string
 }
 
 var _ storecatalog.Catalog = (*FakeStoreCatalog)(nil)
@@ -57,6 +72,39 @@ func (f *FakeStoreCatalog) Open(_ context.Context, name string) (storecatalog.Op
 		return storecatalog.Opened{}, fmt.Errorf("no central store is registered as %q", name)
 	}
 	return opened, nil
+}
+
+// CreateLocal records the call and returns the configured result.
+func (f *FakeStoreCatalog) CreateLocal(_ context.Context, dir, prefix string) (storecatalog.Opened, error) {
+	return f.create(StoreCreateCall{Dir: dir, Prefix: prefix})
+}
+
+// CreateCentral records the call and returns the configured result.
+func (f *FakeStoreCatalog) CreateCentral(_ context.Context, dir, name, prefix string) (storecatalog.Opened, error) {
+	return f.create(StoreCreateCall{Central: true, Dir: dir, Name: name, Prefix: prefix})
+}
+
+func (f *FakeStoreCatalog) create(call StoreCreateCall) (storecatalog.Opened, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.creates = append(f.creates, call)
+	if f.CreateErr != nil {
+		return storecatalog.Opened{}, f.CreateErr
+	}
+	return f.Created, nil
+}
+
+// DerivePrefix returns "pfx", so a test can tell a prefilled prefix from one
+// the operator typed.
+func (f *FakeStoreCatalog) DerivePrefix(string) string { return "pfx" }
+
+// Creates returns the create calls, in order.
+func (f *FakeStoreCatalog) Creates() []StoreCreateCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]StoreCreateCall(nil), f.creates...)
 }
 
 // Calls returns how many times Stores has been called. It takes the same lock
