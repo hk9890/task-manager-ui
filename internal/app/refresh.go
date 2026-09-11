@@ -41,7 +41,7 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 		return nil
 	}
 	m.markSurfaceRefreshed(m.active)
-	return tab.AutoRefresh()
+	return m.scoped(tab.AutoRefresh())
 }
 
 // reloadDetailCmd issues a detail load for the current selection and marks the
@@ -67,7 +67,7 @@ func (m *Model) reloadDetailCmd() tea.Cmd {
 	}
 	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{})
 	m.markSurfaceRefreshed(mode.Detail)
-	return loadDetailCmd(m.ctx, m.services, selection.Issue.ID)
+	return m.loadDetail(selection.Issue.ID)
 }
 
 func (m *Model) markBrowseSurfacesDirty() {

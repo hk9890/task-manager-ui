@@ -61,7 +61,7 @@ func (m Model) View() string {
 // help line (docs/DESIGN-GUIDE.md).
 func (m Model) renderSurface() string {
 	if m.active == mode.StorePicker {
-		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys))
+		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys, m.storeOpen))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
@@ -199,7 +199,14 @@ func (m Model) renderFooter() string {
 		return ""
 	}
 
-	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(footerHelpText(m.active, m.width, m.keys))
+	text := footerHelpText(m.active, m.width, m.keys)
+	// Detail is where the launch keys work, so it is where their being off is
+	// said, before the operator presses one. Truncated rather than wrapped: the
+	// workspace height is computed from a one-line footer.
+	if m.active == mode.Detail && m.projectRootMissing {
+		text = textutil.TruncateString(text+" · launchers off: project path missing", max(1, m.width))
+	}
+	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(text)
 }
 
 // browseLoadingScope maps a browse mode to its loading scope. A new browse
@@ -256,7 +263,27 @@ func (m Model) headerContext() string {
 	return variants[len(variants)-1]
 }
 
+// headerContextVariants returns the right-hand header text, widest first.
+//
+// With stores switchable, which store is on screen is the first thing the
+// header must say, so every variant leads with its name and the name survives
+// narrowing until nothing but the surface fits beside it. The unnamed variants
+// stay as the last resort for a terminal too narrow even for that.
 func (m Model) headerContextVariants() []string {
+	variants := m.surfaceContextVariants()
+	name := strings.TrimSpace(m.services.StoreName)
+	if name == "" {
+		return variants
+	}
+
+	named := make([]string, 0, 2*len(variants))
+	for _, variant := range variants {
+		named = append(named, name+" · "+variant)
+	}
+	return append(named, variants...)
+}
+
+func (m Model) surfaceContextVariants() []string {
 	if m.active == mode.Detail {
 		id := strings.TrimSpace(m.detail.Detail.Summary.ID)
 		if id == "" {
@@ -340,7 +367,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  detail scroll: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
 		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
 		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
-		fmt.Sprintf("  %s = list the central task stores on this machine", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
+		fmt.Sprintf("  %s = list the central task stores on this machine and open one", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
@@ -352,13 +379,18 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 
 // storePickerHelpText is the picker's own footer. The shell footer is not
 // rendered while the picker is up, so this line is the only place its keys are
-// named on screen.
-func storePickerHelpText(keys config.ResolvedKeyBindings) string {
-	return fmt.Sprintf("Stores: %s/%s move · %s reload · %s back · %s quit",
+// named on screen. With no store open, Escape quits rather than going back.
+func storePickerHelpText(keys config.ResolvedKeyBindings, storeOpen bool) string {
+	escape := "back"
+	if !storeOpen {
+		escape = "quit"
+	}
+	return fmt.Sprintf("Stores: %s/%s move · %s open · %s reload · %s %s · %s quit",
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown),
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp),
+		keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail),
 		keys.DisplayPrimary(config.BoardContext, config.BoardActionReload),
-		keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape),
+		keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), escape,
 		keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit),
 	)
 }

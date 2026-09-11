@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	docsmode "github.com/hk9890/task-manager-ui/internal/mode/docs"
 	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
 	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
+	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -33,10 +35,34 @@ type Model struct {
 	services Services
 	keys     config.ResolvedKeyBindings
 
-	// ctx is the application lifecycle context, cancelled when the process is
-	// shutting down. Shell-issued repository reads use it so quitting abandons
-	// them. Never nil — NewModelWithOptions defaults it to context.Background().
-	ctx context.Context
+	// appCtx is the application lifecycle context, cancelled when the process
+	// is shutting down. Never nil — NewModelWithOptions defaults it to
+	// context.Background().
+	appCtx context.Context
+
+	// ctx is the active store's context, derived from appCtx. Every repository
+	// read issued by the shell or a browse mode uses it, so quitting abandons
+	// them and so does switching stores: bindStore cancels it and derives a new
+	// one.
+	ctx         context.Context
+	cancelStore context.CancelFunc
+
+	// storeOpen is false only when the app started without a store to open. The
+	// operator is held on the picker until one is opened: there is no board to
+	// return to and no tab worth switching to.
+	storeOpen bool
+
+	// projectRootMissing is true when the active store's project path does not
+	// stat. Launchers that run there are refused with the reason instead of
+	// failing at exec time. Recomputed on every store bind.
+	projectRootMissing bool
+
+	// storeEpoch identifies the active store. Work issued against a store
+	// carries it (see scoped), and a result that arrives after the store it was
+	// issued against was switched away is dropped instead of rendered:
+	// cancelling ctx stops a read, but a Bubble Tea command that has already
+	// produced its message delivers it regardless.
+	storeEpoch int
 
 	// fatalErrTitle and fatalErrBody are set when a startup health check detects
 	// that the app cannot run. When fatalErrTitle is non-empty, View() renders
@@ -77,6 +103,7 @@ type Model struct {
 	actionModal     modal.Model
 	showActionModal bool
 	actionState     mutationDialogState
+	storeForm       storeForm
 
 	focusKnown      bool
 	terminalFocused bool
@@ -153,8 +180,6 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		return Model{}, fmt.Errorf("invalid keybindings in app model: %w", err)
 	}
 
-	now := modelNow()
-
 	helpText := shellKeyHelp(keys)
 	help := modal.NewWithKeys(modal.Config{
 		Title:       "Keyboard Help",
@@ -169,38 +194,164 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		ctx = context.Background()
 	}
 
-	return Model{
-		services:       services,
-		keys:           keys,
-		ctx:            ctx,
-		active:         mode.Board,
-		lastBrowse:     mode.Board,
-		selectedByMode: make(map[mode.ID]*mode.Selection),
-		// Board is initialised eagerly by Init(), so it starts marked done and
-		// a later switch back to it does not re-fire a load.
-		initDone: map[mode.ID]bool{mode.Board: true},
-		board:    boardmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "board"), keys),
-		docs:     docsmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), keys),
-		search:   searchmode.NewModel(ctx, services.Repo, logging.WithComponent(services.Logger, "search"), keys),
+	m := Model{
+		keys:   keys,
+		appCtx: ctx,
+		// The picker lists stores rather than reading one, so it lives on the
+		// application's context and survives every store switch.
 		storePicker: storepickermode.NewModel(ctx, services.StoreCatalog,
 			logging.WithComponent(services.Logger, "storepicker"), keys),
-		pickerReturn: mode.Board,
-		detail:       detail.Model{Keys: keys},
-		toast:        toaster.New(),
-		help:         help,
-		width:        defaultViewportWidth,
-		height:       defaultViewportHeight,
-		refreshStateBySurface: map[mode.ID]surfaceRefreshState{
-			mode.Board:  {lastRefresh: now},
-			mode.Docs:   {lastRefresh: now},
-			mode.Search: {lastRefresh: now},
-			mode.Detail: {},
-		},
+		toast:                toaster.New(),
+		help:                 help,
+		width:                defaultViewportWidth,
+		height:               defaultViewportHeight,
 		runtime:              runtime,
 		scheduleRefreshTick:  defaultScheduleRefreshTick,
 		scheduleToastDismiss: defaultScheduleToastDismiss,
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
-	}, nil
+	}
+	m.bindStore(services)
+	m.storePicker.SetCreateTarget(runtime.StorelessDir)
+	if runtime.UnresolvedStore != "" {
+		m.storeOpen = false
+		m.active = mode.StorePicker
+	}
+	return m, nil
+}
+
+// bindStore makes services the active store. It cancels the previous store's
+// context, derives a new one, and rebuilds every surface that reads a store —
+// board, docs, search, detail — with the state the shell keeps about them.
+//
+// It is the one construction path for those surfaces, at startup and on every
+// switch, so a switch cannot keep a field that a per-mode Reset() forgot to
+// clear.
+func (m *Model) bindStore(services Services) {
+	if m.cancelStore != nil {
+		m.cancelStore()
+	}
+	m.ctx, m.cancelStore = context.WithCancel(m.appCtx)
+	m.storeEpoch++
+	m.services = services
+	m.storeOpen = true
+	m.projectRootMissing = projectRootMissing(services.ProjectRoot)
+
+	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
+	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
+	m.search = searchmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "search"), m.keys)
+	m.detail = detail.Model{Keys: m.keys}
+	m.applyWorkspaceSizeToBrowseModes()
+
+	m.active = mode.Board
+	m.lastBrowse = mode.Board
+	m.pickerReturn = mode.Board
+	m.selectedByMode = make(map[mode.ID]*mode.Selection)
+	m.drillSelection = nil
+	m.pendingDialog = pendingDialogGuard{}
+	m.showActionModal = false
+	m.storeForm = storeForm{}
+	m.fatalErrTitle, m.fatalErrBody = "", ""
+	// Board is initialised eagerly — by Init at startup, by switchStore after a
+	// switch — so it starts marked done and a later switch back to it does not
+	// re-fire a load.
+	m.initDone = map[mode.ID]bool{mode.Board: true}
+
+	now := modelNow()
+	m.refreshStateBySurface = map[mode.ID]surfaceRefreshState{
+		mode.Board:  {lastRefresh: now},
+		mode.Docs:   {lastRefresh: now},
+		mode.Search: {lastRefresh: now},
+		mode.Detail: {},
+	}
+
+	m.storePicker.SetActiveStorePath(services.ActiveStorePath)
+}
+
+// switchStore makes an opened store the active one and loads its board.
+func (m *Model) switchStore(opened storecatalog.Opened) tea.Cmd {
+	services, err := m.services.ForStore(opened)
+	if err != nil {
+		m.logger().Error("failed to switch task-manager store", "store", opened.Name, "error", err.Error())
+		return m.showToast(fmt.Sprintf("Failed to open store %s: %v", opened.Name, err), toaster.StyleError)
+	}
+	m.bindStore(services)
+	// The startup resolution record names the store the app began on. After a
+	// switch it no longer describes the store in use, so the switch says so.
+	m.logger().Info("switched task-manager store",
+		"store", opened.Name,
+		"store_path", opened.StorePath,
+		"project_path", opened.ProjectPath,
+	)
+	return batchCmds(
+		m.scoped(m.board.Init()),
+		m.showToast(fmt.Sprintf("Opened store %s", opened.Name), toaster.StyleSuccess),
+	)
+}
+
+// scopedMsg is a message produced by work issued against one store, tagged
+// with that store's epoch.
+type scopedMsg struct {
+	epoch int
+	msg   tea.Msg
+}
+
+// scoped tags every message cmd produces with the active store's epoch, so
+// update drops it if the store has been switched by the time it arrives.
+//
+// Only store-bound work goes through it: browse-mode commands and the shell's
+// repository reads. Timers stay unscoped — a refresh or spinner tick re-arms
+// only from its own handler, so dropping one would stop the chain for good.
+func (m Model) scoped(cmd tea.Cmd) tea.Cmd {
+	return scopeCmd(m.storeEpoch, cmd)
+}
+
+func scopeCmd(epoch int, cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		switch msg := cmd().(type) {
+		case nil:
+			return nil
+		case tea.BatchMsg:
+			// A batch is a list of commands the runtime runs, not a result, so
+			// the tag goes on each of them rather than on the list.
+			out := make(tea.BatchMsg, 0, len(msg))
+			for _, inner := range msg {
+				out = append(out, scopeCmd(epoch, inner))
+			}
+			return out
+		default:
+			// Bubble Tea's own messages — quit, exec, screen control — are
+			// instructions to the runtime, which acts on them only if it can see
+			// them. A tagged one would be delivered to update instead, and quit
+			// would silently do nothing.
+			if reflect.TypeOf(msg).PkgPath() == bubbleteaPkgPath {
+				return msg
+			}
+			return scopedMsg{epoch: epoch, msg: msg}
+		}
+	}
+}
+
+// bubbleteaPkgPath is the import path of Bubble Tea's own message types.
+var bubbleteaPkgPath = reflect.TypeOf(tea.QuitMsg{}).PkgPath()
+
+// loadDetail loads one issue's detail from the active store.
+func (m Model) loadDetail(issueID string) tea.Cmd {
+	return m.scoped(loadDetailCmd(m.ctx, m.services, issueID))
+}
+
+// openStoreCmd opens a central store by registry name. It is not scoped: it is
+// the work that decides which store is active, not work done inside one.
+func openStoreCmd(ctx context.Context, catalog storecatalog.Catalog, name string) tea.Cmd {
+	return func() tea.Msg {
+		if catalog == nil {
+			return storeOpenedMsg{name: name, err: errors.New("no store catalog is configured for this session")}
+		}
+		opened, err := catalog.Open(ctx, name)
+		return storeOpenedMsg{name: name, opened: opened, err: err}
+	}
 }
 
 // logger returns the injected runtime logger, which carries the session_id,
@@ -220,11 +371,28 @@ func (m Model) logger() *slog.Logger {
 // Update). Search is deferred further until the user first switches to search
 // mode; see lazyInitActiveTabCmd.
 func (m Model) Init() tea.Cmd {
+	if !m.storeOpen {
+		// Nothing to health-check and no board to load: the app opens on the
+		// picker and says why it is there. The refresh tick is still armed: it
+		// re-arms only from its own handler, so a store opened from here would
+		// otherwise never auto-refresh. While the picker is up it reads nothing.
+		reason := m.runtime.UnresolvedStore
+		cmds := []tea.Cmd{
+			m.storePicker.Init(),
+			func() tea.Msg { return unresolvedStoreMsg{reason: reason} },
+			m.services.SweepStaleTempFiles(),
+		}
+		if !m.runtime.DisableAutoRefresh {
+			cmds = append(cmds, m.scheduleRefreshTick())
+		}
+		return tea.Batch(cmds...)
+	}
+
 	m.applyWorkspaceSizeToBrowseModes()
-	healthCheckCmd := func() tea.Msg {
+	healthCheckCmd := m.scoped(func() tea.Msg {
 		err := m.services.Repo.HealthCheck(m.ctx)
 		return startupHealthCheckMsg{err: err}
-	}
+	})
 	sweepCmd := m.services.SweepStaleTempFiles()
 	// The spinner tick is not armed here. Update arms it whenever something
 	// starts loading and stops re-arming when nothing is, so an idle app draws
@@ -256,7 +424,7 @@ func (m *Model) lazyInitActiveTabCmd() tea.Cmd {
 	}
 	m.initDone[m.active] = true
 	m.markSurfaceRefreshed(m.active)
-	return tab.Init()
+	return m.scoped(tab.Init())
 }
 
 // Update handles root-level shell messages.
@@ -286,6 +454,15 @@ func (m *Model) ensureSpinnerTickCmd() tea.Cmd {
 }
 
 func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if scoped, ok := msg.(scopedMsg); ok {
+		if scoped.epoch != m.storeEpoch {
+			// Issued against a store that is no longer active. Rendering it
+			// would put another project's issues on this store's surfaces.
+			return m, nil
+		}
+		msg = scoped.msg
+	}
+
 	// Handle startup health check result before any other processing.
 	if check, ok := msg.(startupHealthCheckMsg); ok {
 		if check.err != nil {
@@ -307,7 +484,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// here (from Update, which returns the model) correctly persists the
 		// board mutation (pendingResults=4, inflight=true) unlike calling it
 		// from Init() (value receiver, mutations discarded).
-		return m, m.board.Init()
+		return m, m.scoped(m.board.Init())
 	}
 
 	// When a fatal error is set, only handle window resize and quit.
@@ -377,6 +554,31 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, modeCmd
 	case storepickermode.StoresLoadedMsg:
 		return m, batchCmds(modeCmd, m.storePicker.Update(msg))
+	case unresolvedStoreMsg:
+		return m, batchCmds(modeCmd, m.showToast(msg.reason, toaster.StyleWarn))
+	case storepickermode.OpenMsg:
+		entry := msg.Entry
+		if !entry.Health.Usable() {
+			return m, batchCmds(modeCmd, m.showToast(
+				fmt.Sprintf("Store %s is %s and cannot be opened", entry.Name, entry.Health), toaster.StyleWarn))
+		}
+		// Already the active store: leave the picker and touch nothing, rather
+		// than rebuilding every surface to show what is already there.
+		if entry.StorePath == m.services.ActiveStorePath {
+			m.active = m.pickerReturn
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, openStoreCmd(m.appCtx, m.services.StoreCatalog, entry.Name))
+	case storepickermode.CreateMsg:
+		return m, batchCmds(modeCmd, m.openStoreForm(msg.Kind, msg.Dir))
+	case storeCreatedMsg:
+		return m, batchCmds(modeCmd, m.handleStoreCreated(msg))
+	case storeOpenedMsg:
+		if msg.err != nil {
+			m.logger().Error("failed to open task-manager store", "store", msg.name, "error", msg.err.Error())
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to open store %s: %v", msg.name, msg.err), toaster.StyleError))
+		}
+		return m, batchCmds(modeCmd, m.switchStore(msg.opened))
 	case detailLoadedMsg:
 		if msg.issueID != m.detail.TargetID() {
 			return m, modeCmd
@@ -463,7 +665,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
 			}
 			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-			return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue))
+			return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue)))
 		case mode.ActionOpenPriorityDialog:
 			issue, ok := m.dialogTargetIssue(msg.Mode)
 			if !ok {
@@ -560,6 +762,19 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 				return m, modeCmd
 			}
 		}
+
+		// With no store open there is nothing below the picker: no board to
+		// return to and no tab to switch to. Escape leaves the app, quit and
+		// help keep working, and every other key is inert.
+		if !m.storeOpen {
+			if m.keys.Match(config.ShellContext, config.ShellActionEscape, msg) {
+				return m, batchCmds(modeCmd, tea.Quit)
+			}
+			if !m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) &&
+				!m.keys.Match(config.ShellContext, config.ShellActionHelp, msg) {
+				return m, modeCmd
+			}
+		}
 	}
 
 	if m.active == mode.Detail {
@@ -597,7 +812,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 				Priority: intent.Ref.Priority,
 			}}
 			m.detail.BeginLoad(issueID, detail.BeginLoadOptions{Ref: &intent.Ref, Drill: true})
-			return m, batchCmds(modeCmd, loadDetailCmd(m.ctx, m.services, issueID))
+			return m, batchCmds(modeCmd, m.loadDetail(issueID))
 		}
 		if consumed {
 			return m, modeCmd
@@ -698,17 +913,17 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
 		}
-		return m, batchCmds(modeCmd, prepareEditCmd(m.ctx, m.services, issueID))
+		return m, batchCmds(modeCmd, m.scoped(prepareEditCmd(m.ctx, m.services, issueID)))
 	case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
 		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
-		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
+		return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{})))
 	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
 		issue, ok := m.mutationTargetIssue()
 		if !ok {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
 		}
 		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
-		return m, batchCmds(modeCmd, loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, issue))
+		return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, issue)))
 	case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
 		issue, ok := m.mutationTargetIssue()
 		if !ok {
@@ -725,29 +940,17 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		issueContext, ok := m.selectedIssueContext()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionNvim, issueContext))
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionNvim))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchOpencode, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		issueContext, ok := m.selectedIssueContext()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionOpencode, issueContext))
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionOpencode))
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchShell, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		issueContext, ok := m.selectedIssueContext()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue for launcher", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, launchActionCmd(m.ctx, m.services, LaunchActionShellCommand, issueContext))
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionShellCommand))
 	}
 
 	return m, modeCmd
@@ -758,7 +961,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 // switch. An open overlay consumes the message: that is why this runs before
 // routing and not inside it.
 func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, tea.Cmd, bool) {
-	// Four message types are the shell's own and an overlay never consumes
+	// These message types are the shell's own and an overlay never consumes
 	// them. Both tick chains re-arm only from their own handlers in update(),
 	// so a swallowed tick froze the spinner and stopped auto-refresh for the
 	// rest of the session; and the shell's resize case is the only caller of
@@ -769,21 +972,31 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 	// A swallowed store listing is the same shape of bug: the picker's in-flight
 	// state is cleared only by its own result, so losing one leaves it reading
 	// "Reading the central store registry…" and spinning for the rest of the
-	// session.
+	// session. A swallowed open request or opened store silently drops a switch
+	// the operator asked for. A created store arrives while its form is still
+	// open, by design, so swallowing it would leave the form stuck on
+	// "creating" for good. The store form also raises toasts while it stays
+	// open; a swallowed dismiss timer leaves that toast on screen for good.
 	switch msg.(type) {
-	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg, storepickermode.StoresLoadedMsg:
+	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg, toaster.DismissMsg,
+		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg,
+		storepickermode.CreateMsg, storeCreatedMsg:
 		return m, nil, false
 	}
 
 	if m.showActionModal {
 		if _, ok := msg.(modal.CancelMsg); ok {
 			m.showActionModal = false
+			m.storeForm = storeForm{}
 			return m, modeCmd, true
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
+			if m.storeForm.kind != 0 {
+				return m, batchCmds(modeCmd, m.submitStoreForm(submit.Values)), true
+			}
 			m.showActionModal = false
-			return m, batchCmds(modeCmd, submitMutationCmd(m.services, m.actionState, submit.Values)), true
+			return m, batchCmds(modeCmd, m.scoped(submitMutationCmd(m.services, m.actionState, submit.Values))), true
 		}
 
 		nextModal, cmd := m.actionModal.Update(msg)

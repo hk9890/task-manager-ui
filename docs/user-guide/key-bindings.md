@@ -29,6 +29,10 @@ overridden through runtime config.
 - `p` — launch `opencode` action in detail mode
 - `l` — launch `shell-command` action in detail mode
 
+`n`, `p` and `l` run in the store's project directory. When that directory is
+gone — the project was moved or deleted — they are refused with a message, and
+the detail footer reads `launchers off`.
+
 ## Board Mode
 
 - `h`, `left` — move to previous column
@@ -94,8 +98,15 @@ starting `taskmgr-ui` in its project. The picker reuses the board keymap:
 
 - `k`, `up` — move up
 - `j`, `down` — move down
+- `enter`, `o` — open the highlighted store; the app switches to it and shows its board
 - `r` — re-read the registry
-- `esc` — return to the tab you opened it from
+- `esc` — return to the tab you opened it from, or quit when no store is open
+
+When `taskmgr-ui` starts somewhere with no task store, it opens on the picker
+instead of exiting. Until you open a store from it, only `esc`, quit and help
+do anything. Two rows at the top of the list offer to create a local or a
+central store for that directory: select one and press `enter` to fill in its
+name and ID prefix.
 
 `s` was unbound in the shell context before this binding existed. A config that
 already binds `s` to another shell action now fails startup with `key "s"

@@ -7,7 +7,11 @@
 // store picker testable without reading the registry of whoever runs the suite.
 package storecatalog
 
-import "context"
+import (
+	"context"
+
+	"github.com/hk9890/task-manager-ui/internal/repository"
+)
 
 // Health classifies an entry's store directory. It carries the SDK's three
 // cases rather than collapsing them into a boolean: the picker renders a broken
@@ -41,12 +45,42 @@ type Entry struct {
 	Health    Health
 }
 
-// Catalog lists the stores this machine knows about.
+// Opened is a store ready to browse: the repository that reads it, and the
+// facts about it the shell needs once it is active.
+type Opened struct {
+	Repo repository.Repository
+	// Name is what the header calls the store: the registry name for a central
+	// store, the project directory's name for a local one.
+	Name string
+	// ProjectPath is the project the store tracks. Launchers interpolate it as
+	// {{project.root}}.
+	ProjectPath string
+	// StorePath is the store directory. The picker matches it against its rows
+	// to mark the active one.
+	StorePath string
+}
+
+// Catalog lists the stores this machine knows about and opens them.
 //
-// Local stores are absent by design: nothing indexes the .tasks directories on
-// a machine, and this app does not walk the filesystem looking for them. A
-// local store is reached by starting taskmgr-ui inside its project.
+// Local stores are absent from the listing by design: nothing indexes the
+// .tasks directories on a machine, and this app does not walk the filesystem
+// looking for them. A local store is reached by starting taskmgr-ui inside its
+// project.
 type Catalog interface {
+	// Open opens the central store registered under name.
+	Open(ctx context.Context, name string) (Opened, error)
+
+	// CreateLocal creates a .tasks store in dir and opens it.
+	CreateLocal(ctx context.Context, dir, prefix string) (Opened, error)
+
+	// CreateCentral registers a central store named name for the project at
+	// dir and opens it.
+	CreateCentral(ctx context.Context, dir, name, prefix string) (Opened, error)
+
+	// DerivePrefix is the issue-ID prefix a store created for dir gets by
+	// default, the one `taskmgr init` would choose.
+	DerivePrefix(dir string) string
+
 	// Stores returns every central-registry entry, in the order the registry
 	// reports them. An absent registry is an empty slice, not an error.
 	//

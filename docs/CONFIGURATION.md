@@ -163,7 +163,8 @@ Supported actions by context:
   - Docs mode has no context of its own: it reads `move_up`, `move_down`,
     `open_detail`, and `reload` from this one. Rebinding them moves both
     surfaces together, which is deliberate — the docs tab is a board column.
-  - The store picker reads `move_up`, `move_down` and `reload` from this one too.
+  - The store picker reads `move_up`, `move_down`, `open_detail` and `reload` from
+    this one too; `open_detail` opens the highlighted store.
     It is a single scrolling list of rows, so a context of its own would ask for
     the same movement to be rebound twice.
 - `search`
@@ -199,13 +200,19 @@ Notes:
 - Unsupported placeholders are passed through literally.
 - Empty issue fields interpolate as empty strings.
 - `workdir` falls back to project root when blank.
+- When the active store's project path does not exist, a launcher whose `workdir` is
+  blank or uses `{{project.root}}` is refused with a toast rather than exec'd in a
+  directory that is gone, and the Detail footer says the launchers are off. A launcher
+  with a `workdir` of its own still runs. The edit key is unaffected: it writes a temp
+  document and runs the editor there.
 - In `command` and `workdir` an issue field may only *extend* what the operator wrote: the value
   must not start with one, and at launch a field carrying `/`, `\` or a `..` segment refuses the
   launch. `command: "/opt/tools/run-{{issue.id}}"` is fine; `command: "{{issue.assignee}}"` is
   rejected at startup, because the issue would then name the program outright.
-- `{{project.root}}` is the resolved store's project path, not the directory
+- `{{project.root}}` is the active store's project path, not the directory
   `taskmgr-ui` was started in: the root of the project holding the local `.tasks`
-  store, or the project path registered for a central store. See
+  store, or the project path registered for a central store. It follows a store
+  switch from the picker. See
   [CODING.md → Store resolution](CODING.md#store-resolution).
 
 ### Writing a launcher template safely

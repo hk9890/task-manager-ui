@@ -118,6 +118,24 @@ func TestRenderGoldens(t *testing.T) {
 		testui.AssertMatchesGoldenNormalized(t, []byte(view), "store_picker_long_names_w60.golden")
 	})
 
+	// A start with no store for the working directory offers to create one,
+	// above the stores already registered.
+	t.Run("create_rows_w100", func(t *testing.T) {
+		rows := []Row{
+			{Action: "Create a local store in /home/hans/dev/widget"},
+			{Action: "Create a central store for /home/hans/dev/widget"},
+		}
+		rows = append(rows, sampleRows()[1:]...)
+		view := Render(State{
+			Rows:   rows,
+			Help:   "Stores: j/k move · enter open · r reload · esc quit · ctrl+q quit",
+			Width:  100,
+			Height: 12,
+		})
+
+		testui.AssertMatchesGoldenNormalized(t, []byte(view), "store_picker_create_rows_w100.golden")
+	})
+
 	t.Run("clipped_window_w100", func(t *testing.T) {
 		rows := make([]Row, 0, 12)
 		for _, name := range []string{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliett", "kilo", "lima"} {
@@ -296,4 +314,17 @@ func cellIndex(line, want string) int {
 		return -1
 	}
 	return lipgloss.Width(line[:idx])
+}
+
+// The header counts stores. A create row is not a store, so two of them above
+// two stores still read "2".
+func TestTheCountIgnoresCreateRows(t *testing.T) {
+	t.Parallel()
+
+	rows := []Row{{Action: "Create a local store in /x"}, {Action: "Create a central store for /x"}}
+	rows = append(rows, sampleRows()[:2]...)
+
+	if got := countLabel(State{Rows: rows}, 20); got != "2" {
+		t.Errorf("count: got %q, want 2", got)
+	}
 }

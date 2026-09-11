@@ -25,6 +25,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
+	"github.com/hk9890/task-manager-ui/internal/repository/nostore"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
 	storecatalogtaskmgr "github.com/hk9890/task-manager-ui/internal/storecatalog/taskmgr"
 	appversion "github.com/hk9890/task-manager-ui/internal/version"
@@ -35,13 +36,18 @@ var configLoad = func(opts config.LoadOptions) (config.Result, error) {
 }
 
 // backend is what startInteractive needs from a resolved repository: the
-// repository itself, the project root launchers interpolate, and the store
-// directory the picker marks as active. The memory backend leaves storePath
-// empty — a JSONL fixture is not a store in the registry.
+// repository itself, the project root launchers interpolate, the store
+// directory the picker marks as active, and the name the header shows. The
+// memory backend leaves storePath and storeName empty — a JSONL fixture is not
+// a store in the registry.
 type backend struct {
 	repo        repository.Repository
 	projectRoot string
 	storePath   string
+	storeName   string
+	// createDir is the directory the picker may create a store for. It is set
+	// only when nothing resolved for the working directory.
+	createDir string
 }
 
 type startupOptions struct {
@@ -113,8 +119,45 @@ func buildRepository(opts startupOptions) (backend, error) {
 			repo:        repositorytaskmgr.New(store, repositorytaskmgr.WithAuthor(resolveAuthor())),
 			projectRoot: info.ProjectPath,
 			storePath:   info.StorePath,
+			storeName:   storecatalogtaskmgr.StoreName(info),
 		}, nil
 	}
+}
+
+// resolveStartupStore opens the store the app starts on. When there is none to
+// open — nothing resolves for the working directory, or --store-name names no
+// registered store — it returns the no-store repository and the reason instead
+// of an error, and the app starts on the store picker. Every other failure is
+// still an error: a store that exists but cannot be read is not a store the
+// operator can pick around.
+func resolveStartupStore(opts startupOptions) (backend, string, error) {
+	selected, err := buildRepository(opts)
+	if err == nil {
+		return selected, "", nil
+	}
+
+	none := backend{repo: nostore.New(), projectRoot: opts.projectRoot}
+	var reason string
+	switch {
+	case errors.Is(err, tasks.ErrStoreNotRegistered):
+		// The working directory may have a store of its own, so offering to
+		// create one there could only collide with it.
+		reason = fmt.Sprintf("No central store is registered as %q", opts.storeName)
+	case errors.Is(err, tasks.ErrNoStore):
+		reason = fmt.Sprintf("No task-manager store for %s", opts.projectRoot)
+		none.createDir = opts.projectRoot
+	default:
+		return backend{}, "", err
+	}
+
+	if opts.logManager != nil {
+		opts.logManager.Component("startup").Info("no task-manager store resolved; starting on the store picker",
+			"reason", reason,
+			"cwd", opts.projectRoot,
+			"store_name", opts.storeName,
+		)
+	}
+	return none, reason, nil
 }
 
 var startInteractive = func(cfg config.Model, opts startupOptions) error {
@@ -123,7 +166,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	selected, err := buildRepository(opts)
+	selected, unresolved, err := resolveStartupStore(opts)
 	if err != nil {
 		return err
 	}
@@ -137,11 +180,14 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	}
 	// The catalog is machine-wide and independent of the repository backend: it
 	// answers which stores exist, not what is inside the one now open.
-	services.StoreCatalog = storecatalogtaskmgr.New()
+	services.StoreCatalog = storecatalogtaskmgr.New(resolveAuthor())
 	services.ActiveStorePath = selected.storePath
+	services.StoreName = selected.storeName
 
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
 		DisableAutoRefresh: !opts.autoRefresh,
+		UnresolvedStore:    unresolved,
+		StorelessDir:       selected.createDir,
 		Ctx:                ctx,
 	})
 	if err != nil {

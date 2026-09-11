@@ -7,8 +7,8 @@ The map of this repository: where things live and how to find them fast. Module
 
 ```
 cmd/taskmgr-ui/           entrypoint: flag parsing, config resolution, logging setup, repository
-                          backend selection. Calls tasks.Resolve, so nothing below cmd/ knows
-                          where the store lives — the adapter receives an already-open *tasks.Store
+                          backend selection. Resolves the store the app starts on; every later
+                          store is opened through storecatalog/ from the picker
 internal/
   app/                    the root shell: mode lifecycle, routing, selection and detail coordination
   mode/                   board, docs, search, detail and storepicker feature models, plus the
@@ -25,6 +25,8 @@ internal/
     taskmgr/                production backend: in-process adapter over the SDK
     memory/                 test and --repo memory backend, over filestorage JSONL
     filestorage/            the JSONL fixture format and its loader; nothing here writes one
+    nostore/                what the app holds while no store is open; every call fails as a
+                            missing store
   storecatalog/           the port for the central store registry — which stores exist, against
                           repository/, which reads the issues inside one. taskmgr/ is the SDK
                           implementation over tasks.Stores

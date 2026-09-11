@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
@@ -28,7 +29,7 @@ func TestStoresListsRegisteredCentralStores(t *testing.T) {
 		t.Fatalf("tasks.InitCentral: %v", err)
 	}
 
-	entries, err := New().Stores(context.Background())
+	entries, err := New("tester").Stores(context.Background())
 	if err != nil {
 		t.Fatalf("Stores: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestStoresReportsADanglingEntry(t *testing.T) {
 		t.Fatalf("tasks.InitCentral: %v", err)
 	}
 
-	before, err := New().Stores(context.Background())
+	before, err := New("tester").Stores(context.Background())
 	if err != nil {
 		t.Fatalf("Stores: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestStoresReportsADanglingEntry(t *testing.T) {
 		t.Fatalf("RemoveAll: %v", err)
 	}
 
-	after, err := New().Stores(context.Background())
+	after, err := New("tester").Stores(context.Background())
 	if err != nil {
 		t.Fatalf("Stores: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestStoresReportsADanglingEntry(t *testing.T) {
 func TestStoresOnAnEmptyRegistryIsEmptyNotAnError(t *testing.T) {
 	isolateCentralHome(t)
 
-	entries, err := New().Stores(context.Background())
+	entries, err := New("tester").Stores(context.Background())
 	if err != nil {
 		t.Fatalf("Stores: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestStoresHonoursACancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := New().Stores(ctx); err == nil {
+	if _, err := New("tester").Stores(ctx); err == nil {
 		t.Error("expected a cancelled context to be reported")
 	}
 }
@@ -126,5 +127,135 @@ func TestConvertHealthCoversEverySDKCase(t *testing.T) {
 		if got := convertHealth(tc.in); got != tc.want {
 			t.Errorf("convertHealth(%v): got %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestOpenResolvesARegisteredStoreByName(t *testing.T) {
+	isolateCentralHome(t)
+
+	project := t.TempDir()
+	if _, err := tasks.InitCentral(project, "opened-fixture", "opn"); err != nil {
+		t.Fatalf("tasks.InitCentral: %v", err)
+	}
+
+	opened, err := New("tester").Open(context.Background(), "opened-fixture")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if opened.Repo == nil {
+		t.Fatal("Open returned no repository")
+	}
+	if opened.Name != "opened-fixture" {
+		t.Errorf("Name: got %q, want the registry name", opened.Name)
+	}
+	if opened.StorePath == "" || opened.ProjectPath == "" {
+		t.Errorf("paths: got store %q, project %q; both are needed once the store is active", opened.StorePath, opened.ProjectPath)
+	}
+
+	// The repository reads the store that was opened, not some other one.
+	if err := opened.Repo.HealthCheck(context.Background()); err != nil {
+		t.Errorf("HealthCheck on the opened store: %v", err)
+	}
+}
+
+func TestOpenAnUnregisteredNameFails(t *testing.T) {
+	isolateCentralHome(t)
+
+	_, err := New("tester").Open(context.Background(), "not-registered")
+	if err == nil {
+		t.Fatal("expected an error opening an unregistered store")
+	}
+	if !strings.Contains(err.Error(), "not-registered") {
+		t.Errorf("error should name the store, got: %v", err)
+	}
+}
+
+// A local store's directory is always .tasks, so the header would call every
+// local store ".tasks". It is named after its project instead; a central store
+// keeps its registry name.
+func TestStoreNameForLocalAndCentralStores(t *testing.T) {
+	t.Parallel()
+
+	local := tasks.ResolveInfo{Kind: tasks.ResolvedLocal, ProjectPath: "/home/hans/dev/widget", StorePath: "/home/hans/dev/widget/.tasks"}
+	if got := StoreName(local); got != "widget" {
+		t.Errorf("local store name: got %q, want the project directory's name", got)
+	}
+
+	for _, kind := range []tasks.ResolveKind{tasks.ResolvedCentral, tasks.ResolvedOverrideName} {
+		central := tasks.ResolveInfo{Kind: kind, ProjectPath: "/home/hans/dev/widget", StorePath: "/home/hans/.taskmgr/stores/widget-tracker"}
+		if got := StoreName(central); got != "widget-tracker" {
+			t.Errorf("central store name (%v): got %q, want the registry name", kind, got)
+		}
+	}
+}
+
+// A local store created from the picker is the store a later start in that
+// directory finds — what `taskmgr where` would report there.
+func TestCreateLocalMakesTheStoreADirectoryResolvesTo(t *testing.T) {
+	isolateCentralHome(t)
+
+	dir := t.TempDir()
+	opened, err := New("tester").CreateLocal(context.Background(), dir, "loc")
+	if err != nil {
+		t.Fatalf("CreateLocal: %v", err)
+	}
+
+	_, info, err := tasks.Resolve(tasks.ResolveOptions{WorkDir: dir})
+	if err != nil {
+		t.Fatalf("the created store does not resolve from its directory: %v", err)
+	}
+	if info.Kind != tasks.ResolvedLocal || info.StorePath != opened.StorePath {
+		t.Errorf("resolved %v store at %q, want the local store created at %q", info.Kind, info.StorePath, opened.StorePath)
+	}
+	if opened.Name != filepath.Base(dir) {
+		t.Errorf("Name: got %q, want the directory's name", opened.Name)
+	}
+}
+
+func TestCreateCentralRegistersTheStore(t *testing.T) {
+	isolateCentralHome(t)
+
+	dir := t.TempDir()
+	opened, err := New("tester").CreateCentral(context.Background(), dir, "created-central", "cen")
+	if err != nil {
+		t.Fatalf("CreateCentral: %v", err)
+	}
+	if opened.Name != "created-central" {
+		t.Errorf("Name: got %q, want the registry name", opened.Name)
+	}
+
+	entries, err := New("tester").Stores(context.Background())
+	if err != nil {
+		t.Fatalf("Stores: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name != "created-central" {
+		t.Errorf("registry after the create: got %+v, want the one store just created", entries)
+	}
+}
+
+// A second central store under a name already taken fails, and the error says
+// which name — it is what the operator has to change in the form.
+func TestCreateCentralWithATakenNameFails(t *testing.T) {
+	isolateCentralHome(t)
+
+	catalog := New("tester")
+	if _, err := catalog.CreateCentral(context.Background(), t.TempDir(), "taken", "tkn"); err != nil {
+		t.Fatalf("first CreateCentral: %v", err)
+	}
+
+	_, err := catalog.CreateCentral(context.Background(), t.TempDir(), "taken", "tkn")
+	if err == nil {
+		t.Fatal("expected a second store under the same name to fail")
+	}
+	if !strings.Contains(err.Error(), "taken") {
+		t.Errorf("error should name the store, got: %v", err)
+	}
+}
+
+func TestDerivePrefixIsTheSDKDefault(t *testing.T) {
+	t.Parallel()
+
+	if got, want := New("tester").DerivePrefix("/home/hans/dev/widget"), tasks.DerivePrefix("/home/hans/dev/widget"); got != want {
+		t.Errorf("DerivePrefix: got %q, want the SDK's %q", got, want)
 	}
 }

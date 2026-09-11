@@ -77,14 +77,34 @@ discovery only, so a project whose store was promoted with `taskmgr store move -
 would report "no .tasks directory found". `Resolve` applies the same precedence as the
 `taskmgr` CLI — see the SDK for the order.
 
-Nothing resolving is an error: startup fails with exit code `1` rather than booting
-against an empty board.
+Nothing resolving is not an error. When `tasks.Resolve` reports `ErrNoStore`, or
+`ErrStoreNotRegistered` for a `--store-name`, `resolveStartupStore` starts the app on the store
+picker with the `nostore` repository, and the operator stays there until a store is open. Every
+other resolution failure — a store that exists but cannot be opened — still exits `1`: starting on
+the picker would hide it.
 
-The project root the app runs with is the resolved store's project path, not the target
+The project root the app runs with is the active store's project path, not the target
 directory. That is what `{{project.root}}` interpolates to
 ([CONFIGURATION.md](CONFIGURATION.md#launcher-interpolationcontext-surface)) and it differs
 from the working directory whenever the app is started from a subdirectory or against a
 central store. `--repo=memory` has no store to ask, so it keeps the target directory.
+
+### Switching stores
+
+`cmd/` resolves the store the app starts on. Every later store is opened in-process through
+`storecatalog.Catalog.Open` and made active by `Model.bindStore` (`internal/app/model.go`) —
+so the app, not only `cmd/`, knows where the active store lives. Core Architectural Rule 3
+still holds: each repository instance is bound to one store, and switching replaces it.
+
+- Rebuild store-bound state through `bindStore`, the path startup also takes. It cancels the
+  previous store's context and constructs board, docs, search and detail from scratch; a
+  per-mode `Reset()` is a second place to forget a field.
+- Pass every command that reads the store through `Model.scoped`. It tags the result with the
+  store epoch, and `update` drops a result whose epoch is stale. Cancelling the context
+  stops a read but not a command that has already produced its message, so the tag is what
+  keeps the previous store's issues off the new store's board.
+- Leave timer commands unscoped. A refresh or spinner tick re-arms only from its own
+  handler, so a dropped tick stops the chain for the rest of the session.
 
 `TASKMGR_DIR` is rejected by the SDK rather than honored; unset it and use `--cwd` or
 `--store-name`.

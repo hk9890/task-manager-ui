@@ -33,8 +33,13 @@ const (
 	minPathWidth = 12
 )
 
-// Row is one rendered registry entry.
+// Row is one rendered line: a registry entry, or an action when Action is set.
 type Row struct {
+	// Action is the label of a row that does something rather than naming a
+	// store — "Create a local store in …". An action row carries no other
+	// field.
+	Action string
+
 	Name        string
 	ProjectPath string
 	// Health is the entry's health token, rendered when the entry is not
@@ -132,16 +137,29 @@ func title(state State) string {
 
 // countLabel follows the header-count rule: a plain N only when the whole list
 // is loaded and fits, "N of M" for a clipped window, and the skeleton glyph
-// while a cold listing is in flight.
+// while a cold listing is in flight. It counts stores; the create rows are not
+// stores.
 func countLabel(state State, capacity int) string {
-	if state.Loading && len(state.Rows) == 0 {
+	total := storeRows(state.Rows)
+	if state.Loading && total == 0 {
 		return issuerow.SkeletonGlyph
 	}
-	total := len(state.Rows)
-	if total > capacity {
-		return fmt.Sprintf("%d of %d", capacity, total)
+	if len(state.Rows) <= capacity {
+		return fmt.Sprintf("%d", total)
 	}
-	return fmt.Sprintf("%d", total)
+	offset := max(0, min(state.ScrollOffset, len(state.Rows)))
+	visible := storeRows(state.Rows[offset:min(offset+capacity, len(state.Rows))])
+	return fmt.Sprintf("%d of %d", visible, total)
+}
+
+func storeRows(rows []Row) int {
+	n := 0
+	for _, row := range rows {
+		if row.Action == "" {
+			n++
+		}
+	}
+	return n
 }
 
 func renderRows(state State, innerWidth, capacity int) []string {
@@ -186,6 +204,11 @@ func renderRows(state State, innerWidth, capacity int) []string {
 
 func renderRow(row Row, selected bool, nameWidth, innerWidth int) string {
 	plainPrefix, renderedPrefix := styles.SelectionPrefix(selected, true)
+
+	if row.Action != "" {
+		label := textutil.TruncateString(row.Action, innerWidth-lipgloss.Width(plainPrefix))
+		return renderedPrefix + lipgloss.NewStyle().Foreground(styles.TextSecondaryColor).Bold(true).Render(label)
+	}
 
 	nameStyle := lipgloss.NewStyle().Foreground(styles.TextPrimaryColor)
 	if !row.Usable {
@@ -246,6 +269,9 @@ func statusToken(row Row) (string, lipgloss.Style) {
 func nameColumnWidth(rows []Row) int {
 	width := 0
 	for _, row := range rows {
+		if row.Action != "" {
+			continue
+		}
 		if w := lipgloss.Width(row.Name); w > width {
 			width = w
 		}

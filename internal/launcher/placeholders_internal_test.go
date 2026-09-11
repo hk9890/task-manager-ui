@@ -9,7 +9,7 @@ import "testing"
 func TestIssueFieldPlaceholdersCoverEveryUntrustedPlaceholder(t *testing.T) {
 	t.Parallel()
 
-	trusted := map[string]struct{}{projectRootPlaceholder: {}}
+	trusted := map[string]struct{}{ProjectRootPlaceholder: {}}
 
 	untrusted := make(map[string]struct{}, len(issueFieldPlaceholders()))
 	for _, placeholder := range issueFieldPlaceholders() {

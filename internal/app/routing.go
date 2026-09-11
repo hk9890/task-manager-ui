@@ -58,7 +58,7 @@ func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
 		if !m.shouldForwardTo(entry.ID, msg) {
 			continue
 		}
-		cmds = append(cmds, entry.Tab.Update(msg))
+		cmds = append(cmds, m.scoped(entry.Tab.Update(msg)))
 	}
 	return batchCmds(cmds...)
 }

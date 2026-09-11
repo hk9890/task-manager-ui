@@ -36,6 +36,32 @@ type StoresLoadedMsg struct {
 	Generation int
 }
 
+// OpenMsg asks the shell to make Entry the active store. The picker emits it
+// rather than opening the store itself: which store is active is the shell's
+// state, and the picker only knows which row the operator chose.
+type OpenMsg struct {
+	Entry storecatalog.Entry
+}
+
+// StoreKind is the kind of store the picker offers to create.
+type StoreKind int
+
+const (
+	// LocalStore is a .tasks directory inside the project.
+	LocalStore StoreKind = iota + 1
+	// CentralStore is a store under the central root, registered for the
+	// project.
+	CentralStore
+)
+
+// CreateMsg asks the shell to create a store of Kind for Dir. Like OpenMsg it
+// carries only the operator's choice; the form and the creation are the
+// shell's.
+type CreateMsg struct {
+	Kind StoreKind
+	Dir  string
+}
+
 // Model is the store-picker controller.
 type Model struct {
 	ctx     context.Context
@@ -52,6 +78,10 @@ type Model struct {
 	// activeStorePath is the store directory the app is currently browsing. It
 	// marks one row as the active store; empty when no store is open.
 	activeStorePath string
+
+	// createDir is the directory the picker offers to create a store for, as
+	// two rows above the registry entries. Empty offers nothing.
+	createDir string
 
 	// loading is the visual loading state; inflight guards a manual reload
 	// against a listing already on its way. generation identifies the listing
@@ -111,11 +141,21 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // An unconsumed key falls through to the shell, which is how Escape, quit and
 // help keep working while the picker is up.
 //
-// Row movement and reload read the board keybinding context: the picker is a
-// single scrolling list of rows, the same shape a board column is, and a
+// Row movement, open and reload read the board keybinding context: the picker
+// is a single scrolling list of rows, the same shape a board column is, and a
 // context of its own would ask the operator to rebind the same movement twice.
 func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	switch {
+	case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
+		if kinds := m.createKinds(); m.selectedRow < len(kinds) {
+			create := CreateMsg{Kind: kinds[m.selectedRow], Dir: m.createDir}
+			return true, func() tea.Msg { return create }
+		}
+		entry, ok := m.SelectedEntry()
+		if !ok {
+			return true, nil
+		}
+		return true, func() tea.Msg { return OpenMsg{Entry: entry} }
 	case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 		m.moveRow(-1)
 		return true, nil
@@ -135,7 +175,14 @@ func (m *Model) View(spinnerFrame int, help string) string {
 		errText = m.err.Error()
 	}
 
-	rows := make([]uistorepicker.Row, 0, len(m.entries))
+	rows := make([]uistorepicker.Row, 0, m.rowCount())
+	for _, kind := range m.createKinds() {
+		label := "Create a local store in " + m.createDir
+		if kind == CentralStore {
+			label = "Create a central store for " + m.createDir
+		}
+		rows = append(rows, uistorepicker.Row{Action: label})
+	}
 	for _, entry := range m.entries {
 		rows = append(rows, uistorepicker.Row{
 			Name:        entry.Name,
@@ -168,6 +215,26 @@ func (m *Model) SetSize(width, height int) {
 	m.clampSelection()
 }
 
+// SetCreateTarget offers to create a store for dir, or withdraws the offer
+// when dir is empty.
+func (m *Model) SetCreateTarget(dir string) {
+	m.createDir = dir
+	m.clampSelection()
+}
+
+// createKinds is what the create rows offer, in the order they are drawn.
+func (m *Model) createKinds() []StoreKind {
+	if m.createDir == "" {
+		return nil
+	}
+	return []StoreKind{LocalStore, CentralStore}
+}
+
+// rowCount is every selectable row: the create rows, then the stores.
+func (m *Model) rowCount() int {
+	return len(m.createKinds()) + len(m.entries)
+}
+
 // SetActiveStorePath marks the row for the store the app is browsing. An empty
 // path marks none, which is what the no-store start looks like.
 func (m *Model) SetActiveStorePath(storePath string) {
@@ -186,14 +253,12 @@ func (m *Model) Entries() []storecatalog.Entry {
 	return out
 }
 
-// SelectedEntry returns the highlighted store, or false when the list is empty.
+// SelectedEntry returns the highlighted store, or false when the highlight is
+// on a create row or the list is empty.
 func (m *Model) SelectedEntry() (storecatalog.Entry, bool) {
-	if len(m.entries) == 0 {
-		return storecatalog.Entry{}, false
-	}
-	row := m.selectedRow
+	row := m.selectedRow - len(m.createKinds())
 	if row < 0 || row >= len(m.entries) {
-		row = 0
+		return storecatalog.Entry{}, false
 	}
 	return m.entries[row], true
 }
@@ -242,7 +307,8 @@ func (m *Model) apply(msg StoresLoadedMsg) {
 }
 
 func (m *Model) clampSelection() {
-	if len(m.entries) == 0 {
+	total := m.rowCount()
+	if total == 0 {
 		m.selectedRow = 0
 		m.scrollOffset = 0
 		return
@@ -250,18 +316,18 @@ func (m *Model) clampSelection() {
 	if m.selectedRow < 0 {
 		m.selectedRow = 0
 	}
-	if m.selectedRow >= len(m.entries) {
-		m.selectedRow = len(m.entries) - 1
+	if m.selectedRow >= total {
+		m.selectedRow = total - 1
 	}
 	capacity := m.itemCapacity()
-	if maxOffset := len(m.entries) - capacity; m.scrollOffset > maxOffset {
+	if maxOffset := total - capacity; m.scrollOffset > maxOffset {
 		m.scrollOffset = max(maxOffset, 0)
 	}
 	m.scrollOffset = scroll.EnsureVisible(m.scrollOffset, m.selectedRow, capacity)
 }
 
 func (m *Model) moveRow(delta int) {
-	if len(m.entries) == 0 {
+	if m.rowCount() == 0 {
 		m.selectedRow = 0
 		return
 	}

@@ -74,6 +74,16 @@ type Services struct {
 	// ActiveStorePath is the store directory Repo reads, used to mark the
 	// active row in the picker. Empty when the caller did not resolve one.
 	ActiveStorePath string
+	// StoreName is what the header calls the active store. Empty leaves the
+	// header as it was before stores could be switched.
+	StoreName string
+	// ProjectRoot is the project the active store tracks: what Launcher
+	// interpolates as {{project.root}}.
+	ProjectRoot string
+	// ProcessRunner is the runner Launcher was built with. ForStore rebuilds
+	// the launcher for another project root and reuses it, so a test that
+	// injects a fake keeps it across a store switch.
+	ProcessRunner launcher.ProcessRunner
 	// Logger is the optional root runtime logger. It must NOT carry a
 	// "component" attribute; NewModelWithOptions derives per-mode loggers
 	// (component=board, component=search, …) via logging.WithComponent. When
@@ -153,7 +163,8 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 		return Services{}, errors.New("repo is required")
 	}
 
-	launcherService, err := launcher.NewService(LauncherDefinitions(cfg), projectRoot, launcher.NewExecProcessRunner())
+	runner := launcher.NewExecProcessRunner()
+	launcherService, err := launcher.NewService(LauncherDefinitions(cfg), projectRoot, runner)
 	if err != nil {
 		return Services{}, err
 	}
@@ -169,7 +180,38 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 		Editor:             editorService,
 		Config:             cfg,
 		ExecCommandFactory: defaultExecCommandFactory,
+		ProjectRoot:        projectRoot,
+		ProcessRunner:      runner,
 	}, nil
+}
+
+// ForStore returns a copy of s bound to another store. The repository, the
+// editor that writes through it, and the launcher that interpolates the
+// store's project root are rebuilt; everything that is not a property of the
+// store — config, logger, catalog, exec factory — carries over.
+func (s Services) ForStore(opened storecatalog.Opened) (Services, error) {
+	if opened.Repo == nil {
+		return Services{}, errors.New("repo is required")
+	}
+
+	launcherService, err := launcher.NewService(LauncherDefinitions(s.Config), opened.ProjectPath, s.ProcessRunner)
+	if err != nil {
+		return Services{}, err
+	}
+
+	editorService, err := launchereditor.NewIssueEditor(opened.Repo, s.Config.Editor.Command)
+	if err != nil {
+		return Services{}, err
+	}
+
+	next := s
+	next.Repo = opened.Repo
+	next.Launcher = launcherService
+	next.Editor = editorService
+	next.ProjectRoot = opened.ProjectPath
+	next.ActiveStorePath = opened.StorePath
+	next.StoreName = opened.Name
+	return next, nil
 }
 
 // SweepStaleTempFiles removes taskmgr-ui-issue-*.md files in os.TempDir() older
@@ -237,5 +279,6 @@ func NewServicesWithLauncher(repo repository.Repository, cfg config.Model, launc
 		Editor:             editorService,
 		Config:             cfg,
 		ExecCommandFactory: defaultExecCommandFactory,
+		ProcessRunner:      launcher.NewExecProcessRunner(),
 	}, nil
 }

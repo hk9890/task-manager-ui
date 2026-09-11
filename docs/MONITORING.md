@@ -82,23 +82,30 @@ record) is the working directory, while `project_path` is the store's project �
 they differ for a central store, and for a run started in a subdirectory
 ([CONFIGURATION.md](CONFIGURATION.md) covers what a launcher template does with it).
 
-A failure to resolve is reported by the existing `interactive startup failed`
-record instead; it names the working directory, or the store name when
-`--store-name` was given.
+When nothing resolves — no store for the working directory, or no registered store
+under `--store-name` — the app starts on the store picker instead, and the `startup`
+record is `no task-manager store resolved; starting on the store picker`, carrying
+`reason`, `cwd` and `store_name`. Any other failure to resolve is reported by the
+existing `interactive startup failed` record; it names the working directory, or the
+store name when `--store-name` was given.
 
 A `WARN` follows the record when `project_path` is not accessible. Resolution
 checks the store directory, never the project path recorded for it, so a
-registry entry outliving a moved or deleted project opens normally — the board
-reads fine, while launchers without an explicit `work_dir` exec in a directory
-that is gone. Re-point the entry by running
+registry entry outliving a moved or deleted project opens normally and the board
+reads fine. The app refuses the launchers that would run there, with a toast, and
+the Detail footer reads `launchers off: project path missing`; the refusal writes
+no record. Re-point the entry by running
 `taskmgr store move --relink --to <store>` from the project's new location.
 
 ### What a healthy run logs after startup
 
-Two things, both expected:
+These, all expected:
 
 - `temp cleanup: removed stale temp file` (INFO, `internal/app/services.go`) — the
   post-startup sweep armed by `Model.Init` found an old edit temp file and removed it.
+- `switched task-manager store` (INFO) — a store opened or created from the picker became
+  active, with `store`, `store_path` and `project_path`. From this record on, the startup
+  resolution record no longer names the store in use; read the latest of the two.
 - the Done-column load-more trace (DEBUG, `internal/mode/board/model.go`) — only when the
   column actually pages, and only under `--debug`.
 
@@ -130,6 +137,12 @@ suppressed for the interactive session.
 - `failed to list central task-manager stores` (`storepicker`) — the store picker could
   not read the central registry. The picker shows the cause inline and keeps whatever it
   listed before; on a first open it has nothing to keep and shows the error alone.
+- `failed to open task-manager store`, `failed to switch task-manager store` — a store
+  chosen in the picker did not become active. The app stays on the store it was on, and
+  the toast carries the same cause.
+- `failed to create task-manager store` — creating a store from the picker failed, most
+  often on a registry name already taken. The form stays open with what was typed, and
+  the toast carries the same cause.
 - `backend sort assumption broken` (WARN) — a dashboard group came back in an order
   `internal/dashboard` does not expect (`Warning.Threshold == -1`). The column still
   renders; its order is the backend's, not the composed one.

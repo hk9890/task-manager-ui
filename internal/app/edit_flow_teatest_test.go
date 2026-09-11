@@ -488,7 +488,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	}
 
 	// Phase 2: run prepareEditCmd → editIssuePreparedMsg; model returns tea.Exec cmd.
-	preparedMsg := cmd()
+	preparedMsg := unscoped(cmd())
 	prepared, ok := preparedMsg.(editIssuePreparedMsg)
 	if !ok {
 		t.Fatalf("expected editIssuePreparedMsg, got %T", preparedMsg)

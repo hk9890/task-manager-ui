@@ -6,6 +6,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
+	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
 // refreshTickMsg triggers periodic surface auto-refresh.
@@ -41,6 +42,24 @@ type editorExitedMsg struct {
 	execErr  error
 }
 
+// unresolvedStoreMsg reports, once the program runs, why it started without a
+// store.
+type unresolvedStoreMsg struct{ reason string }
+
+// storeOpenedMsg carries the result of opening a store the picker asked for.
+type storeOpenedMsg struct {
+	name   string
+	opened storecatalog.Opened
+	err    error
+}
+
+// storeCreatedMsg carries the result of creating a store from the picker.
+type storeCreatedMsg struct {
+	dir    string
+	opened storecatalog.Opened
+	err    error
+}
+
 // launchActionResultMsg carries the result of a background launcher action.
 type launchActionResultMsg struct {
 	action string
@@ -57,8 +76,20 @@ type surfaceRefreshState struct {
 type RuntimeOptions struct {
 	DisableAutoRefresh bool
 
-	// Ctx is the application lifecycle context. Repository reads issued by the
-	// shell and by both browse modes derive from it, so quitting abandons work
-	// in flight instead of waiting for it. Nil means context.Background().
+	// UnresolvedStore is why startup found no store to open. Non-empty starts
+	// the app on the store picker instead of a board, holds the operator there
+	// until a store is open, and says why in a toast.
+	UnresolvedStore string
+
+	// StorelessDir is the working directory when no store resolved for it. The
+	// picker offers to create a store there. Empty offers nothing — in
+	// particular when --store-name named an unregistered store, since the
+	// working directory may well have one of its own.
+	StorelessDir string
+
+	// Ctx is the application lifecycle context. Each store the app opens gets
+	// a context derived from it, and repository reads use that one, so both
+	// quitting and switching stores abandon work in flight instead of waiting
+	// for it. Nil means context.Background().
 	Ctx context.Context
 }

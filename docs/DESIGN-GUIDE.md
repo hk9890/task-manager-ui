@@ -112,6 +112,22 @@ absent from `mode.BrowseModes` and never appears in the tab cycle.
 A surface above the shell takes keys before the shell key switch and reports whether it consumed
 each one — `Model.HandleKey` returns `(consumed, cmd)` — so Escape, quit and help keep working
 without it re-implementing them. Escape returns to the mode it was opened from, including Detail.
+The shell actions that act on the selected issue are inert there: the picker has no issue
+selection, and the answer `currentSelection()` would give is a row that is not on screen.
+
+Opening a store from the picker lands on the new store's Board, whatever mode the picker was
+opened from — the previous store's Detail and selection are gone.
+
+The picker is also the start screen when no store resolves. With no store open there is nothing
+below it, so the operator is held there: Escape quits, quit and help work, and every other shell
+key is inert until a store is opened.
+
+When nothing resolved for the working directory, the picker offers to create a store there as two
+action rows above the registry — `Row.Action` in `internal/ui/storepicker`. An action is a row, not
+a key: it costs no binding and no config surface, and it disappears once the directory has a
+store. The header count counts stores only. The form rides the shell's action-modal slot and stays
+open until the store is created, so a rejected name or prefix is corrected in place. The header's context text leads
+with the active store's name and keeps it until only the surface name still fits.
 
 ## Selection and scrolling
 

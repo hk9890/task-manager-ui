@@ -183,7 +183,7 @@ func (m *Model) reloadDetailAfterMutationCmd(issueID string) tea.Cmd {
 		return nil
 	}
 	m.detail.BeginLoad(issueID, detail.BeginLoadOptions{})
-	return loadDetailCmd(m.ctx, m.services, issueID)
+	return m.loadDetail(issueID)
 }
 
 // openMutationModal puts dialog on screen and returns the Cmd that starts it.
