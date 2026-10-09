@@ -166,5 +166,9 @@ The mouse does what the keys above do, and has no bindings to configure.
   focused.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.
 - The startup-error screen also quits on `q`.
-- Data views also auto-refresh when the app regains focus and on a low-frequency
-  background schedule. Use `r` when you want an immediate manual refresh.
+- Data views refresh by themselves when the store changes, whoever wrote it — the
+  `taskmgr` CLI, an agent, another `taskmgr-ui` — also while the terminal is not
+  focused. A change that arrives under a dialog or the help overlay shows when it
+  closes. They also refresh when the app regains focus and once a minute, which
+  is what remains where the store cannot be watched. `--no-auto-refresh` turns
+  all three off; `r` reloads at once either way.

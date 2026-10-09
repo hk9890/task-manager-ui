@@ -105,6 +105,11 @@ still holds: each repository instance is bound to one store, and switching repla
   keeps the previous store's issues off the new store's board.
 - Leave timer commands unscoped. A refresh or spinner tick re-arms only from its own
   handler, so a dropped tick stops the chain for the rest of the session.
+- The store watch (`internal/app/storewatch.go`) is the opposite case and is scoped: `bindStore`
+  starts one per store on that store's context, so the previous store's wait ends by itself and
+  its last message must not reach the new store's chain. Its two messages are on the pass-through
+  list in `handleOverlayMessage`, as the ticks are, because the wait also re-arms only from its
+  own handler.
 
 `TASKMGR_DIR` is rejected by the SDK rather than honored; unset it and use `--cwd` or
 `--store-name`.

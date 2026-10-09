@@ -139,3 +139,16 @@ type Repository interface {
 	// that matches today's taskmgr behavior.
 	Catalogs(ctx context.Context) (Catalogs, error)
 }
+
+// ChangeWatcher is the optional half of a backend whose store other processes
+// write: it reports that the store changed. A backend without one is read on
+// the shell's refresh tick alone.
+type ChangeWatcher interface {
+	// WatchChanges returns a channel that carries one value per burst of
+	// changes to the store, this process's own writes included. A value says
+	// only "read again". The channel closes when ctx is done or when the store
+	// can no longer be watched; a close carries no cause.
+	//
+	// Call it before the first read, or a change between the two is missed.
+	WatchChanges(ctx context.Context) (<-chan struct{}, error)
+}

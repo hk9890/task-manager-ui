@@ -52,7 +52,8 @@ func defaultExecCommandFactory(cmd *exec.Cmd) tea.ExecCommand {
 //   - config model (runtime preferences)
 //
 // This shell intentionally excludes orchestration/control-plane, SQL,
-// caching, pub/sub, and watcher wiring.
+// caching and pub/sub. The one watch it holds is the store's own change
+// signal, which it takes from Repo when Repo is a repository.ChangeWatcher.
 // Launcher integration stays shell-owned so browse/detail modes can emit intent
 // while launch execution stays centralized and reusable.
 type Services struct {

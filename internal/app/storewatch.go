@@ -1,0 +1,83 @@
+package app
+
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+)
+
+// watchStore subscribes to the changes other processes make to the store. It
+// returns nil when the backend reports none, when the watch cannot start, or
+// under --no-auto-refresh; the refresh tick is then the only trigger.
+func (m *Model) watchStore(repo repository.Repository) <-chan struct{} {
+	if m.runtime.DisableAutoRefresh {
+		return nil
+	}
+	watcher, ok := repo.(repository.ChangeWatcher)
+	if !ok {
+		return nil
+	}
+	changes, err := watcher.WatchChanges(m.ctx)
+	if err != nil {
+		m.logger().Warn("store change watch not started; the refresh tick is the only trigger", "error", err.Error())
+		return nil
+	}
+	return changes
+}
+
+// waitForStoreChangeCmd waits for the store to change or its watch to end. It
+// re-arms only from the storeChangedMsg handler, and it is scoped: the watch of
+// a store that was switched away ends with that store's context, and the stale
+// epoch drops the message instead of ending the new store's chain.
+func (m Model) waitForStoreChangeCmd() tea.Cmd {
+	changes := m.storeChanges
+	if changes == nil {
+		return nil
+	}
+	return m.scoped(m.awaitStoreChange(changes))
+}
+
+// refreshAfterStoreChangeCmd reloads the active surface when the store changed
+// after that surface's latest load started. Update runs it after every message,
+// so a change that arrives during a load, under an overlay or while another
+// surface is active is applied as soon as the surface can take it. The terminal
+// focus does not gate it: a board in view while an agent writes in another pane
+// is the case the watch exists for.
+func (m *Model) refreshAfterStoreChangeCmd() tea.Cmd {
+	if m.showHelp || m.showActionModal {
+		return nil
+	}
+	state, tracked := m.refreshStateBySurface[m.active]
+	if !tracked || state.loadedAtChange == m.storeChangeSeq || m.surfaceLoading(m.active) {
+		return nil
+	}
+	// Recorded here and not only by trackSurfaceLoads: a refresh that starts no
+	// load, such as a search with no query, must not be issued again on every
+	// message.
+	state.loadedAtChange = m.storeChangeSeq
+	m.refreshStateBySurface[m.active] = state
+	return m.refreshActiveSurfaceCmd()
+}
+
+// trackSurfaceLoads records, for each surface whose load started in this
+// update, the store change it started after. Every path that starts a load is
+// covered, the reload keys the modes handle themselves included.
+func (m *Model) trackSurfaceLoads() {
+	for surface, state := range m.refreshStateBySurface {
+		loading := m.surfaceLoading(surface)
+		if loading && !state.loading {
+			state.loadedAtChange = m.storeChangeSeq
+		}
+		state.loading = loading
+		m.refreshStateBySurface[surface] = state
+	}
+}
+
+func (m *Model) surfaceLoading(surface mode.ID) bool {
+	if surface == mode.Detail {
+		return m.detail.IsLoading()
+	}
+	tab := m.browseController(surface)
+	return tab != nil && tab.IsLoading()
+}

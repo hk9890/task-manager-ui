@@ -9,35 +9,42 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 )
 
-// Dashboard composes the board snapshot from SDK primitives. It is fail-fast,
-// not snapshot-isolated: the first underlying error aborts the whole call, but
-// the five independent store reads are not a single consistent snapshot, so a
-// concurrent write between them can yield a momentarily inconsistent board.
-// This is acceptable for a single-user, auto-refreshing TUI.
+// Dashboard composes the board snapshot from two store reads: the graph of the
+// hot set, which gives the ready, blocked, in-progress and not-ready sections
+// one consistent view, and the closed page. It is fail-fast: the first error
+// aborts the whole call. A close or reopen between the two reads can show an
+// issue in both its section and Done, or in neither, until the next refresh.
 func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
 	}
 
-	ready, err := r.store.Ready()
+	nodes, err := r.store.Graph()
 	if err != nil {
 		return repository.DashboardData{}, mapReadErr("dashboard", err)
 	}
-	blocked, err := r.store.Blocked()
-	if err != nil {
-		return repository.DashboardData{}, mapReadErr("dashboard", err)
-	}
-	inProgress, err := r.store.List(tasks.Filter{Expr: `status == "in_progress"`})
-	if err != nil {
-		return repository.DashboardData{}, mapReadErr("dashboard", err)
-	}
-	// Feeds the board's Not Ready column (the dashboard composer merges this with
-	// the dep-blocked set, deduped by ID). "deferred" is an active, non-closed
-	// status (work consciously postponed) that is neither ready nor in-progress,
-	// so it joins blocked-status issues here to stay visible on the board.
-	notReady, err := r.store.List(tasks.Filter{Expr: `status == "blocked" || status == "deferred"`})
-	if err != nil {
-		return repository.DashboardData{}, mapReadErr("dashboard", err)
+	var (
+		ready, inProgress, notReady []*tasks.Issue
+		blocked                     []tasks.BlockedIssue
+	)
+	for _, n := range nodes {
+		if n.Ready {
+			ready = append(ready, n.Issue)
+		}
+		if n.Blocked {
+			blocked = append(blocked, tasks.BlockedIssue{Issue: n.Issue, BlockedBy: n.BlockedBy})
+		}
+		switch n.Issue.Status {
+		case tasks.StatusInProgress:
+			inProgress = append(inProgress, n.Issue)
+		// Feeds the board's Not Ready column (the dashboard composer merges this
+		// with the dep-blocked set, deduped by ID). "deferred" is an active,
+		// non-closed status (work consciously postponed) that is neither ready
+		// nor in-progress, so it joins blocked-status issues here to stay
+		// visible on the board.
+		case tasks.StatusBlocked, tasks.StatusDeferred:
+			notReady = append(notReady, n.Issue)
+		}
 	}
 	// ClosedLimit <= 0 means "all remaining" (Filter.Limit 0 = no limit), matching
 	// the memory backend; ClosedOffset pages the closed window. Total is the full

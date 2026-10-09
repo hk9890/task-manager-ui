@@ -12,6 +12,13 @@ import (
 // refreshTickMsg triggers periodic surface auto-refresh.
 type refreshTickMsg struct{}
 
+// storeChangedMsg reports that the active store changed on disk.
+type storeChangedMsg struct{}
+
+// storeWatchEndedMsg reports that the active store's change watch ended while
+// the store was still open.
+type storeWatchEndedMsg struct{}
+
 // startupHealthCheckMsg carries the result of the startup repository health check.
 type startupHealthCheckMsg struct{ err error }
 
@@ -70,6 +77,13 @@ type launchActionResultMsg struct {
 type surfaceRefreshState struct {
 	dirty       bool
 	lastRefresh time.Time
+
+	// loading is whether the surface was loading after the previous update, and
+	// loadedAtChange the Model.storeChangeSeq its latest load started at. A
+	// surface whose loadedAtChange is behind the sequence shows a store that
+	// has changed since.
+	loading        bool
+	loadedAtChange int
 }
 
 // RuntimeOptions carries toggles that alter runtime behaviour without touching config.
