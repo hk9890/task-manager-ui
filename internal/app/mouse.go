@@ -50,7 +50,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.showHelp || m.showActionModal {
-		m.hoverTab = ""
+		m.clearHeaderHover()
 		cmd := m.mouseToSurface(leave)
 		switch {
 		case !m.showHelp:
@@ -63,7 +63,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.active == mode.StorePicker {
-		m.hoverTab = ""
+		m.clearHeaderHover()
 		return m, m.storePicker.Update(event)
 	}
 
@@ -74,11 +74,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		cmd := m.mouseToSurface(leave)
 		return m, batchCmds(cmd, m.mouseOnHeader(event))
 	case event.Y >= headerHeight+workspaceHeight:
-		m.hoverTab = ""
+		m.clearHeaderHover()
 		return m, m.mouseToSurface(leave)
 	}
 
-	m.hoverTab = ""
+	m.clearHeaderHover()
 	event.Y -= headerHeight
 	return m, m.mouseToSurface(event)
 }
@@ -124,19 +124,40 @@ func (m *Model) mouseToSurface(event mode.MouseMsg) tea.Cmd {
 	return m.scoped(m.board.Update(event))
 }
 
-// mouseOnHeader lights the tab under the pointer and switches to it on a
-// click.
+// clearHeaderHover unlights the tab or the button the pointer was on.
+func (m *Model) clearHeaderHover() {
+	m.hoverTab = ""
+	m.hoverAction = ""
+}
+
+// mouseOnHeader lights the tab or the button under the pointer, and on a click
+// switches to the tab or runs the button's action. Only the top bar answers:
+// the rule under it draws nothing to press.
 func (m *Model) mouseOnHeader(event mode.MouseMsg) tea.Cmd {
-	tab, ok := m.tabAt(event.X)
-	if !ok {
-		m.hoverTab = ""
+	m.clearHeaderHover()
+	if event.Y != 0 {
 		return nil
 	}
-	m.hoverTab = tab
-	if event.Kind != mode.MouseClick || (tab == m.active) {
-		return nil
+
+	if tab, ok := m.tabAt(event.X); ok {
+		m.hoverTab = tab
+		if event.Kind != mode.MouseClick || (tab == m.active) {
+			return nil
+		}
+		return m.switchToTab(tab)
 	}
-	return m.switchToTab(tab)
+
+	for _, cell := range m.barCells() {
+		if event.X < cell.x0 || event.X >= cell.x1 {
+			continue
+		}
+		m.hoverAction = cell.action.action
+		if event.Kind != mode.MouseClick {
+			return nil
+		}
+		return cell.action.run(m)
+	}
+	return nil
 }
 
 // tabAt is the browse tab the header strip draws at column x.

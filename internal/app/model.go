@@ -75,6 +75,9 @@ type Model struct {
 
 	// hoverTab is the header tab under the pointer, or "".
 	hoverTab mode.ID
+	// hoverAction is the shell action of the top-bar button under the
+	// pointer, or "".
+	hoverAction string
 
 	// press is where the left button went down, until it comes up; sel is the
 	// box a drag from there selects (textselect.go). copyText puts a finished
@@ -561,6 +564,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerTicking = false
 		return m, modeCmd
 	case tea.WindowSizeMsg:
+		// The buttons stand flush right, so a new width moves them from under a
+		// pointer that sent no event. The tabs stay where they are.
+		if msg.Width != m.width {
+			m.hoverAction = ""
+		}
 		m.sizeKnown = true
 		m.width = msg.Width
 		m.height = msg.Height
@@ -740,6 +748,34 @@ var issueScopedShellActions = []string{
 	config.ShellActionCommentIssue,
 }
 
+// The three shell actions the top bar also offers as buttons. The key switch
+// and the bar both run them from here, so a button does what its key does.
+
+func (m *Model) openHelp() tea.Cmd {
+	m.showHelp = true
+	m.help = m.help.ScrollToTop()
+	m.help.SetSize(m.width, m.height)
+	return nil
+}
+
+func (m *Model) openStorePicker() tea.Cmd {
+	if m.active == mode.StorePicker {
+		return nil
+	}
+	m.pickerReturn = m.active
+	m.active = mode.StorePicker
+	m.storePicker.SetSize(m.width, m.height)
+	m.storePicker.SetActiveStorePath(m.services.ActiveStorePath)
+	// Re-listed on every open, not cached: a store registered from another
+	// terminal since the last look must appear without a restart.
+	return m.storePicker.Init()
+}
+
+func (m *Model) requestCreateIssue() tea.Cmd {
+	m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
+	return m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
+}
+
 // handleShellKey handles one key press for the shell: the pending-dialog
 // choke point, the mode-local capture and intent checks, and the shell
 // keybinding switch. It is split out of update() so that message routing and
@@ -817,21 +853,9 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 	case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
 		return m, batchCmds(modeCmd, tea.Quit)
 	case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
-		m.showHelp = true
-		m.help = m.help.ScrollToTop()
-		m.help.SetSize(m.width, m.height)
-		return m, modeCmd
+		return m, batchCmds(modeCmd, m.openHelp())
 	case m.keys.Match(config.ShellContext, config.ShellActionStorePicker, msg):
-		if m.active == mode.StorePicker {
-			return m, modeCmd
-		}
-		m.pickerReturn = m.active
-		m.active = mode.StorePicker
-		m.storePicker.SetSize(m.width, m.height)
-		m.storePicker.SetActiveStorePath(m.services.ActiveStorePath)
-		// Re-listed on every open, not cached: a store registered from another
-		// terminal since the last look must appear without a restart.
-		return m, batchCmds(modeCmd, m.storePicker.Init())
+		return m, batchCmds(modeCmd, m.openStorePicker())
 	case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
 		return m, batchCmds(modeCmd, m.switchToTab(mode.Board))
 	case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
@@ -907,8 +931,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 		return m, batchCmds(modeCmd, m.scoped(prepareEditCmd(m.ctx, m.services, issueID)))
 	case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
-		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
-		return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{})))
+		return m, batchCmds(modeCmd, m.requestCreateIssue())
 	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
 		issue, ok := m.mutationTargetIssue()
 		if !ok {

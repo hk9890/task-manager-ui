@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func sampleRows() []Row {
@@ -85,8 +86,7 @@ func TestRenderGoldens(t *testing.T) {
 
 	// The window is smaller than the list, so the count reads "N of M" rather
 	// than a plain total (docs/DESIGN-GUIDE.md, Selection and scrolling).
-	// Width selects the layout branch: below the point where a project path
-	// fits, the path is dropped and only the name and the status token remain.
+	// At this width a project path is longer than its line and is cut.
 	t.Run("narrow_w40", func(t *testing.T) {
 		view := Render(State{
 			Rows: []Row{
@@ -102,12 +102,12 @@ func TestRenderGoldens(t *testing.T) {
 		testui.AssertMatchesGoldenNormalized(t, []byte(view), "store_picker_narrow_w40.golden")
 	})
 
-	// A name past nameColumnMax is truncated, which is a branch no w100 golden
-	// with short fixture names reaches.
+	// A name longer than its line is truncated, which is a branch no w100
+	// golden with short fixture names reaches.
 	t.Run("long_names_w60", func(t *testing.T) {
 		view := Render(State{
 			Rows: []Row{
-				{Name: "a-very-long-registry-store-name-indeed", ProjectPath: "/home/hans/dev/long", Health: "ok", Usable: true},
+				{Name: "a-very-long-registry-store-name-indeed-that-outruns-the-whole-row", ProjectPath: "/home/hans/dev/long", Health: "ok", Usable: true},
 				{Name: "short", ProjectPath: "/home/hans/dev/short", Health: "ok", Usable: true, Active: true},
 			},
 			Help:   "Stores: j/k · r · esc · ctrl+q",
@@ -142,10 +142,13 @@ func TestRenderGoldens(t *testing.T) {
 			rows = append(rows, Row{Name: name, ProjectPath: "/home/hans/dev/" + name, Health: "ok", Usable: true})
 		}
 
+		// Height 10 is seven content lines: three rows and a line to spare.
+		// The offset is where the controller leaves it with row 7 selected
+		// last in the window.
 		view := Render(State{
 			Rows:         rows,
 			SelectedRow:  7,
-			ScrollOffset: 4,
+			ScrollOffset: 5,
 			Help:         "Stores: j/k move · r reload · esc back · ctrl+q quit",
 			Width:        100,
 			Height:       10,
@@ -171,24 +174,63 @@ func TestEmptyStateNamesWhatWouldBeListed(t *testing.T) {
 }
 
 // RowCapacity is the controller's scroll window. A window wider than the rows
-// the renderer actually draws puts the selection chevron on a row that is not
-// on screen.
+// the renderer actually draws puts the selection bar on a row that is not on
+// screen. A row is two lines, so the heights alternate between a content
+// height the rows fill and one that leaves a line spare.
 func TestRowCapacityMatchesRenderedRows(t *testing.T) {
 	t.Parallel()
 
-	for _, height := range []int{6, 10, 16, 24, 40} {
-		capacity := RowCapacity(height, false)
+	for _, hasError := range []bool{false, true} {
+		for _, height := range []int{6, 7, 10, 11, 16, 17, 24, 25, 40} {
+			capacity := RowCapacity(height, hasError)
 
-		rows := make([]Row, 0, capacity+5)
-		for i := 0; i < capacity+5; i++ {
-			rows = append(rows, Row{Name: "store", ProjectPath: "/home/hans/dev/store", Health: "ok", Usable: true})
+			rows := make([]Row, 0, capacity+5)
+			for i := 0; i < capacity+5; i++ {
+				rows = append(rows, Row{Name: "store", ProjectPath: "/home/hans/dev/store", Health: "ok", Usable: true})
+			}
+			state := State{Rows: rows, SelectedRow: -1, Width: 100, Height: height, Help: "help"}
+			if hasError {
+				state.Error = "registry unreadable"
+			}
+
+			view := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
+			if got := len(strings.Split(view, "\n")); got != height {
+				t.Errorf("height %d, error %v: the frame is %d lines", height, hasError, got)
+			}
+			names, paths := strings.Count(view, "│  store "), strings.Count(view, "│  /home/hans/dev/store ")
+			if names != capacity || paths != capacity {
+				t.Errorf("height %d, error %v: rendered %d names and %d paths, RowCapacity says %d rows:\n%s",
+					height, hasError, names, paths, capacity, view)
+			}
 		}
+	}
+}
 
-		view := Render(State{Rows: rows, Width: 100, Height: height, Help: "help"})
-		// Two border lines plus the help line frame the rows.
-		got := len(strings.Split(view, "\n")) - 3
-		if got != capacity {
-			t.Errorf("height %d: rendered %d rows, RowCapacity says %d", height, got, capacity)
+// TestRowCapacityCountsRowsNotLines pins the window at even and odd heights:
+// a row is two lines, the frame takes three, and the inline error row costs a
+// line — which is a row only when no line was spare.
+func TestRowCapacityCountsRowsNotLines(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		height           int
+		plain, withError int
+	}{
+		{height: 0, plain: 10, withError: 10}, // the default height, 24
+		{height: 4, plain: 1, withError: 1},   // never less than one row
+		{height: 5, plain: 1, withError: 1},
+		{height: 6, plain: 1, withError: 1},
+		{height: 7, plain: 2, withError: 1},
+		{height: 16, plain: 6, withError: 6},
+		{height: 17, plain: 7, withError: 6},
+		{height: 24, plain: 10, withError: 10},
+		{height: 25, plain: 11, withError: 10},
+	} {
+		if got := RowCapacity(tc.height, false); got != tc.plain {
+			t.Errorf("RowCapacity(%d, false) = %d, want %d", tc.height, got, tc.plain)
+		}
+		if got := RowCapacity(tc.height, true); got != tc.withError {
+			t.Errorf("RowCapacity(%d, true) = %d, want %d", tc.height, got, tc.withError)
 		}
 	}
 }
@@ -196,10 +238,89 @@ func TestRowCapacityMatchesRenderedRows(t *testing.T) {
 func TestRowCapacityLeavesRoomForTheErrorRow(t *testing.T) {
 	t.Parallel()
 
-	withError := RowCapacity(16, true)
-	withoutError := RowCapacity(16, false)
-	if withError != withoutError-1 {
+	for _, height := range []int{16, 17} {
+		if with, without := contentLines(height, true), contentLines(height, false); with != without-1 {
+			t.Errorf("height %d: an inline error row costs one content line: got %d with, %d without", height, with, without)
+		}
+	}
+	// With no line spare, that line is a store row.
+	if withError, withoutError := RowCapacity(17, true), RowCapacity(17, false); withError != withoutError-1 {
 		t.Errorf("an inline error row costs one store row: got %d with, %d without", withError, withoutError)
+	}
+}
+
+// TestRowDrawsTheStatusOnTheNameLineAndThePathUnderIt pins the two lines of a
+// row: the name with the status token flush right, then the project path.
+func TestRowDrawsTheStatusOnTheNameLineAndThePathUnderIt(t *testing.T) {
+	t.Parallel()
+
+	const innerWidth = 40
+	strip := func(lines []string) []string {
+		out := make([]string, len(lines))
+		for idx, line := range lines {
+			out[idx] = testui.AnsiEscapePattern.ReplaceAllString(line, "")
+		}
+		return out
+	}
+	gutter, _ := styles.SelectionPrefix(true, false)
+
+	lines := strip(renderRow(Row{Name: "alpha", ProjectPath: "/home/hans/dev/alpha", Health: "ok", Usable: true, Active: true}, true, innerWidth))
+	if len(lines) != rowLines {
+		t.Fatalf("a store row is %d lines, want %d", len(lines), rowLines)
+	}
+	if want := gutter + "alpha" + strings.Repeat(" ", innerWidth-len("  alpha")-len("active")) + "active"; lines[0] != want {
+		t.Errorf("first line:\n got %q\nwant %q", lines[0], want)
+	}
+	if want := gutter + "/home/hans/dev/alpha"; lines[1] != want {
+		t.Errorf("second line:\n got %q\nwant %q", lines[1], want)
+	}
+
+	// A row with no token gives the name the whole line.
+	lines = strip(renderRow(Row{Name: "bravo", ProjectPath: "/home/hans/dev/bravo", Health: "ok", Usable: true}, false, innerWidth))
+	if strings.TrimRight(lines[0], " ") != "  bravo" || lines[1] != "  /home/hans/dev/bravo" {
+		t.Errorf("an unmarked row: got %q", lines)
+	}
+
+	// An action row keeps the height; its second line is the gutter alone.
+	lines = strip(renderRow(Row{Action: "Create a local store in /x"}, true, innerWidth))
+	if len(lines) != rowLines || lines[0] != gutter+"Create a local store in /x" || lines[1] != gutter {
+		t.Errorf("an action row: got %q", lines)
+	}
+}
+
+// TestEveryStateFillsTheFrame holds each body to exactly the content lines:
+// rows, the empty state, a cold listing and a failed read with nothing cached,
+// at content heights that leave no line spare and at ones that leave one.
+func TestEveryStateFillsTheFrame(t *testing.T) {
+	t.Parallel()
+
+	states := map[string]State{
+		"rows":           {Rows: sampleRows()},
+		"rows and error": {Rows: sampleRows(), Error: "registry unreadable"},
+		"empty":          {},
+		"cold listing":   {Loading: true},
+		"failed read":    {Error: "registry unreadable"},
+	}
+	for name, state := range states {
+		for height := 4; height <= 13; height++ {
+			for _, width := range []int{100, 20, 8, 6} {
+				state.Width, state.Height, state.Help = width, height, "help"
+				view := Render(state)
+				lines := strings.Split(view, "\n")
+				if len(lines) != height {
+					t.Errorf("%s at %dx%d: the frame is %d lines:\n%s", name, width, height, len(lines), view)
+				}
+				// The top border is styles.FormSection's: it outruns a frame
+				// narrower than the title and the count, and the join pads every
+				// line to it. So the body is measured to its right border.
+				for _, line := range lines[1:] {
+					if got := lipgloss.Width(strings.TrimRight(line, " ")); got > width {
+						t.Errorf("%s at %dx%d: a line is %d cells wide:\n%s", name, width, height, got, view)
+						break
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -241,9 +362,9 @@ func TestAnActiveStoreThatWentUnusableReportsItsHealth(t *testing.T) {
 	}
 }
 
-// The name column is a property of the whole list. Sized to the visible window
-// instead, every path and status token slides sideways as a long name scrolls
-// in or out of view.
+// The path has a line of its own, so it starts in one column whatever the
+// names above it are: no path slides sideways as a long name scrolls in or out
+// of view.
 func TestColumnsDoNotShiftAsTheListScrolls(t *testing.T) {
 	t.Parallel()
 
@@ -274,8 +395,8 @@ func TestColumnsDoNotShiftAsTheListScrolls(t *testing.T) {
 	}
 }
 
-// Within one frame every status token lands in the same place, whether or not
-// that row had room for its project path.
+// Within one frame every status token lands in the same place, whatever the
+// length of the name it follows.
 func TestStatusTokensShareOneRightEdge(t *testing.T) {
 	t.Parallel()
 

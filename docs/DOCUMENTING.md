@@ -74,6 +74,6 @@ gap somewhere else.
   is written; `mise tasks` and `.mise.toml` say what each task runs. Restating a task body in prose
   is a copy that goes stale on the next edit.
 - **Every runbook that needs a real terminal lives in [RUNNING.md](RUNNING.md).** Three behaviours —
-  height-scaled closed limits, chevron following, Done-column pagination — cannot be driven under the
+  height-scaled closed limits, the selection bar following, Done-column pagination — cannot be driven under the
   PTY harness. They are procedures for driving the product, not test policy, so TESTING.md links them
   rather than holding them.

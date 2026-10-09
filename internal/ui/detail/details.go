@@ -40,7 +40,7 @@ type State struct {
 	TargetID                 string
 	Detail                   domain.IssueDetail
 	BrowserItems             []domain.IssueReference
-	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); marked with the app-wide "› " selection prefix
+	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); marked with the app-wide selection gutter
 	QuickActions             QuickActionLabels
 	Loading                  bool
 	Skeleton                 bool // when true, Content pane renders skeleton rows instead of description body
@@ -582,10 +582,6 @@ func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) i
 	return -1
 }
 
-// stripANSI removes ANSI escape sequences for line-content comparison.
-// contentDividerStyle renders the thin header/body divider in a muted border color.
-var contentDividerStyle = lipgloss.NewStyle().Foreground(styles.BorderDefaultColor)
-
 // contentHeaderMetaRow renders the compact, dashboard-styled metadata row shown at the
 // top of the Content pane: type, priority, and status tokens (each in its board color,
 // reusing the shared renderhelpers) followed by the full issue ID (muted). It mirrors
@@ -611,12 +607,14 @@ func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
 }
 
 // contentHeaderRule renders the thin full-width horizontal divider that separates the
-// Content pane header (meta row + title) from the description body.
+// Content pane header (meta row + title) from the description body, in the border colour.
+// The style is built on each call: a package variable would keep the colour of the theme
+// the styles package starts on, whatever styles.Apply assigned after it.
 func contentHeaderRule(width int) string {
 	if width < 1 {
 		return ""
 	}
-	return contentDividerStyle.Render(strings.Repeat("─", width))
+	return lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width))
 }
 
 // isPlaceholderSummary reports whether the summary is the search "no selection"

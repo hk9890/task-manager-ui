@@ -5,7 +5,6 @@
 package renderhelpers
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -18,34 +17,20 @@ import (
 // styles.IssueTypeStyle — a type with a distinct glyph but no distinct colour
 // reads as "unrecognised" on the board. type_style_parity_test.go pins that.
 func CompactIssueType(issueType string) string {
-	switch NormalizeToken(issueType) {
-	case "bug":
-		return "B"
-	case "task":
-		return "T"
-	case "feature":
-		return "F"
-	case "epic":
-		return "E"
-	case "chore":
-		return "C"
-	case "doc", "docs":
-		return "D"
-	default:
-		return "?"
-	}
+	glyph, _ := styles.Glyphs.IssueType(issueType)
+	return glyph
 }
 
 // CompactPriority returns a compact priority token.
 func CompactPriority(priority int) string {
-	if priority < 0 {
-		priority = 0
-	}
-	return fmt.Sprintf("P%d", priority)
+	return styles.Glyphs.Priority(priority)
 }
 
 // CompactIssueState returns a compact status token.
 func CompactIssueState(status string) string {
+	if glyph, ok := styles.Glyphs.Status(status); ok {
+		return glyph
+	}
 	switch NormalizeToken(status) {
 	case "blocked":
 		return "BLK"
@@ -78,6 +63,9 @@ func CompactIssueState(status string) string {
 
 // CompactIssueStateNarrow returns a single-character status token for dense rows.
 func CompactIssueStateNarrow(status string) string {
+	if glyph, ok := styles.Glyphs.Status(status); ok {
+		return glyph
+	}
 	switch NormalizeToken(status) {
 	case "blocked":
 		return "B"

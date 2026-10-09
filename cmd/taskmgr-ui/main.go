@@ -28,6 +28,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository/nostore"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
 	storecatalogtaskmgr "github.com/hk9890/task-manager-ui/internal/storecatalog/taskmgr"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 	appversion "github.com/hk9890/task-manager-ui/internal/version"
 )
 
@@ -314,6 +315,17 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 			startupLogger.Error("invalid launcher configuration", "error", err.Error())
 		} else {
 			_, _ = fmt.Fprintf(stderr, "invalid launcher configuration: %v\n", err)
+		}
+		return 1
+	}
+
+	// The theme and the glyph set are checked here for the same reason, and
+	// applied here because every surface draws with them from its first frame.
+	if err := styles.Apply(configResult.Config.UI.Theme, configResult.Config.UI.Glyphs); err != nil {
+		if startupLogger != nil {
+			startupLogger.Error("invalid ui configuration", "error", err.Error())
+		} else {
+			_, _ = fmt.Fprintf(stderr, "invalid ui configuration: %v\n", err)
 		}
 		return 1
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 // bandOf is the background sequence RowHighlight opens a band with.
-func bandOf(color lipgloss.AdaptiveColor) string {
+func bandOf(color lipgloss.Color) string {
 	on, _, _ := strings.Cut(lipgloss.NewStyle().Background(color).Render("x"), "x")
 	return on
 }
@@ -66,27 +66,25 @@ func TestRowHighlightBandsTheWholeRow(t *testing.T) {
 // were one 256-colour palette entry, and the hovered tab's light value was the
 // inactive tab's, so on those terminals the pointer marked nothing.
 func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
-	previousProfile, previousDark := lipgloss.ColorProfile(), lipgloss.HasDarkBackground()
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(previousProfile)
-		lipgloss.SetHasDarkBackground(previousDark)
-	})
+	previousProfile := lipgloss.ColorProfile()
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	restoreInitialStyles(t)
 
 	for name, profile := range map[string]termenv.Profile{
 		"true colour": termenv.TrueColor, "256 colours": termenv.ANSI256, "16 colours": termenv.ANSI,
 	} {
-		for _, dark := range []bool{true, false} {
+		for _, theme := range Themes() {
 			lipgloss.SetColorProfile(profile)
-			lipgloss.SetHasDarkBackground(dark)
+			if err := Apply(theme, initialGlyphs); err != nil {
+				t.Fatalf("Apply(%q): %v", theme, err)
+			}
 
 			if bandOf(RowSelectedBgColor) == bandOf(RowHoverBgColor) {
-				t.Errorf("%s, dark %v: the hover band is the selection band %q", name, dark, bandOf(RowHoverBgColor))
+				t.Errorf("%s, %s: the hover band is the selection band %q", name, theme, bandOf(RowHoverBgColor))
 			}
-			// Sixteen colours hold one light grey, so the two tab roles cannot
-			// differ there on a light background.
 			tabsAlike := sameStyle(lipgloss.NewStyle().Foreground(ShellTabHoverColor), lipgloss.NewStyle().Foreground(ShellTabInactiveColor))
-			if profile != termenv.ANSI && tabsAlike {
-				t.Errorf("%s, dark %v: a hovered tab is drawn as an inactive one", name, dark)
+			if tabsAlike {
+				t.Errorf("%s, %s: a hovered tab is drawn as an inactive one", name, theme)
 			}
 		}
 	}

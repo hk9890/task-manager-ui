@@ -12,7 +12,7 @@
 │(none)                          │  │                                                                  │  │  Children  : 0                 │
 │                                │  │                                                                  │  │                                │
 │Parent (1)                      │  │                                                                  │  │Quick actions                   │
-│› ? P0 - …parent Parent epic    │  │                                                                  │  │e Edit issue                    │
+│▌ ? P0 - …parent Parent epic    │  │                                                                  │  │e Edit issue                    │
 │                                │  │                                                                  │  │u Update issue                  │
 │                                │  │                                                                  │  │a Add comment                   │
 │                                │  │                                                                  │  │x Close issue                   │

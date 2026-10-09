@@ -73,6 +73,35 @@ func TestMouseSelectsOpensAndScrollsTheDocList(t *testing.T) {
 	}
 }
 
+// TestClickOnEitherLineOfADocSelectsAndOpensIt: a doc is two lines tall, and
+// the line under the title is as much the row as the title is. A click on one
+// and a second on the other are a double click on the same doc.
+func TestClickOnEitherLineOfADocSelectsAndOpensIt(t *testing.T) {
+	t.Parallel()
+
+	m := mouseDocs(t)
+	_, titleY := testui.FindCell(t, m.View(0), "doc-three")
+	if _, idY := testui.FindCell(t, m.View(0), "tm-3"); idY != titleY+1 {
+		t.Fatalf("setup: the ID is on line %d, want it directly under the title on line %d", idY, titleY)
+	}
+
+	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "tm-3", 0))
+	if m.selectedRow != 2 || cmd == nil || opensDetail(cmd) {
+		t.Fatalf("a click on the second line: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.selectedRow, cmd != nil)
+	}
+	assertSelectionDrawn(t, m)
+	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "doc-three", 200)); !opensDetail(cmd) {
+		t.Fatal("a second click, on the other line of the same doc, did not open Detail")
+	}
+
+	// The second line of the last doc is its last line: the one below is empty.
+	x, y := testui.FindCell(t, m.View(0), "tm-3")
+	cmd = m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y + 1, At: mouseStart.Add(5 * time.Second)})
+	if cmd != nil || m.selectedRow != 2 {
+		t.Fatalf("a click below the last doc changed the selection (row %d, cmd %v)", m.selectedRow, cmd != nil)
+	}
+}
+
 func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
 	testui.ForceTrueColor(t)
 

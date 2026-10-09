@@ -1,7 +1,7 @@
 Default · cols 2-4/5
 ╭─ In Progress ────────────────── 1 ─╮  ╭─ Blocked ─────────────────────── 2 ─╮  ╭─ Recent Work ────────────────── 15 ─╮
-│  F P1 IP yze.4.3 Implement launche…│  │› B P1 BLK yze.4.5 Add editor and la…│  │  T P1 CLS yze.4 Deliver editor and …│
-│                                    │  │                                     │  │                                     │
+│  F Implement launcher framework wi…│  │▌ B Add editor and launcher integrat…│  │  T Deliver editor and launcher flows│
+│    P1 IP task-manager-ui-yze.4.3   │  │▌   P1 BLK task-manager-ui-yze.4.5   │  │    P1 CLS task-manager-ui-yze.4     │
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │

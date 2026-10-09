@@ -69,7 +69,17 @@ The model is intentionally small and only covers app-shell concerns:
     start; override a built-in instead of appending a new action.
 - `UI.ShowModeSwitcherHelp`
   - Defaults to `true`.
-  - Controls whether the shell renders the mode hotkey hint line.
+  - Controls whether the shell renders the key legend on its last line.
+- `UI.Theme`
+  - Defaults to `catppuccin-mocha`. The others are `catppuccin-macchiato`, `catppuccin-frappe`
+    and `catppuccin-latte`, the one light theme.
+  - The theme does not follow the terminal background: set `catppuccin-latte` on a light terminal.
+- `UI.Glyphs`
+  - Defaults to `nerd`, which draws an issue's type, priority and status as icons and needs a
+    [Nerd Font](https://www.nerdfonts.com/). Set `unicode` when those icons show as boxes — it
+    spells the three as letters — and `ascii` for a terminal whose font is not yours.
+- An unknown theme or glyph set fails startup, and `--check-config`, with the valid names.
+  `styles.Validate` (`internal/ui/styles/theme.go`) owns both lists.
 
 Example config:
 
@@ -94,6 +104,8 @@ launcher:
 
 ui:
   show_mode_switcher_help: false
+  theme: catppuccin-latte
+  glyphs: unicode
 
 keybindings:
   shell:

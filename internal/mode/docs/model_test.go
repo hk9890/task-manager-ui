@@ -268,9 +268,10 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 
 // TestScrollOffsetReservesOneRowForAnInlineError: internal/ui/board pins an
 // inline error row above the issue rows, so the offset the model stores must
-// leave exactly one row for it while an error is shown — and only then.
+// leave exactly one line for it while an error is shown — and only then.
 // itemCapacity itself stays the section height; uiboard.EnsureVisible does
-// the reserving so it matches what the renderer draws.
+// the reserving so it matches what the renderer draws. A doc is two lines, so
+// the line costs a doc only where the column had no spare one.
 func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 	t.Parallel()
 
@@ -283,13 +284,14 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 		name   string
 		height int
 		// wantWithoutErr is the offset that keeps the last row visible with no
-		// error shown; with an error it must be exactly one larger, until the
-		// floor of one row.
+		// error shown; with an error it must be exactly one larger where the
+		// error takes a line a doc needed, until the floor of one row.
 		wantWithoutErr int
 		wantWithErr    int
 	}{
-		{"roomy column", 8, 5, 6},
-		{"two rows leaves one for the error", 5, 8, 9},
+		{"roomy column", 9, 7, 8},
+		{"an odd column has a spare line for the error", 8, 8, 8},
+		{"two docs leaves one for the error", 7, 8, 9},
 		{"single row cannot reserve and keeps its row", 4, 9, 9},
 	}
 
@@ -313,6 +315,9 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 			m.clampSelection()
 			if m.scrollOffset != tc.wantWithErr {
 				t.Errorf("offset with an inline error = %d, want %d", m.scrollOffset, tc.wantWithErr)
+			}
+			if tc.height > 4 {
+				assertSelectionDrawn(t, m)
 			}
 		})
 	}

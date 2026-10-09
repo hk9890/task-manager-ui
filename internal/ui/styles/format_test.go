@@ -17,7 +17,7 @@ func TestSelectionPrefix(t *testing.T) {
 
 	t.Run("selected unstyled", func(t *testing.T) {
 		plain, rendered := SelectionPrefix(true, false)
-		if plain != "› " || rendered != "› " {
+		if plain != "▌ " || rendered != "▌ " {
 			t.Fatalf("expected unstyled selected prefix, got plain=%q rendered=%q", plain, rendered)
 		}
 	})
@@ -26,7 +26,7 @@ func TestSelectionPrefix(t *testing.T) {
 		forceTrueColor(t)
 
 		plain, rendered := SelectionPrefix(true, true)
-		if plain != "› " {
+		if plain != "▌ " {
 			t.Fatalf("expected plain selected prefix to stay canonical, got %q", plain)
 		}
 		if !strings.Contains(rendered, "\x1b[") {

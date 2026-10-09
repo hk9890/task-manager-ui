@@ -36,6 +36,10 @@ type LauncherDefinition struct {
 // UI contains shell-level presentation preferences.
 type UI struct {
 	ShowModeSwitcherHelp bool `yaml:"show_mode_switcher_help"`
+	// Theme and Glyphs name the palette and the glyph set every surface draws
+	// with. internal/ui/styles owns the valid names.
+	Theme  string `yaml:"theme"`
+	Glyphs string `yaml:"glyphs"`
 }
 
 func resolvedDefaultEditorCommand() string {
@@ -130,6 +134,6 @@ func Default() Model {
 		Editor:      Editor{Command: editor},
 		Launcher:    Launcher{Definitions: defaultLauncherDefinitions(editor)},
 		KeyBindings: DefaultKeyBindings(),
-		UI:          UI{ShowModeSwitcherHelp: true},
+		UI:          UI{ShowModeSwitcherHelp: true, Theme: "catppuccin-mocha", Glyphs: "nerd"},
 	}
 }

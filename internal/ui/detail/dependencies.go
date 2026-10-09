@@ -111,7 +111,7 @@ func renderRelationshipGroups(groups []relationshipGroup, marks refMarks, width 
 				Seed:   len(out),
 				Phase:  skeletonPhase,
 				Styled: true,
-			}))
+			})[0])
 			continue
 		}
 		out = append(out, textutil.TruncateString(fmt.Sprintf("%s (%d)", group.Label, len(ordered)), width))
@@ -165,7 +165,7 @@ func DependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, 
 // renderReferenceRow renders a single dependency reference row.
 //
 // isCursor marks the movable selection row (↑/↓ moves it; Enter commits the load).
-// It is rendered with the app-wide "› " selection prefix via issuerow Selected=true —
+// It is rendered with the app-wide selection gutter via issuerow Selected=true —
 // byte-identical to the cursor in the board, search, and metadata panes, so the one
 // marker the user moves looks the same everywhere. The currently-viewed issue is never
 // in this list (it is excluded when the browser panel is assembled), so it needs no

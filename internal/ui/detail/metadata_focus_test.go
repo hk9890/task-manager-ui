@@ -25,9 +25,9 @@ func metadataPaneFixture() domain.IssueDetail {
 }
 
 // countSelectionChevrons reports how many rows carry the selection gutter.
-// The chevron is styled, so the rendered pane is stripped before counting.
+// The bar is styled, so the rendered pane is stripped before counting.
 func countSelectionChevrons(pane string) int {
-	return strings.Count(textutil.StripANSI(pane), "› ")
+	return strings.Count(textutil.StripANSI(pane), selectionGutter())
 }
 
 // TestRenderMetadataPaneShowsTheSelectedFieldOnlyWhileFocused pins both

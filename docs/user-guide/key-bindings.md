@@ -10,8 +10,8 @@ overridden through runtime config.
 
 - `ctrl+q`, `ctrl+c` — quit
 - `?` — toggle help
-- `tab`, `ctrl+pgdown` — next tab in the header strip (Board → Docs → Search → Board)
-- `shift+tab`, `ctrl+pgup` — previous tab in the header strip
+- `tab`, `ctrl+pgdown` — next tab in the top bar (Board → Docs → Search → Board)
+- `shift+tab`, `ctrl+pgup` — previous tab in the top bar
 - `ctrl+space` (`ctrl+@`) — go to search from any other tab; from search or detail, return to board
 - `1` — switch to board mode
 - `2` — switch to search mode
@@ -134,7 +134,9 @@ The mouse does what the keys above do, and has no bindings to configure.
   `enter` does: an issue, a doc or a search result opens in detail mode, a row of
   the detail Dependencies pane navigates to that issue, a store picker row opens
   that store.
-- **Click a tab** in the header strip to switch to it.
+- **Click a tab** in the top bar to switch to it.
+- **Click a button** on the right of the top bar — `new`, `stores`, `help` — to do what
+  the key shown beside it does.
 - **Click a pane** in search or detail mode to focus it.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the focused column, whichever column the pointer is over; click a row to move

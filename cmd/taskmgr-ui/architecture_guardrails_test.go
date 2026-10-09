@@ -190,7 +190,7 @@ func assertNoForbiddenDirectImportsInFirstPartyDeps(t *testing.T, pkgs []listedP
 }
 
 func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	resolved := config.Default()
 	tests := []struct {
@@ -209,8 +209,6 @@ func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
 			var stdout, stderr bytes.Buffer
 			loadCalls := 0
 			loggerCalls := 0
@@ -258,7 +256,7 @@ func TestRun_NonInteractiveFlagsDoNotStartBubbleTea(t *testing.T) {
 }
 
 func TestRun_PrintConfigWritesResolvedYAMLAndSource(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	resolved := config.Default()
 	configPath := filepath.Join(t.TempDir(), "custom.yaml")
@@ -306,7 +304,7 @@ func TestRun_PrintConfigWritesResolvedYAMLAndSource(t *testing.T) {
 }
 
 func TestRun_CheckConfigPrintsWarningsAndSuccess(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	var stdout, stderr bytes.Buffer
 	code := runWithLogger([]string{"--check-config", "--debug"}, &stdout, &stderr,
@@ -343,7 +341,7 @@ func TestRun_CheckConfigPrintsWarningsAndSuccess(t *testing.T) {
 }
 
 func TestRun_NonInteractiveDebugCreatesPersistentStartupLogs(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	stateDir := t.TempDir()
 	var stdout, stderr bytes.Buffer
@@ -473,6 +471,8 @@ func TestRun_UsageErrorsExitCode2(t *testing.T) {
 }
 
 func TestRun_CWDAndConfigResolutionAndStartOptions(t *testing.T) {
+	restoreStyles(t)
+
 	startDir := t.TempDir()
 	projectDir := filepath.Join(startDir, "project")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {

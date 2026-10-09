@@ -276,11 +276,9 @@ func (m *Model) clampSelection() {
 	// does. EnsureVisible only slides far enough to reveal the selected row, so
 	// on its own a list that shrank under a scrolled offset keeps the offset and
 	// draws its last rows with the ones above unreachable until the operator
-	// presses k.
+	// presses k. MaxOffset counts the lines the renderer draws, as capacity does.
 	capacity := m.itemCapacity()
-	if maxOffset := len(m.issues) - capacity; m.scrollOffset > maxOffset {
-		m.scrollOffset = max(maxOffset, 0)
-	}
+	m.scrollOffset = min(m.scrollOffset, uiboard.MaxOffset(m.uiColumn(), capacity, m.now()))
 	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, m.now())
 }
 

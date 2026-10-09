@@ -7,145 +7,128 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// SkeletonShades cycles through 3 muted lipgloss.AdaptiveColor values to
-// produce a ~1.2 s breathing pulse on cold-start placeholders. Hand-tuned
-// for both dark and light themes; the dark-theme dynamic range is wider by
-// design (TextMutedColor on light themes sits close to typical backgrounds,
-// so the light-theme pulse may be less perceptible than on dark themes —
-// this is documented and expected; T4 verification should note if it is
-// unusable on light terminals).
-var SkeletonShades = []lipgloss.AdaptiveColor{
-	{Light: "#C8CCC0", Dark: "#454545"}, // dim
-	{Light: "#D9DCCF", Dark: "#696969"}, // mid (matches TextMutedColor dark)
-	{Light: "#EAEDE0", Dark: "#7F7F7F"}, // bright
-}
+// SkeletonShades are the three shades a cold-start placeholder cycles through
+// for a ~1.2 s breathing pulse.
+var SkeletonShades []lipgloss.Color
 
+// Every colour role. Apply assigns each from the theme's flavour: a colour is
+// chosen once, in applyFlavor (theme.go), and nowhere else.
 var (
-	// Text colors.
-	TextPrimaryColor   = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#CCCCCC"}
-	TextMutedColor     = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#696969"}
-	TextSecondaryColor = lipgloss.AdaptiveColor{Light: "#AAAAAA", Dark: "#BBBBBB"}
-
-	// Shell chrome colors.
-	ShellTitleColor         = TextPrimaryColor
-	ShellTabActiveTextColor = ButtonTextColor
-	ShellTabActiveBgColor   = ButtonPrimaryFocusBgColor
-	ShellTabInactiveColor   = TextMutedColor
-	ShellTabHoverColor      = TextSecondaryColor
-	ShellContextColor       = TextMutedColor
-	ShellFooterHelpColor    = TextMutedColor
-
-	// Row bands. The selected row and the row under the pointer each carry a
-	// background across their whole width; the hover's is a step quieter, so
-	// which of two lit rows Enter means reads at a glance. The two must stay two
-	// colours on a 256-colour terminal as well, where a near pair collapses into
-	// one palette entry.
-	RowSelectedBgColor = lipgloss.AdaptiveColor{Light: "#C9DBF5", Dark: "#2B3A55"}
-	RowHoverBgColor    = lipgloss.AdaptiveColor{Light: "#E6E8EA", Dark: "#2A2D34"}
-
-	// Border and overlay colors.
-	BorderDefaultColor        = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#696969"}
-	OverlayTitleColor         = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#C9C9C9"}
-	OverlayBorderColor        = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#8C8C8C"}
-	BorderHighlightFocusColor = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
-
-	// Button colors.
-	ButtonTextColor             = lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#FFFFFF"}
-	ButtonPrimaryBgColor        = lipgloss.AdaptiveColor{Light: "#1A5276", Dark: "#1A5276"}
-	ButtonPrimaryFocusBgColor   = lipgloss.AdaptiveColor{Light: "#3498DB", Dark: "#3498DB"}
-	ButtonSecondaryBgColor      = lipgloss.AdaptiveColor{Light: "#2D3436", Dark: "#2D3436"}
-	ButtonSecondaryFocusBgColor = lipgloss.AdaptiveColor{Light: "#636E72", Dark: "#636E72"}
-	ButtonDangerBgColor         = lipgloss.AdaptiveColor{Light: "#922B21", Dark: "#922B21"}
-	ButtonDangerFocusBgColor    = lipgloss.AdaptiveColor{Light: "#E74C3C", Dark: "#E74C3C"}
-
-	// Toast colors.
-	ToastBorderSuccessColor = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	ToastBorderErrorColor   = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
-	ToastBorderInfoColor    = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
-	ToastBorderWarnColor    = lipgloss.AdaptiveColor{Light: "#FECA57", Dark: "#FECA57"}
-
-	// Store picker colors. The picker lists stores, not issues, so it names its
-	// own roles rather than borrowing the issue vocabulary below — but it takes
-	// their values, so the palette stays one palette.
-	StoreActiveColor   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	StoreDanglingColor = lipgloss.AdaptiveColor{Light: "#FF9F43", Dark: "#FF9F43"}
-	StoreBrokenColor   = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
-
-	// Compact board issue metadata colors.
-	IssueTypeBugColor     = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
-	IssueTypeTaskColor    = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
-	IssueTypeFeatureColor = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	IssueTypeEpicColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	IssueTypeChoreColor   = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
-	IssueTypeDocColor     = lipgloss.AdaptiveColor{Light: "#0FA3A3", Dark: "#4ECDC4"}
-
-	IssuePriorityP0Color = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
-	IssuePriorityP1Color = lipgloss.AdaptiveColor{Light: "#FF9F43", Dark: "#FF9F43"}
-	IssuePriorityP2Color = lipgloss.AdaptiveColor{Light: "#FECA57", Dark: "#FECA57"}
-	IssuePriorityP3Color = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
-
-	IssueStatusOpenColor       = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	IssueStatusReadyColor      = lipgloss.AdaptiveColor{Light: "#0F9B8E", Dark: "#4FD1C5"}
-	IssueStatusInProgressColor = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
-	IssueStatusBlockedColor    = lipgloss.AdaptiveColor{Light: "#FF6B6B", Dark: "#FF8787"}
-	IssueStatusClosedColor     = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
-	// Deferred is a real status the store offers in the status dialog. Without a
-	// role of its own its token fell to TextMutedColor and read as an
-	// unrecognised status.
-	IssueStatusDeferredColor = lipgloss.AdaptiveColor{Light: "#8A6BBF", Dark: "#B39DDB"}
-
-	baseButtonStyle = lipgloss.NewStyle().Padding(0, 2).Bold(true)
-
-	SelectionIndicatorStyle = lipgloss.NewStyle().Bold(true).Foreground(BorderHighlightFocusColor)
-	IssueIDMutedStyle       = lipgloss.NewStyle().Foreground(TextSecondaryColor)
-
-	IssuePriorityP0Style     = lipgloss.NewStyle().Foreground(IssuePriorityP0Color).Bold(true)
-	IssuePriorityP1Style     = lipgloss.NewStyle().Foreground(IssuePriorityP1Color)
-	IssuePriorityP2Style     = lipgloss.NewStyle().Foreground(IssuePriorityP2Color)
-	IssuePriorityP3Style     = lipgloss.NewStyle().Foreground(IssuePriorityP3Color)
-	IssueStatusOpenStyle     = lipgloss.NewStyle().Foreground(IssueStatusOpenColor)
-	IssueStatusReadyStyle    = lipgloss.NewStyle().Foreground(IssueStatusReadyColor)
-	IssueStatusIPStyle       = lipgloss.NewStyle().Foreground(IssueStatusInProgressColor)
-	IssueStatusBlockedStyle  = lipgloss.NewStyle().Foreground(IssueStatusBlockedColor)
-	IssueStatusClosedStyle   = lipgloss.NewStyle().Foreground(IssueStatusClosedColor)
-	IssueStatusDeferredStyle = lipgloss.NewStyle().Foreground(IssueStatusDeferredColor)
-	IssueTypeBugStyle        = lipgloss.NewStyle().Foreground(IssueTypeBugColor)
-	IssueTypeTaskStyle       = lipgloss.NewStyle().Foreground(IssueTypeTaskColor)
-	IssueTypeFeatureStyle    = lipgloss.NewStyle().Foreground(IssueTypeFeatureColor)
-	IssueTypeEpicStyle       = lipgloss.NewStyle().Foreground(IssueTypeEpicColor)
-	IssueTypeChoreStyle      = lipgloss.NewStyle().Foreground(IssueTypeChoreColor)
-	IssueTypeDocStyle        = lipgloss.NewStyle().Foreground(IssueTypeDocColor)
-
-	PrimaryButtonStyle = baseButtonStyle.
-				Foreground(ButtonTextColor).
-				Background(ButtonPrimaryBgColor)
-
-	PrimaryButtonFocusedStyle = baseButtonStyle.
-					Foreground(ButtonTextColor).
-					Background(ButtonPrimaryFocusBgColor).
-					Underline(true).
-					UnderlineSpaces(true)
-
-	SecondaryButtonStyle = baseButtonStyle.
-				Foreground(ButtonTextColor).
-				Background(ButtonSecondaryBgColor)
-
-	SecondaryButtonFocusedStyle = baseButtonStyle.
-					Foreground(ButtonTextColor).
-					Background(ButtonSecondaryFocusBgColor).
-					Underline(true).
-					UnderlineSpaces(true)
-
-	DangerButtonStyle = baseButtonStyle.
-				Foreground(ButtonTextColor).
-				Background(ButtonDangerBgColor)
-
-	DangerButtonFocusedStyle = baseButtonStyle.
-					Foreground(ButtonTextColor).
-					Background(ButtonDangerFocusBgColor).
-					Underline(true).
-					UnderlineSpaces(true)
+	TextPrimaryColor            lipgloss.Color
+	TextMutedColor              lipgloss.Color
+	TextSecondaryColor          lipgloss.Color
+	ShellTabActiveTextColor     lipgloss.Color
+	ShellTabActiveBgColor       lipgloss.Color
+	ShellTabInactiveColor       lipgloss.Color
+	ShellTabHoverColor          lipgloss.Color
+	ShellContextColor           lipgloss.Color
+	ShellFooterHelpColor        lipgloss.Color
+	RowSelectedBgColor          lipgloss.Color
+	RowHoverBgColor             lipgloss.Color
+	BorderDefaultColor          lipgloss.Color
+	OverlayTitleColor           lipgloss.Color
+	OverlayBorderColor          lipgloss.Color
+	BorderHighlightFocusColor   lipgloss.Color
+	ButtonTextColor             lipgloss.Color
+	ButtonPrimaryBgColor        lipgloss.Color
+	ButtonPrimaryFocusBgColor   lipgloss.Color
+	ButtonSecondaryBgColor      lipgloss.Color
+	ButtonSecondaryFocusBgColor lipgloss.Color
+	ButtonDangerBgColor         lipgloss.Color
+	ButtonDangerFocusBgColor    lipgloss.Color
+	ToastBorderSuccessColor     lipgloss.Color
+	ToastBorderErrorColor       lipgloss.Color
+	ToastBorderInfoColor        lipgloss.Color
+	ToastBorderWarnColor        lipgloss.Color
+	StoreActiveColor            lipgloss.Color
+	StoreDanglingColor          lipgloss.Color
+	StoreBrokenColor            lipgloss.Color
+	IssueTypeBugColor           lipgloss.Color
+	IssueTypeTaskColor          lipgloss.Color
+	IssueTypeFeatureColor       lipgloss.Color
+	IssueTypeEpicColor          lipgloss.Color
+	IssueTypeChoreColor         lipgloss.Color
+	IssueTypeDocColor           lipgloss.Color
+	IssuePriorityP0Color        lipgloss.Color
+	IssuePriorityP1Color        lipgloss.Color
+	IssuePriorityP2Color        lipgloss.Color
+	IssuePriorityP3Color        lipgloss.Color
+	IssueStatusOpenColor        lipgloss.Color
+	IssueStatusReadyColor       lipgloss.Color
+	IssueStatusInProgressColor  lipgloss.Color
+	IssueStatusBlockedColor     lipgloss.Color
+	IssueStatusClosedColor      lipgloss.Color
+	IssueStatusDeferredColor    lipgloss.Color
+	// ShellRuleColor is the rule under the top bar.
+	ShellRuleColor lipgloss.Color
+	// ShellActionColor is a top-bar button's label.
+	ShellActionColor lipgloss.Color
 )
+
+// The styles built from the roles. Apply rebuilds them with the roles.
+var (
+	SelectionIndicatorStyle     lipgloss.Style
+	IssueIDMutedStyle           lipgloss.Style
+	IssuePriorityP0Style        lipgloss.Style
+	IssuePriorityP1Style        lipgloss.Style
+	IssuePriorityP2Style        lipgloss.Style
+	IssuePriorityP3Style        lipgloss.Style
+	IssueStatusOpenStyle        lipgloss.Style
+	IssueStatusReadyStyle       lipgloss.Style
+	IssueStatusIPStyle          lipgloss.Style
+	IssueStatusBlockedStyle     lipgloss.Style
+	IssueStatusClosedStyle      lipgloss.Style
+	IssueStatusDeferredStyle    lipgloss.Style
+	IssueTypeBugStyle           lipgloss.Style
+	IssueTypeTaskStyle          lipgloss.Style
+	IssueTypeFeatureStyle       lipgloss.Style
+	IssueTypeEpicStyle          lipgloss.Style
+	IssueTypeChoreStyle         lipgloss.Style
+	IssueTypeDocStyle           lipgloss.Style
+	PrimaryButtonStyle          lipgloss.Style
+	PrimaryButtonFocusedStyle   lipgloss.Style
+	SecondaryButtonStyle        lipgloss.Style
+	SecondaryButtonFocusedStyle lipgloss.Style
+	DangerButtonStyle           lipgloss.Style
+	DangerButtonFocusedStyle    lipgloss.Style
+)
+
+func buildStyles() {
+	fg := func(c lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
+	button := func(bg lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Padding(0, 2).Bold(true).Foreground(ButtonTextColor).Background(bg)
+	}
+	focused := func(bg lipgloss.Color) lipgloss.Style {
+		return button(bg).Underline(true).UnderlineSpaces(true)
+	}
+
+	SelectionIndicatorStyle = fg(BorderHighlightFocusColor).Bold(true)
+	IssueIDMutedStyle = fg(TextSecondaryColor)
+
+	IssuePriorityP0Style = fg(IssuePriorityP0Color).Bold(true)
+	IssuePriorityP1Style = fg(IssuePriorityP1Color)
+	IssuePriorityP2Style = fg(IssuePriorityP2Color)
+	IssuePriorityP3Style = fg(IssuePriorityP3Color)
+	IssueStatusOpenStyle = fg(IssueStatusOpenColor)
+	IssueStatusReadyStyle = fg(IssueStatusReadyColor)
+	IssueStatusIPStyle = fg(IssueStatusInProgressColor)
+	IssueStatusBlockedStyle = fg(IssueStatusBlockedColor)
+	IssueStatusClosedStyle = fg(IssueStatusClosedColor)
+	IssueStatusDeferredStyle = fg(IssueStatusDeferredColor)
+	IssueTypeBugStyle = fg(IssueTypeBugColor)
+	IssueTypeTaskStyle = fg(IssueTypeTaskColor)
+	IssueTypeFeatureStyle = fg(IssueTypeFeatureColor)
+	IssueTypeEpicStyle = fg(IssueTypeEpicColor)
+	IssueTypeChoreStyle = fg(IssueTypeChoreColor)
+	IssueTypeDocStyle = fg(IssueTypeDocColor)
+
+	PrimaryButtonStyle = button(ButtonPrimaryBgColor)
+	PrimaryButtonFocusedStyle = focused(ButtonPrimaryFocusBgColor)
+	SecondaryButtonStyle = button(ButtonSecondaryBgColor)
+	SecondaryButtonFocusedStyle = focused(ButtonSecondaryFocusBgColor)
+	DangerButtonStyle = button(ButtonDangerBgColor)
+	DangerButtonFocusedStyle = focused(ButtonDangerFocusBgColor)
+}
 
 // IssueTypeStyle returns the compact board style for an issue type token. The
 // token set must match renderhelpers.CompactIssueType; see the parity test in

@@ -22,10 +22,6 @@ import (
 	uistorepicker "github.com/hk9890/task-manager-ui/internal/ui/storepicker"
 )
 
-// defaultItemCapacity is the row window used before the first
-// tea.WindowSizeMsg sets a real height.
-const defaultItemCapacity = 20
-
 // StoresLoadedMsg carries the result of a catalog listing. It is exported
 // because the shell arms the reload that produces it.
 type StoresLoadedMsg struct {
@@ -391,12 +387,10 @@ func (m *Model) moveRow(delta int) {
 }
 
 // itemCapacity returns the number of store rows that fit at the current
-// height. It mirrors what the renderer draws, so the scroll window and the
-// visible rows cannot disagree.
+// height. The renderer answers, also for the height it draws with before the
+// first tea.WindowSizeMsg, so the scroll window and the visible rows cannot
+// disagree.
 func (m *Model) itemCapacity() int {
-	if m.height == 0 {
-		return defaultItemCapacity
-	}
 	return uistorepicker.RowCapacity(m.height, m.err != nil)
 }
 

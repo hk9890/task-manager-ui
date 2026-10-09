@@ -44,9 +44,9 @@ func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
 			view := m.View()
 			lines := strings.Split(view, "\n")
 
-			topLine, topCol := findRunePosition(lines, '╭', "Keyboard Help")
+			topLine, topCol := helpModalTopLeft(lines)
 			if topLine < 0 {
-				t.Fatalf("expected modal top border line containing 'Keyboard Help'; view:\n%s", view)
+				t.Fatalf("expected the modal's ╭ corner above its 'Keyboard Help' title; view:\n%s", view)
 			}
 
 			// Look for a closing `╰` at the same column on a later line.
@@ -90,9 +90,9 @@ func TestHelpModal_OverflowIndicatorAppearsInsideFrame(t *testing.T) {
 	lines := strings.Split(view, "\n")
 
 	// Locate the top and bottom border lines of the modal.
-	topLine, topCol := findRunePosition(lines, '╭', "Keyboard Help")
+	topLine, topCol := helpModalTopLeft(lines)
 	if topLine < 0 {
-		t.Fatalf("expected modal top border; view:\n%s", view)
+		t.Fatalf("expected the modal's ╭ corner above its 'Keyboard Help' title; view:\n%s", view)
 	}
 	bottomLine := -1
 	for i := topLine + 1; i < len(lines); i++ {
@@ -120,22 +120,26 @@ func TestHelpModal_OverflowIndicatorAppearsInsideFrame(t *testing.T) {
 	}
 }
 
-// findRunePosition scans lines for the first line whose content contains
-// mustContain (when non-empty) and includes the given rune; returns
-// (lineIndex, columnIndex) of that rune. Returns (-1, -1) when not found.
-// Column index is rune-position, not byte-position.
-func findRunePosition(lines []string, want rune, mustContain string) (int, int) {
+// helpModalTopLeft returns (lineIndex, columnIndex) of the help modal's top
+// left corner: the `╭` one line above the "Keyboard Help" title and one border
+// and one padding cell left of it. Returns (-1, -1) when the title is not on
+// screen or no corner stands there. Column index is rune-position, not
+// byte-position.
+//
+// The corner is found from the modal's own title, not as the first `╭` of the
+// line: the board under the modal draws corners of its own on the same lines.
+func helpModalTopLeft(lines []string) (int, int) {
+	const title = "Keyboard Help"
 	for i, line := range lines {
-		if mustContain != "" && !strings.Contains(line, mustContain) {
+		before, _, found := strings.Cut(line, title)
+		if !found {
 			continue
 		}
-		col := 0
-		for _, r := range line {
-			if r == want {
-				return i, col
-			}
-			col++
+		col := len([]rune(before)) - 2
+		if i == 0 || col < 0 || runeAtColumn(lines[i-1], col) != '╭' {
+			return -1, -1
 		}
+		return i - 1, col
 	}
 	return -1, -1
 }

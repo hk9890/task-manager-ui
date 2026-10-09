@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -210,18 +211,27 @@ func TestActiveStoreIsMarkedOnTheRowThatMatchesTheStorePath(t *testing.T) {
 
 	// Line by line, so a marker on the wrong row fails rather than passing on a
 	// count. This is the only coverage of the Services.ActiveStorePath ->
-	// SetActiveStorePath -> Row.Active chain.
-	for _, line := range strings.Split(m.View(0, "help"), "\n") {
-		plain := ansi.ReplaceAllString(line, "")
+	// SetActiveStorePath -> Row.Active chain. The marker rides the row's first
+	// line, beside the name; the project path is the line under it.
+	lines := strings.Split(ansi.ReplaceAllString(m.View(0, "help"), ""), "\n")
+	found := false
+	for idx, plain := range lines {
 		marked := strings.Contains(plain, "active")
 		switch {
-		case strings.Contains(plain, "bravo"):
+		case strings.Contains(plain, "bravo") && !strings.Contains(plain, "/bravo"):
+			found = true
 			if !marked {
 				t.Errorf("the active store's row is not marked: %q", plain)
 			}
+			if !strings.Contains(lines[idx+1], "/home/hans/dev/bravo") {
+				t.Errorf("the line under the active store's name is not its path: %q", lines[idx+1])
+			}
 		case marked:
-			t.Errorf("a row other than the active store is marked: %q", plain)
+			t.Errorf("a line other than the active store's name is marked: %q", plain)
 		}
+	}
+	if !found {
+		t.Errorf("the active store's name line is not drawn:\n%s", m.View(0, "help"))
 	}
 }
 
@@ -317,8 +327,11 @@ func TestFailedReloadKeepsTheChevronOnScreen(t *testing.T) {
 	_, cmd := m.HandleKey(key("r"))
 	run(t, m, cmd)
 
-	if !strings.Contains(ansi.ReplaceAllString(m.View(0, "help"), ""), "\u203a") {
-		t.Errorf("the selection chevron left the screen after a failed reload:\n%s", m.View(0, "help"))
+	// The selection bar runs down both lines of the selected row; a window one
+	// row too long would leave it on a row the frame cuts.
+	gutter, _ := styles.SelectionPrefix(true, false)
+	if got := strings.Count(ansi.ReplaceAllString(m.View(0, "help"), ""), "│"+gutter); got != 2 {
+		t.Errorf("the selection bar is on %d lines after a failed reload, want both lines of the selected row:\n%s", got, m.View(0, "help"))
 	}
 }
 
@@ -352,6 +365,62 @@ func TestScrollWindowFollowsTheSelectionThroughALongList(t *testing.T) {
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("scrollOffset back at the top: got %d, want 0", m.scrollOffset)
+	}
+}
+
+// Before the first resize the picker has no height and the renderer draws at
+// its own default. The window is the renderer's there too: a default of the
+// controller's own, counted in one-line rows, left the selection below the last
+// row drawn.
+func TestSelectionStaysOnScreenBeforeTheFirstResize(t *testing.T) {
+	t.Parallel()
+
+	names := make([]string, 0, 30)
+	for i := 0; i < 30; i++ {
+		names = append(names, fmt.Sprintf("store-%02d", i))
+	}
+	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries(names...)})
+	run(t, m, m.Init())
+
+	gutter, _ := styles.SelectionPrefix(true, false)
+	for i := 0; i < 29; i++ {
+		m.HandleKey(key("j"))
+		view := ansi.ReplaceAllString(m.View(0, "help"), "")
+		if got := strings.Count(view, "│"+gutter); got != 2 {
+			t.Fatalf("after %d moves the selection bar is on %d lines, want both lines of the selected row:\n%s", i+1, got, view)
+		}
+	}
+}
+
+// A row is two lines, so a content height can leave one line spare. The window
+// counts rows, not lines: at an odd and at an even content height the selected
+// row is drawn whole — its name and its path — after every move.
+func TestSelectedRowIsDrawnWholeAtEvenAndOddHeights(t *testing.T) {
+	t.Parallel()
+
+	names := make([]string, 0, 30)
+	for i := 0; i < 30; i++ {
+		names = append(names, fmt.Sprintf("store-%02d", i))
+	}
+	gutter, _ := styles.SelectionPrefix(true, false)
+
+	for _, height := range []int{6, 7, 24, 25} {
+		m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries(names...)})
+		m.SetSize(100, height)
+		run(t, m, m.Init())
+
+		for _, move := range []string{"j", "k"} {
+			for i := 0; i < len(names); i++ {
+				m.HandleKey(key(move))
+				view := ansi.ReplaceAllString(m.View(0, "help"), "")
+				name := names[m.selectedRow]
+				for _, want := range []string{"│" + gutter + name + " ", "│" + gutter + "/home/hans/dev/" + name + " "} {
+					if !strings.Contains(view, want) {
+						t.Fatalf("height %d, row %d after %q: %q is not drawn:\n%s", height, m.selectedRow, move, want, view)
+					}
+				}
+			}
+		}
 	}
 }
 

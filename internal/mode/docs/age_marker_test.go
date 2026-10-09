@@ -30,5 +30,6 @@ func TestDocsModeOrdersByLastChangeAndDrawsAgeMarkers(t *testing.T) {
 	}
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-	testui.AssertContainsAll(t, plain, "› D P0 OPN tm-2", "older than 1 day", "tm-1", "older than 1 week", "tm-3")
+	testui.AssertContainsAll(t, plain, selectedGutter+"D Fresh", selectedGutter+"  P0 OPN tm-2", "older than 1 day", "tm-1", "older than 1 week", "tm-3")
+	assertSelectionDrawn(t, m)
 }

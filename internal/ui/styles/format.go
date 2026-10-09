@@ -6,10 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const (
-	selectionSelectedPrefix = "› "
-	selectionIdlePrefix     = "  "
-)
+const selectionIdlePrefix = "  "
 
 // SelectionPrefix returns the shared 2-character selection gutter prefix.
 // The plain variant is unstyled and should be used for width math/truncation.
@@ -19,11 +16,12 @@ func SelectionPrefix(selected, styled bool) (plain string, rendered string) {
 		return selectionIdlePrefix, selectionIdlePrefix
 	}
 
+	plain = Glyphs.Cursor + " "
 	if styled {
-		return selectionSelectedPrefix, SelectionIndicatorStyle.Render("›") + " "
+		return plain, SelectionIndicatorStyle.Render(Glyphs.Cursor) + " "
 	}
 
-	return selectionSelectedPrefix, selectionSelectedPrefix
+	return plain, plain
 }
 
 // sgrReset is what Lip Gloss ends every styled run with.

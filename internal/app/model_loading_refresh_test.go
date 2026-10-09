@@ -34,10 +34,10 @@ func extractIssueIDsFromView(rendered string) map[string]bool {
 }
 
 // containsAnySpinnerGlyph reports whether the rendered string contains any of
-// the pinned braille spinner glyphs from loading.SpinnerFrames.
+// the spinner glyphs of the applied glyph set.
 func containsAnySpinnerGlyph(rendered string) bool {
-	for _, r := range loading.SpinnerFrames {
-		if strings.ContainsRune(rendered, r) {
+	for _, glyph := range styles.Glyphs.Spinner {
+		if strings.Contains(rendered, glyph) {
 			return true
 		}
 	}
@@ -48,8 +48,8 @@ func containsAnySpinnerGlyph(rendered string) bool {
 // plain-text comparisons are not confused by the header braille glyph changing
 // independently of skeleton color cycling.
 func stripSpinnerGlyphs(s string) string {
-	for _, r := range loading.SpinnerFrames {
-		s = strings.ReplaceAll(s, string(r), "")
+	for _, glyph := range styles.Glyphs.Spinner {
+		s = strings.ReplaceAll(s, glyph, "")
 	}
 	return s
 }
@@ -124,7 +124,7 @@ func TestSkeletonPhasePulse(t *testing.T) {
 //
 //  1. Stale board rows remain visible in View() during an in-flight reload
 //     (the board is loading=true but existing issues are shown).
-//  2. The header spinner glyph from loading.SpinnerFrames appears in View()
+//  2. The header spinner glyph from styles.Glyphs.Spinner appears in View()
 //     while a board reload is in flight.
 //  3. The spinner glyph is absent from View() once the reload has settled.
 //  4. The rows visible at the first board capture are still in the set visible

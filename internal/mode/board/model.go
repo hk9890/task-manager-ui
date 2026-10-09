@@ -289,16 +289,17 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 //
 // The scroll window is derived from the height, so a resize that shrinks the
 // terminal shrinks the window under an offset that was valid for the old one:
-// without the clamp the selected row and its chevron sit below the last drawn
-// row until the operator presses j or k.
+// without the clamp the selected row and its selection bar sit below the last
+// drawn row until the operator presses j or k.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampScrollOffsets()
 }
 
-// sectionItemCapacity returns the number of issue rows that fit in a section
-// at the current terminal height.
+// sectionItemCapacity returns the number of content lines a section holds at
+// the current terminal height. An issue takes issuerow.Height of them; which
+// lines are issues is uiboard.EnsureVisible's and uiboard.MaxOffset's business.
 func (m *Model) sectionItemCapacity() int {
 	if m.height == 0 {
 		return 20 // safe default before first WindowSizeMsg
@@ -539,8 +540,9 @@ func (m *Model) settleAfterRefreshLoad() {
 // Only moveRow used to write scrollOffset, so a column that shrank under a
 // scrolled offset kept the old one: the renderer clamps the offset to the row
 // count, computes an empty window from it, and the column draws its border and
-// its header count with no rows and no chevron until the operator presses j or
-// k. Docs mode calls EnsureVisible from its own clamp for the same reason.
+// its header count with no rows and no selection bar until the operator
+// presses j or k. Docs mode calls EnsureVisible from its own clamp for the same
+// reason.
 func (m *Model) clampScrollOffsets() {
 	capacity := m.sectionItemCapacity()
 	for i := range m.columns {
@@ -557,10 +559,10 @@ func (m *Model) clampScrollOffsets() {
 		// Pull the window back inside the list first. EnsureVisible only slides
 		// far enough to reveal the selected row, so on its own it would leave a
 		// shrunk column scrolled to its last row with the rows above it
-		// unreachable until the operator pressed k.
-		if maxOffset := len(m.columns[i].issues) - capacity; m.scrollOffset[i] > maxOffset {
-			m.scrollOffset[i] = max(maxOffset, 0)
-		}
+		// unreachable until the operator pressed k. MaxOffset counts the lines
+		// the renderer draws: a bound counted in issues against a capacity in
+		// lines pulls back a window that is still full.
+		m.scrollOffset[i] = min(m.scrollOffset[i], uiboard.MaxOffset(m.uiColumn(i, row), capacity, m.now()))
 		m.scrollOffset[i] = uiboard.EnsureVisible(m.uiColumn(i, row), capacity, m.now())
 	}
 }
