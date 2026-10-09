@@ -138,7 +138,9 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   hints that do not fit from the end. Order a surface's hints in `footerHints` by how much an
   operator needs them. A shell action with no button, such as creating an issue, is named there.
   The workspace height is measured from the rendered chrome (`Model.workspaceSize`), so none of
-  the four lines may wrap.
+  the four lines may wrap. `Model.renderSurface` cuts the body to that height: a renderer keeps a
+  floor of rows, and a frame taller than the terminal loses its top lines and puts every click a
+  row off.
 
 ### The tabs
 
@@ -210,7 +212,9 @@ with the active store's name and keeps it until only the surface name still fits
 - A header reads a plain `N` only when the whole list is loaded and fits. A clipped window or a
   paginated column (`TotalIsExact` false, or a load-more in flight) reads `N of M`; a skeleton pane
   reads `issuerow.SkeletonGlyph`. `internal/ui/board/board.go` holds the board's,
-  `internal/ui/detail/details.go` the detail panes'.
+  `internal/ui/detail/details.go` the detail panes', and `resultCountTitle`
+  (`internal/ui/search/search.go`) the search results', which shortens to `N/M` when the long form
+  does not fit beside the title.
 
 ## The mouse
 
@@ -220,7 +224,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   the keyboard's order — overlay, surface above the shell, header, active surface — and hands the
   surface a `mode.MouseMsg` in that surface's own coordinates. A mode never sees the raw event.
 - An open overlay takes the event and the surface below gets a `mode.MouseLeave`. Help scrolls under
-  the wheel; a dialog ignores the mouse.
+  the wheel, as it does on the detail scroll keys (`Model.scrollHelp`); a dialog ignores the mouse.
 - A surface answers "what is drawn at this cell" with a pure `HitTest(state, x, y)` beside its
   `Render`, built from the same layout helpers. A mode model builds one state value for both — its
   `viewState` — so a click cannot land on a row other than the one drawn under it.
@@ -237,8 +241,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - A click on a menu-bar button runs the method its key runs (`Model.mouseOnHeader`).
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
-  reverse-video box over the screen as it was when the drag began, and the release copies the box
-  with OSC 52 and says so in a toast. While the box is up every other mouse event and every key
+  reverse-video box over the screen as it was when the drag began, and the release sends the box
+  to the clipboard with OSC 52. The toast says sent, not copied: OSC 52 has no reply. While the box is up every other mouse event and every key
   but Escape and quit is dropped — each would change the screen the box stands over.
 
 ## Overlays

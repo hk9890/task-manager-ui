@@ -12,9 +12,14 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
+	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
-	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
+
+// searchPageSize is how many results one search loads. The Results pane
+// scrolls through them, so it is a fixed page well above a screen, not the
+// number of rows that fit.
+const searchPageSize = 100
 
 type searchLoadedMsg struct {
 	appliedQuery string
@@ -65,9 +70,10 @@ type Model struct {
 	// first screen shows live work; toggleScopeKey flips it and re-runs.
 	includeClosed bool
 
-	page        domain.SearchResultPage
-	selectedRow int
-	typing      bool
+	page         domain.SearchResultPage
+	selectedRow  int
+	scrollOffset int
+	typing       bool
 
 	selectedDetail        domain.IssueDetail
 	selectedDetailLoading bool
@@ -120,7 +126,7 @@ func (m *Model) Init() tea.Cmd {
 	m.reloading = false
 	m.errText = ""
 	m.typing = false
-	return loadSearchCmd(m.ctx, m.repo, domain.SearchIssuesQuery{Limit: m.searchItemCapacity(), Offset: 0, IncludeClosed: m.includeClosed})
+	return loadSearchCmd(m.ctx, m.repo, domain.SearchIssuesQuery{Limit: searchPageSize, Offset: 0, IncludeClosed: m.includeClosed})
 }
 
 // Update processes search-specific messages and keybindings.
@@ -161,6 +167,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if anchor != nil {
 			m.restoreSelectionFromAnchor(anchor)
 		} else {
+			// Only a reload carries an anchor. Any other result set is a new
+			// one and starts on its first result, with the window at the top.
+			m.selectedRow = 0
 			m.normalizeSelection()
 		}
 		m.selectedDetail = domain.IssueDetail{}
@@ -402,7 +411,7 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 	}
 	query := domain.SearchIssuesQuery{
 		Text:          queryText,
-		Limit:         m.searchItemCapacity(),
+		Limit:         searchPageSize,
 		Offset:        0,
 		IncludeClosed: m.includeClosed,
 	}
@@ -434,6 +443,7 @@ func (m *Model) viewState(skeletonPhase int) uisearch.State {
 		Typing:                m.typing,
 		Results:               m.results(),
 		Metadata:              m.page.Metadata,
+		ScrollOffset:          m.scrollOffset,
 		SelectedID:            m.selectedIssueID(),
 		SelectedDetail:        m.selectedDetail,
 		DetailLoading:         m.selectedDetailLoading,
@@ -456,28 +466,22 @@ func (m *Model) viewState(skeletonPhase int) uisearch.State {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+	m.keepSelectionVisible()
 }
 
-// searchItemCapacity returns the number of result rows that fit in the results
-// pane at the current terminal height.
-//
-// Lines the results do not get: the query FormSection is 3 (2 borders and the
-// input line), the results FormSection adds 2 borders, and the stale-results
-// banner takes 2 when it is up (the banner and the blank line under it).
-// Total = 7, and a result is issuerow.Height lines.
-// Formula: max(1, (height-7)/issuerow.Height).
-//
-// When height is 0 (before the first tea.WindowSizeMsg), a safe default of 20
-// is returned so that Init() fires queries with a reasonable limit.
+// searchItemCapacity returns the number of result rows the scroll window
+// holds. The renderer answers, also for the height it draws with before the
+// first tea.WindowSizeMsg, so the window and the rows drawn cannot disagree.
 func (m *Model) searchItemCapacity() int {
-	if m.height == 0 {
-		return 20 // safe default before first WindowSizeMsg
-	}
-	rows := (m.height - 7) / issuerow.Height
-	if rows < 1 {
-		rows = 1
-	}
-	return rows
+	return uisearch.RowCapacity(m.height)
+}
+
+// keepSelectionVisible slides the scroll window to the selected result, and
+// back up when the list no longer reaches the bottom of it.
+func (m *Model) keepSelectionVisible() {
+	capacity := m.searchItemCapacity()
+	offset := min(m.scrollOffset, max(0, len(m.page.Results)-capacity))
+	m.scrollOffset = scroll.EnsureVisible(offset, m.selectedRow, capacity)
 }
 
 // IsLoading reports whether a repository search is active.
@@ -539,6 +543,7 @@ func (m *Model) moveSelection(delta int) bool {
 func (m *Model) normalizeSelection() {
 	if !m.hasResults() {
 		m.selectedRow = 0
+		m.scrollOffset = 0
 		m.selectedDetail = domain.IssueDetail{}
 		m.selectedDetailLoading = false
 		return
@@ -549,6 +554,7 @@ func (m *Model) normalizeSelection() {
 	if m.selectedRow >= len(m.page.Results) {
 		m.selectedRow = len(m.page.Results) - 1
 	}
+	m.keepSelectionVisible()
 }
 
 func (m *Model) ensureMetadataSelection() {

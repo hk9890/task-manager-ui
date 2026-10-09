@@ -75,6 +75,32 @@ func TestScrollStartsFromTheDrawnLineAfterAResize(t *testing.T) {
 	}
 }
 
+// TestAPageShowsEveryLineOnce: a page down starts on the line after the last
+// one the view before it drew, and ScrollToEnd lands where scrolling stops.
+func TestAPageShowsEveryLineOnce(t *testing.T) {
+	t.Parallel()
+
+	m := tallModal(30, 14)
+	page := m.PageLines()
+	first := m.Scroll(page).View()
+	second := m.Scroll(2 * page).View()
+	// The title, its divider and the padding row stand above line-00.
+	lastDrawn := fmt.Sprintf("line-%02d", 2*page-3)
+	if !strings.Contains(first, lastDrawn) || strings.Contains(second, lastDrawn) {
+		t.Fatalf("%s must close the first page and not open the second:\n%s\n%s", lastDrawn, first, second)
+	}
+	if next := fmt.Sprintf("line-%02d", 2*page-2); strings.Contains(first, next) || !strings.Contains(second, next) {
+		t.Fatalf("%s must open the second page:\n%s\n%s", next, first, second)
+	}
+
+	if end := m.ScrollToEnd().View(); end != m.Scroll(1000).View() {
+		t.Fatalf("ScrollToEnd must land on the last view:\n%s", end)
+	}
+	if fits := tallModal(3, 40); fits.ScrollToEnd().View() != fits.View() {
+		t.Fatal("ScrollToEnd changed a modal that fits")
+	}
+}
+
 func TestScrollDoesNothingToAModalThatFits(t *testing.T) {
 	t.Parallel()
 

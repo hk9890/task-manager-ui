@@ -87,13 +87,15 @@ func TestMoveSelectionDownOffTheLastRowKeepsASelection(t *testing.T) {
 }
 
 // TestSelectionSurvivesAPageExactlyOneShorter covers the other way the row can
-// land exactly at len(Results): a re-search returning one fewer row than the
-// current index.
+// land exactly at len(Results): a reload returning one fewer row than the
+// current index. Only a reload keeps the row; a new result set starts on its
+// first.
 func TestSelectionSurvivesAPageExactlyOneShorter(t *testing.T) {
 	t.Parallel()
 
 	m := modelWithResults(t, 4)
 	m.selectedRow = 3
+	m.pendingSelectionAnchor = m.captureSelectionAnchor()
 
 	_ = m.Update(searchLoadedMsg{page: resultsPage(3)})
 

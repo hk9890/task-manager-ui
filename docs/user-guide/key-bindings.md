@@ -124,9 +124,21 @@ example `keybindings: {shell: {open_store_picker: [S]}}`.
 - `y` — submit when button row is focused
 - `n` — cancel when the button row is focused, except in the Status and Priority dialogs, which require a value
 
+The help overlay is taller than most terminals and shows `… N more lines` where
+it is cut. It scrolls on the Detail Mode scroll keys, and follows them when a
+config rebinds them:
+
+- `k`, `up` / `j`, `down` — scroll one line
+- `pgup` / `pgdown` — scroll one page
+- `home` / `end` — jump to the top or the bottom
+- `?`, `esc`, `enter` — close it; it opens at the top again
+
 ## Mouse
 
-The mouse does what the keys above do, and has no bindings to configure.
+The mouse does what the keys above do. It has no bindings to configure and
+cannot be turned off: the app takes every click, wheel notch and plain drag.
+**Hold `shift` and drag** to select text with the terminal's own selection
+instead.
 
 - The selected row carries a band of colour across its width. The row under the
   pointer carries a quieter one, and a tab under the pointer brightens.
@@ -145,12 +157,14 @@ The mouse does what the keys above do, and has no bindings to configure.
   scrolls it three lines a notch.
 - While help or a dialog is open, the mouse reaches nothing under it. A dialog
   takes keys only.
-- **Drag** to select a box of text. Letting go copies it to the clipboard and a
-  toast says how much; `esc` during the drag drops it. The box can cross panes
-  and overlays, and the screen holds still under it until you let go.
-- The copy uses the terminal's OSC 52 clipboard sequence. In a terminal that
-  does not support it, **hold `shift` and drag** to select with the terminal
-  instead.
+- **Drag** to select a box of text; `esc` during the drag drops it. The box can
+  cross panes and overlays, and the screen holds still under it until you let
+  go.
+- Letting go sends the text to the clipboard through the terminal, with the
+  OSC 52 sequence, and a toast reads `Sent N characters to the clipboard;
+  shift+drag if not copied`. The app cannot tell whether the terminal took it.
+  A terminal or multiplexer that ignores OSC 52 leaves the clipboard as it
+  was: **hold `shift` and drag** there, and copy with the terminal.
 
 ## Notes
 
@@ -158,7 +172,7 @@ The mouse does what the keys above do, and has no bindings to configure.
   shell, board, search, detail, and modal contexts.
 - `ctrl+space` may be reported by some terminals as `ctrl+@`; both refer to the
   same default toggle-search binding.
-- `tab`/`shift+tab` belong to the shell tab strip everywhere except in a modal,
+- `tab`/`shift+tab` belong to the view tabs everywhere except in a modal,
   where they still move between fields — a modal consumes keys before the shell
   sees them. They also switch tabs while the search query field is focused;
   typed text is unaffected.

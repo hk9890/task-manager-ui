@@ -32,7 +32,7 @@ func layoutPanes(state State) panes {
 	if height <= 0 {
 		height = defaultSearchHeight
 	}
-	resultsHeight := max(6, height-searchQueryHeight)
+	resultsHeight := resultsPaneHeight(height)
 
 	if width >= searchWideMinWidth {
 		rail, content, metadata := splitWideWidths(width)
@@ -79,10 +79,10 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	}
 	// The banner and the blank line under it sit above the rows.
 	if banner := renderResultsBanner(state, p.results.width-2); len(banner) > 0 {
-		line -= len(banner) + 1
+		line -= bannerLines
 	}
-	if line >= 0 && line < issuerow.Height*len(state.Results) {
-		hit.Row = line / issuerow.Height
+	if row := firstResult(state) + line/issuerow.Height; line >= 0 && row < len(state.Results) {
+		hit.Row = row
 	}
 	return hit, true
 }

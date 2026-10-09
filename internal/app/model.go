@@ -1048,6 +1048,13 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 			return m, modeCmd, true
 		}
 
+		if k, ok := msg.(tea.KeyMsg); ok {
+			if scrolled, ok := m.scrollHelp(k); ok {
+				m.help = scrolled
+				return m, modeCmd, true
+			}
+		}
+
 		nextHelp, cmd := m.help.Update(msg)
 		m.help = nextHelp
 
@@ -1062,4 +1069,26 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 	}
 
 	return m, nil, false
+}
+
+// scrollHelp scrolls the help overlay on the keys that scroll a detail pane.
+// The wheel scrolls it too, and the mouse only repeats what a key does
+// (docs/DESIGN-GUIDE.md).
+func (m Model) scrollHelp(k tea.KeyMsg) (modal.Model, bool) {
+	detailKey := func(action string) bool { return m.keys.Match(config.DetailContext, action, k) }
+	switch {
+	case detailKey(config.DetailActionScrollUp):
+		return m.help.Scroll(-1), true
+	case detailKey(config.DetailActionScrollDown):
+		return m.help.Scroll(1), true
+	case detailKey(config.DetailActionPageUp):
+		return m.help.Scroll(-m.help.PageLines()), true
+	case detailKey(config.DetailActionPageDown):
+		return m.help.Scroll(m.help.PageLines()), true
+	case detailKey(config.DetailActionHome):
+		return m.help.ScrollToTop(), true
+	case detailKey(config.DetailActionEnd):
+		return m.help.ScrollToEnd(), true
+	}
+	return m.help, false
 }

@@ -52,8 +52,11 @@ type State struct {
 	Focus        FocusPane
 	Typing       bool
 
-	Results        []domain.IssueSummary
-	Metadata       domain.SearchResultMetadata
+	Results  []domain.IssueSummary
+	Metadata domain.SearchResultMetadata
+	// ScrollOffset is the index of the first result the pane draws. Render and
+	// HitTest both read it, so the row under a click is the row drawn there.
+	ScrollOffset   int
 	SelectedID     string
 	SelectedDetail domain.IssueDetail
 	DetailLoading  bool
@@ -99,7 +102,7 @@ func Render(state State) string {
 func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, height int) string {
 	railWidth, contentWidth, metadataWidth := splitWideWidths(width)
 	queryHeight := searchQueryHeight
-	resultsHeight := max(6, height-queryHeight)
+	resultsHeight := resultsPaneHeight(height)
 
 	queryContent := renderQueryContent(state, railWidth-2)
 	queryBox := styles.FormSection(styles.FormSectionConfig{
@@ -115,9 +118,9 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 	resultsBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              railWidth,
 		Height:             resultsHeight,
-		TopLeft:            "Results",
-		TopRight:           resultCountTitle(state),
-		Content:            renderResultsContent(state, railWidth-2),
+		TopLeft:            resultsTitle,
+		TopRight:           resultCountTitle(state, railWidth, resultsHeight),
+		Content:            renderResultsContent(state, railWidth-2, resultsHeight),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -155,7 +158,7 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, height int) string {
 	leftWidth, rightWidth := splitNarrowWidths(width)
 	queryHeight := searchQueryHeight
-	resultsHeight := max(6, height-queryHeight)
+	resultsHeight := resultsPaneHeight(height)
 	contentHeight, metadataHeight := splitNarrowRightHeights(height)
 
 	queryContent := renderQueryContent(state, leftWidth-2)
@@ -172,9 +175,9 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 	resultsBox := styles.FormSection(styles.FormSectionConfig{
 		Width:              leftWidth,
 		Height:             resultsHeight,
-		TopLeft:            "Results",
-		TopRight:           resultCountTitle(state),
-		Content:            renderResultsContent(state, leftWidth-2),
+		TopLeft:            resultsTitle,
+		TopRight:           resultCountTitle(state, leftWidth, resultsHeight),
+		Content:            renderResultsContent(state, leftWidth-2, resultsHeight),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -296,15 +299,75 @@ func queryStatusBadge(state State) string {
 	return "idle"
 }
 
-func resultCountTitle(state State) string {
-	count := displayedResultCount(state)
+const resultsTitle = "Results"
+
+// resultCountTitle is the Results header: the loaded count, whether the
+// backend had more, and the scope. It leads with `N of` when the pane draws
+// only N of the loaded results, and with `N/` when the rail is too narrow for
+// that beside the title.
+func resultCountTitle(state State, paneWidth, paneHeight int) string {
 	badge := strings.TrimSpace(resultCompletenessBadge(state))
 	var parts []string
 	if badge != "" {
 		parts = append(parts, badge)
 	}
 	parts = append(parts, searchScopeLabel(state))
-	return fmt.Sprintf("%d %s", count, strings.Join(parts, " · "))
+	tail := strings.Join(parts, " · ")
+
+	loaded := displayedResultCount(state)
+	drawn := drawnResultCount(state, paneHeight)
+	if drawn >= len(state.Results) {
+		return fmt.Sprintf("%d %s", loaded, tail)
+	}
+	// What styles.FormSection leaves beside the left title: the corners, the
+	// spaces around both titles and one rule between them.
+	room := paneWidth - lipgloss.Width(resultsTitle) - 9
+	title := fmt.Sprintf("%d of %d %s", drawn, loaded, tail)
+	if lipgloss.Width(title) > room {
+		title = fmt.Sprintf("%d/%d %s", drawn, loaded, tail)
+	}
+	return textutil.TruncateString(title, room)
+}
+
+// resultsPaneHeight is the height of the results box, borders included, in a
+// frame of the given height.
+func resultsPaneHeight(height int) int {
+	return max(6, height-searchQueryHeight)
+}
+
+// bannerLines is what the banner takes from the rows: itself and the blank
+// line under it.
+const bannerLines = 2
+
+// resultLines is the lines a results box of paneHeight has for the rows: its
+// inside, less the banner while that is up.
+func resultLines(state State, paneHeight int) int {
+	lines := paneHeight - 2
+	if len(renderResultsBanner(state, 0)) > 0 {
+		lines -= bannerLines
+	}
+	return max(0, lines)
+}
+
+// RowCapacity returns how many whole results the pane draws at this frame
+// height while the banner is up — the fewest it ever draws. The controller
+// takes its scroll window from it, so the selection stays on a drawn row
+// whether or not the banner is.
+func RowCapacity(height int) int {
+	if height <= 0 {
+		height = defaultSearchHeight
+	}
+	return max(1, (resultsPaneHeight(height)-2-bannerLines)/issuerow.Height)
+}
+
+// firstResult is the scroll offset held inside the result list.
+func firstResult(state State) int {
+	return textutil.Clamp(state.ScrollOffset, 0, max(0, len(state.Results)-1))
+}
+
+// drawnResultCount is the number of results the pane draws whole.
+func drawnResultCount(state State, paneHeight int) int {
+	return min(resultLines(state, paneHeight)/issuerow.Height, len(state.Results)-firstResult(state))
 }
 
 // searchScopeLabel names the active scope for the results header.
@@ -315,9 +378,9 @@ func searchScopeLabel(state State) string {
 	return "open"
 }
 
-func renderResultsContent(state State, width int) []string {
+func renderResultsContent(state State, width, paneHeight int) []string {
 	banner := renderResultsBanner(state, width)
-	body := renderResultsBody(state, width)
+	body := renderResultsBody(state, width, paneHeight)
 	if len(banner) == 0 {
 		return body
 	}
@@ -344,7 +407,7 @@ func renderResultsBanner(state State, width int) []string {
 	return nil
 }
 
-func renderResultsBody(state State, width int) []string {
+func renderResultsBody(state State, width, paneHeight int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
 		lines := []string{"Search failed."}
 		lines = append(lines, textutil.WrapLines(state.Error, width)...)
@@ -362,7 +425,7 @@ func renderResultsBody(state State, width int) []string {
 		return renderEmptyResultsBody(state, width)
 	}
 
-	return renderResultRows(state, width)
+	return renderResultRows(state, width, paneHeight)
 }
 
 func renderEmptyResultsBody(state State, width int) []string {
@@ -378,15 +441,21 @@ func renderEmptyResultsBody(state State, width int) []string {
 	return lines
 }
 
-func renderResultRows(state State, width int) []string {
+func renderResultRows(state State, width, paneHeight int) []string {
 	// Dim rows when a refresh is in flight (stale data visible, new data pending).
 	dim := state.Loading && len(state.Results) > 0
-	lines := make([]string, 0, issuerow.Height*len(state.Results))
+	first := firstResult(state)
+	// A search loads far more results than the pane has lines for. The last
+	// row drawn may have a line for its title only.
+	fitting := (resultLines(state, paneHeight) + issuerow.Height - 1) / issuerow.Height
+	end := min(len(state.Results), first+fitting)
+	lines := make([]string, 0, issuerow.Height*(end-first))
 	hover := -1
 	if state.Hover != nil && state.Hover.Pane == FocusResults {
 		hover = state.Hover.Row
 	}
-	for idx, issue := range state.Results {
+	for idx := first; idx < end; idx++ {
+		issue := state.Results[idx]
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,
 			Selected: issue.ID == state.SelectedID,

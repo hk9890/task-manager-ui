@@ -59,7 +59,7 @@ func TestDefault_UIPreferences(t *testing.T) {
 	if !cfg.UI.ShowModeSwitcherHelp {
 		t.Fatal("expected mode switcher help to be enabled by default")
 	}
-	if cfg.UI.Theme != "catppuccin-mocha" || cfg.UI.Glyphs != "nerd" {
+	if cfg.UI.Theme != "catppuccin-mocha" || cfg.UI.Glyphs != "unicode" {
 		t.Fatalf("expected the default theme and glyph set, got theme=%q glyphs=%q", cfg.UI.Theme, cfg.UI.Glyphs)
 	}
 }

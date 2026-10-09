@@ -105,10 +105,9 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 ## Gotchas
 
-- **The default glyph set is `nerd`, and `pyte` shows its icons as private-use characters.** Pass
-  `--config` with `ui.glyphs: unicode` to read the issue tokens in a checkpoint
+- **`pyte` shows the icons of the `nerd` glyph set as private-use characters.** Capture with the
+  default `unicode` set to read the issue tokens in a checkpoint
   ([CONFIGURATION.md](CONFIGURATION.md#runtime-configuration)).
-
 - **The Done column needs a wide terminal.** At `--width 120` only Not Ready, Ready and In Progress
   fit, so a `wait-for-text:Done` never settles. Use `--width 200` for any flow that touches Done.
 - **A modal holds the keyboard until it is dismissed.** Keys sent meanwhile are typed into the

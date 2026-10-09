@@ -68,10 +68,25 @@ func (m Model) View() string {
 // legend (docs/DESIGN-GUIDE.md).
 func (m Model) renderSurface() string {
 	if m.active == mode.StorePicker {
-		return m.storePicker.View(m.spinnerFrame, styles.KeyLegend(storePickerHints(m.keys, m.storeOpen), m.width))
+		return firstLines(m.storePicker.View(m.spinnerFrame, styles.KeyLegend(storePickerHints(m.keys, m.storeOpen), m.width)), m.height)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
+	// A renderer keeps a floor of rows however short the workspace is. The body
+	// is cut to the workspace, so the header stays on row 0 and the legend on
+	// the row handleMouse takes for it: Bubble Tea drops the top of a frame
+	// taller than the terminal, and every click then lands a row off.
+	header, footer := m.renderHeader(), m.renderFooter()
+	body := firstLines(m.renderBody(), m.workspaceHeight(header, footer))
+	return firstLines(lipgloss.JoinVertical(lipgloss.Left, header, body, footer), m.height)
+}
+
+// firstLines cuts s to its first count lines.
+func firstLines(s string, count int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= count {
+		return s
+	}
+	return strings.Join(lines[:max(0, count)], "\n")
 }
 
 // The header's geometry. renderHeader draws from it, and tabAt and barCells
@@ -332,11 +347,13 @@ func (m Model) detailViewportWidth() int {
 }
 
 func (m Model) workspaceSize() (int, int) {
-	workspaceWidth := max(1, m.width)
-	headerHeight := lipgloss.Height(m.renderHeader())
-	footerHeight := lipgloss.Height(m.renderFooter())
-	workspaceHeight := max(1, m.height-headerHeight-footerHeight)
-	return workspaceWidth, workspaceHeight
+	return max(1, m.width), m.workspaceHeight(m.renderHeader(), m.renderFooter())
+}
+
+// workspaceHeight is the rows the terminal has left between a rendered header
+// and footer.
+func (m Model) workspaceHeight(header, footer string) int {
+	return max(1, m.height-lipgloss.Height(header)-lipgloss.Height(footer))
 }
 
 func (m Model) applyWorkspaceSizeToBrowseModes() {
@@ -527,7 +544,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		"  launcher actions do not provide in-app return/save handling",
 		fmt.Sprintf("  use %s for edit/save round-trip that reloads detail", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
 		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
-		fmt.Sprintf("  detail scroll: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
+		fmt.Sprintf("  scroll detail and this help: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
 		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
 		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
 		fmt.Sprintf("  %s = list the central task stores on this machine and open one", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
@@ -538,7 +555,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		"  click = select a row, switch to a tab, press a menu-bar button, or focus a pane",
 		"  second click on a row = open it",
 		"  wheel = move the selection, or scroll detail text and this help",
-		"  drag = select a box of text; letting go copies it",
+		"  drag = select a box of text; letting go sends it to the terminal clipboard",
 		"  shift+drag = select text with the terminal instead",
 		"",
 		"Detail presentation model (v1): dedicated detail mode",

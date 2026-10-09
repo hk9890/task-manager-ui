@@ -33,8 +33,8 @@ func newSelectingShell(t *testing.T) (Model, *[]string) {
 
 // TestDragSelectsABoxOfTheScreenAndCopiesIt drags across two rows of two
 // columns: the box is drawn in reverse video over the screen as it was, and
-// the release puts its text on the clipboard, one line per screen line, and
-// says so.
+// the release sends its text to the clipboard, one line per screen line, and
+// says what it sent.
 func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 	m, copied := newSelectingShell(t)
 
@@ -73,8 +73,12 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 		!strings.HasPrefix(lines[0], "progress-first") || !strings.HasSuffix(lines[len(lines)-1], "progress-second") {
 		t.Fatalf("copied %q, want the %d lines of the box from one title to the next", (*copied)[0], want)
 	}
-	if !strings.Contains(m.View(), "Copied") {
-		t.Fatalf("no toast says the text was copied:\n%s", m.View())
+	// OSC 52 has no reply, so the toast says what was sent and names the way
+	// that needs no clipboard support — whole, in an 80-column terminal too.
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 30})
+	toast := m.View()
+	if strings.Contains(toast, "Copied") || !strings.Contains(toast, "Sent") || !strings.Contains(toast, "shift+drag if not copied") {
+		t.Fatalf("the toast must say the text was sent and name shift+drag, without claiming a copy:\n%s", toast)
 	}
 }
 
@@ -162,7 +166,7 @@ func TestABoxOfBlankCellsCopiesNothing(t *testing.T) {
 		t.Fatal("fixture: the drag did not start a selection")
 	}
 	m = send(t, m, leftRelease(x+12, y+5))
-	if len(*copied) != 0 || strings.Contains(m.View(), "Copied") {
+	if len(*copied) != 0 || strings.Contains(m.View(), "clipboard") {
 		t.Fatalf("a blank box was copied: %q", *copied)
 	}
 }

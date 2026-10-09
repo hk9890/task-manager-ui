@@ -16,6 +16,10 @@ What it does:
 - **Launch external tools** — run `nvim`, `opencode` or your own command against the selected issue.
 - **Stores** — `s` lists every central task store on the machine and switches to one in place;
   started somewhere with no store, it opens there instead of exiting and offers to create one.
+- **Mouse** — click, wheel and drag-select do what the keys do. A plain drag belongs to the app;
+  hold `shift` and drag for the terminal's own selection.
+- **Themes and glyph sets** — four Catppuccin themes, and issue tokens as letters or as Nerd Font
+  icons.
 - **No daemon** — the store is opened in-process through the task-manager Go SDK.
 
 ## Getting Started
@@ -69,6 +73,17 @@ directory found by walking up, otherwise the central registry
 on the store picker, where you can open a registered store or create one for the
 directory.
 
+The default theme, `catppuccin-mocha`, is dark and does not follow the terminal background. On a
+light terminal put this in `~/.config/taskmgr-ui/config.yaml`:
+
+```yaml
+ui:
+  theme: catppuccin-latte
+```
+
+With a [Nerd Font](https://www.nerdfonts.com/), `ui.glyphs: nerd` draws type, priority and status
+as icons.
+
 ## CLI surface
 
 `taskmgr-ui` is a TUI-first binary with a small startup CLI. `taskmgr-ui --help` is
@@ -87,7 +102,7 @@ templates — is
 ## Docs
 
 - [`docs/user-guide/key-bindings.md`](./docs/user-guide/key-bindings.md) — the default keybindings
-- [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) — the config file, keybinding overrides, and launcher templates
+- [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md) — the config file, the theme and glyph set, keybinding overrides, and launcher templates
 - [`CHANGELOG.md`](./CHANGELOG.md) — release history
 
 Developer and agent documentation lives under [`docs/`](./docs/); [`CONTRIBUTING.md`](./CONTRIBUTING.md)

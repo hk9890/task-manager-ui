@@ -646,7 +646,7 @@ func TestSearchItemCapacity(t *testing.T) {
 		height int
 		want   int
 	}{
-		{height: 0, want: 20},  // before first WindowSizeMsg: safe default
+		{height: 0, want: 8},   // before first WindowSizeMsg: the 24 lines the renderer draws with
 		{height: 1, want: 1},   // min clamp
 		{height: 9, want: 1},   // (9 - 7) / 2 = 1
 		{height: 10, want: 1},  // (10 - 7) / 2 = 1, one line spare
@@ -665,9 +665,9 @@ func TestSearchItemCapacity(t *testing.T) {
 }
 
 // TestSearchItemCapacityResultsAllFitUnderTheBanner asks the renderer whether
-// the limit a query carries is a list the results pane can draw whole: both
+// the scroll window is a list the results pane can draw whole: both
 // lines of every result, at even and odd heights, with the stale-results
-// banner and the blank line under it taking the two lines the limit leaves.
+// banner and the blank line under it taking the two lines the window leaves.
 func TestSearchItemCapacityResultsAllFitUnderTheBanner(t *testing.T) {
 	t.Parallel()
 
@@ -695,7 +695,7 @@ func TestSearchItemCapacityResultsAllFitUnderTheBanner(t *testing.T) {
 			for _, issue := range results {
 				for _, want := range []string{"T " + issue.Title, "  P2 OPN " + issue.ID} {
 					if !strings.Contains(view, want) {
-						t.Errorf("height %d, query %q: %d results requested, %q is not drawn:\n%s", height, query, capacity, want, view)
+						t.Errorf("height %d, query %q: %d results in the window, %q is not drawn:\n%s", height, query, capacity, want, view)
 					}
 				}
 			}
