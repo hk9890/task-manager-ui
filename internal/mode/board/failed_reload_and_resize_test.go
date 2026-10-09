@@ -119,16 +119,22 @@ func TestStaleLoadMorePageDoesNotReleaseTheLatch(t *testing.T) {
 	m.doneLoadedCount = 30
 	m.doneLoadInFlight = true
 
-	// A page from before a reload arrives: its offset no longer matches.
-	if cmd := m.applyLoadMoreClosed(loadMoreClosedDoneMsg{offset: 10}); cmd != nil {
-		t.Errorf("a stale page should produce no command, got one")
-	}
-	if !m.doneLoadInFlight {
-		t.Error("a stale page released the latch of the load that is still in flight")
+	// A page from before a reload arrives: its offset no longer matches, or it
+	// matches and the page was dispatched under an earlier reload.
+	for _, stale := range []loadMoreClosedDoneMsg{
+		{reloadSeq: m.reloadSeq, offset: 10},
+		{reloadSeq: m.reloadSeq - 1, offset: 30},
+	} {
+		if cmd := m.applyLoadMoreClosed(stale); cmd != nil {
+			t.Errorf("a stale page should produce no command, got one")
+		}
+		if !m.doneLoadInFlight {
+			t.Error("a stale page released the latch of the load that is still in flight")
+		}
 	}
 
 	// The current page does release it.
-	m.applyLoadMoreClosed(loadMoreClosedDoneMsg{offset: 30})
+	m.applyLoadMoreClosed(loadMoreClosedDoneMsg{reloadSeq: m.reloadSeq, offset: 30})
 	if m.doneLoadInFlight {
 		t.Error("the current page did not release the latch")
 	}

@@ -63,8 +63,10 @@ carries its `vX.Y.Z` section of this file as its notes.
   height: the menu bar stays on the first line and the key legend on the last.
 - Fixed: a refresh you did not ask for returned the Done column to its first
   page. With the column paged down, the selected issue left the column and the
-  cursor moved to another one. The column now keeps the rows already loaded and
-  the cursor stays on its issue. `r` still returns to the first page.
+  cursor moved to another one. The column now reloads as deep as it was paged,
+  and the cursor stays on its issue while that issue is within those rows. A
+  cursor move made while a refresh ran was also undone when it finished. `r`
+  still returns to the first page.
 
 ## v0.17.0
 

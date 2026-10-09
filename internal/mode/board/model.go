@@ -47,14 +47,18 @@ type dashboardLoadedMsg struct {
 // surfaces the error on the Done column; on success it merges via
 // dashboard.Compose with PriorClosed set to the current Done issues.
 //
-// offset is the ClosedOffset the page was requested at. It is what lets the
-// handler tell a current page from one a reload has superseded: without it a
-// page fetched at offset 200 merged onto a Done column a fresh Dashboard had
-// just reset to rows 0-30, leaving a permanent hole in the middle of the list.
+// reloadSeq and offset are what let the handler tell a current page from one a
+// reload has superseded. reloadSeq is the Model.reloadSeq the page was
+// dispatched under and offset the ClosedOffset it was requested at. Without
+// them a page fetched at offset 200 merged onto a Done column a fresh Dashboard
+// had just reset to rows 0-30, leaving a hole in the middle of the list. The
+// offset alone does not tell: an auto refresh reads Done back to the depth it
+// had, so a page from before it still starts where the column ends.
 type loadMoreClosedDoneMsg struct {
-	offset int
-	data   repository.DashboardData
-	err    error
+	reloadSeq int
+	offset    int
+	data      repository.DashboardData
+	err       error
 }
 
 // columnData holds the loaded data for one board column after composition.
@@ -102,8 +106,12 @@ type Model struct {
 	// the selected row is always within the visible window.
 	scrollOffset map[int]int
 
-	refreshMode   mode.RefreshMode
-	refreshAnchor *refreshAnchor
+	refreshMode mode.RefreshMode
+
+	// reloadSeq counts the reloads started. A load-more page carries the count
+	// it was dispatched under, so a page from before a reload is never merged
+	// onto the rows that reload read.
+	reloadSeq int
 
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
@@ -338,9 +346,9 @@ func (m *Model) AutoRefresh() tea.Cmd {
 	return m.startReload(mode.RefreshAuto)
 }
 
-// startReload captures the selection anchor (if auto), marks all columns
-// loading, and dispatches a single Dashboard repository call. It is
-// the single entry point for initial load, manual reload, and auto-refresh.
+// startReload marks all columns loading and dispatches a single Dashboard
+// repository call. It is the single entry point for initial load, manual
+// reload, and auto-refresh.
 func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	// Defense-in-depth: guard against re-entrant calls from future callers that
 	// may not check IsLoading() at the call site. The call-site guards in the
@@ -354,12 +362,6 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	}
 	m.inflight = true
 
-	// Capture anchor before clearing state so it reflects the current selection.
-	var anchor *refreshAnchor
-	if rm == mode.RefreshAuto {
-		anchor = m.captureRefreshAnchor()
-	}
-
 	// Mark all columns as loading, preserve existing issues for stale rendering.
 	for i := range m.columns {
 		m.columns[i].loading = true
@@ -367,28 +369,27 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	}
 
 	m.refreshMode = rm
-	m.refreshAnchor = anchor
 
 	// An auto refresh reads Done as deep as the operator has paged it. Reading
 	// one screen dropped the selected row from the column each time the store
 	// changed, and the cursor moved to another issue. The reload key still
 	// returns to page 1.
 	closedLimit := m.sectionItemCapacity()
-	if rm == mode.RefreshAuto && m.doneLoadedCount > closedLimit {
-		closedLimit = m.doneLoadedCount
+	if rm == mode.RefreshAuto {
+		closedLimit = max(closedLimit, m.doneLoadedCount)
 	}
 
 	// Reset load-more state before any new full reload so the next compose
-	// sets doneLoadedCount from scratch. This is the "r resets page 1"
-	// contract; this reset is the safety net for all reload modes.
+	// sets doneLoadedCount from scratch.
 	//
-	// A load-more this reload did not cancel may still be outstanding. Its
-	// response is dropped by the offset check in applyLoadMoreClosed rather
-	// than merged onto the reloaded list, which is what used to leave a hole in
-	// the middle of the Done column. composeFailed restores doneLoadedCount
-	// when the reload fails, because the old rows stay on screen.
+	// A load-more this reload did not cancel may still be outstanding. The new
+	// reloadSeq makes applyLoadMoreClosed drop its response rather than merge
+	// it onto the reloaded list, which is what used to leave a hole in the
+	// middle of the Done column. composeFailed restores doneLoadedCount when
+	// the reload fails, because the old rows stay on screen.
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
+	m.reloadSeq++
 
 	if rm == mode.RefreshReload {
 		// Full reset: move focus to col 0, clear selection and scroll maps, reset columns.
@@ -432,6 +433,15 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 		)
 	}
 
+	// The anchor is the selection as it is now, not as it was when the refresh
+	// started. The rows stay on screen while a refresh is in flight, and an
+	// anchor from its start moved the cursor back off the row the operator had
+	// since gone to.
+	var anchor *refreshAnchor
+	if m.refreshMode == mode.RefreshAuto {
+		anchor = m.captureRefreshAnchor()
+	}
+
 	// Build the four fixed columns, clearing loading flags atomically.
 	m.columns = []columnData{
 		{title: sectionTitleNotReady, issues: cols.NotReady.Issues, total: cols.NotReady.Total, exact: cols.NotReady.TotalIsExact, loading: false},
@@ -456,7 +466,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 	m.doneClosedTotal = data.ClosedTotal
 
-	m.settleAfterRefreshLoad()
+	m.settleAfterRefreshLoad(anchor)
 	// Composition complete — clear the in-flight flag so future reload requests
 	// (keyboard or auto-refresh) are permitted.
 	m.inflight = false
@@ -489,10 +499,9 @@ func (m *Model) composeFailed(loadErr error) tea.Cmd {
 	// happened. The rows it described are still on screen, so put it back.
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 
-	// A failed refresh restores nothing: the anchor belongs to the state still
-	// on screen, so the selection is already where it should be.
+	// A failed refresh restores nothing: the rows it keeps are the ones the
+	// selection is already on.
 	m.refreshMode = mode.RefreshReload
-	m.refreshAnchor = nil
 	m.clampScrollOffsets()
 	m.inflight = false
 	// Report the selection, exactly as the success path does. A manual reload
@@ -537,14 +546,13 @@ func (m *Model) normalizeFocus() {
 	m.normalizeSelectionForFocusedColumn()
 }
 
-func (m *Model) settleAfterRefreshLoad() {
+func (m *Model) settleAfterRefreshLoad(anchor *refreshAnchor) {
 	if m.refreshMode == mode.RefreshAuto {
-		m.restoreFromAnchor(m.refreshAnchor)
+		m.restoreFromAnchor(anchor)
 	} else {
 		m.normalizeFocus()
 	}
 	m.refreshMode = mode.RefreshReload
-	m.refreshAnchor = nil
 	m.clampScrollOffsets()
 }
 
@@ -723,7 +731,11 @@ func (m *Model) maybeLoadMoreClosed() tea.Cmd {
 // if there are more pages to fetch. Returns nil if already in flight or all
 // pages are loaded.
 func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
-	if m.doneLoadInFlight {
+	// A reload in flight counts. It has zeroed doneLoadedCount, so a page
+	// dispatched now is read at offset 0: landing first it is merged behind the
+	// rows still on screen, and landing second it is dropped with the latch
+	// held, which stops every later load-more until the next reload.
+	if m.inflight || m.doneLoadInFlight {
 		m.logger.Debug("load-more suppressed; already in flight")
 		return nil
 	}
@@ -749,7 +761,7 @@ func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
 		"offset", opts.ClosedOffset,
 		"limit", opts.ClosedLimit,
 	)
-	return loadMoreClosedCmd(m.ctx, m.repo, opts)
+	return loadMoreClosedCmd(m.ctx, m.repo, opts, m.reloadSeq)
 }
 
 // applyLoadMoreClosed processes an incoming loadMoreClosedDoneMsg: clears the
@@ -757,16 +769,16 @@ func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
 // the new page into Done.Issues via dashboard.Compose with PriorClosed set.
 func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 	// Drop a page a reload has superseded, before touching the latch. A page is
-	// only mergeable at the offset the Done column currently ends at; a reload
-	// that landed while this one was in flight reset that count, and merging
-	// anyway concatenates rows 0-30 with rows 200-249 and leaves a hole no
-	// later load-more refills.
+	// only mergeable under the reload it was dispatched after and at the offset
+	// the Done column currently ends at; a reload that started while this one
+	// was in flight read the column again, and merging anyway concatenates
+	// rows 0-30 with rows 200-249 and leaves a hole no later load-more refills.
 	//
 	// The latch is not this response's to release either: startReload already
 	// cleared it, and a dispatch made after that reload may be holding it. The
 	// error path below is reached only by a response that is still current, so
 	// it releases the latch it actually owns.
-	if msg.offset != m.doneLoadedCount {
+	if msg.reloadSeq != m.reloadSeq || msg.offset != m.doneLoadedCount {
 		m.logger.Debug("stale load-more page dropped; a reload superseded it",
 			"page_offset", msg.offset,
 			"loaded", m.doneLoadedCount,
@@ -859,10 +871,10 @@ func loadDashboardCmd(ctx context.Context, repo repository.Repository, opts repo
 // loadMoreClosedCmd fires a Dashboard call scoped to the next closed page
 // (offset=doneLoadedCount, limit=pageSize) and wraps the result in a
 // loadMoreClosedDoneMsg.
-func loadMoreClosedCmd(ctx context.Context, repo repository.Repository, opts repository.DashboardOptions) tea.Cmd {
+func loadMoreClosedCmd(ctx context.Context, repo repository.Repository, opts repository.DashboardOptions, reloadSeq int) tea.Cmd {
 	offset := opts.ClosedOffset
 	return func() tea.Msg {
 		data, err := repo.Dashboard(ctx, opts)
-		return loadMoreClosedDoneMsg{offset: offset, data: data, err: err}
+		return loadMoreClosedDoneMsg{reloadSeq: reloadSeq, offset: offset, data: data, err: err}
 	}
 }

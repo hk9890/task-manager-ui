@@ -135,7 +135,7 @@ store large enough to page.
 ### Closed-limit scales with terminal height
 
 **Proves:** `sectionItemCapacity()` scales with the height the mode receives (`height - 3`, floored
-at 1, and `20` before the first `WindowSizeMsg`), and a refresh re-reads it.
+at 1, and `20` before the first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
 
 Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
 rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-7 of M`, where

@@ -1485,9 +1485,8 @@ func TestDoneLoadMore_ExplicitKey(t *testing.T) {
 // page (not the stale 85).
 //
 // Audit note: the r key handler calls startReload(mode.RefreshReload) which
-// already resets doneLoadedCount=0 and doneLoadInFlight=false (lines 383-384
-// of model.go). This test is the explicit regression guard for that
-// path.
+// already resets doneLoadedCount=0 and doneLoadInFlight=false. This test is
+// the explicit regression guard for that path.
 func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	t.Parallel()
 
@@ -2064,9 +2063,11 @@ func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
 	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(200), ClosedTotal: 736})
 	m.doneLoadedCount = 200
 
-	// A load-more for offset 200 is outstanding when the auto-refresh lands.
+	// A load-more for offset 200 is outstanding when the reload key lands. An
+	// auto refresh reads the 200 rows back and is the case of
+	// TestLoadMorePageFromBeforeAnAutoRefreshIsDropped.
 	m.doneLoadInFlight = true
-	_ = m.startReload(mode.RefreshAuto)
+	_ = m.startReload(mode.RefreshReload)
 	feedDashboardData(m, repository.DashboardData{Closed: makeClosedIssues(31), ClosedTotal: 736})
 
 	if got := len(m.columns[doneColumnIndex].issues); got != 31 {
@@ -2105,5 +2106,127 @@ func TestStaleLoadMorePageIsDroppedAfterAReload(t *testing.T) {
 	}
 	if next.offset != 31 {
 		t.Errorf("next load-more offset = %d, want 31 — a gap in the Done column is never refilled", next.offset)
+	}
+}
+
+// pagedDoneClosedAt is when the latest issue of newPagedDoneModel was closed.
+var pagedDoneClosedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// seedClosed adds an issue to repo that was closed at closedAt.
+func seedClosed(repo *memoryrepo.Repository, id string, closedAt time.Time) {
+	repo.Seed(memoryrepo.Issue{ID: id, Title: "Closed " + id, Status: "closed"})
+	repo.SeedClosed(id, closedAt, "done")
+}
+
+// newPagedDoneModel returns a settled board over a store of total closed
+// issues, an hour apart, with Done focused and paged once past its first
+// screen. The repository is the memory one: it honours ClosedLimit and
+// ClosedOffset, which a canned response does not.
+func newPagedDoneModel(t *testing.T, total int) (*Model, *memoryrepo.Repository) {
+	t.Helper()
+
+	repo := memoryrepo.New(fakes.FrozenClock())
+	for i := range total {
+		seedClosed(repo, fmt.Sprintf("closed-%03d", i), pagedDoneClosedAt.Add(-time.Duration(i)*time.Hour))
+	}
+
+	m := newSettledBoardModel(t, repo)
+	m.focusedColumn = doneColumnIndex
+	boardApplyMessages(t, m, testui.DrainCmd(m.dispatchLoadMoreClosed()))
+	if m.doneLoadedCount <= m.sectionItemCapacity() || m.doneLoadedCount >= total {
+		t.Fatalf("setup: Done holds %d of %d issues, want it paged past one screen and short of the end",
+			m.doneLoadedCount, total)
+	}
+	return m, repo
+}
+
+// TestLoadMorePageFromBeforeAnAutoRefreshIsDropped pins the race the page
+// offset cannot see. An auto refresh reads Done back to the depth it had, so a
+// page dispatched before it still starts where the column ends. Merged, it
+// continued a list the refresh had read again: with one issue closed in
+// between, the row that close pushed past the read depth was in neither read.
+func TestLoadMorePageFromBeforeAnAutoRefreshIsDropped(t *testing.T) {
+	t.Parallel()
+
+	m, repo := newPagedDoneModel(t, 150)
+	loaded := m.doneLoadedCount
+
+	// The next page is read, and its response is held back.
+	page := m.dispatchLoadMoreClosed()
+	if page == nil {
+		t.Fatal("setup: expected a load-more dispatch")
+	}
+	held := page()
+
+	// Another process closes an issue, and the refresh for it lands first.
+	seedClosed(repo, "closed-new", pagedDoneClosedAt.Add(time.Hour))
+	boardApplyMessages(t, m, testui.DrainCmd(m.AutoRefresh()))
+	if m.doneLoadedCount != loaded {
+		t.Fatalf("doneLoadedCount = %d after the refresh, want %d", m.doneLoadedCount, loaded)
+	}
+
+	_ = m.Update(held)
+
+	want, err := repo.Dashboard(context.Background(), repository.DashboardOptions{ClosedLimit: loaded})
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	got := m.columns[doneColumnIndex].issues
+	if len(got) != loaded {
+		t.Fatalf("Done rows after the held page = %d, want %d — a page from before the refresh must be dropped",
+			len(got), loaded)
+	}
+	for i := range got {
+		if got[i].ID != want.Closed[i].ID {
+			t.Fatalf("Done row %d is %s, the store has %s there", i, got[i].ID, want.Closed[i].ID)
+		}
+	}
+	if m.doneLoadedCount != loaded {
+		t.Errorf("doneLoadedCount = %d after the held page, want %d", m.doneLoadedCount, loaded)
+	}
+}
+
+// TestLoadMoreWaitsForAReloadInFlight pins that no page is dispatched while a
+// reload is in flight. startReload has zeroed doneLoadedCount by then, so the
+// page was read at offset 0. When the reload landed first the page was dropped
+// with the latch still held, and no load-more ran until the next reload.
+func TestLoadMoreWaitsForAReloadInFlight(t *testing.T) {
+	t.Parallel()
+
+	m, _ := newPagedDoneModel(t, 150)
+	// Each move below ends inside the load-more threshold.
+	m.selectedRow[doneColumnIndex] = m.doneLoadedCount - loadMoreThreshold
+
+	refresh := m.AutoRefresh()
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.doneLoadInFlight {
+		t.Fatal("a move near the end of Done dispatched a load-more while the refresh was in flight")
+	}
+
+	boardApplyMessages(t, m, testui.DrainCmd(refresh))
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if !m.doneLoadInFlight {
+		t.Error("a move near the end of Done dispatched no load-more after the refresh landed")
+	}
+}
+
+// TestAutoRefreshKeepsASelectionMadeWhileItWasInFlight pins where an auto
+// refresh leaves the cursor: on the issue the operator is on when it lands.
+// The rows stay on screen while it is in flight, and the anchor was taken when
+// it started, so a move made in between was undone.
+func TestAutoRefreshKeepsASelectionMadeWhileItWasInFlight(t *testing.T) {
+	t.Parallel()
+
+	m, _ := newPagedDoneModel(t, 150)
+	m.selectedRow[doneColumnIndex] = 10
+
+	refresh := m.AutoRefresh()
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	moved := m.currentSelection().Issue.ID
+
+	boardApplyMessages(t, m, testui.DrainCmd(refresh))
+
+	if got := m.currentSelection().Issue.ID; got != moved {
+		t.Errorf("the cursor is on %s after the refresh, want %s where the operator moved it", got, moved)
 	}
 }
