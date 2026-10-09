@@ -41,6 +41,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	event := mode.MouseMsg{Kind: kind, X: msg.X, Y: msg.Y, At: modelNow()}
 	leave := mode.MouseMsg{Kind: mode.MouseLeave, At: event.At}
+	m.leaveHiddenSurfaces(leave)
 
 	// A click or a wheel notch cancels a dialog still loading, as a key does:
 	// it can move the selection the dialog was asked for.
@@ -62,6 +63,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.active == mode.StorePicker {
+		m.hoverTab = ""
 		return m, m.storePicker.Update(event)
 	}
 
@@ -79,6 +81,24 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	m.hoverTab = ""
 	event.Y -= headerHeight
 	return m, m.mouseToSurface(event)
+}
+
+// leaveHiddenSurfaces tells every surface the shell is not drawing that the
+// pointer left it. A surface keeps its pointer cell while a key takes the
+// shell to another one, and would mark a row under a cell the pointer is long
+// gone from when it is drawn again.
+func (m *Model) leaveHiddenSurfaces(leave mode.MouseMsg) {
+	if m.active != mode.StorePicker {
+		m.storePicker.Update(leave)
+	}
+	if m.active != mode.Detail {
+		m.detail.HandleMouse(leave, 0, 0)
+	}
+	for _, entry := range m.browseTabs() {
+		if entry.ID != m.active {
+			entry.Tab.Update(leave)
+		}
+	}
 }
 
 // mouseToSurface hands event to the surface the shell is drawing.

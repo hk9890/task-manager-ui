@@ -450,6 +450,10 @@ func (m Model) ScrollToTop() Model {
 
 // Scroll moves the view of a modal too tall for the viewport by delta lines,
 // and does nothing to one that fits.
+//
+// The move starts from the line that is drawn, not from the stored offset: a
+// taller viewport hides fewer lines, and View already draws an offset past the
+// new end at that end.
 func (m Model) Scroll(delta int) Model {
 	const verticalMargin = 2
 	maxHeight := m.height - verticalMargin
@@ -459,7 +463,7 @@ func (m Model) Scroll(delta int) Model {
 		m.scrollOffset = 0
 		return m
 	}
-	m.scrollOffset = max(0, min(m.scrollOffset+delta, hidden))
+	m.scrollOffset = max(0, min(min(m.scrollOffset, hidden)+delta, hidden))
 	return m
 }
 

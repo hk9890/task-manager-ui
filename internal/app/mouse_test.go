@@ -5,8 +5,10 @@ package app
 // surface does with an event is tested in its own mode package.
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -19,8 +21,12 @@ import (
 
 // newMouseShell is a loaded shell on the Board at 160x30: one ready issue and
 // two in progress, the first of which is related to the second.
+//
+// The clock stands still, so two clicks sent one after the other are a double
+// click however long the machine takes between them.
 func newMouseShell(t *testing.T) Model {
 	t.Helper()
+	withModelNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC))
 
 	gw := fakes.NewTracked()
 	seedReady(gw, "tm-1", "ready-first", "task", 1)
@@ -315,6 +321,63 @@ func TestTheStorePickerTakesTheMouseInsteadOfTheBoard(t *testing.T) {
 	m = send(t, m, leftClick(30, 0))
 	if got := firstSelectionID(m, mode.Board); got != "tm-1" || m.active != mode.StorePicker {
 		t.Fatalf("the mouse reached the shell under the picker (selection %q, surface %q)", got, m.active)
+	}
+}
+
+// TestASurfaceLeftByAKeyForgetsThePointer: a key takes the shell to another
+// surface and the pointer moves on there. The surface left behind must not
+// light a row under the cell it last saw the pointer on when it is drawn again.
+func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
+	m := newMouseShell(t)
+
+	x, y := testui.FindCell(t, m.View(), "progress-second")
+	m = send(t, m, pointerMove(x, y))
+	if !strings.Contains(m.View(), "› T P2") {
+		t.Fatal("fixture: the row under the pointer is not lit")
+	}
+
+	m = pressKey(t, m, "3")
+	if m.active != mode.Detail {
+		t.Fatalf("fixture did not reach Detail, on %q", m.active)
+	}
+	m = send(t, m, pointerMove(x, y+3))
+	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.active != mode.Board || strings.Contains(m.View(), "› T P2") {
+		t.Fatalf("back on %q a row is lit under a cell the pointer left", m.active)
+	}
+
+	// The tab strip forgets the pointer the same way once the picker is up.
+	tabX, _ := testui.FindCell(t, strings.SplitN(m.View(), "\n", 2)[0], " Docs ")
+	m = send(t, m, pointerMove(tabX+1, 0))
+	if m.hoverTab != mode.Docs {
+		t.Fatalf("fixture: hovered tab is %q, want docs", m.hoverTab)
+	}
+	m = pressKey(t, m, "s")
+	m = send(t, m, pointerMove(tabX+1, 5))
+	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.active != mode.Board || m.hoverTab != "" {
+		t.Fatalf("back on %q the %q tab is lit under a cell the pointer left", m.active, m.hoverTab)
+	}
+}
+
+// TestEditorExitTurnsMouseReportingBackOn: tea.Exec hands the terminal to the
+// editor with mouse reporting off, and Bubble Tea does not restore it. Without
+// the command the mouse is dead from the first edit to the end of the session.
+func TestEditorExitTurnsMouseReportingBackOn(t *testing.T) {
+	for name, execErr := range map[string]error{"clean exit": nil, "editor failed": errors.New("exit status 1")} {
+		m := newMouseShell(t)
+		m.services.Editor = &fakes.FakeEditor{}
+
+		_, cmd := m.Update(editorExitedMsg{execErr: execErr})
+		enabled := false
+		for _, msg := range runBatch(cmd) {
+			if msg == tea.EnableMouseAllMotion() {
+				enabled = true
+			}
+		}
+		if !enabled {
+			t.Errorf("%s: the editor exit did not turn mouse reporting back on", name)
+		}
 	}
 }
 

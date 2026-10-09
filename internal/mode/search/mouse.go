@@ -8,21 +8,14 @@ import (
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
-// pointer is the cell the mouse is over, in the tab's own coordinates. The
-// hover is derived from it on every draw, as the board's is.
-type pointer struct {
-	x, y int
-}
-
 // handleMouse is the wheel, the pointer and the left button. The wheel over
 // the results moves the selection. A click focuses the pane it lands on; on a
 // result it also selects it, and a second click opens it.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
-	if msg.Kind == mode.MouseLeave {
-		m.pointer = nil
+	m.pointer = msg.Pointer()
+	if m.pointer == nil {
 		return nil
 	}
-	m.pointer = &pointer{x: msg.X, y: msg.Y}
 
 	hit, ok := uisearch.HitTest(m.viewState(0), msg.X, msg.Y)
 	if !ok {
@@ -49,7 +42,7 @@ func (m *Model) click(hit uisearch.Hit, msg mode.MouseMsg) tea.Cmd {
 	if hit.Row >= 0 {
 		target = m.page.Results[hit.Row].Issue.ID
 	}
-	if m.clicks.Double(target, msg) {
+	if m.clicks.Double(target, m.selectedIssueID(), msg) {
 		return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
 	}
 
@@ -82,7 +75,7 @@ func (m *Model) hover(state uisearch.State) *uisearch.Hit {
 	if m.pointer == nil {
 		return nil
 	}
-	hit, ok := uisearch.HitTest(state, m.pointer.x, m.pointer.y)
+	hit, ok := uisearch.HitTest(state, m.pointer.X, m.pointer.Y)
 	if !ok || hit.Row < 0 {
 		return nil
 	}

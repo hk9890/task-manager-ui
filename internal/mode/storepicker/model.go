@@ -95,7 +95,7 @@ type Model struct {
 	selectedRow  int
 	scrollOffset int
 
-	pointer *pointer
+	pointer *mode.Pointer
 	clicks  mode.ClickTracker
 }
 
@@ -185,11 +185,10 @@ func (m *Model) openSelected() tea.Cmd {
 // the selection; one click selects a row and a second acts on it, as Enter
 // does.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
-	if msg.Kind == mode.MouseLeave {
-		m.pointer = nil
+	m.pointer = msg.Pointer()
+	if m.pointer == nil {
 		return nil
 	}
-	m.pointer = &pointer{x: msg.X, y: msg.Y}
 
 	switch msg.Kind {
 	case mode.MouseWheelUp:
@@ -202,7 +201,7 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 		if ok {
 			target = strconv.Itoa(row)
 		}
-		if m.clicks.Double(target, msg) {
+		if m.clicks.Double(target, strconv.Itoa(m.selectedRow), msg) {
 			return m.openSelected()
 		}
 		if ok {
@@ -212,17 +211,11 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// pointer is the cell the mouse is over. The hover is derived from it on every
-// draw, so a row that scrolls under a still pointer is the one that lights up.
-type pointer struct {
-	x, y int
-}
-
 // View renders the picker full screen.
 func (m *Model) View(spinnerFrame int, help string) string {
 	state := m.viewState(spinnerFrame, help)
 	if m.pointer != nil {
-		if row, ok := uistorepicker.HitTest(state, m.pointer.x, m.pointer.y); ok {
+		if row, ok := uistorepicker.HitTest(state, m.pointer.X, m.pointer.Y); ok {
 			state.Hover = &row
 		}
 	}

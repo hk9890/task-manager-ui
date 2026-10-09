@@ -7,20 +7,13 @@ import (
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 )
 
-// pointer is the cell the mouse is over, in the tab's own coordinates. The
-// hover is derived from it on every draw, as the board's is.
-type pointer struct {
-	x, y int
-}
-
 // handleMouse is the board's mouse on one column: the wheel moves the
 // selection, one click selects a doc and a second opens it.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
-	if msg.Kind == mode.MouseLeave {
-		m.pointer = nil
+	m.pointer = msg.Pointer()
+	if m.pointer == nil {
 		return nil
 	}
-	m.pointer = &pointer{x: msg.X, y: msg.Y}
 
 	hit, ok := uiboard.HitTest(m.viewState(0), msg.X, msg.Y)
 	if !ok {
@@ -37,7 +30,7 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 		if hit.Row >= 0 {
 			target = m.issues[hit.Row].ID
 		}
-		if m.clicks.Double(target, msg) {
+		if m.clicks.Double(target, m.selectedIssueID(), msg) {
 			return mode.RequestActionCmd(mode.Docs, mode.ActionOpenDetail)
 		}
 		if target == "" {
@@ -46,6 +39,13 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 		return m.moveRow(hit.Row - m.selectedRow)
 	}
 	return nil
+}
+
+func (m *Model) selectedIssueID() string {
+	if selection := m.currentSelection(); selection != nil {
+		return selection.Issue.ID
+	}
+	return ""
 }
 
 // viewState is the docs column as the renderer sees it. View and the hit test
@@ -69,7 +69,7 @@ func (m *Model) hover(state uiboard.State) *uiboard.Hit {
 	if m.pointer == nil {
 		return nil
 	}
-	hit, ok := uiboard.HitTest(state, m.pointer.x, m.pointer.y)
+	hit, ok := uiboard.HitTest(state, m.pointer.X, m.pointer.Y)
 	if !ok || hit.Row < 0 {
 		return nil
 	}

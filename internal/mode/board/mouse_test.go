@@ -109,6 +109,24 @@ func TestClickSelectsAndASecondClickOpens(t *testing.T) {
 	}
 }
 
+// TestAWheelNotchBetweenTwoClicksIsNotADoubleClick: a double click opens the
+// selection, which the wheel has moved off the row that was clicked.
+func TestAWheelNotchBetweenTwoClicksIsNotADoubleClick(t *testing.T) {
+	t.Parallel()
+
+	m := mouseBoard(t)
+	_ = m.Update(mouseAt(t, m, mode.MouseClick, "progress-one", 0))
+	_ = m.Update(mouseAt(t, m, mode.MouseWheelDown, "progress-one", 50))
+
+	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "progress-one", 100))
+	if opensDetail(cmd) {
+		t.Fatal("a click after a wheel notch opened the row the wheel moved to")
+	}
+	if got := selectionFrom(t, cmd); got != "tm-7" {
+		t.Fatalf("the click selected %q, want the clicked row tm-7", got)
+	}
+}
+
 // TestClickOffTheRowsSelectsNothing covers the cells of a column that hold no
 // issue, and the space outside the columns.
 func TestClickOffTheRowsSelectsNothing(t *testing.T) {

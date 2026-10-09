@@ -1,7 +1,3 @@
-// Package detail is the detail-mode controller: pane focus, scroll offsets,
-// dependency-browser selection, and the metadata quick-edit intents the shell
-// turns into dialogs. Rendering — and all pane geometry — is internal/ui/detail,
-// a different package with the same name.
 package detail
 
 import (
@@ -52,7 +48,7 @@ type Model struct {
 	// when the counter reaches 0 (the real data load). Reset to 0 by ClearDrillFocus.
 	drillDepsFocusCalls int
 
-	pointer *pointer
+	pointer *mode.Pointer
 	clicks  mode.ClickTracker
 }
 
@@ -236,32 +232,23 @@ func (m *Model) AnchorSelection(issueID string) {
 
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
-	d := m.RenderDetail()
-	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
-	skeletonContent := m.skeletonContent()
+	state := m.viewState(maxWidth, viewportHeight, skeletonPhase)
 
 	if compact || viewportHeight <= 0 {
 		return detail.Render(detail.State{
-			SelectionID: m.selectionID,
-			TargetID:    m.targetID,
-			Detail:      d,
-			QuickActions: detail.QuickActionLabels{
-				EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
-				UpdateIssue:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
-				AddComment:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
-				CloseIssue:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
-				ReloadDetail: m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
-			},
-			Loading:       blockingLoad,
-			Skeleton:      skeletonContent,
+			SelectionID:   state.SelectionID,
+			TargetID:      state.TargetID,
+			Detail:        state.Detail,
+			QuickActions:  state.QuickActions,
+			Loading:       state.Loading,
+			Skeleton:      state.Skeleton,
 			SkeletonPhase: skeletonPhase,
-			Error:         m.errText,
+			Error:         state.Error,
 			Width:         maxWidth,
 			Compact:       compact,
 		})
 	}
 
-	state := m.viewState(maxWidth, viewportHeight, skeletonPhase)
 	state.Hover = m.hover(state)
 	return detail.Render(state)
 }

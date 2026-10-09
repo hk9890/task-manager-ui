@@ -186,15 +186,19 @@ func layoutFrame(state State) frame {
 	return f
 }
 
-// columnView is what one column draws inside its borders: the lines, and where
-// the issues landed among them.
+// columnView is what one column draws inside its borders: the lines, and how
+// many of its issues are among them.
 type columnView struct {
-	rows []string
-	// prefix is the number of pinned rows ahead of the issue area, and start
-	// the layout line the issue area opens on.
-	prefix, start int
-	layout        rowLayout
+	rows          []string
 	visibleIssues int
+}
+
+// windowed reports whether col draws its rows through the scroll window. A
+// loading column does not — the skeleton and stale-refresh paths manage their
+// own row counts — unless a load-more is in flight (offset > 0 indicates deep
+// navigation with a pending page fetch).
+func windowed(col Column) bool {
+	return len(col.Rows) > 0 && (!col.Loading || col.ScrollOffset > 0)
 }
 
 // viewColumn builds the idx-th visible column of state.
@@ -207,40 +211,45 @@ func (f frame) viewColumn(state State, idx int) columnView {
 	}
 
 	rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, f.start+idx, state.Now, hover)
-	view := columnView{rows: rendered.rows, prefix: rendered.prefix, layout: rendered.layout, visibleIssues: len(col.Rows)}
+	view := columnView{rows: rendered.rows, visibleIssues: len(col.Rows)}
+	if !windowed(col) {
+		return view
+	}
 
-	// Apply the scroll window. Only when not loading (skeleton / stale-refresh
-	// paths manage their own row counts), or when a load-more is in flight
-	// (offset > 0 indicates deep navigation with a pending page fetch). The
-	// pinned error row counts against innerHeight; rowLayout.window says
+	// The pinned error row counts against innerHeight; rowLayout.window says
 	// which lines of the issue area are drawn.
-	isLoadMore := col.Loading && len(col.Rows) > 0 && col.ScrollOffset > 0
-	if (!col.Loading || isLoadMore) && len(col.Rows) > 0 {
-		issueRows := rendered.rows[view.prefix:]
-		startRow, endRow := rendered.layout.window(col, f.innerHeight-view.prefix, len(issueRows))
-		view.start = startRow
-		view.rows = make([]string, 0, view.prefix+endRow-startRow)
-		view.rows = append(view.rows, rendered.rows[:view.prefix]...)
-		view.rows = append(view.rows, issueRows[startRow:endRow]...)
+	issueRows := rendered.rows[rendered.prefix:]
+	startRow, endRow := rendered.layout.window(col, f.innerHeight-rendered.prefix, len(issueRows))
+	view.rows = make([]string, 0, rendered.prefix+endRow-startRow)
+	view.rows = append(view.rows, rendered.rows[:rendered.prefix]...)
+	view.rows = append(view.rows, issueRows[startRow:endRow]...)
 
-		view.visibleIssues = 0
-		for _, row := range rendered.layout.issueRow {
-			if row >= startRow && row < endRow {
-				view.visibleIssues++
-			}
+	view.visibleIssues = 0
+	for _, row := range rendered.layout.issueRow {
+		if row >= startRow && row < endRow {
+			view.visibleIssues++
 		}
 	}
 	return view
 }
 
-// issueAt is the index of the issue drawn on content line line, or -1 when
-// that line holds a divider, the error row, or nothing.
-func (v columnView) issueAt(line int) int {
-	if line < v.prefix {
+// issueAt is the index of the issue col draws on content line line, or -1 when
+// that line holds a divider, the error row, or nothing. It reads the layout
+// viewColumn windows its rows with and renders none of them: the pointer asks
+// on every cell it crosses.
+func (f frame) issueAt(col Column, now time.Time, line int) int {
+	prefix := errorRows(col)
+	if line < prefix || len(col.Rows) == 0 {
 		return -1
 	}
-	target := v.start + line - v.prefix
-	for idx, row := range v.layout.issueRow {
+
+	layout := layoutRows(col, now)
+	target := line - prefix
+	if windowed(col) {
+		start, _ := layout.window(col, f.innerHeight-prefix, layout.lines())
+		target += start
+	}
+	for idx, row := range layout.issueRow {
 		if row == target {
 			return idx
 		}
@@ -285,7 +294,7 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 		if x == left || x == left+width-1 || content < 0 || content >= f.innerHeight {
 			return hit, true
 		}
-		hit.Row = f.viewColumn(state, idx).issueAt(content)
+		hit.Row = f.issueAt(state.Columns[hit.Column], state.Now, content)
 		return hit, true
 	}
 	return Hit{}, false

@@ -7,23 +7,15 @@ import (
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 )
 
-// pointer is the cell the mouse is over, in the board's own coordinates. The
-// hover is derived from it on every draw rather than stored, so a row that
-// scrolls or reloads under a still pointer is the one that lights up.
-type pointer struct {
-	x, y int
-}
-
 // handleMouse is the wheel, the pointer and the left button. The wheel moves
 // the selection of the focused column, as the arrow keys do. One click selects
 // an issue, taking the focus to its column, and a second opens it, as Enter
 // does.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
-	if msg.Kind == mode.MouseLeave {
-		m.pointer = nil
+	m.pointer = msg.Pointer()
+	if m.pointer == nil {
 		return nil
 	}
-	m.pointer = &pointer{x: msg.X, y: msg.Y}
 
 	hit, ok := uiboard.HitTest(m.viewState(0), msg.X, msg.Y)
 	if !ok {
@@ -59,14 +51,14 @@ func (m *Model) click(hit uiboard.Hit, msg mode.MouseMsg) tea.Cmd {
 	if hit.Row >= 0 {
 		target = m.columns[hit.Column].issues[hit.Row].ID
 	}
-	if m.clicks.Double(target, msg) {
+	previous := m.selectedIssueID()
+	if m.clicks.Double(target, previous, msg) {
 		return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
 	}
 	if target == "" {
 		return nil
 	}
 
-	previous := m.selectedIssueID()
 	m.focusedColumn = hit.Column
 	m.selectedRow[hit.Column] = hit.Row
 	m.moveRow(0)
@@ -111,7 +103,7 @@ func (m *Model) hover(state uiboard.State) *uiboard.Hit {
 	if m.pointer == nil {
 		return nil
 	}
-	hit, ok := uiboard.HitTest(state, m.pointer.x, m.pointer.y)
+	hit, ok := uiboard.HitTest(state, m.pointer.X, m.pointer.Y)
 	if !ok || hit.Row < 0 {
 		return nil
 	}

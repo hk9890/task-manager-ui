@@ -82,6 +82,18 @@ def feed_keys(fd: int, keys: str) -> None:
     os.write(fd, data)
 
 
+def mouse_reporting_on(output: bytes) -> bool:
+    """Whether the app has asked the terminal to report the mouse.
+
+    A real terminal sends mouse bytes only while a tracking mode is set, so a
+    step that wrote them regardless would pass where a user's click does
+    nothing.
+    """
+    enabled = max(output.rfind(f"{ESC}[?{mode}h".encode()) for mode in (1000, 1002, 1003))
+    disabled = max(output.rfind(f"{ESC}[?{mode}l".encode()) for mode in (1000, 1002, 1003))
+    return enabled > disabled
+
+
 def feed_mouse(fd: int, spec: str) -> None:
     """Send one mouse event as the SGR sequence a terminal reports it with.
 
@@ -378,6 +390,8 @@ def capture(
                     read_once(WAIT_POLL_SECONDS)
                     read_once(WAIT_POLL_SECONDS)
                 elif step.kind == "send-mouse":
+                    if not mouse_reporting_on(bytes(buffer)):
+                        raise ValueError("mouse reporting is off; a terminal would not send this event")
                     feed_mouse(master_fd, step.value or "")
                     read_once(WAIT_POLL_SECONDS)
                     read_once(WAIT_POLL_SECONDS)

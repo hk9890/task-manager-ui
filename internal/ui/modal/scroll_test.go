@@ -57,6 +57,24 @@ func TestScrollMovesAModalTooTallForTheViewport(t *testing.T) {
 	}
 }
 
+// TestScrollStartsFromTheDrawnLineAfterAResize grows the viewport under a
+// modal scrolled to its end. Fewer lines are hidden now, so the stored offset
+// is past the new end, and the first notch back must still move the view.
+func TestScrollStartsFromTheDrawnLineAfterAResize(t *testing.T) {
+	t.Parallel()
+
+	m := tallModal(30, 14).Scroll(1000)
+	m.SetSize(80, 24)
+	bottom := m.View()
+	if !strings.Contains(bottom, "line-29") || strings.Contains(bottom, "more lines") {
+		t.Fatalf("fixture: the resized view must still end on the last line:\n%s", bottom)
+	}
+
+	if up := m.Scroll(-1).View(); up == bottom {
+		t.Fatal("the first notch up after the resize did not move the view")
+	}
+}
+
 func TestScrollDoesNothingToAModalThatFits(t *testing.T) {
 	t.Parallel()
 
