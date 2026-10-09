@@ -449,6 +449,19 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	if help = send(t, help, pointerMove(x+1, 0)); !help.showHelp || help.hoverAction != "" {
 		t.Errorf("under the help overlay (%v) the %q button is lit", help.showHelp, help.hoverAction)
 	}
+
+	// A new width moves the buttons and sends no mouse event: the one that was
+	// lit is no longer under the pointer. A new height moves nothing on the bar.
+	if taller := send(t, onButton(m), tea.WindowSizeMsg{Width: 160, Height: 40}); taller.hoverAction != config.ShellActionStorePicker {
+		t.Errorf("a resize that kept the width unlit the button under the pointer (%q)", taller.hoverAction)
+	}
+	wider := send(t, onButton(m), tea.WindowSizeMsg{Width: 200, Height: 30})
+	if moved, _ := barButton(t, wider, "stores", config.ShellActionStorePicker); moved == x {
+		t.Fatal("fixture: the stores button did not move with the width")
+	}
+	if wider.hoverAction != "" {
+		t.Errorf("the %q button stayed lit after a resize moved it from under the pointer", wider.hoverAction)
+	}
 }
 
 // TestHoverLightsTheTabAndTheRowUnderThePointer checks the highlight follows

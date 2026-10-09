@@ -109,7 +109,7 @@ func (l rowLayout) lines() int {
 // opens at the offset issue's first line, divider included, and slides down
 // only as far as it must to keep every line of the selected issue drawn — which is
 // how a divider that appeared since the offset was computed, or a section too
-// short for the stacked dividers and an issue, still shows the chevron.
+// short for the stacked dividers and an issue, still shows the selection bar.
 func (l rowLayout) window(col Column, content, total int) (start, end int) {
 	if content < 1 {
 		content = 1

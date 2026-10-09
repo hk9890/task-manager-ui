@@ -1762,3 +1762,29 @@ func TestSliceWithOffsetDrawsTheScrolledOffIndicatorFromTheFirstStep(t *testing.
 		})
 	}
 }
+
+// TestContentHeaderRuleTakesTheAppliedTheme: the rule under the content header
+// is drawn in the border colour, so it follows the theme. A style built once
+// at package init kept the colour of the theme the styles package starts on.
+func TestContentHeaderRuleTakesTheAppliedTheme(t *testing.T) {
+	// Apply and the colour profile are process-wide, so this test is not parallel.
+	testui.ForceTrueColor(t)
+	t.Cleanup(func() {
+		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+			t.Fatalf("restore the initial styles: %v", err)
+		}
+	})
+
+	started := contentHeaderRule(3)
+	if err := styles.Apply("catppuccin-latte", "unicode"); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	applied := contentHeaderRule(3)
+
+	if want := lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render("───"); applied != want {
+		t.Fatalf("the rule is %q under catppuccin-latte, want the border colour %q", applied, want)
+	}
+	if applied == started {
+		t.Fatalf("the rule kept the colour of the theme the package starts on: %q", applied)
+	}
+}

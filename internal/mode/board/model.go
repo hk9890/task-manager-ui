@@ -289,8 +289,8 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 //
 // The scroll window is derived from the height, so a resize that shrinks the
 // terminal shrinks the window under an offset that was valid for the old one:
-// without the clamp the selected row and its chevron sit below the last drawn
-// row until the operator presses j or k.
+// without the clamp the selected row and its selection bar sit below the last
+// drawn row until the operator presses j or k.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -540,8 +540,9 @@ func (m *Model) settleAfterRefreshLoad() {
 // Only moveRow used to write scrollOffset, so a column that shrank under a
 // scrolled offset kept the old one: the renderer clamps the offset to the row
 // count, computes an empty window from it, and the column draws its border and
-// its header count with no rows and no chevron until the operator presses j or
-// k. Docs mode calls EnsureVisible from its own clamp for the same reason.
+// its header count with no rows and no selection bar until the operator
+// presses j or k. Docs mode calls EnsureVisible from its own clamp for the same
+// reason.
 func (m *Model) clampScrollOffsets() {
 	capacity := m.sectionItemCapacity()
 	for i := range m.columns {

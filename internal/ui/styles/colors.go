@@ -17,7 +17,6 @@ var (
 	TextPrimaryColor            lipgloss.Color
 	TextMutedColor              lipgloss.Color
 	TextSecondaryColor          lipgloss.Color
-	ShellTitleColor             lipgloss.Color
 	ShellTabActiveTextColor     lipgloss.Color
 	ShellTabActiveBgColor       lipgloss.Color
 	ShellTabInactiveColor       lipgloss.Color
@@ -60,7 +59,7 @@ var (
 	IssueStatusBlockedColor     lipgloss.Color
 	IssueStatusClosedColor      lipgloss.Color
 	IssueStatusDeferredColor    lipgloss.Color
-	// ShellRuleColor is the rule under the top bar and over the key legend.
+	// ShellRuleColor is the rule under the top bar.
 	ShellRuleColor lipgloss.Color
 	// ShellActionColor is a top-bar button's label.
 	ShellActionColor lipgloss.Color

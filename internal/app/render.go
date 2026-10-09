@@ -504,7 +504,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
 		"Mouse:",
-		"  click = select a row, switch to a tab, or focus a pane",
+		"  click = select a row, switch to a tab, press a top-bar button, or focus a pane",
 		"  second click on a row = open it",
 		"  wheel = move the selection, or scroll detail text and this help",
 		"  drag = select a box of text; letting go copies it",

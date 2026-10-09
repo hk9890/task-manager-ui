@@ -42,7 +42,7 @@ An issue's type, priority and status each render as a compact token plus a colou
 | Field | Token in the `unicode` and `ascii` sets | Source |
 |---|---|---|
 | Type | `B` bug, `T` task, `F` feature, `E` epic, `C` chore, `D` doc, `?` unknown | `renderhelpers.CompactIssueType` |
-| Priority | `P0`–`P3` | `renderhelpers.CompactPriority` |
+| Priority | `P0`–`P4` | `renderhelpers.CompactPriority` |
 | Status | `OPN`, `IP`, `BLK`, `CLS`, `RDY`, `DFR` | `renderhelpers.CompactIssueState` |
 | Status (dense rows) | `O`, `I`, `B`, `C`, `R`, `D` | `renderhelpers.CompactIssueStateNarrow` |
 
@@ -71,9 +71,10 @@ column below shows the `unicode` set:
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
-- A new marker is a field of `GlyphSet` with a value in all three sets. Every one but a letter
-  token is one cell wide, and a spinner's frame count divides ten, the length of the shell's frame
-  counter.
+- A new marker is a field of `GlyphSet` with a value in all three sets. A row marker that is not a
+  letter token is one cell wide; a toast glyph may be two, and `glyphCells`
+  (`internal/ui/toaster/toaster.go`) budgets for the wider. A spinner's frame count divides ten,
+  the length of the shell's frame counter.
 
 The rest is the same in every set, and each has one definition:
 

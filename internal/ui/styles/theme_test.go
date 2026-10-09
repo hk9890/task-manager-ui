@@ -38,7 +38,6 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 			"TextPrimaryColor":            TextPrimaryColor,
 			"TextMutedColor":              TextMutedColor,
 			"TextSecondaryColor":          TextSecondaryColor,
-			"ShellTitleColor":             ShellTitleColor,
 			"ShellTabActiveTextColor":     ShellTabActiveTextColor,
 			"ShellTabActiveBgColor":       ShellTabActiveBgColor,
 			"ShellTabInactiveColor":       ShellTabInactiveColor,

@@ -81,9 +81,20 @@ func TestGlyphSetIssueVocabulary(t *testing.T) {
 			t.Errorf("unicode Priority(%d) = %q, want %q", priority, got, want)
 		}
 	}
-	for priority, want := range map[int]string{-1: nerd.priority[0], 0: nerd.priority[0], 3: nerd.priority[3], 7: nerd.priority[3]} {
+	for priority, want := range map[int]string{-1: nerd.priority[0], 0: nerd.priority[0], 3: nerd.priority[3], 4: nerd.priority[4], 7: nerd.priority[4]} {
 		if got := nerd.Priority(priority); got != want {
 			t.Errorf("nerd Priority(%d) = %q, want %q", priority, got, want)
 		}
+	}
+
+	// The store accepts P0 to P4. Two of them behind one icon cannot be told
+	// apart on a row, which the letters of the other sets never allowed.
+	drawn := map[string]int{}
+	for priority := 0; priority <= 4; priority++ {
+		glyph := nerd.Priority(priority)
+		if other, ok := drawn[glyph]; ok {
+			t.Errorf("nerd draws P%d and P%d with the same icon %q", other, priority, glyph)
+		}
+		drawn[glyph] = priority
 	}
 }

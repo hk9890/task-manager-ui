@@ -368,6 +368,30 @@ func TestScrollWindowFollowsTheSelectionThroughALongList(t *testing.T) {
 	}
 }
 
+// Before the first resize the picker has no height and the renderer draws at
+// its own default. The window is the renderer's there too: a default of the
+// controller's own, counted in one-line rows, left the selection below the last
+// row drawn.
+func TestSelectionStaysOnScreenBeforeTheFirstResize(t *testing.T) {
+	t.Parallel()
+
+	names := make([]string, 0, 30)
+	for i := 0; i < 30; i++ {
+		names = append(names, fmt.Sprintf("store-%02d", i))
+	}
+	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries(names...)})
+	run(t, m, m.Init())
+
+	gutter, _ := styles.SelectionPrefix(true, false)
+	for i := 0; i < 29; i++ {
+		m.HandleKey(key("j"))
+		view := ansi.ReplaceAllString(m.View(0, "help"), "")
+		if got := strings.Count(view, "│"+gutter); got != 2 {
+			t.Fatalf("after %d moves the selection bar is on %d lines, want both lines of the selected row:\n%s", i+1, got, view)
+		}
+	}
+}
+
 // A row is two lines, so a content height can leave one line spare. The window
 // counts rows, not lines: at an odd and at an even content height the selected
 // row is drawn whole — its name and its path — after every move.

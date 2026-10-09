@@ -2,8 +2,10 @@ package styles
 
 import "strconv"
 
-// GlyphSet is the marker vocabulary a surface draws with. Every glyph but a
-// letter token is one cell wide, whatever the set.
+// GlyphSet is the marker vocabulary a surface draws with. A row marker — the
+// cursor, a spinner frame, an issue token that is not letters — is one cell
+// wide, whatever the set. A toast glyph may be two, as the success and error
+// marks of the unicode set are: the toaster budgets for the wider one.
 //
 // The set covers the markers that carry meaning: the selection bar, the
 // spinner, the toast severities and the issue vocabulary. Section borders, the
@@ -23,7 +25,8 @@ type GlyphSet struct {
 	// leaves status empty spells a status with its letters.
 	issueType        map[string]string
 	issueTypeUnknown string
-	// priority is P0 to P3; a set that leaves it empty spells "P<n>".
+	// priority is P0 to P4, every priority the store accepts, so that no two
+	// are drawn alike; a set that leaves it empty spells "P<n>".
 	priority      []string
 	status        map[string]string
 	statusUnknown string
@@ -80,6 +83,7 @@ var glyphSets = map[string]GlyphSet{
 			"", // nf-fa-angle_up
 			"", // nf-fa-minus
 			"", // nf-fa-angle_down
+			"", // nf-fa-angle_double_down
 		},
 		status: map[string]string{
 			"open":        "", // nf-fa-circle_o

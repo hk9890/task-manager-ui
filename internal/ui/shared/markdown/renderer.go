@@ -55,7 +55,7 @@ func renderMarkdownANSIMemoized(content string, width int) (string, error) {
 }
 
 // markdownCacheKey identifies one rendered result. dark is part of the key
-// because the style is chosen from the terminal background.
+// because the style is chosen from the applied theme (styles.Dark).
 type markdownCacheKey struct {
 	content string
 	width   int
@@ -118,10 +118,10 @@ func storeRenderedMarkdown(content string, width int, dark bool, rendered string
 // building it once. A fresh renderer was constructed on every call: 7.7ms and
 // 2.9MB for a ~20-section document, 77.5ms and 30MB for a 21KB description.
 //
-// The style follows the terminal background the way every lipgloss.
-// AdaptiveColor in this app does. It was pinned to "dark", so on a light
-// terminal every description, note and comment rendered in dark-theme colours
-// while the chrome around them adapted (docs/DESIGN-GUIDE.md, Colour roles).
+// The style follows the applied theme the way every colour role in this app
+// does. It was pinned to "dark", so under a light theme every description,
+// note and comment rendered in dark-theme colours while the chrome around
+// them did not (docs/DESIGN-GUIDE.md, Colour roles).
 func termRendererFor(width int, dark bool) (*lockedRenderer, error) {
 	key := markdownCacheKey{width: width, dark: dark}
 
@@ -147,8 +147,8 @@ func termRendererFor(width int, dark bool) (*lockedRenderer, error) {
 	return locked, nil
 }
 
-// glamourStyleName maps the terminal background to a glamour standard style,
-// the same split lipgloss.AdaptiveColor makes for every other colour here.
+// glamourStyleName maps the background the applied theme draws on to a glamour
+// standard style.
 func glamourStyleName(dark bool) string {
 	if dark {
 		return "dark"

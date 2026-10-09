@@ -98,8 +98,8 @@ func Render(state State) string {
 		//
 		// (1) TotalIsExact=false (paginated column, e.g. Done with load-more):
 		//     show "loaded of total" — len(col.Rows) / col.Total — so the user
-		//     sees real pagination progress, not the window size. The chevron
-		//     visibility property implicitly communicates window clip.
+		//     sees real pagination progress, not the window size. The selection
+		//     bar's visibility property implicitly communicates window clip.
 		//
 		// (2) TotalIsExact=true and window clips (visibleIssues < len(col.Rows)):
 		//     show "visible of total" — visibleIssues / col.Total — so the user

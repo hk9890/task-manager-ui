@@ -564,6 +564,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerTicking = false
 		return m, modeCmd
 	case tea.WindowSizeMsg:
+		// The buttons stand flush right, so a new width moves them from under a
+		// pointer that sent no event. The tabs stay where they are.
+		if msg.Width != m.width {
+			m.hoverAction = ""
+		}
 		m.sizeKnown = true
 		m.width = msg.Width
 		m.height = msg.Height
