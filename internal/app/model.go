@@ -1025,8 +1025,15 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 	//
 	// The store watch is a third chain of that kind: a swallowed change stops
 	// the wait from re-arming, and the watch is dead for the rest of the session.
+	//
+	// The watch also starts loads at moments the operator does not choose, so
+	// one can land under an overlay opened a moment later. A swallowed detail
+	// result leaves Detail loading for good, which stops every later reload of
+	// it, the reload key included. A swallowed selection leaves the shell
+	// acting on the row the reload moved the cursor away from.
 	switch msg.(type) {
 	case loading.TickMsg, refreshTickMsg, storeChangedMsg, storeWatchEndedMsg,
+		detailLoadedMsg, mode.SelectionChangedMsg,
 		tea.WindowSizeMsg, toaster.DismissMsg,
 		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg,
 		storepickermode.CreateMsg, storeCreatedMsg:

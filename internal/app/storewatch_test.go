@@ -241,6 +241,109 @@ func TestStoreChangeReloadsTheOpenDetail(t *testing.T) {
 	}
 }
 
+// Search holds an auto-refresh back while its query is typed. The change is
+// still owed once the typing ends.
+func TestStoreChangeWhileTheSearchQueryIsTypedReloadsWhenTheTypingEnds(t *testing.T) {
+	t.Parallel()
+
+	repo := newWatchedRepository()
+	m, _ := watchedModel(t, repo, RuntimeOptions{})
+	// Two steps: a landing search ends the typing, so the first one lands first.
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlAt}})
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")}})
+	if m.active != mode.Search {
+		t.Fatalf("setup: active = %v, want Search", m.active)
+	}
+
+	mark := repo.CallCount()
+	m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+	if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 0 {
+		t.Fatalf("search reads while the query is typed = %d, want 0", got)
+	}
+
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}})
+	if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 1 {
+		t.Errorf("search reads once the typing ended = %d, want 1: the change was dropped", got)
+	}
+}
+
+// The Search preview draws the selected issue from the detail the shell holds,
+// so that detail must follow the results it sits next to.
+func TestStoreChangeReloadsTheSearchPreviewWithTheResults(t *testing.T) {
+	t.Parallel()
+
+	repo := newWatchedRepository()
+	m, _ := watchedModel(t, repo, RuntimeOptions{})
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlAt}})
+	if m.active != mode.Search || firstSelectionID(m, mode.Search) != "tm-1" {
+		t.Fatalf("setup: active = %v, selection = %q", m.active, firstSelectionID(m, mode.Search))
+	}
+
+	mark := repo.CallCount()
+	m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+	if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 1 {
+		t.Errorf("search reads after one store change = %d, want 1", got)
+	}
+	if got := repo.CallCountSince(mark, fakes.MethodIssue); got != 1 {
+		t.Errorf("preview reads after one store change = %d, want 1: the preview is behind its row", got)
+	}
+
+	mark = repo.CallCount()
+	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 40}})
+	if got := storeReads(repo, mark); got != 0 {
+		t.Errorf("store reads on a later message = %d, want 0", got)
+	}
+}
+
+// The watch starts a load at a moment the operator does not choose, so its
+// result can land under an overlay opened a moment later.
+func TestALoadAStoreChangeStartedLandsUnderAnOverlay(t *testing.T) {
+	t.Parallel()
+
+	for name, open := range map[string]func(m *Model){
+		"help modal":   func(m *Model) { m.showHelp = true },
+		"action modal": func(m *Model) { m.showActionModal = true },
+	} {
+		t.Run(name+"/detail", func(t *testing.T) {
+			t.Parallel()
+
+			repo := newWatchedRepository()
+			m, _ := watchedModel(t, repo, RuntimeOptions{})
+			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+			if m.active != mode.Detail {
+				t.Fatalf("setup: active = %v, want Detail", m.active)
+			}
+
+			next, reload := m.Update(storeChangedMsg{})
+			m = next.(Model)
+			open(&m)
+			m = applyMessages(t, m, runBatch(reload))
+
+			if m.detail.IsLoading() {
+				t.Error("the overlay swallowed the detail result: Detail loads for good, and no later change or reload key reaches it")
+			}
+		})
+
+		t.Run(name+"/selection", func(t *testing.T) {
+			t.Parallel()
+
+			repo := newWatchedRepository()
+			m, _ := watchedModel(t, repo, RuntimeOptions{})
+
+			next, reload := m.Update(storeChangedMsg{})
+			m = next.(Model)
+			open(&m)
+			seedReady(repo.TrackedRepository, "tm-1", "Retitled by another process", "task", 1)
+			m = applyMessages(t, m, runBatch(reload))
+
+			selection := m.selectedByMode[mode.Board]
+			if selection == nil || selection.Issue.Title != "Retitled by another process" {
+				t.Errorf("the overlay swallowed the selection of the reloaded board: the shell still acts on %+v", selection)
+			}
+		})
+	}
+}
+
 func TestStoreWatchEndStopsTheWaitAndAStaleStoreCannotEndIt(t *testing.T) {
 	t.Parallel()
 

@@ -100,7 +100,7 @@ func (m *Model) shouldRefreshSurface(surface mode.ID) bool {
 	if !ok {
 		return true
 	}
-	if state.dirty {
+	if state.dirty || m.behindStore(surface) {
 		return true
 	}
 	if state.lastRefresh.IsZero() {

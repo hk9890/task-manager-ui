@@ -48,16 +48,28 @@ func (m *Model) refreshAfterStoreChangeCmd() tea.Cmd {
 	if m.showHelp || m.showActionModal {
 		return nil
 	}
-	state, tracked := m.refreshStateBySurface[m.active]
-	if !tracked || state.loadedAtChange == m.storeChangeSeq || m.surfaceLoading(m.active) {
+	if !m.behindStore(m.active) || m.surfaceLoading(m.active) {
 		return nil
 	}
-	// Recorded here and not only by trackSurfaceLoads: a refresh that starts no
-	// load, such as a search with no query, must not be issued again on every
-	// message.
+	cmd := m.refreshActiveSurfaceCmd()
+	if cmd == nil {
+		// The surface cannot take the change yet, such as a search whose query
+		// is being typed. The change stays owed and the next message asks again.
+		return nil
+	}
+	// Recorded here and not only by trackSurfaceLoads, which sees no load start
+	// when this load follows the previous one within a single update.
+	state := m.refreshStateBySurface[m.active]
 	state.loadedAtChange = m.storeChangeSeq
 	m.refreshStateBySurface[m.active] = state
-	return m.refreshActiveSurfaceCmd()
+	return cmd
+}
+
+// behindStore reports whether the store changed after the latest load of
+// surface started. A surface the shell does not track is never behind.
+func (m *Model) behindStore(surface mode.ID) bool {
+	state, tracked := m.refreshStateBySurface[surface]
+	return tracked && state.loadedAtChange != m.storeChangeSeq
 }
 
 // trackSurfaceLoads records, for each surface whose load started in this

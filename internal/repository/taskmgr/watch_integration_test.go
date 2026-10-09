@@ -53,16 +53,14 @@ func TestWatchChangesSignalsAWriteFromAnotherHandle(t *testing.T) {
 	}
 
 	cancel()
-	select {
-	case _, open := <-changes:
-		if open {
-			// A signal that was already pending; the close follows it.
-			if _, open = <-changes; open {
-				t.Fatal("the channel stayed open after its context was cancelled")
-			}
+	// A signal that was already pending comes first; the close follows it.
+	deadline := time.After(5 * time.Second)
+	for open := true; open; {
+		select {
+		case _, open = <-changes:
+		case <-deadline:
+			t.Fatal("the channel did not close within 5s of the cancel")
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the channel did not close within 5s of the cancel")
 	}
 }
 
