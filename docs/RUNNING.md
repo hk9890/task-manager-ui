@@ -138,10 +138,10 @@ store large enough to page.
 **Proves:** `sectionItemCapacity()` scales with the height the mode receives (`height - 3`, floored
 at 1, and `20` before the first `WindowSizeMsg`), and a refresh re-reads it.
 
-Seed a store with more than 200 closed issues. The mode receives the terminal height minus three
-rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-6 of M`, where
-`M` is the true closed total: `34 of M` at height 40, `24 of M` at height 30. Keep the app running,
-resize to 200 rows, press `r`: the header must read `194 of M`, with `M` unchanged.
+Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
+rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-7 of M`, where
+`M` is the true closed total: `33 of M` at height 40, `23 of M` at height 30. Keep the app running,
+resize to 200 rows, press `r`: the header must read `193 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
 `DashboardOptions.ClosedLimit`, or the `WindowSizeMsg` handler never saw the new size — both in

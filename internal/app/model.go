@@ -75,7 +75,7 @@ type Model struct {
 
 	// hoverTab is the header tab under the pointer, or "".
 	hoverTab mode.ID
-	// hoverAction is the shell action of the top-bar button under the
+	// hoverAction is the name of the menu-bar button under the
 	// pointer, or "".
 	hoverAction string
 
@@ -564,11 +564,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerTicking = false
 		return m, modeCmd
 	case tea.WindowSizeMsg:
-		// The buttons stand flush right, so a new width moves them from under a
-		// pointer that sent no event. The tabs stay where they are.
-		if msg.Width != m.width {
-			m.hoverAction = ""
-		}
 		m.sizeKnown = true
 		m.width = msg.Width
 		m.height = msg.Height
@@ -748,8 +743,8 @@ var issueScopedShellActions = []string{
 	config.ShellActionCommentIssue,
 }
 
-// The three shell actions the top bar also offers as buttons. The key switch
-// and the bar both run them from here, so a button does what its key does.
+// The shell actions the menu bar also offers as buttons. The key switch and
+// the bar both run them from here, so a button does what its key does.
 
 func (m *Model) openHelp() tea.Cmd {
 	m.showHelp = true
@@ -769,6 +764,23 @@ func (m *Model) openStorePicker() tea.Cmd {
 	// Re-listed on every open, not cached: a store registered from another
 	// terminal since the last look must appear without a restart.
 	return m.storePicker.Init()
+}
+
+func (m *Model) quit() tea.Cmd {
+	return tea.Quit
+}
+
+// reloadActiveSurface does what the reload key of the surface on screen does.
+func (m *Model) reloadActiveSurface() tea.Cmd {
+	switch m.active {
+	case mode.Detail:
+		return m.reloadDetailCmd()
+	case mode.Search:
+		return m.scoped(m.search.Reload())
+	case mode.Docs:
+		return m.scoped(m.docs.Reload())
+	}
+	return m.scoped(m.board.Reload())
 }
 
 func (m *Model) requestCreateIssue() tea.Cmd {
@@ -851,7 +863,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 
 	switch {
 	case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
-		return m, batchCmds(modeCmd, tea.Quit)
+		return m, batchCmds(modeCmd, m.quit())
 	case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
 		return m, batchCmds(modeCmd, m.openHelp())
 	case m.keys.Match(config.ShellContext, config.ShellActionStorePicker, msg):

@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/version"
 )
 
 // View renders the root shell.
@@ -63,7 +64,7 @@ func (m Model) View() string {
 // renderSurface renders whatever surface is active, without overlays.
 //
 // The picker is not a tab and not a drill-in: it renders instead of the shell,
-// so the top bar and the legend are absent while it is up and it draws its own
+// so the header and the legend are absent while it is up and it draws its own
 // legend (docs/DESIGN-GUIDE.md).
 func (m Model) renderSurface() string {
 	if m.active == mode.StorePicker {
@@ -73,14 +74,19 @@ func (m Model) renderSurface() string {
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
 }
 
-// The top bar's geometry. renderHeader draws from it, and tabAt and barCells
+// The header's geometry. renderHeader draws from it, and tabAt and barCells
 // read a column back through it, so a click lands on what is drawn there.
 const (
+	// The three header lines: the menu bar, the rule, the view tabs.
+	headerMenuRow = 0
+	headerTabsRow = 2
+
+	headerMenuStart   = 1
 	headerSpinnerCols = 2
 	headerTabPadding  = 1
 	headerTabGap      = 1
-	// headerBarGap is the least space between the last tab and the first
-	// button; a button that would close it is dropped.
+	// headerBarGap is the least space between the last button and the version,
+	// and between the last tab and the context.
 	headerBarGap = 2
 	// barSeparator stands between two buttons, as it does between two key
 	// hints on the legend.
@@ -88,27 +94,48 @@ const (
 	ruleGlyph    = "─"
 )
 
-// tabLabels names each browse tab on the top bar.
+// tabLabels names each browse tab on the tab line.
 var tabLabels = map[mode.ID]string{
 	mode.Board:  "Board",
 	mode.Docs:   "Docs",
 	mode.Search: "Search",
 }
 
-// barAction is one button on the right of the top bar: what the shell can do
-// that is not about the row under the cursor. A button carries the key bound
-// to its action — the bar is a second way to reach the same thing, never the
-// only way.
+// barAction is one button on the menu bar: what the shell can do that is not
+// about the row under the cursor. A button carries the key bound to its
+// action — the bar is a second way to reach the same thing, never the only
+// way.
 type barAction struct {
-	label  string
+	label string
+	// action names the button: the shell action it runs, where it has one.
 	action string
+	key    func(Model) string
 	run    func(*Model) tea.Cmd
 }
 
+const barActionReload = "reload"
+
+func shellKey(action string) func(Model) string {
+	return func(m Model) string { return m.keys.DisplayPrimary(config.ShellContext, action) }
+}
+
 var barActions = []barAction{
-	{label: "new", action: config.ShellActionCreateIssue, run: (*Model).requestCreateIssue},
-	{label: "stores", action: config.ShellActionStorePicker, run: (*Model).openStorePicker},
-	{label: "help", action: config.ShellActionHelp, run: (*Model).openHelp},
+	{label: "stores", action: config.ShellActionStorePicker, key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker},
+	{label: "reload", action: barActionReload, key: Model.reloadKey, run: (*Model).reloadActiveSurface},
+	{label: "help", action: config.ShellActionHelp, key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
+	{label: "quit", action: config.ShellActionQuit, key: shellKey(config.ShellActionQuit), run: (*Model).quit},
+}
+
+// reloadKey is the key that reloads the active surface: each surface binds its
+// own.
+func (m Model) reloadKey() string {
+	switch m.active {
+	case mode.Detail:
+		return m.keys.DisplayPrimary(config.ShellContext, config.ShellActionReloadDetail)
+	case mode.Search:
+		return m.keys.DisplayPrimary(config.SearchContext, config.SearchActionReload)
+	}
+	return m.keys.DisplayPrimary(config.BoardContext, config.BoardActionReload)
 }
 
 // barCell is a button's place on the bar: its text, and the columns it covers.
@@ -135,32 +162,19 @@ func headerTabsEnd() int {
 	return end
 }
 
-// barCells places the buttons flush right. The tabs come first: a button that
-// does not fit beside them is dropped, the leftmost first, so help is the last
-// to go.
+// barCells places the buttons from the left edge. A button that does not fit
+// is dropped, the rightmost first.
 func (m Model) barCells() []barCell {
 	cells := make([]barCell, 0, len(barActions))
+	x := headerMenuStart
 	for _, action := range barActions {
-		cells = append(cells, barCell{action: action, key: m.keys.DisplayPrimary(config.ShellContext, action.action)})
-	}
-
-	free := m.width - headerTabsEnd() - headerBarGap
-	for len(cells) > 0 {
-		total := (len(cells) - 1) * lipgloss.Width(barSeparator)
-		for _, cell := range cells {
-			total += lipgloss.Width(cell.text())
+		cell := barCell{action: action, key: action.key(m), x0: x}
+		cell.x1 = x + lipgloss.Width(cell.text())
+		if cell.x1 > m.width {
+			break
 		}
-		if total > free {
-			cells = cells[1:]
-			continue
-		}
-		x := m.width - total
-		for idx := range cells {
-			cells[idx].x0 = x
-			cells[idx].x1 = x + lipgloss.Width(cells[idx].text())
-			x = cells[idx].x1 + lipgloss.Width(barSeparator)
-		}
-		break
+		cells = append(cells, cell)
+		x = cell.x1 + lipgloss.Width(barSeparator)
 	}
 	return cells
 }
@@ -183,10 +197,51 @@ func (m Model) headerSpinnerCell() string {
 	return style.Render("  ")
 }
 
-// renderHeader draws the two lines above the workspace: the top bar — the tabs
-// on the left, the buttons on the right — and the rule that carries the
-// context.
+// renderHeader draws the three lines above the workspace: the menu bar, the
+// rule under it, and the view tabs with the context.
 func (m Model) renderHeader() string {
+	return m.renderMenuBar() + "\n" + m.renderRule() + "\n" + m.renderTabs()
+}
+
+// renderMenuBar draws the buttons from the left and the version flush right.
+// The version is the first to go when the two do not fit.
+func (m Model) renderMenuBar() string {
+	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
+	muted := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
+
+	cells := m.barCells()
+	bar := ""
+	for idx, cell := range cells {
+		lead := muted.Render(barSeparator)
+		if idx == 0 {
+			lead = strings.Repeat(" ", headerMenuStart)
+		}
+		labelStyle := label
+		if m.hoverAction == cell.action.action {
+			labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
+		}
+		bar += lead + labelStyle.Render(cell.action.label)
+		if cell.key != "" {
+			bar += " " + muted.Render(cell.key)
+		}
+	}
+
+	free := m.width - lipgloss.Width(bar) - lipgloss.Width(version.Version)
+	if len(cells) == len(barActions) && free >= headerBarGap {
+		bar += strings.Repeat(" ", free) + muted.Render(version.Version)
+	}
+	return bar
+}
+
+// renderRule is the line between the menu bar and the view tabs.
+func (m Model) renderRule() string {
+	return lipgloss.NewStyle().Foreground(styles.ShellRuleColor).Render(strings.Repeat(ruleGlyph, max(0, m.width)))
+}
+
+// renderTabs draws the view tabs on the left and, flush right, the store and
+// what the surface shows. The tabs come first: the context is cut to what is
+// left beside them.
+func (m Model) renderTabs() string {
 	tab := func(id mode.ID) string {
 		base := lipgloss.NewStyle().Padding(0, headerTabPadding)
 		switch {
@@ -207,46 +262,14 @@ func (m Model) renderHeader() string {
 		}
 		parts = append(parts, tab(id))
 	}
-	bar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+	line := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 
-	if cells := m.barCells(); len(cells) > 0 {
-		label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
-		key := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
-		buttons := make([]string, 0, len(cells))
-		for _, cell := range cells {
-			labelStyle := label
-			if m.hoverAction == cell.action.action {
-				labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
-			}
-			button := labelStyle.Render(cell.action.label)
-			if cell.key != "" {
-				button += " " + key.Render(cell.key)
-			}
-			buttons = append(buttons, button)
-		}
-		bar += strings.Repeat(" ", cells[0].x0-lipgloss.Width(bar)) + strings.Join(buttons, key.Render(barSeparator))
-	}
-
-	return bar + "\n" + m.renderRule()
-}
-
-// renderRule is the line under the top bar: a rule, with the store and what
-// the surface shows set into its left end.
-func (m Model) renderRule() string {
-	context := m.headerContext()
-	contextStyle := lipgloss.NewStyle().Foreground(styles.ShellContextColor)
-	if m.width <= 0 {
-		return contextStyle.Render(context)
-	}
-
-	rule := lipgloss.NewStyle().Foreground(styles.ShellRuleColor)
-	lead := strings.Repeat(ruleGlyph, 2) + " "
-	context = textutil.TruncateString(context, m.width-lipgloss.Width(lead)-1)
+	context := textutil.TruncateString(m.headerContext(), m.width-headerTabsEnd()-headerBarGap)
 	if context == "" {
-		return rule.Render(strings.Repeat(ruleGlyph, m.width))
+		return line
 	}
-	fill := max(0, m.width-lipgloss.Width(lead)-lipgloss.Width(context)-1)
-	return rule.Render(lead) + contextStyle.Render(context) + " " + rule.Render(strings.Repeat(ruleGlyph, fill))
+	gap := m.width - headerTabsEnd() - lipgloss.Width(context)
+	return line + strings.Repeat(" ", gap) + lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(context)
 }
 
 // renderBody renders the active surface. Like every other renderer here it is
@@ -504,7 +527,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
 		"Mouse:",
-		"  click = select a row, switch to a tab, press a top-bar button, or focus a pane",
+		"  click = select a row, switch to a tab, press a menu-bar button, or focus a pane",
 		"  second click on a row = open it",
 		"  wheel = move the selection, or scroll detail text and this help",
 		"  drag = select a box of text; letting go copies it",
@@ -555,12 +578,15 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 	}
 	help := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionHelp), Desc: "help"}
 	quit := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"}
+	// Creating an issue has no button: the legend is where its key is named.
+	create := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionCreateIssue), Desc: "new"}
 
 	switch active {
 	case mode.Docs:
 		return []styles.KeyHint{
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "docs"},
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			create,
 			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
 		}
@@ -587,6 +613,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			{Key: pair(config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), Desc: "columns"},
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "issues"},
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			create,
 			{Key: primary(config.ShellContext, config.ShellActionToggleSearch), Desc: "search"},
 			help, quit,
 		}

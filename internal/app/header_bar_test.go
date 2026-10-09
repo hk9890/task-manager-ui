@@ -1,8 +1,8 @@
 package app
 
-// The geometry of the two header lines: what the top bar keeps as the terminal
-// narrows, and that neither line reaches past it. What a click on the bar does
-// is in mouse_test.go.
+// The geometry of the three header lines: what the menu bar and the tab line
+// keep as the terminal narrows, and that no line reaches past it. What a click
+// on the header does is in mouse_test.go.
 //
 // Direct assertions rather than goldens: the property holds at every width, and
 // a snapshot shows three of them.
@@ -18,6 +18,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/version"
 )
 
 // newHeaderShell is a shell with one ready issue, a store name and no size yet:
@@ -36,13 +37,14 @@ func newHeaderShell(t *testing.T, cfg config.Model) Model {
 	return applyMessages(t, m, runBatch(m.Init()))
 }
 
-// headerLines renders the header at width and returns its lines.
+// headerLines renders the header at width and returns its lines, without
+// colour.
 func headerLines(m Model, width int) []string {
 	m.width = width
-	return strings.Split(m.renderHeader(), "\n")
+	return strings.Split(testui.AnsiEscapePattern.ReplaceAllString(m.renderHeader(), ""), "\n")
 }
 
-// drawnButtons is the labels of the buttons the top bar draws, left to right,
+// drawnButtons is the labels of the buttons the menu bar draws, left to right,
 // read back from the rendered line and not from barCells.
 func drawnButtons(t *testing.T, m Model, bar string) []string {
 	t.Helper()
@@ -50,7 +52,7 @@ func drawnButtons(t *testing.T, m Model, bar string) []string {
 	var labels []string
 	last := -1
 	for _, action := range barActions {
-		text := action.label + " " + m.keys.DisplayPrimary(config.ShellContext, action.action)
+		text := action.label + " " + action.key(m)
 		if !strings.Contains(bar, text) {
 			continue
 		}
@@ -64,10 +66,10 @@ func drawnButtons(t *testing.T, m Model, bar string) []string {
 	return labels
 }
 
-// TestHeaderIsTwoLinesNoWiderThanTheTerminal renders the header across the
+// TestHeaderIsThreeLinesNoWiderThanTheTerminal renders the header across the
 // widths a terminal is resized through. The workspace height is what is left
-// under it, so a third line or a wrapped one pushes the footer off the screen.
-func TestHeaderIsTwoLinesNoWiderThanTheTerminal(t *testing.T) {
+// under it, so a fourth line or a wrapped one pushes the footer off the screen.
+func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
@@ -76,115 +78,94 @@ func TestHeaderIsTwoLinesNoWiderThanTheTerminal(t *testing.T) {
 		m.active = active
 		for width := 0; width <= 220; width++ {
 			lines := headerLines(m, width)
-			if len(lines) != 2 {
+			if len(lines) != 3 {
 				t.Fatalf("%s at width %d: the header is %d lines:\n%s", active, width, len(lines), strings.Join(lines, "\n"))
+			}
+			if got := lipgloss.Width(lines[1]); got != width || strings.Trim(lines[1], "─") != "" {
+				t.Fatalf("%s at width %d: the rule is %q", active, width, lines[1])
+			}
+			if got := lipgloss.Width(lines[headerMenuRow]); got > width {
+				t.Fatalf("%s at width %d: the menu bar is %d cells wide:\n%s", active, width, got, lines[headerMenuRow])
 			}
 
 			// The tabs are never dropped: a terminal narrower than the tab
-			// strip cuts them off at its edge. From there up both lines fit.
-			if width < headerTabsEnd() {
-				continue
-			}
-			for idx, line := range lines {
-				if got := lipgloss.Width(line); got > width {
-					t.Fatalf("%s at width %d: header line %d is %d cells wide:\n%s", active, width, idx, got, line)
-				}
-			}
+			// strip cuts them off at its edge. From there up the line fits.
+			tabs := lines[headerTabsRow]
 			for _, label := range []string{" Board ", " Docs ", " Search "} {
-				if !strings.Contains(lines[0], label) {
-					t.Fatalf("%s at width %d: the top bar lost the tab %q:\n%s", active, width, label, lines[0])
+				if !strings.Contains(tabs, label) {
+					t.Fatalf("%s at width %d: the tab line lost the tab %q:\n%s", active, width, label, tabs)
 				}
 			}
-			if len(drawnButtons(t, m, lines[0])) > 0 && lipgloss.Width(lines[0]) != width {
-				t.Fatalf("%s at width %d: the buttons are not flush right, the bar is %d cells:\n%s",
-					active, width, lipgloss.Width(lines[0]), lines[0])
+			if got := lipgloss.Width(tabs); width >= headerTabsEnd() && got > width {
+				t.Fatalf("%s at width %d: the tab line is %d cells wide:\n%s", active, width, got, tabs)
 			}
 		}
 	}
 }
 
-// TestBarButtonsDropLeftmostFirstAndNeverTouchTheTabs narrows the terminal one
-// column at a time. The tabs come first: a button that does not fit beside them
-// goes, new before stores before help, and what stays keeps its gap.
-func TestBarButtonsDropLeftmostFirstAndNeverTouchTheTabs(t *testing.T) {
+// TestMenuBarDropsTheVersionThenTheRightmostButton narrows the terminal one
+// column at a time. The version goes first, then quit, help, reload: stores is
+// the last button standing.
+func TestMenuBarDropsTheVersionThenTheRightmostButton(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
-	all := []string{"new", "stores", "help"}
+	all := []string{"stores", "reload", "help", "quit"}
 
-	// The width each count of buttons first fits at, read from the render.
-	firstFit := map[int]int{}
-	previous := 0
+	previous, hadVersion := 0, false
 	for width := 0; width <= 220; width++ {
-		bar := headerLines(m, width)[0]
+		bar := headerLines(m, width)[headerMenuRow]
 		drawn := drawnButtons(t, m, bar)
 
-		if want := all[len(all)-len(drawn):]; strings.Join(drawn, ",") != strings.Join(want, ",") {
-			t.Fatalf("at width %d the bar draws %v, want the rightmost %d of %v:\n%s", width, drawn, len(drawn), all, bar)
+		if want := all[:len(drawn)]; strings.Join(drawn, ",") != strings.Join(want, ",") {
+			t.Fatalf("at width %d the bar draws %v, want the leftmost %d of %v:\n%s", width, drawn, len(drawn), all, bar)
 		}
-		if len(drawn) < previous {
-			t.Fatalf("the bar lost a button as the terminal grew to %d: %v", width, drawn)
+		if len(drawn) < previous || len(drawn) > previous+1 {
+			t.Fatalf("at width %d the bar went from %d buttons to %d", width, previous, len(drawn))
 		}
-		if len(drawn) > previous+1 {
-			t.Fatalf("the bar gained %d buttons in one column, at width %d", len(drawn)-previous, width)
-		}
-		if len(drawn) > previous {
-			firstFit[len(drawn)] = width
-		}
-		previous = len(drawn)
 
-		// What barCells says is what is drawn, and none of it is a tab's.
+		// What barCells says is what is drawn, and a button that first fits
+		// ends on the last column.
 		m.width = width
 		cells := m.barCells()
 		if len(cells) != len(drawn) {
 			t.Fatalf("at width %d barCells places %d buttons and the bar draws %d:\n%s", width, len(cells), len(drawn), bar)
 		}
-		searchX := 0
-		if len(cells) > 0 {
-			searchX, _ = testui.FindCell(t, bar, " Search ")
-		}
 		for _, cell := range cells {
-			x, _ := testui.FindCell(t, bar, cell.text())
-			if cell.x0 != x || cell.x1 != x+lipgloss.Width(cell.text()) {
+			if x, _ := testui.FindCell(t, bar, cell.text()); cell.x0 != x || cell.x1 != x+lipgloss.Width(cell.text()) {
 				t.Fatalf("at width %d %q is drawn at column %d and placed at [%d, %d)", width, cell.text(), x, cell.x0, cell.x1)
 			}
-			if gap := cell.x0 - (searchX + len(" Search ")); gap < headerBarGap {
-				t.Fatalf("at width %d %q starts %d cells after the last tab, want at least %d:\n%s", width, cell.text(), gap, headerBarGap, bar)
-			}
-			if cell.x1 > width {
-				t.Fatalf("at width %d %q ends at column %d", width, cell.text(), cell.x1)
-			}
-			for column := cell.x0; column < cell.x1; column++ {
-				if tab, ok := m.tabAt(column); ok {
-					t.Fatalf("at width %d column %d is both the %q button and the %q tab", width, column, cell.text(), tab)
-				}
-			}
 		}
+		if len(drawn) > previous && cells[len(cells)-1].x1 != width {
+			t.Fatalf("at width %d the bar gained %q, which ends at column %d", width, drawn[len(drawn)-1], cells[len(cells)-1].x1)
+		}
+		previous = len(drawn)
+
+		// The version stands flush right, clear of the buttons, or not at all.
+		buttonsEnd := 0
+		if len(cells) > 0 {
+			buttonsEnd = cells[len(cells)-1].x1
+		}
+		hasVersion := strings.HasSuffix(bar, version.Version) && lipgloss.Width(bar) == width
+		fits := len(drawn) == len(all) && width-buttonsEnd-lipgloss.Width(version.Version) >= headerBarGap
+		if hasVersion != fits {
+			t.Fatalf("at width %d with %v the version is drawn %v, want %v:\n%s", width, drawn, hasVersion, fits, bar)
+		}
+		if hadVersion && !hasVersion {
+			t.Fatalf("the bar lost the version as the terminal grew to %d", width)
+		}
+		hadVersion = hasVersion
 	}
 
-	if previous != len(all) {
-		t.Fatalf("at width 220 the bar draws %d buttons, want all %d", previous, len(all))
-	}
-	// Exactly fitting: the first width a button is drawn at leaves the gap and
-	// not a cell more, and one column less drops it.
-	for count := 1; count <= len(all); count++ {
-		width := firstFit[count]
-		bar := headerLines(m, width)[0]
-		m.width = width
-		searchX, _ := testui.FindCell(t, bar, " Search ")
-		if gap := m.barCells()[0].x0 - (searchX + len(" Search ")); gap != headerBarGap {
-			t.Errorf("%d buttons first fit at width %d with a gap of %d cells, want exactly %d:\n%s", count, width, gap, headerBarGap, bar)
-		}
-		if got := len(drawnButtons(t, m, headerLines(m, width-1)[0])); got != count-1 {
-			t.Errorf("at width %d, one short of fitting %d buttons, the bar draws %d", width-1, count, got)
-		}
+	if previous != len(all) || !hadVersion {
+		t.Fatalf("at width 220 the bar draws %d buttons and the version %v, want all of it", previous, hadVersion)
 	}
 }
 
-// TestBarButtonsMeasureAWideKeyName rebinds help to a key with a long display
-// name. The button is placed by what it draws, so it is still flush right and
-// the others are dropped sooner to make room for it.
-func TestBarButtonsMeasureAWideKeyName(t *testing.T) {
+// TestMenuBarMeasuresAWideKeyName rebinds help to a key with a long display
+// name. A button is placed by what it draws, so quit moves right by what the
+// name added.
+func TestMenuBarMeasuresAWideKeyName(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.Default()
@@ -194,81 +175,79 @@ func TestBarButtonsMeasureAWideKeyName(t *testing.T) {
 	wide := newHeaderShell(t, cfg)
 	narrow := newHeaderShell(t, config.Default())
 
-	text := "help " + wide.keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp)
-	grew := lipgloss.Width(text) - lipgloss.Width("help "+narrow.keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp))
+	quit := "quit " + wide.keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit)
+	grew := lipgloss.Width(wide.keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp)) -
+		lipgloss.Width(narrow.keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp))
 	if grew <= 0 {
-		t.Fatalf("fixture: %q is no wider than the default help button", text)
+		t.Fatal("fixture: the rebound help key is no wider than the default")
 	}
 
-	for width := headerTabsEnd(); width <= 220; width++ {
-		bar := headerLines(wide, width)[0]
-		if got := lipgloss.Width(bar); got > width {
-			t.Fatalf("at width %d the bar is %d cells wide:\n%s", width, got, bar)
-		}
-		drawn := drawnButtons(t, wide, bar)
-		if len(drawn) == 0 {
-			continue
-		}
-		if !strings.HasSuffix(bar, text) {
-			t.Fatalf("at width %d the bar does not end on %q:\n%s", width, text, bar)
-		}
-		// The same buttons the default bar draws in a terminal narrower by
-		// what the key name added.
-		if want := drawnButtons(t, narrow, headerLines(narrow, width-grew)[0]); len(drawn) != len(want) {
-			t.Fatalf("at width %d the bar draws %v; the default bar draws %v at width %d", width, drawn, want, width-grew)
+	wideX, _ := testui.FindCell(t, headerLines(wide, 220)[headerMenuRow], quit)
+	narrowX, _ := testui.FindCell(t, headerLines(narrow, 220)[headerMenuRow], quit)
+	if wideX-narrowX != grew {
+		t.Fatalf("quit is drawn at column %d, and at %d with the default key; want it %d cells further right", wideX, narrowX, grew)
+	}
+}
+
+// TestReloadButtonShowsTheKeyOfTheActiveSurface: each surface binds its own
+// reload key, and the button names the one that works where the operator is.
+func TestReloadButtonShowsTheKeyOfTheActiveSurface(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
+		Shell:  map[string][]string{config.ShellActionReloadDetail: {"f5"}},
+		Search: map[string][]string{config.SearchActionReload: {"f6"}},
+	})
+	m := newHeaderShell(t, cfg)
+
+	for active, want := range map[mode.ID]string{mode.Board: "reload r", mode.Docs: "reload r", mode.Search: "reload f6", mode.Detail: "reload f5"} {
+		m.active = active
+		if bar := headerLines(m, 120)[headerMenuRow]; !strings.Contains(bar, want+" ") {
+			t.Errorf("on %s the bar does not draw %q:\n%s", active, want, bar)
 		}
 	}
 }
 
-// TestHeaderRuleSpansTheTerminalAndCutsItsContext pins the line under the top
-// bar: exactly as wide as the terminal at every width, with the context cut
-// when it does not fit and gone when not even one cell of it would.
-func TestHeaderRuleSpansTheTerminalAndCutsItsContext(t *testing.T) {
+// TestTabLineSetsTheContextFlushRightAndCutsIt pins the line of the view tabs:
+// the context ends on the last column, keeps its gap from the tabs, and is cut
+// with an ellipsis or gone when it does not fit beside them.
+func TestTabLineSetsTheContextFlushRightAndCutsIt(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
 
 	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search, mode.Detail} {
 		m.active = active
-		for width := 1; width <= 220; width++ {
+		for width := headerTabsEnd(); width <= 220; width++ {
+			line := headerLines(m, width)[headerTabsRow]
 			m.width = width
-			rule := m.renderRule()
-			if strings.Contains(rule, "\n") {
-				t.Fatalf("%s at width %d: the rule takes more than one line: %q", active, width, rule)
-			}
-			if got := lipgloss.Width(rule); got != width {
-				t.Fatalf("%s at width %d: the rule is %d cells wide: %q", active, width, got, rule)
-			}
-
 			context := m.headerContext()
+			free := width - headerTabsEnd() - headerBarGap
+
 			switch {
-			case width <= lipgloss.Width("── ")+1:
-				// No room for the lead, one cell of context and the space
-				// after it.
-				if rule != strings.Repeat("─", width) {
-					t.Fatalf("%s at width %d: want a bare rule, got %q", active, width, rule)
+			case free <= 0:
+				if lipgloss.Width(line) != headerTabsEnd() {
+					t.Fatalf("%s at width %d: want the tabs alone, got %q", active, width, line)
 				}
-			case lipgloss.Width("── "+context+" ") <= width:
-				if !strings.HasPrefix(rule, "── "+context+" ") {
-					t.Fatalf("%s at width %d: the rule does not carry the context %q: %q", active, width, context, rule)
+			case lipgloss.Width(context) <= free:
+				if !strings.HasSuffix(line, context) || lipgloss.Width(line) != width {
+					t.Fatalf("%s at width %d: the context %q is not flush right: %q", active, width, context, line)
 				}
 			default:
-				if !strings.HasPrefix(rule, "── ") || !strings.HasSuffix(rule, "… ") {
-					t.Fatalf("%s at width %d: want the context cut with an ellipsis at the edge, got %q", active, width, rule)
+				if !strings.HasSuffix(line, "…") || lipgloss.Width(line) != width {
+					t.Fatalf("%s at width %d: want the context cut with an ellipsis at the edge, got %q", active, width, line)
+				}
+				if gap := line[headerTabsEnd() : headerTabsEnd()+headerBarGap]; strings.TrimSpace(gap) != "" {
+					t.Fatalf("%s at width %d: the cut context touches the tabs: %q", active, width, line)
 				}
 			}
 		}
 	}
-
-	// Before the first resize there is no width to fill: the context alone.
-	m.width = 0
-	if got := m.renderRule(); got != m.headerContext() {
-		t.Fatalf("at width 0 the rule is %q, want the context %q", got, m.headerContext())
-	}
 }
 
 // TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter holds the
-// frame to the terminal's height. The workspace is what the two header lines
+// frame to the terminal's height. The workspace is what the three header lines
 // and the footer leave, and a hidden footer still holds its line: the frame is
 // joined from three parts whether or not the last one draws anything.
 func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testing.T) {
@@ -283,8 +262,8 @@ func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testi
 			m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: size.width, Height: size.height}})
 
 			_, workspace := m.workspaceSize()
-			if want := size.height - 3; workspace != want {
-				t.Errorf("footer %v at %dx%d: the workspace is %d lines, want %d under a 2-line header and over the footer's line",
+			if want := size.height - 4; workspace != want {
+				t.Errorf("footer %v at %dx%d: the workspace is %d lines, want %d under a 3-line header and over the footer's line",
 					showFooter, size.width, size.height, workspace, want)
 			}
 			if got := lipgloss.Height(m.renderBody()); got != workspace {

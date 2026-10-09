@@ -29,7 +29,7 @@ func mouseKind(msg tea.MouseMsg) (mode.MouseKind, bool) {
 
 // handleMouse routes one mouse event to whatever is drawn under it, in the
 // order the keyboard is routed: an overlay first, then a surface above the
-// shell, then the tab strip and the active surface.
+// shell, then the header and the active surface.
 //
 // An open overlay holds the screen as it holds the keyboard, so nothing below
 // it sees the event — the help overlay scrolls under the wheel and a dialog
@@ -131,14 +131,20 @@ func (m *Model) clearHeaderHover() {
 }
 
 // mouseOnHeader lights the tab or the button under the pointer, and on a click
-// switches to the tab or runs the button's action. Only the top bar answers:
-// the rule under it draws nothing to press.
+// switches to the tab or runs the button's action. The menu bar and the tab
+// line answer: the rule between them draws nothing to press.
 func (m *Model) mouseOnHeader(event mode.MouseMsg) tea.Cmd {
 	m.clearHeaderHover()
-	if event.Y != 0 {
-		return nil
+	switch event.Y {
+	case headerMenuRow:
+		return m.mouseOnMenuBar(event)
+	case headerTabsRow:
+		return m.mouseOnTabs(event)
 	}
+	return nil
+}
 
+func (m *Model) mouseOnTabs(event mode.MouseMsg) tea.Cmd {
 	if tab, ok := m.tabAt(event.X); ok {
 		m.hoverTab = tab
 		if event.Kind != mode.MouseClick || (tab == m.active) {
@@ -146,7 +152,10 @@ func (m *Model) mouseOnHeader(event mode.MouseMsg) tea.Cmd {
 		}
 		return m.switchToTab(tab)
 	}
+	return nil
+}
 
+func (m *Model) mouseOnMenuBar(event mode.MouseMsg) tea.Cmd {
 	for _, cell := range m.barCells() {
 		if event.X < cell.x0 || event.X >= cell.x1 {
 			continue
@@ -160,7 +169,7 @@ func (m *Model) mouseOnHeader(event mode.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// tabAt is the browse tab the header strip draws at column x.
+// tabAt is the browse tab the tab line draws at column x.
 func (m Model) tabAt(x int) (mode.ID, bool) {
 	left := headerTabsStart()
 	for _, id := range mode.BrowseModes {

@@ -78,14 +78,14 @@ func TestStorePickerOpensOnItsKeyAndListsTheRegistry(t *testing.T) {
 	}
 }
 
-// The picker renders instead of the shell, so the top bar, the rule under it
-// and the shell footer are absent while it is up (docs/DESIGN-GUIDE.md).
+// The picker renders instead of the shell, so the three header lines and the
+// shell footer are absent while it is up (docs/DESIGN-GUIDE.md).
 func TestStorePickerReplacesTheShellChrome(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	before := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
-	// The top bar and the rule, as the shell draws them, each on its own line.
+	// The header, as the shell draws it, each line on its own.
 	chrome := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(m.renderHeader(), ""), "\n")
 	footer := testui.AnsiEscapePattern.ReplaceAllString(m.renderFooter(), "")
 	for _, line := range append(chrome, footer) {

@@ -85,7 +85,7 @@ The rest is the same in every set, and each has one definition:
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
 | `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
-| `·` | separator between fields, top-bar buttons and legend hints | inline at the call site |
+| `·` | separator between fields, menu-bar buttons and legend hints | inline at the call site |
 
 Spend a new glyph only when an existing one cannot carry the meaning, and define it next to its
 siblings rather than inline at the call site.
@@ -119,24 +119,30 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 
 ## The shell chrome
 
-The shell frames the workspace with three lines, all drawn in `internal/app/render.go`: the top bar
-and the rule under it (`Model.renderHeader`), and the key legend below (`Model.renderFooter`).
+The shell frames the workspace with four lines, all drawn in `internal/app/render.go`: the menu
+bar, the rule under it and the tab line (`Model.renderHeader`), and the key legend below
+(`Model.renderFooter`).
 
-- The top bar holds the tabs on the left and the buttons on the right. A button is a shell action
-  that is not about the selected row, and it shows the key bound to that action: the bar is a
-  second way to reach it, never the only one. Add one as an entry in `barActions`, with the method
-  the key switch in `handleShellKey` also calls.
-- A button that does not fit beside the tabs is dropped, the leftmost first (`Model.barCells`).
-- The rule carries the context — the store, the surface, the selection — from
-  `Model.headerContext`.
+- The menu bar holds the buttons from the left edge and the build version flush right. A button is
+  a shell action that is not about the selected row, and it shows the key bound to that action: the
+  bar is a second way to reach it, never the only one. Add one as an entry in `barActions`, with
+  the method the key switch in `handleShellKey` also calls.
+- `reload` is one button for every surface: it runs the reload of the surface on screen and shows
+  that surface's key (`Model.reloadKey`).
+- When the bar does not fit, the version goes first, then the buttons from the right
+  (`Model.barCells`).
+- The tab line holds the view tabs on the left and the context — the store, the surface, the
+  selection — flush right, from `Model.headerContext`. The tabs come first: the context is cut to
+  the space beside them.
 - The legend is one line of `styles.KeyHint` values through `styles.KeyLegend`, which drops the
   hints that do not fit from the end. Order a surface's hints in `footerHints` by how much an
-  operator needs them. The workspace height is measured from the rendered chrome
-  (`Model.workspaceSize`), so none of the three lines may wrap.
+  operator needs them. A shell action with no button, such as creating an issue, is named there.
+  The workspace height is measured from the rendered chrome (`Model.workspaceSize`), so none of
+  the four lines may wrap.
 
 ### The tabs
 
-- The tabs are the three browse tabs in `mode.BrowseModes` order — Board, Docs, Search. Detail
+- The tabs are the three views in `mode.BrowseModes` order — Board, Docs, Search. Detail
   never appears there: it is a drill-in, not a tab.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
   `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
@@ -211,7 +217,7 @@ with the active store's name and keeps it until only the surface name still fits
 The mouse repeats what a key already does; it adds no behaviour of its own and no config surface.
 
 - `Model.handleMouse` (`internal/app/mouse.go`) is the only reader of `tea.MouseMsg`. It routes in
-  the keyboard's order — overlay, surface above the shell, top bar, active surface — and hands the
+  the keyboard's order — overlay, surface above the shell, header, active surface — and hands the
   surface a `mode.MouseMsg` in that surface's own coordinates. A mode never sees the raw event.
 - An open overlay takes the event and the surface below gets a `mode.MouseLeave`. Help scrolls under
   the wheel; a dialog ignores the mouse.
@@ -227,8 +233,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   same re-centring reason — and scrolls a pane of text.
 - Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
   scrolls or reloads under a still pointer is the one marked. It draws as the quieter row band
-  (Selection and scrolling); a hovered tab or top-bar button takes `ShellTabHoverColor`.
-- A click on a top-bar button runs the method its key runs (`Model.mouseOnHeader`).
+  (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`.
+- A click on a menu-bar button runs the method its key runs (`Model.mouseOnHeader`).
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release copies the box

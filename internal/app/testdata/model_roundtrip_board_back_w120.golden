@@ -1,5 +1,6 @@
-   Board   Docs   Search                                                                       new c · stores s · help ?
-── Board · Selected: tm-2 (in_progress) · Idle ─────────────────────────────────────────────────────────────────────────
+ stores s · reload r · help ? · quit ctrl+q                                                                          dev
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Board   Docs   Search                                                     Board · Selected: tm-2 (in_progress) · Idle
 Default · cols 2-4/4
 ╭─ Ready ──────────────────────── 1 ─╮  ╭─ In Progress ─────────────────── 1 ─╮  ╭─ Done ────────────────────────── 0 ─╮
 │  T Ready first                     │  │▌ T In progress one                  │  │(no issues)                          │
@@ -29,6 +30,5 @@ Default · cols 2-4/4
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
-│                                    │  │                                     │  │                                     │
 ╰────────────────────────────────────╯  ╰─────────────────────────────────────╯  ╰─────────────────────────────────────╯
-h/l columns · j/k issues · enter detail · ctrl+space search · ? help · ctrl+q quit
+h/l columns · j/k issues · enter detail · c new · ctrl+space search · ? help · ctrl+q quit
