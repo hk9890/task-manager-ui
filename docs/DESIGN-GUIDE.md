@@ -95,9 +95,9 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
   a pane or a column it rides the border instead.
 - A new browse surface is one entry in `mode.BrowseModes`, one arm in `Model.browseController`, and
-  one `tab(...)` call. The controller must satisfy `mode.Browse`; registering it there is what wires
-  forwarding, sizing, loading state and auto-refresh at once. Adding it anywhere else puts the strip
-  and the cycle order out of step.
+  one label in `tabLabels` (`internal/app/render.go`). The controller must satisfy `mode.Browse`;
+  registering it there is what wires forwarding, sizing, loading state and auto-refresh at once.
+  Adding it anywhere else puts the strip and the cycle order out of step.
 - `tab` / `shift+tab` belong to the strip everywhere except inside a modal, which consumes keys
   before the shell sees them. They switch tabs even while the search query field is focused, so a
   browse surface must not claim either key.
@@ -151,6 +151,34 @@ with the active store's name and keeps it until only the surface name still fits
   paginated column (`TotalIsExact` false, or a load-more in flight) reads `N of M`; a skeleton pane
   reads `issuerow.SkeletonGlyph`. `internal/ui/board/board.go` holds the board's,
   `internal/ui/detail/details.go` the detail panes'.
+
+## The mouse
+
+The mouse repeats what a key already does; it adds no behaviour of its own and no config surface.
+
+- `Model.handleMouse` (`internal/app/mouse.go`) is the only reader of `tea.MouseMsg`. It routes in
+  the keyboard's order — overlay, surface above the shell, tab strip, active surface — and hands the
+  surface a `mode.MouseMsg` in that surface's own coordinates. A mode never sees the raw event.
+- An open overlay takes the event and the surface below gets a `mode.MouseLeave`. Help scrolls under
+  the wheel; a dialog ignores the mouse.
+- A surface answers "what is drawn at this cell" with a pure `HitTest(state, x, y)` beside its
+  `Render`, built from the same layout helpers. A mode model builds one state value for both — its
+  `viewState` — so a click cannot land on a row other than the one drawn under it.
+- Test a `HitTest` against the renderer, not against arithmetic: `testui.FindCell` finds where
+  `Render` drew a text, and the test asserts `HitTest` reports that row there.
+- One click selects a row and a second opens it. Take the decision from `mode.ClickTracker`: a
+  second click on the same cell opens the row the first one selected, because selecting a board row
+  can re-centre the columns and slide another row under the pointer.
+- The wheel moves a list's selection one row a notch — on the board the focused column's, for the
+  same re-centring reason — and scrolls a pane of text.
+- Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
+  scrolls or reloads under a still pointer is the one marked. Draw it with
+  `styles.RowPrefix(selected, hovered, styled)`: the selection's glyph in `HoverIndicatorColor`,
+  and the selection's own gutter when a row is both. A hovered tab takes `ShellTabHoverColor`.
+- The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select.
+  Shift+drag is the documented way to select text
+  ([user-guide/key-bindings.md](user-guide/key-bindings.md#mouse)); drag selection is not
+  reimplemented.
 
 ## Overlays
 

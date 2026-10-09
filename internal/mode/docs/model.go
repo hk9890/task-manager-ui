@@ -65,6 +65,9 @@ type Model struct {
 	selectedRow  int
 	scrollOffset int
 
+	pointer *pointer
+	clicks  mode.ClickTracker
+
 	// anchorIssueID is the issue selected when an auto-refresh started. The
 	// load handler restores the cursor onto it when it survives the refresh.
 	anchorIssueID string
@@ -113,6 +116,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case docsLoadedMsg:
 		return m.apply(msg)
 
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
+
 	case tea.KeyMsg:
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
@@ -139,18 +145,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the docs column.
 func (m *Model) View(skeletonPhase int) string {
-	// No dashboard title: with a single column the tab chip and the column
-	// header already name the surface, so the board's title line would only
-	// repeat them. The renderer omits the line when the title is empty (it
-	// still reserves the row, so the column height is unchanged).
-	return uiboard.Render(uiboard.State{
-		Columns:       []uiboard.Column{m.uiColumn()},
-		FocusedColumn: 0,
-		Width:         m.width,
-		Height:        m.height,
-		SkeletonPhase: skeletonPhase,
-		Now:           m.now(),
-	})
+	state := m.viewState(skeletonPhase)
+	state.Hover = m.hover(state)
+	return uiboard.Render(state)
 }
 
 // uiColumn is the docs column as the renderer sees it. View and clampSelection

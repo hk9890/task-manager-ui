@@ -119,8 +119,10 @@ type RenderConfig struct {
 	// and search on one data shape and removes adapter-only row structs.
 	Issue    domain.IssueSummary
 	Selected bool
-	Width    int
-	Styled   bool
+	// Hovered marks the row under the pointer.
+	Hovered bool
+	Width   int
+	Styled  bool
 
 	// Dim, when true, applies a SkeletonShades foreground tint to the rendered
 	// row text — used to signal that the surface is refreshing stale data.
@@ -136,13 +138,15 @@ type RenderConfig struct {
 type ReferenceRenderConfig struct {
 	Issue    domain.IssueReference
 	Selected bool
-	Width    int
-	Styled   bool
+	// Hovered marks the row under the pointer.
+	Hovered bool
+	Width   int
+	Styled  bool
 }
 
 // RenderCompact renders one compact issue row with shared metadata semantics.
 func RenderCompact(config RenderConfig) string {
-	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
+	prefixPlain, prefixStyled := styles.RowPrefix(config.Selected, config.Hovered, config.Styled)
 
 	title := strings.TrimSpace(config.Issue.Title)
 	if title == "" {
@@ -184,7 +188,7 @@ func RenderCompact(config RenderConfig) string {
 
 // RenderReferenceCompact renders a one-line compact row for related issues.
 func RenderReferenceCompact(config ReferenceRenderConfig) string {
-	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
+	prefixPlain, prefixStyled := styles.RowPrefix(config.Selected, config.Hovered, config.Styled)
 
 	title := strings.TrimSpace(config.Issue.Title)
 	if title == "" {

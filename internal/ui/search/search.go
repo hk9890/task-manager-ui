@@ -72,6 +72,10 @@ type State struct {
 	Width         int
 	Height        int
 	SkeletonPhase int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
+
+	// Hover is the cell under the pointer, as HitTest reported it; nil when the
+	// pointer is elsewhere. Its result row draws the hover chevron.
+	Hover *Hit
 }
 
 // Render renders the standalone search view.
@@ -380,10 +384,15 @@ func renderResultRows(state State, width int) []string {
 	// Dim rows when a refresh is in flight (stale data visible, new data pending).
 	dim := state.Loading && len(state.Results) > 0
 	lines := make([]string, 0, len(state.Results))
-	for _, issue := range state.Results {
+	hover := -1
+	if state.Hover != nil && state.Hover.Pane == FocusResults {
+		hover = state.Hover.Row
+	}
+	for idx, issue := range state.Results {
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,
 			Selected: issue.ID == state.SelectedID,
+			Hovered:  idx == hover,
 			Width:    width,
 			Styled:   true,
 			Dim:      dim,

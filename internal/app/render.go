@@ -67,6 +67,27 @@ func (m Model) renderSurface() string {
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
 }
 
+// The header strip's geometry. renderHeader draws from it and tabAt reads a
+// column back through it, so a click lands on the tab that is drawn there.
+const (
+	headerTitle       = "Task Manager UI"
+	headerSpinnerCols = 2
+	headerTabPadding  = 1
+	headerTabGap      = 1
+)
+
+// tabLabels names each browse tab on the header strip.
+var tabLabels = map[mode.ID]string{
+	mode.Board:  "Board",
+	mode.Docs:   "Docs",
+	mode.Search: "Search",
+}
+
+// headerTabsStart is the column the first tab starts at.
+func headerTabsStart() int {
+	return lipgloss.Width(headerTitle) + headerSpinnerCols
+}
+
 // headerSpinnerCell returns a fixed 2-cell string: the current braille spinner
 // glyph followed by a space when any surface is loading, or two literal spaces
 // when idle. Using a fixed-width cell keeps lipgloss.Width(headerLeft) invariant.
@@ -79,26 +100,29 @@ func (m Model) headerSpinnerCell() string {
 }
 
 func (m Model) renderHeader() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render("Task Manager UI")
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render(headerTitle)
 
-	tab := func(id mode.ID, label string) string {
-		base := lipgloss.NewStyle().Padding(0, 1)
-		if m.active == id {
-			return base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true).Render(label)
+	tab := func(id mode.ID) string {
+		base := lipgloss.NewStyle().Padding(0, headerTabPadding)
+		switch {
+		case m.active == id:
+			base = base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true)
+		case m.hoverTab == id:
+			base = base.Foreground(styles.ShellTabHoverColor)
+		default:
+			base = base.Foreground(styles.ShellTabInactiveColor)
 		}
-		return base.Foreground(styles.ShellTabInactiveColor).Render(label)
+		return base.Render(tabLabels[id])
 	}
 
-	left := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		title,
-		m.headerSpinnerCell(),
-		tab(mode.Board, "Board"),
-		" ",
-		tab(mode.Docs, "Docs"),
-		" ",
-		tab(mode.Search, "Search"),
-	)
+	parts := []string{title, m.headerSpinnerCell()}
+	for idx, id := range mode.BrowseModes {
+		if idx > 0 {
+			parts = append(parts, strings.Repeat(" ", headerTabGap))
+		}
+		parts = append(parts, tab(id))
+	}
+	left := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 
 	context := lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(m.headerContext())
 	if m.width <= 0 {
@@ -370,6 +394,12 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  %s = list the central task stores on this machine and open one", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
+		"",
+		"Mouse:",
+		"  click = select a row, switch to a tab, or focus a pane",
+		"  second click on a row = open it",
+		"  wheel = move the selection, or scroll detail text and this help",
+		"  shift+drag = select text with the terminal",
 		"",
 		"Detail presentation model (v1): dedicated detail mode",
 		"  - Board/Search prioritize overview triage density",

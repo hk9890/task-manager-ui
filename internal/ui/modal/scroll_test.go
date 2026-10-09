@@ -1,0 +1,68 @@
+package modal
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+func tallModal(lines, viewportHeight int) Model {
+	message := make([]string, lines)
+	for idx := range message {
+		message[idx] = fmt.Sprintf("line-%02d", idx)
+	}
+	m := New(Config{Title: "Tall", Message: strings.Join(message, "\n"), HideButtons: true})
+	m.SetSize(80, viewportHeight)
+	return m
+}
+
+// TestScrollMovesAModalTooTallForTheViewport walks a clipped modal to its end
+// and back: the window follows, each clipped edge says how much it hides, and
+// the offset stops at both ends.
+func TestScrollMovesAModalTooTallForTheViewport(t *testing.T) {
+	t.Parallel()
+
+	m := tallModal(30, 14)
+	top := m.View()
+	if !strings.Contains(top, "line-00") || strings.Contains(top, "earlier lines") || !strings.Contains(top, "more lines") {
+		t.Fatalf("unscrolled view must open on the first line with only a 'more' indicator:\n%s", top)
+	}
+	if got := strings.Count(top, "\n") + 1; got != 12 {
+		t.Fatalf("clipped modal is %d lines tall, want viewport minus its margin = 12", got)
+	}
+
+	m = m.Scroll(5)
+	middle := m.View()
+	if strings.Contains(middle, "line-00") || !strings.Contains(middle, "earlier lines") || !strings.Contains(middle, "more lines") {
+		t.Fatalf("scrolled view must hide the first line and mark both clipped edges:\n%s", middle)
+	}
+	if got := strings.Count(middle, "\n") + 1; got != 12 {
+		t.Fatalf("scrolled modal is %d lines tall, want 12", got)
+	}
+
+	m = m.Scroll(1000)
+	bottom := m.View()
+	if !strings.Contains(bottom, "line-29") || strings.Contains(bottom, "more lines") {
+		t.Fatalf("view scrolled to the end must show the last line and no 'more' indicator:\n%s", bottom)
+	}
+	if again := m.Scroll(3).View(); again != bottom {
+		t.Fatal("scrolling past the end moved the view")
+	}
+
+	if back := m.Scroll(-1000).View(); back != top {
+		t.Fatalf("scrolling back to the start must restore the first view:\n%s", back)
+	}
+	if reset := m.ScrollToTop().View(); reset != top {
+		t.Fatal("ScrollToTop must restore the first view")
+	}
+}
+
+func TestScrollDoesNothingToAModalThatFits(t *testing.T) {
+	t.Parallel()
+
+	m := tallModal(3, 40)
+	before := m.View()
+	if after := m.Scroll(5).View(); after != before {
+		t.Fatalf("scrolling a modal that fits changed it:\n%s", after)
+	}
+}

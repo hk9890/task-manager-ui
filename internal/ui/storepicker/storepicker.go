@@ -68,6 +68,35 @@ type State struct {
 	SpinnerFrame int
 	Width        int
 	Height       int
+	// Hover is the index of the row under the pointer, as HitTest reported it;
+	// nil when the pointer is elsewhere. That row draws the hover chevron.
+	Hover *int
+}
+
+// HitTest reports the index of the row Render(state) draws at cell (x, y),
+// with (0, 0) the first cell of the frame. ok is false anywhere but on a row.
+func HitTest(state State, x, y int) (row int, ok bool) {
+	width := state.Width
+	if width <= 0 {
+		width = defaultWidth
+	}
+	height := state.Height
+	if height <= 0 {
+		height = defaultHeight
+	}
+
+	line := y - 1
+	if state.Error != "" {
+		line--
+	}
+	if x < 1 || x >= width-1 || line < 0 || line >= RowCapacity(height, state.Error != "") {
+		return 0, false
+	}
+	row = max(0, min(state.ScrollOffset, len(state.Rows))) + line
+	if row >= len(state.Rows) {
+		return 0, false
+	}
+	return row, true
 }
 
 // RowCapacity returns how many store rows fit at this terminal height. The
@@ -194,7 +223,8 @@ func renderRows(state State, innerWidth, capacity int) []string {
 	nameWidth := nameColumnWidth(state.Rows)
 	out := make([]string, 0, capacity)
 	for idx, row := range visible {
-		out = append(out, renderRow(row, offset+idx == state.SelectedRow, nameWidth, innerWidth))
+		hovered := state.Hover != nil && *state.Hover == offset+idx
+		out = append(out, renderRow(row, offset+idx == state.SelectedRow, hovered, nameWidth, innerWidth))
 	}
 	for len(out) < capacity {
 		out = append(out, "")
@@ -202,8 +232,8 @@ func renderRows(state State, innerWidth, capacity int) []string {
 	return out
 }
 
-func renderRow(row Row, selected bool, nameWidth, innerWidth int) string {
-	plainPrefix, renderedPrefix := styles.SelectionPrefix(selected, true)
+func renderRow(row Row, selected, hovered bool, nameWidth, innerWidth int) string {
+	plainPrefix, renderedPrefix := styles.RowPrefix(selected, hovered, true)
 
 	if row.Action != "" {
 		label := textutil.TruncateString(row.Action, innerWidth-lipgloss.Width(plainPrefix))

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -76,6 +78,47 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 		},
 	})
 	return m.loadDetail(selection.Issue.ID)
+}
+
+// drillInto navigates Detail to a related issue, from Enter or a double click
+// on a row of its Dependencies rail.
+//
+// Drilling into a related issue is a full navigation, not a peek: the target
+// becomes the new detail selection so ALL three panes — including the
+// Dependencies rail — reflect the target once loaded. This is what lets you
+// open a child from an epic and then jump back via the child's own Parent row.
+// Seeding an optimistic placeholder from the row's known ref renders the header
+// + core metadata immediately, while the description and Dependencies pane show
+// their skeleton until the single taskmgr show returns. ApplyLoadedDetail
+// resets scroll offsets when the issue changes.
+//
+// Focus retention: BeginLoad sets Loading and the drill-focus counter before
+// the placeholder ApplyLoadedDetail call so that clearBrowserPanel does not flip
+// focus away from the Dependencies pane during the in-flight window. The real
+// detailLoadedMsg will apply the correct focus decision from actual rail content
+// via the counter mechanism in ApplyLoadedDetail.
+func (m *Model) drillInto(intent detail.OpenRelatedIssueIntent) tea.Cmd {
+	issueID := strings.TrimSpace(intent.IssueID)
+	if issueID == "" {
+		return nil
+	}
+	m.active = mode.Detail
+	m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
+		ID:       issueID,
+		Title:    intent.Ref.Title,
+		Status:   intent.Ref.Status,
+		Type:     intent.Ref.Type,
+		Priority: intent.Ref.Priority,
+	}}
+	m.detail.BeginLoad(issueID, detail.BeginLoadOptions{Ref: &intent.Ref, Drill: true})
+	return m.loadDetail(issueID)
+}
+
+// switchToTab makes a browse tab the active surface, from its mode key or a
+// click on the header strip.
+func (m *Model) switchToTab(id mode.ID) tea.Cmd {
+	m.enterBrowseMode(id)
+	return batchCmds(m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 }
 
 func (m Model) selectedIssueID() (string, bool) {

@@ -31,8 +31,14 @@ var (
 	ShellTabActiveTextColor = ButtonTextColor
 	ShellTabActiveBgColor   = ButtonPrimaryFocusBgColor
 	ShellTabInactiveColor   = TextMutedColor
+	ShellTabHoverColor      = TextPrimaryColor
 	ShellContextColor       = TextMutedColor
 	ShellFooterHelpColor    = TextMutedColor
+
+	// HoverIndicatorColor is the gutter chevron on the row under the pointer:
+	// the selection's glyph in a quieter colour, because a click there is what
+	// makes it the selection.
+	HoverIndicatorColor = TextSecondaryColor
 
 	// Border and overlay colors.
 	BorderDefaultColor        = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#696969"}
@@ -88,6 +94,7 @@ var (
 	baseButtonStyle = lipgloss.NewStyle().Padding(0, 2).Bold(true)
 
 	SelectionIndicatorStyle = lipgloss.NewStyle().Bold(true).Foreground(BorderHighlightFocusColor)
+	HoverIndicatorStyle     = lipgloss.NewStyle().Foreground(HoverIndicatorColor)
 	IssueIDMutedStyle       = lipgloss.NewStyle().Foreground(TextSecondaryColor)
 
 	IssuePriorityP0Style     = lipgloss.NewStyle().Foreground(IssuePriorityP0Color).Bold(true)

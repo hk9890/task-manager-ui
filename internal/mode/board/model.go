@@ -109,6 +109,9 @@ type Model struct {
 	refreshMode   mode.RefreshMode
 	refreshAnchor *refreshAnchor
 
+	pointer *pointer
+	clicks  mode.ClickTracker
+
 	// --- Done column load-more state ---
 
 	// doneLoadedCount is the number of closed issues currently in
@@ -189,6 +192,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case loadMoreClosedDoneMsg:
 		return m.applyLoadMoreClosed(msg)
 
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
+
 	case tea.KeyMsg:
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveLeft, msg):
@@ -256,24 +262,9 @@ func (m *Model) View(skeletonPhase int) string {
 		return "No board sections available."
 	}
 
-	uiColumns := make([]uiboard.Column, 0, len(m.columns))
-	for colIdx := range m.columns {
-		selectedRow := -1
-		if colIdx == m.focusedColumn {
-			selectedRow = m.selectedRow[colIdx]
-		}
-		uiColumns = append(uiColumns, m.uiColumn(colIdx, selectedRow))
-	}
-
-	return uiboard.Render(uiboard.State{
-		DashboardTitle: dashboardTitle,
-		Columns:        uiColumns,
-		FocusedColumn:  m.focusedColumn,
-		Width:          m.width,
-		Height:         m.height,
-		SkeletonPhase:  skeletonPhase,
-		Now:            m.now(),
-	})
+	state := m.viewState(skeletonPhase)
+	state.Hover = m.hover(state)
+	return uiboard.Render(state)
 }
 
 // uiColumn is column colIdx as the renderer sees it, with selectedRow as its

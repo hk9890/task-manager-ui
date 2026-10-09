@@ -51,6 +51,9 @@ type Model struct {
 	// The focus decision (Dependencies if rail non-empty, Content if empty) is applied
 	// when the counter reaches 0 (the real data load). Reset to 0 by ClearDrillFocus.
 	drillDepsFocusCalls int
+
+	pointer *pointer
+	clicks  mode.ClickTracker
 }
 
 // OpenRelatedIssueIntent requests shell-level navigation to another issue from
@@ -235,20 +238,7 @@ func (m *Model) AnchorSelection(issueID string) {
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
 	d := m.RenderDetail()
 	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
-	// skeleton=true in two cases:
-	// 1. preview path: target differs from selection and preview detail has not yet loaded.
-	// 2. direct-nav path: a load is in flight and only the placeholder summary is
-	//    present — no description, comments, or relations yet. Without this branch
-	//    the user sees "(no description)" / "(none)" fallbacks during the in-flight
-	//    window, which misrepresents loading state as empty content.
-	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
-	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
-		strings.TrimSpace(m.Detail.Description) == "" &&
-		len(m.Detail.Comments) == 0 &&
-		len(m.Detail.BlockedBy) == 0 &&
-		len(m.Detail.Blocks) == 0 &&
-		len(m.Detail.Related) == 0
-	skeletonContent := previewSkeleton || directNavSkeleton
+	skeletonContent := m.skeletonContent()
 
 	if compact || viewportHeight <= 0 {
 		return detail.Render(detail.State{
@@ -271,7 +261,36 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		})
 	}
 
-	return detail.Render(detail.State{
+	state := m.viewState(maxWidth, viewportHeight, skeletonPhase)
+	state.Hover = m.hover(state)
+	return detail.Render(state)
+}
+
+// skeletonContent reports whether the panes draw skeleton rows. True in two
+// cases:
+//  1. preview path: target differs from selection and preview detail has not yet loaded.
+//  2. direct-nav path: a load is in flight and only the placeholder summary is
+//     present — no description, comments, or relations yet. Without this branch
+//     the user sees "(no description)" / "(none)" fallbacks during the in-flight
+//     window, which misrepresents loading state as empty content.
+func (m *Model) skeletonContent() bool {
+	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
+	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
+		strings.TrimSpace(m.Detail.Description) == "" &&
+		len(m.Detail.Comments) == 0 &&
+		len(m.Detail.BlockedBy) == 0 &&
+		len(m.Detail.Blocks) == 0 &&
+		len(m.Detail.Related) == 0
+	return previewSkeleton || directNavSkeleton
+}
+
+// viewState is the three-pane detail as the renderer sees it. View and the hit
+// test build the same value, so a click lands on the row that is drawn under
+// it.
+func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.State {
+	d := m.RenderDetail()
+	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
+	return detail.State{
 		SelectionID: m.selectionID,
 		TargetID:    m.targetID,
 		Detail:      d,
@@ -287,7 +306,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		}(),
 		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
 		Loading:                  blockingLoad,
-		Skeleton:                 skeletonContent,
+		Skeleton:                 m.skeletonContent(),
 		SkeletonPhase:            skeletonPhase,
 		Error:                    m.errText,
 		Width:                    maxWidth,
@@ -298,7 +317,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		ContentScrollOffset:      m.ContentScrollOffset,
 		DependenciesScrollOffset: m.DependenciesScrollOffset,
 		MetadataScrollOffset:     m.MetadataScrollOffset,
-	})
+	}
 }
 
 // ClampScroll keeps all pane scroll offsets inside current content bounds.

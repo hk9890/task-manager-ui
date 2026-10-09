@@ -1,6 +1,8 @@
 package mode
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -125,3 +127,61 @@ const (
 	ActionOpenStatusDialog   Action = "open_status_dialog"
 	ActionOpenPriorityDialog Action = "open_priority_dialog"
 )
+
+// MouseKind is what the pointer did.
+type MouseKind int
+
+const (
+	// MouseMove is the pointer arriving on a cell, with no button involved.
+	MouseMove MouseKind = iota
+	// MouseLeave is the pointer leaving the surface: it carries no cell.
+	MouseLeave
+	// MouseClick is a press of the left button.
+	MouseClick
+	MouseWheelUp
+	MouseWheelDown
+)
+
+// MouseMsg is one pointer event for a surface, in that surface's own
+// coordinates: the shell subtracts its chrome, so (0, 0) is the first cell the
+// surface draws. Only the surface on screen receives one.
+type MouseMsg struct {
+	Kind MouseKind
+	X, Y int
+	// At is when the event arrived, which is what tells a double click from
+	// two single ones.
+	At time.Time
+}
+
+// doubleClickWindow is how close two clicks on one target are to count as a
+// double click. The desktop's own is between 400 and 500 ms.
+const doubleClickWindow = 400 * time.Millisecond
+
+// ClickTracker tells a double click from two single ones. A click selects and
+// a second click on the same target opens it, so every surface with rows keeps
+// one.
+type ClickTracker struct {
+	target string
+	x, y   int
+	at     time.Time
+}
+
+// Double records a click and reports whether it is the second of a double
+// click. target names the row under the pointer, "" for none.
+//
+// The second click counts when it lands on the row the first one selected, or
+// on the same cell: selecting a row can move it — the board re-centres its
+// columns on the focused one — and the operator double-clicking in place means
+// the row they just selected, not whatever slid under the pointer. So on true
+// the caller opens its current selection and selects nothing new. A double
+// click is consumed, and a third click starts over.
+func (t *ClickTracker) Double(target string, msg MouseMsg) bool {
+	last := *t
+	*t = ClickTracker{target: target, x: msg.X, y: msg.Y, at: msg.At}
+	sameCell := last.x == msg.X && last.y == msg.Y
+	if last.target == "" || (target != last.target && !sameCell) || msg.At.Sub(last.at) >= doubleClickWindow {
+		return false
+	}
+	*t = ClickTracker{}
+	return true
+}

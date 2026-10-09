@@ -67,6 +67,9 @@ type State struct {
 	SkeletonPhase  int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
 	// Now is the instant the age markers measure against.
 	Now time.Time
+	// Hover is the cell under the pointer, as HitTest reported it; nil when the
+	// pointer is elsewhere. Its row draws the hover chevron.
+	Hover *Hit
 }
 
 // Render renders a multi-column board dashboard using section borders.
@@ -75,67 +78,19 @@ func Render(state State) string {
 		return "No board sections configured."
 	}
 
-	width := state.Width
-	if width <= 0 {
-		width = defaultBoardWidth
-	}
-	height := state.Height
-	if height <= 0 {
-		height = defaultBoardHeight
-	}
-
-	start, end := visibleColumnRange(width, len(state.Columns), state.FocusedColumn)
-	visible := state.Columns[start:end]
-
-	visibleAvailableWidth := width - (columnGap * (len(visible) - 1))
-	if visibleAvailableWidth < minRenderableWidth {
-		visibleAvailableWidth = minRenderableWidth
-	}
-
-	columnWidths := distributeWidths(visibleAvailableWidth, len(visible))
-	columnHeight := max(3, height-1)
+	f := layoutFrame(state)
+	start := f.start
+	visible := state.Columns[start:f.end]
+	columnWidths, columnHeight := f.widths, f.columnHeight
 	renderedCols := make([]string, 0, len(visible))
 	for idx, col := range visible {
-		innerWidth := columnWidths[idx] - 2
-		if innerWidth < 1 {
-			innerWidth = 1
-		}
-
-		// innerHeight is the number of content rows that fit inside the section
-		// borders. FormSection reserves 2 lines for top and bottom borders.
-		innerHeight := max(1, columnHeight-2)
-
 		// isLoadMore is true when a background page fetch is in flight for an
 		// already-populated column that the user has scrolled into (offset > 0).
 		// This is distinct from a full refresh (col.Loading=true, offset=0).
 		isLoadMore := col.Loading && len(col.Rows) > 0 && col.ScrollOffset > 0
 
-		// Build all rendered rows for this column.
-		rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, start+idx, state.Now)
-		rows := rendered.rows
-
-		// Apply the scroll window. Only when not loading (skeleton / stale-refresh
-		// paths manage their own row counts), or when a load-more is in flight
-		// (offset > 0 indicates deep navigation with a pending page fetch). The
-		// pinned error row counts against innerHeight; rowLayout.window says
-		// which lines of the issue area are drawn.
-		displayRows := rows
-		visibleIssues := len(col.Rows)
-		if (!col.Loading || isLoadMore) && len(col.Rows) > 0 {
-			prefix := rendered.prefix
-			issueRows := rows[prefix:]
-			startRow, endRow := rendered.layout.window(col, innerHeight-prefix, len(issueRows))
-			displayRows = make([]string, 0, prefix+endRow-startRow)
-			displayRows = append(displayRows, rows[:prefix]...)
-			displayRows = append(displayRows, issueRows[startRow:endRow]...)
-
-			visibleIssues = 0
-			for _, row := range rendered.layout.issueRow {
-				if row >= startRow && row < endRow {
-					visibleIssues++
-				}
-			}
-		}
+		view := f.viewColumn(state, idx)
+		displayRows, visibleIssues := view.rows, view.visibleIssues
 
 		// Compute header badge.
 		//
@@ -180,16 +135,160 @@ func Render(state State) string {
 		}))
 	}
 
-	head := strings.TrimSpace(state.DashboardTitle)
-	if len(visible) < len(state.Columns) {
-		head = fmt.Sprintf("%s · cols %d-%d/%d", head, start+1, end, len(state.Columns))
-	}
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, joinWithGap(renderedCols, strings.Repeat(" ", columnGap))...)
-	if head == "" {
+	if f.head == "" {
 		return columns
 	}
 
-	return head + "\n" + columns
+	return f.head + "\n" + columns
+}
+
+// frame is the geometry of one board frame: which columns are drawn, how wide
+// each is, and how many lines sit above them. Render draws from it and HitTest
+// reads a cell back through it, so the two cannot place a column differently.
+type frame struct {
+	start, end   int
+	widths       []int
+	columnHeight int
+	// innerHeight is the number of content rows that fit inside the section
+	// borders. FormSection reserves 2 lines for top and bottom borders.
+	innerHeight int
+	// head is the title line above the columns; empty draws no line.
+	head string
+}
+
+func layoutFrame(state State) frame {
+	width := state.Width
+	if width <= 0 {
+		width = defaultBoardWidth
+	}
+	height := state.Height
+	if height <= 0 {
+		height = defaultBoardHeight
+	}
+
+	var f frame
+	f.start, f.end = visibleColumnRange(width, len(state.Columns), state.FocusedColumn)
+	count := f.end - f.start
+
+	available := width - (columnGap * (count - 1))
+	if available < minRenderableWidth {
+		available = minRenderableWidth
+	}
+	f.widths = distributeWidths(available, count)
+	f.columnHeight = max(3, height-1)
+	f.innerHeight = max(1, f.columnHeight-2)
+
+	f.head = strings.TrimSpace(state.DashboardTitle)
+	if count < len(state.Columns) {
+		f.head = fmt.Sprintf("%s · cols %d-%d/%d", f.head, f.start+1, f.end, len(state.Columns))
+	}
+	return f
+}
+
+// columnView is what one column draws inside its borders: the lines, and where
+// the issues landed among them.
+type columnView struct {
+	rows []string
+	// prefix is the number of pinned rows ahead of the issue area, and start
+	// the layout line the issue area opens on.
+	prefix, start int
+	layout        rowLayout
+	visibleIssues int
+}
+
+// viewColumn builds the idx-th visible column of state.
+func (f frame) viewColumn(state State, idx int) columnView {
+	col := state.Columns[f.start+idx]
+	innerWidth := max(1, f.widths[idx]-2)
+	hover := -1
+	if state.Hover != nil && state.Hover.Column == f.start+idx {
+		hover = state.Hover.Row
+	}
+
+	rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, f.start+idx, state.Now, hover)
+	view := columnView{rows: rendered.rows, prefix: rendered.prefix, layout: rendered.layout, visibleIssues: len(col.Rows)}
+
+	// Apply the scroll window. Only when not loading (skeleton / stale-refresh
+	// paths manage their own row counts), or when a load-more is in flight
+	// (offset > 0 indicates deep navigation with a pending page fetch). The
+	// pinned error row counts against innerHeight; rowLayout.window says
+	// which lines of the issue area are drawn.
+	isLoadMore := col.Loading && len(col.Rows) > 0 && col.ScrollOffset > 0
+	if (!col.Loading || isLoadMore) && len(col.Rows) > 0 {
+		issueRows := rendered.rows[view.prefix:]
+		startRow, endRow := rendered.layout.window(col, f.innerHeight-view.prefix, len(issueRows))
+		view.start = startRow
+		view.rows = make([]string, 0, view.prefix+endRow-startRow)
+		view.rows = append(view.rows, rendered.rows[:view.prefix]...)
+		view.rows = append(view.rows, issueRows[startRow:endRow]...)
+
+		view.visibleIssues = 0
+		for _, row := range rendered.layout.issueRow {
+			if row >= startRow && row < endRow {
+				view.visibleIssues++
+			}
+		}
+	}
+	return view
+}
+
+// issueAt is the index of the issue drawn on content line line, or -1 when
+// that line holds a divider, the error row, or nothing.
+func (v columnView) issueAt(line int) int {
+	if line < v.prefix {
+		return -1
+	}
+	target := v.start + line - v.prefix
+	for idx, row := range v.layout.issueRow {
+		if row == target {
+			return idx
+		}
+	}
+	return -1
+}
+
+// Hit is the board cell under a point: the column, and the issue drawn there.
+// Row is -1 where the column draws no issue — its border, a divider, the error
+// row, or the space below the last row.
+type Hit struct {
+	Column int
+	Row    int
+}
+
+// HitTest reports what Render(state) draws at cell (x, y), with (0, 0) the
+// first cell of the frame. ok is false outside every column.
+func HitTest(state State, x, y int) (hit Hit, ok bool) {
+	if len(state.Columns) == 0 {
+		return Hit{}, false
+	}
+	f := layoutFrame(state)
+	line := y
+	if f.head != "" {
+		line--
+	}
+	if x < 0 || line < 0 || line >= f.columnHeight {
+		return Hit{}, false
+	}
+
+	left := 0
+	for idx, width := range f.widths {
+		if x >= left+width {
+			left += width + columnGap
+			continue
+		}
+		if x < left {
+			return Hit{}, false
+		}
+		hit = Hit{Column: f.start + idx, Row: -1}
+		content := line - 1
+		if x == left || x == left+width-1 || content < 0 || content >= f.innerHeight {
+			return hit, true
+		}
+		hit.Row = f.viewColumn(state, idx).issueAt(content)
+		return hit, true
+	}
+	return Hit{}, false
 }
 
 func visibleColumnRange(width, total, focused int) (start, end int) {
@@ -308,7 +407,9 @@ func errorRows(col Column) int {
 	return 0
 }
 
-func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now time.Time) columnRows {
+// renderColumnRows renders col. hover is the index of the issue under the
+// pointer, or -1.
+func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now time.Time, hover int) columnRows {
 	var out columnRows
 
 	// Inline error row at the top (if any).
@@ -328,7 +429,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 			// Load-more in flight: the user has scrolled deep and a background page
 			// fetch is in progress. Render rows normally (not dimmed) and append a
 			// single skeleton row at the end as a load-in-flight affordance.
-			out.appendIssueRows(col, maxWidth, false, skeletonPhase, now)
+			out.appendIssueRows(col, maxWidth, false, skeletonPhase, now, hover)
 			out.rows = append(out.rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 				Width:  maxWidth,
 				Seed:   0,
@@ -339,7 +440,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 		}
 		// Refresh: stale rows on screen while new data is in flight.
 		// Dim the foreground with the current skeleton phase to signal motion.
-		out.appendIssueRows(col, maxWidth, true, skeletonPhase, now)
+		out.appendIssueRows(col, maxWidth, true, skeletonPhase, now, hover)
 		return out
 	}
 
@@ -349,13 +450,13 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 		return out
 	}
 
-	out.appendIssueRows(col, maxWidth, false, skeletonPhase, now)
+	out.appendIssueRows(col, maxWidth, false, skeletonPhase, now, hover)
 	return out
 }
 
 // appendIssueRows renders every issue of col in the order layoutRows placed
 // them, drawing each age-marker divider ahead of the issue it precedes.
-func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase int, now time.Time) {
+func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase int, now time.Time, hover int) {
 	out.layout = layoutRows(col, now)
 	markers := out.layout.markers
 	for idx, issue := range col.Rows {
@@ -366,6 +467,7 @@ func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase
 		out.rows = append(out.rows, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,
 			Selected: idx == col.SelectedRow,
+			Hovered:  idx == hover,
 			Width:    maxWidth,
 			Styled:   true,
 			Dim:      dim,

@@ -124,6 +124,28 @@ example `keybindings: {shell: {open_store_picker: [S]}}`.
 - `y` — submit when button row is focused
 - `n` — cancel when the button row is focused, except in the Status and Priority dialogs, which require a value
 
+## Mouse
+
+The mouse does what the keys above do, and has no bindings to configure.
+
+- Whatever the pointer is over shows it can be clicked: a row gets a grey `›` in
+  its gutter, a tab brightens.
+- **Click a row** to select it. **Click it again** within 0.4 s to open it, as
+  `enter` does: an issue, a doc or a search result opens in detail mode, a row of
+  the detail Dependencies pane navigates to that issue, a store picker row opens
+  that store.
+- **Click a tab** in the header strip to switch to it.
+- **Click a pane** in search or detail mode to focus it.
+- **Wheel** over a list moves its selection one row a notch. On the board that is
+  the focused column, whichever column the pointer is over; click a row to move
+  the focus.
+- **Wheel** over the detail Content or Metadata pane, or over the help overlay,
+  scrolls it three lines a notch.
+- While help or a dialog is open, the mouse reaches nothing under it. A dialog
+  takes keys only.
+- **Hold `shift` and drag** to select text. The app takes the mouse, so a plain
+  drag no longer selects; `shift` hands the drag back to the terminal.
+
 ## Notes
 
 - Keybindings are context-specific. The same key may do different things in

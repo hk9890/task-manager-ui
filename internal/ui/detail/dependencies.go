@@ -15,8 +15,47 @@ type relationshipGroup struct {
 	Refs  []domain.IssueReference
 }
 
+// refMarks names the reference rows that carry a gutter mark: the cursor row
+// the keys move, and the row under the pointer.
+type refMarks struct {
+	cursor string
+	hover  string
+}
+
+// marks is the gutter marks state asks for.
+func (state State) marks() refMarks {
+	marks := refMarks{cursor: state.BrowserSelectedIssueID}
+	if state.Hover != nil && state.Hover.Pane == FocusPaneDependencies {
+		marks.hover = state.Hover.RefID
+	}
+	return marks
+}
+
 func renderDependenciesPaneLines(detail domain.IssueDetail, browserItems []domain.IssueReference, cursorIssueID string, width int, skeleton bool, skeletonPhase int) []string {
-	return renderRelationshipGroups(dependencyGroups(detail, browserItems), cursorIssueID, width, skeleton, skeletonPhase)
+	return renderRelationshipGroups(dependencyGroups(detail, browserItems), refMarks{cursor: cursorIssueID}, width, skeleton, skeletonPhase)
+}
+
+// dependencyLineRefs is the reference ID each line of the dependency pane
+// holds, in the order renderRelationshipGroups draws them: "" for a label, a
+// separator and a "(none)" line. It mirrors that function's structure so a
+// line can be mapped to its reference without rendering.
+func dependencyLineRefs(groups []relationshipGroup) []string {
+	out := make([]string, 0, 32)
+	for _, group := range groups {
+		ordered := orderedReferences(group.Refs)
+		if len(out) > 0 {
+			out = append(out, "")
+		}
+		out = append(out, "")
+		if len(ordered) == 0 {
+			out = append(out, "")
+			continue
+		}
+		for _, ref := range ordered {
+			out = append(out, ref.ID)
+		}
+	}
+	return out
 }
 
 func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueReference) []relationshipGroup {
@@ -55,9 +94,9 @@ func dependencyGroups(detail domain.IssueDetail, browserItems []domain.IssueRefe
 	return out
 }
 
-func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID string, width int, skeleton bool, skeletonPhase int) []string {
+func renderRelationshipGroups(groups []relationshipGroup, marks refMarks, width int, skeleton bool, skeletonPhase int) []string {
 	out := make([]string, 0, 32)
-	cursorIssueID = strings.TrimSpace(cursorIssueID)
+	cursorIssueID := strings.TrimSpace(marks.cursor)
 	cursorMatched := false
 	for _, group := range groups {
 		ordered := orderedReferences(group.Refs)
@@ -84,7 +123,7 @@ func renderRelationshipGroups(groups []relationshipGroup, cursorIssueID string, 
 			if isCursor {
 				cursorMatched = true
 			}
-			out = append(out, renderReferenceRow(ref, width, isCursor))
+			out = append(out, renderReferenceRow(ref, width, isCursor, marks.hover != "" && ref.ID == marks.hover))
 		}
 	}
 	if len(out) == 0 {
@@ -114,27 +153,10 @@ func DependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, 
 		return -1
 	}
 
-	groups := dependencyGroups(detail, browserItems)
-	linePos := 0
-	firstGroup := true
-	for _, group := range groups {
-		ordered := orderedReferences(group.Refs)
-		if !firstGroup {
-			linePos++ // empty separator line
+	for line, refID := range dependencyLineRefs(dependencyGroups(detail, browserItems)) {
+		if refID != "" && strings.TrimSpace(refID) == targetID {
+			return line
 		}
-		linePos++ // group label line
-		if len(ordered) == 0 {
-			linePos++ // "(none)" line
-			firstGroup = false
-			continue
-		}
-		for _, ref := range ordered {
-			if strings.TrimSpace(ref.ID) == targetID {
-				return linePos
-			}
-			linePos++
-		}
-		firstGroup = false
 	}
 	return -1
 }
@@ -147,10 +169,11 @@ func DependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, 
 // marker the user moves looks the same everywhere. The currently-viewed issue is never
 // in this list (it is excluded when the browser panel is assembled), so it needs no
 // marker here — it lives in the Content/Metadata panes.
-func renderReferenceRow(ref domain.IssueReference, width int, isCursor bool) string {
+func renderReferenceRow(ref domain.IssueReference, width int, isCursor, isHover bool) string {
 	return issuerow.RenderReferenceCompact(issuerow.ReferenceRenderConfig{
 		Issue:    ref,
 		Selected: isCursor,
+		Hovered:  isHover,
 		Width:    width,
 		Styled:   true,
 	})
