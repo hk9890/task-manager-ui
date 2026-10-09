@@ -15,7 +15,8 @@ internal/
                           shell message contracts. Type.IsWork() is false for doc, so doc issues
                           reach no board column — docs/ is the tab that browses them
   ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
-    styles/                 every colour and the shared FormSection chrome
+    styles/                 every colour role, the themes, the glyph sets, the key legend and the
+                            shared FormSection chrome
     shared/                 issuerow, markdown, renderhelpers, textutil — reused across modes
     board/ search/ detail/  one renderer per browse surface
     storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
@@ -49,7 +50,9 @@ rg -n '^\t\w+Action\w+ +=' internal/config/keybindings.go   # every bindable act
 rg -n '^type \w+Msg\b' internal/                           # every Bubble Tea message type; the shell contracts are the exported ones in internal/mode/contracts.go
 rg -n '^\t[A-Z]\w+\(' internal/repository/repository.go    # every repository operation
 rg -n '^func Render' internal/ui/                          # every top-level renderer
-rg -n '^\t\w+Color +=' internal/ui/styles/colors.go        # every colour role
+rg -n '^func HitTest' internal/ui/                         # what each renderer draws at a cell; the mouse reads through these
+rg -n '^\t\w+Color = ' internal/ui/styles/theme.go          # every colour role, and the colour each theme gives it
+rg -n '^\t"[a-z-]+": +\{?' internal/ui/styles/glyphs.go internal/ui/styles/theme.go   # every glyph set and theme name
 rg -n '<config-key>' internal/config/                      # where a config key is read
 rg -n 'dep == "|MustCompile' cmd/taskmgr-ui/architecture_guardrails_test.go   # the import bans CI enforces
 ```

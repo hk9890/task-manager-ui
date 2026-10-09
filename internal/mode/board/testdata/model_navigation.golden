@@ -1,9 +1,9 @@
 Default
 ╭─ Ready ─────────────────────────────────── 1 ─╮  ╭─ In Progress ───────────────────────────── 2 ─╮
-│  T P1 OPN tm-1 Ready first                    │  │  T P2 IP tm-7 Progress one                    │
-│                                               │  │› B P1 IP tm-8 Progress two                    │
-│                                               │  │                                               │
-│                                               │  │                                               │
+│  T Ready first                                │  │  T Progress one                               │
+│    P1 OPN tm-1                                │  │    P2 IP tm-7                                 │
+│                                               │  │▌ B Progress two                               │
+│                                               │  │▌   P1 IP tm-8                                 │
 │                                               │  │                                               │
 │                                               │  │                                               │
 │                                               │  │                                               │

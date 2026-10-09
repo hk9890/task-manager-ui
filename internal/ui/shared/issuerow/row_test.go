@@ -13,8 +13,17 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
+// plainLines strips the escapes from each line of a rendered row.
+func plainLines(lines []string) []string {
+	plain := make([]string, len(lines))
+	for i, line := range lines {
+		plain[i] = testui.AnsiEscapePattern.ReplaceAllString(line, "")
+	}
+	return plain
+}
+
 func TestRenderCompactSelectionAndMetadata(t *testing.T) {
-	line := RenderCompact(RenderConfig{
+	lines := RenderCompact(RenderConfig{
 		Issue: domain.IssueSummary{
 			ID:       "task-manager-ui-u5s",
 			Title:    "Row renderer metadata",
@@ -26,31 +35,47 @@ func TestRenderCompactSelectionAndMetadata(t *testing.T) {
 		Width:    72,
 	})
 
-	if !strings.HasPrefix(line, "› ") {
-		t.Fatalf("expected selected row prefix, got: %q", line)
+	if len(lines) != Height {
+		t.Fatalf("expected %d lines, got %d: %q", Height, len(lines), lines)
 	}
-	if !strings.Contains(line, "T P1 OPN") {
-		t.Fatalf("expected compact metadata tokens, got: %q", line)
+	if lines[0] != "▌ T Row renderer metadata" {
+		t.Fatalf("expected the selection bar, the type and the title on the first line, got: %q", lines[0])
+	}
+	if lines[1] != "▌   P1 OPN task-manager-ui-u5s" {
+		t.Fatalf("expected the selection bar and the metadata under the title, got: %q", lines[1])
 	}
 }
 
-func TestRenderCompactTruncatesMetadataWhenVeryNarrow(t *testing.T) {
-	line := RenderCompact(RenderConfig{
-		Issue: domain.IssueSummary{
-			ID:       "task-manager-ui-very-long-id",
-			Title:    "Long title that should not fit",
-			Type:     "feature",
-			Status:   "in_progress",
-			Priority: 0,
-		},
-		Width: 15,
-	})
-
-	if strings.Contains(line, "Long title") {
-		t.Fatalf("expected title to be omitted when metadata consumes width, got: %q", line)
+func TestRenderCompactKeepsMetadataWhenVeryNarrow(t *testing.T) {
+	issue := domain.IssueSummary{
+		ID:       "task-manager-ui-very-long-id",
+		Title:    "Long title that should not fit",
+		Type:     "feature",
+		Status:   "in_progress",
+		Priority: 0,
 	}
-	if !strings.Contains(line, "F P0 IP") {
-		t.Fatalf("expected metadata retained in narrow row, got: %q", line)
+
+	tests := []struct {
+		width int
+		want  []string
+	}{
+		// The ID keeps what is left of the second line.
+		{width: 15, want: []string{"  F Long title…", "    P0 IP …g-id"}},
+		// No cell is left for the ID: the row drops it and keeps the tokens.
+		{width: 10, want: []string{"  F Long …", "    P0 IP"}},
+	}
+
+	for _, tc := range tests {
+		lines := RenderCompact(RenderConfig{Issue: issue, Width: tc.width})
+
+		if len(lines) != len(tc.want) || lines[0] != tc.want[0] || lines[1] != tc.want[1] {
+			t.Errorf("width %d: got %q, want %q", tc.width, lines, tc.want)
+		}
+		for i, line := range lines {
+			if lipgloss.Width(line) > tc.width {
+				t.Errorf("width %d: line %d is %d cells wide: %q", tc.width, i, lipgloss.Width(line), line)
+			}
+		}
 	}
 }
 
@@ -61,7 +86,7 @@ func TestRenderCompactStyledIncludesANSI(t *testing.T) {
 		lipgloss.SetColorProfile(previousProfile)
 	})
 
-	line := RenderCompact(RenderConfig{
+	lines := RenderCompact(RenderConfig{
 		Issue: domain.IssueSummary{
 			ID:       "task-manager-ui-u5s",
 			Title:    "Styled row",
@@ -74,12 +99,60 @@ func TestRenderCompactStyledIncludesANSI(t *testing.T) {
 		Styled:   true,
 	})
 
-	if !strings.Contains(line, "\x1b[") {
-		t.Fatalf("expected ANSI styling when Styled is true, got: %q", line)
+	for i, line := range lines {
+		if !strings.Contains(line, "\x1b[") {
+			t.Fatalf("expected ANSI styling on line %d when Styled is true, got: %q", i, line)
+		}
 	}
-	plain := testui.AnsiEscapePattern.ReplaceAllString(line, "")
-	if !strings.Contains(plain, "› B P0 BLK u5s") {
+	plain := plainLines(lines)
+	if !strings.HasPrefix(plain[0], "▌ B Styled row") || !strings.HasPrefix(plain[1], "▌   P0 BLK task-manager-ui-u5s") {
 		t.Fatalf("expected styled metadata to preserve token text, got: %q", plain)
+	}
+}
+
+// TestRenderCompactStyledSelectedRowFillsItsWidth: the band and the selection
+// bar are what join the two lines into one row, so a styled selected row is
+// Width cells on both lines and carries the bar on both — under every glyph
+// set, because an icon that measured two cells would push one line past the
+// other.
+func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	// Apply writes package variables, so this test is not parallel.
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(previousProfile)
+		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+			t.Fatalf("restore the initial styles: %v", err)
+		}
+	})
+
+	issues := []domain.IssueSummary{
+		{ID: "task-manager-ui-very-long-id", Title: strings.Repeat("A long title ", 12), Type: "feature", Status: "in_progress", Priority: 0},
+		{ID: "TM-1", Title: "Short", Type: "not-a-type", Status: "not-a-status", Priority: 3},
+	}
+
+	for _, set := range styles.GlyphSets() {
+		if err := styles.Apply("catppuccin-mocha", set); err != nil {
+			t.Fatalf("Apply(%q): %v", set, err)
+		}
+		cursor := styles.Glyphs.Cursor + " "
+
+		for _, issue := range issues {
+			for width := 2; width <= 100; width++ {
+				lines := RenderCompact(RenderConfig{Issue: issue, Selected: true, Styled: true, Width: width})
+				if len(lines) != Height {
+					t.Fatalf("%s, width %d: expected %d lines, got %d", set, width, Height, len(lines))
+				}
+				for i, line := range plainLines(lines) {
+					if got := lipgloss.Width(line); got != width {
+						t.Errorf("%s, %s, width %d: line %d is %d cells wide: %q", set, issue.ID, width, i, got, line)
+					}
+					if !strings.HasPrefix(line, cursor) {
+						t.Errorf("%s, %s, width %d: line %d does not carry the selection bar: %q", set, issue.ID, width, i, line)
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -161,7 +234,7 @@ func TestRenderReferenceCompactSelectionDistinct(t *testing.T) {
 	selectedPlain := testui.AnsiEscapePattern.ReplaceAllString(selected, "")
 	idlePlain := testui.AnsiEscapePattern.ReplaceAllString(idle, "")
 
-	if !strings.HasPrefix(selectedPlain, "› ") {
+	if !strings.HasPrefix(selectedPlain, "▌ ") {
 		t.Fatalf("expected selected row indicator prefix, got %q", selectedPlain)
 	}
 	if !strings.HasPrefix(idlePlain, "  ") {
@@ -169,53 +242,62 @@ func TestRenderReferenceCompactSelectionDistinct(t *testing.T) {
 	}
 }
 
-// TestRenderCompactSkeletonWidth verifies that lipgloss.Width equals opts.Width
-// for representative widths and that RenderConfig.RenderCompact is unchanged.
+// TestRenderCompactSkeletonWidth verifies that the skeleton is Height lines,
+// each opts.Width cells wide, down to the widths where it degrades to bars.
 func TestRenderCompactSkeletonWidth(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	for _, w := range []int{30, 50, 80, 120, 200} {
-		row := RenderCompactSkeleton(SkeletonOpts{Width: w, Seed: 0, Styled: true})
-		got := lipgloss.Width(row)
-		if got != w {
-			t.Errorf("RenderCompactSkeleton(width=%d): lipgloss.Width=%d, want %d (row=%q)", w, got, w, row)
+	for _, w := range []int{1, 4, 5, 11, 12, 30, 50, 80, 120, 200} {
+		for seed := 0; seed < 6; seed++ {
+			lines := RenderCompactSkeleton(SkeletonOpts{Width: w, Seed: seed, Styled: true})
+			if len(lines) != Height {
+				t.Fatalf("RenderCompactSkeleton(width=%d): %d lines, want %d", w, len(lines), Height)
+			}
+			for i, line := range lines {
+				if got := lipgloss.Width(line); got != w {
+					t.Errorf("RenderCompactSkeleton(width=%d, seed=%d): line %d lipgloss.Width=%d, want %d (line=%q)", w, seed, i, got, w, line)
+				}
+			}
 		}
 	}
+
+	// No width draws nothing, and still takes the row's height.
+	if lines := RenderCompactSkeleton(SkeletonOpts{Width: 0, Styled: true}); len(lines) != Height || strings.Join(lines, "") != "" {
+		t.Errorf("RenderCompactSkeleton(width=0) = %q, want %d empty lines", lines, Height)
+	}
 }
 
-// TestRenderCompactSkeletonSegmentStructure verifies that the plain-text skeleton
-// row has the expected segment shape: three "X" metadata runs (type/priority/
-// state) followed by two SkeletonGlyph bars (id + title).
+// skeletonRuns counts the runs of glyph on each line of a skeleton row.
+func skeletonRuns(lines []string, glyph string) []int {
+	re := regexp.MustCompile(glyph + "+")
+	runs := make([]int, len(lines))
+	for i, line := range plainLines(lines) {
+		runs[i] = len(re.FindAllString(line, -1))
+	}
+	return runs
+}
+
+// TestRenderCompactSkeletonSegmentStructure verifies that the skeleton row has
+// the shape of a real one: an "X" type slot and a title bar on the first line,
+// then "X" priority and state slots and an ID bar on the second.
 func TestRenderCompactSkeletonSegmentStructure(t *testing.T) {
-	row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: false})
-	// Strip ANSI escapes for the structural check (Styled:false so none expected).
-	plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
-
-	metaRuns := regexp.MustCompile(SkeletonMetaGlyph+"+").FindAllString(plain, -1)
-	if len(metaRuns) != 3 {
-		t.Errorf("expected 3 %s metadata runs, got %d in %q", SkeletonMetaGlyph, len(metaRuns), plain)
-	}
-	barRuns := regexp.MustCompile(SkeletonGlyph+"+").FindAllString(plain, -1)
-	if len(barRuns) != 2 {
-		t.Errorf("expected 2 %s bar runs (id + title), got %d in %q", SkeletonGlyph, len(barRuns), plain)
-	}
-}
-
-// TestRenderCompactSkeletonStyledSegmentStructure verifies the same structure when Styled:true.
-func TestRenderCompactSkeletonStyledSegmentStructure(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: true})
-	plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
-	if got := len(regexp.MustCompile(SkeletonMetaGlyph+"+").FindAllString(plain, -1)); got != 3 {
-		t.Errorf("expected 3 %s metadata runs in styled row, got %d in %q", SkeletonMetaGlyph, got, plain)
-	}
-	if got := len(regexp.MustCompile(SkeletonGlyph+"+").FindAllString(plain, -1)); got != 2 {
-		t.Errorf("expected 2 %s bar runs in styled row, got %d in %q", SkeletonGlyph, got, plain)
+	for _, styled := range []bool{false, true} {
+		lines := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: styled})
+
+		if got := skeletonRuns(lines, SkeletonMetaGlyph); len(got) != 2 || got[0] != 1 || got[1] != 2 {
+			t.Errorf("styled %v: expected %s metadata runs [1 2] (type, then priority and state), got %v in %q",
+				styled, SkeletonMetaGlyph, got, plainLines(lines))
+		}
+		if got := skeletonRuns(lines, SkeletonGlyph); len(got) != 2 || got[0] != 1 || got[1] != 1 {
+			t.Errorf("styled %v: expected %s bar runs [1 1] (title, then id), got %v in %q",
+				styled, SkeletonGlyph, got, plainLines(lines))
+		}
 	}
 }
 
@@ -225,14 +307,13 @@ func TestRenderCompactSkeletonSixDistinctTitleFills(t *testing.T) {
 	re := regexp.MustCompile(SkeletonGlyph + "+")
 	seen := make(map[int]bool)
 	for seed := 0; seed < 6; seed++ {
-		row := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: seed, Styled: false})
-		plain := testui.AnsiEscapePattern.ReplaceAllString(row, "")
-		runs := re.FindAllString(plain, -1)
-		if len(runs) == 0 {
-			t.Fatalf("seed %d: no %s runs found in %q", seed, SkeletonGlyph, plain)
+		lines := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: seed, Styled: false})
+		// The title bar is the bar of the first line.
+		runs := re.FindAllString(lines[0], -1)
+		if len(runs) != 1 {
+			t.Fatalf("seed %d: expected one %s title bar in %q", seed, SkeletonGlyph, lines[0])
 		}
-		// The last bar run is the title segment.
-		seen[len([]rune(runs[len(runs)-1]))] = true
+		seen[len([]rune(runs[0]))] = true
 	}
 	if len(seen) != 6 {
 		t.Errorf("expected 6 distinct title bar widths across seeds 0-5, got %d: %v", len(seen), seen)
@@ -270,12 +351,12 @@ func TestRenderCompactDimFalseIsUnchanged(t *testing.T) {
 	}
 
 	// Baseline: zero-value Dim and Phase (Dim==false is the default).
-	baseline := RenderCompact(cfg)
+	baseline := strings.Join(RenderCompact(cfg), "\n")
 
 	// Explicit Dim==false must be byte-identical.
 	cfg.Dim = false
 	cfg.Phase = 1
-	got := RenderCompact(cfg)
+	got := strings.Join(RenderCompact(cfg), "\n")
 
 	if got != baseline {
 		t.Fatalf("Dim==false output differs from baseline:\nbaseline: %q\ngot:      %q", baseline, got)
@@ -283,7 +364,7 @@ func TestRenderCompactDimFalseIsUnchanged(t *testing.T) {
 }
 
 // TestRenderCompactDimAppliesSkeletonShadesForeground verifies that when
-// Dim==true && Selected==false the output contains the SkeletonShades[phase]
+// Dim==true && Selected==false both lines carry the SkeletonShades[phase]
 // ANSI sequence as a foreground color code.
 func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
@@ -308,14 +389,10 @@ func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
 				Phase:    phase,
 			})
 
-			if !strings.Contains(dimmed, "\x1b[") {
-				t.Fatalf("phase %d: expected ANSI in dimmed row, got: %q", phase, dimmed)
-			}
-
 			// The plain text must still contain the issue content.
-			plain := testui.AnsiEscapePattern.ReplaceAllString(dimmed, "")
-			if !strings.Contains(plain, "Dim foreground test") {
-				t.Fatalf("phase %d: expected title in plain text, got: %q", phase, plain)
+			plain := plainLines(dimmed)
+			if !strings.Contains(plain[0], "Dim foreground test") || !strings.Contains(plain[1], "task-manager-ui-dim1") {
+				t.Fatalf("phase %d: expected title and id in plain text, got: %q", phase, plain)
 			}
 
 			// Assert the specific SkeletonShades[phase] ANSI foreground sequence is present.
@@ -324,9 +401,11 @@ func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
 			sentinel := "\x00"
 			rendered := lipgloss.NewStyle().Foreground(skeletonColor(phase)).Render(sentinel)
 			ansiPrefix := strings.SplitN(rendered, sentinel, 2)[0]
-			if !strings.Contains(dimmed, ansiPrefix) {
-				t.Fatalf("phase %d: expected SkeletonShades[%d] ANSI sequence %q in dimmed row, got: %q",
-					phase, phase, ansiPrefix, dimmed)
+			for i, line := range dimmed {
+				if !strings.Contains(line, ansiPrefix) {
+					t.Fatalf("phase %d: expected SkeletonShades[%d] ANSI sequence %q on line %d, got: %q",
+						phase, phase, ansiPrefix, i, line)
+				}
 			}
 
 			// Verify the row with Dim differs from the same row without Dim.
@@ -343,8 +422,10 @@ func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
 				Styled:   true,
 				Dim:      false,
 			})
-			if dimmed == undimmed {
-				t.Fatalf("phase %d: Dim==true output identical to Dim==false — dim not applied", phase)
+			for i := range dimmed {
+				if dimmed[i] == undimmed[i] {
+					t.Fatalf("phase %d: line %d of Dim==true is identical to Dim==false — dim not applied", phase, i)
+				}
 			}
 		})
 	}
@@ -374,18 +455,7 @@ func TestRenderCompactDimSelectedPreservesSelectionAndDimsForeground(t *testing.
 		Phase:    0,
 	})
 
-	// The plain text must still contain the selection prefix.
-	plain := testui.AnsiEscapePattern.ReplaceAllString(dimmedSelected, "")
-	if !strings.HasPrefix(plain, "› ") {
-		t.Fatalf("expected selection prefix '› ' in dimmed+selected row, got: %q", plain)
-	}
-
-	// The styled output must contain ANSI (both selection indicator and dim shade).
-	if !strings.Contains(dimmedSelected, "\x1b[") {
-		t.Fatalf("expected ANSI in dimmed+selected row, got: %q", dimmedSelected)
-	}
-
-	// The dimmed+selected row must differ from the selected-but-not-dimmed row.
+	// The selected-but-not-dimmed row, to compare against.
 	selectedOnly := RenderCompact(RenderConfig{
 		Issue: domain.IssueSummary{
 			ID:       "task-manager-ui-sc1",
@@ -399,8 +469,21 @@ func TestRenderCompactDimSelectedPreservesSelectionAndDimsForeground(t *testing.
 		Styled:   true,
 		Dim:      false,
 	})
-	if dimmedSelected == selectedOnly {
-		t.Fatalf("expected dimmed+selected to differ from selected-only\ngot: %q", dimmedSelected)
+
+	_, styledPrefix := styles.SelectionPrefix(true, true)
+	for i, line := range dimmedSelected {
+		// The plain text must still contain the selection prefix.
+		if plain := testui.AnsiEscapePattern.ReplaceAllString(line, ""); !strings.HasPrefix(plain, "▌ ") {
+			t.Fatalf("expected selection prefix '▌ ' on line %d of a dimmed+selected row, got: %q", i, plain)
+		}
+		// The selection bar keeps its own colour: the tint is on the content only.
+		if !strings.Contains(line, strings.TrimSuffix(styledPrefix, " ")) {
+			t.Fatalf("expected the selection bar in its own style on line %d, got: %q", i, line)
+		}
+		// The dimmed+selected row must differ from the selected-but-not-dimmed row.
+		if line == selectedOnly[i] {
+			t.Fatalf("expected line %d of dimmed+selected to differ from selected-only\ngot: %q", i, line)
+		}
 	}
 }
 
@@ -419,7 +502,7 @@ func TestRenderCompactSkeletonPhaseCyclesColor(t *testing.T) {
 	outputs := make([]string, 3)
 	plains := make([]string, 3)
 	for phase := 0; phase < 3; phase++ {
-		row := RenderCompactSkeleton(SkeletonOpts{Width: width, Seed: seed, Phase: phase, Styled: true})
+		row := strings.Join(RenderCompactSkeleton(SkeletonOpts{Width: width, Seed: seed, Phase: phase, Styled: true}), "\n")
 		outputs[phase] = row
 		plains[phase] = testui.AnsiEscapePattern.ReplaceAllString(row, "")
 	}
@@ -447,52 +530,49 @@ func TestRenderCompactSkeletonPhaseCyclesColor(t *testing.T) {
 	}
 }
 
-// TestRenderCompactKeepsAFullTitleSlotAtTheNarrowestWidthThatShowsATitle pins
-// the narrow-row cutoff at its own boundary. This primitive serves both the
-// board columns and the search results, so a one-off in the threshold blanks
-// issue titles in the narrowest usable column — or keeps an unreadably short
-// one — on both surfaces at once.
+// TestRenderCompactGivesTheTitleEveryCellAfterTheType pins the title slot at
+// its own boundary. This primitive serves both the board columns and the
+// search results, so a one-off in the slot cuts a title that fits — or lets a
+// row run past its width — on both surfaces at once.
 //
-// The width is found by scanning rather than hard-coded: the metadata prefix
-// width depends on CompactIDWidth, which itself varies with the row width.
-func TestRenderCompactKeepsAFullTitleSlotAtTheNarrowestWidthThatShowsATitle(t *testing.T) {
-	t.Parallel()
+// The title has the first line to itself after the gutter, the type and a
+// space, so the slot is the same whether the row is styled or not.
+func TestRenderCompactGivesTheTitleEveryCellAfterTheType(t *testing.T) {
+	previousProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
-	// Uppercase ID and lowercase title, so the presence of a lowercase rune
-	// means the title slot rendered and not part of the metadata prefix.
-	issue := domain.IssueSummary{ID: "TM-1", Title: strings.Repeat("z", 40), Type: "task", Priority: 1, Status: "open"}
-	renderAt := func(width int, title string) string {
-		row := issue
-		row.Title = title
-		return RenderCompact(RenderConfig{Issue: row, Width: width})
-	}
+	// Uppercase ID and lowercase title, so a lowercase rune is the title.
+	issue := domain.IssueSummary{ID: "TM-1", Type: "task", Priority: 1, Status: "open"}
+	const chrome = len("  T ")
 
-	narrowest := -1
-	for width := 1; width <= 120; width++ {
-		if strings.Contains(renderAt(width, issue.Title), "z") {
-			narrowest = width
-			break
+	for _, styled := range []bool{false, true} {
+		titleLine := func(width int, title string) string {
+			row := issue
+			row.Title = title
+			return plainLines(RenderCompact(RenderConfig{Issue: row, Width: width, Styled: styled}))[0]
 		}
-	}
-	if narrowest < 0 {
-		t.Fatal("no width up to 120 rendered a title")
-	}
 
-	// At that width the slot must be exactly minTitleWidth cells: a title of
-	// that length renders whole, and one rune longer must be truncated. A
-	// cutoff that is off by one satisfies the first check and fails the second.
-	whole := strings.Repeat("z", minTitleWidth)
-	if got := renderAt(narrowest, whole); !strings.Contains(got, whole) {
-		t.Errorf("width %d: a %d-rune title was not rendered whole: %q", narrowest, minTitleWidth, got)
-	}
-	overlong := strings.Repeat("z", minTitleWidth+1)
-	if got := renderAt(narrowest, overlong); strings.Contains(got, overlong) {
-		t.Errorf("width %d: a %d-rune title fitted, so the title slot is wider than minTitleWidth (%d): %q",
-			narrowest, minTitleWidth+1, minTitleWidth, got)
-	}
+		for width := chrome + 1; width <= 60; width++ {
+			slot := width - chrome
 
-	// One cell narrower, the row drops the title rather than showing a stub.
-	if got := renderAt(narrowest-1, issue.Title); strings.Contains(got, "z") {
-		t.Errorf("width %d: expected no title below the cutoff, got %q", narrowest-1, got)
+			// A title of exactly the slot renders whole, and one rune longer
+			// is truncated. A slot that is off by one fails one of the two.
+			whole := strings.Repeat("z", slot)
+			if got := titleLine(width, whole); got != "  T "+whole {
+				t.Errorf("styled %v, width %d: a %d-rune title was not rendered whole: %q", styled, width, slot, got)
+			}
+			got := titleLine(width, whole+"z")
+			if strings.Contains(got, whole+"z") || lipgloss.Width(got) != width || !strings.HasSuffix(got, "…") {
+				t.Errorf("styled %v, width %d: a %d-rune title must be cut to the row width with an ellipsis: %q",
+					styled, width, slot+1, got)
+			}
+		}
+
+		// With no cell left for a title, the line is the type and nothing of
+		// the title, and it stays inside the width.
+		if got := titleLine(chrome, "zzzz"); strings.Contains(got, "z") || lipgloss.Width(got) > chrome {
+			t.Errorf("styled %v, width %d: expected no title and no overflow, got %q", styled, chrome, got)
+		}
 	}
 }

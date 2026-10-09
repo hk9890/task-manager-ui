@@ -73,6 +73,21 @@ type Model struct {
 	active     mode.ID
 	lastBrowse mode.ID
 
+	// hoverTab is the header tab under the pointer, or "".
+	hoverTab mode.ID
+	// barPointer is the menu-bar column under the pointer, or nil. The bar
+	// reads the lit button from it on every draw: the reload button is as wide
+	// as the key of the surface on screen, so a key that changes the surface
+	// moves the buttons after it under a pointer that sent no event.
+	barPointer *int
+
+	// press is where the left button went down, until it comes up; sel is the
+	// box a drag from there selects (textselect.go). copyText puts a finished
+	// selection on the clipboard; tests replace it.
+	press    *screenCell
+	sel      textSelection
+	copyText func(string) tea.Cmd
+
 	selectedByMode map[mode.ID]*mode.Selection
 
 	// drillSelection is the issue Detail drilled into from its Dependencies
@@ -209,6 +224,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleRefreshTick:  defaultScheduleRefreshTick,
 		scheduleToastDismiss: defaultScheduleToastDismiss,
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
+		copyText:             copyToClipboard,
 	}
 	m.bindStore(services)
 	m.storePicker.SetCreateTarget(runtime.StorelessDir)
@@ -503,6 +519,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if mouse, ok := msg.(tea.MouseMsg); ok {
+		next, cmd, handled := m.mouseHeld(mouse)
+		if handled {
+			return next, cmd
+		}
+		return next.handleMouse(mouse)
+	}
+	if key, ok := msg.(tea.KeyMsg); ok && m.sel.active {
+		return m.selectingKey(key)
+	}
+
 	modeCmd := tea.Cmd(nil)
 	if !m.shouldCaptureKeyForOverlay(msg) {
 		modeCmd = m.forwardModeMessages(msg)
@@ -718,6 +745,46 @@ var issueScopedShellActions = []string{
 	config.ShellActionCommentIssue,
 }
 
+// The shell actions the menu bar also offers as buttons. The key switch and
+// the bar both run them from here, so a button does what its key does.
+
+func (m *Model) openHelp() tea.Cmd {
+	m.showHelp = true
+	m.help = m.help.ScrollToTop()
+	m.help.SetSize(m.width, m.height)
+	return nil
+}
+
+func (m *Model) openStorePicker() tea.Cmd {
+	if m.active == mode.StorePicker {
+		return nil
+	}
+	m.pickerReturn = m.active
+	m.active = mode.StorePicker
+	m.storePicker.SetSize(m.width, m.height)
+	m.storePicker.SetActiveStorePath(m.services.ActiveStorePath)
+	// Re-listed on every open, not cached: a store registered from another
+	// terminal since the last look must appear without a restart.
+	return m.storePicker.Init()
+}
+
+func (m *Model) quit() tea.Cmd {
+	return tea.Quit
+}
+
+// reloadActiveSurface does what the reload key of the surface on screen does.
+func (m *Model) reloadActiveSurface() tea.Cmd {
+	if m.active == mode.Detail {
+		return m.reloadDetailCmd()
+	}
+	// Board is the shell's home tab, so an unknown active mode draws it
+	// (renderBody) and the button reloads what is drawn.
+	if tab := m.browseController(m.active); tab != nil {
+		return m.scoped(tab.Reload())
+	}
+	return m.scoped(m.board.Reload())
+}
+
 // handleShellKey handles one key press for the shell: the pending-dialog
 // choke point, the mode-local capture and intent checks, and the shell
 // keybinding switch. It is split out of update() so that message routing and
@@ -784,35 +851,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 			return m, batchCmds(modeCmd, actionCmd)
 		}
 		if intent != nil {
-			issueID := strings.TrimSpace(intent.IssueID)
-			if issueID == "" {
-				return m, modeCmd
-			}
-			m.active = mode.Detail
-			// Drilling into a related issue is a full navigation, not a peek:
-			// the target becomes the new detail selection so ALL three panes —
-			// including the Dependencies rail — reflect the target once loaded.
-			// This is what lets you open a child from an epic and then jump
-			// back via the child's own Parent row. Seeding an optimistic
-			// placeholder from the row's known ref renders the header + core
-			// metadata immediately, while the description and Dependencies pane
-			// show their skeleton until the single taskmgr show returns.
-			// ApplyLoadedDetail resets scroll offsets when the issue changes.
-			//
-			// Focus retention: set Loading and the drill-focus counter before the
-			// placeholder ApplyLoadedDetail call so that clearBrowserPanel does not
-			// flip focus away from the Dependencies pane during the in-flight window.
-			// The real detailLoadedMsg will apply the correct focus decision from
-			// actual rail content via the counter mechanism in ApplyLoadedDetail.
-			m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
-				ID:       issueID,
-				Title:    intent.Ref.Title,
-				Status:   intent.Ref.Status,
-				Type:     intent.Ref.Type,
-				Priority: intent.Ref.Priority,
-			}}
-			m.detail.BeginLoad(issueID, detail.BeginLoadOptions{Ref: &intent.Ref, Drill: true})
-			return m, batchCmds(modeCmd, m.loadDetail(issueID))
+			return m, batchCmds(modeCmd, m.drillInto(*intent))
 		}
 		if consumed {
 			return m, modeCmd
@@ -821,31 +860,17 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 
 	switch {
 	case m.keys.Match(config.ShellContext, config.ShellActionQuit, msg):
-		return m, batchCmds(modeCmd, tea.Quit)
+		return m, batchCmds(modeCmd, m.quit())
 	case m.keys.Match(config.ShellContext, config.ShellActionHelp, msg):
-		m.showHelp = true
-		m.help.SetSize(m.width, m.height)
-		return m, modeCmd
+		return m, batchCmds(modeCmd, m.openHelp())
 	case m.keys.Match(config.ShellContext, config.ShellActionStorePicker, msg):
-		if m.active == mode.StorePicker {
-			return m, modeCmd
-		}
-		m.pickerReturn = m.active
-		m.active = mode.StorePicker
-		m.storePicker.SetSize(m.width, m.height)
-		m.storePicker.SetActiveStorePath(m.services.ActiveStorePath)
-		// Re-listed on every open, not cached: a store registered from another
-		// terminal since the last look must appear without a restart.
-		return m, batchCmds(modeCmd, m.storePicker.Init())
+		return m, batchCmds(modeCmd, m.openStorePicker())
 	case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
-		m.enterBrowseMode(mode.Board)
-		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		return m, batchCmds(modeCmd, m.switchToTab(mode.Board))
 	case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
-		m.enterBrowseMode(mode.Docs)
-		return m, batchCmds(modeCmd, m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		return m, batchCmds(modeCmd, m.switchToTab(mode.Docs))
 	case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
-		m.enterBrowseMode(mode.Search)
-		return m, batchCmds(modeCmd, m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+		return m, batchCmds(modeCmd, m.switchToTab(mode.Search))
 	case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
 		if m.active == mode.Detail {
 			m.enterBrowseMode(mode.Board)

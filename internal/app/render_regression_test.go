@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // countColumnTopLines returns the number of lines in the rendered view that
@@ -259,7 +260,7 @@ func TestModelDetailModeRendersConfigurableFooterHelp(t *testing.T) {
 	m = applyMessages(t, m, runBatch(cmd))
 
 	view := m.View()
-	if !strings.Contains(view, "Detail: j/k scroll") || !strings.Contains(view, "home/end bounds") {
+	if !strings.Contains(view, "j/k scroll") || !strings.Contains(view, "home/end bounds") {
 		t.Fatalf("expected detail footer help to include configurable detail bindings, got:\n%s", view)
 	}
 }
@@ -313,7 +314,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	}
 }
 
-func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T) {
+func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *testing.T) {
 	t.Parallel()
 
 	gw := fakes.NewTracked()
@@ -332,14 +333,29 @@ func TestModelBoardShellUsesSingleLineHeaderAndFooterHelpAt120Cols(t *testing.T)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	header := m.renderHeader()
-	if strings.Contains(header, "\n") {
-		t.Fatalf("expected single-line header, got:\n%s", header)
+	headerLines := strings.Split(header, "\n")
+	if len(headerLines) != 3 {
+		t.Fatalf("expected the menu bar, the rule and the tab line, got %d lines:\n%s", len(headerLines), header)
+	}
+	for _, line := range headerLines {
+		if got := lipgloss.Width(line); got != 120 {
+			t.Fatalf("expected each header line to span the 120 columns, got %d:\n%s", got, header)
+		}
+	}
+	if strings.Contains(headerLines[0], " Board ") || !strings.Contains(headerLines[0], "stores") {
+		t.Fatalf("expected the buttons and no tab on the menu bar, got:\n%s", headerLines[0])
+	}
+	if !strings.Contains(headerLines[2], " Board ") || !strings.Contains(headerLines[2], "Selected: tm-3 (blocked)") {
+		t.Fatalf("expected the tabs and the context on the tab line, got:\n%s", headerLines[2])
 	}
 	if strings.Contains(header, "Detail") {
 		t.Fatalf("expected detail to be contextual and absent from top tabs, got:\n%s", header)
 	}
 
 	footer := m.renderFooter()
+	if strings.Contains(footer, "\n") {
+		t.Fatalf("expected single-line footer, got:\n%s", footer)
+	}
 	if !strings.Contains(footer, "ctrl+space search") {
 		t.Fatalf("expected board footer help with ctrl+space hint, got:\n%s", footer)
 	}
@@ -517,7 +533,7 @@ func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
 	if strings.Contains(view, "Selected Issue") {
 		t.Fatalf("expected board view without selected issue sidebar, got:\n%s", view)
 	}
-	if !strings.Contains(view, "bwf-1 Seed fixture roo") {
+	if !strings.Contains(view, "T Seed fixture root task") || !strings.Contains(view, "P1 OPN bwf-1") {
 		t.Fatalf("expected fixture-shaped issue title in board capture, got:\n%s", view)
 	}
 	if strings.Count(view, "│") < 20 {
@@ -605,8 +621,7 @@ func TestHeaderSpinnerCellContainsGlyphWhenLoading(t *testing.T) {
 	// verify none of the 10 glyphs appear when idle (all loading cleared)
 	m.detail.FinishLoad(nil)
 	idleCell := m.headerSpinnerCell()
-	for i, r := range loading.SpinnerFrames {
-		g := string(r)
+	for i, g := range styles.Glyphs.Spinner {
 		if strings.Contains(idleCell, g) {
 			t.Errorf("headerSpinnerCell when idle contains spinner glyph[%d] %q: got %q",
 				i, g, idleCell)

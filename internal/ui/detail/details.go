@@ -23,6 +23,9 @@ const (
 	InspectorTwoColumnMinWidth   = 110
 	InspectorThreeColumnMinWidth = 140
 
+	// minDetailWidth is the narrowest terminal the panes are drawn at.
+	minDetailWidth = 30
+
 	detailColumnGap   = 2
 	metadataRailWidth = 34
 	leftRailMinWidth  = 24
@@ -37,7 +40,7 @@ type State struct {
 	TargetID                 string
 	Detail                   domain.IssueDetail
 	BrowserItems             []domain.IssueReference
-	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); marked with the app-wide "› " selection prefix
+	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); marked with the app-wide selection gutter
 	QuickActions             QuickActionLabels
 	Loading                  bool
 	Skeleton                 bool // when true, Content pane renders skeleton rows instead of description body
@@ -51,6 +54,9 @@ type State struct {
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
+	// Hover is the cell under the pointer, as HitTest reported it; nil when the
+	// pointer is elsewhere. Its reference row draws the hover band.
+	Hover *Hit
 }
 
 // FocusPane identifies which detail pane is visually focused.
@@ -132,7 +138,6 @@ func Render(state State) string {
 		height = defaultDetailHeight
 	}
 
-	const minDetailWidth = 30
 	if width < minDetailWidth {
 		return "Terminal too narrow"
 	}
@@ -264,7 +269,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 func renderDependenciesPane(detail domain.IssueDetail, state State, width, height int) string {
 	innerHeight := max(1, height-2)
-	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2, state.Skeleton, state.SkeletonPhase)
+	dependencies := renderRelationshipGroups(dependencyGroups(detail, state.BrowserItems), state.marks(), width-2, state.Skeleton, state.SkeletonPhase)
 	dependenciesView, _ := sliceWithOffset(dependencies, state.DependenciesScrollOffset, innerHeight, width-2)
 	totalRefs := countDependencyReferences(detail)
 	var topRight string
@@ -333,7 +338,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 
 	depGroups := dependencyGroups(detail, state.BrowserItems)
-	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2, state.Skeleton, state.SkeletonPhase)
+	deps := renderRelationshipGroups(depGroups, state.marks(), leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	innerHeight := max(1, height-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
 	totalDepRefs := countDependencyReferences(detail)
@@ -577,10 +582,6 @@ func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) i
 	return -1
 }
 
-// stripANSI removes ANSI escape sequences for line-content comparison.
-// contentDividerStyle renders the thin header/body divider in a muted border color.
-var contentDividerStyle = lipgloss.NewStyle().Foreground(styles.BorderDefaultColor)
-
 // contentHeaderMetaRow renders the compact, dashboard-styled metadata row shown at the
 // top of the Content pane: type, priority, and status tokens (each in its board color,
 // reusing the shared renderhelpers) followed by the full issue ID (muted). It mirrors
@@ -606,12 +607,14 @@ func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
 }
 
 // contentHeaderRule renders the thin full-width horizontal divider that separates the
-// Content pane header (meta row + title) from the description body.
+// Content pane header (meta row + title) from the description body, in the border colour.
+// The style is built on each call: a package variable would keep the colour of the theme
+// the styles package starts on, whatever styles.Apply assigned after it.
 func contentHeaderRule(width int) string {
 	if width < 1 {
 		return ""
 	}
-	return contentDividerStyle.Render(strings.Repeat("─", width))
+	return lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width))
 }
 
 // isPlaceholderSummary reports whether the summary is the search "no selection"

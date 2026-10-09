@@ -1,13 +1,13 @@
 Default
 ╭─ Not Ready ───────────────────────── 2 ─╮  ╭─ Ready ───────────────────────────── 3 ─╮  ╭─ In Progress ──────────────────────── 3 ─╮  ╭─ Done ─────────────────────────────── 3 ─╮
-│› T P1 BLK tm-9 Blocked: migration seque…│  │  T P1 OPN tm-1 Ready fix login prompt   │  │  F P1 IP tm-2 Implement board keyboard s…│  │  F P1 IP tm-2 Implement board keyboard s…│
-│─── older than 1 day ────────────── 1 ───│  │─── older than 1 day ────────────── 2 ───│  │─── older than 1 day ─────────────── 2 ───│  │  T P1 IP tm-7 Wire detail reload behavior│
-│─── older than 1 week ───────────── 1 ───│  │  T P2 OPN tm-5 Ready improve docs outli…│  │  T P1 IP tm-7 Wire detail reload behavior│  │  D P2 IP tm-8 Polish header help copy    │
-│  B P0 BLK tm-3 Blocked: API contract pe…│  │─── older than 1 week ───────────── 1 ───│  │─── older than 1 week ────────────── 1 ───│  │                                          │
-│                                         │  │  C P2 OPN tm-6 Ready triage inbox       │  │  D P2 IP tm-8 Polish header help copy    │  │                                          │
-│                                         │  │                                         │  │                                          │  │                                          │
-│                                         │  │                                         │  │                                          │  │                                          │
-│                                         │  │                                         │  │                                          │  │                                          │
+│▌ T Blocked: migration sequencing        │  │  T Ready fix login prompt               │  │  F Implement board keyboard shortcuts    │  │  F Implement board keyboard shortcuts    │
+│▌   P1 BLK tm-9                          │  │    P1 OPN tm-1                          │  │    P1 IP tm-2                            │  │    P1 IP tm-2                            │
+│─── older than 1 day ────────────── 1 ───│  │─── older than 1 day ────────────── 2 ───│  │─── older than 1 day ─────────────── 2 ───│  │  T Wire detail reload behavior           │
+│─── older than 1 week ───────────── 1 ───│  │  T Ready improve docs outline           │  │  T Wire detail reload behavior           │  │    P1 IP tm-7                            │
+│  B Blocked: API contract pending        │  │    P2 OPN tm-5                          │  │    P1 IP tm-7                            │  │  D Polish header help copy               │
+│    P0 BLK tm-3                          │  │─── older than 1 week ───────────── 1 ───│  │─── older than 1 week ────────────── 1 ───│  │    P2 IP tm-8                            │
+│                                         │  │  C Ready triage inbox                   │  │  D Polish header help copy               │  │                                          │
+│                                         │  │    P2 OPN tm-6                          │  │    P2 IP tm-8                            │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │

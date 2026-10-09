@@ -80,7 +80,8 @@ taskmgr-ui --check-config      # validate the config file and exit
 taskmgr-ui --debug             # mirror startup diagnostics to stderr
 ```
 
-Configuring it — the config file, keybinding overrides, launcher templates — is
+Configuring it — the config file, the theme and glyph set, keybinding overrides, launcher
+templates — is
 [`docs/CONFIGURATION.md`](./docs/CONFIGURATION.md).
 
 ## Docs

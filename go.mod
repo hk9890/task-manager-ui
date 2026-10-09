@@ -3,6 +3,7 @@ module github.com/hk9890/task-manager-ui
 go 1.26.3
 
 require (
+	github.com/catppuccin/go v0.3.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0

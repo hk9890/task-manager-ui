@@ -1,7 +1,3 @@
-// Package board is the board-mode controller: it owns column selection, scroll
-// offsets, and dashboard query routing, and emits mode.SelectionChangedMsg for
-// the shell to react to. Column layout is composed by internal/dashboard and
-// drawn by internal/ui/board.
 package board
 
 import (
@@ -109,6 +105,9 @@ type Model struct {
 	refreshMode   mode.RefreshMode
 	refreshAnchor *refreshAnchor
 
+	pointer *mode.Pointer
+	clicks  mode.ClickTracker
+
 	// --- Done column load-more state ---
 
 	// doneLoadedCount is the number of closed issues currently in
@@ -176,6 +175,16 @@ func (m *Model) Init() tea.Cmd {
 	return m.startReload(mode.RefreshReload)
 }
 
+// Reload is the manual refresh: a full reset, dropped while one is in flight.
+func (m *Model) Reload() tea.Cmd {
+	if m.inflight {
+		m.logger.Debug("manual board refresh suppressed; refresh already in flight",
+			"trigger", "board-manual")
+		return nil
+	}
+	return m.startReload(mode.RefreshReload)
+}
+
 // Update processes board-specific messages and keybindings.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
@@ -188,6 +197,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case loadMoreClosedDoneMsg:
 		return m.applyLoadMoreClosed(msg)
+
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
 
 	case tea.KeyMsg:
 		switch {
@@ -231,12 +243,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
-			if m.inflight {
-				m.logger.Debug("manual board refresh suppressed; refresh already in flight",
-					"trigger", "board-manual")
-				return nil
-			}
-			return m.startReload(mode.RefreshReload)
+			return m.Reload()
 		case m.keys.Match(config.BoardContext, config.BoardActionLoadMore, msg):
 			// Explicit load-more: dispatch regardless of cursor proximity,
 			// but still respect the in-flight guard and "nothing more" check.
@@ -256,24 +263,9 @@ func (m *Model) View(skeletonPhase int) string {
 		return "No board sections available."
 	}
 
-	uiColumns := make([]uiboard.Column, 0, len(m.columns))
-	for colIdx := range m.columns {
-		selectedRow := -1
-		if colIdx == m.focusedColumn {
-			selectedRow = m.selectedRow[colIdx]
-		}
-		uiColumns = append(uiColumns, m.uiColumn(colIdx, selectedRow))
-	}
-
-	return uiboard.Render(uiboard.State{
-		DashboardTitle: dashboardTitle,
-		Columns:        uiColumns,
-		FocusedColumn:  m.focusedColumn,
-		Width:          m.width,
-		Height:         m.height,
-		SkeletonPhase:  skeletonPhase,
-		Now:            m.now(),
-	})
+	state := m.viewState(skeletonPhase)
+	state.Hover = m.hover(state)
+	return uiboard.Render(state)
 }
 
 // uiColumn is column colIdx as the renderer sees it, with selectedRow as its
@@ -302,16 +294,17 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 //
 // The scroll window is derived from the height, so a resize that shrinks the
 // terminal shrinks the window under an offset that was valid for the old one:
-// without the clamp the selected row and its chevron sit below the last drawn
-// row until the operator presses j or k.
+// without the clamp the selected row and its selection bar sit below the last
+// drawn row until the operator presses j or k.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampScrollOffsets()
 }
 
-// sectionItemCapacity returns the number of issue rows that fit in a section
-// at the current terminal height.
+// sectionItemCapacity returns the number of content lines a section holds at
+// the current terminal height. An issue takes issuerow.Height of them; which
+// lines are issues is uiboard.EnsureVisible's and uiboard.MaxOffset's business.
 func (m *Model) sectionItemCapacity() int {
 	if m.height == 0 {
 		return 20 // safe default before first WindowSizeMsg
@@ -552,8 +545,9 @@ func (m *Model) settleAfterRefreshLoad() {
 // Only moveRow used to write scrollOffset, so a column that shrank under a
 // scrolled offset kept the old one: the renderer clamps the offset to the row
 // count, computes an empty window from it, and the column draws its border and
-// its header count with no rows and no chevron until the operator presses j or
-// k. Docs mode calls EnsureVisible from its own clamp for the same reason.
+// its header count with no rows and no selection bar until the operator
+// presses j or k. Docs mode calls EnsureVisible from its own clamp for the same
+// reason.
 func (m *Model) clampScrollOffsets() {
 	capacity := m.sectionItemCapacity()
 	for i := range m.columns {
@@ -570,10 +564,10 @@ func (m *Model) clampScrollOffsets() {
 		// Pull the window back inside the list first. EnsureVisible only slides
 		// far enough to reveal the selected row, so on its own it would leave a
 		// shrunk column scrolled to its last row with the rows above it
-		// unreachable until the operator pressed k.
-		if maxOffset := len(m.columns[i].issues) - capacity; m.scrollOffset[i] > maxOffset {
-			m.scrollOffset[i] = max(maxOffset, 0)
-		}
+		// unreachable until the operator pressed k. MaxOffset counts the lines
+		// the renderer draws: a bound counted in issues against a capacity in
+		// lines pulls back a window that is still full.
+		m.scrollOffset[i] = min(m.scrollOffset[i], uiboard.MaxOffset(m.uiColumn(i, row), capacity, m.now()))
 		m.scrollOffset[i] = uiboard.EnsureVisible(m.uiColumn(i, row), capacity, m.now())
 	}
 }

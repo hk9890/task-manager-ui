@@ -12,15 +12,16 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
-// SpinnerFrames is the pinned braille spinner glyph sequence.
-var SpinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
+// spinnerFrameCount is the length of the frame counter's cycle. Every glyph
+// set's spinner divides it, so no set jumps where the counter wraps.
+const spinnerFrameCount = 10
 
 // TickMsg is the message type fired by SpinnerTickCmd on each tick.
 type TickMsg struct{}
 
 // NextFrame returns the next spinner frame index after prev.
 func NextFrame(prev int) int {
-	return (prev + 1) % len(SpinnerFrames)
+	return (prev + 1) % spinnerFrameCount
 }
 
 // SkeletonPhase returns the skeleton color-cycle index for a given spinner
@@ -38,8 +39,9 @@ func SkeletonPhase(frame int) int {
 // Glyph returns the spinner glyph string for the given frame index.
 // Defensive against negative input.
 func Glyph(frame int) string {
-	n := len(SpinnerFrames)
-	return string(SpinnerFrames[((frame%n)+n)%n])
+	frames := styles.Glyphs.Spinner
+	n := len(frames)
+	return frames[((frame%n)+n)%n]
 }
 
 // SpinnerTickCmd returns a tea.Cmd that fires a TickMsg after duration d.

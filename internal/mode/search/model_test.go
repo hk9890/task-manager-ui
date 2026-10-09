@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -647,8 +648,11 @@ func TestSearchItemCapacity(t *testing.T) {
 	}{
 		{height: 0, want: 20},  // before first WindowSizeMsg: safe default
 		{height: 1, want: 1},   // min clamp
-		{height: 24, want: 17}, // 24 - 7 = 17
-		{height: 30, want: 23}, // 30 - 7 = 23
+		{height: 9, want: 1},   // (9 - 7) / 2 = 1
+		{height: 10, want: 1},  // (10 - 7) / 2 = 1, one line spare
+		{height: 24, want: 8},  // (24 - 7) / 2 = 8, one line spare
+		{height: 25, want: 9},  // (25 - 7) / 2 = 9
+		{height: 30, want: 11}, // (30 - 7) / 2 = 11, one line spare
 	}
 
 	for _, tc := range cases {
@@ -656,6 +660,45 @@ func TestSearchItemCapacity(t *testing.T) {
 		got := m.searchItemCapacity()
 		if got != tc.want {
 			t.Errorf("searchItemCapacity() with height=%d: got %d, want %d", tc.height, got, tc.want)
+		}
+	}
+}
+
+// TestSearchItemCapacityResultsAllFitUnderTheBanner asks the renderer whether
+// the limit a query carries is a list the results pane can draw whole: both
+// lines of every result, at even and odd heights, with the stale-results
+// banner and the blank line under it taking the two lines the limit leaves.
+func TestSearchItemCapacityResultsAllFitUnderTheBanner(t *testing.T) {
+	t.Parallel()
+
+	for height := 9; height <= 31; height++ {
+		capacity := (&Model{height: height}).searchItemCapacity()
+		results := make([]domain.IssueSummary, capacity)
+		for idx := range results {
+			results[idx] = domain.IssueSummary{
+				ID: fmt.Sprintf("tm-%02d", idx), Title: fmt.Sprintf("fit-%02d", idx), Type: "task", Status: "open", Priority: 2,
+			}
+		}
+
+		for _, query := range []string{"fit", "other"} {
+			view := testui.AnsiEscapePattern.ReplaceAllString(uisearch.Render(uisearch.State{
+				Query:        query,
+				AppliedQuery: "fit",
+				Results:      results,
+				SelectedID:   results[0].ID,
+				Width:        160,
+				Height:       height,
+			}), "")
+			if banner := strings.Contains(view, "are stale"); banner != (query == "other") {
+				t.Fatalf("height %d, query %q: stale banner drawn = %v:\n%s", height, query, banner, view)
+			}
+			for _, issue := range results {
+				for _, want := range []string{"T " + issue.Title, "  P2 OPN " + issue.ID} {
+					if !strings.Contains(view, want) {
+						t.Errorf("height %d, query %q: %d results requested, %q is not drawn:\n%s", height, query, capacity, want, view)
+					}
+				}
+			}
 		}
 	}
 }

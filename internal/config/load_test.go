@@ -34,6 +34,55 @@ func TestLoad_MissingConfigUsesDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_ConfigOverridesThemeAndGlyphs(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, strings.TrimSpace(`
+ui:
+  theme: catppuccin-latte
+  glyphs: ascii
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if result.Config.UI.Theme != "catppuccin-latte" || result.Config.UI.Glyphs != "ascii" {
+		t.Fatalf("expected the theme and glyph set of the file, got theme=%q glyphs=%q",
+			result.Config.UI.Theme, result.Config.UI.Glyphs)
+	}
+	if !result.Config.UI.ShowModeSwitcherHelp {
+		t.Fatal("a ui key the file does not set must keep its default")
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("ui.theme and ui.glyphs are known keys, got warnings %#v", result.Warnings)
+	}
+}
+
+// TestLoad_ConfigKeepsDefaultThemeAndGlyphsIndependently: each of the two keys
+// merges on its own, so a file that names one keeps the default of the other.
+func TestLoad_ConfigKeepsDefaultThemeAndGlyphsIndependently(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, strings.TrimSpace(`
+ui:
+  glyphs: unicode
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if result.Config.UI.Theme != Default().UI.Theme || result.Config.UI.Glyphs != "unicode" {
+		t.Fatalf("expected the default theme and the glyph set of the file, got theme=%q glyphs=%q",
+			result.Config.UI.Theme, result.Config.UI.Glyphs)
+	}
+}
+
 func TestLoad_ConfigOverridesEditorAndLaunchers(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)

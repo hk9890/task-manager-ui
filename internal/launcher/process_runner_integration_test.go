@@ -163,12 +163,6 @@ func TestExecProcessRunnerDetachesChildIntoItsOwnProcessGroup(t *testing.T) {
 	runner := NewExecProcessRunner()
 	pgidFile := filepath.Join(t.TempDir(), "child-pgid")
 
-	// Not parallel: setReaperHook is process-global, so a concurrent launch in
-	// another test would consume this hook signal.
-	hook := make(chan struct{}, 1)
-	setReaperHook(hook)
-	t.Cleanup(func() { setReaperHook(nil) })
-
 	// The child reports its own process group. `ps -o pgid= -p $$` is POSIX and
 	// prints the group with no header on both Linux and macOS. The path travels
 	// as a positional argument, never interpolated into the body (security rule).
@@ -181,19 +175,22 @@ func TestExecProcessRunnerDetachesChildIntoItsOwnProcessGroup(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	select {
-	case <-hook:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for the child to exit")
-	}
-
-	raw, err := os.ReadFile(pgidFile)
-	if err != nil {
-		t.Fatalf("read child pgid: %v", err)
-	}
-	childPgid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
-	if err != nil {
-		t.Fatalf("parse child pgid from %q: %v", raw, err)
+	// Wait for what this child wrote, not for the reaper hook: the hook is
+	// process-global, and the child of an earlier test, reaped late, fires it
+	// before this one has written a byte. The shell creates the file before ps
+	// fills it, so an empty file is not an answer yet either.
+	var childPgid int
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		raw, _ := os.ReadFile(pgidFile)
+		if pgid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil {
+			childPgid = pgid
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for the child's pgid in %s; last read %q", pgidFile, raw)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	ownPgid, err := syscall.Getpgid(os.Getpid())

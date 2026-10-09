@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -64,7 +65,8 @@ func datedFrom(rows []domain.IssueSummary, idx int) int {
 // rowLayout is where each issue of a column lands among the lines the
 // renderer draws for it, dividers included and the pinned error row excluded.
 // issueStart[i] is the first line of issue i once any divider drawn directly
-// above it is included; issueRow[i] is the line of the issue itself.
+// above it is included; issueRow[i] is the first of the issuerow.Height lines
+// of the issue itself.
 type rowLayout struct {
 	markers    []ageMarker
 	issueStart []int
@@ -88,7 +90,7 @@ func layoutRows(col Column, now time.Time) rowLayout {
 			pending = pending[1:]
 		}
 		layout.issueRow[idx] = line
-		line++
+		line += issuerow.Height
 	}
 	return layout
 }
@@ -98,16 +100,16 @@ func (l rowLayout) lines() int {
 	if len(l.issueRow) == 0 {
 		return 0
 	}
-	return l.issueRow[len(l.issueRow)-1] + 1
+	return l.issueRow[len(l.issueRow)-1] + issuerow.Height
 }
 
 // window is the line range [start, end) Render draws for col from its scroll
 // offset, given content rows for the issue area of total lines (the layout
 // plus any trailing affordance such as the load-more skeleton). The window
 // opens at the offset issue's first line, divider included, and slides down
-// only as far as it must to keep the selected issue on a drawn line — which is
+// only as far as it must to keep every line of the selected issue drawn — which is
 // how a divider that appeared since the offset was computed, or a section too
-// short for the stacked dividers and an issue, still shows the chevron.
+// short for the stacked dividers and an issue, still shows the selection bar.
 func (l rowLayout) window(col Column, content, total int) (start, end int) {
 	if content < 1 {
 		content = 1
@@ -117,8 +119,10 @@ func (l rowLayout) window(col Column, content, total int) (start, end int) {
 	if offset < len(col.Rows) {
 		start = l.issueStart[offset]
 	}
-	if sel := col.SelectedRow; sel >= 0 && sel < len(col.Rows) && l.issueRow[sel] >= start+content {
-		start = l.issueRow[sel] - content + 1
+	if sel := col.SelectedRow; sel >= 0 && sel < len(col.Rows) && l.issueRow[sel]+issuerow.Height > start+content {
+		// A section shorter than one issue opens on the issue's first line: the
+		// title says which issue it is, the line under it does not.
+		start = min(l.issueRow[sel], l.issueRow[sel]+issuerow.Height-content)
 	}
 	end = min(start+content, total)
 	return start, end
@@ -144,8 +148,26 @@ func EnsureVisible(col Column, capacity int, now time.Time) int {
 		content = 1
 	}
 	layout := layoutRows(col, now)
-	for offset < sel && layout.issueRow[sel]-layout.issueStart[offset] >= content {
+	for offset < sel && layout.issueRow[sel]+issuerow.Height-layout.issueStart[offset] > content {
 		offset++
+	}
+	return offset
+}
+
+// MaxOffset returns the largest scroll offset that leaves no blank line under
+// the last issue of col when the section holds capacity content rows: the
+// first issue from which every remaining line fits. A mode model pulls a
+// stored offset back to it after the rows or the height changed, and counts
+// lines the way EnsureVisible does.
+func MaxOffset(col Column, capacity int, now time.Time) int {
+	if len(col.Rows) == 0 {
+		return 0
+	}
+	content := max(capacity-errorRows(col), 1)
+	layout := layoutRows(col, now)
+	offset := len(col.Rows) - 1
+	for offset > 0 && layout.lines()-layout.issueStart[offset-1] <= content {
+		offset--
 	}
 	return offset
 }

@@ -61,6 +61,7 @@ a sleep guesses:
 | Step | Waits for |
 |---|---|
 | `send-key:<KEY>` | nothing; sends the key |
+| `send-mouse:<ACTION>:<COL>:<ROW>` | nothing; sends `click`, `move`, `wheel-up`, `wheel-down`, or one part of a drag — `press`, `drag`, `release` — at that cell, counted from 0 as the checkpoint screens are. Two `click` steps in a row are a double click. Fails with `mouse reporting is off` when the app has not asked the terminal for the mouse, as a real terminal would then send nothing |
 | `wait-for-text:<TEXT>[:timeout-ms]` | `TEXT` to appear on the rendered screen |
 | `wait-for-text-once:<TEXT>[:timeout-ms]` | `TEXT` anywhere in the output stream since this step began — the verb for text already overwritten, such as a toast (they dismiss after 3s) |
 | `wait-for-no-text:<TEXT>[:timeout-ms]` | `TEXT` to disappear from the rendered screen |
@@ -104,6 +105,10 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 ## Gotchas
 
+- **The default glyph set is `nerd`, and `pyte` shows its icons as private-use characters.** Pass
+  `--config` with `ui.glyphs: unicode` to read the issue tokens in a checkpoint
+  ([CONFIGURATION.md](CONFIGURATION.md#runtime-configuration)).
+
 - **The Done column needs a wide terminal.** At `--width 120` only Not Ready, Ready and In Progress
   fit, so a `wait-for-text:Done` never settles. Use `--width 200` for any flow that touches Done.
 - **A modal holds the keyboard until it is dismissed.** Keys sent meanwhile are typed into the
@@ -133,25 +138,26 @@ store large enough to page.
 **Proves:** `sectionItemCapacity()` scales with the height the mode receives (`height - 3`, floored
 at 1, and `20` before the first `WindowSizeMsg`), and a refresh re-reads it.
 
-Seed a store with more than 200 closed issues. The mode receives the terminal height minus two rows
-of shell chrome, so at a terminal of `H` rows the Done column header reads `H-5 of M`, where `M` is
-the true closed total: `35 of M` at height 40, `25 of M` at height 30. Keep the app running, resize
-to 200 rows, press `r`: the header must read `195 of M`, with `M` unchanged.
+Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
+rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-7 of M`, where
+`M` is the true closed total: `33 of M` at height 40, `23 of M` at height 30. Keep the app running,
+resize to 200 rows, press `r`: the header must read `193 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
 `DashboardOptions.ClosedLimit`, or the `WindowSizeMsg` handler never saw the new size — both in
 `internal/mode/board/model.go`. `M` equal to `N` means `ClosedTotal` is computed after the limit
 slice instead of before.
 
-### The chevron follows the selection
+### The selection bar follows the selection
 
 **Proves:** the scroll window keeps the selected row on screen when it clips the list.
 
-Seed more than 22 ready issues, open at height 25, focus the Ready column and press `j` thirty times.
-The `›` chevron must still be on screen and the header must read `N of M` with `N < M`. Repeat in the
+Seed more than 22 ready issues, open at height 25, focus the Ready column and press `j` twenty times.
+The `▌` selection bar must still be on screen, on both lines of its row, and the header must read
+`N of M` with `N < M`. Repeat in the
 detail Dependencies pane (press Left to focus it) on an issue with more than 12 relations.
 
-A lost chevron means `scroll.EnsureVisible` is not called from `moveRow` in
+A lost bar means `scroll.EnsureVisible` is not called from `moveRow` in
 `internal/mode/board/model.go`, or `scroll.EnsureVisibleClipped` from `moveRelatedSelection` in
 `internal/mode/detail/model.go` — the detail panes spend their first and last rows on the
 `… (N earlier)` / `… (N more)` indicators, so they need the clipped form. A plain count where `N of M`
@@ -165,7 +171,7 @@ belongs means the clipping branch in `internal/ui/board/board.go` or the pane he
 Seed roughly 89 closed issues and open at 30 rows or fewer. Launch with `--debug` — the load-more
 records are DEBUG level and reach the persistent log only under that flag
 ([MONITORING.md](MONITORING.md)). Focus Done and hold `j`: the header `N` grows monotonically toward
-`M`, the chevron stays visible, and the run logs one `dispatching load-more for Done column` per
+`M`, the selection bar stays visible, and the run logs one `dispatching load-more for Done column` per
 threshold crossing — any `load-more suppressed` beside it is the double-load guard doing its job.
 Press `r`: the header returns to the opening `N` and the selection returns to the top.
 

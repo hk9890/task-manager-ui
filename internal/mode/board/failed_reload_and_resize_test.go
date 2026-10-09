@@ -60,7 +60,7 @@ func TestFailedManualReloadReportsTheEmptiedSelection(t *testing.T) {
 //
 // sectionItemCapacity() derives the scroll window from the terminal height, so
 // shrinking the terminal shrinks the window under an offset that was valid for
-// the old one. clampScrollOffsets existed but nothing called it from SetSize, so
+// the old one. The window is counted in issues: a row is issuerow.Height lines. clampScrollOffsets existed but nothing called it from SetSize, so
 // the selected row and its chevron sat below the last drawn row until the
 // operator pressed j or k.
 func TestResizeKeepsTheSelectedRowInTheScrollWindow(t *testing.T) {
@@ -98,11 +98,12 @@ func TestResizeKeepsTheSelectedRowInTheScrollWindow(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 
 	offset := m.scrollOffset[m.focusedColumn]
-	window := m.sectionItemCapacity()
+	window := issueCapacity(m)
 	if selected := m.selectedRow[m.focusedColumn]; selected < offset || selected >= offset+window {
 		t.Errorf("after the resize the selected row %d is outside the window [%d,%d) — the chevron is off screen",
 			selected, offset, offset+window)
 	}
+	assertSelectionDrawn(t, m)
 }
 
 // TestStaleLoadMorePageDoesNotReleaseTheLatch pins the ordering inside

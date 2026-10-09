@@ -3,6 +3,8 @@ package loading
 import (
 	"strings"
 	"testing"
+
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func TestSkeletonPhaseAdvancesEveryFourFrames(t *testing.T) {
@@ -33,6 +35,39 @@ func TestSkeletonPhaseNegativeReturnsZero(t *testing.T) {
 	}
 	if got := SkeletonPhase(-100); got != 0 {
 		t.Fatalf("SkeletonPhase(-100) = %d, want 0", got)
+	}
+}
+
+// TestGlyphCyclesTheAppliedSpinnerWithoutAJumpAtTheWrap: the shell counts
+// spinnerFrameCount frames whatever the set, so a set whose cycle does not
+// divide the count would repeat or skip a frame where the count wraps.
+func TestGlyphCyclesTheAppliedSpinnerWithoutAJumpAtTheWrap(t *testing.T) {
+	// Apply writes package variables, so this test is not parallel.
+	t.Cleanup(func() {
+		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+			t.Fatalf("restore the initial styles: %v", err)
+		}
+	})
+
+	for _, set := range styles.GlyphSets() {
+		if err := styles.Apply("catppuccin-mocha", set); err != nil {
+			t.Fatalf("Apply(%q): %v", set, err)
+		}
+		frames := styles.Glyphs.Spinner
+
+		frame := 0
+		for step := 0; step < 2*spinnerFrameCount; step++ {
+			if got, want := Glyph(frame), frames[step%len(frames)]; got != want {
+				t.Fatalf("%s: step %d (frame %d) drew %q, want %q", set, step, frame, got, want)
+			}
+			frame = NextFrame(frame)
+		}
+		if frame != 0 {
+			t.Errorf("%s: the counter is at %d after two cycles, want 0", set, frame)
+		}
+		if got, want := Glyph(-1), frames[len(frames)-1]; got != want {
+			t.Errorf("%s: Glyph(-1) = %q, want the last frame %q", set, got, want)
+		}
 	}
 }
 

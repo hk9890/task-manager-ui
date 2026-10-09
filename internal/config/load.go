@@ -108,7 +108,9 @@ type overrideLauncherDefinition struct {
 }
 
 type overrideUI struct {
-	ShowModeSwitcherHelp *bool `yaml:"show_mode_switcher_help"`
+	ShowModeSwitcherHelp *bool   `yaml:"show_mode_switcher_help"`
+	Theme                *string `yaml:"theme"`
+	Glyphs               *string `yaml:"glyphs"`
 }
 
 func readConfigFile(path string, requireExists bool) ([]byte, []string, error) {
@@ -256,8 +258,16 @@ func merge(base Model, override overrideModel) Model {
 	}
 	merged.KeyBindings = MergeKeyBindings(merged.KeyBindings, override.KeyBindings)
 
-	if override.UI != nil && override.UI.ShowModeSwitcherHelp != nil {
-		merged.UI.ShowModeSwitcherHelp = *override.UI.ShowModeSwitcherHelp
+	if override.UI != nil {
+		if override.UI.ShowModeSwitcherHelp != nil {
+			merged.UI.ShowModeSwitcherHelp = *override.UI.ShowModeSwitcherHelp
+		}
+		if override.UI.Theme != nil {
+			merged.UI.Theme = *override.UI.Theme
+		}
+		if override.UI.Glyphs != nil {
+			merged.UI.Glyphs = *override.UI.Glyphs
+		}
 	}
 
 	return merged
@@ -344,6 +354,8 @@ var allowedMappingKeys = map[string]map[string]struct{}{
 	},
 	"ui": {
 		"show_mode_switcher_help": {},
+		"theme":                   {},
+		"glyphs":                  {},
 	},
 	"keybindings": {
 		"shell":  {},

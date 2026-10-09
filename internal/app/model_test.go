@@ -173,7 +173,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 					observedVisibleBoardState = true
 				}
 				footer := m.renderFooter()
-				if !strings.Contains(footer, "Board:") {
+				if !strings.Contains(footer, "h/l columns") {
 					t.Fatalf("expected mode-specific help footer in board mode, got:\n%s", footer)
 				}
 			}

@@ -1,7 +1,3 @@
-// Package detail is the detail-mode controller: pane focus, scroll offsets,
-// dependency-browser selection, and the metadata quick-edit intents the shell
-// turns into dialogs. Rendering — and all pane geometry — is internal/ui/detail,
-// a different package with the same name.
 package detail
 
 import (
@@ -51,6 +47,9 @@ type Model struct {
 	// The focus decision (Dependencies if rail non-empty, Content if empty) is applied
 	// when the counter reaches 0 (the real data load). Reset to 0 by ClearDrillFocus.
 	drillDepsFocusCalls int
+
+	pointer *mode.Pointer
+	clicks  mode.ClickTracker
 }
 
 // OpenRelatedIssueIntent requests shell-level navigation to another issue from
@@ -233,14 +232,35 @@ func (m *Model) AnchorSelection(issueID string) {
 
 // View renders the detail surface for pane and dedicated detail mode.
 func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase int) string {
-	d := m.RenderDetail()
-	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
-	// skeleton=true in two cases:
-	// 1. preview path: target differs from selection and preview detail has not yet loaded.
-	// 2. direct-nav path: a load is in flight and only the placeholder summary is
-	//    present — no description, comments, or relations yet. Without this branch
-	//    the user sees "(no description)" / "(none)" fallbacks during the in-flight
-	//    window, which misrepresents loading state as empty content.
+	state := m.viewState(maxWidth, viewportHeight, skeletonPhase)
+
+	if compact || viewportHeight <= 0 {
+		return detail.Render(detail.State{
+			SelectionID:   state.SelectionID,
+			TargetID:      state.TargetID,
+			Detail:        state.Detail,
+			QuickActions:  state.QuickActions,
+			Loading:       state.Loading,
+			Skeleton:      state.Skeleton,
+			SkeletonPhase: skeletonPhase,
+			Error:         state.Error,
+			Width:         maxWidth,
+			Compact:       compact,
+		})
+	}
+
+	state.Hover = m.hover(state)
+	return detail.Render(state)
+}
+
+// skeletonContent reports whether the panes draw skeleton rows. True in two
+// cases:
+//  1. preview path: target differs from selection and preview detail has not yet loaded.
+//  2. direct-nav path: a load is in flight and only the placeholder summary is
+//     present — no description, comments, or relations yet. Without this branch
+//     the user sees "(no description)" / "(none)" fallbacks during the in-flight
+//     window, which misrepresents loading state as empty content.
+func (m *Model) skeletonContent() bool {
 	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
 	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
 		strings.TrimSpace(m.Detail.Description) == "" &&
@@ -248,30 +268,16 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		len(m.Detail.BlockedBy) == 0 &&
 		len(m.Detail.Blocks) == 0 &&
 		len(m.Detail.Related) == 0
-	skeletonContent := previewSkeleton || directNavSkeleton
+	return previewSkeleton || directNavSkeleton
+}
 
-	if compact || viewportHeight <= 0 {
-		return detail.Render(detail.State{
-			SelectionID: m.selectionID,
-			TargetID:    m.targetID,
-			Detail:      d,
-			QuickActions: detail.QuickActionLabels{
-				EditIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
-				UpdateIssue:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
-				AddComment:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
-				CloseIssue:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
-				ReloadDetail: m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
-			},
-			Loading:       blockingLoad,
-			Skeleton:      skeletonContent,
-			SkeletonPhase: skeletonPhase,
-			Error:         m.errText,
-			Width:         maxWidth,
-			Compact:       compact,
-		})
-	}
-
-	return detail.Render(detail.State{
+// viewState is the three-pane detail as the renderer sees it. View and the hit
+// test build the same value, so a click lands on the row that is drawn under
+// it.
+func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.State {
+	d := m.RenderDetail()
+	blockingLoad := m.loading && !m.isPreviewingTarget() && strings.TrimSpace(m.Detail.Summary.ID) == ""
+	return detail.State{
 		SelectionID: m.selectionID,
 		TargetID:    m.targetID,
 		Detail:      d,
@@ -287,7 +293,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		}(),
 		BrowserSelectedIssueID:   m.browserSelectedIssueID(),
 		Loading:                  blockingLoad,
-		Skeleton:                 skeletonContent,
+		Skeleton:                 m.skeletonContent(),
 		SkeletonPhase:            skeletonPhase,
 		Error:                    m.errText,
 		Width:                    maxWidth,
@@ -298,7 +304,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 		ContentScrollOffset:      m.ContentScrollOffset,
 		DependenciesScrollOffset: m.DependenciesScrollOffset,
 		MetadataScrollOffset:     m.MetadataScrollOffset,
-	})
+	}
 }
 
 // ClampScroll keeps all pane scroll offsets inside current content bounds.

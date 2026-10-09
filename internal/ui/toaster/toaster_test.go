@@ -8,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func TestShowHide(t *testing.T) {
@@ -126,14 +128,28 @@ func TestOverlayUsesProvidedTerminalWidth(t *testing.T) {
 }
 
 func TestToastGlyphWidthsAgreeWithWcwidth(t *testing.T) {
-	t.Parallel()
+	// Apply writes package variables, so this test is not parallel.
+	t.Cleanup(func() {
+		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+			t.Fatalf("restore the initial styles: %v", err)
+		}
+	})
 
 	// The frame is sized with lipgloss.Width and drawn by a terminal following
 	// wcwidth. A glyph the two measure differently makes overlay.Place splice
 	// the line short, so the toast renders as a broken box with no message.
-	for _, glyph := range []string{glyphSuccess, glyphError, glyphInfo, glyphWarn} {
-		if got, want := lipgloss.Width(glyph), ansi.StringWidthWc(glyph); got != want {
-			t.Errorf("glyph %q: lipgloss.Width = %d, ansi.StringWidthWc = %d", glyph, got, want)
+	for _, set := range styles.GlyphSets() {
+		if err := styles.Apply("catppuccin-mocha", set); err != nil {
+			t.Fatalf("Apply(%q): %v", set, err)
+		}
+		g := styles.Glyphs
+		for _, glyph := range []string{g.ToastSuccess, g.ToastError, g.ToastInfo, g.ToastWarn} {
+			if glyph == "" {
+				t.Errorf("%s: a toast severity has no glyph", set)
+			}
+			if got, want := lipgloss.Width(glyph), ansi.StringWidthWc(glyph); got != want {
+				t.Errorf("%s: glyph %q: lipgloss.Width = %d, ansi.StringWidthWc = %d", set, glyph, got, want)
+			}
 		}
 	}
 }

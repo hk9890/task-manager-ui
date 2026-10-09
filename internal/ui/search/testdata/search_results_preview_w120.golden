@@ -2,10 +2,10 @@
 │backend                               │  │T P1 OPN tm-1                           │  │  Core                          │
 ╰──────────────────────────────────────╯  │Backend search result                   │  │  Type    : task                │
 ╭─ Results ─────────── 2 exact · open ─╮  │────────────────────────────────────────│  │  Status  : open                │
-│› T P1 OPN tm-1 Backend search result │  │Description                             │  │  Priority: P1                  │
-│  B P0 IP tm-2 Another result         │  │Search preview description              │  │  ------------------------------│
-│                                      │  │                                        │  │  Ownership                     │
-│                                      │  │                                        │  │  Assignee: hans                │
+│▌ T Backend search result             │  │Description                             │  │  Priority: P1                  │
+│▌   P1 OPN tm-1                       │  │Search preview description              │  │  ------------------------------│
+│  B Another result                    │  │                                        │  │  Ownership                     │
+│    P0 IP tm-2                        │  │                                        │  │  Assignee: hans                │
 │                                      │  │                                        │  │  ------------------------------│
 │                                      │  │                                        │  │  Labels                        │
 │                                      │  │                                        │  │  • ui                          │

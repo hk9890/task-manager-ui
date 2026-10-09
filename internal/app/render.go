@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+	"github.com/hk9890/task-manager-ui/internal/version"
 )
 
 // View renders the root shell.
@@ -25,6 +27,11 @@ func (m Model) View() string {
 	// visible above the correct render.
 	if !m.sizeKnown {
 		return ""
+	}
+
+	// A drag selects text on the screen as it was when the drag began.
+	if m.sel.active {
+		return m.sel.view()
 	}
 
 	if m.fatalErrTitle != "" {
@@ -57,19 +64,131 @@ func (m Model) View() string {
 // renderSurface renders whatever surface is active, without overlays.
 //
 // The picker is not a tab and not a drill-in: it renders instead of the shell,
-// so the tab strip and footer are absent while it is up and it draws its own
-// help line (docs/DESIGN-GUIDE.md).
+// so the header and the legend are absent while it is up and it draws its own
+// legend (docs/DESIGN-GUIDE.md).
 func (m Model) renderSurface() string {
 	if m.active == mode.StorePicker {
-		return m.storePicker.View(m.spinnerFrame, storePickerHelpText(m.keys, m.storeOpen))
+		return m.storePicker.View(m.spinnerFrame, styles.KeyLegend(storePickerHints(m.keys, m.storeOpen), m.width))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), m.renderBody(), m.renderFooter())
 }
 
-// headerSpinnerCell returns a fixed 2-cell string: the current braille spinner
-// glyph followed by a space when any surface is loading, or two literal spaces
-// when idle. Using a fixed-width cell keeps lipgloss.Width(headerLeft) invariant.
+// The header's geometry. renderHeader draws from it, and tabAt and barCells
+// read a column back through it, so a click lands on what is drawn there.
+const (
+	// The three header lines: the menu bar, the rule, the view tabs.
+	headerMenuRow = 0
+	headerTabsRow = 2
+
+	headerMenuStart   = 1
+	headerSpinnerCols = 2
+	headerTabPadding  = 1
+	headerTabGap      = 1
+	// headerBarGap is the least space between the last button and the version,
+	// and between the last tab and the context.
+	headerBarGap = 2
+	// barSeparator stands between two buttons, as it does between two key
+	// hints on the legend.
+	barSeparator = " · "
+	ruleGlyph    = "─"
+)
+
+// tabLabels names each browse tab on the tab line.
+var tabLabels = map[mode.ID]string{
+	mode.Board:  "Board",
+	mode.Docs:   "Docs",
+	mode.Search: "Search",
+}
+
+// barAction is one button on the menu bar: what the shell can do that is not
+// about the row under the cursor. A button carries the key bound to its
+// action — the bar is a second way to reach the same thing, never the only
+// way.
+type barAction struct {
+	label string
+	key   func(Model) string
+	run   func(*Model) tea.Cmd
+}
+
+func shellKey(action string) func(Model) string {
+	return func(m Model) string { return m.keys.DisplayPrimary(config.ShellContext, action) }
+}
+
+var barActions = []barAction{
+	{label: "stores", key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker},
+	{label: "reload", key: Model.reloadKey, run: (*Model).reloadActiveSurface},
+	{label: "help", key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
+	{label: "quit", key: shellKey(config.ShellActionQuit), run: (*Model).quit},
+}
+
+// reloadKey is the key that reloads the active surface: each surface binds its
+// own.
+func (m Model) reloadKey() string {
+	switch m.active {
+	case mode.Detail:
+		return m.keys.DisplayPrimary(config.ShellContext, config.ShellActionReloadDetail)
+	case mode.Search:
+		return m.keys.DisplayPrimary(config.SearchContext, config.SearchActionReload)
+	}
+	return m.keys.DisplayPrimary(config.BoardContext, config.BoardActionReload)
+}
+
+// barCell is a button's place on the bar: its text, and the columns it covers.
+type barCell struct {
+	action barAction
+	key    string
+	x0, x1 int
+}
+
+// headerTabsStart is the column the first tab starts at.
+func headerTabsStart() int {
+	return headerSpinnerCols
+}
+
+// headerTabsEnd is the column after the last tab.
+func headerTabsEnd() int {
+	end := headerTabsStart()
+	for idx, id := range mode.BrowseModes {
+		if idx > 0 {
+			end += headerTabGap
+		}
+		end += lipgloss.Width(tabLabels[id]) + 2*headerTabPadding
+	}
+	return end
+}
+
+// barCells places the buttons from the left edge. A button that does not fit
+// is dropped, the rightmost first.
+func (m Model) barCells() []barCell {
+	cells := make([]barCell, 0, len(barActions))
+	x := headerMenuStart
+	for _, action := range barActions {
+		cell := barCell{action: action, key: action.key(m), x0: x}
+		cell.x1 = x + lipgloss.Width(cell.text())
+		if cell.x1 > m.width {
+			break
+		}
+		cells = append(cells, cell)
+		x = cell.x1 + lipgloss.Width(barSeparator)
+	}
+	return cells
+}
+
+func (c barCell) text() string {
+	if c.key == "" {
+		return c.action.label
+	}
+	return c.action.label + " " + c.key
+}
+
+func (c barCell) covers(x int) bool {
+	return x >= c.x0 && x < c.x1
+}
+
+// headerSpinnerCell returns a fixed 2-cell string: the current spinner glyph
+// followed by a space when any surface is loading, or two literal spaces when
+// idle. Using a fixed-width cell keeps the tabs where tabAt looks for them.
 func (m Model) headerSpinnerCell() string {
 	style := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 	if len(m.loadingStates()) > 0 {
@@ -78,46 +197,79 @@ func (m Model) headerSpinnerCell() string {
 	return style.Render("  ")
 }
 
+// renderHeader draws the three lines above the workspace: the menu bar, the
+// rule under it, and the view tabs with the context.
 func (m Model) renderHeader() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ShellTitleColor).Render("Task Manager UI")
+	return m.renderMenuBar() + "\n" + m.renderRule() + "\n" + m.renderTabs()
+}
 
-	tab := func(id mode.ID, label string) string {
-		base := lipgloss.NewStyle().Padding(0, 1)
-		if m.active == id {
-			return base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true).Render(label)
+// renderMenuBar draws the buttons from the left and the version flush right.
+// The version is the first to go when the two do not fit.
+func (m Model) renderMenuBar() string {
+	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
+	muted := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
+
+	cells := m.barCells()
+	bar := ""
+	for idx, cell := range cells {
+		lead := muted.Render(barSeparator)
+		if idx == 0 {
+			lead = strings.Repeat(" ", headerMenuStart)
 		}
-		return base.Foreground(styles.ShellTabInactiveColor).Render(label)
-	}
-
-	left := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		title,
-		m.headerSpinnerCell(),
-		tab(mode.Board, "Board"),
-		" ",
-		tab(mode.Docs, "Docs"),
-		" ",
-		tab(mode.Search, "Search"),
-	)
-
-	context := lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(m.headerContext())
-	if m.width <= 0 {
-		return left
-	}
-
-	leftWidth := lipgloss.Width(left)
-	contextWidth := lipgloss.Width(context)
-	if leftWidth+1+contextWidth > m.width {
-		available := max(0, m.width-leftWidth-1)
-		if available <= 0 {
-			return left
+		labelStyle := label
+		if m.barPointer != nil && cell.covers(*m.barPointer) {
+			labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
 		}
-		context = lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(textutil.TruncateString(m.headerContext(), available))
-		contextWidth = lipgloss.Width(context)
+		bar += lead + labelStyle.Render(cell.action.label)
+		if cell.key != "" {
+			bar += " " + muted.Render(cell.key)
+		}
 	}
 
-	spacer := strings.Repeat(" ", max(1, m.width-leftWidth-contextWidth))
-	return left + spacer + context
+	free := m.width - lipgloss.Width(bar) - lipgloss.Width(version.Version)
+	if len(cells) == len(barActions) && free >= headerBarGap {
+		bar += strings.Repeat(" ", free) + muted.Render(version.Version)
+	}
+	return bar
+}
+
+// renderRule is the line between the menu bar and the view tabs.
+func (m Model) renderRule() string {
+	return lipgloss.NewStyle().Foreground(styles.ShellRuleColor).Render(strings.Repeat(ruleGlyph, max(0, m.width)))
+}
+
+// renderTabs draws the view tabs on the left and, flush right, the store and
+// what the surface shows. The tabs come first: the context is cut to what is
+// left beside them.
+func (m Model) renderTabs() string {
+	tab := func(id mode.ID) string {
+		base := lipgloss.NewStyle().Padding(0, headerTabPadding)
+		switch {
+		case m.active == id:
+			base = base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true)
+		case m.hoverTab == id:
+			base = base.Foreground(styles.ShellTabHoverColor)
+		default:
+			base = base.Foreground(styles.ShellTabInactiveColor)
+		}
+		return base.Render(tabLabels[id])
+	}
+
+	parts := []string{m.headerSpinnerCell()}
+	for idx, id := range mode.BrowseModes {
+		if idx > 0 {
+			parts = append(parts, strings.Repeat(" ", headerTabGap))
+		}
+		parts = append(parts, tab(id))
+	}
+	line := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+
+	context := textutil.TruncateString(m.headerContext(), m.contextRoom())
+	if context == "" {
+		return line
+	}
+	gap := m.width - headerTabsEnd() - lipgloss.Width(context)
+	return line + strings.Repeat(" ", gap) + lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(context)
 }
 
 // renderBody renders the active surface. Like every other renderer here it is
@@ -194,19 +346,22 @@ func (m Model) applyWorkspaceSizeToBrowseModes() {
 	}
 }
 
+// renderFooter draws the key legend. It is one line whatever the width: the
+// workspace height is computed from it, so a hint that does not fit is dropped
+// rather than wrapped.
 func (m Model) renderFooter() string {
 	if !m.services.Config.UI.ShowModeSwitcherHelp {
 		return ""
 	}
 
-	text := footerHelpText(m.active, m.width, m.keys)
+	hints := footerHints(m.active, m.keys)
 	// Detail is where the launch keys work, so it is where their being off is
-	// said, before the operator presses one. Truncated rather than wrapped: the
-	// workspace height is computed from a one-line footer.
+	// said, before the operator presses one. It leads the legend so that it is
+	// the last hint a narrow terminal drops.
 	if m.active == mode.Detail && m.projectRootMissing {
-		text = textutil.TruncateString(text+" · launchers off: project path missing", max(1, m.width))
+		hints = append([]styles.KeyHint{{Desc: "launchers off: project path missing"}}, hints...)
 	}
-	return lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor).Render(text)
+	return styles.KeyLegend(hints, m.width)
 }
 
 // browseLoadingScope maps a browse mode to its loading scope. A new browse
@@ -254,13 +409,21 @@ func (m Model) headerContext() string {
 		return variants[0]
 	}
 
+	// Half the line at most, and no more than stands free beside the tabs: a
+	// variant drawn whole comes before a longer one cut short.
+	budget := min(m.width/2, m.contextRoom())
 	for _, v := range variants {
-		if lipgloss.Width(v) <= m.width/2 {
+		if lipgloss.Width(v) <= budget {
 			return v
 		}
 	}
 
 	return variants[len(variants)-1]
+}
+
+// contextRoom is the cells the tab line has for the context, clear of the tabs.
+func (m Model) contextRoom() int {
+	return m.width - headerTabsEnd() - headerBarGap
 }
 
 // headerContextVariants returns the right-hand header text, widest first.
@@ -371,28 +534,35 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
+		"Mouse:",
+		"  click = select a row, switch to a tab, press a menu-bar button, or focus a pane",
+		"  second click on a row = open it",
+		"  wheel = move the selection, or scroll detail text and this help",
+		"  drag = select a box of text; letting go copies it",
+		"  shift+drag = select text with the terminal instead",
+		"",
 		"Detail presentation model (v1): dedicated detail mode",
 		"  - Board/Search prioritize overview triage density",
 		fmt.Sprintf("  - %s opens full issue detail view", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
 	}, "\n")
 }
 
-// storePickerHelpText is the picker's own footer. The shell footer is not
+// storePickerHints is the picker's own legend. The shell footer is not
 // rendered while the picker is up, so this line is the only place its keys are
 // named on screen. With no store open, Escape quits rather than going back.
-func storePickerHelpText(keys config.ResolvedKeyBindings, storeOpen bool) string {
+func storePickerHints(keys config.ResolvedKeyBindings, storeOpen bool) []styles.KeyHint {
 	escape := "back"
 	if !storeOpen {
 		escape = "quit"
 	}
-	return fmt.Sprintf("Stores: %s/%s move · %s open · %s reload · %s %s · %s quit",
-		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown),
-		keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp),
-		keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail),
-		keys.DisplayPrimary(config.BoardContext, config.BoardActionReload),
-		keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape), escape,
-		keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit),
-	)
+	primary := keys.DisplayPrimary
+	return []styles.KeyHint{
+		{Key: primary(config.BoardContext, config.BoardActionMoveDown) + "/" + primary(config.BoardContext, config.BoardActionMoveUp), Desc: "move"},
+		{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "open"},
+		{Key: primary(config.BoardContext, config.BoardActionReload), Desc: "reload"},
+		{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: escape},
+		{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"},
+	}
 }
 
 func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, second string) string {
@@ -407,28 +577,53 @@ func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, secon
 	return left + " or " + right
 }
 
-func footerHelpText(active mode.ID, width int, keys config.ResolvedKeyBindings) string {
-	if width < 90 {
-		switch active {
-		case mode.Docs:
-			return fmt.Sprintf("Docs: %s %s %s/%s %s %s", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCyclePrev), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
-		case mode.Search:
-			return fmt.Sprintf("Search: type+enter %s %s/%s %s %s %s", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayPrimary(config.SearchContext, config.SearchActionCycleFocusPrev), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown)+"/"+keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
-		case mode.Detail:
-			return fmt.Sprintf("Detail: %s/%s %s/%s %s/%s %s", keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionHome), keys.DisplayPrimary(config.DetailContext, config.DetailActionEnd), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
-		default:
-			return fmt.Sprintf("Board: %s %s %s %s %s %s", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown)+"/"+keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
-		}
+// footerHints is the legend of the active surface, the keys an operator needs
+// first leading: KeyLegend drops from the end.
+func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHint {
+	primary := keys.DisplayPrimary
+	pair := func(context, first, second string) string {
+		return primary(context, first) + "/" + primary(context, second)
 	}
+	help := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionHelp), Desc: "help"}
+	quit := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"}
+	// Creating an issue has no button: the legend is where its key is named.
+	create := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionCreateIssue), Desc: "new"}
 
 	switch active {
 	case mode.Docs:
-		return fmt.Sprintf("Docs: %s/%s docs · %s detail · %s/%s switch tabs · %s help · %s quit", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayPrimary(config.ShellContext, config.ShellActionModeCyclePrev), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+		return []styles.KeyHint{
+			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "docs"},
+			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			create,
+			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
+			help, quit,
+		}
 	case mode.Search:
-		return fmt.Sprintf("Search: type + Enter query · %s focus · %s/%s switch panes · %s/%s query/results · ctrl+t scope · %s detail · %s board", keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayPrimary(config.SearchContext, config.SearchActionFocusRight), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveDown), keys.DisplayPrimary(config.SearchContext, config.SearchActionMoveUp), keys.DisplayPrimary(config.SearchContext, config.SearchActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
+		return []styles.KeyHint{
+			{Key: "type + enter", Desc: "query"},
+			{Key: primary(config.SearchContext, config.SearchActionFocusQuery), Desc: "focus"},
+			{Key: pair(config.SearchContext, config.SearchActionMoveDown, config.SearchActionMoveUp), Desc: "results"},
+			{Key: primary(config.SearchContext, config.SearchActionOpenDetail), Desc: "detail"},
+			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "board"},
+			{Key: pair(config.SearchContext, config.SearchActionFocusLeft, config.SearchActionFocusRight), Desc: "panes"},
+			{Key: "ctrl+t", Desc: "scope"},
+		}
 	case mode.Detail:
-		return fmt.Sprintf("Detail: %s/%s scroll · %s/%s page · %s/%s bounds · %s edit · %s back", keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionScrollUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp), keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown), keys.DisplayPrimary(config.DetailContext, config.DetailActionHome), keys.DisplayPrimary(config.DetailContext, config.DetailActionEnd), keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue), keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape))
+		return []styles.KeyHint{
+			{Key: pair(config.DetailContext, config.DetailActionScrollDown, config.DetailActionScrollUp), Desc: "scroll"},
+			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "back"},
+			{Key: primary(config.ShellContext, config.ShellActionEditIssue), Desc: "edit"},
+			{Key: pair(config.DetailContext, config.DetailActionPageUp, config.DetailActionPageDown), Desc: "page"},
+			{Key: pair(config.DetailContext, config.DetailActionHome, config.DetailActionEnd), Desc: "bounds"},
+		}
 	default:
-		return fmt.Sprintf("Board: %s/%s columns · %s/%s issues · %s detail · %s search · %s help · %s quit", keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveLeft), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveRight), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveDown), keys.DisplayPrimary(config.BoardContext, config.BoardActionMoveUp), keys.DisplayPrimary(config.BoardContext, config.BoardActionOpenDetail), keys.DisplayPrimary(config.ShellContext, config.ShellActionToggleSearch), keys.DisplayPrimary(config.ShellContext, config.ShellActionHelp), keys.DisplayPrimary(config.ShellContext, config.ShellActionQuit))
+		return []styles.KeyHint{
+			{Key: pair(config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), Desc: "columns"},
+			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "issues"},
+			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			create,
+			{Key: primary(config.ShellContext, config.ShellActionToggleSearch), Desc: "search"},
+			help, quit,
+		}
 	}
 }

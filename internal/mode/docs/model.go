@@ -1,8 +1,3 @@
-// Package docs is the docs-mode controller: a single-column browse surface over
-// issues of type doc. A doc is not work — task-manager excludes it from the
-// ready and blocked queues by construction (sdk/tasks Type.IsWork) — so an open
-// doc never reaches a board column. This mode is where docs are browsed
-// instead. Rows are drawn by internal/ui/board, the renderer the board uses.
 package docs
 
 import (
@@ -65,6 +60,9 @@ type Model struct {
 	selectedRow  int
 	scrollOffset int
 
+	pointer *mode.Pointer
+	clicks  mode.ClickTracker
+
 	// anchorIssueID is the issue selected when an auto-refresh started. The
 	// load handler restores the cursor onto it when it survives the refresh.
 	anchorIssueID string
@@ -101,6 +99,16 @@ func (m *Model) Init() tea.Cmd {
 	return m.startReload(mode.RefreshReload)
 }
 
+// Reload is the manual refresh: a full reset, dropped while one is in flight.
+func (m *Model) Reload() tea.Cmd {
+	if m.inflight {
+		m.logger.Debug("manual docs refresh suppressed; refresh already in flight",
+			"trigger", "docs-manual")
+		return nil
+	}
+	return m.startReload(mode.RefreshReload)
+}
+
 // Update processes docs-specific messages and keybindings. Row movement, open
 // detail, and reload reuse the board keybinding context: the docs column is a
 // board column, so the two surfaces must not drift apart.
@@ -112,6 +120,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 	case docsLoadedMsg:
 		return m.apply(msg)
+
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
 
 	case tea.KeyMsg:
 		switch {
@@ -125,12 +136,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return mode.RequestActionCmd(mode.Docs, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
-			if m.inflight {
-				m.logger.Debug("manual docs refresh suppressed; refresh already in flight",
-					"trigger", "docs-manual")
-				return nil
-			}
-			return m.startReload(mode.RefreshReload)
+			return m.Reload()
 		}
 	}
 
@@ -139,18 +145,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 // View renders the docs column.
 func (m *Model) View(skeletonPhase int) string {
-	// No dashboard title: with a single column the tab chip and the column
-	// header already name the surface, so the board's title line would only
-	// repeat them. The renderer omits the line when the title is empty (it
-	// still reserves the row, so the column height is unchanged).
-	return uiboard.Render(uiboard.State{
-		Columns:       []uiboard.Column{m.uiColumn()},
-		FocusedColumn: 0,
-		Width:         m.width,
-		Height:        m.height,
-		SkeletonPhase: skeletonPhase,
-		Now:           m.now(),
-	})
+	state := m.viewState(skeletonPhase)
+	state.Hover = m.hover(state)
+	return uiboard.Render(state)
 }
 
 // uiColumn is the docs column as the renderer sees it. View and clampSelection
@@ -284,11 +281,9 @@ func (m *Model) clampSelection() {
 	// does. EnsureVisible only slides far enough to reveal the selected row, so
 	// on its own a list that shrank under a scrolled offset keeps the offset and
 	// draws its last rows with the ones above unreachable until the operator
-	// presses k.
+	// presses k. MaxOffset counts the lines the renderer draws, as capacity does.
 	capacity := m.itemCapacity()
-	if maxOffset := len(m.issues) - capacity; m.scrollOffset > maxOffset {
-		m.scrollOffset = max(maxOffset, 0)
-	}
+	m.scrollOffset = min(m.scrollOffset, uiboard.MaxOffset(m.uiColumn(), capacity, m.now()))
 	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, m.now())
 }
 

@@ -143,7 +143,7 @@ func TestRenderMetadataRailReservesIdleGutterWhenUnfocused(t *testing.T) {
 		if !strings.HasPrefix(plain, "  ") {
 			t.Fatalf("expected permanent idle gutter on all metadata lines, got %q", plain)
 		}
-		if strings.HasPrefix(plain, "› ") {
+		if strings.HasPrefix(plain, selectionGutter()) {
 			t.Fatalf("did not expect selected marker while unfocused, got %q", plain)
 		}
 	}
@@ -161,7 +161,7 @@ func TestRenderMetadataRailHighlightsSelectedStatusField(t *testing.T) {
 	}, 40, MetadataFieldStatus, false)
 
 	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
-	if !strings.Contains(joined, "› Status") {
+	if !strings.Contains(joined, selectionGutter()+"Status") {
 		t.Fatalf("expected selected status indicator in metadata rail, got:\n%s", joined)
 	}
 }
@@ -178,7 +178,7 @@ func TestRenderMetadataRailHighlightsSelectedPriorityField(t *testing.T) {
 	}, 40, MetadataFieldPriority, false)
 
 	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
-	if !strings.Contains(joined, "› Priority") {
+	if !strings.Contains(joined, selectionGutter()+"Priority") {
 		t.Fatalf("expected selected priority indicator in metadata rail, got:\n%s", joined)
 	}
 }
@@ -197,7 +197,7 @@ func TestRenderMetadataRailShowsSelectedMarkerOnlyOnSelectedRow(t *testing.T) {
 	selectedCount := 0
 	for _, line := range lines {
 		plain := metadataANSIPattern.ReplaceAllString(line, "")
-		if strings.HasPrefix(plain, "› ") {
+		if strings.HasPrefix(plain, selectionGutter()) {
 			selectedCount++
 		}
 	}

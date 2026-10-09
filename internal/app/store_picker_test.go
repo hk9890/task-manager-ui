@@ -78,21 +78,31 @@ func TestStorePickerOpensOnItsKeyAndListsTheRegistry(t *testing.T) {
 	}
 }
 
-// The picker renders instead of the shell, so the tab strip and the shell
-// footer are absent while it is up (docs/DESIGN-GUIDE.md).
+// The picker renders instead of the shell, so the three header lines and the
+// shell footer are absent while it is up (docs/DESIGN-GUIDE.md).
 func TestStorePickerReplacesTheShellChrome(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	before := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
-	if !strings.Contains(before, "Task Manager UI") {
-		t.Fatalf("expected the shell title before the picker opens:\n%s", before)
+	// The header, as the shell draws it, each line on its own.
+	chrome := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(m.renderHeader(), ""), "\n")
+	footer := testui.AnsiEscapePattern.ReplaceAllString(m.renderFooter(), "")
+	for _, line := range append(chrome, footer) {
+		if strings.TrimSpace(line) == "" {
+			t.Fatalf("fixture: the shell draws an empty chrome line: %q", chrome)
+		}
+		if !strings.Contains(before, line) {
+			t.Fatalf("expected the shell chrome line %q before the picker opens:\n%s", line, before)
+		}
 	}
 
 	m = openPicker(t, m)
 	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
-	if strings.Contains(view, "Task Manager UI") {
-		t.Errorf("the shell header is still rendered under the picker:\n%s", view)
+	for _, gone := range append(chrome, footer, " Board ", " Docs ", " Search ", "stores s") {
+		if strings.Contains(view, gone) {
+			t.Errorf("the shell chrome %q is still rendered under the picker:\n%s", gone, view)
+		}
 	}
 	if !strings.Contains(view, "esc back") {
 		t.Errorf("expected the picker's own help line:\n%s", view)

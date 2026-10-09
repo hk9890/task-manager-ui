@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/repofixture"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // --- resolveAndValidateCWD tests ---
@@ -225,6 +226,19 @@ func TestRunCWDExecuteOnlyExitsWithCode1(t *testing.T) {
 
 func noopLogger(logging.Options) *logging.Manager { return nil }
 
+// restoreStyles is for a test whose run gets past config validation: run then
+// applies the configured theme and glyph set, which are package variables of
+// internal/ui/styles. Such a test is not parallel, and puts back what that
+// package starts on.
+func restoreStyles(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+			t.Fatalf("restore the initial styles: %v", err)
+		}
+	})
+}
+
 // --- stderr suppression around interactive runtime ---
 
 // TestStartInteractiveSuppressesStderrDuringRun verifies that startInteractive
@@ -236,7 +250,7 @@ func noopLogger(logging.Options) *logging.Manager { return nil }
 // bytes.Buffer stderr, and a stubbed "start" function that fires a slog.Warn
 // via the manager's logger and records whether stderr was clear at that point.
 func TestStartInteractiveSuppressesStderrDuringRun(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	stateDir := t.TempDir()
 	var stderr bytes.Buffer
@@ -268,7 +282,7 @@ func TestStartInteractiveSuppressesStderrDuringRun(t *testing.T) {
 		&bytes.Buffer{},
 		&stderr2,
 		func(config.LoadOptions) (config.Result, error) {
-			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+			return config.Result{Config: config.Default(), Path: "(none)"}, nil
 		},
 		stubStart,
 		func(logging.Options) *logging.Manager { return logMgr },
@@ -296,7 +310,7 @@ func TestStartInteractiveSuppressesStderrDuringRun(t *testing.T) {
 // works correctly when logManager is nil (no logger configured), which is a
 // supported path via the noopLogger stub.
 func TestStartInteractiveNoLogManagerDoesNotPanic(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -317,7 +331,7 @@ func TestStartInteractiveNoLogManagerDoesNotPanic(t *testing.T) {
 		&bytes.Buffer{},
 		&bytes.Buffer{},
 		func(config.LoadOptions) (config.Result, error) {
-			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+			return config.Result{Config: config.Default(), Path: "(none)"}, nil
 		},
 		stubStart,
 		noopLogger,
@@ -459,7 +473,7 @@ func TestParseCLIRepoFlags(t *testing.T) {
 // and a valid fixture file produced by repofixture.Save, using a stub start that
 // asserts the startupOptions have the correct repoFlag and repoFile set.
 func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	// Build a tiny in-memory repo and save it to a temp file.
 	r := memory.New()
@@ -485,7 +499,7 @@ func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
 		&bytes.Buffer{},
 		&stderr,
 		func(config.LoadOptions) (config.Result, error) {
-			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+			return config.Result{Config: config.Default(), Path: "(none)"}, nil
 		},
 		func(cfg config.Model, opts startupOptions) error {
 			started = true
@@ -512,7 +526,7 @@ func TestRunRepoMemoryLoadsFromFile(t *testing.T) {
 // TestRunPassesStoreNameToStartup pins the wiring between the --store-name flag
 // and the startup options buildRepository resolves from.
 func TestRunPassesStoreNameToStartup(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	var seenOpts startupOptions
 	var stderr bytes.Buffer
@@ -521,7 +535,7 @@ func TestRunPassesStoreNameToStartup(t *testing.T) {
 		&bytes.Buffer{},
 		&stderr,
 		func(config.LoadOptions) (config.Result, error) {
-			return config.Result{Config: config.Model{}, Path: "(none)"}, nil
+			return config.Result{Config: config.Default(), Path: "(none)"}, nil
 		},
 		func(cfg config.Model, opts startupOptions) error {
 			seenOpts = opts
@@ -885,10 +899,86 @@ func TestRun_CheckConfigRejectsUnsafeLauncherDefinition(t *testing.T) {
 	}
 }
 
+// TestRun_RejectsUnknownThemeAndGlyphSet pins that a theme or a glyph set name
+// that does not resolve exits 1 with the valid names, on every path that
+// loads the config: --check-config must reach the verdict a start reaches.
+func TestRun_RejectsUnknownThemeAndGlyphSet(t *testing.T) {
+	restoreStyles(t)
+
+	unknownTheme := config.Default()
+	unknownTheme.UI.Theme = "solarized"
+	unknownGlyphs := config.Default()
+	unknownGlyphs.UI.Glyphs = "emoji"
+
+	cases := []struct {
+		name string
+		cfg  config.Model
+		want []string
+	}{
+		{name: "theme", cfg: unknownTheme, want: []string{`unknown theme "solarized"`, "catppuccin-latte", "catppuccin-mocha"}},
+		{name: "glyph set", cfg: unknownGlyphs, want: []string{`unknown glyph set "emoji"`, "ascii", "nerd", "unicode"}},
+	}
+	for _, tc := range cases {
+		for _, args := range [][]string{{"--check-config"}, {"--print-config"}, {"--cwd", t.TempDir()}} {
+			var stdout, stderr bytes.Buffer
+			code := runWithLogger(args, &stdout, &stderr,
+				func(config.LoadOptions) (config.Result, error) {
+					return config.Result{Config: tc.cfg, Path: "/tmp/config.yaml"}, nil
+				},
+				func(config.Model, startupOptions) error {
+					t.Errorf("%s, %v: the interactive start ran despite the unknown name", tc.name, args)
+					return nil
+				},
+				noopLogger,
+			)
+
+			if code != 1 {
+				t.Errorf("%s, %v: exit code = %d, want 1 (stdout=%q stderr=%q)", tc.name, args, code, stdout.String(), stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Errorf("%s, %v: expected nothing on stdout, got %q", tc.name, args, stdout.String())
+			}
+			for _, want := range append([]string{"invalid ui configuration"}, tc.want...) {
+				if !strings.Contains(stderr.String(), want) {
+					t.Errorf("%s, %v: stderr does not name %q: %q", tc.name, args, want, stderr.String())
+				}
+			}
+		}
+	}
+}
+
+// TestRun_AppliesTheConfiguredThemeAndGlyphSet pins the wiring between the
+// config and what every surface draws with.
+func TestRun_AppliesTheConfiguredThemeAndGlyphSet(t *testing.T) {
+	restoreStyles(t)
+
+	cfg := config.Default()
+	cfg.UI.Theme = "catppuccin-latte"
+	cfg.UI.Glyphs = "ascii"
+
+	var stderr bytes.Buffer
+	code := runWithLogger([]string{"--cwd", t.TempDir()}, &bytes.Buffer{}, &stderr,
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: cfg, Path: "(none)"}, nil
+		},
+		func(config.Model, startupOptions) error {
+			if styles.Dark() || styles.Glyphs.Cursor != ">" {
+				t.Errorf("the start ran before the styles were applied: dark=%v cursor=%q", styles.Dark(), styles.Glyphs.Cursor)
+			}
+			return nil
+		},
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+}
+
 // TestRun_CheckConfigWarnsAboutUnlaunchableAction covers a definition that is
 // safe but that no keybinding can start.
 func TestRun_CheckConfigWarnsAboutUnlaunchableAction(t *testing.T) {
-	t.Parallel()
+	restoreStyles(t)
 
 	cfg := config.Default()
 	cfg.Launcher.Definitions = append(cfg.Launcher.Definitions, config.LauncherDefinition{

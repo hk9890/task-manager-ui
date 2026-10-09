@@ -1,5 +1,3 @@
-// Package search renders the search surface: the query box, the result list,
-// and the empty, loading, and error states.
 package search
 
 import (
@@ -72,6 +70,10 @@ type State struct {
 	Width         int
 	Height        int
 	SkeletonPhase int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
+
+	// Hover is the cell under the pointer, as HitTest reported it; nil when the
+	// pointer is elsewhere. Its result row draws the hover band.
+	Hover *Hit
 }
 
 // Render renders the standalone search view.
@@ -353,7 +355,7 @@ func renderResultsBody(state State, width int) []string {
 
 	// Cold-start: loading with no prior results — render skeleton placeholder rows.
 	if state.Loading && len(state.Results) == 0 {
-		return renderSkeletonRows(width, 6, state.SkeletonPhase)
+		return renderSkeletonRows(width, 3, state.SkeletonPhase)
 	}
 
 	if len(state.Results) == 0 {
@@ -379,16 +381,21 @@ func renderEmptyResultsBody(state State, width int) []string {
 func renderResultRows(state State, width int) []string {
 	// Dim rows when a refresh is in flight (stale data visible, new data pending).
 	dim := state.Loading && len(state.Results) > 0
-	lines := make([]string, 0, len(state.Results))
-	for _, issue := range state.Results {
+	lines := make([]string, 0, issuerow.Height*len(state.Results))
+	hover := -1
+	if state.Hover != nil && state.Hover.Pane == FocusResults {
+		hover = state.Hover.Row
+	}
+	for idx, issue := range state.Results {
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,
 			Selected: issue.ID == state.SelectedID,
+			Hovered:  idx == hover,
 			Width:    width,
 			Styled:   true,
 			Dim:      dim,
 			Phase:    state.SkeletonPhase,
-		}))
+		})...)
 	}
 
 	return lines
@@ -402,14 +409,14 @@ func renderResultRows(state State, width int) []string {
 // Omitting it pinned every row to shade 0, so a stalled search
 // looked exactly like a fast one.
 func renderSkeletonRows(width, n, phase int) []string {
-	lines := make([]string, n)
-	for i := range lines {
-		lines[i] = issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
+	lines := make([]string, 0, issuerow.Height*n)
+	for i := 0; i < n; i++ {
+		lines = append(lines, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 			Width:  width,
 			Seed:   i,
 			Phase:  phase,
 			Styled: true,
-		})
+		})...)
 	}
 	return lines
 }
