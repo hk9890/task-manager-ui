@@ -185,8 +185,13 @@ func TestReloadKeepsTheScrolledWindowAndANewQueryResetsIt(t *testing.T) {
 	}
 	assertSelectionDrawn(t, m, scrollIssues-2)
 
-	m.selectedRow = 0
-	_ = m.Update(searchLoadedMsg{appliedQuery: "reach", page: m.page})
+	// A new query, typed and submitted from the scrolled pane.
+	pressRune(m, "/", 1)
+	pressRune(m, "reach", 1)
+	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.appliedQuery != "reach" || len(m.page.Results) != scrollIssues {
+		t.Fatalf("fixture: query %q loaded %d results, want %q and %d", m.appliedQuery, len(m.page.Results), "reach", scrollIssues)
+	}
 	if m.scrollOffset != 0 {
 		t.Fatalf("a new result set kept scroll offset %d, want 0", m.scrollOffset)
 	}

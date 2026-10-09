@@ -120,7 +120,7 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 		Height:             resultsHeight,
 		TopLeft:            resultsTitle,
 		TopRight:           resultCountTitle(state, railWidth, resultsHeight),
-		Content:            renderResultsContent(state, railWidth-2),
+		Content:            renderResultsContent(state, railWidth-2, resultsHeight),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -177,7 +177,7 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 		Height:             resultsHeight,
 		TopLeft:            resultsTitle,
 		TopRight:           resultCountTitle(state, leftWidth, resultsHeight),
-		Content:            renderResultsContent(state, leftWidth-2),
+		Content:            renderResultsContent(state, leftWidth-2, resultsHeight),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -339,6 +339,16 @@ func resultsPaneHeight(height int) int {
 // line under it.
 const bannerLines = 2
 
+// resultLines is the lines a results box of paneHeight has for the rows: its
+// inside, less the banner while that is up.
+func resultLines(state State, paneHeight int) int {
+	lines := paneHeight - 2
+	if len(renderResultsBanner(state, 0)) > 0 {
+		lines -= bannerLines
+	}
+	return max(0, lines)
+}
+
 // RowCapacity returns how many whole results the pane draws at this frame
 // height while the banner is up — the fewest it ever draws. The controller
 // takes its scroll window from it, so the selection stays on a drawn row
@@ -357,11 +367,7 @@ func firstResult(state State) int {
 
 // drawnResultCount is the number of results the pane draws whole.
 func drawnResultCount(state State, paneHeight int) int {
-	lines := paneHeight - 2
-	if len(renderResultsBanner(state, 0)) > 0 {
-		lines -= bannerLines
-	}
-	return min(max(0, lines/issuerow.Height), len(state.Results)-firstResult(state))
+	return min(resultLines(state, paneHeight)/issuerow.Height, len(state.Results)-firstResult(state))
 }
 
 // searchScopeLabel names the active scope for the results header.
@@ -372,9 +378,9 @@ func searchScopeLabel(state State) string {
 	return "open"
 }
 
-func renderResultsContent(state State, width int) []string {
+func renderResultsContent(state State, width, paneHeight int) []string {
 	banner := renderResultsBanner(state, width)
-	body := renderResultsBody(state, width)
+	body := renderResultsBody(state, width, paneHeight)
 	if len(banner) == 0 {
 		return body
 	}
@@ -401,7 +407,7 @@ func renderResultsBanner(state State, width int) []string {
 	return nil
 }
 
-func renderResultsBody(state State, width int) []string {
+func renderResultsBody(state State, width, paneHeight int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
 		lines := []string{"Search failed."}
 		lines = append(lines, textutil.WrapLines(state.Error, width)...)
@@ -419,7 +425,7 @@ func renderResultsBody(state State, width int) []string {
 		return renderEmptyResultsBody(state, width)
 	}
 
-	return renderResultRows(state, width)
+	return renderResultRows(state, width, paneHeight)
 }
 
 func renderEmptyResultsBody(state State, width int) []string {
@@ -435,16 +441,20 @@ func renderEmptyResultsBody(state State, width int) []string {
 	return lines
 }
 
-func renderResultRows(state State, width int) []string {
+func renderResultRows(state State, width, paneHeight int) []string {
 	// Dim rows when a refresh is in flight (stale data visible, new data pending).
 	dim := state.Loading && len(state.Results) > 0
 	first := firstResult(state)
-	lines := make([]string, 0, issuerow.Height*(len(state.Results)-first))
+	// A search loads far more results than the pane has lines for. The last
+	// row drawn may have a line for its title only.
+	fitting := (resultLines(state, paneHeight) + issuerow.Height - 1) / issuerow.Height
+	end := min(len(state.Results), first+fitting)
+	lines := make([]string, 0, issuerow.Height*(end-first))
 	hover := -1
 	if state.Hover != nil && state.Hover.Pane == FocusResults {
 		hover = state.Hover.Row
 	}
-	for idx := first; idx < len(state.Results); idx++ {
+	for idx := first; idx < end; idx++ {
 		issue := state.Results[idx]
 		lines = append(lines, issuerow.RenderCompact(issuerow.RenderConfig{
 			Issue:    issue,

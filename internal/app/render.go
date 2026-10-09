@@ -75,9 +75,9 @@ func (m Model) renderSurface() string {
 	// is cut to the workspace, so the header stays on row 0 and the legend on
 	// the row handleMouse takes for it: Bubble Tea drops the top of a frame
 	// taller than the terminal, and every click then lands a row off.
-	_, workspaceHeight := m.workspaceSize()
-	frame := lipgloss.JoinVertical(lipgloss.Left, m.renderHeader(), firstLines(m.renderBody(), workspaceHeight), m.renderFooter())
-	return firstLines(frame, m.height)
+	header, footer := m.renderHeader(), m.renderFooter()
+	body := firstLines(m.renderBody(), m.workspaceHeight(header, footer))
+	return firstLines(lipgloss.JoinVertical(lipgloss.Left, header, body, footer), m.height)
 }
 
 // firstLines cuts s to its first count lines.
@@ -347,11 +347,13 @@ func (m Model) detailViewportWidth() int {
 }
 
 func (m Model) workspaceSize() (int, int) {
-	workspaceWidth := max(1, m.width)
-	headerHeight := lipgloss.Height(m.renderHeader())
-	footerHeight := lipgloss.Height(m.renderFooter())
-	workspaceHeight := max(1, m.height-headerHeight-footerHeight)
-	return workspaceWidth, workspaceHeight
+	return max(1, m.width), m.workspaceHeight(m.renderHeader(), m.renderFooter())
+}
+
+// workspaceHeight is the rows the terminal has left between a rendered header
+// and footer.
+func (m Model) workspaceHeight(header, footer string) int {
+	return max(1, m.height-lipgloss.Height(header)-lipgloss.Height(footer))
 }
 
 func (m Model) applyWorkspaceSizeToBrowseModes() {

@@ -262,3 +262,28 @@ func TestResultsHeaderSaysWhenThePaneClipsTheLoadedResults(t *testing.T) {
 		})
 	}
 }
+
+// TestRenderResultsContentStopsAtTheLastRowThePaneHasALineFor: a search loads
+// far more results than the pane draws, and the rows the box would cut away
+// are not rendered. The row with a line for its title only still is.
+func TestRenderResultsContentStopsAtTheLastRowThePaneHasALineFor(t *testing.T) {
+	t.Parallel()
+
+	state := hitTestState(160, 24)
+	state.ScrollOffset = 1
+	for _, tc := range []struct {
+		paneHeight, rows int
+	}{
+		{paneHeight: 6, rows: 2}, // four lines inside
+		{paneHeight: 7, rows: 3}, // five: two rows and the title of a third
+	} {
+		lines := renderResultsContent(state, 60, tc.paneHeight)
+		if len(lines) != tc.rows*issuerow.Height {
+			t.Fatalf("pane of %d: rendered %d lines, want the %d of %d rows", tc.paneHeight, len(lines), tc.rows*issuerow.Height, tc.rows)
+		}
+		last := testui.AnsiEscapePattern.ReplaceAllString(lines[len(lines)-issuerow.Height], "")
+		if want := fmt.Sprintf("hit-%02d", tc.rows); !strings.Contains(last, want) {
+			t.Fatalf("pane of %d: the last row rendered is %q, want %s", tc.paneHeight, last, want)
+		}
+	}
+}

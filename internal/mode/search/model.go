@@ -167,7 +167,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if anchor != nil {
 			m.restoreSelectionFromAnchor(anchor)
 		} else {
-			m.scrollOffset = 0
+			// Only a reload carries an anchor. Any other result set is a new
+			// one and starts on its first result, with the window at the top.
+			m.selectedRow = 0
 			m.normalizeSelection()
 		}
 		m.selectedDetail = domain.IssueDetail{}
