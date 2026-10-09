@@ -6,6 +6,50 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
+## v0.18.0
+
+- **Action required on a light terminal.** The app now draws in a theme of its
+  own, `catppuccin-mocha` by default, and no longer follows the terminal
+  background. Mocha is dark: on a light terminal the selected row and much of
+  the text are hard to read. Set `ui: {theme: catppuccin-latte}` in your config.
+- **Action required if you select text by dragging.** The app now takes the
+  mouse, and a plain drag no longer makes a terminal selection. Hold `shift`
+  and drag for the terminal's own selection. The mouse cannot be turned off.
+- **Changed: the screen layout.** The first line is a menu bar with the
+  `stores`, `reload`, `help` and `quit` buttons, each with its key, and the
+  version on the right. The view tabs Board, Docs and Search have a line of
+  their own under it. An issue row is two lines: type and title, then priority,
+  status and ID. A store picker row is the name and status, then the project
+  path. The selected row is marked by a bar and a band of colour in place of
+  `>`. The last line names what each key does. A screen shows about half as
+  many issues as before.
+- **Added: mouse support.** Click a row to select it and click it again to open
+  it. Click a view tab, a menu-bar button or a pane. The wheel moves a list's
+  selection and scrolls detail text and the help. Dialogs take keys only.
+  [`docs/user-guide/key-bindings.md`](https://github.com/hk9890/task-manager-ui/blob/v0.18.0/docs/user-guide/key-bindings.md#mouse)
+  has the whole list.
+- **Added: drag to copy.** A drag selects a box of text and letting go sends it
+  to the clipboard through the terminal. The toast says `Sent`, not `Copied`:
+  a terminal or multiplexer that ignores the OSC 52 clipboard sequence leaves
+  the clipboard as it was, and the app cannot tell. Use `shift` and drag there.
+- **Added: themes.** `ui.theme` takes `catppuccin-mocha`, `catppuccin-macchiato`,
+  `catppuccin-frappe` or `catppuccin-latte`, the one light theme.
+- **Added: glyph sets.** `ui.glyphs` takes `unicode`, the default, which spells
+  type, priority and status as letters as before; `nerd`, which draws them as
+  icons and needs a [Nerd Font](https://www.nerdfonts.com/); or `ascii`. An
+  unknown theme or glyph set fails startup and `--check-config` with the valid
+  names.
+- **Changed: the search results scroll.** A search loads up to 100 results and
+  the Results pane scrolls through them with the selection. Before, it loaded
+  only the results that fit the pane, and the others could be reached only by
+  narrowing the query. The header reads `7 of 13` when the pane shows part of
+  the list.
+- Fixed: the help overlay was cut at the bottom of the terminal and the rest
+  could not be read. It now scrolls on the detail scroll keys, `j`/`k`,
+  `pgup`/`pgdown`, `home`/`end`, and under the wheel.
+- Fixed: in a terminal shorter than 13 rows the menu bar scrolled off the top
+  of the screen. The screen is now cut to the terminal height.
+
 ## v0.17.0
 
 - **Action required if your config binds `s` in the shell context.** `s` now

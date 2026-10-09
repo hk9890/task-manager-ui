@@ -138,7 +138,8 @@ func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled boo
 			return m, nil, true
 		}
 		count := len([]rune(strings.ReplaceAll(text, "\n", "")))
-		toast := m.showToast(fmt.Sprintf("Copied %d characters", count), toaster.StyleInfo)
+		// OSC 52 has no reply: the toast says what was sent, not that it arrived.
+		toast := m.showToast(fmt.Sprintf("Sent %d characters to the clipboard; shift+drag if not copied", count), toaster.StyleInfo)
 		return m, batchCmds(m.copyText(text), toast), true
 	}
 	return m, nil, m.sel.active

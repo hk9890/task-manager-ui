@@ -75,9 +75,10 @@ The model is intentionally small and only covers app-shell concerns:
     and `catppuccin-latte`, the one light theme.
   - The theme does not follow the terminal background: set `catppuccin-latte` on a light terminal.
 - `UI.Glyphs`
-  - Defaults to `nerd`, which draws an issue's type, priority and status as icons and needs a
-    [Nerd Font](https://www.nerdfonts.com/). Set `unicode` when those icons show as boxes — it
-    spells the three as letters — and `ascii` for a terminal whose font is not yours.
+  - Defaults to `unicode`, which spells an issue's type, priority and status as letters.
+  - `nerd` draws the three as icons and needs a [Nerd Font](https://www.nerdfonts.com/); without
+    one they show as boxes.
+  - `ascii` is for a terminal whose font is not yours.
 - An unknown theme or glyph set fails startup, and `--check-config`, with the valid names.
   `styles.Validate` (`internal/ui/styles/theme.go`) owns both lists.
 

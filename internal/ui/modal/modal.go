@@ -3,6 +3,7 @@ package modal
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -465,6 +466,19 @@ func (m Model) Scroll(delta int) Model {
 	}
 	m.scrollOffset = max(0, min(min(m.scrollOffset, hidden)+delta, hidden))
 	return m
+}
+
+// ScrollToEnd moves the view to the last line.
+func (m Model) ScrollToEnd() Model {
+	m.scrollOffset = math.MaxInt
+	return m.Scroll(0)
+}
+
+// PageLines is how far a page moves the view: the content rows a clipped
+// modal draws between its two indicators.
+func (m Model) PageLines() int {
+	const verticalMargin, borders, indicators = 2, 2, 2
+	return max(1, m.height-verticalMargin-borders-indicators)
 }
 
 func (m Model) renderInputSection(index int, label string, width int) string {

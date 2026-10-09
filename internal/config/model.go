@@ -134,6 +134,6 @@ func Default() Model {
 		Editor:      Editor{Command: editor},
 		Launcher:    Launcher{Definitions: defaultLauncherDefinitions(editor)},
 		KeyBindings: DefaultKeyBindings(),
-		UI:          UI{ShowModeSwitcherHelp: true, Theme: "catppuccin-mocha", Glyphs: "nerd"},
+		UI:          UI{ShowModeSwitcherHelp: true, Theme: "catppuccin-mocha", Glyphs: "unicode"},
 	}
 }
