@@ -194,7 +194,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		return fmt.Errorf("failed to initialize app model: %w", err)
 	}
 
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus(), tea.WithMouseAllMotion())
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("taskmgr-ui failed: %w", err)
 	}

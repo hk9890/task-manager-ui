@@ -64,7 +64,9 @@ func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
 }
 
 // shouldForwardTo reports whether msg goes to the tab with this id. A key
-// belongs to the active tab alone; everything else reaches all of them.
+// belongs to the active tab alone; everything else reaches all of them. The
+// mouse never arrives here: handleMouse takes it first and gives the surface
+// under the pointer a mode.MouseMsg in its own coordinates.
 func (m Model) shouldForwardTo(id mode.ID, msg tea.Msg) bool {
 	if _, isKey := msg.(tea.KeyMsg); isKey {
 		return m.active == id

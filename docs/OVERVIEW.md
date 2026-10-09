@@ -49,6 +49,7 @@ rg -n '^\t\w+Action\w+ +=' internal/config/keybindings.go   # every bindable act
 rg -n '^type \w+Msg\b' internal/                           # every Bubble Tea message type; the shell contracts are the exported ones in internal/mode/contracts.go
 rg -n '^\t[A-Z]\w+\(' internal/repository/repository.go    # every repository operation
 rg -n '^func Render' internal/ui/                          # every top-level renderer
+rg -n '^func HitTest' internal/ui/                         # what each renderer draws at a cell; the mouse reads through these
 rg -n '^\t\w+Color +=' internal/ui/styles/colors.go        # every colour role
 rg -n '<config-key>' internal/config/                      # where a config key is read
 rg -n 'dep == "|MustCompile' cmd/taskmgr-ui/architecture_guardrails_test.go   # the import bans CI enforces

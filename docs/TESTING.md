@@ -212,6 +212,9 @@ the real catalog reads and writes the registry of whoever runs the suite. The SD
 itself is tested against a real registry in `internal/storecatalog/taskmgr`, under a
 `TASKMGR_HOME` of the test's own.
 
+The system clipboard is the last: a shell test replaces `Model.copyText`, because the real one
+writes an OSC 52 sequence to the terminal of whoever runs the suite.
+
 - Failure-path tests wrap any `repository.Repository` in `fakes.NewErrorInjecting`
   (`internal/testing/fakes/error_injecting.go`); do not hand-roll an error-returning stub.
 - A controller test that needs to seed fixtures *and* inspect calls takes

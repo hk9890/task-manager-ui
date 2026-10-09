@@ -11,10 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	uistorepicker "github.com/hk9890/task-manager-ui/internal/ui/storepicker"
@@ -92,6 +94,9 @@ type Model struct {
 
 	selectedRow  int
 	scrollOffset int
+
+	pointer *mode.Pointer
+	clicks  mode.ClickTracker
 }
 
 // NewModel builds the store-picker controller. Keybindings default to the
@@ -133,6 +138,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.SetSize(msg.Width, msg.Height)
 	case StoresLoadedMsg:
 		m.apply(msg)
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
 	}
 	return nil
 }
@@ -147,15 +154,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	switch {
 	case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
-		if kinds := m.createKinds(); m.selectedRow < len(kinds) {
-			create := CreateMsg{Kind: kinds[m.selectedRow], Dir: m.createDir}
-			return true, func() tea.Msg { return create }
-		}
-		entry, ok := m.SelectedEntry()
-		if !ok {
-			return true, nil
-		}
-		return true, func() tea.Msg { return OpenMsg{Entry: entry} }
+		return true, m.openSelected()
 	case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 		m.moveRow(-1)
 		return true, nil
@@ -168,8 +167,64 @@ func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
+// openSelected asks the shell to act on the selected row: create a store for an
+// action row, open the store for an entry.
+func (m *Model) openSelected() tea.Cmd {
+	if kinds := m.createKinds(); m.selectedRow < len(kinds) {
+		create := CreateMsg{Kind: kinds[m.selectedRow], Dir: m.createDir}
+		return func() tea.Msg { return create }
+	}
+	entry, ok := m.SelectedEntry()
+	if !ok {
+		return nil
+	}
+	return func() tea.Msg { return OpenMsg{Entry: entry} }
+}
+
+// handleMouse is the wheel, the pointer and the left button. The wheel moves
+// the selection; one click selects a row and a second acts on it, as Enter
+// does.
+func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
+	m.pointer = msg.Pointer()
+	if m.pointer == nil {
+		return nil
+	}
+
+	switch msg.Kind {
+	case mode.MouseWheelUp:
+		m.moveRow(-1)
+	case mode.MouseWheelDown:
+		m.moveRow(1)
+	case mode.MouseClick:
+		row, ok := uistorepicker.HitTest(m.viewState(0, ""), msg.X, msg.Y)
+		target := ""
+		if ok {
+			target = strconv.Itoa(row)
+		}
+		if m.clicks.Double(target, strconv.Itoa(m.selectedRow), msg) {
+			return m.openSelected()
+		}
+		if ok {
+			m.moveRow(row - m.selectedRow)
+		}
+	}
+	return nil
+}
+
 // View renders the picker full screen.
 func (m *Model) View(spinnerFrame int, help string) string {
+	state := m.viewState(spinnerFrame, help)
+	if m.pointer != nil {
+		if row, ok := uistorepicker.HitTest(state, m.pointer.X, m.pointer.Y); ok {
+			state.Hover = &row
+		}
+	}
+	return uistorepicker.Render(state)
+}
+
+// viewState is the picker as the renderer sees it. View and the hit test build
+// the same value, so a click lands on the row that is drawn under it.
+func (m *Model) viewState(spinnerFrame int, help string) uistorepicker.State {
 	errText := ""
 	if m.err != nil {
 		errText = m.err.Error()
@@ -193,7 +248,7 @@ func (m *Model) View(spinnerFrame int, help string) string {
 		})
 	}
 
-	return uistorepicker.Render(uistorepicker.State{
+	return uistorepicker.State{
 		Rows:         rows,
 		SelectedRow:  m.selectedRow,
 		ScrollOffset: m.scrollOffset,
@@ -203,7 +258,7 @@ func (m *Model) View(spinnerFrame int, help string) string {
 		SpinnerFrame: spinnerFrame,
 		Width:        m.width,
 		Height:       m.height,
-	})
+	}
 }
 
 // SetSize updates render dimensions. The clamp mirrors the board's: the row

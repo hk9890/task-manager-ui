@@ -23,6 +23,9 @@ const (
 	InspectorTwoColumnMinWidth   = 110
 	InspectorThreeColumnMinWidth = 140
 
+	// minDetailWidth is the narrowest terminal the panes are drawn at.
+	minDetailWidth = 30
+
 	detailColumnGap   = 2
 	metadataRailWidth = 34
 	leftRailMinWidth  = 24
@@ -51,6 +54,9 @@ type State struct {
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
+	// Hover is the cell under the pointer, as HitTest reported it; nil when the
+	// pointer is elsewhere. Its reference row draws the hover band.
+	Hover *Hit
 }
 
 // FocusPane identifies which detail pane is visually focused.
@@ -132,7 +138,6 @@ func Render(state State) string {
 		height = defaultDetailHeight
 	}
 
-	const minDetailWidth = 30
 	if width < minDetailWidth {
 		return "Terminal too narrow"
 	}
@@ -264,7 +269,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 func renderDependenciesPane(detail domain.IssueDetail, state State, width, height int) string {
 	innerHeight := max(1, height-2)
-	dependencies := renderDependenciesPaneLines(detail, state.BrowserItems, state.BrowserSelectedIssueID, width-2, state.Skeleton, state.SkeletonPhase)
+	dependencies := renderRelationshipGroups(dependencyGroups(detail, state.BrowserItems), state.marks(), width-2, state.Skeleton, state.SkeletonPhase)
 	dependenciesView, _ := sliceWithOffset(dependencies, state.DependenciesScrollOffset, innerHeight, width-2)
 	totalRefs := countDependencyReferences(detail)
 	var topRight string
@@ -333,7 +338,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
 
 	depGroups := dependencyGroups(detail, state.BrowserItems)
-	deps := renderRelationshipGroups(depGroups, state.BrowserSelectedIssueID, leftWidth-2, state.Skeleton, state.SkeletonPhase)
+	deps := renderRelationshipGroups(depGroups, state.marks(), leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	innerHeight := max(1, height-2)
 	depView, _ := sliceWithOffset(deps, state.DependenciesScrollOffset, innerHeight, leftWidth-2)
 	totalDepRefs := countDependencyReferences(detail)

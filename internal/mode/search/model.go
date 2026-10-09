@@ -1,7 +1,3 @@
-// Package search is the search-mode controller: query draft state, result
-// paging, and the async cadence around an in-flight search (a keystroke
-// arriving before the previous query resolves is queued, not dropped).
-// Rendering is internal/ui/search.
 package search
 
 import (
@@ -77,6 +73,9 @@ type Model struct {
 	metadataSelectedField detail.MetadataFieldKey
 
 	pendingSelectionAnchor *selectionAnchor
+
+	pointer *mode.Pointer
+	clicks  mode.ClickTracker
 
 	// pendingDraft holds a typed+submitted draft query that arrived while a
 	// search was already in flight. When the in-flight search resolves, this
@@ -176,6 +175,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.selectionChangedCmd()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
 	}
 
 	return nil
@@ -413,7 +414,16 @@ func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAncho
 
 // View renders the standalone search surface.
 func (m *Model) View(skeletonPhase int) string {
-	return uisearch.Render(uisearch.State{
+	state := m.viewState(skeletonPhase)
+	state.Hover = m.hover(state)
+	return uisearch.Render(state)
+}
+
+// viewState is the search surface as the renderer sees it. View and the hit
+// test build the same value, so a click lands on the row that is drawn under
+// it.
+func (m *Model) viewState(skeletonPhase int) uisearch.State {
+	return uisearch.State{
 		Loading:               m.loading,
 		Reloading:             m.reloading,
 		Error:                 m.errText,
@@ -438,7 +448,7 @@ func (m *Model) View(skeletonPhase int) string {
 		Width:         m.width,
 		Height:        m.height,
 		SkeletonPhase: skeletonPhase,
-	})
+	}
 }
 
 // SetSize updates render dimensions.

@@ -99,6 +99,9 @@ type Model struct {
 	focusedField Field
 	width        int
 	height       int
+	// scrollOffset is the first content line drawn when the modal is too tall
+	// for the viewport. Move it with Scroll.
+	scrollOffset int
 }
 
 // New creates a modal with default key bindings.
@@ -330,6 +333,16 @@ func (m Model) prevField() Model {
 // the content is clipped to fit, preserving both the top and bottom borders.
 // The row immediately above the bottom border shows an overflow indicator.
 func (m Model) View() string {
+	rendered, contentWidth := m.render()
+	// Clip with border preserved when the modal overflows the viewport.
+	if m.height > 0 {
+		rendered = clipModalToViewport(rendered, m.height, contentWidth, m.scrollOffset)
+	}
+	return rendered
+}
+
+// render draws the whole modal, however tall, and reports its content width.
+func (m Model) render() (string, int) {
 	minWidth := max(40, m.config.MinWidth)
 	contentWidth := max(minWidth, lipgloss.Width(m.config.Title))
 	boxWidth := contentWidth + 2
@@ -369,19 +382,14 @@ func (m Model) View() string {
 		Width(boxWidth).
 		Render(body)
 
-	// Clip with border preserved when the modal overflows the viewport.
-	if m.height > 0 {
-		rendered = clipModalToViewport(rendered, m.height, contentWidth)
-	}
-
-	return rendered
+	return rendered, contentWidth
 }
 
 // clipModalToViewport clips a rendered modal to fit within viewportHeight rows,
 // preserving the top and bottom border lines. When lines are clipped, an
 // overflow indicator is inserted on the row immediately above the bottom border.
 // A margin of 2 rows is reserved so the modal does not touch the viewport edges.
-func clipModalToViewport(rendered string, viewportHeight, contentWidth int) string {
+func clipModalToViewport(rendered string, viewportHeight, contentWidth, offset int) string {
 	const verticalMargin = 2
 	maxHeight := viewportHeight - verticalMargin
 	if maxHeight < 4 {
@@ -397,41 +405,66 @@ func clipModalToViewport(rendered string, viewportHeight, contentWidth int) stri
 	// lines[0] is the top border, lines[len-1] is the bottom border.
 	topBorder := lines[0]
 	bottomBorder := lines[len(lines)-1]
+	content := lines[1 : len(lines)-1]
 
 	// We need maxHeight lines total: topBorder + (maxHeight-2) content + bottomBorder.
-	// The last content slot becomes the overflow indicator.
 	contentSlots := maxHeight - 2 // rows between top and bottom borders
 	if contentSlots < 1 {
 		return rendered
 	}
 
-	clipped := make([]string, 0, maxHeight)
-	clipped = append(clipped, topBorder)
-
-	// Fill content slots, replacing the last slot with the overflow indicator.
-	for i := 1; i <= contentSlots; i++ {
-		srcLine := lines[i] // lines[1] .. lines[contentSlots]
-		if i == contentSlots {
-			// Overflow indicator: show how many hidden lines remain.
-			// contentSlots includes the indicator row itself, so (contentSlots-1)
-			// real content lines are shown; hidden = total_content - shown.
-			hidden := len(lines) - 1 - contentSlots // total content lines minus shown
-			indicatorText := fmt.Sprintf("… %d more lines", hidden)
-			indicatorStyled := lipgloss.NewStyle().
-				Foreground(styles.TextSecondaryColor).
-				Width(contentWidth).
-				Render(indicatorText)
-			// Wrap in side-border characters matching the modal frame.
-			borderColor := lipgloss.NewStyle().Foreground(styles.OverlayBorderColor)
-			left := borderColor.Render("│") + " "
-			right := " " + borderColor.Render("│")
-			srcLine = left + indicatorStyled + right
-		}
-		clipped = append(clipped, srcLine)
+	// An indicator takes the place of a content row, so it counts that row
+	// among the hidden ones.
+	indicator := func(text string) string {
+		styled := lipgloss.NewStyle().
+			Foreground(styles.TextSecondaryColor).
+			Width(contentWidth).
+			Render(text)
+		// Wrap in side-border characters matching the modal frame.
+		borderColor := lipgloss.NewStyle().Foreground(styles.OverlayBorderColor)
+		return borderColor.Render("│") + " " + styled + " " + borderColor.Render("│")
 	}
 
+	offset = max(0, min(offset, len(content)-contentSlots))
+	window := append([]string(nil), content[offset:offset+contentSlots]...)
+	if offset > 0 {
+		window[0] = indicator(fmt.Sprintf("… %d earlier lines", offset+1))
+	}
+	if below := len(content) - offset - contentSlots; below > 0 {
+		window[contentSlots-1] = indicator(fmt.Sprintf("… %d more lines", below+1))
+	}
+
+	clipped := make([]string, 0, maxHeight)
+	clipped = append(clipped, topBorder)
+	clipped = append(clipped, window...)
 	clipped = append(clipped, bottomBorder)
 	return strings.Join(clipped, "\n")
+}
+
+// ScrollToTop returns the modal to its first line, for an overlay that is
+// reopened rather than rebuilt.
+func (m Model) ScrollToTop() Model {
+	m.scrollOffset = 0
+	return m
+}
+
+// Scroll moves the view of a modal too tall for the viewport by delta lines,
+// and does nothing to one that fits.
+//
+// The move starts from the line that is drawn, not from the stored offset: a
+// taller viewport hides fewer lines, and View already draws an offset past the
+// new end at that end.
+func (m Model) Scroll(delta int) Model {
+	const verticalMargin = 2
+	maxHeight := m.height - verticalMargin
+	rendered, _ := m.render()
+	hidden := strings.Count(rendered, "\n") + 1 - maxHeight
+	if m.height <= 0 || maxHeight < 4 || hidden <= 0 {
+		m.scrollOffset = 0
+		return m
+	}
+	m.scrollOffset = max(0, min(min(m.scrollOffset, hidden)+delta, hidden))
+	return m
 }
 
 func (m Model) renderInputSection(index int, label string, width int) string {

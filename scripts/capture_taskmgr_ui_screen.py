@@ -82,6 +82,40 @@ def feed_keys(fd: int, keys: str) -> None:
     os.write(fd, data)
 
 
+def mouse_reporting_on(output: bytes) -> bool:
+    """Whether the app has asked the terminal to report the mouse.
+
+    A real terminal sends mouse bytes only while a tracking mode is set, so a
+    step that wrote them regardless would pass where a user's click does
+    nothing.
+    """
+    enabled = max(output.rfind(f"{ESC}[?{mode}h".encode()) for mode in (1000, 1002, 1003))
+    disabled = max(output.rfind(f"{ESC}[?{mode}l".encode()) for mode in (1000, 1002, 1003))
+    return enabled > disabled
+
+
+def feed_mouse(fd: int, spec: str) -> None:
+    """Send one mouse event as the SGR sequence a terminal reports it with.
+
+    spec is <action>:<col>:<row>, the cell counted from 0 as the rendered
+    screen is. A click is a press and its release.
+    """
+    # press, drag and release are the three parts of a drag of the left button.
+    buttons = {"click": 0, "press": 0, "drag": 32, "release": 0, "move": 35, "wheel-up": 64, "wheel-down": 65}
+    parts = spec.split(":")
+    if len(parts) != 3 or parts[0] not in buttons or not parts[1].isdigit() or not parts[2].isdigit():
+        raise ValueError(
+            f"invalid send-mouse step {spec!r}; expected <action>:<col>:<row> "
+            f"with an action in {sorted(buttons)}"
+        )
+    action, col, row = parts[0], int(parts[1]) + 1, int(parts[2]) + 1
+    final = "m" if action == "release" else "M"
+    data = f"{ESC}[<{buttons[action]};{col};{row}{final}"
+    if action == "click":
+        data += f"{ESC}[<0;{col};{row}m"
+    os.write(fd, data.encode())
+
+
 def answer_terminal_queries(fd: int, chunk: bytes) -> None:
     if b"\x1b[6n" in chunk:
         os.write(fd, b"\x1b[1;1R")
@@ -116,6 +150,9 @@ def parse_step(step_text: str, default_timeout_ms: int) -> Step:
     if raw.startswith("send-key:"):
         return Step(raw=raw, kind="send-key", value=raw[len("send-key:") :])
 
+    if raw.startswith("send-mouse:"):
+        return Step(raw=raw, kind="send-mouse", value=raw[len("send-mouse:") :])
+
     if raw.startswith("checkpoint:"):
         return Step(raw=raw, kind="checkpoint", value=raw[len("checkpoint:") :])
 
@@ -141,7 +178,7 @@ def parse_step(step_text: str, default_timeout_ms: int) -> Step:
         return Step(raw=raw, kind="wait-for-no-text", value=text, timeout_ms=timeout_ms)
 
     raise ValueError(
-        f"invalid step {raw!r}; expected send-key:, wait-for-text:, wait-for-text-once:, wait-for-no-text:, checkpoint:, or sleep-ms:"
+        f"invalid step {raw!r}; expected send-key:, send-mouse:, wait-for-text:, wait-for-text-once:, wait-for-no-text:, checkpoint:, or sleep-ms:"
     )
 
 
@@ -352,6 +389,12 @@ def capture(
             try:
                 if step.kind == "send-key":
                     feed_keys(master_fd, step.value or "")
+                    read_once(WAIT_POLL_SECONDS)
+                    read_once(WAIT_POLL_SECONDS)
+                elif step.kind == "send-mouse":
+                    if not mouse_reporting_on(bytes(buffer)):
+                        raise ValueError("mouse reporting is off; a terminal would not send this event")
+                    feed_mouse(master_fd, step.value or "")
                     read_once(WAIT_POLL_SECONDS)
                     read_once(WAIT_POLL_SECONDS)
                 elif step.kind == "sleep-ms":

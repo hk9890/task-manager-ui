@@ -84,7 +84,12 @@ func (m Model) handleEditIssuePrepared(modeCmd tea.Cmd, msg editIssuePreparedMsg
 }
 
 // handleEditorExited processes editorExitedMsg in Update.
+//
+// tea.Exec releases the terminal for the editor, which turns mouse reporting
+// off, and Bubble Tea does not turn it back on when it takes the terminal
+// back. Both paths re-enable the mode startInteractive runs the program with.
 func (m Model) handleEditorExited(modeCmd tea.Cmd, msg editorExitedMsg) (tea.Model, tea.Cmd) {
+	modeCmd = batchCmds(modeCmd, tea.EnableMouseAllMotion)
 	if msg.execErr != nil {
 		_ = os.Remove(msg.prepared.TempPath)
 		issueID := msg.prepared.IssueID
