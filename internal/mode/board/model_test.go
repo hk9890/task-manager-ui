@@ -1568,24 +1568,21 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	}
 }
 
-// TestDoneLoadMore_FocusRegainResetsToPage1 verifies that the focus-regain
-// auto-refresh path resets Done pagination to page 1.
+// TestDoneLoadMore_AutoRefreshKeepsThePagedDepth pins that a refresh the
+// operator did not ask for — the store changed, the tick fired, the terminal
+// regained focus — reads Done as deep as it is paged and leaves the cursor on
+// its issue. The reload key is the one that returns to page 1
+// (TestDoneLoadMore_ManualReloadResetsToPage1).
 //
-// Architecture note: focus-regain is handled in internal/app/model.go
-// (tea.FocusMsg → maybeAutoRefreshActiveSurfaceCmdOnFocusRegain →
-// refreshActiveSurfaceCmd → m.board.AutoRefresh). AutoRefresh() calls
-// startReload(mode.RefreshAuto), which resets doneLoadedCount and
-// doneLoadInFlight via the shared counter-reset block in startReload (lines
-// 383-384 of model.go). This test covers the board.AutoRefresh() entry point
-// directly — the app-level wiring is covered by existing app model tests; the
-// board-level counter reset is what we pin here.
-func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
+// It drives board.AutoRefresh() directly: that is the method the app shell
+// calls for all three triggers.
+func TestDoneLoadMore_AutoRefreshKeepsThePagedDepth(t *testing.T) {
 	t.Parallel()
 
-	const freshPageSize = 20
-	freshClosed := makeClosedIssues(freshPageSize)
+	const loaded = 85
+	closed := makeClosedIssues(loaded)
 	stub := newDashboardStub(repository.DashboardData{
-		Closed:      freshClosed,
+		Closed:      closed,
 		ClosedTotal: 736,
 	},
 	)
@@ -1594,62 +1591,48 @@ func TestDoneLoadMore_FocusRegainResetsToPage1(t *testing.T) {
 	// height=23 → sectionItemCapacity()=20.
 	m.SetSize(120, 23)
 
-	// Arrange: 85 Done issues loaded (deep into pagination).
-	const staleLoaded = 85
-	staleClosed := makeClosedIssues(staleLoaded)
+	// Arrange: 85 Done issues loaded (deep into pagination), the cursor on row 50.
 	m.columns = []columnData{
 		{title: sectionTitleNotReady},
 		{title: sectionTitleReady},
 		{title: sectionTitleInProgress},
-		{title: sectionTitleDone, issues: staleClosed, total: 736, exact: false},
+		{title: sectionTitleDone, issues: closed, total: 736, exact: false},
 	}
-	m.doneLoadedCount = staleLoaded
+	m.doneLoadedCount = loaded
 	m.doneClosedTotal = 736
-	m.doneLoadInFlight = false
+	m.focusedColumn = doneColumnIndex
+	m.selectedRow[doneColumnIndex] = 50
+	selectedID := closed[50].ID
 
-	// Simulate focus-regain auto-refresh by calling AutoRefresh() directly —
-	// this is the same method the app shell calls from refreshActiveSurfaceCmd.
 	cmd := m.AutoRefresh()
 	if cmd == nil {
-		t.Fatal("expected non-nil Cmd from AutoRefresh() (focus-regain path)")
+		t.Fatal("expected non-nil Cmd from AutoRefresh()")
 	}
-
-	// AC: counters reset immediately when AutoRefresh/startReload runs.
-	if m.doneLoadedCount != 0 {
-		t.Errorf("expected doneLoadedCount=0 after AutoRefresh, got %d", m.doneLoadedCount)
-	}
-	if m.doneLoadInFlight {
-		t.Error("expected doneLoadInFlight=false after AutoRefresh reset")
-	}
-
-	// Execute cmd to capture opts.
 	msg := cmd()
 
 	opts := stub.capturedOpts()
 	if len(opts) != 1 {
 		t.Fatalf("expected exactly 1 Dashboard call from AutoRefresh, got %d: %v", len(opts), opts)
 	}
-
-	// AC: ClosedOffset=0 (page-1 reset).
 	if opts[0].ClosedOffset != 0 {
-		t.Errorf("expected ClosedOffset=0 on focus-regain reload, got %d", opts[0].ClosedOffset)
+		t.Errorf("expected ClosedOffset=0 on auto refresh, got %d", opts[0].ClosedOffset)
 	}
-	// AC: ClosedLimit=sectionItemCapacity().
-	wantLimit := m.sectionItemCapacity()
-	if opts[0].ClosedLimit != wantLimit {
-		t.Errorf("expected ClosedLimit=%d on focus-regain reload, got %d", wantLimit, opts[0].ClosedLimit)
+	if opts[0].ClosedLimit != loaded {
+		t.Errorf("ClosedLimit = %d on auto refresh, want the %d rows already paged in", opts[0].ClosedLimit, loaded)
 	}
 
-	// Feed the dashboard result so compose() runs.
-	loaded, ok := msg.(dashboardLoadedMsg)
+	dashboard, ok := msg.(dashboardLoadedMsg)
 	if !ok {
 		t.Fatalf("expected dashboardLoadedMsg from AutoRefresh cmd, got %T", msg)
 	}
-	_ = m.Update(loaded)
+	_ = m.Update(dashboard)
 
-	// AC: doneLoadedCount set from fresh page.
-	if m.doneLoadedCount != freshPageSize {
-		t.Errorf("expected doneLoadedCount=%d after focus-regain reload response, got %d", freshPageSize, m.doneLoadedCount)
+	if m.doneLoadedCount != loaded {
+		t.Errorf("doneLoadedCount = %d after the refresh, want %d", m.doneLoadedCount, loaded)
+	}
+	row := m.selectedRow[doneColumnIndex]
+	if got := m.columns[doneColumnIndex].issues[row].ID; got != selectedID {
+		t.Errorf("the cursor is on %s (row %d) after the refresh, want %s where it was", got, row, selectedID)
 	}
 }
 

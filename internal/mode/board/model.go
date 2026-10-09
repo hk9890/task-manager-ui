@@ -369,6 +369,15 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	m.refreshMode = rm
 	m.refreshAnchor = anchor
 
+	// An auto refresh reads Done as deep as the operator has paged it. Reading
+	// one screen dropped the selected row from the column each time the store
+	// changed, and the cursor moved to another issue. The reload key still
+	// returns to page 1.
+	closedLimit := m.sectionItemCapacity()
+	if rm == mode.RefreshAuto && m.doneLoadedCount > closedLimit {
+		closedLimit = m.doneLoadedCount
+	}
+
 	// Reset load-more state before any new full reload so the next compose
 	// sets doneLoadedCount from scratch. This is the "r resets page 1"
 	// contract; this reset is the safety net for all reload modes.
@@ -392,7 +401,7 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	// Build opts before entering the Cmd closure so no model state is read
 	// inside the closure (Bubble Tea runs Cmds outside the Update loop — per
 	// grill Q4, reading model state there is a race smell).
-	opts := repository.DashboardOptions{ClosedLimit: m.sectionItemCapacity()}
+	opts := repository.DashboardOptions{ClosedLimit: closedLimit}
 	return loadDashboardCmd(m.ctx, m.repo, opts)
 }
 
