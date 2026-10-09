@@ -31,15 +31,17 @@ var (
 	ShellTabActiveTextColor = ButtonTextColor
 	ShellTabActiveBgColor   = ButtonPrimaryFocusBgColor
 	ShellTabInactiveColor   = TextMutedColor
-	ShellTabHoverColor      = TextPrimaryColor
+	ShellTabHoverColor      = TextSecondaryColor
 	ShellContextColor       = TextMutedColor
 	ShellFooterHelpColor    = TextMutedColor
 
 	// Row bands. The selected row and the row under the pointer each carry a
 	// background across their whole width; the hover's is a step quieter, so
-	// which of two lit rows Enter means reads at a glance.
+	// which of two lit rows Enter means reads at a glance. The two must stay two
+	// colours on a 256-colour terminal as well, where a near pair collapses into
+	// one palette entry.
 	RowSelectedBgColor = lipgloss.AdaptiveColor{Light: "#C9DBF5", Dark: "#2B3A55"}
-	RowHoverBgColor    = lipgloss.AdaptiveColor{Light: "#E6E9EE", Dark: "#2A2D34"}
+	RowHoverBgColor    = lipgloss.AdaptiveColor{Light: "#E6E8EA", Dark: "#2A2D34"}
 
 	// Border and overlay colors.
 	BorderDefaultColor        = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#696969"}

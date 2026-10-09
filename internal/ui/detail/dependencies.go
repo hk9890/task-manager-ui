@@ -15,14 +15,15 @@ type relationshipGroup struct {
 	Refs  []domain.IssueReference
 }
 
-// refMarks names the reference rows that carry a gutter mark: the cursor row
-// the keys move, and the row under the pointer.
+// refMarks names the reference rows that are marked: the cursor row the keys
+// move, which takes the selection gutter and band, and the row under the
+// pointer, which takes the hover band.
 type refMarks struct {
 	cursor string
 	hover  string
 }
 
-// marks is the gutter marks state asks for.
+// marks is the marked rows state asks for.
 func (state State) marks() refMarks {
 	marks := refMarks{cursor: state.BrowserSelectedIssueID}
 	if state.Hover != nil && state.Hover.Pane == FocusPaneDependencies {

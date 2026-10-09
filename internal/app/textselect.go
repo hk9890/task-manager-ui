@@ -44,6 +44,26 @@ func (s textSelection) box() (left, top, right, bottom int) {
 	return min(s.from.x, s.to.x), min(s.from.y, s.to.y), max(s.from.x, s.to.x), max(s.from.y, s.to.y)
 }
 
+// glyphEdges widens the cells [left, right] of a line without escape codes
+// until neither end splits a glyph two cells wide. Cut through its middle, such
+// a glyph is dropped on one side of the edge and kept whole on the other: the
+// row is drawn a cell out of line and the copy disagrees with the box.
+func glyphEdges(plain string, left, right int) (int, int) {
+	for cell := 0; plain != "" && cell <= right; {
+		cluster, width := ansi.FirstGraphemeCluster(plain, ansi.GraphemeWidth)
+		last := cell + width - 1
+		if cell < left && left <= last {
+			left = cell
+		}
+		if cell <= right && right < last {
+			right = last
+		}
+		plain = plain[len(cluster):]
+		cell += width
+	}
+	return left, right
+}
+
 // text is what the box holds, one line per row, without colour and without
 // the spaces a row is padded with.
 func (s textSelection) text() string {
@@ -51,8 +71,9 @@ func (s textSelection) text() string {
 	lines := strings.Split(s.screen, "\n")
 	var out []string
 	for y := top; y <= bottom && y < len(lines); y++ {
-		cut := ansi.Cut(ansi.Strip(lines[y]), left, right+1)
-		out = append(out, strings.TrimRight(cut, " "))
+		plain := ansi.Strip(lines[y])
+		from, to := glyphEdges(plain, left, right)
+		out = append(out, strings.TrimRight(ansi.Cut(plain, from, to+1), " "))
 	}
 	return strings.Join(out, "\n")
 }
@@ -63,14 +84,13 @@ func (s textSelection) text() string {
 func (s textSelection) view() string {
 	left, top, right, bottom := s.box()
 	lines := strings.Split(s.screen, "\n")
-	width := right - left + 1
 	for y := top; y <= bottom && y < len(lines); y++ {
 		line := lines[y]
-		before := ansi.Truncate(line, left, "")
-		inside := ansi.Cut(ansi.Strip(line), left, right+1)
-		lines[y] = textutil.PadToWidth(before, left) +
-			"\x1b[0;7m" + textutil.PadToWidth(inside, width) + "\x1b[0m" +
-			ansi.TruncateLeft(line, right+1, "")
+		plain := ansi.Strip(line)
+		from, to := glyphEdges(plain, left, right)
+		lines[y] = textutil.PadToWidth(ansi.Truncate(line, from, ""), from) +
+			"\x1b[0;7m" + textutil.PadToWidth(ansi.Cut(plain, from, to+1), to-from+1) + "\x1b[0m" +
+			ansi.TruncateLeft(line, to+1, "")
 	}
 	return strings.Join(lines, "\n")
 }

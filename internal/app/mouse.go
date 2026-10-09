@@ -107,7 +107,10 @@ func (m *Model) mouseToSurface(event mode.MouseMsg) tea.Cmd {
 	case mode.StorePicker:
 		return m.storePicker.Update(event)
 	case mode.Detail:
-		intent := m.detail.HandleMouse(event, m.detailViewportWidth(), m.detailViewportHeight())
+		// One measure for both: each viewport getter renders the header and
+		// the footer to take theirs, and the pointer asks on every cell.
+		width, height := m.workspaceSize()
+		intent := m.detail.HandleMouse(event, width, height)
 		if intent == nil {
 			return nil
 		}

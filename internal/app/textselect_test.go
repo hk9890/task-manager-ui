@@ -162,6 +162,41 @@ func TestABoxOfBlankCellsCopiesNothing(t *testing.T) {
 	}
 }
 
+// TestABoxEdgeInsideAWideGlyphTakesTheWholeGlyph: a glyph two cells wide under
+// an edge of the box is selected whole. Cut in half it was dropped on one side
+// and kept on the other, so the row moved a cell and the copy lost the glyph.
+func TestABoxEdgeInsideAWideGlyphTakesTheWholeGlyph(t *testing.T) {
+	t.Parallel()
+
+	// The wide glyphs sit on cells 2-3 and 7-8.
+	const line = "ab\x1b[31m✅cd\x1b[0m 日 tail"
+	plain := testui.AnsiEscapePattern.ReplaceAllString(line, "")
+
+	for left := 0; left <= 8; left++ {
+		for right := left; right <= 12; right++ {
+			sel := textSelection{from: screenCell{x: left}, to: screenCell{x: right}, screen: line}
+			if got := testui.AnsiEscapePattern.ReplaceAllString(sel.view(), ""); got != plain {
+				t.Errorf("box %d-%d moved the row: %q, want %q", left, right, got, plain)
+			}
+		}
+	}
+
+	for _, tc := range []struct {
+		left, right int
+		want        string
+	}{
+		{left: 0, right: 2, want: "ab✅"},
+		{left: 3, right: 4, want: "✅c"},
+		{left: 3, right: 7, want: "✅cd 日"},
+		{left: 4, right: 5, want: "cd"},
+	} {
+		sel := textSelection{from: screenCell{x: tc.left}, to: screenCell{x: tc.right}, screen: line}
+		if got := sel.text(); got != tc.want {
+			t.Errorf("box %d-%d copied %q, want %q", tc.left, tc.right, got, tc.want)
+		}
+	}
+}
+
 // TestSelectingWorksOverTheHelpOverlay: the box stands over whatever is on
 // screen, so the help text can be copied too.
 func TestSelectingWorksOverTheHelpOverlay(t *testing.T) {
