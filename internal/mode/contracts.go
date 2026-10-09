@@ -66,6 +66,10 @@ type Browse interface {
 	// AutoRefresh returns the periodic reload command, or nil when the tab has
 	// nothing to refresh.
 	AutoRefresh() tea.Cmd
+
+	// Reload is what the tab's reload key runs, which the shell's reload
+	// button runs too. It returns nil while a load is already in flight.
+	Reload() tea.Cmd
 }
 
 // RefreshMode distinguishes the two reasons a browse tab reloads. It lives here

@@ -314,7 +314,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	}
 }
 
-func TestModelBoardShellUsesTwoLineHeaderAndSingleLineFooterHelpAt120Cols(t *testing.T) {
+func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *testing.T) {
 	t.Parallel()
 
 	gw := fakes.NewTracked()
@@ -334,19 +334,19 @@ func TestModelBoardShellUsesTwoLineHeaderAndSingleLineFooterHelpAt120Cols(t *tes
 
 	header := m.renderHeader()
 	headerLines := strings.Split(header, "\n")
-	if len(headerLines) != 2 {
-		t.Fatalf("expected the top bar and the rule under it, got %d lines:\n%s", len(headerLines), header)
+	if len(headerLines) != 3 {
+		t.Fatalf("expected the menu bar, the rule and the tab line, got %d lines:\n%s", len(headerLines), header)
 	}
 	for _, line := range headerLines {
 		if got := lipgloss.Width(line); got != 120 {
 			t.Fatalf("expected each header line to span the 120 columns, got %d:\n%s", got, header)
 		}
 	}
-	if !strings.Contains(headerLines[0], " Board ") || strings.Contains(headerLines[0], "Selected:") {
-		t.Fatalf("expected the tabs and no context on the top bar, got:\n%s", headerLines[0])
+	if strings.Contains(headerLines[0], " Board ") || !strings.Contains(headerLines[0], "stores") {
+		t.Fatalf("expected the buttons and no tab on the menu bar, got:\n%s", headerLines[0])
 	}
-	if !strings.Contains(headerLines[1], "Selected: tm-3 (blocked)") {
-		t.Fatalf("expected the context on the rule, got:\n%s", headerLines[1])
+	if !strings.Contains(headerLines[2], " Board ") || !strings.Contains(headerLines[2], "Selected: tm-3 (blocked)") {
+		t.Fatalf("expected the tabs and the context on the tab line, got:\n%s", headerLines[2])
 	}
 	if strings.Contains(header, "Detail") {
 		t.Fatalf("expected detail to be contextual and absent from top tabs, got:\n%s", header)

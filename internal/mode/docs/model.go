@@ -99,6 +99,16 @@ func (m *Model) Init() tea.Cmd {
 	return m.startReload(mode.RefreshReload)
 }
 
+// Reload is the manual refresh: a full reset, dropped while one is in flight.
+func (m *Model) Reload() tea.Cmd {
+	if m.inflight {
+		m.logger.Debug("manual docs refresh suppressed; refresh already in flight",
+			"trigger", "docs-manual")
+		return nil
+	}
+	return m.startReload(mode.RefreshReload)
+}
+
 // Update processes docs-specific messages and keybindings. Row movement, open
 // detail, and reload reuse the board keybinding context: the docs column is a
 // board column, so the two surfaces must not drift apart.
@@ -126,12 +136,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return mode.RequestActionCmd(mode.Docs, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
-			if m.inflight {
-				m.logger.Debug("manual docs refresh suppressed; refresh already in flight",
-					"trigger", "docs-manual")
-				return nil
-			}
-			return m.startReload(mode.RefreshReload)
+			return m.Reload()
 		}
 	}
 

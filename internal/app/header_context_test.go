@@ -13,7 +13,7 @@ import (
 // context fit rule. headerContextVariants builds four to six alternatives and
 // only the chosen one reaches the screen, so nothing observed which budget the
 // choice was made against: a doubled budget lets the context string consume the
-// whole rule under the top bar, where a long store name is then cut mid-word.
+// whole tab line, where a long store name is then cut mid-word.
 //
 // Asserted as the rule rather than as a snapshot: no golden is added, so the
 // app captures do not gain two more files that churn on every header change.
@@ -38,7 +38,8 @@ func TestHeaderContextPicksTheLongestVariantInsideItsBudget(t *testing.T) {
 		}
 
 		got := m.headerContext()
-		budget := width / 2
+		// Half the line, and no more than stands free beside the tabs.
+		budget := min(width/2, width-headerTabsEnd()-headerBarGap)
 
 		// The chosen variant is the first one inside the budget, or the last
 		// variant when none fits.
@@ -54,8 +55,8 @@ func TestHeaderContextPicksTheLongestVariantInsideItsBudget(t *testing.T) {
 				width, budget, got, lipgloss.Width(got), want, lipgloss.Width(want))
 		}
 
-		// The budget itself: whenever some variant fits in half the header, the
-		// chosen one must too. This is the half that a doubled budget breaks.
+		// The budget itself: whenever some variant fits in it, the chosen one
+		// must too. This is the half that a doubled budget breaks.
 		anyFits := false
 		for _, v := range variants {
 			if lipgloss.Width(v) <= budget {

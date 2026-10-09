@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
 
 // newMouseShell is a loaded shell on the Board at 160x30: one ready issue and
@@ -151,15 +152,14 @@ func TestClickOnATabSwitchesToIt(t *testing.T) {
 		label string
 		want  mode.ID
 	}{{"Docs", mode.Docs}, {"Search", mode.Search}, {"Board", mode.Board}} {
-		header := strings.SplitN(m.View(), "\n", 2)[0]
-		x, _ := testui.FindCell(t, header, " "+tab.label+" ")
+		x, _ := testui.FindCell(t, tabLine(m), " "+tab.label+" ")
 		// Both padding cells and the label belong to the tab.
 		for _, column := range []int{x, x + 1, x + len(tab.label) + 1} {
 			if got, ok := m.tabAt(column); !ok || got != tab.want {
 				t.Fatalf("tabAt(%d) = %q, %v; want %q", column, got, ok, tab.want)
 			}
 		}
-		m = send(t, m, leftClick(x+1, 0))
+		m = send(t, m, leftClick(x+1, headerTabsRow))
 		if m.active != tab.want || m.lastBrowse != tab.want {
 			t.Fatalf("click on %s left the shell on %q (last browse %q)", tab.label, m.active, m.lastBrowse)
 		}
@@ -171,19 +171,25 @@ func TestClickOnATabSwitchesToIt(t *testing.T) {
 	if m.active != mode.Detail {
 		t.Fatalf("fixture did not reach Detail, on %q", m.active)
 	}
-	x, _ = testui.FindCell(t, strings.SplitN(m.View(), "\n", 2)[0], " Docs ")
-	if m = send(t, m, leftClick(x+1, 0)); m.active != mode.Docs {
+	x, _ = testui.FindCell(t, tabLine(m), " Docs ")
+	if m = send(t, m, leftClick(x+1, headerTabsRow)); m.active != mode.Docs {
 		t.Fatalf("tab click from Detail left the shell on %q, want docs", m.active)
 	}
 }
 
-// topBar is the first line of the shell, without colour: the tabs and the
-// buttons, as a hit-test test finds them with testui.FindCell.
-func topBar(m Model) string {
-	return testui.AnsiEscapePattern.ReplaceAllString(strings.SplitN(m.View(), "\n", 2)[0], "")
+// headerLine is one line of the shell's header, without colour, as a hit-test
+// test finds a tab or a button on it with testui.FindCell.
+func headerLine(m Model, row int) string {
+	return testui.AnsiEscapePattern.ReplaceAllString(strings.Split(m.View(), "\n")[row], "")
 }
 
-// barButton is where the top bar draws the button of a shell action: its first
+// topBar is the menu bar: the buttons and the version.
+func topBar(m Model) string { return headerLine(m, headerMenuRow) }
+
+// tabLine is the line of the view tabs.
+func tabLine(m Model) string { return headerLine(m, headerTabsRow) }
+
+// barButton is where the menu bar draws the button of a shell action: its first
 // column and its text, the label and the key bound to it.
 func barButton(t *testing.T, m Model, label, action string) (x int, text string) {
 	t.Helper()
@@ -192,46 +198,133 @@ func barButton(t *testing.T, m Model, label, action string) (x int, text string)
 	return x, text
 }
 
-func TestClickOffTheTabsOnTheHeaderDoesNothing(t *testing.T) {
+// litButton is the label of the button the menu bar lights, or "".
+func litButton(m Model) string {
+	if m.barPointer == nil {
+		return ""
+	}
+	cell, _ := m.buttonAt(*m.barPointer)
+	return cell.action.label
+}
+
+func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 	m := newMouseShell(t)
 
-	storesX, _ := barButton(t, m, "stores", config.ShellActionStorePicker)
-	// The spinner cell, the cell before the first tab, the first cell after
-	// the last tab, the middle of the bar, and the `·` between two buttons.
-	searchX, _ := testui.FindCell(t, topBar(m), " Search ")
-	for _, column := range []int{0, headerTabsStart() - 1, searchX + len(" Search "), 80, storesX - 2} {
-		if got, ok := m.tabAt(column); ok {
-			t.Errorf("tabAt(%d) = %q, want no tab", column, got)
-		}
-		next, cmd := m.Update(leftClick(column, 0))
-		if cmd != nil {
-			t.Errorf("click on header column %d returned a command", column)
-		}
-		if got := next.(Model); got.active != mode.Board || got.showHelp || got.pendingDialog.active || got.hoverAction != "" || got.hoverTab != "" {
-			t.Errorf("click on header column %d: surface %q, help %v, pending dialog %v, hover %q/%q; want nothing",
-				column, got.active, got.showHelp, got.pendingDialog.active, got.hoverTab, got.hoverAction)
-		}
-	}
+	storesX, storesText := barButton(t, m, "stores", config.ShellActionStorePicker)
+	searchX, _ := testui.FindCell(t, tabLine(m), " Search ")
+	docsX, _ := testui.FindCell(t, tabLine(m), " Docs ")
 
-	// The rule under the bar draws nothing to press, under a tab or a button.
-	docsX, _ := testui.FindCell(t, topBar(m), " Docs ")
-	for _, column := range []int{docsX + 1, storesX + 1} {
-		next, cmd := m.Update(leftClick(column, 1))
-		if cmd != nil {
-			t.Errorf("click on the rule at column %d returned a command", column)
-		}
-		got := next.(Model)
-		if got.active != mode.Board || got.showHelp || got.hoverAction != "" || got.hoverTab != "" {
-			t.Errorf("click on the rule at column %d: surface %q, help %v, hover %q/%q; want nothing",
-				column, got.active, got.showHelp, got.hoverTab, got.hoverAction)
-		}
-		if firstSelectionID(got, mode.Board) != "tm-1" {
-			t.Errorf("click on the rule at column %d reached the board", column)
+	dead := map[string][][2]int{
+		// The spinner cell, the cell before the first tab, the first cell
+		// after the last tab, and the space before the context.
+		"the tab line": {{0, headerTabsRow}, {headerTabsStart() - 1, headerTabsRow}, {searchX + len(" Search "), headerTabsRow}, {80, headerTabsRow}},
+		// The cell before the first button, the `·` after it, and the space
+		// before the version.
+		"the menu bar": {{storesX - 1, headerMenuRow}, {storesX + len(storesText) + 1, headerMenuRow}, {80, headerMenuRow}},
+		// The rule draws nothing to press, under a button or over a tab.
+		"the rule": {{docsX + 1, 1}, {storesX + 1, 1}},
+	}
+	for name, cells := range dead {
+		for _, cell := range cells {
+			if got, ok := m.tabAt(cell[0]); ok && cell[1] == headerTabsRow {
+				t.Errorf("%s: tabAt(%d) = %q, want no tab", name, cell[0], got)
+			}
+			next, cmd := m.Update(leftClick(cell[0], cell[1]))
+			if cmd != nil {
+				t.Errorf("%s: click on column %d returned a command", name, cell[0])
+			}
+			got := next.(Model)
+			if got.active != mode.Board || got.showHelp || got.pendingDialog.active || litButton(got) != "" || got.hoverTab != "" {
+				t.Errorf("%s: click on column %d: surface %q, help %v, pending dialog %v, hover %q/%q; want nothing",
+					name, cell[0], got.active, got.showHelp, got.pendingDialog.active, got.hoverTab, litButton(got))
+			}
+			if firstSelectionID(got, mode.Board) != "tm-1" {
+				t.Errorf("%s: click on column %d reached the board", name, cell[0])
+			}
 		}
 	}
 }
 
-// TestClickOnABarButtonDoesWhatItsKeyDoes clicks each button where the top bar
+// TestClickOnReloadAndQuit: the two buttons whose effect is a command, not a
+// screen. Each returns what its key returns.
+func TestClickOnReloadAndQuit(t *testing.T) {
+	m := newMouseShell(t)
+
+	x, _ := testui.FindCell(t, topBar(m), "reload "+m.keys.DisplayPrimary(config.BoardContext, config.BoardActionReload))
+	next, cmd := m.Update(leftClick(x, headerMenuRow))
+	if reloading := next.(Model); cmd == nil || !reloading.board.IsLoading() {
+		t.Fatalf("click on reload: command %v, board loading %v; want a reload in flight", cmd != nil, reloading.board.IsLoading())
+	}
+
+	x, _ = barButton(t, m, "quit", config.ShellActionQuit)
+	_, cmd = m.Update(leftClick(x, headerMenuRow))
+	quit := false
+	for _, msg := range runBatch(cmd) {
+		if _, ok := msg.(tea.QuitMsg); ok {
+			quit = true
+		}
+	}
+	if !quit {
+		t.Fatal("click on quit did not quit")
+	}
+}
+
+// TestClickOnReloadReloadsTheSurfaceOnScreen: reload is one button, and the
+// load it starts is the one of the surface under it and of no other.
+func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
+	tab := tea.KeyMsg{Type: tea.KeyTab}
+	detail := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}
+
+	for _, tc := range []struct {
+		surface mode.ID
+		reach   []tea.Msg
+		want    loading.Scope
+	}{
+		{surface: mode.Board, want: loading.ScopeBoard},
+		{surface: mode.Docs, reach: []tea.Msg{tab}, want: loading.ScopeDocs},
+		{surface: mode.Search, reach: []tea.Msg{tab, tab}, want: loading.ScopeSearch},
+		{surface: mode.Detail, reach: []tea.Msg{detail}, want: loading.ScopeDetail},
+	} {
+		m := applyMessages(t, newMouseShell(t), tc.reach)
+		if m.active != tc.surface || len(m.loadingStates()) != 0 {
+			t.Fatalf("fixture: on %q with %d loads in flight, want %q at rest", m.active, len(m.loadingStates()), tc.surface)
+		}
+
+		x, _ := testui.FindCell(t, topBar(m), "reload "+m.reloadKey())
+		next, cmd := m.Update(leftClick(x, headerMenuRow))
+		states := next.(Model).loadingStates()
+		if cmd == nil || len(states) != 1 || states[0].Scope != tc.want {
+			t.Errorf("click on reload on %q: command %v, loading %v; want %q alone", tc.surface, cmd != nil, states, tc.want)
+		}
+	}
+}
+
+// TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface: the reload
+// button is as wide as the key of the surface on screen, so a key that changes
+// the surface moves the buttons after it under a pointer that sent no event.
+func TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface(t *testing.T) {
+	cfg := config.Default()
+	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
+		Search: map[string][]string{config.SearchActionReload: {"ctrl+r"}},
+	})
+	m := send(t, newHeaderShell(t, cfg), tea.WindowSizeMsg{Width: 160, Height: 30})
+
+	x, _ := barButton(t, m, "help", config.ShellActionHelp)
+	if m = send(t, m, pointerMove(x, headerMenuRow)); litButton(m) != "help" {
+		t.Fatalf("fixture: pointer over help lights %q", litButton(m))
+	}
+
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyTab}, tea.KeyMsg{Type: tea.KeyTab}})
+	if moved, _ := barButton(t, m, "help", config.ShellActionHelp); m.active != mode.Search || moved == x {
+		t.Fatalf("fixture: on %q with help at column %d, want search and help moved from column %d", m.active, moved, x)
+	}
+	under, ok := m.buttonAt(x)
+	if !ok || litButton(m) != under.action.label {
+		t.Errorf("the bar lights %q and draws %q under the pointer", litButton(m), under.text())
+	}
+}
+
+// TestClickOnABarButtonDoesWhatItsKeyDoes clicks each button where the menu bar
 // draws it and holds the shell against the one its key leaves: the bar is a
 // second way to reach an action, never a different one.
 func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
@@ -253,12 +346,6 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 		label, action string
 		check         func(*testing.T, Model)
 	}{
-		{label: "new", action: config.ShellActionCreateIssue, check: func(t *testing.T, m Model) {
-			t.Helper()
-			if !m.showActionModal || m.actionState.kind != mutationCreate {
-				t.Errorf("the create dialog is not up (modal %v, kind %q)", m.showActionModal, m.actionState.kind)
-			}
-		}},
 		{label: "stores", action: config.ShellActionStorePicker, check: func(t *testing.T, m Model) {
 			t.Helper()
 			if m.active != mode.StorePicker || m.pickerReturn != mode.Board {
@@ -332,7 +419,7 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 	base := newMouseShell(t)
 	buttons := map[string]int{}
 	for label, action := range map[string]string{
-		"new": config.ShellActionCreateIssue, "stores": config.ShellActionStorePicker, "help": config.ShellActionHelp,
+		"stores": config.ShellActionStorePicker, "help": config.ShellActionHelp, "quit": config.ShellActionQuit,
 	} {
 		buttons[label], _ = barButton(t, base, label, action)
 	}
@@ -353,7 +440,7 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 				if cmd != nil {
 					t.Errorf("%s: a mouse event on %q under the overlay returned a command", name, label)
 				}
-				if m.hoverAction != "" {
+				if litButton(m) != "" {
 					t.Errorf("%s: %q is lit under the overlay", name, label)
 				}
 			}
@@ -370,9 +457,9 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 	}
 	for label, x := range buttons {
 		m = send(t, send(t, m, pointerMove(x, 0)), leftClick(x, 0))
-		if m.active != mode.StorePicker || m.showHelp || m.showActionModal || m.pendingDialog.active || m.hoverAction != "" {
+		if m.active != mode.StorePicker || m.showHelp || m.showActionModal || m.pendingDialog.active || litButton(m) != "" {
 			t.Errorf("a click where %q was drawn ran under the picker (surface %q, help %v, modal %v, pending dialog %v, hover %q)",
-				label, m.active, m.showHelp, m.showActionModal, m.pendingDialog.active, m.hoverAction)
+				label, m.active, m.showHelp, m.showActionModal, m.pendingDialog.active, litButton(m))
 		}
 	}
 }
@@ -384,17 +471,17 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	m := newMouseShell(t)
 	idle := m.View()
 
-	x, _ := barButton(t, m, "stores", config.ShellActionStorePicker)
+	x, text := barButton(t, m, "stores", config.ShellActionStorePicker)
 	helpX, _ := barButton(t, m, "help", config.ShellActionHelp)
-	docsX, _ := testui.FindCell(t, topBar(m), " Docs ")
+	docsX, _ := testui.FindCell(t, tabLine(m), " Docs ")
 	rowX, rowY := testui.FindCell(t, idle, "progress-second")
 
 	onButton := func(m Model) Model {
 		t.Helper()
 		m = send(t, m, pointerMove(x+1, 0))
-		if m.hoverAction != config.ShellActionStorePicker || m.hoverTab != "" || m.active != mode.Board {
+		if litButton(m) != "stores" || m.hoverTab != "" || m.active != mode.Board {
 			t.Fatalf("pointer over stores: hover %q, tab %q, surface %q; want the button lit and the board still up",
-				m.hoverAction, m.hoverTab, m.active)
+				litButton(m), m.hoverTab, m.active)
 		}
 		return m
 	}
@@ -409,8 +496,8 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	}
 
 	// Onto the next button: one is lit at a time.
-	if m = send(t, m, pointerMove(helpX, 0)); m.hoverAction != config.ShellActionHelp {
-		t.Fatalf("pointer over help: hover %q", m.hoverAction)
+	if m = send(t, m, pointerMove(helpX, 0)); litButton(m) != "help" {
+		t.Fatalf("pointer over help: hover %q", litButton(m))
 	}
 	// The wheel over a button is not a click.
 	if m = send(t, m, wheel(helpX, 0, tea.MouseButtonWheelDown)); m.showHelp || firstSelectionID(m, mode.Board) != "tm-1" {
@@ -418,15 +505,15 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	}
 
 	leaves := map[string]tea.MouseMsg{
-		"a tab":         pointerMove(docsX+1, 0),
-		"the separator": pointerMove(x-2, 0),
+		"a tab":         pointerMove(docsX+1, headerTabsRow),
+		"the separator": pointerMove(x+len(text)+1, 0),
 		"the rule":      pointerMove(x+1, 1),
 		"a row":         pointerMove(rowX, rowY),
 		"the footer":    pointerMove(x+1, 29),
 	}
 	for name, leave := range leaves {
-		if left := send(t, onButton(m), leave); left.hoverAction != "" {
-			t.Errorf("the button stayed lit (%q) after the pointer moved to %s", left.hoverAction, name)
+		if left := send(t, onButton(m), leave); litButton(left) != "" {
+			t.Errorf("the button stayed lit (%q) after the pointer moved to %s", litButton(left), name)
 		}
 	}
 	if left := send(t, onButton(m), leaves["the footer"]); left.View() != idle {
@@ -435,32 +522,19 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	if left := send(t, onButton(m), leaves["a tab"]); left.hoverTab != mode.Docs {
 		t.Errorf("the tab the pointer moved to is not lit (%q)", left.hoverTab)
 	}
-	if left := send(t, send(t, m, pointerMove(docsX+1, 0)), pointerMove(x+1, 0)); left.hoverTab != "" {
+	if left := send(t, send(t, m, pointerMove(docsX+1, headerTabsRow)), pointerMove(x+1, 0)); left.hoverTab != "" {
 		t.Errorf("the tab stayed lit (%q) after the pointer moved to a button", left.hoverTab)
 	}
 
 	// The bar forgets the pointer once the picker is up, and under an overlay.
 	picker := pressKey(t, onButton(m), "s")
 	picker = send(t, picker, pointerMove(x+1, 5))
-	if picker = send(t, picker, tea.KeyMsg{Type: tea.KeyEsc}); picker.active != mode.Board || picker.hoverAction != "" {
-		t.Errorf("back on %q the %q button is lit under a cell the pointer left", picker.active, picker.hoverAction)
+	if picker = send(t, picker, tea.KeyMsg{Type: tea.KeyEsc}); picker.active != mode.Board || litButton(picker) != "" {
+		t.Errorf("back on %q the %q button is lit under a cell the pointer left", picker.active, litButton(picker))
 	}
 	help := pressKey(t, onButton(m), "?")
-	if help = send(t, help, pointerMove(x+1, 0)); !help.showHelp || help.hoverAction != "" {
-		t.Errorf("under the help overlay (%v) the %q button is lit", help.showHelp, help.hoverAction)
-	}
-
-	// A new width moves the buttons and sends no mouse event: the one that was
-	// lit is no longer under the pointer. A new height moves nothing on the bar.
-	if taller := send(t, onButton(m), tea.WindowSizeMsg{Width: 160, Height: 40}); taller.hoverAction != config.ShellActionStorePicker {
-		t.Errorf("a resize that kept the width unlit the button under the pointer (%q)", taller.hoverAction)
-	}
-	wider := send(t, onButton(m), tea.WindowSizeMsg{Width: 200, Height: 30})
-	if moved, _ := barButton(t, wider, "stores", config.ShellActionStorePicker); moved == x {
-		t.Fatal("fixture: the stores button did not move with the width")
-	}
-	if wider.hoverAction != "" {
-		t.Errorf("the %q button stayed lit after a resize moved it from under the pointer", wider.hoverAction)
+	if help = send(t, help, pointerMove(x+1, 0)); !help.showHelp || litButton(help) != "" {
+		t.Errorf("under the help overlay (%v) the %q button is lit", help.showHelp, litButton(help))
 	}
 }
 
@@ -471,8 +545,8 @@ func TestHoverLightsTheTabAndTheRowUnderThePointer(t *testing.T) {
 	m := newMouseShell(t)
 	idle := m.View()
 
-	x, _ := testui.FindCell(t, strings.SplitN(idle, "\n", 2)[0], " Docs ")
-	m = send(t, m, pointerMove(x+1, 0))
+	x, _ := testui.FindCell(t, tabLine(m), " Docs ")
+	m = send(t, m, pointerMove(x+1, headerTabsRow))
 	if m.hoverTab != mode.Docs || m.active != mode.Board {
 		t.Fatalf("pointer over Docs: hover %q, surface %q; want the tab lit and the board still up", m.hoverTab, m.active)
 	}
@@ -623,8 +697,8 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 	}
 
 	// The tab strip forgets the pointer the same way once the picker is up.
-	tabX, _ := testui.FindCell(t, strings.SplitN(m.View(), "\n", 2)[0], " Docs ")
-	m = send(t, m, pointerMove(tabX+1, 0))
+	tabX, _ := testui.FindCell(t, tabLine(m), " Docs ")
+	m = send(t, m, pointerMove(tabX+1, headerTabsRow))
 	if m.hoverTab != mode.Docs {
 		t.Fatalf("fixture: hovered tab is %q, want docs", m.hoverTab)
 	}

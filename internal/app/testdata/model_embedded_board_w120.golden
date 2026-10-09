@@ -1,5 +1,6 @@
-   Board   Docs   Search                                                                       new c · stores s · help ?
-── Board · Selected: bwf-2 (blocked) · Idle ────────────────────────────────────────────────────────────────────────────
+ stores s · reload r · help ? · quit ctrl+q                                                                          dev
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Board   Docs   Search                                                        Board · Selected: bwf-2 (blocked) · Idle
 Default · cols 1-3/4
 ╭─ Not Ready ──────────────────── 1 ─╮  ╭─ Ready ───────────────────────── 1 ─╮  ╭─ In Progress ─────────────────── 0 ─╮
 │▌ B Blocked bug for fixture         │  │  T Seed fixture root task           │  │(no issues)                          │
@@ -29,6 +30,5 @@ Default · cols 1-3/4
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
-│                                    │  │                                     │  │                                     │
 ╰────────────────────────────────────╯  ╰─────────────────────────────────────╯  ╰─────────────────────────────────────╯
-h/l columns · j/k issues · enter detail · ctrl+space search · ? help · ctrl+q quit
+h/l columns · j/k issues · enter detail · c new · ctrl+space search · ? help · ctrl+q quit

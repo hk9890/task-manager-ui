@@ -59,9 +59,9 @@ var (
 	IssueStatusBlockedColor     lipgloss.Color
 	IssueStatusClosedColor      lipgloss.Color
 	IssueStatusDeferredColor    lipgloss.Color
-	// ShellRuleColor is the rule under the top bar.
+	// ShellRuleColor is the rule under the menu bar.
 	ShellRuleColor lipgloss.Color
-	// ShellActionColor is a top-bar button's label.
+	// ShellActionColor is a menu-bar button's label.
 	ShellActionColor lipgloss.Color
 )
 

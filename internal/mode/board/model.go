@@ -175,6 +175,16 @@ func (m *Model) Init() tea.Cmd {
 	return m.startReload(mode.RefreshReload)
 }
 
+// Reload is the manual refresh: a full reset, dropped while one is in flight.
+func (m *Model) Reload() tea.Cmd {
+	if m.inflight {
+		m.logger.Debug("manual board refresh suppressed; refresh already in flight",
+			"trigger", "board-manual")
+		return nil
+	}
+	return m.startReload(mode.RefreshReload)
+}
+
 // Update processes board-specific messages and keybindings.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
@@ -233,12 +243,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
-			if m.inflight {
-				m.logger.Debug("manual board refresh suppressed; refresh already in flight",
-					"trigger", "board-manual")
-				return nil
-			}
-			return m.startReload(mode.RefreshReload)
+			return m.Reload()
 		case m.keys.Match(config.BoardContext, config.BoardActionLoadMore, msg):
 			// Explicit load-more: dispatch regardless of cursor proximity,
 			// but still respect the in-flight guard and "nothing more" check.
