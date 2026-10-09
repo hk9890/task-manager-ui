@@ -143,6 +143,11 @@ suppressed for the interactive session.
 - `failed to create task-manager store` — creating a store from the picker failed, most
   often on a registry name already taken. The form stays open with what was typed, and
   the toast carries the same cause.
+- `store change watch not started; the refresh tick is the only trigger` (WARN, with `error`),
+  `store change watch ended; the refresh tick is the only trigger` (WARN) — the watch
+  `Model.watchStore` starts on the active store (`internal/app/storewatch.go`) is off: the
+  operating system refused it, or the store directory was removed or renamed. No toast. The views
+  refresh on the one-minute tick, on focus regain and on `r` until another store is opened.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.

@@ -29,6 +29,19 @@ func defaultScheduleRefreshTick() tea.Cmd {
 	})
 }
 
+// defaultAwaitStoreChange is the production wait for the next signal on a
+// store's change channel. It blocks until the store changes or the channel
+// closes, so it is stored per-Model like the schedulers: a test that drains
+// commands replaces it.
+func defaultAwaitStoreChange(changes <-chan struct{}) tea.Cmd {
+	return func() tea.Msg {
+		if _, open := <-changes; !open {
+			return storeWatchEndedMsg{}
+		}
+		return storeChangedMsg{}
+	}
+}
+
 // defaultScheduleToastDismiss is the production implementation of the toast
 // dismiss scheduler. Stored per-Model for the same reason as
 // defaultScheduleRefreshTick.

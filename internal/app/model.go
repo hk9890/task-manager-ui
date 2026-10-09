@@ -130,6 +130,11 @@ type Model struct {
 
 	refreshStateBySurface map[mode.ID]surfaceRefreshState
 
+	// storeChanges carries the active store's change signals; nil when the
+	// store is not watched. storeChangeSeq counts the signals received.
+	storeChanges   <-chan struct{}
+	storeChangeSeq int
+
 	spinnerFrame int
 
 	// spinnerTicking is true while a loading.TickMsg is scheduled. The tick used
@@ -164,13 +169,14 @@ type Model struct {
 
 	runtime RuntimeOptions
 
-	// scheduleRefreshTick, scheduleToastDismiss, scheduleSpinnerTick are the
-	// per-Model scheduler functions. Production code initialises them to the
-	// default*Schedule* functions; tests override them directly on the Model
-	// instance without needing a global mutex.
+	// scheduleRefreshTick, scheduleToastDismiss, scheduleSpinnerTick and
+	// awaitStoreChange are the per-Model scheduler functions. Production code
+	// initialises them to the default* functions; tests override them directly
+	// on the Model instance without needing a global mutex.
 	scheduleRefreshTick  func() tea.Cmd
 	scheduleToastDismiss func(time.Duration, int) tea.Cmd
 	scheduleSpinnerTick  func() tea.Cmd
+	awaitStoreChange     func(<-chan struct{}) tea.Cmd
 
 	// onEditIssueResult is a test-only hook called after editIssueResultMsg is
 	// fully processed and the toast has been set. It is nil in production.
@@ -224,6 +230,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleRefreshTick:  defaultScheduleRefreshTick,
 		scheduleToastDismiss: defaultScheduleToastDismiss,
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
+		awaitStoreChange:     defaultAwaitStoreChange,
 		copyText:             copyToClipboard,
 	}
 	m.bindStore(services)
@@ -251,6 +258,9 @@ func (m *Model) bindStore(services Services) {
 	m.services = services
 	m.storeOpen = true
 	m.projectRootMissing = projectRootMissing(services.ProjectRoot)
+	// Before the first read of the store, or a change between the two is missed.
+	m.storeChanges = m.watchStore(services.Repo)
+	m.storeChangeSeq = 0
 
 	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
@@ -300,6 +310,7 @@ func (m *Model) switchStore(opened storecatalog.Opened) tea.Cmd {
 	)
 	return batchCmds(
 		m.scoped(m.board.Init()),
+		m.waitForStoreChangeCmd(),
 		m.showToast(fmt.Sprintf("Opened store %s", opened.Name), toaster.StyleSuccess),
 	)
 }
@@ -416,7 +427,7 @@ func (m Model) Init() tea.Cmd {
 	if m.runtime.DisableAutoRefresh {
 		return tea.Batch(healthCheckCmd, sweepCmd)
 	}
-	return tea.Batch(healthCheckCmd, sweepCmd, m.scheduleRefreshTick())
+	return batchCmds(healthCheckCmd, sweepCmd, m.scheduleRefreshTick(), m.waitForStoreChangeCmd())
 }
 
 // lazyInitActiveTabCmd fires the active browse tab's Init() exactly once — the
@@ -455,7 +466,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 	model.syncSearchPreviewDetailState()
-	return model, batchCmds(cmd, model.ensureSpinnerTickCmd())
+	refreshCmd := model.refreshAfterStoreChangeCmd()
+	model.trackSurfaceLoads()
+	return model, batchCmds(cmd, refreshCmd, model.ensureSpinnerTickCmd())
 }
 
 // ensureSpinnerTickCmd arms the spinner tick when work is in flight and no tick
@@ -560,6 +573,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case storeChangedMsg:
+		m.storeChangeSeq++
+		return m, batchCmds(modeCmd, m.waitForStoreChangeCmd())
+	case storeWatchEndedMsg:
+		m.storeChanges = nil
+		m.logger().Warn("store change watch ended; the refresh tick is the only trigger")
+		return m, modeCmd
 	case loading.TickMsg:
 		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
 		// This tick has fired; Update re-arms it only while work is in flight.
@@ -1002,8 +1022,19 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 	// open, by design, so swallowing it would leave the form stuck on
 	// "creating" for good. The store form also raises toasts while it stays
 	// open; a swallowed dismiss timer leaves that toast on screen for good.
+	//
+	// The store watch is a third chain of that kind: a swallowed change stops
+	// the wait from re-arming, and the watch is dead for the rest of the session.
+	//
+	// The watch also starts loads at moments the operator does not choose, so
+	// one can land under an overlay opened a moment later. A swallowed detail
+	// result leaves Detail loading for good, which stops every later reload of
+	// it, the reload key included. A swallowed selection leaves the shell
+	// acting on the row the reload moved the cursor away from.
 	switch msg.(type) {
-	case loading.TickMsg, refreshTickMsg, tea.WindowSizeMsg, toaster.DismissMsg,
+	case loading.TickMsg, refreshTickMsg, storeChangedMsg, storeWatchEndedMsg,
+		detailLoadedMsg, mode.SelectionChangedMsg,
+		tea.WindowSizeMsg, toaster.DismissMsg,
 		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg,
 		storepickermode.CreateMsg, storeCreatedMsg:
 		return m, nil, false
