@@ -75,9 +75,11 @@ type Model struct {
 
 	// hoverTab is the header tab under the pointer, or "".
 	hoverTab mode.ID
-	// hoverAction is the name of the menu-bar button under the
-	// pointer, or "".
-	hoverAction string
+	// barPointer is the menu-bar column under the pointer, or nil. The bar
+	// reads the lit button from it on every draw: the reload button is as wide
+	// as the key of the surface on screen, so a key that changes the surface
+	// moves the buttons after it under a pointer that sent no event.
+	barPointer *int
 
 	// press is where the left button went down, until it comes up; sel is the
 	// box a drag from there selects (textselect.go). copyText puts a finished
@@ -772,20 +774,15 @@ func (m *Model) quit() tea.Cmd {
 
 // reloadActiveSurface does what the reload key of the surface on screen does.
 func (m *Model) reloadActiveSurface() tea.Cmd {
-	switch m.active {
-	case mode.Detail:
+	if m.active == mode.Detail {
 		return m.reloadDetailCmd()
-	case mode.Search:
-		return m.scoped(m.search.Reload())
-	case mode.Docs:
-		return m.scoped(m.docs.Reload())
+	}
+	// Board is the shell's home tab, so an unknown active mode draws it
+	// (renderBody) and the button reloads what is drawn.
+	if tab := m.browseController(m.active); tab != nil {
+		return m.scoped(tab.Reload())
 	}
 	return m.scoped(m.board.Reload())
-}
-
-func (m *Model) requestCreateIssue() tea.Cmd {
-	m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
-	return m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{}))
 }
 
 // handleShellKey handles one key press for the shell: the pending-dialog
@@ -943,7 +940,8 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 		return m, batchCmds(modeCmd, m.scoped(prepareEditCmd(m.ctx, m.services, issueID)))
 	case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
-		return m, batchCmds(modeCmd, m.requestCreateIssue())
+		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
+		return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{})))
 	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
 		issue, ok := m.mutationTargetIssue()
 		if !ok {

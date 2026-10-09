@@ -107,23 +107,19 @@ var tabLabels = map[mode.ID]string{
 // way.
 type barAction struct {
 	label string
-	// action names the button: the shell action it runs, where it has one.
-	action string
-	key    func(Model) string
-	run    func(*Model) tea.Cmd
+	key   func(Model) string
+	run   func(*Model) tea.Cmd
 }
-
-const barActionReload = "reload"
 
 func shellKey(action string) func(Model) string {
 	return func(m Model) string { return m.keys.DisplayPrimary(config.ShellContext, action) }
 }
 
 var barActions = []barAction{
-	{label: "stores", action: config.ShellActionStorePicker, key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker},
-	{label: "reload", action: barActionReload, key: Model.reloadKey, run: (*Model).reloadActiveSurface},
-	{label: "help", action: config.ShellActionHelp, key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
-	{label: "quit", action: config.ShellActionQuit, key: shellKey(config.ShellActionQuit), run: (*Model).quit},
+	{label: "stores", key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker},
+	{label: "reload", key: Model.reloadKey, run: (*Model).reloadActiveSurface},
+	{label: "help", key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
+	{label: "quit", key: shellKey(config.ShellActionQuit), run: (*Model).quit},
 }
 
 // reloadKey is the key that reloads the active surface: each surface binds its
@@ -186,6 +182,10 @@ func (c barCell) text() string {
 	return c.action.label + " " + c.key
 }
 
+func (c barCell) covers(x int) bool {
+	return x >= c.x0 && x < c.x1
+}
+
 // headerSpinnerCell returns a fixed 2-cell string: the current spinner glyph
 // followed by a space when any surface is loading, or two literal spaces when
 // idle. Using a fixed-width cell keeps the tabs where tabAt looks for them.
@@ -217,7 +217,7 @@ func (m Model) renderMenuBar() string {
 			lead = strings.Repeat(" ", headerMenuStart)
 		}
 		labelStyle := label
-		if m.hoverAction == cell.action.action {
+		if m.barPointer != nil && cell.covers(*m.barPointer) {
 			labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
 		}
 		bar += lead + labelStyle.Render(cell.action.label)
@@ -264,7 +264,7 @@ func (m Model) renderTabs() string {
 	}
 	line := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 
-	context := textutil.TruncateString(m.headerContext(), m.width-headerTabsEnd()-headerBarGap)
+	context := textutil.TruncateString(m.headerContext(), m.contextRoom())
 	if context == "" {
 		return line
 	}
@@ -409,13 +409,21 @@ func (m Model) headerContext() string {
 		return variants[0]
 	}
 
+	// Half the line at most, and no more than stands free beside the tabs: a
+	// variant drawn whole comes before a longer one cut short.
+	budget := min(m.width/2, m.contextRoom())
 	for _, v := range variants {
-		if lipgloss.Width(v) <= m.width/2 {
+		if lipgloss.Width(v) <= budget {
 			return v
 		}
 	}
 
 	return variants[len(variants)-1]
+}
+
+// contextRoom is the cells the tab line has for the context, clear of the tabs.
+func (m Model) contextRoom() int {
+	return m.width - headerTabsEnd() - headerBarGap
 }
 
 // headerContextVariants returns the right-hand header text, widest first.

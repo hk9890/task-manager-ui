@@ -127,7 +127,7 @@ func (m *Model) mouseToSurface(event mode.MouseMsg) tea.Cmd {
 // clearHeaderHover unlights the tab or the button the pointer was on.
 func (m *Model) clearHeaderHover() {
 	m.hoverTab = ""
-	m.hoverAction = ""
+	m.barPointer = nil
 }
 
 // mouseOnHeader lights the tab or the button under the pointer, and on a click
@@ -156,17 +156,21 @@ func (m *Model) mouseOnTabs(event mode.MouseMsg) tea.Cmd {
 }
 
 func (m *Model) mouseOnMenuBar(event mode.MouseMsg) tea.Cmd {
-	for _, cell := range m.barCells() {
-		if event.X < cell.x0 || event.X >= cell.x1 {
-			continue
-		}
-		m.hoverAction = cell.action.action
-		if event.Kind != mode.MouseClick {
-			return nil
-		}
+	m.barPointer = &event.X
+	if cell, ok := m.buttonAt(event.X); ok && event.Kind == mode.MouseClick {
 		return cell.action.run(m)
 	}
 	return nil
+}
+
+// buttonAt is the button the menu bar draws at column x.
+func (m Model) buttonAt(x int) (barCell, bool) {
+	for _, cell := range m.barCells() {
+		if cell.covers(x) {
+			return cell, true
+		}
+	}
+	return barCell{}, false
 }
 
 // tabAt is the browse tab the tab line draws at column x.

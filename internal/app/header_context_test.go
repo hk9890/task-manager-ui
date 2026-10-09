@@ -38,7 +38,8 @@ func TestHeaderContextPicksTheLongestVariantInsideItsBudget(t *testing.T) {
 		}
 
 		got := m.headerContext()
-		budget := width / 2
+		// Half the line, and no more than stands free beside the tabs.
+		budget := min(width/2, width-headerTabsEnd()-headerBarGap)
 
 		// The chosen variant is the first one inside the budget, or the last
 		// variant when none fits.
@@ -54,8 +55,8 @@ func TestHeaderContextPicksTheLongestVariantInsideItsBudget(t *testing.T) {
 				width, budget, got, lipgloss.Width(got), want, lipgloss.Width(want))
 		}
 
-		// The budget itself: whenever some variant fits in half the header, the
-		// chosen one must too. This is the half that a doubled budget breaks.
+		// The budget itself: whenever some variant fits in it, the chosen one
+		// must too. This is the half that a doubled budget breaks.
 		anyFits := false
 		for _, v := range variants {
 			if lipgloss.Width(v) <= budget {

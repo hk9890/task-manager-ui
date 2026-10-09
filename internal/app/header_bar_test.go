@@ -211,7 +211,8 @@ func TestReloadButtonShowsTheKeyOfTheActiveSurface(t *testing.T) {
 
 // TestTabLineSetsTheContextFlushRightAndCutsIt pins the line of the view tabs:
 // the context ends on the last column, keeps its gap from the tabs, and is cut
-// with an ellipsis or gone when it does not fit beside them.
+// with an ellipsis or gone when it does not fit beside them. It is cut only
+// when no variant fits: a shorter one drawn whole comes first.
 func TestTabLineSetsTheContextFlushRightAndCutsIt(t *testing.T) {
 	t.Parallel()
 
@@ -235,6 +236,11 @@ func TestTabLineSetsTheContextFlushRightAndCutsIt(t *testing.T) {
 					t.Fatalf("%s at width %d: the context %q is not flush right: %q", active, width, context, line)
 				}
 			default:
+				for _, variant := range m.headerContextVariants() {
+					if lipgloss.Width(variant) <= free {
+						t.Fatalf("%s at width %d: the context %q is cut while %q fits whole: %q", active, width, context, variant, line)
+					}
+				}
 				if !strings.HasSuffix(line, "…") || lipgloss.Width(line) != width {
 					t.Fatalf("%s at width %d: want the context cut with an ellipsis at the edge, got %q", active, width, line)
 				}

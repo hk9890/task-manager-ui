@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
 
 // newMouseShell is a loaded shell on the Board at 160x30: one ready issue and
@@ -197,6 +198,15 @@ func barButton(t *testing.T, m Model, label, action string) (x int, text string)
 	return x, text
 }
 
+// litButton is the label of the button the menu bar lights, or "".
+func litButton(m Model) string {
+	if m.barPointer == nil {
+		return ""
+	}
+	cell, _ := m.buttonAt(*m.barPointer)
+	return cell.action.label
+}
+
 func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 	m := newMouseShell(t)
 
@@ -224,9 +234,9 @@ func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 				t.Errorf("%s: click on column %d returned a command", name, cell[0])
 			}
 			got := next.(Model)
-			if got.active != mode.Board || got.showHelp || got.pendingDialog.active || got.hoverAction != "" || got.hoverTab != "" {
+			if got.active != mode.Board || got.showHelp || got.pendingDialog.active || litButton(got) != "" || got.hoverTab != "" {
 				t.Errorf("%s: click on column %d: surface %q, help %v, pending dialog %v, hover %q/%q; want nothing",
-					name, cell[0], got.active, got.showHelp, got.pendingDialog.active, got.hoverTab, got.hoverAction)
+					name, cell[0], got.active, got.showHelp, got.pendingDialog.active, got.hoverTab, litButton(got))
 			}
 			if firstSelectionID(got, mode.Board) != "tm-1" {
 				t.Errorf("%s: click on column %d reached the board", name, cell[0])
@@ -256,6 +266,61 @@ func TestClickOnReloadAndQuit(t *testing.T) {
 	}
 	if !quit {
 		t.Fatal("click on quit did not quit")
+	}
+}
+
+// TestClickOnReloadReloadsTheSurfaceOnScreen: reload is one button, and the
+// load it starts is the one of the surface under it and of no other.
+func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
+	tab := tea.KeyMsg{Type: tea.KeyTab}
+	detail := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}
+
+	for _, tc := range []struct {
+		surface mode.ID
+		reach   []tea.Msg
+		want    loading.Scope
+	}{
+		{surface: mode.Board, want: loading.ScopeBoard},
+		{surface: mode.Docs, reach: []tea.Msg{tab}, want: loading.ScopeDocs},
+		{surface: mode.Search, reach: []tea.Msg{tab, tab}, want: loading.ScopeSearch},
+		{surface: mode.Detail, reach: []tea.Msg{detail}, want: loading.ScopeDetail},
+	} {
+		m := applyMessages(t, newMouseShell(t), tc.reach)
+		if m.active != tc.surface || len(m.loadingStates()) != 0 {
+			t.Fatalf("fixture: on %q with %d loads in flight, want %q at rest", m.active, len(m.loadingStates()), tc.surface)
+		}
+
+		x, _ := testui.FindCell(t, topBar(m), "reload "+m.reloadKey())
+		next, cmd := m.Update(leftClick(x, headerMenuRow))
+		states := next.(Model).loadingStates()
+		if cmd == nil || len(states) != 1 || states[0].Scope != tc.want {
+			t.Errorf("click on reload on %q: command %v, loading %v; want %q alone", tc.surface, cmd != nil, states, tc.want)
+		}
+	}
+}
+
+// TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface: the reload
+// button is as wide as the key of the surface on screen, so a key that changes
+// the surface moves the buttons after it under a pointer that sent no event.
+func TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface(t *testing.T) {
+	cfg := config.Default()
+	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
+		Search: map[string][]string{config.SearchActionReload: {"ctrl+r"}},
+	})
+	m := send(t, newHeaderShell(t, cfg), tea.WindowSizeMsg{Width: 160, Height: 30})
+
+	x, _ := barButton(t, m, "help", config.ShellActionHelp)
+	if m = send(t, m, pointerMove(x, headerMenuRow)); litButton(m) != "help" {
+		t.Fatalf("fixture: pointer over help lights %q", litButton(m))
+	}
+
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyTab}, tea.KeyMsg{Type: tea.KeyTab}})
+	if moved, _ := barButton(t, m, "help", config.ShellActionHelp); m.active != mode.Search || moved == x {
+		t.Fatalf("fixture: on %q with help at column %d, want search and help moved from column %d", m.active, moved, x)
+	}
+	under, ok := m.buttonAt(x)
+	if !ok || litButton(m) != under.action.label {
+		t.Errorf("the bar lights %q and draws %q under the pointer", litButton(m), under.text())
 	}
 }
 
@@ -375,7 +440,7 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 				if cmd != nil {
 					t.Errorf("%s: a mouse event on %q under the overlay returned a command", name, label)
 				}
-				if m.hoverAction != "" {
+				if litButton(m) != "" {
 					t.Errorf("%s: %q is lit under the overlay", name, label)
 				}
 			}
@@ -392,9 +457,9 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 	}
 	for label, x := range buttons {
 		m = send(t, send(t, m, pointerMove(x, 0)), leftClick(x, 0))
-		if m.active != mode.StorePicker || m.showHelp || m.showActionModal || m.pendingDialog.active || m.hoverAction != "" {
+		if m.active != mode.StorePicker || m.showHelp || m.showActionModal || m.pendingDialog.active || litButton(m) != "" {
 			t.Errorf("a click where %q was drawn ran under the picker (surface %q, help %v, modal %v, pending dialog %v, hover %q)",
-				label, m.active, m.showHelp, m.showActionModal, m.pendingDialog.active, m.hoverAction)
+				label, m.active, m.showHelp, m.showActionModal, m.pendingDialog.active, litButton(m))
 		}
 	}
 }
@@ -414,9 +479,9 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	onButton := func(m Model) Model {
 		t.Helper()
 		m = send(t, m, pointerMove(x+1, 0))
-		if m.hoverAction != config.ShellActionStorePicker || m.hoverTab != "" || m.active != mode.Board {
+		if litButton(m) != "stores" || m.hoverTab != "" || m.active != mode.Board {
 			t.Fatalf("pointer over stores: hover %q, tab %q, surface %q; want the button lit and the board still up",
-				m.hoverAction, m.hoverTab, m.active)
+				litButton(m), m.hoverTab, m.active)
 		}
 		return m
 	}
@@ -431,8 +496,8 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	}
 
 	// Onto the next button: one is lit at a time.
-	if m = send(t, m, pointerMove(helpX, 0)); m.hoverAction != config.ShellActionHelp {
-		t.Fatalf("pointer over help: hover %q", m.hoverAction)
+	if m = send(t, m, pointerMove(helpX, 0)); litButton(m) != "help" {
+		t.Fatalf("pointer over help: hover %q", litButton(m))
 	}
 	// The wheel over a button is not a click.
 	if m = send(t, m, wheel(helpX, 0, tea.MouseButtonWheelDown)); m.showHelp || firstSelectionID(m, mode.Board) != "tm-1" {
@@ -447,8 +512,8 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 		"the footer":    pointerMove(x+1, 29),
 	}
 	for name, leave := range leaves {
-		if left := send(t, onButton(m), leave); left.hoverAction != "" {
-			t.Errorf("the button stayed lit (%q) after the pointer moved to %s", left.hoverAction, name)
+		if left := send(t, onButton(m), leave); litButton(left) != "" {
+			t.Errorf("the button stayed lit (%q) after the pointer moved to %s", litButton(left), name)
 		}
 	}
 	if left := send(t, onButton(m), leaves["the footer"]); left.View() != idle {
@@ -464,12 +529,12 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	// The bar forgets the pointer once the picker is up, and under an overlay.
 	picker := pressKey(t, onButton(m), "s")
 	picker = send(t, picker, pointerMove(x+1, 5))
-	if picker = send(t, picker, tea.KeyMsg{Type: tea.KeyEsc}); picker.active != mode.Board || picker.hoverAction != "" {
-		t.Errorf("back on %q the %q button is lit under a cell the pointer left", picker.active, picker.hoverAction)
+	if picker = send(t, picker, tea.KeyMsg{Type: tea.KeyEsc}); picker.active != mode.Board || litButton(picker) != "" {
+		t.Errorf("back on %q the %q button is lit under a cell the pointer left", picker.active, litButton(picker))
 	}
 	help := pressKey(t, onButton(m), "?")
-	if help = send(t, help, pointerMove(x+1, 0)); !help.showHelp || help.hoverAction != "" {
-		t.Errorf("under the help overlay (%v) the %q button is lit", help.showHelp, help.hoverAction)
+	if help = send(t, help, pointerMove(x+1, 0)); !help.showHelp || litButton(help) != "" {
+		t.Errorf("under the help overlay (%v) the %q button is lit", help.showHelp, litButton(help))
 	}
 }
 
