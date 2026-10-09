@@ -2,10 +2,12 @@ package search
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 func hitTestState(width, height int) State {
@@ -40,7 +42,8 @@ func hitTestState(width, height int) State {
 
 // TestHitTestFindsEveryResultWhereRenderDrewIt asks the rendered frame where
 // each result is, in both layouts and with the stale-results banner pushing
-// the rows down.
+// the rows down. A result is issuerow.Height lines, and each of them is that
+// result: the title line and the line under it that carries the ID.
 func TestHitTestFindsEveryResultWhereRenderDrewIt(t *testing.T) {
 	t.Parallel()
 
@@ -64,15 +67,50 @@ func TestHitTestFindsEveryResultWhereRenderDrewIt(t *testing.T) {
 				tc.mutate(&state)
 			}
 			view := Render(state)
+			lines := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(view, ""), "\n")
 
+			x, y := 0, 0
 			for row, issue := range state.Results {
-				x, y := testui.FindCell(t, view, issue.Title)
-				hit, ok := HitTest(state, x, y)
-				if !ok || hit.Pane != FocusResults || hit.Row != row {
-					t.Errorf("HitTest at %q (%d,%d) = %+v, %v; want result %d", issue.Title, x, y, hit, ok, row)
+				x, y = testui.FindCell(t, view, issue.Title)
+				if !strings.Contains(lines[y+1], "P2 OPN "+issue.ID) {
+					t.Fatalf("result %d: the line under the title does not carry its ID:\n%s", row, view)
+				}
+				for line := 0; line < issuerow.Height; line++ {
+					hit, ok := HitTest(state, x, y+line)
+					if !ok || hit.Pane != FocusResults || hit.Row != row {
+						t.Errorf("HitTest on line %d of %q (%d,%d) = %+v, %v; want result %d", line, issue.Title, x, y+line, hit, ok, row)
+					}
 				}
 			}
+
+			// The line under the last result's second line is no result.
+			if hit, ok := HitTest(state, x, y+issuerow.Height); !ok || hit.Pane != FocusResults || hit.Row != -1 {
+				t.Errorf("HitTest under the last result = %+v, %v; want the results pane with no row", hit, ok)
+			}
 		})
+	}
+}
+
+// TestHitTestReportsNoRowForAResultThePaneClips covers a result list longer
+// than the pane: the frame's bottom border is drawn where a half-drawn
+// result's second line would be, and a click there is not that result.
+func TestHitTestReportsNoRowForAResultThePaneClips(t *testing.T) {
+	t.Parallel()
+
+	// Height 12 leaves the results pane 7 content lines: three results and the
+	// first line of the fourth.
+	state := hitTestState(160, 12)
+	view := Render(state)
+
+	x, y := testui.FindCell(t, view, state.Results[3].Title)
+	if hit, ok := HitTest(state, x, y); !ok || hit.Row != 3 {
+		t.Fatalf("HitTest on the half-drawn result = %+v, %v; want result 3", hit, ok)
+	}
+	if hit, ok := HitTest(state, x, y+1); !ok || hit.Pane != FocusResults || hit.Row != -1 {
+		t.Fatalf("HitTest on the bottom border = %+v, %v; want the results pane with no row", hit, ok)
+	}
+	if strings.Contains(testui.AnsiEscapePattern.ReplaceAllString(view, ""), state.Results[4].Title) {
+		t.Fatalf("result 4 is drawn in a pane that has no room for it:\n%s", view)
 	}
 }
 

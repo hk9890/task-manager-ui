@@ -18,7 +18,7 @@ Everything else this file raises is a suggestion.
 
 - **The UI law** — [DESIGN-GUIDE.md](DESIGN-GUIDE.md) governs every change under `internal/ui/` and
   `internal/mode/`: colour roles, the issue token vocabulary, glyphs, shared chrome, the selection
-  chevron, overlay placement, ANSI-aware width math. Nothing enforces it.
+  bar, overlay placement, ANSI-aware width math. Nothing enforces it.
 - **The architectural rules** — [CODING.md](CODING.md)'s Core Architectural Rules. The guardrail test
   proves one import ban from rule 1 plus a package-path ban; every numbered rule still needs reading.
 - **Doc ownership and placement** — content put in the wrong file is governed by

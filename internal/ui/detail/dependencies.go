@@ -111,7 +111,7 @@ func renderRelationshipGroups(groups []relationshipGroup, marks refMarks, width 
 				Seed:   len(out),
 				Phase:  skeletonPhase,
 				Styled: true,
-			}))
+			})[0])
 			continue
 		}
 		out = append(out, textutil.TruncateString(fmt.Sprintf("%s (%d)", group.Label, len(ordered)), width))

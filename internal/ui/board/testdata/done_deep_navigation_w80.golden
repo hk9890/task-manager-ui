@@ -1,66 +1,123 @@
 Default
 ╭─ Done ────────────────────────────────────────────────────────────────── 60 ─╮
-│  T P0 CLS tm-done-0 Closed issue 0                                           │
-│  T P0 CLS tm-done-1 Closed issue 1                                           │
-│  T P0 CLS tm-done-2 Closed issue 2                                           │
-│  T P0 CLS tm-done-3 Closed issue 3                                           │
-│  T P0 CLS tm-done-4 Closed issue 4                                           │
-│  T P0 CLS tm-done-5 Closed issue 5                                           │
-│  T P0 CLS tm-done-6 Closed issue 6                                           │
-│  T P0 CLS tm-done-7 Closed issue 7                                           │
-│  T P0 CLS tm-done-8 Closed issue 8                                           │
-│  T P0 CLS tm-done-9 Closed issue 9                                           │
-│  T P0 CLS tm-done-10 Closed issue 10                                         │
-│  T P0 CLS tm-done-11 Closed issue 11                                         │
-│  T P0 CLS tm-done-12 Closed issue 12                                         │
-│  T P0 CLS tm-done-13 Closed issue 13                                         │
-│  T P0 CLS tm-done-14 Closed issue 14                                         │
-│  T P0 CLS tm-done-15 Closed issue 15                                         │
-│  T P0 CLS tm-done-16 Closed issue 16                                         │
-│  T P0 CLS tm-done-17 Closed issue 17                                         │
-│  T P0 CLS tm-done-18 Closed issue 18                                         │
-│  T P0 CLS tm-done-19 Closed issue 19                                         │
-│  T P0 CLS tm-done-20 Closed issue 20                                         │
-│  T P0 CLS tm-done-21 Closed issue 21                                         │
-│  T P0 CLS tm-done-22 Closed issue 22                                         │
-│  T P0 CLS tm-done-23 Closed issue 23                                         │
-│  T P0 CLS tm-done-24 Closed issue 24                                         │
-│  T P0 CLS tm-done-25 Closed issue 25                                         │
-│  T P0 CLS tm-done-26 Closed issue 26                                         │
-│  T P0 CLS tm-done-27 Closed issue 27                                         │
-│  T P0 CLS tm-done-28 Closed issue 28                                         │
-│  T P0 CLS tm-done-29 Closed issue 29                                         │
-│  T P0 CLS tm-done-30 Closed issue 30                                         │
-│  T P0 CLS tm-done-31 Closed issue 31                                         │
-│  T P0 CLS tm-done-32 Closed issue 32                                         │
-│  T P0 CLS tm-done-33 Closed issue 33                                         │
-│  T P0 CLS tm-done-34 Closed issue 34                                         │
-│  T P0 CLS tm-done-35 Closed issue 35                                         │
-│  T P0 CLS tm-done-36 Closed issue 36                                         │
-│  T P0 CLS tm-done-37 Closed issue 37                                         │
-│  T P0 CLS tm-done-38 Closed issue 38                                         │
-│  T P0 CLS tm-done-39 Closed issue 39                                         │
-│  T P0 CLS tm-done-40 Closed issue 40                                         │
-│  T P0 CLS tm-done-41 Closed issue 41                                         │
-│  T P0 CLS tm-done-42 Closed issue 42                                         │
-│  T P0 CLS tm-done-43 Closed issue 43                                         │
-│  T P0 CLS tm-done-44 Closed issue 44                                         │
-│  T P0 CLS tm-done-45 Closed issue 45                                         │
-│  T P0 CLS tm-done-46 Closed issue 46                                         │
-│  T P0 CLS tm-done-47 Closed issue 47                                         │
-│  T P0 CLS tm-done-48 Closed issue 48                                         │
-│  T P0 CLS tm-done-49 Closed issue 49                                         │
-│  T P0 CLS tm-done-50 Closed issue 50                                         │
-│  T P0 CLS tm-done-51 Closed issue 51                                         │
-│  T P0 CLS tm-done-52 Closed issue 52                                         │
-│  T P0 CLS tm-done-53 Closed issue 53                                         │
-│  T P0 CLS tm-done-54 Closed issue 54                                         │
-│  T P0 CLS tm-done-55 Closed issue 55                                         │
-│  T P0 CLS tm-done-56 Closed issue 56                                         │
-│  T P0 CLS tm-done-57 Closed issue 57                                         │
-│› T P0 CLS tm-done-58 Closed issue 58                                         │
-│  T P0 CLS tm-done-59 Closed issue 59                                         │
-│                                                                              │
-│                                                                              │
-│                                                                              │
+│  T Closed issue 0                                                            │
+│    P0 CLS tm-done-0                                                          │
+│  T Closed issue 1                                                            │
+│    P0 CLS tm-done-1                                                          │
+│  T Closed issue 2                                                            │
+│    P0 CLS tm-done-2                                                          │
+│  T Closed issue 3                                                            │
+│    P0 CLS tm-done-3                                                          │
+│  T Closed issue 4                                                            │
+│    P0 CLS tm-done-4                                                          │
+│  T Closed issue 5                                                            │
+│    P0 CLS tm-done-5                                                          │
+│  T Closed issue 6                                                            │
+│    P0 CLS tm-done-6                                                          │
+│  T Closed issue 7                                                            │
+│    P0 CLS tm-done-7                                                          │
+│  T Closed issue 8                                                            │
+│    P0 CLS tm-done-8                                                          │
+│  T Closed issue 9                                                            │
+│    P0 CLS tm-done-9                                                          │
+│  T Closed issue 10                                                           │
+│    P0 CLS tm-done-10                                                         │
+│  T Closed issue 11                                                           │
+│    P0 CLS tm-done-11                                                         │
+│  T Closed issue 12                                                           │
+│    P0 CLS tm-done-12                                                         │
+│  T Closed issue 13                                                           │
+│    P0 CLS tm-done-13                                                         │
+│  T Closed issue 14                                                           │
+│    P0 CLS tm-done-14                                                         │
+│  T Closed issue 15                                                           │
+│    P0 CLS tm-done-15                                                         │
+│  T Closed issue 16                                                           │
+│    P0 CLS tm-done-16                                                         │
+│  T Closed issue 17                                                           │
+│    P0 CLS tm-done-17                                                         │
+│  T Closed issue 18                                                           │
+│    P0 CLS tm-done-18                                                         │
+│  T Closed issue 19                                                           │
+│    P0 CLS tm-done-19                                                         │
+│  T Closed issue 20                                                           │
+│    P0 CLS tm-done-20                                                         │
+│  T Closed issue 21                                                           │
+│    P0 CLS tm-done-21                                                         │
+│  T Closed issue 22                                                           │
+│    P0 CLS tm-done-22                                                         │
+│  T Closed issue 23                                                           │
+│    P0 CLS tm-done-23                                                         │
+│  T Closed issue 24                                                           │
+│    P0 CLS tm-done-24                                                         │
+│  T Closed issue 25                                                           │
+│    P0 CLS tm-done-25                                                         │
+│  T Closed issue 26                                                           │
+│    P0 CLS tm-done-26                                                         │
+│  T Closed issue 27                                                           │
+│    P0 CLS tm-done-27                                                         │
+│  T Closed issue 28                                                           │
+│    P0 CLS tm-done-28                                                         │
+│  T Closed issue 29                                                           │
+│    P0 CLS tm-done-29                                                         │
+│  T Closed issue 30                                                           │
+│    P0 CLS tm-done-30                                                         │
+│  T Closed issue 31                                                           │
+│    P0 CLS tm-done-31                                                         │
+│  T Closed issue 32                                                           │
+│    P0 CLS tm-done-32                                                         │
+│  T Closed issue 33                                                           │
+│    P0 CLS tm-done-33                                                         │
+│  T Closed issue 34                                                           │
+│    P0 CLS tm-done-34                                                         │
+│  T Closed issue 35                                                           │
+│    P0 CLS tm-done-35                                                         │
+│  T Closed issue 36                                                           │
+│    P0 CLS tm-done-36                                                         │
+│  T Closed issue 37                                                           │
+│    P0 CLS tm-done-37                                                         │
+│  T Closed issue 38                                                           │
+│    P0 CLS tm-done-38                                                         │
+│  T Closed issue 39                                                           │
+│    P0 CLS tm-done-39                                                         │
+│  T Closed issue 40                                                           │
+│    P0 CLS tm-done-40                                                         │
+│  T Closed issue 41                                                           │
+│    P0 CLS tm-done-41                                                         │
+│  T Closed issue 42                                                           │
+│    P0 CLS tm-done-42                                                         │
+│  T Closed issue 43                                                           │
+│    P0 CLS tm-done-43                                                         │
+│  T Closed issue 44                                                           │
+│    P0 CLS tm-done-44                                                         │
+│  T Closed issue 45                                                           │
+│    P0 CLS tm-done-45                                                         │
+│  T Closed issue 46                                                           │
+│    P0 CLS tm-done-46                                                         │
+│  T Closed issue 47                                                           │
+│    P0 CLS tm-done-47                                                         │
+│  T Closed issue 48                                                           │
+│    P0 CLS tm-done-48                                                         │
+│  T Closed issue 49                                                           │
+│    P0 CLS tm-done-49                                                         │
+│  T Closed issue 50                                                           │
+│    P0 CLS tm-done-50                                                         │
+│  T Closed issue 51                                                           │
+│    P0 CLS tm-done-51                                                         │
+│  T Closed issue 52                                                           │
+│    P0 CLS tm-done-52                                                         │
+│  T Closed issue 53                                                           │
+│    P0 CLS tm-done-53                                                         │
+│  T Closed issue 54                                                           │
+│    P0 CLS tm-done-54                                                         │
+│  T Closed issue 55                                                           │
+│    P0 CLS tm-done-55                                                         │
+│  T Closed issue 56                                                           │
+│    P0 CLS tm-done-56                                                         │
+│  T Closed issue 57                                                           │
+│    P0 CLS tm-done-57                                                         │
+│▌ T Closed issue 58                                                           │
+│▌   P0 CLS tm-done-58                                                         │
+│  T Closed issue 59                                                           │
+│    P0 CLS tm-done-59                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯

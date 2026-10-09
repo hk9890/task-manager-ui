@@ -2,10 +2,46 @@ package board
 
 import (
 	"context"
+	"strings"
+	"testing"
 
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
+
+// selectedGutter is the gutter the renderer draws down both lines of the
+// selected issue.
+var selectedGutter, _ = styles.SelectionPrefix(true, false)
+
+// issueCapacity is the number of whole issues a section holds at the current
+// height when no divider and no error row takes a line from them.
+func issueCapacity(m *Model) int {
+	return m.sectionItemCapacity() / issuerow.Height
+}
+
+// assertSelectionDrawn fails unless the board draws both lines of the selected
+// issue, each behind the selection gutter: the title, and the ID directly
+// under it. An offset that leaves either line outside the window fails it.
+func assertSelectionDrawn(t *testing.T, m *Model) {
+	t.Helper()
+
+	selection := m.currentSelection()
+	if selection == nil {
+		t.Fatal("assertSelectionDrawn: the board has no selection")
+	}
+	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
+	lines := strings.Split(plain, "\n")
+	for idx := 0; idx+1 < len(lines); idx++ {
+		if strings.Contains(lines[idx], selectedGutter) && strings.Contains(lines[idx], selection.Issue.Title) &&
+			strings.Contains(lines[idx+1], selectedGutter) && strings.Contains(lines[idx+1], selection.Issue.ID) {
+			return
+		}
+	}
+	t.Fatalf("the selected issue %s is not drawn with both of its lines:\n%s", selection.Issue.ID, plain)
+}
 
 // cannedDashboard answers every Dashboard call with one prepared response and
 // leaves the rest of the interface to the embedded nil, which panics if a test

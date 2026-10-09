@@ -13,16 +13,23 @@ shell. Every other package is pure.
 
 ## Colour roles
 
-- Name a role from `internal/ui/styles/colors.go`; never write a hex literal at a call site. That
-  file is the only place a colour is spelled.
-- Every colour is a `lipgloss.AdaptiveColor` carrying both a `Light` and a `Dark` value. A new
-  colour needs both — a single value renders unreadable on one of the two theme families.
+- Name a role from `internal/ui/styles/colors.go`; never write a hex literal or a palette colour at
+  a call site.
+- A role takes its colour in `applyFlavor` (`internal/ui/styles/theme.go`), from the Catppuccin
+  flavour of the theme. That function is the only place a colour is chosen, so a new role is one
+  declaration in `colors.go` and one line there, and it then holds in every theme.
+- A new theme is one entry in `flavors`, and in `lightThemes` when it draws on a light background —
+  `styles.Dark` is what markdown takes its glamour style from.
+- `styles.Apply` runs once, from `cmd/taskmgr-ui`, before the first frame: the roles are package
+  variables. A test draws with `catppuccin-mocha` and the `unicode` glyphs, which the package
+  starts on; one that applies another restores it in `t.Cleanup` and stays out of `t.Parallel`.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
-  `TextSecondaryColor`), shell chrome (`ShellTitleColor`, `ShellTab*`, `ShellFooterHelpColor`),
+  `TextSecondaryColor`), shell chrome (`ShellTab*`, `ShellAction*`, `ShellRuleColor`,
+  `ShellFooterHelpColor`),
   borders and overlays (`BorderDefaultColor`, `OverlayBorderColor`, `BorderHighlightFocusColor`),
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
   (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
-- Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tab strip and
+- Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tabs and
   the modal buttons carry focus on a background instead, each with its own `Focus` role. A row's
   background is not focus: it is the selection or the pointer (`RowSelectedBgColor`,
   `RowHoverBgColor`).
@@ -32,15 +39,18 @@ shell. Every other package is pure.
 An issue's type, priority and status each render as a compact token plus a colour, resolved by
 `styles.IssueTypeStyle`, `styles.IssuePriorityStyle`, and `styles.IssueStatusStyle`.
 
-| Field | Token | Source |
+| Field | Token in the `unicode` and `ascii` sets | Source |
 |---|---|---|
 | Type | `B` bug, `T` task, `F` feature, `E` epic, `C` chore, `D` doc, `?` unknown | `renderhelpers.CompactIssueType` |
 | Priority | `P0`–`P3` | `renderhelpers.CompactPriority` |
 | Status | `OPN`, `IP`, `BLK`, `CLS`, `RDY`, `DFR` | `renderhelpers.CompactIssueState` |
 | Status (dense rows) | `O`, `I`, `B`, `C`, `R`, `D` | `renderhelpers.CompactIssueStateNarrow` |
 
-Adding an issue type or status takes a token **and** a colour: one with a distinct glyph but no
-distinct colour reads as unrecognised on the board.
+The `nerd` set draws each of the three as a one-cell icon instead (`glyphSets` in
+`internal/ui/styles/glyphs.go`), and one icon serves both status widths.
+
+Adding an issue type or status takes a token in every glyph set **and** a colour: one with a
+distinct glyph but no distinct colour reads as unrecognised on the board.
 `internal/ui/shared/renderhelpers/type_style_parity_test.go` pins both sets together — the status
 half reads an explicit case in `CompactIssueState` as the signal, so a token that matches what its
 default branch would derive counts as no token at all.
@@ -50,19 +60,31 @@ the plain one for width math — a styled token carries escape bytes that break 
 
 ## Glyphs
 
-The whole vocabulary, and the one place each is defined:
+A marker that carries meaning comes from the applied glyph set, `styles.Glyphs`. The operator picks
+the set — `nerd`, `unicode` or `ascii` — because a program cannot ask which font is loaded. The
+column below shows the `unicode` set:
+
+| Glyph | Means | Field of `styles.GlyphSet` |
+|---|---|---|
+| `▌ ` / two spaces | the selection gutter, always 2 cells wide; take it from `styles.SelectionPrefix` | `Cursor` |
+| `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight; draw it with `loading.Glyph` | `Spinner` |
+| `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
+| the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
+
+- A new marker is a field of `GlyphSet` with a value in all three sets. Every one but a letter
+  token is one cell wide, and a spinner's frame count divides ten, the length of the shell's frame
+  counter.
+
+The rest is the same in every set, and each has one definition:
 
 | Glyph | Means | Defined in |
 |---|---|---|
-| `› ` / two spaces | the selection gutter, always 2 cells wide | `styles.SelectionPrefix` |
 | `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString` |
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
-| `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight, 10 frames | `loading.SpinnerFrames` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
-| `✅ ❌ ℹ ⚠` | toast severity | `toaster.glyphSuccess` and its siblings |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
 | `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
-| `·` | field separator in a header or status line | inline at the call site |
+| `·` | separator between fields, top-bar buttons and legend hints | inline at the call site |
 
 Spend a new glyph only when an existing one cannot carry the meaning, and define it next to its
 siblings rather than inline at the call site.
@@ -81,6 +103,12 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   different degraded rendering handles the narrow case before calling.
 - `ui/shared/issuerow` is the single compact issue-row renderer for board- and search-style lists.
   Row rendering stays there.
+- A row in a list is two lines: what it is, then its details, dimmer. `issuerow.RenderCompact`
+  draws the type and the title over the priority, the status and the ID; `ui/storepicker` draws a
+  store's name and status over its project path. A list that scrolls, counts or hit-tests its rows
+  reads `issuerow.Height` (the picker its own `rowLines`) rather than assuming a line. A relation
+  in a detail pane is the exception, `issuerow.RenderReferenceCompact`: those panes are a few rows
+  tall.
 - There is intentionally **no shared issue-list component.** Board and search containers differ
   materially in layout, empty state and focus, so the containers stay mode-specific — `ui/board`
   columns against `ui/search` panes. The docs tab is a board column by another name, so it draws
@@ -88,11 +116,27 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   real duplication appears above the row level.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
-## The tab strip
+## The shell chrome
 
-- The header strip is the three browse tabs in `mode.BrowseModes` order — Board, Docs, Search —
-  rendered by `Model.renderHeader` in `internal/app/render.go`. Detail never appears there: it is a
-  drill-in, not a tab.
+The shell frames the workspace with three lines, all drawn in `internal/app/render.go`: the top bar
+and the rule under it (`Model.renderHeader`), and the key legend below (`Model.renderFooter`).
+
+- The top bar holds the tabs on the left and the buttons on the right. A button is a shell action
+  that is not about the selected row, and it shows the key bound to that action: the bar is a
+  second way to reach it, never the only one. Add one as an entry in `barActions`, with the method
+  the key switch in `handleShellKey` also calls.
+- A button that does not fit beside the tabs is dropped, the leftmost first (`Model.barCells`).
+- The rule carries the context — the store, the surface, the selection — from
+  `Model.headerContext`.
+- The legend is one line of `styles.KeyHint` values through `styles.KeyLegend`, which drops the
+  hints that do not fit from the end. Order a surface's hints in `footerHints` by how much an
+  operator needs them. The workspace height is measured from the rendered chrome
+  (`Model.workspaceSize`), so none of the three lines may wrap.
+
+### The tabs
+
+- The tabs are the three browse tabs in `mode.BrowseModes` order — Board, Docs, Search. Detail
+  never appears there: it is a drill-in, not a tab.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
   `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
   a pane or a column it rides the border instead.
@@ -100,15 +144,15 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   one label in `tabLabels` (`internal/app/render.go`). The controller must satisfy `mode.Browse`;
   registering it there is what wires forwarding, sizing, loading state and auto-refresh at once.
   Adding it anywhere else puts the strip and the cycle order out of step.
-- `tab` / `shift+tab` belong to the strip everywhere except inside a modal, which consumes keys
+- `tab` / `shift+tab` belong to the tabs everywhere except inside a modal, which consumes keys
   before the shell sees them. They switch tabs even while the search query field is focused, so a
   browse surface must not claim either key.
 
 ## Surfaces above the shell
 
 The store picker (`internal/mode/storepicker`, `internal/ui/storepicker`) is neither a tab nor a
-drill-in: it renders **instead of** the shell, as `fatalerror` does, so the tab strip and the footer
-are absent while it is up and it draws its own help line in the footer's place. It is therefore
+drill-in: it renders **instead of** the shell, as `fatalerror` does, so the shell chrome is absent
+while it is up and it draws its own key legend in the footer's place. It is therefore
 absent from `mode.BrowseModes` and never appears in the tab cycle.
 
 A surface above the shell takes keys before the shell key switch and reports whether it consumed
@@ -139,18 +183,20 @@ with the active store's name and keeps it until only the surface name still fits
 - A selected row also carries a band: `styles.RowHighlight(row, width, selected, hovered)` lays
   `RowSelectedBgColor` under the whole row, or the quieter `RowHoverBgColor` under the row the
   pointer is on, and the selection's on a row that is both. `issuerow` applies it; a list that
-  renders its own rows calls it on the finished row, as `ui/storepicker` does. The chevron stays
-  with it: a terminal without colour draws no band.
+  renders its own rows calls it on each line of the finished row, as `ui/storepicker` does. The
+  selection bar stays with it, on every line of the row: a terminal without colour draws no band.
 - A move that changes the selection calls `scroll.EnsureVisible(offset, sel, window)` — or
   `scroll.EnsureVisibleClipped(offset, sel, window, total)` when the pane spends its first and last
-  rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The `›` chevron staying on
-  a row that actually renders is a contract; `EnsureVisible` in a clipped pane satisfies the window
-  check and hides the chevron.
+  rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The selection bar staying
+  on a row that actually renders is a contract; `EnsureVisible` in a clipped pane satisfies the
+  window check and hides the bar. Both count rows of one line; a list of two-line rows passes its
+  capacity in rows, as `mode/storepicker` does with `RowCapacity`.
 - A column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
   issue older than a day and another before the first older than a week, each carrying the count
   of issues below it (`internal/ui/board/agemarker.go`). A divider is a row, not an issue:
   `ScrollOffset` and `SelectedRow` stay issue indices. A mode model that draws through `ui/board`
-  takes its offset from `board.EnsureVisible`, not `scroll.EnsureVisible` — it reserves the inline
+  takes its offset from `board.EnsureVisible`, bounded by `board.MaxOffset`, not from
+  `scroll.EnsureVisible` — the two count the lines the renderer draws, and reserve the inline
   error row and the dividers between the offset and the selection, and the renderer slides the
   window itself when a divider appears between the key press and the draw. Done keeps the
   backend's close-date order and draws none.
@@ -164,7 +210,7 @@ with the active store's name and keeps it until only the surface name still fits
 The mouse repeats what a key already does; it adds no behaviour of its own and no config surface.
 
 - `Model.handleMouse` (`internal/app/mouse.go`) is the only reader of `tea.MouseMsg`. It routes in
-  the keyboard's order — overlay, surface above the shell, tab strip, active surface — and hands the
+  the keyboard's order — overlay, surface above the shell, top bar, active surface — and hands the
   surface a `mode.MouseMsg` in that surface's own coordinates. A mode never sees the raw event.
 - An open overlay takes the event and the surface below gets a `mode.MouseLeave`. Help scrolls under
   the wheel; a dialog ignores the mouse.
@@ -180,7 +226,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   same re-centring reason — and scrolls a pane of text.
 - Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
   scrolls or reloads under a still pointer is the one marked. It draws as the quieter row band
-  (Selection and scrolling); a hovered tab takes `ShellTabHoverColor`.
+  (Selection and scrolling); a hovered tab or top-bar button takes `ShellTabHoverColor`.
+- A click on a top-bar button runs the method its key runs (`Model.mouseOnHeader`).
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release copies the box

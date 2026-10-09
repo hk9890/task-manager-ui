@@ -224,9 +224,10 @@ func (f frame) viewColumn(state State, idx int) columnView {
 	view.rows = append(view.rows, rendered.rows[:rendered.prefix]...)
 	view.rows = append(view.rows, issueRows[startRow:endRow]...)
 
+	// An issue counts as visible only with every one of its lines drawn.
 	view.visibleIssues = 0
 	for _, row := range rendered.layout.issueRow {
-		if row >= startRow && row < endRow {
+		if row >= startRow && row+issuerow.Height <= endRow {
 			view.visibleIssues++
 		}
 	}
@@ -250,7 +251,7 @@ func (f frame) issueAt(col Column, now time.Time, line int) int {
 		target += start
 	}
 	for idx, row := range layout.issueRow {
-		if row == target {
+		if target >= row && target < row+issuerow.Height {
 			return idx
 		}
 	}
@@ -377,7 +378,7 @@ func distributeWidths(total, count int) []int {
 // skeletonRowCounts varies the number of skeleton rows per board column so the
 // cold-start loading state does not render as a uniform grid of identical
 // columns. Indexed by absolute column index; safe-modulo handles >4 columns.
-var skeletonRowCounts = [...]int{4, 6, 3, 5}
+var skeletonRowCounts = [...]int{3, 4, 2, 3}
 
 // skeletonRows returns skeleton placeholder rows for a loading column. colIndex
 // selects the row count from skeletonRowCounts so adjacent columns differ in
@@ -392,7 +393,7 @@ func skeletonRows(maxWidth, phase, colIndex int) []string {
 			Seed:   i,
 			Phase:  phase,
 			Styled: true,
-		}))
+		})...)
 	}
 	return rows
 }
@@ -423,7 +424,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 
 	// Inline error row at the top (if any).
 	if errorRows(col) > 0 {
-		errRow := textutil.TruncateString("⚠ load failed: "+col.Error, maxWidth)
+		errRow := textutil.TruncateString(styles.Glyphs.ToastWarn+" load failed: "+col.Error, maxWidth)
 		out.rows = append(out.rows, errRow)
 		out.prefix = 1
 	}
@@ -444,7 +445,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 				Seed:   0,
 				Phase:  skeletonPhase,
 				Styled: true,
-			}))
+			})...)
 			return out
 		}
 		// Refresh: stale rows on screen while new data is in flight.
@@ -481,7 +482,7 @@ func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase
 			Styled:   true,
 			Dim:      dim,
 			Phase:    phase,
-		}))
+		})...)
 	}
 }
 

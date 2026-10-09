@@ -13,7 +13,7 @@ import (
 // context fit rule. headerContextVariants builds four to six alternatives and
 // only the chosen one reaches the screen, so nothing observed which budget the
 // choice was made against: a doubled budget lets the context string consume the
-// whole header row and crowd out the title and the tab strip.
+// whole rule under the top bar, where a long store name is then cut mid-word.
 //
 // Asserted as the rule rather than as a snapshot: no golden is added, so the
 // app captures do not gain two more files that churn on every header change.

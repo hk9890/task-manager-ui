@@ -7,10 +7,10 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 const (
@@ -34,7 +34,7 @@ var renderMarkdownANSI = renderMarkdownANSIMemoized
 // Nothing above this seam is memoized on purpose: a test that swaps
 // renderMarkdownANSI must see its own function, never a cached frame.
 func renderMarkdownANSIMemoized(content string, width int) (string, error) {
-	dark := lipgloss.HasDarkBackground()
+	dark := styles.Dark()
 
 	if cached, ok := lookupRenderedMarkdown(content, width, dark); ok {
 		return cached, nil

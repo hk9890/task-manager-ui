@@ -7,7 +7,6 @@ package storepicker
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -24,16 +23,12 @@ const (
 	// helpLines is the row the help hint occupies below the section box.
 	helpLines = 1
 
-	// nameColumnMax caps the registry-name column so one long name cannot
-	// squeeze every project path off the screen.
-	nameColumnMax = 28
-
-	// minPathWidth is the width below which the project path is dropped
-	// entirely rather than truncated to something unreadable.
-	minPathWidth = 12
+	// rowLines is the number of lines one row draws: the store's name and its
+	// status, then its project path.
+	rowLines = 2
 )
 
-// Row is one rendered line: a registry entry, or an action when Action is set.
+// Row is one list entry: a registry entry, or an action when Action is set.
 type Row struct {
 	// Action is the label of a row that does something rather than naming a
 	// store — "Create a local store in …". An action row carries no other
@@ -63,7 +58,8 @@ type State struct {
 	// Error is non-empty when the listing failed. It pins an inline row above
 	// the entries, which keeps any stale rows readable.
 	Error string
-	// Help is the hint line drawn below the box, in place of the shell footer.
+	// Help is the key legend drawn below the box, in place of the shell
+	// footer. It arrives styled (styles.KeyLegend).
 	Help         string
 	SpinnerFrame int
 	Width        int
@@ -89,10 +85,14 @@ func HitTest(state State, x, y int) (row int, ok bool) {
 	if state.Error != "" {
 		line--
 	}
-	if x < 1 || x >= width-1 || line < 0 || line >= RowCapacity(height, state.Error != "") {
+	hasError := state.Error != ""
+	// A frame too short for one whole row still draws its first line, so the
+	// rows end where the content does.
+	rowsEnd := min(rowLines*RowCapacity(height, hasError), contentLines(height, hasError))
+	if x < 1 || x >= width-1 || line < 0 || line >= rowsEnd {
 		return 0, false
 	}
-	row = max(0, min(state.ScrollOffset, len(state.Rows))) + line
+	row = max(0, min(state.ScrollOffset, len(state.Rows))) + line/rowLines
 	if row >= len(state.Rows) {
 		return 0, false
 	}
@@ -106,15 +106,21 @@ func RowCapacity(height int, hasError bool) int {
 	if height <= 0 {
 		height = defaultHeight
 	}
-	// Two border lines plus the help line below the box.
-	rows := height - 2 - helpLines
-	if hasError {
-		rows--
-	}
+	rows := contentLines(height, hasError) / rowLines
 	if rows < 1 {
 		rows = 1
 	}
 	return rows
+}
+
+// contentLines is the number of lines inside the box below the error row.
+func contentLines(height int, hasError bool) int {
+	// Two border lines plus the help line below the box.
+	lines := height - 2 - helpLines
+	if hasError {
+		lines--
+	}
+	return max(lines, 1)
 }
 
 // Render draws the picker.
@@ -138,7 +144,7 @@ func Render(state State) string {
 	if state.Error != "" {
 		content = append(content, renderError(state.Error, innerWidth))
 	}
-	content = append(content, renderRows(state, innerWidth, capacity)...)
+	content = append(content, renderRows(state, innerWidth, capacity, contentLines(height, state.Error != ""))...)
 
 	box := styles.FormSection(styles.FormSectionConfig{
 		Content:            content,
@@ -150,9 +156,7 @@ func Render(state State) string {
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 
-	help := lipgloss.NewStyle().
-		Foreground(styles.ShellFooterHelpColor).
-		Render(textutil.TruncateString(state.Help, width))
+	help := textutil.TruncateString(state.Help, width)
 
 	return lipgloss.JoinVertical(lipgloss.Left, box, help)
 }
@@ -191,18 +195,19 @@ func storeRows(rows []Row) int {
 	return n
 }
 
-func renderRows(state State, innerWidth, capacity int) []string {
+// renderRows draws capacity rows into exactly lines lines.
+func renderRows(state State, innerWidth, capacity, lines int) []string {
 	if state.Loading && len(state.Rows) == 0 {
-		return skeletonRows(innerWidth, capacity)
+		return skeletonRows(innerWidth, lines)
 	}
 	if len(state.Rows) == 0 {
 		// With an error above them, no rows means the read failed, not that the
 		// registry is empty. Saying "no stores are registered" here is the one
 		// wrong answer, so the error line is left to speak alone.
 		if state.Error != "" {
-			return blankRows(capacity)
+			return blankRows(lines)
 		}
-		return emptyState(innerWidth, capacity)
+		return emptyState(innerWidth, lines)
 	}
 
 	offset := state.ScrollOffset
@@ -217,64 +222,54 @@ func renderRows(state State, innerWidth, capacity int) []string {
 		visible = visible[:capacity]
 	}
 
-	// Measured across every row, not just the visible ones: a column sized to
-	// the window shifts every path and token sideways as a long name scrolls in
-	// or out of view.
-	nameWidth := nameColumnWidth(state.Rows)
-	out := make([]string, 0, capacity)
+	out := make([]string, 0, lines)
 	for idx, row := range visible {
 		hovered := state.Hover != nil && *state.Hover == offset+idx
 		selected := offset+idx == state.SelectedRow
-		out = append(out, styles.RowHighlight(renderRow(row, selected, nameWidth, innerWidth), innerWidth, selected, hovered))
+		for _, line := range renderRow(row, selected, innerWidth) {
+			out = append(out, styles.RowHighlight(line, innerWidth, selected, hovered))
+		}
 	}
-	for len(out) < capacity {
+	for len(out) < lines {
 		out = append(out, "")
 	}
-	return out
+	return out[:lines]
 }
 
-func renderRow(row Row, selected bool, nameWidth, innerWidth int) string {
+// renderRow draws one row as rowLines lines: the name with its status token
+// flush right, then the project path. An action row has no second line to
+// fill; it keeps the height so every row is one size.
+func renderRow(row Row, selected bool, innerWidth int) []string {
 	plainPrefix, renderedPrefix := styles.SelectionPrefix(selected, true)
+	textWidth := max(innerWidth-lipgloss.Width(plainPrefix), 0)
 
 	if row.Action != "" {
-		label := textutil.TruncateString(row.Action, innerWidth-lipgloss.Width(plainPrefix))
-		return renderedPrefix + lipgloss.NewStyle().Foreground(styles.TextSecondaryColor).Bold(true).Render(label)
+		label := textutil.TruncateString(row.Action, textWidth)
+		return []string{
+			renderedPrefix + lipgloss.NewStyle().Foreground(styles.TextSecondaryColor).Bold(true).Render(label),
+			renderedPrefix,
+		}
 	}
 
 	nameStyle := lipgloss.NewStyle().Foreground(styles.TextPrimaryColor)
 	if !row.Usable {
 		nameStyle = lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 	}
-	name := textutil.PadToWidth(textutil.TruncateString(row.Name, nameWidth), nameWidth)
 
 	token, tokenStyle := statusToken(row)
 	tokenWidth := 0
 	if token != "" {
 		tokenWidth = lipgloss.Width(token) + 1
 	}
+	nameWidth := max(textWidth-tokenWidth, 1)
 
-	var b strings.Builder
-	b.WriteString(renderedPrefix)
-	b.WriteString(nameStyle.Render(name))
-
-	// The path is dropped rather than truncated to a few unreadable cells. The
-	// token still lands flush right either way: a token that follows the name on
-	// some rows and the right edge on others makes the frame ragged at exactly
-	// the widths where it is already tightest.
-	pathWidth := innerWidth - lipgloss.Width(plainPrefix) - nameWidth - 1 - tokenWidth
-	if pathWidth >= minPathWidth {
-		path := " " + textutil.PadToWidth(textutil.TruncateString(row.ProjectPath, pathWidth), pathWidth)
-		b.WriteString(lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(path))
-	} else if pad := innerWidth - lipgloss.Width(plainPrefix) - nameWidth - tokenWidth; pad > 0 {
-		b.WriteString(strings.Repeat(" ", pad))
-	}
-
+	first := renderedPrefix + nameStyle.Render(textutil.PadToWidth(textutil.TruncateString(row.Name, nameWidth), nameWidth))
 	if token != "" {
-		b.WriteString(" ")
-		b.WriteString(tokenStyle.Render(token))
+		first += " " + tokenStyle.Render(token)
 	}
+	path := lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(textutil.TruncateString(row.ProjectPath, textWidth))
 
-	return textutil.TruncateString(b.String(), innerWidth)
+	return []string{textutil.TruncateString(first, innerWidth), renderedPrefix + path}
 }
 
 // statusToken returns the one token a row may carry on its right.
@@ -295,25 +290,6 @@ func statusToken(row Row) (string, lipgloss.Style) {
 		return "active", lipgloss.NewStyle().Foreground(styles.StoreActiveColor).Bold(true)
 	}
 	return "", lipgloss.NewStyle()
-}
-
-func nameColumnWidth(rows []Row) int {
-	width := 0
-	for _, row := range rows {
-		if row.Action != "" {
-			continue
-		}
-		if w := lipgloss.Width(row.Name); w > width {
-			width = w
-		}
-	}
-	if width > nameColumnMax {
-		width = nameColumnMax
-	}
-	if width < 1 {
-		width = 1
-	}
-	return width
 }
 
 func blankRows(capacity int) []string {

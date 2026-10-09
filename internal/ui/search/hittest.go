@@ -1,5 +1,7 @@
 package search
 
+import "github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+
 // Hit is the search cell under a point: the pane, and the result drawn there.
 // Row is -1 anywhere but on a result row.
 type Hit struct {
@@ -79,8 +81,8 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	if banner := renderResultsBanner(state, p.results.width-2); len(banner) > 0 {
 		line -= len(banner) + 1
 	}
-	if line >= 0 && line < len(state.Results) {
-		hit.Row = line
+	if line >= 0 && line < issuerow.Height*len(state.Results) {
+		hit.Row = line / issuerow.Height
 	}
 	return hit, true
 }

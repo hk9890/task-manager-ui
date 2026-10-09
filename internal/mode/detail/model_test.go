@@ -15,6 +15,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func TestModelViewRendersRepresentativeStates(t *testing.T) {
@@ -1612,6 +1613,7 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 	// Walk the whole list one row at a time. Every step must leave the chevron
 	// on the selected row; the original defect only showed once the window had
 	// scrolled, so a single move would not have caught it.
+	gutter, _ := styles.SelectionPrefix(true, false)
 	for step := 0; step < len(items); step++ {
 		selected := items[m.BrowserSelectedIndex]
 		view := m.View(width, height, false, 0)
@@ -1620,7 +1622,7 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 		for _, line := range strings.Split(view, "\n") {
 			// Match on Title: the pane elides long IDs ("…-blocker-01"), so the
 			// full ID is not present in the rendered row.
-			if strings.Contains(line, "›") && strings.Contains(line, selected.Title) {
+			if strings.Contains(line, gutter) && strings.Contains(line, selected.Title) {
 				chevronLine = line
 				break
 			}

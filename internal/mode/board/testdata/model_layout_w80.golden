@@ -1,13 +1,13 @@
 Default · cols 1-2/4
 ╭─ Not Ready ───────────────────── 2 ─╮  ╭─ Ready ───────────────────────── 3 ─╮
-│› T P1 BLK tm-9 Blocked: migration s…│  │  T P1 OPN tm-1 Ready fix login prom…│
+│▌ T Blocked: migration sequencing    │  │  T Ready fix login prompt           │
+│▌   P1 BLK tm-9                      │  │    P1 OPN tm-1                      │
 │─── older than 1 day ────────── 1 ───│  │─── older than 1 day ────────── 2 ───│
-│─── older than 1 week ───────── 1 ───│  │  T P2 OPN tm-5 Ready improve docs o…│
-│  B P0 BLK tm-3 Blocked: API contrac…│  │─── older than 1 week ───────── 1 ───│
-│                                     │  │  C P2 OPN tm-6 Ready triage inbox   │
-│                                     │  │                                     │
-│                                     │  │                                     │
-│                                     │  │                                     │
+│─── older than 1 week ───────── 1 ───│  │  T Ready improve docs outline       │
+│  B Blocked: API contract pending    │  │    P2 OPN tm-5                      │
+│    P0 BLK tm-3                      │  │─── older than 1 week ───────── 1 ───│
+│                                     │  │  C Ready triage inbox               │
+│                                     │  │    P2 OPN tm-6                      │
 │                                     │  │                                     │
 │                                     │  │                                     │
 │                                     │  │                                     │

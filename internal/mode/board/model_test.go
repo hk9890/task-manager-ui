@@ -947,7 +947,7 @@ func assertCompactIssueRows(t *testing.T, view string, minIssueMetaLines int) {
 
 	for _, forbidden := range []string{"Title:", "Description:", "Assignee:", "Labels:"} {
 		if strings.Contains(view, forbidden) {
-			t.Fatalf("expected board layout to keep compact one-line issue rows without detail-field chrome %q\nview:\n%s", forbidden, view)
+			t.Fatalf("expected board layout to keep compact issue rows without detail-field chrome %q\nview:\n%s", forbidden, view)
 		}
 	}
 }
@@ -985,9 +985,9 @@ func TestStartReload_PassesClosedLimit(t *testing.T) {
 // --- Scroll-window tests ---
 
 // TestBoardModeScrollWindowAdvancesWithSelection verifies that pressing j×30
-// on a column with 80 rows (height=25, sectionItemCapacity=22) advances
-// the selection to row 30 and moves ScrollOffset so the selection stays
-// within the visible window.
+// on a column with 80 rows (height=25, sectionItemCapacity=22 lines, eleven
+// two-line issues) advances the selection to row 30 and moves ScrollOffset so
+// the selection stays within the visible window.
 func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
 	t.Parallel()
 
@@ -1011,7 +1011,7 @@ func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
 	m.scrollOffset[0] = 0
 	m.SetSize(120, 25) // sectionItemCapacity = 25-3 = 22
 
-	capacity := m.sectionItemCapacity() // 22
+	capacity := issueCapacity(m) // 11
 
 	// Press j 30 times.
 	const steps = 30
@@ -1030,10 +1030,12 @@ func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
 		t.Errorf("selection %d not in window [%d, %d)", sel, offset, offset+capacity)
 	}
 
-	// Offset must have advanced (it can't stay at 0 when sel=30 and window=22).
-	if offset == 0 {
-		t.Errorf("expected scroll offset to advance from 0, got 0 with sel=%d window=%d", sel, capacity)
+	// Offset must have advanced (it can't stay at 0 when sel=30 and window=11),
+	// and only as far as it had to: the selection is the last issue drawn.
+	if offset != sel-capacity+1 {
+		t.Errorf("expected scroll offset %d with sel=%d window=%d, got %d", sel-capacity+1, sel, capacity, offset)
 	}
+	assertSelectionDrawn(t, m)
 }
 
 // TestBoardModeScrollWindowRendererSlicesRows verifies that the board renderer
@@ -1058,15 +1060,15 @@ func TestBoardModeScrollWindowRendererSlicesRows(t *testing.T) {
 	}
 	m.focusedColumn = 0
 	m.selectedRow[0] = 30
-	m.scrollOffset[0] = 20 // window shows rows 20..41
+	m.scrollOffset[0] = 20 // window shows rows 20..30
 
-	m.SetSize(120, 25) // capacity = 22
+	m.SetSize(120, 25) // capacity = 22 lines, eleven two-line issues
 
 	view := m.View(0)
 
 	// Header must show "N of 80" since window clips.
-	if !strings.Contains(view, "of 80") {
-		t.Errorf("expected 'of 80' in header when window clips, got:\n%s", view)
+	if !strings.Contains(view, "11 of 80") {
+		t.Errorf("expected '11 of 80' in header when window clips, got:\n%s", view)
 	}
 
 	// Row tm-r20 should be visible (start of window).
@@ -1079,13 +1081,20 @@ func TestBoardModeScrollWindowRendererSlicesRows(t *testing.T) {
 	if strings.Contains(plain, "Ready issue 0") {
 		t.Errorf("expected row 0 to be hidden at scroll offset 20, got:\n%s", plain)
 	}
+
+	// Row tm-r31 should NOT be visible (after window).
+	if strings.Contains(plain, "Ready issue 31") {
+		t.Errorf("expected row 31 to be below the window, got:\n%s", plain)
+	}
+	assertSelectionDrawn(t, m)
 }
 
 // TestBoardModeScrollTeatestChevronVisible exercises the full EnsureVisible +
 // renderer path end-to-end: Init triggers a real Dashboard load from an
 // in-memory repo, then 30 j keypresses are applied synchronously via
-// ApplyControllerKeySequence, and the final View output is asserted to contain
-// the selection chevron (›) — proving the selected row is in the visible window.
+// ApplyControllerKeySequence, and the final View output is asserted to draw
+// both lines of the selected row behind the selection gutter — proving the
+// selected row is in the visible window.
 func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	t.Parallel()
 
@@ -1142,7 +1151,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 
 	// Scroll offset must have advanced so the selection stays in the window.
 	offset := finalBoard.scrollOffset[finalBoard.focusedColumn]
-	capacity := finalBoard.sectionItemCapacity()
+	capacity := issueCapacity(finalBoard)
 	if sel < offset || sel >= offset+capacity {
 		t.Errorf("selection %d not in visible window [%d, %d)", sel, offset, offset+capacity)
 	}
@@ -1150,12 +1159,8 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 		t.Errorf("expected scroll offset > 0 after selection moved past viewport, got 0")
 	}
 
-	// The rendered view must contain the chevron character (›).
-	view := finalBoard.View(0)
-	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "›") {
-		t.Errorf("expected selection chevron '›' in rendered view after 30 j presses, got:\n%s", plain)
-	}
+	// The rendered view must draw the selected row, gutter and both lines.
+	assertSelectionDrawn(t, finalBoard)
 }
 
 // --- Done column load-more tests ---
@@ -1841,13 +1846,14 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 
 // TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow is the model-side
 // regression guard for FIX #6. When the focused column shows an inline error
-// row, the renderer pins that row at the top and shows one fewer issue row, so
-// moveRow must reserve it in the scroll-window size (sectionItemCapacity()-1).
-// Without that reservation the selected bottom row lands at offset+capacity-1 —
-// exactly the row the renderer drops — and clips off-screen.
+// row, the renderer pins that row at the top and has one line fewer for the
+// issues, so moveRow must reserve it in the scroll-window size
+// (sectionItemCapacity()-1 lines). Without that reservation the second line of
+// the selected bottom row lands on the line the renderer drops, and the row is
+// cut in half.
 func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
-	m.SetSize(40, 13) // sectionItemCapacity() == 13-3 == 10
+	m.SetSize(40, 13) // sectionItemCapacity() == 13-3 == 10 lines, five issues
 
 	const n = 20
 	issues := make([]domain.IssueSummary, n)
@@ -1867,13 +1873,15 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 
 	idx := m.selectedRow[doneColumnIndex]
 	off := m.scrollOffset[doneColumnIndex]
-	capacity := m.sectionItemCapacity()
-	// The renderer's visible issue window with an error prefix is
-	// [off, off+capacity-1); the selected row must fall inside it.
-	if idx-off > capacity-2 {
-		t.Errorf("selected row clips below the error-reserved window: idx=%d offset=%d capacity=%d (idx-off=%d must be <= %d)",
-			idx, off, capacity, idx-off, capacity-2)
+	// The error row leaves nine lines: four whole issues. The renderer's
+	// visible issue window is [off, off+4); the selected row must fall inside
+	// it, and without the reservation it is the fifth.
+	window := (m.sectionItemCapacity() - 1) / issuerow.Height
+	if idx-off > window-1 {
+		t.Errorf("selected row clips below the error-reserved window: idx=%d offset=%d window=%d (idx-off=%d must be <= %d)",
+			idx, off, window, idx-off, window-1)
 	}
+	assertSelectionDrawn(t, m)
 	if idx != n-1 {
 		t.Fatalf("expected selection at last row %d, got %d", n-1, idx)
 	}
@@ -1891,16 +1899,25 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 	t.Parallel()
 
+	// SetSize(120, 25) leaves 22 content lines: eleven two-line issues, so the
+	// last full window of the 40 rows opens on row 29.
 	const n = 40
 	cases := []struct {
 		name           string
 		selected       int
 		startingOffset int
+		wantOffset     int
 	}{
-		{"selection far below a stale top offset", 30, 0},
-		{"selection above a stale bottom offset", 2, 25},
-		{"offset past the end of a shrunk column", 30, 9},
-		{"selection already visible keeps its offset", 12, 9},
+		{"selection far below a stale top offset", 30, 0, 20},
+		{"selection above a stale bottom offset", 2, 25, 2},
+		{"offset past the end of a shrunk column", 30, 9, 20},
+		{"selection already visible keeps its offset", 12, 9, 9},
+		// The clamp counts the window in issues. Counted in lines it took any
+		// offset past row 18 for one past the end, and every refresh, resize
+		// and load-more pulled a window the operator had scrolled there back
+		// until the selection sat on its last row.
+		{"selection inside a window scrolled near the end keeps its offset", 30, 25, 25},
+		{"offset past the last full window is pulled back to it", 39, 38, 29},
 	}
 
 	for _, tc := range cases {
@@ -1921,7 +1938,10 @@ func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 			m.clampScrollOffsets()
 
 			offset := m.scrollOffset[doneColumnIndex]
-			window := m.sectionItemCapacity()
+			window := issueCapacity(m)
+			if offset != tc.wantOffset {
+				t.Errorf("offset = %d, want %d", offset, tc.wantOffset)
+			}
 			if offset < 0 || offset > n-window {
 				t.Fatalf("offset %d is outside [0, %d] for a %d-row column with a %d-row window",
 					offset, n-window, n, window)
@@ -1930,6 +1950,8 @@ func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 				t.Fatalf("selected row %d is outside the window [%d, %d)",
 					tc.selected, offset, offset+window)
 			}
+			m.focusedColumn = doneColumnIndex
+			assertSelectionDrawn(t, m)
 		})
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 type searchLoadedMsg struct {
@@ -460,10 +461,11 @@ func (m *Model) SetSize(width, height int) {
 // searchItemCapacity returns the number of result rows that fit in the results
 // pane at the current terminal height.
 //
-// Chrome breakdown: the query FormSection occupies searchQueryHeight (5) rows
-// (1 top border + 3 content lines + 1 bottom border), and the results
-// FormSection adds 2 border rows (1 top + 1 bottom). Total chrome = 7.
-// Formula: max(1, height-7).
+// Lines the results do not get: the query FormSection is 3 (2 borders and the
+// input line), the results FormSection adds 2 borders, and the stale-results
+// banner takes 2 when it is up (the banner and the blank line under it).
+// Total = 7, and a result is issuerow.Height lines.
+// Formula: max(1, (height-7)/issuerow.Height).
 //
 // When height is 0 (before the first tea.WindowSizeMsg), a safe default of 20
 // is returned so that Init() fires queries with a reasonable limit.
@@ -471,7 +473,7 @@ func (m *Model) searchItemCapacity() int {
 	if m.height == 0 {
 		return 20 // safe default before first WindowSizeMsg
 	}
-	rows := m.height - 7
+	rows := (m.height - 7) / issuerow.Height
 	if rows < 1 {
 		rows = 1
 	}

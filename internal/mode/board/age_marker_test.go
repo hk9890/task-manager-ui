@@ -18,7 +18,7 @@ import (
 // TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers walks the cursor
 // down a Ready column that crosses both age thresholds. The two divider rows
 // take space from the issue window, so a scroll offset computed for issues
-// alone would leave the selected row below the last drawn line.
+// alone would leave a line of the selected row below the last drawn line.
 func TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers(t *testing.T) {
 	t.Parallel()
 
@@ -44,7 +44,7 @@ func TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers(t *testing.T) {
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.now = func() time.Time { return now }
-	m.SetSize(80, 12)
+	m.SetSize(80, 21) // 18 content rows: nine two-line issues
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -53,9 +53,10 @@ func TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers(t *testing.T) {
 	for step := 1; step < rowCount; step++ {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-		want := fmt.Sprintf("› T P2 OPN tm-%02d", step)
-		if !strings.Contains(plain, want) {
-			t.Fatalf("after %d presses expected %q on screen:\n%s", step, want, plain)
+		for _, want := range selectedReadyLines(step) {
+			if !strings.Contains(plain, want) {
+				t.Fatalf("after %d presses expected %q on screen:\n%s", step, want, plain)
+			}
 		}
 	}
 
@@ -64,6 +65,15 @@ func TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers(t *testing.T) {
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
 	testui.AssertContainsAll(t, plain, "9 of 20")
 	testui.AssertNotContainsAny(t, plain, "older than")
+}
+
+// selectedReadyLines is the two lines the board draws for the selected issue
+// idx of the Ready fixtures in this file: the gutter runs down both.
+func selectedReadyLines(idx int) []string {
+	return []string{
+		fmt.Sprintf("%sT Ready %02d", selectedGutter, idx),
+		fmt.Sprintf("%s  P2 OPN tm-%02d", selectedGutter, idx),
+	}
 }
 
 // TestBoardModeChevronSurvivesADividerAppearingWhileIdle: the offset is stored
@@ -91,7 +101,7 @@ func TestBoardModeChevronSurvivesADividerAppearingWhileIdle(t *testing.T) {
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.now = func() time.Time { return now }
-	m.SetSize(80, 12)
+	m.SetSize(80, 21) // 18 content rows: nine two-line issues
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -100,15 +110,15 @@ func TestBoardModeChevronSurvivesADividerAppearingWhileIdle(t *testing.T) {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-	testui.AssertContainsAll(t, plain, "› T P2 OPN tm-08", "9 of 12")
+	testui.AssertContainsAll(t, plain, append(selectedReadyLines(8), "9 of 12")...)
 
 	now = now.Add(25 * time.Minute)
 	plain = testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-	testui.AssertContainsAll(t, plain, "older than 1 day", "› T P2 OPN tm-08", "8 of 12")
+	testui.AssertContainsAll(t, plain, append(selectedReadyLines(8), "older than 1 day", "8 of 12")...)
 }
 
-// TestBoardModeTinySectionStillDrawsTheSelectedRow: two content rows cannot
-// hold two stacked dividers and an issue, so the issue wins.
+// TestBoardModeTinySectionStillDrawsTheSelectedRow: three content rows cannot
+// hold two stacked dividers and a two-line issue, so the issue wins.
 func TestBoardModeTinySectionStillDrawsTheSelectedRow(t *testing.T) {
 	t.Parallel()
 
@@ -127,16 +137,17 @@ func TestBoardModeTinySectionStillDrawsTheSelectedRow(t *testing.T) {
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.now = func() time.Time { return now }
-	m.SetSize(80, 5)
+	m.SetSize(80, 6)
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	}
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-	testui.AssertContainsAll(t, plain, "older than 1 week", "› T P2 OPN tm-00", "1 of 3")
+	testui.AssertContainsAll(t, plain, append(selectedReadyLines(0), "older than 1 week", "1 of 3")...)
+	testui.AssertNotContainsAny(t, plain, "older than 1 day")
 	for step := 1; step < 3; step++ {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		plain = testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-		testui.AssertContainsAll(t, plain, fmt.Sprintf("› T P2 OPN tm-%02d", step))
+		testui.AssertContainsAll(t, plain, selectedReadyLines(step)...)
 	}
 }

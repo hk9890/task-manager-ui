@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func TestRenderResultsFirstSearchLayout(t *testing.T) {
@@ -30,6 +32,7 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		Height:     28,
 	})
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
+	gutter, _ := styles.SelectionPrefix(true, false)
 
 	for _, want := range []string{
 		"Search",
@@ -39,8 +42,10 @@ func TestRenderResultsFirstSearchLayout(t *testing.T) {
 		"backend",
 		"shown",
 		"exact",
-		"› T P1 OPN tm-1 Backend search result",
-		"B P0 IP tm-2 Another result",
+		"│" + gutter + "T Backend search result",
+		"│" + gutter + "  P1 OPN tm-1",
+		"│  B Another result",
+		"│    P0 IP tm-2",
 		"Backend search result",
 	} {
 		if !strings.Contains(plain, want) {
@@ -64,8 +69,11 @@ func TestRenderShowsEmptyQueryResultsAndPreview(t *testing.T) {
 		Height:     24,
 	})
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "› T P1 OPN tm-1 Default all result") {
-		t.Fatalf("expected default issue list row, got:\n%s", plain)
+	gutter, _ := styles.SelectionPrefix(true, false)
+	for _, want := range []string{"│" + gutter + "T Default all result", "│" + gutter + "  P1 OPN tm-1"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected default issue list row line %q, got:\n%s", want, plain)
+		}
 	}
 	if !strings.Contains(plain, "Second default") {
 		t.Fatalf("expected second issue row, got:\n%s", plain)
@@ -75,22 +83,38 @@ func TestRenderShowsEmptyQueryResultsAndPreview(t *testing.T) {
 	}
 }
 
-func TestRenderResultsRowsApplySharedIDWidthCap(t *testing.T) {
+// TestRenderResultsRowsCompactTheIDToTheRowWidth pins the ID on a result's
+// second line: it has the rest of that line, so it is whole where it fits and
+// cut from the front where it does not.
+func TestRenderResultsRowsCompactTheIDToTheRowWidth(t *testing.T) {
 	t.Parallel()
 
-	view := Render(State{
+	state := State{
 		Focus: FocusResults,
 		Results: []domain.IssueSummary{
 			{ID: "task-manager-ui-ultra-wide-width-id", Title: "Result", Status: "open", Type: "task", Priority: 1},
 		},
 		SelectedID: "task-manager-ui-ultra-wide-width-id",
-		Width:      220,
-		Height:     24,
-	})
+	}
 
-	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "…") || !strings.Contains(plain, "width-id") {
-		t.Fatalf("expected capped compact issue id suffix in search results, got:\n%s", plain)
+	for _, tc := range []struct {
+		width int
+		want  string
+	}{
+		{width: 60, want: "P1 OPN task-manager-ui-ultra-wide-width-id"},
+		{width: 24, want: "P1 OPN …ide-width-id"},
+	} {
+		lines := renderResultsContent(state, tc.width)
+		if len(lines) != issuerow.Height {
+			t.Fatalf("width %d: got %d lines, want %d", tc.width, len(lines), issuerow.Height)
+		}
+		plain := testui.AnsiEscapePattern.ReplaceAllString(lines[1], "")
+		if strings.TrimSpace(strings.TrimPrefix(plain, styles.Glyphs.Cursor)) != tc.want {
+			t.Fatalf("width %d: second line = %q, want the meta and the ID as %q", tc.width, plain, tc.want)
+		}
+		if got := lipgloss.Width(lines[1]); got > tc.width {
+			t.Fatalf("width %d: second line is %d cells wide", tc.width, got)
+		}
 	}
 }
 
@@ -99,13 +123,12 @@ func TestRenderResultsContentUsesSharedIssueRowRenderer(t *testing.T) {
 
 	issue := domain.IssueSummary{ID: "task-manager-ui-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
 	lines := renderResultsContent(State{Results: []domain.IssueSummary{issue}, SelectedID: issue.ID}, 60)
-	if len(lines) != 1 {
-		t.Fatalf("expected exactly one rendered row, got %d", len(lines))
-	}
-
 	want := issuerow.RenderCompact(issuerow.RenderConfig{Issue: issue, Selected: true, Width: 60, Styled: true})
-	if lines[0] != want {
-		t.Fatalf("expected results row to use shared renderer\nwant: %q\ngot:  %q", want, lines[0])
+	if len(want) != issuerow.Height {
+		t.Fatalf("expected the shared renderer to draw %d lines, got %d", issuerow.Height, len(want))
+	}
+	if !slices.Equal(lines, want) {
+		t.Fatalf("expected exactly one rendered row from the shared renderer\nwant: %q\ngot:  %q", want, lines)
 	}
 }
 
@@ -341,18 +364,19 @@ func TestRenderColdStartLoadingShowsSkeletonAndInput(t *testing.T) {
 	// Row count, not merely presence: DESIGN-GUIDE requires the wait state to
 	// fill the surface it stands in for, and "at least one glyph" is satisfied
 	// by a single line as much as by a full rail.
-	if got := countSkeletonRows(plain); got != coldStartSkeletonRows {
-		t.Fatalf("cold start drew %d skeleton rows, want %d:\n%s", got, coldStartSkeletonRows, plain)
+	if got, want := countSkeletonLines(plain), coldStartSkeletonRows*issuerow.Height; got != want {
+		t.Fatalf("cold start drew %d skeleton lines, want %d rows of %d:\n%s", got, coldStartSkeletonRows, issuerow.Height, plain)
 	}
 }
 
 // coldStartSkeletonRows is the number of placeholder rows the cold-start rail
 // draws. Written as a literal rather than read from the renderer, so a change
 // to the constant fails this test instead of moving with it.
-const coldStartSkeletonRows = 6
+const coldStartSkeletonRows = 3
 
-// countSkeletonRows counts rendered lines carrying the skeleton glyph.
-func countSkeletonRows(plain string) int {
+// countSkeletonLines counts rendered lines carrying the skeleton glyph. A
+// skeleton row carries it on both of its lines: the title bar and the ID bar.
+func countSkeletonLines(plain string) int {
 	n := 0
 	for _, line := range strings.Split(plain, "\n") {
 		if strings.Contains(line, issuerow.SkeletonGlyph) {
@@ -561,10 +585,25 @@ func TestRefreshSearchCarriesDimPhaseStyle(t *testing.T) {
 		t.Fatalf("stale result title not visible (ANSI-stripped), got:\n%s", plain)
 	}
 
-	// SkeletonShades[2] dark = "#7F7F7F" → RGB(127,127,127) → ANSI 38;2;127;127;127
-	const wantANSI = "38;2;127;127;127"
-	if !strings.Contains(view, wantANSI) {
-		t.Fatalf("expected dim ANSI sequence %q in refresh result row, got:\n%s", wantANSI, view)
+	// Render a sentinel in the expected shade and take the escape before it.
+	const sentinel = "\x00"
+	wantANSI, _, _ := strings.Cut(lipgloss.NewStyle().Foreground(styles.SkeletonShades[phase]).Render(sentinel), sentinel)
+	if wantANSI == "" {
+		t.Fatal("expected the skeleton shade to render an ANSI sequence")
+	}
+	// Both lines of the result row carry the tint; the selection bar marks them.
+	dimmed := 0
+	for _, line := range strings.Split(view, "\n") {
+		if !strings.Contains(line, styles.Glyphs.Cursor) {
+			continue
+		}
+		dimmed++
+		if !strings.Contains(line, wantANSI) {
+			t.Fatalf("expected dim ANSI sequence %q in refresh result row line, got:\n%s", wantANSI, line)
+		}
+	}
+	if dimmed != issuerow.Height {
+		t.Fatalf("expected %d dimmed result lines, got %d:\n%s", issuerow.Height, dimmed, view)
 	}
 }
 

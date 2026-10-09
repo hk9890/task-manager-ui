@@ -8,6 +8,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 func leftDrag(x, y int) tea.MouseMsg {
@@ -32,7 +33,8 @@ func newSelectingShell(t *testing.T) (Model, *[]string) {
 
 // TestDragSelectsABoxOfTheScreenAndCopiesIt drags across two rows of two
 // columns: the box is drawn in reverse video over the screen as it was, and
-// the release puts its text on the clipboard, one line per row, and says so.
+// the release puts its text on the clipboard, one line per screen line, and
+// says so.
 func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 	m, copied := newSelectingShell(t)
 
@@ -65,8 +67,11 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 		t.Fatalf("release copied %d times, want once", len(*copied))
 	}
 	lines := strings.Split((*copied)[0], "\n")
-	if len(lines) != 2 || !strings.HasPrefix(lines[0], "progress-first") || !strings.HasSuffix(lines[1], "progress-second") {
-		t.Fatalf("copied %q, want the two rows of the box", (*copied)[0])
+	// An issue row is issuerow.Height lines, so the box from one title to the
+	// next spans the first row's second line as well.
+	if want := endY - y + 1; want != issuerow.Height+1 || len(lines) != want ||
+		!strings.HasPrefix(lines[0], "progress-first") || !strings.HasSuffix(lines[len(lines)-1], "progress-second") {
+		t.Fatalf("copied %q, want the %d lines of the box from one title to the next", (*copied)[0], want)
 	}
 	if !strings.Contains(m.View(), "Copied") {
 		t.Fatalf("no toast says the text was copied:\n%s", m.View())

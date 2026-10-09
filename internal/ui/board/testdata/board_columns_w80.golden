@@ -1,11 +1,11 @@
 Default · cols 1-2/4
 ╭─ Ready ───────────────────────── 7 ─╮  ╭─ Blocked ─────────────────────── 3 ─╮
-│› T P0 OPN u5s Redesign board rows a…│  │  T P0 BLK 9oo Acceptance review boa…│
-│  F P1 IP 1ri Dashboard UX runtime h…│  │                                     │
-│  B P0 BLK y3x Runtime bug: board ro…│  │                                     │
-│                                     │  │                                     │
-│                                     │  │                                     │
-│                                     │  │                                     │
+│▌ T Redesign board rows and metadata…│  │  T Acceptance review board UX regre…│
+│▌   P0 OPN task-manager-ui-u5s       │  │    P0 BLK task-manager-ui-9oo       │
+│  F Dashboard UX runtime harness and…│  │                                     │
+│    P1 IP task-manager-ui-1ri        │  │                                     │
+│  B Runtime bug: board rows hide rea…│  │                                     │
+│    P0 BLK task-manager-ui-y3x       │  │                                     │
 │                                     │  │                                     │
 │                                     │  │                                     │
 │                                     │  │                                     │

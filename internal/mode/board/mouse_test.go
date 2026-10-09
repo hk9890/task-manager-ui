@@ -11,6 +11,7 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 var mouseStart = time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
@@ -109,6 +110,39 @@ func TestClickSelectsAndASecondClickOpens(t *testing.T) {
 	}
 }
 
+// TestClickOnEitherLineOfARowSelectsAndOpensIt: an issue is two lines tall, and
+// the line under the title is as much the row as the title is. A click on one
+// and a second on the other are a double click on the same row.
+func TestClickOnEitherLineOfARowSelectsAndOpensIt(t *testing.T) {
+	t.Parallel()
+
+	m := mouseBoard(t)
+	_, titleY := testui.FindCell(t, m.View(0), "progress-three")
+	if _, idY := testui.FindCell(t, m.View(0), "tm-9"); idY != titleY+1 {
+		t.Fatalf("setup: the ID is on line %d, want it directly under the title on line %d", idY, titleY)
+	}
+
+	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "tm-9", 0))
+	if got := selectionFrom(t, cmd); got != "tm-9" {
+		t.Fatalf("a click on the second line of a row reported selection %q, want tm-9", got)
+	}
+	if m.focusedColumn != 1 || m.selectedRow[1] != 2 {
+		t.Fatalf("the click left focus on column %d row %d, want column 1 row 2", m.focusedColumn, m.selectedRow[1])
+	}
+	assertSelectionDrawn(t, m)
+
+	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "progress-three", 200)); !opensDetail(cmd) {
+		t.Fatal("a second click, on the other line of the same row, did not open Detail")
+	}
+
+	// The second line of the last row is its last line: the one below is empty.
+	x, y := testui.FindCell(t, m.View(0), "tm-9")
+	cmd = m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y + 1, At: mouseStart.Add(5 * time.Second)})
+	if cmd != nil || m.selectedRow[1] != 2 {
+		t.Fatalf("a click below the last row changed the selection (row %d, cmd %v)", m.selectedRow[1], cmd != nil)
+	}
+}
+
 // TestAWheelNotchBetweenTwoClicksIsNotADoubleClick: a double click opens the
 // selection, which the wheel has moved off the row that was clicked.
 func TestAWheelNotchBetweenTwoClicksIsNotADoubleClick(t *testing.T) {
@@ -134,10 +168,11 @@ func TestClickOffTheRowsSelectsNothing(t *testing.T) {
 
 	m := mouseBoard(t)
 	x, y := testui.FindCell(t, m.View(0), "progress-three")
+	_, titleY := testui.FindCell(t, m.View(0), sectionTitleInProgress)
 
 	for name, cell := range map[string][2]int{
-		"column title":       {x, y - 3},
-		"below the last row": {x, y + 2},
+		"column title":       {x, titleY},
+		"below the last row": {x, y + issuerow.Height},
 		"dashboard title":    {x, 0},
 	} {
 		cmd := m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: cell[0], Y: cell[1], At: mouseStart})

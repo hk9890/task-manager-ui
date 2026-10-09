@@ -1,10 +1,10 @@
 ╭─ Task Stores ──────────────────── 3 ─╮
-│› task-manager-ui /home/hans/d… active│
-│  task-manager    /home/hans/dev/gith…│
+│▌ task-manager-ui               active│
+│▌ /home/hans/dev/github/task-manager-…│
+│  task-manager                        │
+│  /home/hans/dev/github/task-manager  │
 │  moved-away                  dangling│
-│                                      │
-│                                      │
-│                                      │
+│  /home/hans/dev/moved-away           │
 │                                      │
 │                                      │
 │                                      │

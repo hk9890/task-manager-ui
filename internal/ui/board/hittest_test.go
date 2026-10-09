@@ -9,15 +9,16 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// hitTestState is a board whose every issue has a title that appears once, so
-// a test can ask the rendered frame where the renderer put it.
+// hitTestState is a board whose every issue has a title and an ID that appear
+// once, so a test can ask the rendered frame where the renderer put each of
+// its two lines.
 func hitTestState(width, height int) State {
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 	column := func(name string, count int, age time.Duration) Column {
 		rows := make([]domain.IssueSummary, count)
 		for idx := range rows {
 			rows[idx] = domain.IssueSummary{
-				ID:        fmt.Sprintf("tm-%s%d", name, idx),
+				ID:        fmt.Sprintf("tm-%s%02d", name, idx),
 				Title:     fmt.Sprintf("%s-issue-%02d", name, idx),
 				Type:      "task",
 				Status:    "open",
@@ -46,9 +47,9 @@ func hitTestState(width, height int) State {
 }
 
 // TestHitTestFindsEveryIssueWhereRenderDrewIt asks the rendered frame where
-// each issue is and checks HitTest answers with that issue, across the layouts
-// that move rows around: clipped columns, age dividers, a scrolled window and
-// a pinned error row.
+// each issue is and checks HitTest answers with that issue on both of its
+// lines — the title's and the ID's — across the layouts that move rows around:
+// clipped columns, age dividers, a scrolled window and a pinned error row.
 func TestHitTestFindsEveryIssueWhereRenderDrewIt(t *testing.T) {
 	t.Parallel()
 
@@ -60,7 +61,7 @@ func TestHitTestFindsEveryIssueWhereRenderDrewIt(t *testing.T) {
 		// drawn lists the issues expected on screen as column, row.
 		drawn [][2]int
 	}{
-		{name: "all columns", width: 200, height: 24, drawn: [][2]int{{0, 0}, {0, 2}, {1, 0}, {1, 1}, {1, 2}, {1, 11}, {2, 1}, {3, 3}}},
+		{name: "all columns", width: 200, height: 30, drawn: [][2]int{{0, 0}, {0, 2}, {1, 0}, {1, 1}, {1, 2}, {1, 11}, {2, 1}, {3, 3}}},
 		{name: "columns clipped around the focus", width: 110, height: 24, drawn: [][2]int{{0, 0}, {1, 5}, {2, 1}}},
 		{
 			name:  "scrolled window",
@@ -94,10 +95,17 @@ func TestHitTestFindsEveryIssueWhereRenderDrewIt(t *testing.T) {
 
 			for _, want := range tc.drawn {
 				issue := state.Columns[want[0]].Rows[want[1]]
-				x, y := testui.FindCell(t, view, issue.Title)
-				hit, ok := HitTest(state, x, y)
-				if !ok || hit.Column != want[0] || hit.Row != want[1] {
-					t.Errorf("HitTest at %q (%d,%d) = %+v, %v; want column %d row %d", issue.Title, x, y, hit, ok, want[0], want[1])
+				_, titleY := testui.FindCell(t, view, issue.Title)
+				_, idY := testui.FindCell(t, view, issue.ID)
+				if idY != titleY+1 {
+					t.Fatalf("%s: title on line %d and ID on line %d; want the ID directly under the title", issue.ID, titleY, idY)
+				}
+				for _, text := range []string{issue.Title, issue.ID} {
+					x, y := testui.FindCell(t, view, text)
+					hit, ok := HitTest(state, x, y)
+					if !ok || hit.Column != want[0] || hit.Row != want[1] {
+						t.Errorf("HitTest at %q (%d,%d) = %+v, %v; want column %d row %d", text, x, y, hit, ok, want[0], want[1])
+					}
 				}
 			}
 		})
@@ -162,6 +170,13 @@ func TestRenderBandsTheSelectedAndTheHoveredRow(t *testing.T) {
 	hovered := testui.RowBand(t, view, "aa-issue-02")
 	if selected == "" || hovered == "" || selected == hovered {
 		t.Fatalf("bands: selected %q, hovered %q; want two different backgrounds", selected, hovered)
+	}
+	// The band covers both lines of a row.
+	if got := testui.RowBand(t, view, "tm-bb00"); got != selected {
+		t.Fatalf("the second line of the selected row carries %q, want the selection's %q", got, selected)
+	}
+	if got := testui.RowBand(t, view, "tm-aa02"); got != hovered {
+		t.Fatalf("the second line of the hovered row carries %q, want the hover's %q", got, hovered)
 	}
 	if plain := testui.RowBand(t, view, "aa-issue-01"); plain != "" {
 		t.Fatalf("a row that is neither selected nor hovered carries the band %q", plain)

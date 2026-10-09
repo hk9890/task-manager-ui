@@ -2,6 +2,7 @@ package board
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,12 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
+
+// selectedGutter is the gutter the renderer draws down both lines of the
+// selected issue.
+var selectedGutter, _ = styles.SelectionPrefix(true, false)
 
 func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
@@ -21,7 +27,7 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 		lipgloss.SetColorProfile(previousProfile)
 	})
 
-	line := renderColumnRows(Column{
+	lines := renderColumnRows(Column{
 		Rows: []domain.IssueSummary{{
 			ID:       "task-manager-ui-u5s",
 			Title:    "Redesign board rows and metadata for compact scanability",
@@ -30,21 +36,30 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 			Priority: 0,
 		}},
 		SelectedRow: 0,
-	}, 72, 0, 0, time.Time{}, -1).rows[0]
+	}, 72, 0, 0, time.Time{}, -1).rows
 
-	if !strings.Contains(line, "\x1b[") {
-		t.Fatalf("expected ANSI styling in rendered row, got: %q", line)
+	if len(lines) != issuerow.Height {
+		t.Fatalf("expected the %d lines of one issue, got %d: %q", issuerow.Height, len(lines), lines)
 	}
-	if !strings.Contains(line, "›") {
-		t.Fatalf("expected selected-row indicator, got: %q", line)
-	}
-	if !strings.HasPrefix(line, "\x1b[48;") || lipgloss.Width(line) != 72 {
-		t.Fatalf("expected the selection band across the whole 72-cell row, got: %q", line)
+	for _, line := range lines {
+		if !strings.Contains(line, "\x1b[") {
+			t.Fatalf("expected ANSI styling in rendered row, got: %q", line)
+		}
+		if !strings.HasPrefix(testui.AnsiEscapePattern.ReplaceAllString(line, ""), selectedGutter) {
+			t.Fatalf("expected the selected-row indicator on every line of the row, got: %q", line)
+		}
+		if !strings.HasPrefix(line, "\x1b[48;") || lipgloss.Width(line) != 72 {
+			t.Fatalf("expected the selection band across the whole 72-cell row, got: %q", line)
+		}
 	}
 
-	plain := testui.AnsiEscapePattern.ReplaceAllString(line, "")
-	if !strings.Contains(plain, "T P0 OPN u5s") {
-		t.Fatalf("expected compact metadata tokens in row, got: %q", plain)
+	title := testui.AnsiEscapePattern.ReplaceAllString(lines[0], "")
+	if !strings.Contains(title, "T Redesign board rows and metadata for compact scanability") {
+		t.Fatalf("expected the type token and the title on the first line, got: %q", title)
+	}
+	meta := testui.AnsiEscapePattern.ReplaceAllString(lines[1], "")
+	if !strings.Contains(meta, "P0 OPN task-manager-ui-u5s") {
+		t.Fatalf("expected compact metadata tokens on the second line, got: %q", meta)
 	}
 }
 
@@ -53,13 +68,9 @@ func TestRenderColumnRowsUsesSharedIssueRowRenderer(t *testing.T) {
 
 	issue := domain.IssueSummary{ID: "task-manager-ui-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
 	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0, 0, time.Time{}, -1).rows
-	if len(rows) != 1 {
-		t.Fatalf("expected exactly one rendered row, got %d", len(rows))
-	}
-
 	want := issuerow.RenderCompact(issuerow.RenderConfig{Issue: issue, Selected: true, Width: 60, Styled: true})
-	if rows[0] != want {
-		t.Fatalf("expected board row to use shared renderer\nwant: %q\ngot:  %q", want, rows[0])
+	if !slices.Equal(rows, want) {
+		t.Fatalf("expected board row to use shared renderer\nwant: %q\ngot:  %q", want, rows)
 	}
 }
 
@@ -185,11 +196,17 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 		t.Fatalf("stale row title not visible (ANSI-stripped), got: %q", plain)
 	}
 
-	// The row must contain the SkeletonShades[phase] dark-theme hex embedded in an ANSI escape.
-	// SkeletonShades[1] dark = "#696969" → RGB(105,105,105) → ANSI 38;2;105;105;105
-	const wantANSI = "38;2;105;105;105"
-	if !strings.Contains(rows[0], wantANSI) {
-		t.Fatalf("expected dim ANSI sequence %q in refresh row, got: %q", wantANSI, rows[0])
+	// Every line of the row must carry SkeletonShades[phase] as a foreground
+	// ANSI escape.
+	var r, g, b int
+	if _, err := fmt.Sscanf(string(styles.SkeletonShades[phase]), "#%02x%02x%02x", &r, &g, &b); err != nil {
+		t.Fatalf("SkeletonShades[%d] = %q is not a hex colour: %v", phase, styles.SkeletonShades[phase], err)
+	}
+	wantANSI := fmt.Sprintf("38;2;%d;%d;%d", r, g, b)
+	for _, row := range rows {
+		if !strings.Contains(row, wantANSI) {
+			t.Fatalf("expected dim ANSI sequence %q in refresh row, got: %q", wantANSI, row)
+		}
 	}
 }
 
@@ -202,11 +219,13 @@ func TestSkeletonRows(t *testing.T) {
 
 	// Each column index draws its row count from skeletonRowCounts so adjacent
 	// columns differ in length; the count is stable across animation phases.
-	for colIndex, want := range skeletonRowCounts {
+	// A skeleton row is as tall as an issue row.
+	for colIndex, count := range skeletonRowCounts {
+		want := count * issuerow.Height
 		for _, phase := range []int{0, 1, 2} {
 			rows := skeletonRows(width, phase, colIndex)
 			if len(rows) != want {
-				t.Errorf("col=%d phase=%d: skeletonRows returned %d rows, want %d", colIndex, phase, len(rows), want)
+				t.Errorf("col=%d phase=%d: skeletonRows returned %d lines, want %d", colIndex, phase, len(rows), want)
 			}
 			for i, row := range rows {
 				if row == "" {
@@ -217,8 +236,8 @@ func TestSkeletonRows(t *testing.T) {
 	}
 
 	// colIndex wraps via safe-modulo for boards with more columns than the table.
-	if got := len(skeletonRows(width, 0, len(skeletonRowCounts))); got != skeletonRowCounts[0] {
-		t.Errorf("colIndex wrap: got %d rows, want %d", got, skeletonRowCounts[0])
+	if got, want := len(skeletonRows(width, 0, len(skeletonRowCounts))), skeletonRowCounts[0]*issuerow.Height; got != want {
+		t.Errorf("colIndex wrap: got %d lines, want %d", got, want)
 	}
 }
 
@@ -262,7 +281,8 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 	}
 
 	t.Run("small exact column fits in window — plain number no plus no N of M", func(t *testing.T) {
-		// 5 rows, total=5, exact=true, height=24 → window=21 — all 5 rows fit.
+		// 5 rows, total=5, exact=true, height=24 → 21 content lines — all 5
+		// two-line rows fit.
 		state := makeState(5, 5, true, 24)
 		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
 
@@ -278,7 +298,7 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 	})
 
 	t.Run("window clips rows — shows N of M not N+", func(t *testing.T) {
-		// 75 rows, total=75, height=24 → window ~21 → clips → shows "N of 75".
+		// 75 rows, total=75, height=24 → 21 content lines → clips → shows "N of 75".
 		// The exact N depends on window arithmetic; verify "of 75" and no "75+".
 		state := makeState(75, 75, true, 24)
 		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
@@ -293,9 +313,9 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 
 	t.Run("truncated list shows N of M not N+", func(t *testing.T) {
 		// 50 visible rows, 75 total, TotalIsExact=false, tall terminal → all 50 fit.
-		// Window = height-3 = 77, so all 50 rows fit.
+		// Content = height-3 = 100 lines, so all 50 two-line rows fit.
 		// The header should show "50 of 75" because TotalIsExact=false (DB has more).
-		state := makeState(50, 75, false, 80)
+		state := makeState(50, 75, false, 103)
 		plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
 
 		if !strings.Contains(plain, "50 of 75") {
@@ -309,11 +329,12 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 
 // TestRenderLargeColumnScrollWindowGolden verifies the board renderer with a
 // large column + non-zero ScrollOffset. The header must show "N of M" and the
-// visible rows must match the scroll window (offset=10, window ~8 rows).
+// visible rows must match the scroll window (offset=20, four two-line rows and half a fifth).
 func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
 	t.Parallel()
 
-	// 50 rows, ScrollOffset=20, height=12 → innerHeight=10 → window shows rows 20..29.
+	// 50 rows, ScrollOffset=20, height=12 → innerHeight=9 → window shows rows 20..23
+	// and the title of row 24, which the header does not count.
 	const rowCount = 50
 	issues := make([]domain.IssueSummary, rowCount)
 	for i := range issues {
@@ -343,8 +364,8 @@ func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
 	plain := testui.AnsiEscapePattern.ReplaceAllString(rendered, "")
 
 	// Header must show "N of 50".
-	if !strings.Contains(plain, "of 50") {
-		t.Errorf("expected 'of 50' in header, got:\n%s", plain)
+	if !strings.Contains(plain, "4 of 50") {
+		t.Errorf("expected '4 of 50' in header, got:\n%s", plain)
 	}
 
 	// First row in window must be row 20.
@@ -357,13 +378,20 @@ func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
 		t.Errorf("expected row 0 to be hidden by scroll, got:\n%s", plain)
 	}
 
+	// Row 25 must NOT appear (after the window).
+	if strings.Contains(plain, "number 25") {
+		t.Errorf("expected row 25 to be below the window, got:\n%s", plain)
+	}
+
 	testui.AssertMatchesGoldenStripANSI(t, []byte(rendered), "large_column_window_w80.golden")
 }
 
 // TestRenderDoneLoadingMore verifies the "load more in flight" affordance: when
 // col.Loading=true, ScrollOffset>0, and rows are present (60 of 736 loaded),
 // the renderer shows real rows plus a skeleton row at the bottom of the visible
-// window and the header reads "60 of 736".
+// window and the header reads "60 of 736". The skeleton row is as tall as an
+// issue row and follows the last issue, so the window is scrolled to the end of
+// the loaded rows.
 func TestRenderDoneLoadingMore(t *testing.T) {
 	t.Parallel()
 
@@ -387,7 +415,7 @@ func TestRenderDoneLoadingMore(t *testing.T) {
 			Title:        "Done",
 			Rows:         issues,
 			SelectedRow:  58,
-			ScrollOffset: 42,
+			ScrollOffset: 51,
 			Total:        736,
 			TotalIsExact: false,
 			Loading:      true,
@@ -402,14 +430,19 @@ func TestRenderDoneLoadingMore(t *testing.T) {
 		t.Errorf("expected '60 of 736' header badge, got:\n%s", plain)
 	}
 
-	// Selected row 58 must be visible with the cursor indicator.
-	if !strings.Contains(plain, "›") {
-		t.Errorf("expected cursor indicator '›' in visible window, got:\n%s", plain)
-	}
+	// Selected row 58 must be visible with the cursor indicator on both lines.
+	testui.AssertContainsAll(t, plain, selectedGutter+"T Closed issue 58", selectedGutter+"  P0 CLS tm-done-58")
 
-	// Skeleton row affordance must appear at the bottom of the visible window.
-	if !strings.Contains(plain, issuerow.SkeletonMetaGlyph) {
-		t.Errorf("expected skeleton row affordance in load-more state, got:\n%s", plain)
+	// Skeleton row affordance must appear at the bottom of the visible window,
+	// with every line of a row.
+	skeletonLines := 0
+	for _, line := range strings.Split(plain, "\n") {
+		if strings.Contains(line, issuerow.SkeletonMetaGlyph) && strings.Contains(line, issuerow.SkeletonGlyph) {
+			skeletonLines++
+		}
+	}
+	if skeletonLines != issuerow.Height {
+		t.Errorf("expected a %d-line skeleton row affordance in load-more state, got %d lines:\n%s", issuerow.Height, skeletonLines, plain)
 	}
 
 	// Rows before the scroll window must NOT be visible.
@@ -438,13 +471,14 @@ func TestRenderDoneDeepNavigation(t *testing.T) {
 		}
 	}
 
-	// Use a tall terminal (height=66 → innerHeight=63) so all 60 rows fit in
-	// the window without clipping; this lets the header show the exact count.
+	// Use a tall terminal (height=123 → innerHeight=120) so all 60 two-line
+	// rows fit in the window without clipping; this lets the header show the
+	// exact count.
 	state := State{
 		DashboardTitle: "Default",
 		FocusedColumn:  0,
 		Width:          80,
-		Height:         66,
+		Height:         123,
 		Columns: []Column{{
 			Title:        "Done",
 			Rows:         issues,
@@ -467,15 +501,9 @@ func TestRenderDoneDeepNavigation(t *testing.T) {
 		t.Errorf("expected no 'of M' suffix when TotalIsExact and all rows visible, got:\n%s", plain)
 	}
 
-	// Cursor must be visible at the selected row.
-	if !strings.Contains(plain, "›") {
-		t.Errorf("expected cursor indicator '›' visible, got:\n%s", plain)
-	}
-
-	// Row 58 (second from last) must be visible.
-	if !strings.Contains(plain, "tm-done-58") {
-		t.Errorf("expected issue tm-done-58 visible at selected row, got:\n%s", plain)
-	}
+	// Cursor must be visible on both lines of the selected row, 58 (second
+	// from last).
+	testui.AssertContainsAll(t, plain, selectedGutter+"T Closed issue 58", selectedGutter+"  P0 CLS tm-done-58")
 
 	testui.AssertMatchesGoldenStripANSI(t, []byte(rendered), "done_deep_navigation_w80.golden")
 }
@@ -491,14 +519,14 @@ func TestRenderDoneDeepNavigation(t *testing.T) {
 // the issue immediately ABOVE the intended window top leaked in.
 //
 // Layout: Height=10 -> columnHeight=9 -> innerHeight=7. With the error row
-// pinned, six issue rows fit. ScrollOffset=10 puts issues 10..15 in the window;
-// SelectedRow=15 is the last visible issue.
+// pinned, six lines are left: three two-line issues. ScrollOffset=13 puts
+// issues 13..15 in the window; SelectedRow=15 is the last visible issue.
 //
-//   - Buggy:  rows[10:17] -> issues 09..15, error row dropped.
-//   - Fixed:  [⚠ error] + issues 10..15.
+//   - Buggy:  the raw offset slices the error row off and shifts the window up.
+//   - Fixed:  [⚠ error] + issues 13..15.
 //
 // Discriminating assertions (fail if the fix is reverted): the pinned error row
-// is present (buggy slices it off) and off-window issue 09 is absent (buggy
+// is present (buggy slices it off) and off-window issue 12 is absent (buggy
 // leaks it via the one-row shift). The selected issue 15 is asserted present to
 // pin the intended bottom edge.
 func TestRenderErrorRowPinnedAboveScrolledWindow(t *testing.T) {
@@ -523,7 +551,7 @@ func TestRenderErrorRowPinnedAboveScrolledWindow(t *testing.T) {
 			Title:        "Done",
 			Rows:         issues,
 			SelectedRow:  15,
-			ScrollOffset: 10,
+			ScrollOffset: 13,
 			Error:        "taskmgr query timed out",
 			Total:        rowCount,
 			TotalIsExact: true,
@@ -538,15 +566,14 @@ func TestRenderErrorRowPinnedAboveScrolledWindow(t *testing.T) {
 		t.Errorf("expected pinned error row '⚠ load failed' alongside scrolled issues, got:\n%s", plain)
 	}
 
-	// (b) The selected issue (the last visible issue) must be present.
-	if !strings.Contains(plain, "marker 15") {
-		t.Errorf("expected selected issue 15 visible at the bottom edge, got:\n%s", plain)
-	}
+	// (b) The selected issue (the last visible issue) must be present, with
+	// both of its lines.
+	testui.AssertContainsAll(t, plain, selectedGutter+"T Issue marker 15", selectedGutter+"  P0 --- tm-15", "3 of 20")
 
-	// (c) Off-by-one leak: issue 09 sits one row above the intended window top.
+	// (c) Off-by-one leak: issue 12 sits one row above the intended window top.
 	// The fix keeps it out of view; the buggy raw-offset slice pulled it in.
-	if strings.Contains(plain, "marker 09") {
-		t.Errorf("issue 09 is above the scroll window and must not appear (one-row shift), got:\n%s", plain)
+	if strings.Contains(plain, "marker 12") || strings.Contains(plain, "tm-12") {
+		t.Errorf("issue 12 is above the scroll window and must not appear (one-row shift), got:\n%s", plain)
 	}
 
 	// Issue 16 is below the window and must never appear (bottom-edge sanity).

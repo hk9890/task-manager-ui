@@ -297,8 +297,9 @@ func (m *Model) SetSize(width, height int) {
 	m.clampScrollOffsets()
 }
 
-// sectionItemCapacity returns the number of issue rows that fit in a section
-// at the current terminal height.
+// sectionItemCapacity returns the number of content lines a section holds at
+// the current terminal height. An issue takes issuerow.Height of them; which
+// lines are issues is uiboard.EnsureVisible's and uiboard.MaxOffset's business.
 func (m *Model) sectionItemCapacity() int {
 	if m.height == 0 {
 		return 20 // safe default before first WindowSizeMsg
@@ -557,10 +558,10 @@ func (m *Model) clampScrollOffsets() {
 		// Pull the window back inside the list first. EnsureVisible only slides
 		// far enough to reveal the selected row, so on its own it would leave a
 		// shrunk column scrolled to its last row with the rows above it
-		// unreachable until the operator pressed k.
-		if maxOffset := len(m.columns[i].issues) - capacity; m.scrollOffset[i] > maxOffset {
-			m.scrollOffset[i] = max(maxOffset, 0)
-		}
+		// unreachable until the operator pressed k. MaxOffset counts the lines
+		// the renderer draws: a bound counted in issues against a capacity in
+		// lines pulls back a window that is still full.
+		m.scrollOffset[i] = min(m.scrollOffset[i], uiboard.MaxOffset(m.uiColumn(i, row), capacity, m.now()))
 		m.scrollOffset[i] = uiboard.EnsureVisible(m.uiColumn(i, row), capacity, m.now())
 	}
 }

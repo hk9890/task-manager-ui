@@ -2,6 +2,7 @@ package detail
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func TestRenderMinimalGolden(t *testing.T) {
@@ -147,10 +149,10 @@ func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 		Width:                  100,
 	})
 
-	// The movable cursor row uses the app-wide "› " selection prefix.
+	// The movable cursor row uses the app-wide selection prefix.
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "› ") {
-		t.Fatalf("expected cursor row to carry the › selection prefix, got:\n%s", plain)
+	if !strings.Contains(plain, selectionGutter()) {
+		t.Fatalf("expected cursor row to carry the %q selection prefix, got:\n%s", selectionGutter(), plain)
 	}
 	if !strings.Contains(plain, "tm-9") {
 		t.Fatalf("expected cursor issue tm-9 to appear in deps pane, got:\n%s", plain)
@@ -1148,7 +1150,7 @@ func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
 		lipgloss.SetColorProfile(previousProfile)
 	})
 
-	const phase = 0 // shade[0]: dark=#454545 → RGB(69,69,69)
+	const phase = 0
 
 	view := Render(State{
 		SelectionID:   "tm-9",
@@ -1173,9 +1175,13 @@ func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
 		t.Fatalf("stale detail title not visible (ANSI-stripped), got:\n%s", plain)
 	}
 
-	// Faint+Foreground(SkeletonShades[0]) dark-theme: "\x1b[2;38;2;69;69;69m"
-	// Assert the foreground ANSI sequence is present (faint prefix may vary).
-	const wantANSI = "38;2;69;69;69"
+	// Faint+Foreground(SkeletonShades[phase]): render a sentinel in that style
+	// and take the escape before it.
+	const sentinel = "\x00"
+	wantANSI, _, _ := strings.Cut(lipgloss.NewStyle().Faint(true).Foreground(styles.SkeletonShades[phase]).Render(sentinel), sentinel)
+	if wantANSI == "" {
+		t.Fatal("expected the skeleton shade to render an ANSI sequence")
+	}
 	if !strings.Contains(view, wantANSI) {
 		t.Fatalf("expected dim ANSI sequence %q in refresh detail view, got:\n%s", wantANSI, view)
 	}
@@ -1449,12 +1455,12 @@ func TestRenderChildrenGroupGolden(t *testing.T) {
 // --- Browser-panel cursor golden assertions ---
 //
 // The browser panel has exactly one marker: the movable cursor, rendered with the
-// app-wide "› " selection prefix (identical to board/search/metadata). The
+// app-wide selection prefix (identical to board/search/metadata). The
 // currently-viewed issue is excluded from the panel entirely (see the model's
 // browserItemsFromDependencies), so there is no second "subject" marker.
 
 // TestRenderCursorRowUsesSelectionPrefixGolden: when BrowserSelectedIssueID is set,
-// the cursor row carries the app-wide "› " selection prefix and idle rows carry the
+// the cursor row carries the app-wide selection prefix and idle rows carry the
 // blank gutter.
 func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 	// Pin the color profile so the golden is deterministic regardless of other
@@ -1482,15 +1488,15 @@ func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 
 	testui.AssertMatchesGolden(t, []byte(view), "cursor_row_selection_prefix_w2col.golden")
 
-	// The cursor row must carry the › selection prefix.
+	// The cursor row, and only it, must carry the selection prefix.
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	if !strings.Contains(plain, "›") {
-		t.Errorf("expected cursor row to carry the › selection prefix, got:\n%s", plain)
+	if got := strings.Count(plain, selectionGutter()+"T P2 O"); got != 1 {
+		t.Errorf("expected the cursor row alone to carry the %q selection prefix, got %d:\n%s", selectionGutter(), got, plain)
 	}
 }
 
 // TestRenderEpicChildrenCursorPrefixGolden: opening an epic renders its Children
-// group; the cursor row carries the "› " prefix, the epic itself appears only in the
+// group; the cursor row carries the selection prefix, the epic itself appears only in the
 // Content pane (never in the deps pane), and no second marker exists.
 func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 	// Pin the color profile so the golden is deterministic regardless of other
@@ -1512,7 +1518,7 @@ func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 			{ID: "tm-child1", Title: "Child task one"},
 			{ID: "tm-child2", Title: "Child task two"},
 		},
-		BrowserSelectedIssueID: "tm-child1", // cursor on child1 → carries ›
+		BrowserSelectedIssueID: "tm-child1", // cursor on child1 → carries the prefix
 		Width:                  InspectorThreeColumnMinWidth,
 		Height:                 18,
 	})
@@ -1520,9 +1526,9 @@ func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 	testui.AssertMatchesGolden(t, []byte(view), "epic_children_cursor_w3col.golden")
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	// The cursor row (tm-child1) must carry the › selection prefix.
-	if !strings.Contains(plain, "›") {
-		t.Errorf("expected cursor row (tm-child1) to carry the › selection prefix, got:\n%s", plain)
+	// The cursor row (tm-child1) must carry the selection prefix.
+	if !strings.Contains(plain, selectionGutter()) {
+		t.Errorf("expected cursor row (tm-child1) to carry the %q selection prefix, got:\n%s", selectionGutter(), plain)
 	}
 	// The epic ID must appear in the Content pane (title/summary line).
 	if !strings.Contains(plain, "tm-epic") {
@@ -1575,7 +1581,7 @@ func TestContentBodySkeletonIsProseNotBoardRows(t *testing.T) {
 				t.Errorf("prose skeleton has no blank lines — expected at least one blank-line gap between prose blocks; lines:\n%v", proseLines)
 			}
 
-			// AC: no prose skeleton line must equal the corresponding
+			// AC: no prose skeleton line must equal a line of the corresponding
 			// issuerow.RenderCompactSkeleton output (board-row shape).
 			for i, line := range proseLines {
 				boardRow := issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
@@ -1584,12 +1590,53 @@ func TestContentBodySkeletonIsProseNotBoardRows(t *testing.T) {
 					Phase:  phase,
 					Styled: true,
 				})
-				if line == boardRow {
+				if slices.Contains(boardRow, line) {
 					t.Errorf("prose skeleton line %d equals board-row skeleton shape — Content body must not look like board rows; line=%q", i, line)
 				}
 			}
 		})
 	}
+}
+
+// TestRelationSkeletonKeepsOneLineAGroup holds the relation pane's cold start
+// to the height it has once loaded: an issue row is two lines elsewhere, and a
+// relation, loading or loaded, keeps to one.
+func TestRelationSkeletonKeepsOneLineAGroup(t *testing.T) {
+	t.Parallel()
+
+	const width = 30
+	groups := []relationshipGroup{{Label: "Blocked by"}, {Label: "Blocks"}, {Label: "Related"}, {Label: "Children"}}
+
+	skeleton := renderRelationshipGroups(groups, refMarks{}, width, true, 0)
+	loaded := renderRelationshipGroups(groups, refMarks{}, width, false, 0)
+	if len(skeleton) != len(loaded) {
+		t.Fatalf("the skeleton is %d lines, the loaded pane with no relations %d:\n%s", len(skeleton), len(loaded), strings.Join(skeleton, "\n"))
+	}
+
+	bars := 0
+	for idx, line := range skeleton {
+		if got := lipgloss.Width(line); got > width {
+			t.Errorf("skeleton line %d is %d cells wide, want at most %d: %q", idx, got, width, line)
+		}
+		// A group is its label, then one placeholder line where "(none)" or
+		// its first relation goes.
+		if loaded[idx] == "(none)" {
+			bars++
+			if !strings.Contains(line, issuerow.SkeletonGlyph) || lipgloss.Width(line) != width {
+				t.Errorf("skeleton line %d is not a full-width placeholder: %q", idx, line)
+			}
+		}
+	}
+	if bars != len(groups) {
+		t.Fatalf("expected one placeholder line a group, got %d for %d groups", bars, len(groups))
+	}
+}
+
+// selectionGutter is the gutter of a selected row, as the applied glyph set
+// draws it.
+func selectionGutter() string {
+	plain, _ := styles.SelectionPrefix(true, false)
+	return plain
 }
 
 // TestMaxScrollOffsetsReportsPaneInnerHeights pins the geometry the controller

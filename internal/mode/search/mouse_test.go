@@ -55,11 +55,12 @@ func TestClickFocusesThePaneAndSelectsTheResult(t *testing.T) {
 		t.Fatalf("fixture starts on focus %d row %d, want the query box and row 0", m.focus, m.selectedRow)
 	}
 
-	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "tm-3 hit-three", 0))
+	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "T hit-three", 0))
 	if m.focus != uisearch.FocusResults || m.selectedRow != 2 || cmd == nil || opensDetail(cmd) {
 		t.Fatalf("first click: focus %d row %d cmd %v; want the results pane, row 2 and Detail not opened", m.focus, m.selectedRow, cmd != nil)
 	}
-	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "tm-3 hit-three", 200)); !opensDetail(cmd) {
+	// The second click lands on the result's other line: both are that result.
+	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "  P0 OPN tm-3", 200)); !opensDetail(cmd) {
 		t.Fatal("a second click on the same result did not open Detail")
 	}
 
@@ -79,10 +80,10 @@ func TestWheelOverTheResultsMovesTheSelection(t *testing.T) {
 
 	m := mouseSearch(t, "hit-one", "hit-two")
 
-	if cmd := m.Update(mouseAt(t, m, mode.MouseWheelDown, "tm-1 hit-one", 0)); cmd == nil || m.selectedRow != 1 {
+	if cmd := m.Update(mouseAt(t, m, mode.MouseWheelDown, "T hit-one", 0)); cmd == nil || m.selectedRow != 1 {
 		t.Fatalf("wheel down left the selection on row %d, want row 1", m.selectedRow)
 	}
-	if cmd := m.Update(mouseAt(t, m, mode.MouseWheelDown, "tm-1 hit-one", 10)); cmd != nil || m.selectedRow != 1 {
+	if cmd := m.Update(mouseAt(t, m, mode.MouseWheelDown, "  P0 OPN tm-1", 10)); cmd != nil || m.selectedRow != 1 {
 		t.Fatal("a notch past the last result moved the selection or reported a change")
 	}
 	if cmd := m.Update(mouseAt(t, m, mode.MouseWheelUp, "Content ─", 20)); cmd != nil || m.selectedRow != 1 {
@@ -112,12 +113,21 @@ func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
 	m := mouseSearch(t, "hit-one", "hit-two")
 	idle := m.View(0)
 
-	_ = m.Update(mouseAt(t, m, mode.MouseMove, "tm-2 hit-two", 0))
+	_ = m.Update(mouseAt(t, m, mode.MouseMove, "T hit-two", 0))
 	if m.selectedRow != 0 || m.focus != uisearch.FocusQuery {
 		t.Fatal("moving the pointer changed the selection or the focus")
 	}
-	if m.View(0) == idle {
+	hovered := m.View(0)
+	if hovered == idle {
 		t.Fatal("the result under the pointer was not marked")
+	}
+	if title, id := testui.RowBand(t, hovered, "hit-two"), testui.RowBand(t, hovered, "tm-2"); title == "" || title != id {
+		t.Fatalf("hover bands: title line %q, ID line %q; want one band on both lines of the result", title, id)
+	}
+
+	_ = m.Update(mouseAt(t, m, mode.MouseMove, "  P0 OPN tm-2", 10))
+	if m.View(0) != hovered {
+		t.Fatal("the pointer on the result's second line marked something else")
 	}
 
 	_ = m.Update(mode.MouseMsg{Kind: mode.MouseLeave})
