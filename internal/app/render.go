@@ -27,6 +27,11 @@ func (m Model) View() string {
 		return ""
 	}
 
+	// A drag selects text on the screen as it was when the drag began.
+	if m.sel.active {
+		return m.sel.view()
+	}
+
 	if m.fatalErrTitle != "" {
 		return fatalerror.Render(fatalerror.State{
 			Title:  m.fatalErrTitle,
@@ -399,7 +404,8 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		"  click = select a row, switch to a tab, or focus a pane",
 		"  second click on a row = open it",
 		"  wheel = move the selection, or scroll detail text and this help",
-		"  shift+drag = select text with the terminal",
+		"  drag = select a box of text; letting go copies it",
+		"  shift+drag = select text with the terminal instead",
 		"",
 		"Detail presentation model (v1): dedicated detail mode",
 		"  - Board/Search prioritize overview triage density",

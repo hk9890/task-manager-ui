@@ -145,8 +145,18 @@ type ReferenceRenderConfig struct {
 }
 
 // RenderCompact renders one compact issue row with shared metadata semantics.
+// A styled row that is selected or under the pointer carries its band across
+// the whole width.
 func RenderCompact(config RenderConfig) string {
-	prefixPlain, prefixStyled := styles.RowPrefix(config.Selected, config.Hovered, config.Styled)
+	row := renderCompact(config)
+	if !config.Styled {
+		return row
+	}
+	return styles.RowHighlight(row, config.Width, config.Selected, config.Hovered)
+}
+
+func renderCompact(config RenderConfig) string {
+	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
 
 	title := strings.TrimSpace(config.Issue.Title)
 	if title == "" {
@@ -186,9 +196,18 @@ func RenderCompact(config RenderConfig) string {
 	return prefixStyled + content
 }
 
-// RenderReferenceCompact renders a one-line compact row for related issues.
+// RenderReferenceCompact renders a one-line compact row for related issues,
+// with the same band as RenderCompact.
 func RenderReferenceCompact(config ReferenceRenderConfig) string {
-	prefixPlain, prefixStyled := styles.RowPrefix(config.Selected, config.Hovered, config.Styled)
+	row := renderReferenceCompact(config)
+	if !config.Styled {
+		return row
+	}
+	return styles.RowHighlight(row, config.Width, config.Selected, config.Hovered)
+}
+
+func renderReferenceCompact(config ReferenceRenderConfig) string {
+	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
 
 	title := strings.TrimSpace(config.Issue.Title)
 	if title == "" {

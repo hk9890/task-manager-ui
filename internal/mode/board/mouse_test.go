@@ -173,11 +173,11 @@ func TestWheelMovesTheSelectionOfTheFocusedColumn(t *testing.T) {
 	}
 }
 
-// TestHoverFollowsThePointerAndClearsWhenItLeaves checks the hover chevron is
+// TestHoverFollowsThePointerAndClearsWhenItLeaves checks the hover band is
 // drawn on the row under the pointer and nowhere once the pointer is gone. The
-// selection sits in the other column, so the only chevron there is the hover's.
+// selection sits in the other column, so the band there is the hover's, not the selection's.
 func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
-	t.Parallel()
+	testui.ForceTrueColor(t)
 
 	m := mouseBoard(t)
 	idle := m.View(0)
@@ -189,13 +189,13 @@ func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
 		t.Fatal("moving the pointer changed the selection")
 	}
 	hovered := m.View(0)
-	_, wantY := testui.FindCell(t, hovered, "progress-three")
-	if x, y := testui.FindCell(t, hovered, "› B"); y != wantY {
-		t.Fatalf("hover chevron drawn at (%d,%d), want row %d", x, y, wantY)
+	band, selected := testui.RowBand(t, hovered, "progress-three"), testui.RowBand(t, hovered, "ready-one")
+	if band == "" || band == selected {
+		t.Fatalf("the row under the pointer carries the band %q, want one that is not the selection's %q", band, selected)
 	}
 
 	_ = m.Update(mode.MouseMsg{Kind: mode.MouseLeave})
 	if m.View(0) != idle {
-		t.Fatal("the hover chevron stayed after the pointer left")
+		t.Fatal("the hover band stayed after the pointer left")
 	}
 }

@@ -23,7 +23,9 @@ shell. Every other package is pure.
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
   (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
 - Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tab strip and
-  the modal buttons carry focus on a background instead, each with its own `Focus` role.
+  the modal buttons carry focus on a background instead, each with its own `Focus` role. A row's
+  background is not focus: it is the selection or the pointer (`RowSelectedBgColor`,
+  `RowHoverBgColor`).
 
 ## The issue vocabulary
 
@@ -134,6 +136,11 @@ with the active store's name and keeps it until only the surface name still fits
 - Take the gutter from `styles.SelectionPrefix(selected, styled)`. It returns both variants: use
   `plain` for width math and truncation, `rendered` for output. Deriving one from the other by
   stripping escapes is what the two return values exist to prevent.
+- A selected row also carries a band: `styles.RowHighlight(row, width, selected, hovered)` lays
+  `RowSelectedBgColor` under the whole row, or the quieter `RowHoverBgColor` under the row the
+  pointer is on, and the selection's on a row that is both. `issuerow` applies it; a list that
+  renders its own rows calls it on the finished row, as `ui/storepicker` does. The chevron stays
+  with it: a terminal without colour draws no band.
 - A move that changes the selection calls `scroll.EnsureVisible(offset, sel, window)` — or
   `scroll.EnsureVisibleClipped(offset, sel, window, total)` when the pane spends its first and last
   rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The `›` chevron staying on
@@ -172,13 +179,13 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - The wheel moves a list's selection one row a notch — on the board the focused column's, for the
   same re-centring reason — and scrolls a pane of text.
 - Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
-  scrolls or reloads under a still pointer is the one marked. Draw it with
-  `styles.RowPrefix(selected, hovered, styled)`: the selection's glyph in `HoverIndicatorColor`,
-  and the selection's own gutter when a row is both. A hovered tab takes `ShellTabHoverColor`.
-- The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select.
-  Shift+drag is the documented way to select text
-  ([user-guide/key-bindings.md](user-guide/key-bindings.md#mouse)); drag selection is not
-  reimplemented.
+  scrolls or reloads under a still pointer is the one marked. It draws as the quieter row band
+  (Selection and scrolling); a hovered tab takes `ShellTabHoverColor`.
+- The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
+  the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
+  reverse-video box over the screen as it was when the drag began, and the release copies the box
+  with OSC 52 and says so in a toast. While the box is up every other mouse event and every key
+  but Escape and quit is dropped — each would change the screen the box stands over.
 
 ## Overlays
 

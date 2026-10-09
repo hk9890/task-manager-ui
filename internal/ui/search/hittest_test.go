@@ -119,14 +119,18 @@ func TestHitTestIgnoresRowsThatAreNotResults(t *testing.T) {
 	}
 }
 
-func TestRenderMarksTheHoveredResult(t *testing.T) {
-	t.Parallel()
+func TestRenderBandsTheSelectedAndTheHoveredResult(t *testing.T) {
+	testui.ForceTrueColor(t)
 
 	state := hitTestState(160, 24)
-	state.SelectedID = ""
-	_, y := testui.FindCell(t, Render(state), "hit-03")
 	state.Hover = &Hit{Pane: FocusResults, Row: 3}
-	if _, hoverY := testui.FindCell(t, Render(state), "›"); hoverY != y {
-		t.Fatalf("hover chevron drawn on row %d, want row %d", hoverY, y)
+	view := Render(state)
+
+	selected, hovered := testui.RowBand(t, view, "hit-00"), testui.RowBand(t, view, "hit-03")
+	if selected == "" || hovered == "" || selected == hovered {
+		t.Fatalf("bands: selected %q, hovered %q; want two different backgrounds", selected, hovered)
+	}
+	if plain := testui.RowBand(t, view, "hit-02"); plain != "" {
+		t.Fatalf("a plain result carries the band %q", plain)
 	}
 }

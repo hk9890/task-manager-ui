@@ -72,7 +72,7 @@ type State struct {
 	SkeletonPhase int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
 
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
-	// pointer is elsewhere. Its result row draws the hover chevron.
+	// pointer is elsewhere. Its result row draws the hover band.
 	Hover *Hit
 }
 

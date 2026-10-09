@@ -100,7 +100,7 @@ func TestWheelScrollsTheTextPanesAndMovesTheDependencyCursor(t *testing.T) {
 }
 
 func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
-	t.Parallel()
+	testui.ForceTrueColor(t)
 
 	m := mouseDetail(t)
 	idle := m.View(mouseWidth, mouseHeight, false, 0)
@@ -116,6 +116,6 @@ func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
 
 	m.HandleMouse(mode.MouseMsg{Kind: mode.MouseLeave}, mouseWidth, mouseHeight)
 	if m.View(mouseWidth, mouseHeight, false, 0) != idle {
-		t.Fatal("the hover chevron stayed after the pointer left")
+		t.Fatal("the hover band stayed after the pointer left")
 	}
 }

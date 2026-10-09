@@ -38,8 +38,8 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 	if !strings.Contains(line, "›") {
 		t.Fatalf("expected selected-row indicator, got: %q", line)
 	}
-	if strings.Contains(line, "\x1b[48;") {
-		t.Fatalf("expected no full-row background fill, got: %q", line)
+	if !strings.HasPrefix(line, "\x1b[48;") || lipgloss.Width(line) != 72 {
+		t.Fatalf("expected the selection band across the whole 72-cell row, got: %q", line)
 	}
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(line, "")

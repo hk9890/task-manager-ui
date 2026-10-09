@@ -55,7 +55,7 @@ type State struct {
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
-	// pointer is elsewhere. Its reference row draws the hover chevron.
+	// pointer is elsewhere. Its reference row draws the hover band.
 	Hover *Hit
 }
 

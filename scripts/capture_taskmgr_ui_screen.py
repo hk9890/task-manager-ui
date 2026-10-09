@@ -100,7 +100,8 @@ def feed_mouse(fd: int, spec: str) -> None:
     spec is <action>:<col>:<row>, the cell counted from 0 as the rendered
     screen is. A click is a press and its release.
     """
-    buttons = {"click": 0, "move": 35, "wheel-up": 64, "wheel-down": 65}
+    # press, drag and release are the three parts of a drag of the left button.
+    buttons = {"click": 0, "press": 0, "drag": 32, "release": 0, "move": 35, "wheel-up": 64, "wheel-down": 65}
     parts = spec.split(":")
     if len(parts) != 3 or parts[0] not in buttons or not parts[1].isdigit() or not parts[2].isdigit():
         raise ValueError(
@@ -108,7 +109,8 @@ def feed_mouse(fd: int, spec: str) -> None:
             f"with an action in {sorted(buttons)}"
         )
     action, col, row = parts[0], int(parts[1]) + 1, int(parts[2]) + 1
-    data = f"{ESC}[<{buttons[action]};{col};{row}M"
+    final = "m" if action == "release" else "M"
+    data = f"{ESC}[<{buttons[action]};{col};{row}{final}"
     if action == "click":
         data += f"{ESC}[<0;{col};{row}m"
     os.write(fd, data.encode())

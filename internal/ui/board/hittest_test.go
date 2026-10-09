@@ -147,23 +147,28 @@ func TestHitTestIgnoresSkeletonRows(t *testing.T) {
 	}
 }
 
-// TestRenderMarksTheHoveredRow pins the hover chevron: on the hovered row, in
-// its own colour role, and never in place of the selection's.
-func TestRenderMarksTheHoveredRow(t *testing.T) {
-	t.Parallel()
+// TestRenderBandsTheSelectedAndTheHoveredRow pins the two row bands: the
+// selected row's, a different one on the row under the pointer, none on any
+// other row, and the selection's on a row that is both.
+func TestRenderBandsTheSelectedAndTheHoveredRow(t *testing.T) {
+	testui.ForceTrueColor(t)
 
 	state := hitTestState(200, 24)
-	x, y := testui.FindCell(t, Render(state), "aa-issue-02")
+	state.Columns[1].SelectedRow = 0
 	state.Hover = &Hit{Column: 0, Row: 2}
-	if hoverX, hoverY := testui.FindCell(t, Render(state), "›"); hoverY != y || hoverX >= x {
-		t.Fatalf("hover chevron drawn at (%d,%d), want on row %d left of column %d", hoverX, hoverY, y, x)
+	view := Render(state)
+
+	selected := testui.RowBand(t, view, "bb-issue-00")
+	hovered := testui.RowBand(t, view, "aa-issue-02")
+	if selected == "" || hovered == "" || selected == hovered {
+		t.Fatalf("bands: selected %q, hovered %q; want two different backgrounds", selected, hovered)
+	}
+	if plain := testui.RowBand(t, view, "aa-issue-01"); plain != "" {
+		t.Fatalf("a row that is neither selected nor hovered carries the band %q", plain)
 	}
 
-	state.Columns[1].SelectedRow = 0
-	state.Hover = nil
-	selected := Render(state)
 	state.Hover = &Hit{Column: 1, Row: 0}
-	if Render(state) != selected {
-		t.Fatal("hovering the selected row changed the frame; the selection chevron must win")
+	if both := testui.RowBand(t, Render(state), "bb-issue-00"); both != selected {
+		t.Fatalf("a selected row under the pointer carries %q, want the selection's %q", both, selected)
 	}
 }

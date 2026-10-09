@@ -27,6 +27,8 @@ import (
 func newMouseShell(t *testing.T) Model {
 	t.Helper()
 	withModelNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC))
+	// The row bands are backgrounds, which only a colour profile draws.
+	testui.ForceTrueColor(t)
 
 	gw := fakes.NewTracked()
 	seedReady(gw, "tm-1", "ready-first", "task", 1)
@@ -210,8 +212,8 @@ func TestHoverLightsTheTabAndTheRowUnderThePointer(t *testing.T) {
 		t.Fatal("moving the pointer changed the selection")
 	}
 	hovered := m.View()
-	if _, y := testui.FindCell(t, hovered, "› T P2"); y != rowY {
-		t.Fatalf("hover chevron drawn on screen row %d, want row %d", y, rowY)
+	if testui.RowBand(t, hovered, "progress-second") == "" {
+		t.Fatalf("the row on screen row %d under the pointer carries no band", rowY)
 	}
 
 	// The footer is neither a tab nor a row.
@@ -255,7 +257,7 @@ func TestAnOverlayKeepsTheMouseFromTheSurfaceBelow(t *testing.T) {
 		}
 
 		m.showHelp, m.showActionModal = false, false
-		if strings.Contains(m.View(), "› T P2") {
+		if testui.RowBand(t, m.View(), "progress-second") != "" {
 			t.Errorf("%s: a row under the overlay was lit by the pointer", name)
 		}
 	}
@@ -332,7 +334,7 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 
 	x, y := testui.FindCell(t, m.View(), "progress-second")
 	m = send(t, m, pointerMove(x, y))
-	if !strings.Contains(m.View(), "› T P2") {
+	if testui.RowBand(t, m.View(), "progress-second") == "" {
 		t.Fatal("fixture: the row under the pointer is not lit")
 	}
 
@@ -342,7 +344,7 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 	}
 	m = send(t, m, pointerMove(x, y+3))
 	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-	if m.active != mode.Board || strings.Contains(m.View(), "› T P2") {
+	if m.active != mode.Board || testui.RowBand(t, m.View(), "progress-second") != "" {
 		t.Fatalf("back on %q a row is lit under a cell the pointer left", m.active)
 	}
 

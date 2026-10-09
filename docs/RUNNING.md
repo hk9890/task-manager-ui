@@ -61,7 +61,7 @@ a sleep guesses:
 | Step | Waits for |
 |---|---|
 | `send-key:<KEY>` | nothing; sends the key |
-| `send-mouse:<ACTION>:<COL>:<ROW>` | nothing; sends `click`, `move`, `wheel-up` or `wheel-down` at that cell, counted from 0 as the checkpoint screens are. Two `click` steps in a row are a double click. Fails with `mouse reporting is off` when the app has not asked the terminal for the mouse, as a real terminal would then send nothing |
+| `send-mouse:<ACTION>:<COL>:<ROW>` | nothing; sends `click`, `move`, `wheel-up`, `wheel-down`, or one part of a drag — `press`, `drag`, `release` — at that cell, counted from 0 as the checkpoint screens are. Two `click` steps in a row are a double click. Fails with `mouse reporting is off` when the app has not asked the terminal for the mouse, as a real terminal would then send nothing |
 | `wait-for-text:<TEXT>[:timeout-ms]` | `TEXT` to appear on the rendered screen |
 | `wait-for-text-once:<TEXT>[:timeout-ms]` | `TEXT` anywhere in the output stream since this step began — the verb for text already overwritten, such as a toast (they dismiss after 3s) |
 | `wait-for-no-text:<TEXT>[:timeout-ms]` | `TEXT` to disappear from the rendered screen |

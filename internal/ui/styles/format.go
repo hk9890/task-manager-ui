@@ -1,5 +1,11 @@
 package styles
 
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
 const (
 	selectionSelectedPrefix = "› "
 	selectionIdlePrefix     = "  "
@@ -20,15 +26,35 @@ func SelectionPrefix(selected, styled bool) (plain string, rendered string) {
 	return selectionSelectedPrefix, selectionSelectedPrefix
 }
 
-// RowPrefix is the gutter of a row that can be both selected and under the
-// pointer. Selection wins: the hover chevron marks where a click would move the
-// selection to, and it is already there.
-func RowPrefix(selected, hovered, styled bool) (plain string, rendered string) {
-	if selected || !hovered {
-		return SelectionPrefix(selected, styled)
+// sgrReset is what Lip Gloss ends every styled run with.
+const sgrReset = "\x1b[0m"
+
+// RowHighlight lays the selection's or the hover's background under a rendered
+// row and pads it to width, so the band spans the row instead of ending at its
+// last character. Two rows can be lit at once — the one the keys act on and
+// the one the pointer is over — so the hover is a step quieter, and the
+// selection wins on a row that is both.
+//
+// The row arrives as separately styled runs, each ending in a reset that would
+// cut the band. The background is put back after every reset rather than
+// threaded through each run's style, so a renderer stays unaware of it.
+func RowHighlight(row string, width int, selected, hovered bool) string {
+	color := RowHoverBgColor
+	switch {
+	case selected:
+		color = RowSelectedBgColor
+	case !hovered:
+		return row
 	}
-	if styled {
-		return selectionSelectedPrefix, HoverIndicatorStyle.Render("›") + " "
+
+	// Lip Gloss writes the sequence for the active colour profile, and nothing
+	// at all on a terminal without colour.
+	on, _, _ := strings.Cut(lipgloss.NewStyle().Background(color).Render("x"), "x")
+	if on == "" {
+		return row
 	}
-	return selectionSelectedPrefix, selectionSelectedPrefix
+	if gap := width - lipgloss.Width(row); gap > 0 {
+		row += strings.Repeat(" ", gap)
+	}
+	return on + strings.ReplaceAll(row, sgrReset, sgrReset+on) + sgrReset
 }

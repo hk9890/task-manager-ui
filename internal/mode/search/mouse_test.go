@@ -107,7 +107,7 @@ func TestClickWithoutResultsKeepsFocusOnTheQuery(t *testing.T) {
 }
 
 func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
-	t.Parallel()
+	testui.ForceTrueColor(t)
 
 	m := mouseSearch(t, "hit-one", "hit-two")
 	idle := m.View(0)
@@ -122,6 +122,6 @@ func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
 
 	_ = m.Update(mode.MouseMsg{Kind: mode.MouseLeave})
 	if m.View(0) != idle {
-		t.Fatal("the hover chevron stayed after the pointer left")
+		t.Fatal("the hover band stayed after the pointer left")
 	}
 }

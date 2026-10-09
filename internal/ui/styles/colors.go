@@ -35,10 +35,11 @@ var (
 	ShellContextColor       = TextMutedColor
 	ShellFooterHelpColor    = TextMutedColor
 
-	// HoverIndicatorColor is the gutter chevron on the row under the pointer:
-	// the selection's glyph in a quieter colour, because a click there is what
-	// makes it the selection.
-	HoverIndicatorColor = TextSecondaryColor
+	// Row bands. The selected row and the row under the pointer each carry a
+	// background across their whole width; the hover's is a step quieter, so
+	// which of two lit rows Enter means reads at a glance.
+	RowSelectedBgColor = lipgloss.AdaptiveColor{Light: "#C9DBF5", Dark: "#2B3A55"}
+	RowHoverBgColor    = lipgloss.AdaptiveColor{Light: "#E6E9EE", Dark: "#2A2D34"}
 
 	// Border and overlay colors.
 	BorderDefaultColor        = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#696969"}
@@ -94,7 +95,6 @@ var (
 	baseButtonStyle = lipgloss.NewStyle().Padding(0, 2).Bold(true)
 
 	SelectionIndicatorStyle = lipgloss.NewStyle().Bold(true).Foreground(BorderHighlightFocusColor)
-	HoverIndicatorStyle     = lipgloss.NewStyle().Foreground(HoverIndicatorColor)
 	IssueIDMutedStyle       = lipgloss.NewStyle().Foreground(TextSecondaryColor)
 
 	IssuePriorityP0Style     = lipgloss.NewStyle().Foreground(IssuePriorityP0Color).Bold(true)

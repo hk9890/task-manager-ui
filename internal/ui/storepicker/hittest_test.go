@@ -85,14 +85,25 @@ func TestHitTestReportsNothingOffTheRows(t *testing.T) {
 	}
 }
 
-func TestRenderMarksTheHoveredRow(t *testing.T) {
-	t.Parallel()
+func TestRenderBandsTheSelectedAndTheHoveredRow(t *testing.T) {
+	testui.ForceTrueColor(t)
 
 	state := hitTestState(24)
-	_, y := testui.FindCell(t, Render(state), "store-04")
+	state.SelectedRow = 3
 	hover := 6
 	state.Hover = &hover
-	if _, hoverY := testui.FindCell(t, Render(state), "›"); hoverY != y {
-		t.Fatalf("hover chevron drawn on row %d, want row %d", hoverY, y)
+	view := Render(state)
+
+	selected, hovered := testui.RowBand(t, view, "store-01"), testui.RowBand(t, view, "store-04")
+	if selected == "" || hovered == "" || selected == hovered {
+		t.Fatalf("bands: selected %q, hovered %q; want two different backgrounds", selected, hovered)
+	}
+	if plain := testui.RowBand(t, view, "store-02"); plain != "" {
+		t.Fatalf("a plain row carries the band %q", plain)
+	}
+	// An action row is a row too.
+	hover = 0
+	if band := testui.RowBand(t, Render(state), "create-local"); band != hovered {
+		t.Fatalf("a hovered action row carries %q, want the hover band %q", band, hovered)
 	}
 }

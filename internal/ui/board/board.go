@@ -68,7 +68,7 @@ type State struct {
 	// Now is the instant the age markers measure against.
 	Now time.Time
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
-	// pointer is elsewhere. Its row draws the hover chevron.
+	// pointer is elsewhere. Its row draws the hover band.
 	Hover *Hit
 }
 

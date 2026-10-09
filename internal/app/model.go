@@ -76,6 +76,13 @@ type Model struct {
 	// hoverTab is the header tab under the pointer, or "".
 	hoverTab mode.ID
 
+	// press is where the left button went down, until it comes up; sel is the
+	// box a drag from there selects (textselect.go). copyText puts a finished
+	// selection on the clipboard; tests replace it.
+	press    *screenCell
+	sel      textSelection
+	copyText func(string) tea.Cmd
+
 	selectedByMode map[mode.ID]*mode.Selection
 
 	// drillSelection is the issue Detail drilled into from its Dependencies
@@ -212,6 +219,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleRefreshTick:  defaultScheduleRefreshTick,
 		scheduleToastDismiss: defaultScheduleToastDismiss,
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
+		copyText:             copyToClipboard,
 	}
 	m.bindStore(services)
 	m.storePicker.SetCreateTarget(runtime.StorelessDir)
@@ -507,7 +515,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if mouse, ok := msg.(tea.MouseMsg); ok {
-		return m.handleMouse(mouse)
+		next, cmd, handled := m.mouseHeld(mouse)
+		if handled {
+			return next, cmd
+		}
+		return next.handleMouse(mouse)
+	}
+	if key, ok := msg.(tea.KeyMsg); ok && m.sel.active {
+		return m.selectingKey(key)
 	}
 
 	modeCmd := tea.Cmd(nil)

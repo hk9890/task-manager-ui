@@ -164,13 +164,19 @@ func TestHitTestIsOffWhereRenderDrawsNoPanes(t *testing.T) {
 	}
 }
 
-func TestRenderMarksTheHoveredReference(t *testing.T) {
-	t.Parallel()
+func TestRenderBandsTheCursorAndTheHoveredReference(t *testing.T) {
+	testui.ForceTrueColor(t)
 
 	state := hitTestState(160, 70)
-	_, y := testui.FindCell(t, Render(state), "ch-ref-04")
+	state.BrowserSelectedIssueID = "tm-ch01"
 	state.Hover = &Hit{Pane: FocusPaneDependencies, RefID: "tm-ch04"}
-	if _, hoverY := testui.FindCell(t, Render(state), "›"); hoverY != y {
-		t.Fatalf("hover chevron drawn on row %d, want row %d", hoverY, y)
+	view := Render(state)
+
+	cursor, hovered := testui.RowBand(t, view, "ch-ref-01"), testui.RowBand(t, view, "ch-ref-04")
+	if cursor == "" || hovered == "" || cursor == hovered {
+		t.Fatalf("bands: cursor %q, hovered %q; want two different backgrounds", cursor, hovered)
+	}
+	if plain := testui.RowBand(t, view, "ch-ref-02"); plain != "" {
+		t.Fatalf("a plain reference carries the band %q", plain)
 	}
 }

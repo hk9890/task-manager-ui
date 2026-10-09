@@ -69,7 +69,7 @@ type State struct {
 	Width        int
 	Height       int
 	// Hover is the index of the row under the pointer, as HitTest reported it;
-	// nil when the pointer is elsewhere. That row draws the hover chevron.
+	// nil when the pointer is elsewhere. That row draws the hover band.
 	Hover *int
 }
 
@@ -224,7 +224,8 @@ func renderRows(state State, innerWidth, capacity int) []string {
 	out := make([]string, 0, capacity)
 	for idx, row := range visible {
 		hovered := state.Hover != nil && *state.Hover == offset+idx
-		out = append(out, renderRow(row, offset+idx == state.SelectedRow, hovered, nameWidth, innerWidth))
+		selected := offset+idx == state.SelectedRow
+		out = append(out, styles.RowHighlight(renderRow(row, selected, nameWidth, innerWidth), innerWidth, selected, hovered))
 	}
 	for len(out) < capacity {
 		out = append(out, "")
@@ -232,8 +233,8 @@ func renderRows(state State, innerWidth, capacity int) []string {
 	return out
 }
 
-func renderRow(row Row, selected, hovered bool, nameWidth, innerWidth int) string {
-	plainPrefix, renderedPrefix := styles.RowPrefix(selected, hovered, true)
+func renderRow(row Row, selected bool, nameWidth, innerWidth int) string {
+	plainPrefix, renderedPrefix := styles.SelectionPrefix(selected, true)
 
 	if row.Action != "" {
 		label := textutil.TruncateString(row.Action, innerWidth-lipgloss.Width(plainPrefix))
