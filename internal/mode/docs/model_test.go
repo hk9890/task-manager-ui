@@ -289,10 +289,10 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 		wantWithoutErr int
 		wantWithErr    int
 	}{
-		{"roomy column", 9, 7, 8},
-		{"an odd column has a spare line for the error", 8, 8, 8},
-		{"two docs leaves one for the error", 7, 8, 9},
-		{"single row cannot reserve and keeps its row", 4, 9, 9},
+		{"roomy column", 10, 7, 8},
+		{"an odd column has a spare line for the error", 9, 8, 8},
+		{"two docs leaves one for the error", 8, 8, 9},
+		{"single row cannot reserve and keeps its row", 5, 9, 9},
 	}
 
 	for _, tc := range cases {
@@ -316,7 +316,7 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 			if m.scrollOffset != tc.wantWithErr {
 				t.Errorf("offset with an inline error = %d, want %d", m.scrollOffset, tc.wantWithErr)
 			}
-			if tc.height > 4 {
+			if tc.height > 5 {
 				assertSelectionDrawn(t, m)
 			}
 		})

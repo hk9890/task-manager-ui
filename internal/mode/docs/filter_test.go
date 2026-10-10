@@ -40,7 +40,7 @@ func TestDocsFilterNarrowsTheColumnAndCountsMatchesOfLoaded(t *testing.T) {
 		t.Fatalf("setup: the column shows %q", got)
 	}
 	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
-	if !strings.HasPrefix(view, "❯ filter docs") {
+	if lines := strings.Split(view, "\n"); !strings.HasPrefix(lines[1], " ❯ filter docs") {
 		t.Fatalf("the docs tab does not open on its query line:\n%s", view)
 	}
 

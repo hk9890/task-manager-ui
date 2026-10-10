@@ -107,7 +107,7 @@ func TestClampKeepsAWindowTheOperatorScrolledTo(t *testing.T) {
 		})
 	}
 
-	// Height 30 leaves 27 lines: thirteen docs and a spare line. Forty steps
+	// Height 30 leaves 26 lines: thirteen docs. Forty steps
 	// down scroll the window to rows 28..40, five steps up keep it there.
 	m := loadedModel(t, gw)
 	for range 40 {

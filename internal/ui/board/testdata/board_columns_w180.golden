@@ -1,4 +1,5 @@
-❯ filter issues
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ❯ filter issues
 ╭─ Ready ───────────────────────────── 7 ─╮  ╭─ Blocked ─────────────────────────── 3 ─╮  ╭─ Recent Work ─────────────────────── 42 ─╮  ╭─ Assigned ─────────────────────────── 5 ─╮
 │▌ T Redesign board rows and metadata for…│  │  T Acceptance review board UX regressio…│  │  T Remove large sidebar from board view  │  │  E Preserve four-column grouping in dash…│
 │▌   P0 OPN task-manager-ui-u5s           │  │    P0 BLK task-manager-ui-9oo           │  │    P1 CLS task-manager-ui-j34            │  │    P1 IP task-manager-ui-7qz             │
@@ -6,7 +7,6 @@
 │    P1 IP task-manager-ui-1ri            │  │                                         │  │                                          │  │                                          │
 │  B Runtime bug: board rows hide readine…│  │                                         │  │                                          │  │                                          │
 │    P0 BLK task-manager-ui-y3x           │  │                                         │  │                                          │  │                                          │
-│                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │

@@ -105,7 +105,6 @@ const (
 	// barSeparator stands between two buttons, as it does between two key
 	// hints on the legend.
 	barSeparator = " · "
-	ruleGlyph    = "─"
 )
 
 // tabLabels names each browse tab on the tab line.
@@ -246,7 +245,7 @@ func (m Model) renderMenuBar() string {
 
 // renderRule is the line between the menu bar and the view tabs.
 func (m Model) renderRule() string {
-	return lipgloss.NewStyle().Foreground(styles.ShellRuleColor).Render(strings.Repeat(ruleGlyph, max(0, m.width)))
+	return styles.Rule(m.width)
 }
 
 // renderTabs draws the view tabs on the left and, flush right, the store and

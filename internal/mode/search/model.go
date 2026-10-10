@@ -341,7 +341,7 @@ func (m *Model) itemCapacity() int {
 	if m.height == 0 {
 		return defaultItemCapacity
 	}
-	return max(m.height-3, 1)
+	return uiboard.ContentRows(m.height)
 }
 
 // pageRows is the number of results a page key moves the selection by.

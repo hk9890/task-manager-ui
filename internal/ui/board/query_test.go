@@ -134,12 +134,43 @@ func TestQueryLineKeepsTheColumnWindowBesideIt(t *testing.T) {
 	state := queryState("login")
 	state.Width = 80
 	view := Render(state)
-	head, _, _ := strings.Cut(plain(view), "\n")
-	if want := styles.Glyphs.Prompt + " login  · cols 1-2/4"; head != want {
-		t.Errorf("head line %q, want %q", head, want)
+	head := strings.Split(plain(view), "\n")[1]
+	if want := " " + styles.Glyphs.Prompt + " login  · cols 1-2/4"; head != want {
+		t.Errorf("query line %q, want %q", head, want)
 	}
 	if got := lipgloss.Width(head); got > state.Width {
-		t.Errorf("head line is %d cells wide, over %d", got, state.Width)
+		t.Errorf("query line is %d cells wide, over %d", got, state.Width)
+	}
+}
+
+// TestHeadIsARuleOverTheIndentedQueryLine pins the two lines above the
+// columns, and that a click on either lands on no column.
+func TestHeadIsARuleOverTheIndentedQueryLine(t *testing.T) {
+	t.Parallel()
+
+	state := queryState("login")
+	view := Render(state)
+	lines := strings.Split(plain(view), "\n")
+	if want := plain(styles.Rule(state.Width)); lines[0] != want {
+		t.Errorf("first line %q, want the rule %q", lines[0], want)
+	}
+	if want := " " + styles.Glyphs.Prompt + " login "; lines[1] != want {
+		t.Errorf("second line %q, want the query line %q", lines[1], want)
+	}
+	if !strings.HasPrefix(lines[2], "╭─ Not Ready ") {
+		t.Errorf("third line %q, want the top border of the first column", lines[2])
+	}
+
+	x, _ := testui.FindCell(t, view, "Fix the login prompt")
+	_, ruleY := testui.FindCell(t, view, lines[0])
+	_, queryY := testui.FindCell(t, view, lines[1])
+	for _, y := range []int{ruleY, queryY} {
+		if hit, ok := HitTest(state, x, y); ok {
+			t.Errorf("HitTest on head line %d = %+v, want no hit", y, hit)
+		}
+	}
+	if hit, ok := HitTest(state, x, queryY+1); !ok || hit.Column != 1 || hit.Row != -1 {
+		t.Errorf("HitTest on the column border under the head = %+v, %v; want column 1 with no row", hit, ok)
 	}
 }
 

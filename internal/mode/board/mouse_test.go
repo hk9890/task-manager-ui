@@ -172,11 +172,13 @@ func TestClickOffTheRowsSelectsNothing(t *testing.T) {
 	m := mouseBoard(t)
 	x, y := testui.FindCell(t, m.View(0), "progress-three")
 	_, titleY := testui.FindCell(t, m.View(0), sectionTitleInProgress)
+	_, queryY := testui.FindCell(t, m.View(0), queryPlaceholder)
 
 	for name, cell := range map[string][2]int{
-		"column title":       {x, titleY},
-		"below the last row": {x, y + issuerow.Height},
-		"query line":         {x, 0},
+		"column title":        {x, titleY},
+		"below the last row":  {x, y + issuerow.Height},
+		"query line":          {x, queryY},
+		"rule over the query": {x, queryY - 1},
 	} {
 		cmd := m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: cell[0], Y: cell[1], At: mouseStart})
 		if cmd != nil || m.focusedColumn != 0 || m.selectedRow[0] != 0 {
@@ -271,7 +273,7 @@ func TestAClickLeavesTheColumnsUnderThePointer(t *testing.T) {
 	}
 }
 
-// TestADoubleClickOnAHalfDrawnRowOpensIt: at 24 lines a column draws ten issues
+// TestADoubleClickOnAHalfDrawnRowOpensIt: at 25 lines a column draws ten issues
 // and the first line of the next. A click on that line selects the issue and
 // scrolls it into the window, so the second click of the pair finds another
 // issue under the same cell. It opens the one the first click selected.
@@ -285,7 +287,7 @@ func TestADoubleClickOnAHalfDrawnRowOpensIt(t *testing.T) {
 	}
 	m.columns = []columnData{{title: sectionTitleReady, issues: issues, total: len(issues), exact: true}}
 	m.filterColumns()
-	m.SetSize(100, 24)
+	m.SetSize(100, 25)
 
 	click := mouseAt(t, m, mode.MouseClick, "row-10", 0)
 	cmd := m.Update(click)

@@ -137,10 +137,10 @@ func TestHitTestReportsNoIssueOffTheRows(t *testing.T) {
 		t.Errorf("HitTest below the last row = %+v, %v; want column 2 with no row", hit, ok)
 	}
 
-	// The gap between two columns, the query line, and outside the frame.
+	// The gap between two columns, the two head lines, and outside the frame.
 	x, y = testui.FindCell(t, view, "aa-issue-00")
 	gapX, _ := testui.FindCell(t, view, "bb ─")
-	for _, cell := range [][2]int{{gapX - 4, y}, {x, 0}, {x, 24}, {-1, y}, {200, y}} {
+	for _, cell := range [][2]int{{gapX - 4, y}, {x, 0}, {x, 1}, {x, 24}, {-1, y}, {200, y}} {
 		if hit, ok := HitTest(state, cell[0], cell[1]); ok {
 			t.Errorf("HitTest at %v = %+v, want no hit", cell, hit)
 		}

@@ -363,11 +363,7 @@ func (m *Model) sectionItemCapacity() int {
 	if m.height == 0 {
 		return 20 // safe default before first WindowSizeMsg
 	}
-	rows := m.height - 3
-	if rows < 1 {
-		rows = 1
-	}
-	return rows
+	return uiboard.ContentRows(m.height)
 }
 
 // IsLoading reports whether any column is still in its loading state.

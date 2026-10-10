@@ -140,13 +140,14 @@ store large enough to page.
 
 ### Closed-limit scales with terminal height
 
-**Proves:** `sectionItemCapacity()` scales with the height the mode receives (`height - 3`, floored
-at 1, and `20` before the first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
+**Proves:** `sectionItemCapacity()` scales with the height the mode receives (`uiboard.ContentRows`:
+the height less the two head lines and the two column borders, floored at 1, and `20` before the
+first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
 
 Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
-rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-7 of M`, where
-`M` is the true closed total: `33 of M` at height 40, `23 of M` at height 30. Keep the app running,
-resize to 200 rows, press `alt+r`: the header must read `193 of M`, with `M` unchanged.
+rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-8 of M`, where
+`M` is the true closed total: `32 of M` at height 40, `22 of M` at height 30. Keep the app running,
+resize to 200 rows, press `alt+r`: the header must read `192 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
 `DashboardOptions.ClosedLimit` in `internal/mode/board/model.go`, or `applyWorkspaceSizeToBrowseModes`

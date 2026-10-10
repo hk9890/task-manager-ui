@@ -157,7 +157,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 	delayed := fakes.NewDelayingDashboardRepository(counter)
 
 	m := newBoardModel(delayed, resolvedBoardKeys(t))
-	m.SetSize(120, 25) // sectionItemCapacity=22; closedPageSize=max(44,50)=50
+	m.SetSize(120, 26) // sectionItemCapacity=22; closedPageSize=max(44,50)=50
 
 	// Pre-populate Done column as if compose() already ran.
 	priorIssues := makeClosedIssues(priorLoaded)

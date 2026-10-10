@@ -158,24 +158,38 @@ func Render(state State) string {
 	return renderHead(state, f) + "\n" + columns
 }
 
-// renderHead is the line above the columns: the query line, and which columns
-// are drawn when the width does not hold all of them.
+// renderHead is the lines above the columns: a rule that parts the list from
+// the tab line, then the query line, and which columns are drawn when the
+// width does not hold all of them.
 func renderHead(state State, f frame) string {
 	width := state.Width
 	if width <= 0 {
 		width = defaultBoardWidth
 	}
+	indent := strings.Repeat(" ", queryIndent)
+	room := width - queryIndent
 	if f.end-f.start == len(state.Columns) {
-		return renderQueryLine(state.Query, state.Placeholder, width)
+		return styles.Rule(width) + "\n" + indent + renderQueryLine(state.Query, state.Placeholder, room)
 	}
 	window := fmt.Sprintf(" · cols %d-%d/%d", f.start+1, f.end, len(state.Columns))
-	return renderQueryLine(state.Query, state.Placeholder, width-lipgloss.Width(window)) +
+	return styles.Rule(width) + "\n" + indent +
+		renderQueryLine(state.Query, state.Placeholder, room-lipgloss.Width(window)) +
 		lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(window)
 }
 
-// headLines is the number of lines Render draws above the columns: the query
-// line.
-const headLines = 1
+const (
+	// headLines is the number of lines Render draws above the columns: the
+	// rule and the query line.
+	headLines = 2
+	// queryIndent puts the prompt under the first menu-bar button.
+	queryIndent = 1
+)
+
+// ContentRows is the number of content lines a column holds in a frame of
+// height lines: what the head and the column's two borders leave.
+func ContentRows(height int) int {
+	return max(height-headLines-2, 1)
+}
 
 // frame is the geometry of one board frame: which columns are drawn and how
 // wide each is. Render draws from it and HitTest
@@ -208,7 +222,7 @@ func layoutFrame(state State) frame {
 		available = minRenderableWidth
 	}
 	f.widths = distributeWidths(available, count)
-	f.columnHeight = max(3, height-1)
+	f.columnHeight = max(3, height-headLines)
 	f.innerHeight = max(1, f.columnHeight-2)
 	return f
 }

@@ -113,7 +113,8 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   tall.
 - `ui/board` is the one list container. The docs tab and the store search are each a board column
   by another name, so they draw through `board.Render` with a single `Column` rather than growing a
-  renderer of their own.
+  renderer of their own. Each takes the content lines its column holds from `board.ContentRows`,
+  which subtracts the list head and the two borders; none repeats that arithmetic.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ## The shell chrome
@@ -160,7 +161,8 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
 ## Keys and the query line
 
 Board, Docs and the store search each hold one `mode.Query` (`internal/mode/query.go`) and draw it
-on the line above their columns. It is always live: no key enters it and nothing focuses it.
+on the line above their columns, under a rule. It is always live: no key enters it and nothing
+focuses it.
 
 - **No action is bound to a printable key outside a modal.** `mode.IsQueryKey` names the keys a
   query takes — every rune key and `space` without alt, `backspace`, `ctrl+w`, `ctrl+u` — and the
@@ -182,7 +184,10 @@ on the line above their columns. It is always live: no key enters it and nothing
   operator moved the focus meanwhile (`queryChanged`, `queryHome`).
 - The query outlives a reload, an auto refresh, a tab switch and a detail round trip. It ends with
   the model, at a store switch.
-- `board.Render` draws the line (`renderQueryLine`, `internal/ui/board/query.go`) from
+- `board.Render` draws the list head (`renderHead`, `internal/ui/board/board.go`), two lines: a
+  rule from `styles.Rule`, which also draws the rule under the menu bar, and the query line, indented
+  one cell so the prompt stands under the first menu-bar button. `HitTest` reports no column on
+  either. The query line (`renderQueryLine`, `internal/ui/board/query.go`) comes from
   `State.Query` and `State.Placeholder`: `Glyphs.Prompt`, the text, then a cursor block, the prompt
   and the cursor in `QueryAccentColor`. An empty query shows the placeholder in `TextMutedColor`,
   so the line says what a key press does. A text wider than the line loses its front. A board too
