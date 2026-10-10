@@ -21,8 +21,19 @@ carries its `vX.Y.Z` section of this file as its notes.
   their own under it. An issue row is two lines: type and title, then priority,
   status and ID. A store picker row is the name and status, then the project
   path. The selected row is marked by a bar and a band of colour in place of
-  `>`. The last line names what each key does. A screen shows about half as
+  `›`. The last line names what each key does. A screen shows about half as
   many issues as before.
+- **Added: the views follow the store.** The board, the Docs tab, the search
+  results and the detail now reload when anything writes the store: the
+  `taskmgr` CLI, an agent or another `taskmgr-ui`. This also happens while the
+  terminal is not focused. Before, a view reloaded at most once a minute, and
+  an app whose terminal reported that it lost the focus did not reload until
+  the focus came back. A change that arrives under a dialog or the help overlay
+  shows when it closes. A change that arrives while you type a search query
+  shows when you run the query or leave the query field. Where the store cannot
+  be watched, the views refresh on focus and once a minute as before.
+  `--no-auto-refresh` turns the new refresh off with the other two; `r` reloads
+  at once either way.
 - **Added: mouse support.** Click a row to select it and click it again to open
   it. Click a view tab, a menu-bar button or a pane. The wheel moves a list's
   selection and scrolls detail text and the help. Dialogs take keys only.
@@ -47,8 +58,15 @@ carries its `vX.Y.Z` section of this file as its notes.
 - Fixed: the help overlay was cut at the bottom of the terminal and the rest
   could not be read. It now scrolls on the detail scroll keys, `j`/`k`,
   `pgup`/`pgdown`, `home`/`end`, and under the wheel.
-- Fixed: in a terminal shorter than 13 rows the menu bar scrolled off the top
-  of the screen. The screen is now cut to the terminal height.
+- Fixed: on the Search view in a terminal shorter than 11 rows, the first lines
+  of the screen scrolled off the top. The screen is now cut to the terminal
+  height: the menu bar stays on the first line and the key legend on the last.
+- Fixed: a refresh you did not ask for returned the Done column to its first
+  page. With the column paged down, the selected issue left the column and the
+  cursor moved to another one. The column now reloads as deep as it was paged,
+  and the cursor stays on its issue while that issue is within those rows. A
+  cursor move made while a refresh ran was also undone when it finished. `r`
+  still returns to the first page.
 
 ## v0.17.0
 
