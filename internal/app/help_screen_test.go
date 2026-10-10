@@ -299,7 +299,14 @@ func helpAllLines(t *testing.T, m Model) []string {
 	t.Helper()
 
 	m.helpOffset = 0
-	m.height = helpscreen.MaxOffset(helpSections(m.keys), 0) + 5
+	size := tea.WindowSizeMsg{
+		Width:  m.width + 2*m.marginCols,
+		Height: helpscreen.MaxOffset(helpSections(m.keys), 0) + 5,
+	}
+	if size.Width >= marginMinWidth && size.Height+2*screenMarginRows >= marginMinHeight {
+		size.Height += 2 * screenMarginRows
+	}
+	m.setTerminalSize(size)
 	return helpBody(m)
 }
 

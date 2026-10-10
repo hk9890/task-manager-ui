@@ -214,9 +214,9 @@ instead.
   pointer carries a quieter one, a step nearer the background. On a terminal
   without true colour the two can be one shade; the bar at the left of the
   selected row tells them apart.
-- A tab or a menu-bar button under the pointer is lit: its text brightens over a
-  band that covers the space on each side of it. A click anywhere on the band
-  counts.
+- A tab or a menu-bar button under the pointer is lit by a band that covers the
+  space on each side of it: over the band a tab's text brightens and a button's
+  label turns bold. A click anywhere on the band counts.
 - **Click a row** to select it. **Click it again** within 0.4 s to open it, as
   `enter` does: an issue, a doc or a search result opens in detail mode, a row of
   the detail Dependencies pane navigates to that issue, a store picker row opens
