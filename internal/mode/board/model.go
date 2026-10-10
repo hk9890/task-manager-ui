@@ -101,7 +101,10 @@ type Model struct {
 	inflight bool
 
 	focusedColumn int
-	selectedRow   map[int]int
+	// columnStart is the first column drawn when the terminal is too narrow for
+	// all of them. It moves only when the focus leaves the drawn columns.
+	columnStart int
+	selectedRow map[int]int
 	// scrollOffset tracks the viewport top-row offset for each column so that
 	// the selected row is always within the visible window.
 	scrollOffset map[int]int
@@ -190,11 +193,15 @@ func (m *Model) Reload() tea.Cmd {
 			"trigger", "board-manual")
 		return nil
 	}
-	return m.startReload(mode.RefreshReload)
+	cmd := m.startReload(mode.RefreshReload)
+	m.keepFocusedColumnDrawn()
+	return cmd
 }
 
 // Update processes board-specific messages and keybindings.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	defer m.keepFocusedColumnDrawn()
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -308,6 +315,11 @@ func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampScrollOffsets()
+	m.keepFocusedColumnDrawn()
+}
+
+func (m *Model) keepFocusedColumnDrawn() {
+	m.columnStart = uiboard.ColumnStart(m.columnStart, m.width, len(m.columns), m.focusedColumn)
 }
 
 // sectionItemCapacity returns the number of content lines a section holds at

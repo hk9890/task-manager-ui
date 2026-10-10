@@ -1846,6 +1846,7 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 	// (the failed-load-more shape that keeps its issues).
 	m.columns[doneColumnIndex] = columnData{title: sectionTitleDone, issues: issues, total: n, exact: true, err: errors.New("load failed")}
 	m.focusedColumn = doneColumnIndex
+	m.keepFocusedColumnDrawn()
 	m.selectedRow[doneColumnIndex] = 0
 	m.scrollOffset[doneColumnIndex] = 0
 
@@ -1933,6 +1934,7 @@ func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 					tc.selected, offset, offset+window)
 			}
 			m.focusedColumn = doneColumnIndex
+			m.keepFocusedColumnDrawn()
 			assertSelectionDrawn(t, m)
 		})
 	}

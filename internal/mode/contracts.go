@@ -184,7 +184,6 @@ const doubleClickWindow = 400 * time.Millisecond
 // one.
 type ClickTracker struct {
 	target string
-	x, y   int
 	at     time.Time
 }
 
@@ -192,20 +191,16 @@ type ClickTracker struct {
 // click. target names the row under the pointer, "" for none, and selected the
 // row the surface holds selected as the click arrives.
 //
-// The second click counts when it lands on the row the first one selected, or
-// on the same cell: selecting a row can move it — the board re-centres its
-// columns on the focused one — and the operator double-clicking in place means
-// the row they just selected, not whatever slid under the pointer. So on true
-// the caller opens its current selection and selects nothing new. That is the
-// row the first click selected only while nothing else moved the selection: a
-// wheel notch, a key or a reload between the two clicks makes the second one a
-// single click again. A double click is consumed, and a third click starts
-// over.
+// The second click counts when it lands on the row the first one selected. So
+// on true the caller opens its current selection and selects nothing new. That
+// is the row the first click selected only while nothing else moved the
+// selection: a wheel notch, a key or a reload between the two clicks makes the
+// second one a single click again. A double click is consumed, and a third
+// click starts over.
 func (t *ClickTracker) Double(target, selected string, msg MouseMsg) bool {
 	last := *t
-	*t = ClickTracker{target: target, x: msg.X, y: msg.Y, at: msg.At}
-	sameCell := last.x == msg.X && last.y == msg.Y
-	if last.target == "" || last.target != selected || (target != last.target && !sameCell) || msg.At.Sub(last.at) >= doubleClickWindow {
+	*t = ClickTracker{target: target, at: msg.At}
+	if last.target == "" || last.target != selected || target != last.target || msg.At.Sub(last.at) >= doubleClickWindow {
 		return false
 	}
 	*t = ClickTracker{}

@@ -151,8 +151,7 @@ instead.
   do what the key shown beside it does. `reload` reloads the view on screen.
 - **Click a pane** in search or detail mode to focus it.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
-  the focused column, whichever column the pointer is over; click a row to move
-  the focus.
+  the column under the pointer, which takes the focus.
 - **Wheel** over the detail Content or Metadata pane, or over the help overlay,
   scrolls it three lines a notch.
 - While help or a dialog is open, the mouse reaches nothing under it. A dialog
