@@ -10,6 +10,12 @@ import (
 // handleMouse is the board's mouse on one column: the wheel moves the
 // selection, one click selects a result and a second opens it.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
+	// A click or a wheel notch drops a held Enter, as a key does: it can move
+	// the selection the Enter was pressed on. So does the pointer leaving, which
+	// is also what the shell sends a surface it no longer draws.
+	if msg.Kind != mode.MouseMove {
+		m.heldOpen = noHeldOpen
+	}
 	m.pointer = msg.Pointer()
 	if m.pointer == nil {
 		return nil
