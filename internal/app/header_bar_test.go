@@ -13,11 +13,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 	"github.com/hk9890/task-manager-ui/internal/version"
 )
 
@@ -53,6 +55,10 @@ func drawnButtons(t *testing.T, m Model, bar string) []string {
 	last := -1
 	for _, action := range barActions {
 		text := action.label(m) + " " + action.key(m)
+		if action.name {
+			// The name is cut to the room the bar has; its key is not.
+			text = " " + action.key(m)
+		}
 		if !strings.Contains(bar, text) {
 			continue
 		}
@@ -104,8 +110,9 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 }
 
 // TestMenuBarDropsTheVersionThenTheRightmostButton narrows the terminal one
-// column at a time. The version goes first, then quit, help, reload, search: the
-// store's name is the last button standing.
+// column at a time. The version goes first, then quit, help, reload, search,
+// each after the store's name is cut to its floor: the name is the last button
+// standing.
 func TestMenuBarDropsTheVersionThenTheRightmostButton(t *testing.T) {
 	t.Parallel()
 
@@ -231,27 +238,81 @@ func TestStoreButtonNamesTheActiveStore(t *testing.T) {
 }
 
 // TestStoreButtonCutsALongName: a store name is as long as its operator made
-// it. The bar cuts it, so at 80 columns search is still beside it, and at 120
-// every button is.
+// it. The bar cuts it to the room it has: to storeLabelMax on a wide bar,
+// further before a button drops, and to what is left when it stands alone.
 func TestStoreButtonCutsALongName(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
 	m.services.StoreName = "a-store-with-a-name-far-longer-than-any-bar-has-room-for"
 
-	bar := headerLines(m, 80)[headerMenuRow]
-	label := m.storeLabel()
-	if lipgloss.Width(label) != storeLabelMax || !strings.HasSuffix(label, "…") || !strings.HasPrefix(label, "a-store-with-a-name") {
-		t.Errorf("the store label is %q, want the name cut to %d cells with an ellipsis", label, storeLabelMax)
+	for _, tc := range []struct {
+		width, buttons, label int
+	}{
+		{width: 120, buttons: len(barActions), label: storeLabelMax},
+		{width: 80, buttons: len(barActions)},
+		{width: 20, buttons: 1},
+	} {
+		m.width = tc.width
+		cells := m.barCells()
+		if len(cells) != tc.buttons {
+			t.Errorf("at width %d the bar places %d buttons, want %d", tc.width, len(cells), tc.buttons)
+			continue
+		}
+		label := cells[0].label
+		if !strings.HasSuffix(label, "…") || cells[len(cells)-1].x1 > tc.width {
+			t.Errorf("at width %d the store label is %q and the bar ends at column %d", tc.width, label, cells[len(cells)-1].x1)
+		}
+		if tc.label != 0 && lipgloss.Width(label) != tc.label {
+			t.Errorf("at width %d the store label %q is %d cells, want %d", tc.width, label, lipgloss.Width(label), tc.label)
+		}
+		if len(cells) > 1 && lipgloss.Width(label) < storeLabelFloor {
+			t.Errorf("at width %d the store label %q is under the floor of %d cells beside other buttons", tc.width, label, storeLabelFloor)
+		}
+		if bar := headerLines(m, tc.width)[headerMenuRow]; !strings.Contains(bar, label+" ") {
+			t.Errorf("at width %d the bar does not draw %q:\n%s", tc.width, label, bar)
+		}
 	}
-	search := "search " + m.keys.DisplayPrimary(config.ShellContext, config.ShellActionOpenSearch)
-	if !strings.Contains(bar, label+" ") || !strings.Contains(bar, search) {
-		t.Errorf("at width 80 the bar does not draw %q and %q:\n%s", label, search, bar)
-	}
+}
 
+// TestNarrowBarDropsAButtonBeforeTheNameGoesUnderItsFloor: a short name is
+// never cut while a button can still be dropped.
+func TestNarrowBarDropsAButtonBeforeTheNameGoesUnderItsFloor(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	m.services.StoreName = "demo"
+	m.width = 80
+	full := m.barCells()
+
+	m.width = full[len(full)-1].x1 - 1
+	cells := m.barCells()
+	if len(cells) != len(barActions)-1 || cells[0].label != "demo" {
+		t.Errorf("one column short, the bar places %d buttons with the store label %q; want %d and the whole name", len(cells), cells[0].label, len(barActions)-1)
+	}
+}
+
+// TestHoveredStoreButtonTakesTheCommonHover: the store's name rests bold in the
+// buttons' colour, so the pointer changes its colour as it does on any button.
+func TestHoveredStoreButtonTakesTheCommonHover(t *testing.T) {
+	previous := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+
+	m := newHeaderShell(t, config.Default())
 	m.width = 120
-	if cells := m.barCells(); len(cells) != len(barActions) {
-		t.Errorf("at width 120 the bar places %d of %d buttons", len(cells), len(barActions))
+	rest := m.renderMenuBar()
+
+	x := headerMenuStart
+	m.barPointer = &x
+	hovered := m.renderMenuBar()
+
+	want := lipgloss.NewStyle().Foreground(styles.ShellTabHoverColor).Bold(true).Render(m.storeLabel())
+	if hovered == rest || !strings.HasPrefix(strings.TrimLeft(hovered, " "), want) {
+		t.Errorf("the hovered store button is not drawn in the hover style:\nrest    %q\nhovered %q", rest, hovered)
+	}
+	if lipgloss.Width(hovered) != lipgloss.Width(rest) {
+		t.Errorf("the hover changes the bar's width from %d to %d", lipgloss.Width(rest), lipgloss.Width(hovered))
 	}
 }
 

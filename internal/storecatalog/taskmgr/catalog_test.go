@@ -247,6 +247,17 @@ func TestStoreNameForLocalAndCentralStores(t *testing.T) {
 	}
 }
 
+// A directory name may hold a newline or a tab. The name is drawn on one line,
+// so each run of control characters is one space.
+func TestStoreNameReplacesControlCharacters(t *testing.T) {
+	t.Parallel()
+
+	info := tasks.ResolveInfo{Kind: tasks.ResolvedLocal, ProjectPath: "/home/hans/dev/\ta\nb\t\x1bc\n"}
+	if got := StoreName(info); got != "a b c" {
+		t.Errorf("store name: got %q, want %q", got, "a b c")
+	}
+}
+
 // A local store created from the picker is the store a later start in that
 // directory finds — what `taskmgr where` would report there.
 func TestCreateLocalMakesTheStoreADirectoryResolvesTo(t *testing.T) {

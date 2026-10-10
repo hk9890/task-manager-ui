@@ -101,9 +101,10 @@ const (
 	headerTabGap      = 1
 	// headerBarGap is the least space between the last button and the version.
 	headerBarGap = 2
-	// storeLabelMax is the widest a store name is drawn on the menu bar: a
-	// longer one is cut, so it cannot push the other buttons off the bar.
-	storeLabelMax = 24
+	// storeLabelMax is the widest a store name is drawn on the menu bar, and
+	// storeLabelFloor the narrowest it is cut to before a button is dropped.
+	storeLabelMax   = 24
+	storeLabelFloor = 8
 	// barSeparator stands between two buttons, as it does between two key
 	// hints on the legend.
 	barSeparator = " · "
@@ -123,9 +124,10 @@ type barAction struct {
 	label func(Model) string
 	key   func(Model) string
 	run   func(*Model) tea.Cmd
-	// strong draws the label as the store's name is drawn: the one button that
-	// says something about the session.
-	strong bool
+	// name marks the label as the store's name: the one button that says
+	// something about the session. It is drawn bold, and cut to the room the
+	// bar has.
+	name bool
 }
 
 func barLabel(label string) func(Model) string {
@@ -139,7 +141,7 @@ func shellKey(action string) func(Model) string {
 // The store button comes first: which store is on screen is the first thing
 // the header must say, and the first button is the last one a narrow bar drops.
 var barActions = []barAction{
-	{label: Model.storeLabel, key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker, strong: true},
+	{label: Model.storeLabel, key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker, name: true},
 	{label: barLabel("search"), key: shellKey(config.ShellActionOpenSearch), run: (*Model).openSearch},
 	{label: barLabel("reload"), key: Model.reloadKey, run: (*Model).reloadActiveSurface},
 	{label: barLabel("help"), key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
@@ -190,21 +192,52 @@ func headerTabsEnd() int {
 	return end
 }
 
-// barCells places the buttons from the left edge. A button that does not fit
-// is dropped, the rightmost first.
+// barCells places the buttons from the left edge. A bar that does not fit
+// first cuts the store's name down to storeLabelFloor, then drops buttons, the
+// rightmost first. The last button left gives up its floor too, so the bar
+// names the store at any width that holds a cell of it.
 func (m Model) barCells() []barCell {
-	cells := make([]barCell, 0, len(barActions))
-	x := headerMenuStart
-	for _, action := range barActions {
-		cell := barCell{action: action, label: action.label(m), key: action.key(m), x0: x}
-		cell.x1 = x + lipgloss.Width(cell.text())
-		if cell.x1 > m.width {
-			break
+	for count := len(barActions); count > 0; count-- {
+		floor := storeLabelFloor
+		if count == 1 {
+			floor = 1
 		}
+		if cells, ok := m.placeBar(barActions[:count], floor); ok {
+			return cells
+		}
+	}
+	return nil
+}
+
+// placeBar places actions on the bar, with the name cut to the room the other
+// text leaves. It reports false when the actions do not fit with the name cut
+// to floor cells.
+func (m Model) placeBar(actions []barAction, floor int) ([]barCell, bool) {
+	cells := make([]barCell, 0, len(actions))
+	used := headerMenuStart + (len(actions)-1)*lipgloss.Width(barSeparator)
+	for _, action := range actions {
+		cell := barCell{action: action, label: action.label(m), key: action.key(m)}
 		cells = append(cells, cell)
+		used += lipgloss.Width(cell.text())
+	}
+
+	x := headerMenuStart
+	for idx := range cells {
+		cell := &cells[idx]
+		if cell.action.name {
+			full := lipgloss.Width(cell.label)
+			room := full + m.width - used
+			if room < min(floor, full) {
+				return nil, false
+			}
+			cell.label = textutil.TruncateString(cell.label, min(room, full))
+			used += lipgloss.Width(cell.label) - full
+		}
+		cell.x0 = x
+		cell.x1 = x + lipgloss.Width(cell.text())
 		x = cell.x1 + lipgloss.Width(barSeparator)
 	}
-	return cells
+	return cells, used <= m.width
 }
 
 func (c barCell) text() string {
@@ -223,7 +256,7 @@ func (c barCell) covers(x int) bool {
 // idle. Using a fixed-width cell keeps the tabs where tabAt looks for them.
 func (m Model) headerSpinnerCell() string {
 	style := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
-	if len(m.loadingStates()) > 0 {
+	if m.workInFlight() {
 		return style.Render(loading.Glyph(m.spinnerFrame) + " ")
 	}
 	return style.Render("  ")
@@ -239,7 +272,6 @@ func (m Model) renderHeader() string {
 // The version is the first to go when the two do not fit.
 func (m Model) renderMenuBar() string {
 	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
-	strong := lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
 
 	cells := m.barCells()
@@ -249,13 +281,8 @@ func (m Model) renderMenuBar() string {
 		if idx == 0 {
 			lead = strings.Repeat(" ", headerMenuStart)
 		}
-		labelStyle := label
-		hovered := m.barPointer != nil && cell.covers(*m.barPointer)
-		switch {
-		case cell.action.strong:
-			// The strong label already has the hover's colour and weight.
-			labelStyle = strong.Underline(hovered)
-		case hovered:
+		labelStyle := label.Bold(cell.action.name)
+		if m.barPointer != nil && cell.covers(*m.barPointer) {
 			labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
 		}
 		bar += lead + labelStyle.Render(cell.label)
@@ -364,39 +391,22 @@ func (m Model) renderFooter() string {
 	return styles.KeyLegend(hints, m.width)
 }
 
-// browseLoadingScope maps a browse mode to its loading scope. A new browse
-// surface needs its own scope, or its work reports as somebody else's
-// (DESIGN-GUIDE.md).
-func browseLoadingScope(id mode.ID) loading.Scope {
-	switch id {
-	case mode.Board:
-		return loading.ScopeBoard
-	case mode.Docs:
-		return loading.ScopeDocs
-	case mode.Search:
-		return loading.ScopeSearch
-	}
-	return loading.Scope(id)
-}
-
-func (m Model) loadingStates() []loading.State {
-	loadingStates := make([]loading.State, 0, 4)
+// workInFlight reports whether a surface on screen is loading: it is what
+// draws the header spinner and arms its tick.
+func (m Model) workInFlight() bool {
 	for _, entry := range m.browseTabs() {
 		if entry.Tab.IsLoading() {
-			loadingStates = append(loadingStates, loading.State{Scope: browseLoadingScope(entry.ID)})
+			return true
 		}
 	}
 	if m.detail.IsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail})
+		return true
 	}
 	// The picker draws its own spinner, and this is what arms the tick that
 	// advances it. Reported only while the picker is on screen: a listing still
 	// in flight after the operator switched to a browse tab would otherwise spin
 	// that tab's header for a surface nobody is looking at.
-	if m.active == mode.StorePicker && m.storePicker != nil && m.storePicker.IsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeStores})
-	}
-	return loadingStates
+	return m.active == mode.StorePicker && m.storePicker != nil && m.storePicker.IsLoading()
 }
 
 func shellKeyHelp(keys config.ResolvedKeyBindings) string {

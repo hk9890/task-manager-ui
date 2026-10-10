@@ -128,15 +128,16 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   bar is a second way to reach it, never the only one. Add one as an entry in `barActions`, with
   the method the key switch in `handleShellKey` also calls.
 - The first button opens the store picker, and its label is the active store's name
-  (`Model.storeLabel`), bold in `TextPrimaryColor`: the header names the store nowhere else. A
+  (`Model.storeLabel`), bold in `ShellActionColor`: the header names the store nowhere else. A
   name wider than `storeLabelMax` is cut; with no name the label is `stores`.
 - `reload` is one button for every surface: it runs the reload of the surface on screen and shows
   that surface's key (`Model.reloadKey`).
-- When the bar does not fit, the version goes first, then the buttons from the right
-  (`Model.barCells`).
+- When the bar does not fit, the version goes first. Then the store's name is cut down to
+  `storeLabelFloor`, then the buttons go from the right, and the store button, when it stands
+  alone, is cut to the room that is left (`Model.barCells`).
 - The tab line holds the spinner cell and the view tabs, and nothing else. Do not repeat there
-  what the screen already says: the active tab is the surface, the highlighted row is the
-  selection.
+  what the screen already says: on Board and Docs the active tab is the surface, and the
+  highlighted row is the selection. The store search and Detail light no tab.
 - The legend is one line of `styles.KeyHint` values through `styles.KeyLegend`, which drops the
   hints that do not fit from the end. Order a surface's hints in `footerHints` by how much an
   operator needs them. A shell action with no button, such as creating an issue, is named there.
@@ -313,8 +314,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   passes it in `State.ColumnStart`.
 - Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
   scrolls or reloads under a still pointer is the one marked. It draws as the quieter row band
-  (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`. The store
-  button rests in that colour and weight, so under the pointer it takes an underline instead.
+  (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`.
 - A click on a menu-bar button runs the method its key runs (`Model.mouseOnHeader`).
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
@@ -348,8 +348,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Long work renders the spinner: advance the frame with `loading.NextFrame`, draw it with
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
 - The shell says work is in flight with the spinner cell in front of the tabs
-  (`Model.headerSpinnerCell`), drawn while `Model.loadingStates` is not empty; idle draws nothing.
-  A new browse surface needs its own `loading.Scope`, or its work reports as somebody else's.
+  (`Model.headerSpinnerCell`), drawn while `Model.workInFlight` reports a surface loading; idle draws nothing.
 - A cold start draws skeleton rows (`issuerow.RenderCompactSkeleton`) rather than an empty frame.
   Their shade cycles through `styles.SkeletonShades` on the phase from `loading.SkeletonPhase`, which
   advances every 4 spinner frames for a ~1.2 s pulse.
