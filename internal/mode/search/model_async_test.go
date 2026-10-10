@@ -278,6 +278,34 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 	})
 
+	t.Run("enter after text typed before the opening result opens the selected row of the result", func(t *testing.T) {
+		gw := fakes.NewTracked()
+		seedStore(gw)
+		delayed := fakes.NewDelayingSearchRepository(gw)
+		t.Cleanup(delayed.ReleaseAll)
+
+		m := newModel(t, delayed)
+		opening := startAsync(m.Init())
+		waitForInFlight(t, delayed, 1)
+
+		// The pause of the edit supersedes the opening search, so no result
+		// settles before the one for the text.
+		pause := m.Update(runes("tri"))()
+		if cmd := m.Update(enter); cmd != nil {
+			t.Fatalf("enter with no rows on screen asked for %#v", cmd())
+		}
+		delayed.Release()
+		if cmd := m.Update(receive(t, opening)); cmd != nil || len(m.issues) != 0 {
+			t.Fatalf("the superseded opening result was applied: results %q", resultIDs(m))
+		}
+		typed := startAsync(m.Update(pause))
+		waitForInFlight(t, delayed, 1)
+
+		if got := settle(t, m, delayed, typed); got != "tm-2" || m.selectedIssueID() != "tm-2" {
+			t.Fatalf("the held enter opened %q with %q selected, want tm-2, the row of the result", got, m.selectedIssueID())
+		}
+	})
+
 	t.Run("the pointer leaving drops the held enter", func(t *testing.T) {
 		m, delayed, typed := inFlightSearch(t, "tri")
 

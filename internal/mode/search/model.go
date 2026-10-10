@@ -229,9 +229,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // for that result: an edit answers another query, and an auto refresh moves
 // the selection when its issue left the store's answer.
 // The opening search has no rows the operator pressed Enter on, so it holds
-// nothing.
+// nothing. Text typed before its result arrives is what the operator chose:
+// the pause of that edit supersedes the opening search, so no result has
+// settled yet, and the open is held for the result of the text.
 func (m *Model) openDetail() tea.Cmd {
-	if m.loading && m.settled {
+	if m.loading && (m.settled || !m.query.Empty()) {
 		m.heldOpen = true
 		return nil
 	}

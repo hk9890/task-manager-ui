@@ -226,8 +226,9 @@ it.
   reads the search row, and Escape in that Detail returns to the results as they were left.
 - Its query is not matched in memory. An edit waits `editPause`, and one `Repository.Search` runs
   for the text as it is when the pause ends (`Model.searchAfterPause`), so a typed word costs one
-  search. The pause and each search carry a generation, and an older one is dropped. The scope key,
-  Escape, a reload and an auto refresh search at once. `State.Search` tells the renderer that the
+  search. The pause and each search carry a generation, and an older one is dropped. The scope key
+  and Escape search at once and replace a waiting edit; a reload and an auto refresh are dropped
+  during the pause, as they are during a search. `State.Search` tells the renderer that the
   store matched the rows: the header then counts as a column without a query does.
 - Enter, or the second click on a row, while a search is in flight is held (`Model.openDetail`,
   `heldOpen`): the rows on screen answer an older query, or an auto refresh is about to move the
