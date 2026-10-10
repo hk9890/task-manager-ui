@@ -1,7 +1,7 @@
 ╭─ Configuration ──────────────────────────────────────────────────────────────────────────────────╮
 │  no config file: a change is not kept                                                            │
 │                                                                                                  │
-│  Appearance                                                                                      │
+│  Appearance ───────────────────────────────────────────────────────────────────────────────────  │
 │▌ theme     ‹ catppuccin-mocha ›                                                                  │
 │  glyphs    ‹ unicode ›                                                                           │
 │                                                                                                  │

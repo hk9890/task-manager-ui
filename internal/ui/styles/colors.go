@@ -66,6 +66,10 @@ var (
 	QueryAccentColor lipgloss.Color
 	// MatchTextColor is the text of a row that a query word matched.
 	MatchTextColor lipgloss.Color
+	// SectionHeadingColor is the title of a section of the configuration screen.
+	SectionHeadingColor lipgloss.Color
+	// SettingLabelColor is the name of a setting, in front of its value.
+	SettingLabelColor lipgloss.Color
 )
 
 // The styles built from the roles. Apply rebuilds them with the roles.

@@ -95,6 +95,9 @@ func applyFlavor(f catppuccin.Flavor) {
 	QueryAccentColor = c(f.Mauve())
 	MatchTextColor = c(f.Yellow())
 
+	SectionHeadingColor = c(f.Blue())
+	SettingLabelColor = c(f.Blue())
+
 	// The two bands must stay two colours on a 256- and a 16-colour terminal,
 	// where the surfaces of a dark flavour collapse into one palette entry. The
 	// mantle is the nearest shade that does not.

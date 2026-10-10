@@ -33,6 +33,7 @@ shell. Every other package is pure.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
   `TextSecondaryColor`), shell chrome (`ShellTab*`, `ShellAction*`, `ShellRuleColor`,
   `ShellFooterHelpColor`), the query line and its matches (`QueryAccentColor`, `MatchTextColor`),
+  the configuration screen (`SectionHeadingColor`, `SettingLabelColor`),
   borders and overlays (`BorderDefaultColor`, `OverlayBorderColor`, `BorderHighlightFocusColor`),
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
   (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
@@ -276,9 +277,12 @@ key is inert until a store is opened.
 The configuration screen opens from a tab, the store search and Detail (`Model.openConfig`), and
 not from the picker: with no store open the picker has nothing below it.
 
-- It has one section, Appearance, with a row for the theme and one for the glyph set. Each row
-  is the selection gutter, the label padded to `labelWidth`, and the value between
-  `Glyphs.StepPrev` and `Glyphs.StepNext`: the markers say the value is stepped, not typed.
+- It has one section, Appearance, with a row for the theme and one for the glyph set. The
+  section title is bold in `SectionHeadingColor` with a `styles.Rule` to the edge
+  (`renderHeading`, `internal/ui/configscreen/configscreen.go`), so a section reads as a block.
+  Each row is the selection gutter, the label in `SettingLabelColor` padded to `labelWidth`, and
+  the value between `Glyphs.StepPrev` and `Glyphs.StepNext`: the markers say the value is
+  stepped, not typed.
 - `move_up` and `move_down` of the board context move the cursor, clamped. `left`, `right` and
   `enter` step the value through `styles.Themes()` or `styles.GlyphSets()` and wrap at both ends.
   The three are matched as the keys themselves, without Alt, so an `alt+` chord stays a shell key.

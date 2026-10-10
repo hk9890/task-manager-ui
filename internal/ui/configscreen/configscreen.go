@@ -62,7 +62,7 @@ func Render(state State) string {
 	content := []string{
 		gutter + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(textutil.TruncateString(target, textWidth)),
 		"",
-		gutter + lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Bold(true).Render(textutil.TruncateString(sectionTitle, textWidth)),
+		gutter + renderHeading(sectionTitle, textWidth-lipgloss.Width(gutter)),
 	}
 	for idx, row := range state.Rows {
 		content = append(content, renderRow(row, idx == state.SelectedRow, innerWidth))
@@ -94,12 +94,20 @@ func Render(state State) string {
 	return lipgloss.JoinVertical(lipgloss.Left, box, textutil.TruncateString(state.Help, state.Width))
 }
 
+// renderHeading draws a section title with a rule to the edge, so a section
+// reads as a block and not as one more line.
+func renderHeading(title string, width int) string {
+	title = textutil.TruncateString(title, width)
+	heading := lipgloss.NewStyle().Foreground(styles.SectionHeadingColor).Bold(true).Render(title)
+	return heading + " " + styles.Rule(width-lipgloss.Width(title)-1)
+}
+
 // renderRow draws one setting: the selection gutter, the label padded to the
 // value column, and the value between the two step markers, which say that
 // the row is stepped rather than typed.
 func renderRow(row Row, selected bool, innerWidth int) string {
 	_, prefix := styles.SelectionPrefix(selected, true)
-	label := lipgloss.NewStyle().Foreground(styles.TextSecondaryColor)
+	label := lipgloss.NewStyle().Foreground(styles.SettingLabelColor)
 	value := lipgloss.NewStyle().Foreground(styles.TextPrimaryColor)
 	marker := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 
