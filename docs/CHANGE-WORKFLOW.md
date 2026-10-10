@@ -56,5 +56,6 @@ no hook is served by the main checkout's copy. Installing it is a once-per-clone
 1. `taskmgr close <id>` finished work, `taskmgr create` follow-ups, `taskmgr update <id>` whatever
    the change made stale.
 2. `commit-commands:commit-push-pr`.
-3. `gh pr checks` green.
-4. `git status` clean in the worktree.
+3. Review the PR against [REVIEWING.md](REVIEWING.md) with `/worktree-flow:worktree-review <pr>`.
+4. `gh pr checks` green.
+5. `git status` clean in the worktree.

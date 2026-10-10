@@ -23,8 +23,7 @@ expressions that locate things fast. Go there instead of grepping blind.
 
 **MUST read [docs/CODING.md](docs/CODING.md) before creating or editing ANY file under `cmd/`,
 `internal/`, or `scripts/`, or `.mise.toml` or `.github/workflows/ci.yml`.** It owns the startup
-contract, the architectural rules, the naming conventions, and which doc outranks it inside each
-area.
+contract, the architectural rules, and which doc outranks it inside each area.
 
 ### Designing or changing what the operator sees
 
@@ -61,7 +60,8 @@ does not mirror.
 ### Reviewing a PR or a diff
 
 **MUST read [docs/REVIEWING.md](docs/REVIEWING.md) before your first `git diff` or `gh pr diff` run
-to judge a change, and whenever a review is requested.** It carries what this repository must check
+to judge a change, and whenever a review is requested.** It carries the quality rules
+a finished change is held to — constructor names, package comments — what this repository must check
 on top of the generic pass, the severity ladder, and what is explicitly not a finding.
 
 ### Writing documentation

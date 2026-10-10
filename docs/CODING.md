@@ -133,26 +133,6 @@ injects the same three symbols for local dev builds (`.mise.toml`).
 
 ## Naming Conventions
 
-### Constructor names
-
-- **Feature mode models** (`internal/mode/board`, `internal/mode/docs`, `internal/mode/search`, `internal/app`): use
-  `NewModel(...)` returning a named `Model` (or `*Model`). These are stateful Bubble Tea controllers
-  with complex dependency injection.
-- **UI leaf components** (`internal/ui/toaster`, `internal/ui/modal`): use `New(...)` returning a
-  `Model`. These are lightweight rendering components with no cross-cutting dependencies.
-- **No constructor** when a mode model is simple enough to zero-initialize directly (e.g.
-  `internal/mode/detail.Model` is set up via field assignment in the owning shell).
-
-Do not add `Model` suffix to leaf UI component constructors; do not use bare `New` for feature-level
-controllers.
-
-### Package doc placement
-
-Every package carries a package comment. Put it in `doc.go` when the package has more than
-one non-test file; inline on the `package` line for a single-file package.
-`internal/repository` and `internal/ui/styles` predate this rule and keep theirs in a
-source file.
-
 ### Test fakes (`internal/testing/fakes`)
 
 Two naming styles coexist by design:
