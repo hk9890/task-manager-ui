@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -466,7 +467,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 
 	// Inline error row at the top (if any).
 	if errorRows(col) > 0 {
-		errRow := textutil.TruncateString(styles.Glyphs.ToastWarn+" load failed: "+col.Error, maxWidth)
+		errRow := textutil.TruncateString(styles.Glyphs.ToastWarn+" load failed: "+displaytext.OneLine(col.Error), maxWidth)
 		out.rows = append(out.rows, errRow)
 		out.prefix = 1
 	}

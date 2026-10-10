@@ -39,13 +39,15 @@ func (h Health) Usable() bool { return h == HealthOK }
 type Entry struct {
 	// Name is the registry name, unique across the machine.
 	Name string
-	// ProjectPath is the project directory the entry maps.
+	// ProjectPath is the project directory the entry maps, as one line of
+	// text to draw (displaytext.OneLine). It is not a path to open:
+	// Opened.ProjectPath is.
 	ProjectPath string
 	// StorePath is the store directory itself, under the central root.
 	StorePath string
 	Health    Health
-	// Detail is why the store directory could not be read. It is empty for
-	// every other entry.
+	// Detail is why the store directory could not be read, as one line of
+	// text to draw. It is empty for every other entry.
 	Detail string
 }
 

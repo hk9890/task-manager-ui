@@ -117,6 +117,9 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   overlay. Send `ESC`, then wait for the overlay to be gone rather than counting keystrokes.
 - **`ALT+E` hands the terminal to `$EDITOR` and swallows every key until that program exits.** A
   script that follows it with `CTRL+C` sends the quit to the editor and hangs.
+- **A capture is plain text.** It holds no colour, no bold and no underline, so it cannot show a
+  hover, a selection band or a theme ([TESTING.md](TESTING.md#runtime-ui-verification) has what
+  proves a style).
 - **During a capture, `--debug` output reaches the persistent log, not stderr** — tail the log
   ([MONITORING.md](MONITORING.md)), never a stderr redirect.
 - Capture failures name themselves: `step <index> (...) timed out after <N>ms` is one wait that did
@@ -139,8 +142,8 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 ## Behaviours that need a real terminal
 
-The first three cannot be driven under the PTY harness: two need a live resize, and all three need
-a store large enough to page. The fourth the harness cannot see.
+These three cannot be driven under the PTY harness: two need a live resize, and all three need a
+store large enough to page.
 
 ### Closed-limit scales with terminal height
 
@@ -202,10 +205,3 @@ in a 30-row terminal never do.
 `doneLoadedCount` reset path, repeated loads per crossing mean the `doneLoadInFlight` guard, and a
 cursor on another issue after a refresh means `startAnchorSearch` or `continueAnchorSearch` — all in
 `internal/mode/board/model.go`.
-
-### Colour and weight
-
-The capture is plain text: it holds no colour, no bold and no underline. A change to a colour role
-or a weight — a hover, a selection, a theme — is proved by a test that renders under
-`testui.ForceTrueColor` and by a look at the built binary in a real terminal. State in the PR which
-of the two was done.

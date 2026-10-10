@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/markdown"
@@ -121,7 +122,7 @@ func Render(state State) string {
 	// in the header signals the in-flight request.
 
 	if strings.TrimSpace(state.Error) != "" {
-		return fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, state.Error)
+		return fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, displaytext.OneLine(state.Error))
 	}
 
 	detail := state.Detail
