@@ -191,6 +191,15 @@ arriving while a prior async Cmd is still in flight. Drive the controller agains
 `fakes.DelayingRepository` (`internal/testing/fakes/delaying.go`); it wraps any
 `repository.Repository`, so the pattern carries to detail-mode follow-ups.
 
+Give each outcome [DESIGN-GUIDE.md](DESIGN-GUIDE.md) names for such a key its own case — the
+result, the empty result, the failed result. An outcome with no case has a guard no test holds.
+
+The store search waits a pause after an edit. Tests run with a pause of zero: `newModel` in the
+search package sets the `pause` field, and `mustNewModel` and `mustNewModelWithOptions` in
+`internal/app` call `Model.SetEditPause`. A shell test
+that types into the search after a store switch sets it again, because `bindStore` builds a new
+search.
+
 The ordinary harness cannot see these races: `ApplyControllerKeySequence` drains
 every Cmd before the next key arrives, so `m.loading` is always `false` by the time
 the next message is processed.

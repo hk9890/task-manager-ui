@@ -120,12 +120,11 @@ func TestTabLineShowsBoardAndDocsAndNoneActiveWhileSearchIsUp(t *testing.T) {
 	}
 }
 
-// TestSearchTypingRunsTheStoreSearchAndNoShellAction: every edit searches, and
-// the scope key is the search's although a shell action is bound to it.
-func TestSearchTypingRunsTheStoreSearchAndNoShellAction(t *testing.T) {
-	m, gw := searchShell(t, func(cfg *config.Model) {
-		cfg.KeyBindings.Shell[config.ShellActionHelp] = []string{"ctrl+t"}
-	})
+// TestSearchTypingAndTheScopeKeyRunTheStoreSearch: every edit searches, and so
+// does the scope key. Config refuses a binding on that key, so no shell action
+// can be bound to it here.
+func TestSearchTypingAndTheScopeKeyRunTheStoreSearch(t *testing.T) {
+	m, gw := searchShell(t)
 
 	m = typeInto(t, m, "login")
 	if got := lastStoreSearch(t, gw); got.Text != "login" || got.IncludeClosed {
@@ -141,9 +140,6 @@ func TestSearchTypingRunsTheStoreSearchAndNoShellAction(t *testing.T) {
 
 	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Old login page", Status: "closed", Type: "task"})
 	m = press(t, m, "ctrl+t")
-	if m.showHelp {
-		t.Fatal("the scope key also ran the shell action bound to it")
-	}
 	if got := lastStoreSearch(t, gw); got.Text != "login" || !got.IncludeClosed {
 		t.Fatalf("the scope key searched for %#v, want login in all issues", got)
 	}
@@ -204,6 +200,95 @@ func TestSearchEnterDuringASearchOpensTheDetailOfItsResult(t *testing.T) {
 	}
 	if got, ok := m.selectedIssueID(); !ok || got != "tm-2" {
 		t.Fatalf("under detail the shell acts on %q, want the search result tm-2", got)
+	}
+}
+
+// TestSearchHeldEnterOpensTheResultInEitherMessageOrder: the result of a held
+// Enter sends the selection change and the open request as two commands, and
+// the runtime delivers them in either order. The request carries the selected
+// row of the result, so the detail opens on it both times, and the selection
+// change that arrives under that Detail changes nothing.
+func TestSearchHeldEnterOpensTheResultInEitherMessageOrder(t *testing.T) {
+	for name, requestFirst := range map[string]bool{"the request first": true, "the selection change first": false} {
+		t.Run(name, func(t *testing.T) {
+			m, gw := searchShell(t)
+
+			next, typed := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("triage")})
+			next, entered := next.(Model).Update(testKey("enter"))
+			m = applyMessages(t, next.(Model), runBatch(entered))
+
+			// The pause of the edit ends, its search returns and the result is
+			// applied; what the search sends for the result is held back.
+			var request, change tea.Msg
+			for _, pauseEnded := range runBatch(typed) {
+				next, searching := m.Update(pauseEnded)
+				m = next.(Model)
+				for _, result := range runBatch(searching) {
+					next, cmd := m.Update(result)
+					m = next.(Model)
+					for _, msg := range runBatch(cmd) {
+						switch unscoped(msg).(type) {
+						case mode.ActionRequestMsg:
+							request = msg
+						case mode.SelectionChangedMsg:
+							change = msg
+						}
+					}
+				}
+			}
+			if request == nil || change == nil {
+				t.Fatalf("the result of a held enter sent request %#v and selection change %#v, want both", request, change)
+			}
+			if got := firstSelectionID(m, mode.Search); m.active != mode.Search || got != "tm-1" {
+				t.Fatalf("setup: on %q with search selection %q, want the search still on tm-1", m.active, got)
+			}
+
+			first, second := change, request
+			if requestFirst {
+				first, second = request, change
+			}
+			m = applyMessages(t, m, []tea.Msg{first})
+			if requestFirst && (m.active != mode.Detail || m.detail.TargetID() != "tm-2") {
+				t.Fatalf("the request left the shell on %q showing %q, want detail of tm-2", m.active, m.detail.TargetID())
+			}
+			loads := len(gw.CallsFor(fakes.MethodIssue))
+			m = applyMessages(t, m, []tea.Msg{second})
+
+			if m.active != mode.Detail || m.searchFrom != mode.Board {
+				t.Fatalf("the shell is on %q (search from %q), want the detail of a search result", m.active, m.searchFrom)
+			}
+			if m.detail.TargetID() != "tm-2" || m.detail.Detail.Summary.ID != "tm-2" || m.detail.IsLoading() {
+				t.Fatalf("detail targets %q and shows %q (loading %v), want tm-2 loaded", m.detail.TargetID(), m.detail.Detail.Summary.ID, m.detail.IsLoading())
+			}
+			if got, ok := m.selectedIssueID(); !ok || got != "tm-2" {
+				t.Fatalf("under detail the shell acts on %q, want the search result tm-2", got)
+			}
+			if got := len(gw.CallsFor(fakes.MethodIssue)) - loads; requestFirst && got != 0 {
+				t.Fatalf("the selection change under detail loaded the issue %d more times", got)
+			}
+
+			m = press(t, m, "esc")
+			if got := firstSelectionID(m, mode.Search); m.active != mode.Search || got != "tm-2" {
+				t.Fatalf("esc went to %q with search selection %q, want the search on tm-2", m.active, got)
+			}
+		})
+	}
+}
+
+// TestOpenDetailRequestWithoutASelectionOpensNothing: the request names its
+// row, and one that names none says so instead of opening the stored row.
+func TestOpenDetailRequestWithoutASelectionOpensNothing(t *testing.T) {
+	m, _ := filterShell(t)
+	if firstSelectionID(m, mode.Board) == "" {
+		t.Fatal("fixture: the board holds no selection")
+	}
+
+	m = applyMessages(t, m, runBatch(mode.RequestOpenDetailCmd(mode.Board, nil)))
+	if m.active != mode.Board {
+		t.Fatalf("a request without a selection left the board for %q", m.active)
+	}
+	if view := plainShell(m); !strings.Contains(view, "No selected issue to open in detail mode") {
+		t.Fatalf("the shell does not say why nothing opened:\n%s", view)
 	}
 }
 
@@ -398,6 +483,36 @@ func TestStoreSwitchRebuildsTheSearch(t *testing.T) {
 	view := plainShell(m)
 	if !strings.Contains(view, "❯ search the store") || !strings.Contains(view, "Bravo store issue") || strings.Contains(view, "Alpha store issue") {
 		t.Fatalf("the search was not rebuilt for the new store:\n%s", view)
+	}
+}
+
+// TestStoreSwitchDropsAPendingEditPause: the pause of an edit is work of its
+// store, so one that ends after a switch starts no search in the new store,
+// also when the new search stands at the generation the pause carries.
+func TestStoreSwitchDropsAPendingEditPause(t *testing.T) {
+	s := newTwoStores(t)
+	m := applyMessages(t, s.m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 30}})
+	m = press(t, m, "alt+f")
+
+	next, typed := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("alpha")})
+	pauseEnded := runBatch(typed)
+	if len(pauseEnded) == 0 {
+		t.Fatal("fixture: the edit started no pause")
+	}
+
+	// The opening search and the scope key are two generations, as the opening
+	// search and the edit were in the previous store.
+	m = switchToBravo(t, next.(Model))
+	m = press(t, m, "alt+f", "ctrl+t")
+	bravo := s.bravo.Repo.(*fakes.TrackedRepository)
+	searches := storeSearchCount(bravo)
+
+	m = applyMessages(t, m, pauseEnded)
+	if got := storeSearchCount(bravo) - searches; got != 0 {
+		t.Fatalf("the pause of the previous store ran %d searches in the new one", got)
+	}
+	if view := plainShell(m); !strings.Contains(view, "❯ search the store") || !strings.Contains(view, "Bravo store issue") {
+		t.Fatalf("the new store's search did not stay as it was:\n%s", view)
 	}
 }
 

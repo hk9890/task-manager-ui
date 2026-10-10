@@ -38,7 +38,8 @@ func (q Query) Empty() bool {
 
 // IsQueryKey reports whether msg edits a query: a rune key or a space without
 // alt — a paste arrives as one key of several runes — and backspace, ctrl+w
-// and ctrl+u. The shell asks too, so a key the query took runs no shell action.
+// and ctrl+u. A browse surface answers Browse.TakesKey with it, so a key the
+// query took runs no shell action.
 func IsQueryKey(msg tea.KeyMsg) bool {
 	if msg.Alt {
 		return false

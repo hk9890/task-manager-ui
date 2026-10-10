@@ -54,7 +54,7 @@ func (m *Model) click(hit uiboard.Hit, msg mode.MouseMsg) tea.Cmd {
 	}
 	previous := m.selectedIssueID()
 	if m.clicks.Double(target, previous, msg) {
-		return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
+		return mode.RequestOpenDetailCmd(mode.Board, m.currentSelection())
 	}
 	if target == "" {
 		return nil

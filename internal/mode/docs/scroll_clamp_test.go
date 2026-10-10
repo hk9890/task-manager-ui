@@ -8,6 +8,7 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -59,9 +60,9 @@ func TestClampPullsTheWindowBackInsideAShrunkList(t *testing.T) {
 
 	m := loadedModel(t, gw)
 	for range 40 {
-		m.moveRow(1)
+		m.list.Move(1, m.viewState(0))
 	}
-	if m.scrollOffset == 0 {
+	if m.list.ScrollOffset == 0 {
 		t.Fatal("setup: expected the list to be scrolled")
 	}
 
@@ -73,11 +74,11 @@ func TestClampPullsTheWindowBackInsideAShrunkList(t *testing.T) {
 
 	// Six two-line docs under the two age dividers are fourteen lines, and the
 	// column holds twenty-seven.
-	if lines := len(m.issues)*issuerow.Height + 2; lines > m.itemCapacity() {
-		t.Fatalf("setup: the %d lines of the shrunk list do not fit the %d-line column", lines, m.itemCapacity())
+	if lines := len(m.issues)*issuerow.Height + 2; lines > uiboard.ContentRows(m.height) {
+		t.Fatalf("setup: the %d lines of the shrunk list do not fit the %d-line column", lines, uiboard.ContentRows(m.height))
 	}
-	if m.scrollOffset != 0 {
-		t.Errorf("a list shorter than the window is scrolled to %d; every row fits, so the offset must be 0", m.scrollOffset)
+	if m.list.ScrollOffset != 0 {
+		t.Errorf("a list shorter than the window is scrolled to %d; every row fits, so the offset must be 0", m.list.ScrollOffset)
 	}
 	assertSelectionDrawn(t, m)
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
@@ -92,7 +93,7 @@ func TestClampPullsTheWindowBackInsideAShrunkList(t *testing.T) {
 // offset back to: the last window that is full, counted in issues.
 //
 // A row is issuerow.Height lines. The bound was the row count less
-// itemCapacity(), which counts lines, so it took every offset in the second
+// the capacity of the column, which counts lines, so it took every offset in the second
 // half of a long list for one past the end: each resize and each refresh pulled
 // the window back until the selection sat on its last row.
 func TestClampKeepsAWindowTheOperatorScrolledTo(t *testing.T) {
@@ -111,34 +112,34 @@ func TestClampKeepsAWindowTheOperatorScrolledTo(t *testing.T) {
 	// down scroll the window to rows 28..40, five steps up keep it there.
 	m := loadedModel(t, gw)
 	for range 40 {
-		m.moveRow(1)
+		m.list.Move(1, m.viewState(0))
 	}
 	for range 5 {
-		m.moveRow(-1)
+		m.list.Move(-1, m.viewState(0))
 	}
-	if m.selectedRow != 35 || m.scrollOffset != 28 {
-		t.Fatalf("setup: selected row %d at offset %d, want row 35 at offset 28", m.selectedRow, m.scrollOffset)
+	if m.list.SelectedRow != 35 || m.list.ScrollOffset != 28 {
+		t.Fatalf("setup: selected row %d at offset %d, want row 35 at offset 28", m.list.SelectedRow, m.list.ScrollOffset)
 	}
 
 	m.SetSize(120, 30)
-	if m.scrollOffset != 28 {
-		t.Errorf("a resize to the same size moved the window from row 28 to row %d", m.scrollOffset)
+	if m.list.ScrollOffset != 28 {
+		t.Errorf("a resize to the same size moved the window from row 28 to row %d", m.list.ScrollOffset)
 	}
 	assertSelectionDrawn(t, m)
 
 	// Past the last full window the offset is pulled back to it: the last
 	// thirteen docs, with no blank line a doc above could fill.
-	m.scrollOffset = 48
-	m.selectedRow = 49
+	m.list.ScrollOffset = 48
+	m.list.SelectedRow = 49
 	m.clampSelection()
-	if m.scrollOffset != 37 {
-		t.Errorf("an offset past the end was clamped to %d, want 37, the last full window", m.scrollOffset)
+	if m.list.ScrollOffset != 37 {
+		t.Errorf("an offset past the end was clamped to %d, want 37, the last full window", m.list.ScrollOffset)
 	}
 	assertSelectionDrawn(t, m)
 }
 
 // TestResizeKeepsTheSelectionInTheWindow pins that a resize re-derives the
-// window: itemCapacity() reads the height, and SetSize did not clamp.
+// window: the capacity is derived from the height, and SetSize did not clamp.
 func TestResizeKeepsTheSelectionInTheWindow(t *testing.T) {
 	gw := fakes.NewTracked()
 	for i := range 50 {
@@ -154,15 +155,15 @@ func TestResizeKeepsTheSelectionInTheWindow(t *testing.T) {
 	m := loadedModel(t, gw)
 	m.SetSize(120, 60)
 	for range 40 {
-		m.moveRow(1)
+		m.list.Move(1, m.viewState(0))
 	}
 
 	m.SetSize(100, 20)
 
-	capacity := m.itemCapacity() / issuerow.Height
-	if m.selectedRow < m.scrollOffset || m.selectedRow >= m.scrollOffset+capacity {
+	capacity := uiboard.ContentRows(m.height) / issuerow.Height
+	if m.list.SelectedRow < m.list.ScrollOffset || m.list.SelectedRow >= m.list.ScrollOffset+capacity {
 		t.Errorf("after the resize the selected row %d is outside the window [%d,%d) — the chevron is off screen",
-			m.selectedRow, m.scrollOffset, m.scrollOffset+capacity)
+			m.list.SelectedRow, m.list.ScrollOffset, m.list.ScrollOffset+capacity)
 	}
 	assertSelectionDrawn(t, m)
 }

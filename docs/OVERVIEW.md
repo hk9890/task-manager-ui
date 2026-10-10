@@ -15,7 +15,8 @@ internal/
                           shell message contracts and Query, the typed filter text (query.go).
                           Type.IsWork() is false for doc, so doc issues reach no board column —
                           docs/ is the tab that browses them. search/ is the store search: a
-                          browse surface that is not a tab
+                          browse surface that is not a tab. rowlist/ is the list code those
+                          two share
   ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
     styles/                 every colour role, the themes, the glyph sets, the key legend and the
                             shared FormSection chrome

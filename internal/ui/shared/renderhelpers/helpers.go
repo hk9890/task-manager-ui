@@ -133,17 +133,7 @@ func CompactIssueID(id string, maxWidth int) string {
 		}
 	}
 
-	if maxWidth <= 1 {
-		return textutil.TruncateString(trimmed, maxWidth)
-	}
-
-	runes := []rune(trimmed)
-	suffixWidth := maxWidth - 1
-	if suffixWidth <= 0 || len(runes) <= suffixWidth {
-		return trimmed
-	}
-
-	return "…" + string(runes[len(runes)-suffixWidth:])
+	return textutil.TruncateStringFront(trimmed, maxWidth)
 }
 
 // NormalizeToken lowercases and normalizes separators for token comparison.

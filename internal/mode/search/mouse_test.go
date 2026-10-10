@@ -28,12 +28,18 @@ func mouseAt(t *testing.T, m *Model, kind mode.MouseKind, text string, ms int) m
 }
 
 func opensDetail(cmd tea.Cmd) bool {
+	return openedIssueID(cmd) != ""
+}
+
+// openedIssueID is the issue cmd asks the shell to open the detail of, or ""
+// for none.
+func openedIssueID(cmd tea.Cmd) string {
 	for _, msg := range testui.DrainCmd(cmd) {
-		if request, ok := msg.(mode.ActionRequestMsg); ok && request.Mode == mode.Search && request.Action == mode.ActionOpenDetail {
-			return true
+		if request, ok := msg.(mode.ActionRequestMsg); ok && request.Mode == mode.Search && request.Action == mode.ActionOpenDetail && request.Selection != nil {
+			return request.Selection.Issue.ID
 		}
 	}
-	return false
+	return ""
 }
 
 // TestHitTestReportsTheResultTheRendererDrewThere asks the renderer where it
@@ -66,20 +72,20 @@ func TestMouseSelectsOpensAndScrollsTheResults(t *testing.T) {
 	m := mouseSearch(t)
 
 	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "Session notes", 0))
-	if m.selectedRow != 2 || cmd == nil || opensDetail(cmd) {
-		t.Fatalf("first click: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.selectedRow, cmd != nil)
+	if m.list.SelectedRow != 2 || cmd == nil || opensDetail(cmd) {
+		t.Fatalf("first click: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.list.SelectedRow, cmd != nil)
 	}
-	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "Session notes", 200)); !opensDetail(cmd) {
-		t.Fatal("a second click on the same result did not open Detail")
+	if got := openedIssueID(m.Update(mouseAt(t, m, mode.MouseClick, "Session notes", 200))); got != "tm-3" {
+		t.Fatalf("a second click on the same result opened %q, want Detail of tm-3", got)
 	}
 
 	m.Update(mouseAt(t, m, mode.MouseWheelUp, "Session notes", 1000))
-	if m.selectedRow != 1 {
-		t.Fatalf("a wheel notch up left row %d selected, want 1", m.selectedRow)
+	if m.list.SelectedRow != 1 {
+		t.Fatalf("a wheel notch up left row %d selected, want 1", m.list.SelectedRow)
 	}
 	m.Update(mouseAt(t, m, mode.MouseWheelDown, "Session notes", 1100))
-	if m.selectedRow != 2 {
-		t.Fatalf("a wheel notch down left row %d selected, want 2", m.selectedRow)
+	if m.list.SelectedRow != 2 {
+		t.Fatalf("a wheel notch down left row %d selected, want 2", m.list.SelectedRow)
 	}
 }
 
@@ -89,12 +95,12 @@ func TestPointerMarksTheResultUnderItUntilItLeaves(t *testing.T) {
 	m := mouseSearch(t)
 	m.Update(mouseAt(t, m, mode.MouseMove, "Triage inbox", 0))
 	state := m.viewState(0)
-	if hover := m.hover(state); hover == nil || hover.Row != 1 {
+	if hover := m.list.Hover(state); hover == nil || hover.Row != 1 {
 		t.Fatalf("the pointer on the second result marks %#v", hover)
 	}
 
 	m.Update(mode.MouseMsg{Kind: mode.MouseLeave})
-	if hover := m.hover(m.viewState(0)); hover != nil {
+	if hover := m.list.Hover(m.viewState(0)); hover != nil {
 		t.Fatalf("the pointer left and %#v is still marked", hover)
 	}
 }

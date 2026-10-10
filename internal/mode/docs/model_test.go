@@ -15,6 +15,8 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 // seedMixed seeds two docs and one task so every assertion also proves the
@@ -146,7 +148,11 @@ func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected an action-request command on enter")
 	}
-	testui.AssertActionRequest(t, cmd(), mode.Docs, mode.ActionOpenDetail)
+	request := cmd()
+	testui.AssertActionRequest(t, request, mode.Docs, mode.ActionOpenDetail)
+	if carried := request.(mode.ActionRequestMsg).Selection; carried == nil || carried.Issue.ID != "tm-2" {
+		t.Fatalf("expected the request to carry the selected doc tm-2, got %#v", carried)
+	}
 }
 
 func TestDocsModeAutoRefreshKeepsTheSelectedDocUnderTheCursor(t *testing.T) {
@@ -269,7 +275,7 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 // TestScrollOffsetReservesOneRowForAnInlineError: internal/ui/board pins an
 // inline error row above the issue rows, so the offset the model stores must
 // leave exactly one line for it while an error is shown — and only then.
-// itemCapacity itself stays the section height; uiboard.EnsureVisible does
+// The capacity itself stays the section height; uiboard.EnsureVisible does
 // the reserving so it matches what the renderer draws. A doc is two lines, so
 // the line costs a doc only where the column had no spare one.
 func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
@@ -301,20 +307,20 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 
 			m := loadedModel(t, gw)
 			m.SetSize(120, tc.height)
-			m.selectedRow = 9
+			m.list.SelectedRow = 9
 
 			m.err = nil
-			m.scrollOffset = 0
+			m.list.ScrollOffset = 0
 			m.clampSelection()
-			if m.scrollOffset != tc.wantWithoutErr {
-				t.Errorf("offset with no error = %d, want %d", m.scrollOffset, tc.wantWithoutErr)
+			if m.list.ScrollOffset != tc.wantWithoutErr {
+				t.Errorf("offset with no error = %d, want %d", m.list.ScrollOffset, tc.wantWithoutErr)
 			}
 
 			m.err = errors.New("load failed")
-			m.scrollOffset = 0
+			m.list.ScrollOffset = 0
 			m.clampSelection()
-			if m.scrollOffset != tc.wantWithErr {
-				t.Errorf("offset with an inline error = %d, want %d", m.scrollOffset, tc.wantWithErr)
+			if m.list.ScrollOffset != tc.wantWithErr {
+				t.Errorf("offset with an inline error = %d, want %d", m.list.ScrollOffset, tc.wantWithErr)
 			}
 			if tc.height > 5 {
 				assertSelectionDrawn(t, m)
@@ -332,7 +338,7 @@ func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
 		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("Doc %02d", i), Status: "open", Type: "doc", Priority: 2})
 	}
 	m := loadedModel(t, gw)
-	page := m.pageRows()
+	page := uiboard.ContentRows(m.height) / issuerow.Height
 
 	steps := []struct {
 		key  tea.KeyMsg
@@ -347,15 +353,15 @@ func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
 		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
 	}
 	for _, step := range steps {
-		before := m.selectedRow
+		before := m.list.SelectedRow
 		cmd := m.Update(step.key)
-		if m.selectedRow != step.want {
-			t.Fatalf("after %q: selected row %d, want %d", step.key.String(), m.selectedRow, step.want)
+		if m.list.SelectedRow != step.want {
+			t.Fatalf("after %q: selected row %d, want %d", step.key.String(), m.list.SelectedRow, step.want)
 		}
 		if moved := step.want != before; (cmd != nil) != moved {
 			t.Fatalf("after %q: selection command %v, want %v", step.key.String(), cmd != nil, moved)
 		}
-		selected := m.issues[m.selectedRow]
+		selected := m.issues[m.list.SelectedRow]
 		if view := m.View(0); !strings.Contains(view, selected.ID) {
 			t.Fatalf("after %q: the selected doc %s is not drawn:\n%s", step.key.String(), selected.ID, view)
 		}

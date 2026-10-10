@@ -165,9 +165,12 @@ Keybindings are resolved once at startup from the `keybindings` section.
   into the filter; bind it with alt+ or ctrl+`. The Board and Docs tabs and the store search
   type every such key into their query (`mode.Query`, `internal/mode/query.go`), so an action
   on one would never run there. `isPrintableKey` (`internal/config/keybindings.go`) is the test.
-- `backspace`, `ctrl+w` and `ctrl+u` edit that query and `ctrl+t` toggles the scope of the
-  store search. The four are built in: on those surfaces the query takes them before any
-  binding, so bind none of them in `shell` or `board`.
+- **`backspace`, `ctrl+w`, `ctrl+u` and `ctrl+t` are refused in `shell` and `board`.** The first
+  three edit that query and `ctrl+t` toggles the scope of the store search. The four are built
+  in: those surfaces take them before any binding. A binding on one fails startup and
+  `--check-config`: `key "ctrl+u" for action "reload" in board context edits the filter, which
+  takes it before any binding; bind another key`. `detail` and `modal` keep them: neither has a
+  query. `reservedKeys` (`internal/config/keybindings.go`) is the list.
 
 Supported actions by context:
 

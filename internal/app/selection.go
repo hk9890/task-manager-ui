@@ -34,6 +34,23 @@ func (m Model) currentSelection() *mode.Selection {
 	return nil
 }
 
+// adoptSelection stores the selection a browse surface holds, from its
+// SelectionChangedMsg or from the request that opens the detail of that row.
+func (m *Model) adoptSelection(id mode.ID, selection *mode.Selection) {
+	m.selectedByMode[id] = selection
+	if id == m.active && mode.IsBrowse(id) {
+		m.lastBrowse = id
+	}
+	// A browse tab moving its own selection supersedes any drill-in — but
+	// only the tab the operator is actually on. A background load
+	// completing in another tab used to clear the drill selection too,
+	// silently retargeting every shell mutation at that tab's row while
+	// Detail still showed the drilled-in issue.
+	if id == m.active {
+		m.clearDrillSelection()
+	}
+}
+
 // clearDrillSelection drops a drill-in. Call it wherever the shell leaves
 // Detail or a browse tab moves its own selection: from then on the browse row
 // is what the operator is acting on again.

@@ -59,6 +59,28 @@ func TruncateString(s string, maxWidth int) string {
 	return ansi.Truncate(s, maxWidth, "…")
 }
 
+// TruncateStringFront truncates a string to fit maxWidth from its front: the
+// ellipsis (…) leads and the end of the original content is preserved.
+func TruncateStringFront(s string, maxWidth int) string {
+	if maxWidth < 1 {
+		return ""
+	}
+
+	width := lipgloss.Width(s)
+	if width <= maxWidth {
+		return s
+	}
+
+	// One cell is the ellipsis's. ansi.TruncateLeft keeps a wide rune that
+	// straddles the cut, so the cut then moves one cell further.
+	for cut := width - maxWidth + 1; cut < width; cut++ {
+		if tail := ansi.TruncateLeft(s, cut, "…"); lipgloss.Width(tail) <= maxWidth {
+			return tail
+		}
+	}
+	return "…"
+}
+
 // WrapLines word-wraps s to maxWidth and returns the resulting lines.
 // Falls back to hard-wrap for tokens longer than maxWidth.
 func WrapLines(s string, maxWidth int) []string {

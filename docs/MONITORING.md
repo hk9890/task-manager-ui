@@ -161,13 +161,13 @@ fault, and none reaches the log without `--debug`:
 | Record | Emitted by |
 |---|---|
 | `manual <surface> refresh suppressed; refresh already in flight` | board, docs, and detail (`internal/app/refresh.go`) |
-| `manual search refresh suppressed; search already in flight` | the store search's reload key (`internal/mode/search/model.go`) |
+| `manual search refresh suppressed; search already in flight` | the store search's reload key (`internal/mode/search/model.go`). The pause after an edit counts as in flight, so the record also appears before that search has started |
 | `startReload re-entry suppressed` | the board and docs reload paths, one level in |
 | `store listing re-entry suppressed; one is already in flight` | the store picker's reload key (`internal/mode/storepicker/model.go`). Opening the picker is never suppressed — it always lists again |
 | `load-more suppressed; already in flight`, `load-more suppressed; all closed issues loaded` | `internal/mode/board/model.go` |
-| `search result dropped; a later search superseded it` | `internal/mode/search/model.go` — every edit of the query starts a search, and only the latest result is applied |
+| `search result dropped; a later search superseded it` | `internal/mode/search/model.go` — only the latest result is applied. An edit starts a pause and then a search; an edit inside the pause replaces it and leaves no record |
 
-Repeats of one of these under a key held down, or under typing in the store search, are the guard working. The Done-column
+Repeats of one of these under a key held down, or under an edit of the store search while a search is in flight, are the guard working. The Done-column
 runbook in [RUNNING.md](RUNNING.md) reads them that way.
 
 ## `--debug` coverage
