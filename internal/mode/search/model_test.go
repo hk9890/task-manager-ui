@@ -646,13 +646,15 @@ func TestSearchItemCapacity(t *testing.T) {
 		height int
 		want   int
 	}{
-		{height: 0, want: 8},   // before first WindowSizeMsg: the 24 lines the renderer draws with
+		{height: 0, want: 9},   // before first WindowSizeMsg: the 24 lines the renderer draws with
 		{height: 1, want: 1},   // min clamp
-		{height: 9, want: 1},   // (9 - 7) / 2 = 1
-		{height: 10, want: 1},  // (10 - 7) / 2 = 1, one line spare
-		{height: 24, want: 8},  // (24 - 7) / 2 = 8, one line spare
-		{height: 25, want: 9},  // (25 - 7) / 2 = 9
-		{height: 30, want: 11}, // (30 - 7) / 2 = 11, one line spare
+		{height: 6, want: 1},   // the shell cuts the frame: (6 - 4) / 2 = 1
+		{height: 8, want: 2},   // (8 - 4) / 2 = 2
+		{height: 9, want: 2},   // (9 - 5) / 2 = 2
+		{height: 10, want: 2},  // (10 - 5) / 2 = 2, one line spare
+		{height: 24, want: 9},  // (24 - 5) / 2 = 9, one line spare
+		{height: 25, want: 10}, // (25 - 5) / 2 = 10
+		{height: 30, want: 12}, // (30 - 5) / 2 = 12, one line spare
 	}
 
 	for _, tc := range cases {
@@ -664,16 +666,15 @@ func TestSearchItemCapacity(t *testing.T) {
 	}
 }
 
-// TestSearchItemCapacityResultsAllFitUnderTheBanner asks the renderer whether
-// the scroll window is a list the results pane can draw whole: both
-// lines of every result, at even and odd heights, with the stale-results
-// banner and the blank line under it taking the two lines the window leaves.
-func TestSearchItemCapacityResultsAllFitUnderTheBanner(t *testing.T) {
+// TestSearchItemCapacityIsTheResultsThePaneDrawsWhole asks the renderer
+// whether the scroll window is the list the results pane draws whole: both
+// lines of every result in it and not the second line of the next, at even
+// and odd heights, with the stale-results banner up and without it.
+func TestSearchItemCapacityIsTheResultsThePaneDrawsWhole(t *testing.T) {
 	t.Parallel()
 
 	for height := 9; height <= 31; height++ {
-		capacity := (&Model{height: height}).searchItemCapacity()
-		results := make([]domain.IssueSummary, capacity)
+		results := make([]domain.IssueSummary, height)
 		for idx := range results {
 			results[idx] = domain.IssueSummary{
 				ID: fmt.Sprintf("tm-%02d", idx), Title: fmt.Sprintf("fit-%02d", idx), Type: "task", Status: "open", Priority: 2,
@@ -681,23 +682,27 @@ func TestSearchItemCapacityResultsAllFitUnderTheBanner(t *testing.T) {
 		}
 
 		for _, query := range []string{"fit", "other"} {
-			view := testui.AnsiEscapePattern.ReplaceAllString(uisearch.Render(uisearch.State{
-				Query:        query,
-				AppliedQuery: "fit",
-				Results:      results,
-				SelectedID:   results[0].ID,
-				Width:        160,
-				Height:       height,
-			}), "")
+			m := &Model{height: height, draftQuery: query, appliedQuery: "fit"}
+			for _, issue := range results {
+				m.page.Results = append(m.page.Results, domain.SearchResult{Issue: issue})
+			}
+			capacity := m.searchItemCapacity()
+
+			state := m.viewState(0)
+			state.Width = 160
+			view := testui.AnsiEscapePattern.ReplaceAllString(uisearch.Render(state), "")
 			if banner := strings.Contains(view, "are stale"); banner != (query == "other") {
 				t.Fatalf("height %d, query %q: stale banner drawn = %v:\n%s", height, query, banner, view)
 			}
-			for _, issue := range results {
+			for _, issue := range results[:capacity] {
 				for _, want := range []string{"T " + issue.Title, "  P2 OPN " + issue.ID} {
 					if !strings.Contains(view, want) {
 						t.Errorf("height %d, query %q: %d results in the window, %q is not drawn:\n%s", height, query, capacity, want, view)
 					}
 				}
+			}
+			if next := "  P2 OPN " + results[capacity].ID; strings.Contains(view, next) {
+				t.Errorf("height %d, query %q: the window is %d results and the pane draws %q whole too:\n%s", height, query, capacity, next, view)
 			}
 		}
 	}

@@ -32,9 +32,15 @@ func scrollID(idx int) string { return fmt.Sprintf("tm-%02d", idx) }
 // the repository, with the results focused.
 func scrollSearch(t *testing.T) (*Model, *fakes.TrackedRepository) {
 	t.Helper()
+	return scrollSearchOf(t, scrollIssues)
+}
+
+// scrollSearchOf is scrollSearch on a store of issues open issues.
+func scrollSearchOf(t *testing.T, issues int) (*Model, *fakes.TrackedRepository) {
+	t.Helper()
 
 	repo := fakes.NewTracked()
-	for idx := 0; idx < scrollIssues; idx++ {
+	for idx := 0; idx < issues; idx++ {
 		repo.Memory.Seed(memoryrepo.Issue{ID: scrollID(idx), Title: scrollTitle(idx), Status: "open", Type: "task", Priority: 2})
 	}
 	m := NewModel(context.Background(), repo, nil)
@@ -196,6 +202,57 @@ func TestReloadKeepsTheScrolledWindowAndANewQueryResetsIt(t *testing.T) {
 		t.Fatalf("a new result set kept scroll offset %d, want 0", m.scrollOffset)
 	}
 	assertSelectionDrawn(t, m, 0)
+}
+
+// TestAListThatFitsThePaneDoesNotScroll: the window reserved the two banner
+// lines also with no banner up, so the last of 7 results in a pane of 7 rows
+// scrolled the first away and left a blank row.
+func TestAListThatFitsThePaneDoesNotScroll(t *testing.T) {
+	t.Parallel()
+
+	const fitting = 7
+	m, _ := scrollSearchOf(t, fitting)
+	pressRune(m, "j", fitting-1)
+	assertSelectionDrawn(t, m, fitting-1)
+	if m.scrollOffset != 0 {
+		t.Fatalf("scroll offset = %d in a pane that draws the whole list", m.scrollOffset)
+	}
+
+	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
+	for idx := 0; idx < fitting; idx++ {
+		for _, want := range []string{"T " + scrollTitle(idx), "P2 OPN " + scrollID(idx)} {
+			if !strings.Contains(view, want) {
+				t.Errorf("%q is not drawn:\n%s", want, view)
+			}
+		}
+	}
+	if !strings.Contains(view, "─ 7 exact · open ─╮") {
+		t.Fatalf("header of a list that fits does not read a plain `7 exact · open`:\n%s", view)
+	}
+}
+
+// TestTheBannerTakesARowFromTheScrollWindow: a typed draft puts the
+// stale-results banner over the rows with no selection move. The selection was
+// on the last row drawn and stays on a drawn row.
+func TestTheBannerTakesARowFromTheScrollWindow(t *testing.T) {
+	t.Parallel()
+
+	m, _ := scrollSearch(t)
+	withoutBanner := m.searchItemCapacity()
+	pressRune(m, "j", withoutBanner-1)
+	if m.scrollOffset != 0 {
+		t.Fatalf("fixture: the last row of the first window scrolled the pane to %d", m.scrollOffset)
+	}
+
+	pressRune(m, "/", 1)
+	pressRune(m, "x", 1)
+	if view := m.View(0); !strings.Contains(view, "are stale") {
+		t.Fatalf("fixture: a typed draft drew no stale-results banner:\n%s", view)
+	}
+	if got := m.searchItemCapacity(); got != withoutBanner-1 {
+		t.Fatalf("scroll window under the banner = %d rows, want %d", got, withoutBanner-1)
+	}
+	assertSelectionDrawn(t, m, withoutBanner-1)
 }
 
 func TestResizeKeepsTheSelectionInTheScrollWindow(t *testing.T) {

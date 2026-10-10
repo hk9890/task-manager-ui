@@ -272,18 +272,92 @@ func TestRenderResultsContentStopsAtTheLastRowThePaneHasALineFor(t *testing.T) {
 	state := hitTestState(160, 24)
 	state.ScrollOffset = 1
 	for _, tc := range []struct {
-		paneHeight, rows int
+		height, rows int
 	}{
-		{paneHeight: 6, rows: 2}, // four lines inside
-		{paneHeight: 7, rows: 3}, // five: two rows and the title of a third
+		{height: 9, rows: 2},  // four lines inside the pane
+		{height: 10, rows: 3}, // five: two rows and the title of a third
 	} {
-		lines := renderResultsContent(state, 60, tc.paneHeight)
+		lines := renderResultsContent(state, 60, tc.height)
 		if len(lines) != tc.rows*issuerow.Height {
-			t.Fatalf("pane of %d: rendered %d lines, want the %d of %d rows", tc.paneHeight, len(lines), tc.rows*issuerow.Height, tc.rows)
+			t.Fatalf("frame of %d: rendered %d lines, want the %d of %d rows", tc.height, len(lines), tc.rows*issuerow.Height, tc.rows)
 		}
 		last := testui.AnsiEscapePattern.ReplaceAllString(lines[len(lines)-issuerow.Height], "")
 		if want := fmt.Sprintf("hit-%02d", tc.rows); !strings.Contains(last, want) {
-			t.Fatalf("pane of %d: the last row rendered is %q, want %s", tc.paneHeight, last, want)
+			t.Fatalf("frame of %d: the last row rendered is %q, want %s", tc.height, last, want)
+		}
+	}
+}
+
+// TestResultsHeaderKeepsTheScopeWholeInTheNarrowestRail: a capped page of 100
+// in a 76-column terminal. `7/100 capped · open` is a cell wider than the
+// rail has beside the title, and the scope was what lost its end.
+func TestResultsHeaderKeepsTheScopeWholeInTheNarrowestRail(t *testing.T) {
+	t.Parallel()
+
+	results := make([]domain.IssueSummary, 100)
+	for idx := range results {
+		results[idx] = domain.IssueSummary{ID: fmt.Sprintf("tm-%03d", idx), Title: "capped", Type: "task", Status: "open", Priority: 2}
+	}
+	state := State{
+		Results:    results,
+		SelectedID: results[0].ID,
+		Metadata:   domain.SearchResultMetadata{ReturnedCount: len(results), Completeness: domain.SearchResultCompletenessMaybeMore},
+		Width:      76,
+		Height:     20,
+	}
+
+	// The shorter scope leaves the cell that `capped` needs.
+	for want, includeClosed := range map[string]bool{"─ 7/100 · open ─╮": false, "─ 7/100 capped · all ─╮": true} {
+		state.IncludeClosed = includeClosed
+		view := Render(state)
+		lines := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(view, ""), "\n")
+		_, y := testui.FindCell(t, view, "Results ─")
+		if !strings.Contains(lines[y], want) {
+			t.Errorf("header = %q, want it to hold %q", lines[y], want)
+		}
+		if got, want := lipgloss.Width(lines[y]), lipgloss.Width(lines[y+1]); got != want {
+			t.Errorf("the header line is %d cells and the line under it %d:\n%s", got, want, view)
+		}
+	}
+}
+
+// TestBannerGivesWayInAPaneWithNoLinesForAResultUnderIt: below 9 lines the
+// shell cuts the frame, and at 6 or 7 the pane has no two lines left under the
+// banner. The selected result is drawn there and a click finds it.
+func TestBannerGivesWayInAPaneWithNoLinesForAResultUnderIt(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		height int
+		banner bool
+	}{
+		{height: 6},
+		{height: 7},
+		{height: 8, banner: true},
+		{height: 9, banner: true},
+	} {
+		state := hitTestState(160, tc.height)
+		state.Query = "other"
+		state.ScrollOffset = 2
+		state.SelectedID = state.Results[2].ID
+		if got := RowCapacity(state); got != 1 {
+			t.Errorf("height %d: RowCapacity = %d, want 1", tc.height, got)
+		}
+
+		// What the shell leaves of a frame taller than its workspace.
+		view := strings.Join(strings.Split(Render(state), "\n")[:tc.height], "\n")
+		lines := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(view, ""), "\n")
+		if got := strings.Contains(view, "are stale"); got != tc.banner {
+			t.Errorf("height %d: banner drawn = %v, want %v:\n%s", tc.height, got, tc.banner, view)
+		}
+		x, y := testui.FindCell(t, view, "T "+state.Results[2].Title)
+		if y+1 >= len(lines) || !strings.Contains(lines[y+1], "P2 OPN "+state.Results[2].ID) {
+			t.Fatalf("height %d: the selected result is not drawn whole:\n%s", tc.height, view)
+		}
+		for line := 0; line < issuerow.Height; line++ {
+			if hit, ok := HitTest(state, x, y+line); !ok || hit.Row != 2 {
+				t.Errorf("height %d: HitTest on line %d of the selected result = %+v, %v; want result 2", tc.height, line, hit, ok)
+			}
 		}
 	}
 }
