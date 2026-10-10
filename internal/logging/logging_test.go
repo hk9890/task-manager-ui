@@ -3,6 +3,7 @@ package logging
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -397,7 +398,7 @@ func TestManagerCloseDoesNotPanicWhenPersistentSinkUnavailable(t *testing.T) {
 func TestGenerateSessionIDReturnsHexOnSuccess(t *testing.T) {
 	t.Parallel()
 
-	id := generateSessionID()
+	id := generateSessionID(rand.Read)
 	if len(id) == 0 {
 		t.Fatal("expected non-empty session ID")
 	}
@@ -413,13 +414,12 @@ func TestGenerateSessionIDReturnsHexOnSuccess(t *testing.T) {
 }
 
 func TestGenerateSessionIDFallsBackToTimestampOnRandError(t *testing.T) {
-	// Not parallel: modifies package-level randReader.
-	orig := randReader
-	randReader = func(b []byte) (int, error) { return 0, errors.New("entropy exhausted") }
-	t.Cleanup(func() { randReader = orig })
+	t.Parallel()
 
-	id1 := generateSessionID()
-	id2 := generateSessionID()
+	failingRead := func([]byte) (int, error) { return 0, errors.New("entropy exhausted") }
+
+	id1 := generateSessionID(failingRead)
+	id2 := generateSessionID(failingRead)
 
 	if id1 == "00000000" {
 		t.Fatalf("expected non-literal fallback, got %q", id1)

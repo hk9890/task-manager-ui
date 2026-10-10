@@ -18,21 +18,12 @@ const (
 	DefaultEmptyFallback = "(no content)"
 )
 
-// renderMarkdownANSIMu guards renderMarkdownANSI. Production code never
-// reassigns the variable after init; the mutex exists so that tests running in
-// parallel can safely swap and restore the seam without triggering the race
-// detector.
-var renderMarkdownANSIMu sync.Mutex
-
-// renderMarkdownANSI is a test seam for deterministic fallback testing.
-var renderMarkdownANSI = renderMarkdownANSIMemoized
-
 // renderMarkdownANSIMemoized is the production markdown renderer. Both the
 // glamour renderer and its output are memoized, keyed by everything that can
 // change the result.
 //
-// Nothing above this seam is memoized on purpose: a test that swaps
-// renderMarkdownANSI must see its own function, never a cached frame.
+// Nothing above this function is memoized on purpose: a test that sets
+// Renderer.renderANSI must see its own function, never a cached frame.
 func renderMarkdownANSIMemoized(content string, width int) (string, error) {
 	dark := styles.Dark()
 
@@ -156,13 +147,6 @@ func glamourStyleName(dark bool) string {
 	return "light"
 }
 
-// getRenderMarkdownANSI returns the current renderMarkdownANSI function under lock.
-func getRenderMarkdownANSI() func(string, int) (string, error) {
-	renderMarkdownANSIMu.Lock()
-	defer renderMarkdownANSIMu.Unlock()
-	return renderMarkdownANSI
-}
-
 // Renderer renders markdown for read-only terminal viewing surfaces.
 //
 // Fallback behavior is deterministic:
@@ -171,11 +155,15 @@ func getRenderMarkdownANSI() func(string, int) (string, error) {
 //   - glamour renderer init/render failure -> same plain deterministic wrapping
 type Renderer struct {
 	EmptyFallback string
+
+	// renderANSI renders markdown to ANSI. A nil value, as in a Renderer
+	// literal, means renderMarkdownANSIMemoized.
+	renderANSI func(string, int) (string, error)
 }
 
 // NewRenderer returns a renderer configured for read-only markdown viewing.
 func NewRenderer() Renderer {
-	return Renderer{EmptyFallback: DefaultEmptyFallback}
+	return Renderer{EmptyFallback: DefaultEmptyFallback, renderANSI: renderMarkdownANSIMemoized}
 }
 
 // RenderReadOnly renders markdown as ANSI output when markdown structure is
@@ -191,7 +179,12 @@ func (r Renderer) RenderReadOnly(input string, width int) string {
 		return renderPlain(content, width)
 	}
 
-	rendered, err := getRenderMarkdownANSI()(content, width)
+	renderANSI := r.renderANSI
+	if renderANSI == nil {
+		renderANSI = renderMarkdownANSIMemoized
+	}
+
+	rendered, err := renderANSI(content, width)
 	if err != nil {
 		return renderPlain(content, width)
 	}

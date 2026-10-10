@@ -24,13 +24,11 @@ func TestExecProcessRunnerReapsChildren(t *testing.T) {
 
 	const n = 5
 
-	// Install the test hook so the reaper signals completion without sleeping.
-	// Use a buffered channel of size n so each goroutine never blocks.
+	// The runner signals on its own channel after each reap, so only the
+	// children of this test are counted. Use a buffered channel of size n so
+	// each goroutine never blocks.
 	hook := make(chan struct{}, n)
-	setReaperHook(hook)
-	t.Cleanup(func() { setReaperHook(nil) })
-
-	runner := NewExecProcessRunner()
+	runner := execProcessRunner{reaped: hook}
 	ctx := context.Background()
 
 	for i := range n {
@@ -175,10 +173,8 @@ func TestExecProcessRunnerDetachesChildIntoItsOwnProcessGroup(t *testing.T) {
 		t.Fatalf("Run returned error: %v", err)
 	}
 
-	// Wait for what this child wrote, not for the reaper hook: the hook is
-	// process-global, and the child of an earlier test, reaped late, fires it
-	// before this one has written a byte. The shell creates the file before ps
-	// fills it, so an empty file is not an answer yet either.
+	// Wait for what this child wrote. The shell creates the file before ps
+	// fills it, so an empty file is not an answer yet.
 	var childPgid int
 	deadline := time.Now().Add(5 * time.Second)
 	for {
