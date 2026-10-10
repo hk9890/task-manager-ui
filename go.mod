@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/x/exp/teatest v0.0.0-20260330094520-2dce04b6f8a4
 	github.com/hk9890/task-manager/sdk v0.11.0
 	github.com/muesli/termenv v0.16.0
-	golang.org/x/tools v0.50.0
+	golang.org/x/tools v0.51.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
