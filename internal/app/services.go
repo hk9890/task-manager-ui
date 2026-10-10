@@ -61,6 +61,10 @@ type Services struct {
 	Launcher launcher.Service
 	Editor   launchereditor.Service
 	Config   config.Model
+	// ConfigPath is the config file Config was loaded from, or would be loaded
+	// from when it exists: the configuration screen writes a change there.
+	// Empty when the caller resolved none, and a change is then refused.
+	ConfigPath string
 	// ExecCommandFactory wraps a *exec.Cmd as a tea.ExecCommand for the editor
 	// launch flow. It defaults to a thin wrapper with Bubble Tea's "set if unset"
 	// stdin/stdout/stderr semantics. Tests can inject a no-op implementation to

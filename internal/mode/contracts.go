@@ -23,11 +23,15 @@ const (
 	// neither a tab nor a drill-in: it sits above every browse surface and
 	// renders instead of the shell.
 	StorePicker ID = "store_picker"
+	// Config is the configuration screen. Like StorePicker it sits above
+	// every browse surface and renders instead of the shell.
+	Config ID = "config"
 )
 
-// BrowseModes lists the browse tabs in header order. Neither Detail nor
-// StorePicker is a tab: Detail is a drill-in reached from a browse mode and
-// left with Escape, and StorePicker is a full-screen surface above all of them.
+// BrowseModes lists the browse tabs in header order. Detail, StorePicker and
+// Config are not tabs: Detail is a drill-in reached from a browse mode and
+// left with Escape, and the other two are full-screen surfaces above all of
+// them.
 var BrowseModes = []ID{Board, Docs}
 
 // IsBrowse reports whether id is one of the browse tabs. The shell keeps

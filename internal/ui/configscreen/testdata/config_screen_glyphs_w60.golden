@@ -1,0 +1,12 @@
+╭─ Configuration ──────────────────────────────────────────╮
+│  written to ….config/taskmgr-ui/config.yaml as it changes│
+│                                                          │
+│  Appearance                                              │
+│  theme     ‹ catppuccin-mocha ›                          │
+│▌ glyphs    ‹ unicode ›                                   │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+down/up move · left/right change · esc back · ctrl+c quit

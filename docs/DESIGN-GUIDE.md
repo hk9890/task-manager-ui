@@ -21,9 +21,15 @@ shell. Every other package is pure.
   declaration in `colors.go` and one line there, and it then holds in every theme.
 - A new theme is one entry in `flavors`, and in `lightThemes` when it draws on a light background —
   `styles.Dark` is what markdown takes its glamour style from.
-- `styles.Apply` runs once, from `cmd/taskmgr-ui`, before the first frame: the roles are package
-  variables. A test draws with `catppuccin-mocha` and the `unicode` glyphs, which the package
-  starts on; one that applies another restores it in `t.Cleanup` and stays out of `t.Parallel`.
+- `styles.Apply` runs from `cmd/taskmgr-ui` before the first frame, and again on each change made
+  on the configuration screen (`Model.applyConfigChange`, `internal/app/config_screen.go`). The
+  roles are package variables with no guard, so call it under a running program from `Update`
+  only, never inside a `tea.Cmd`: `View` reads them on the same goroutine.
+- After an `Apply` under a running program, clamp the scroll offsets as a resize does
+  (`applyWorkspaceSizeToBrowseModes`, `detail.ClampScroll`): a light theme renders markdown in
+  another glamour style and a glyph set draws tokens of another width.
+- A test draws with `catppuccin-mocha` and the `unicode` glyphs, which the package starts on; one
+  that applies another restores it in `t.Cleanup` and stays out of `t.Parallel`.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
   `TextSecondaryColor`), shell chrome (`ShellTab*`, `ShellAction*`, `ShellRuleColor`,
   `ShellFooterHelpColor`), the query line and its matches (`QueryAccentColor`, `MatchTextColor`),
@@ -70,6 +76,7 @@ column below shows the `unicode` set:
 | `▌ ` / two spaces | the selection gutter, always 2 cells wide; take it from `styles.SelectionPrefix` | `Cursor` |
 | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight; draw it with `loading.Glyph` | `Spinner` |
 | `❯` | the prompt in front of a query line | `Prompt` |
+| `‹ ›` | either side of a value the operator steps through, on the configuration screen | `StepPrev`, `StepNext` |
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
@@ -135,6 +142,7 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   name wider than `storeLabelMax` is cut; with no name the label is `stores`.
 - `reload` is one button for every surface: it runs the reload of the surface on screen and shows
   that surface's key (`Model.reloadKey`).
+- `config` opens the configuration screen (`Model.openConfig`), a surface above the shell.
 - When the bar does not fit, the version goes first, then the buttons from the right
   (`Model.barCells`).
 - The tab line holds the spinner cell and the view tabs, and nothing else. Do not repeat there
@@ -246,10 +254,11 @@ it.
 
 ## Surfaces above the shell
 
-The store picker (`internal/mode/storepicker`, `internal/ui/storepicker`) is neither a tab nor a
-drill-in: it renders **instead of** the shell, as `fatalerror` does, so the shell chrome is absent
-while it is up and it draws its own key legend in the footer's place. It is therefore
-absent from `mode.BrowseModes` and never appears in the tab cycle.
+The store picker (`internal/mode/storepicker`, `internal/ui/storepicker`) and the configuration
+screen (`internal/mode/configscreen`, `internal/ui/configscreen`) are neither tabs nor drill-ins:
+each renders **instead of** the shell, as `fatalerror` does, so the shell chrome is absent while
+it is up and it draws its own key legend in the footer's place (`Model.renderSurface`). Both are
+therefore absent from `mode.BrowseModes` and never appear in the tab cycle.
 
 A surface above the shell takes keys before the shell key switch and reports whether it consumed
 each one — `Model.HandleKey` returns `(consumed, cmd)` — so Escape, quit and help keep working
@@ -263,6 +272,30 @@ opened from — the previous store's Detail and selection are gone.
 The picker is also the start screen when no store resolves. With no store open there is nothing
 below it, so the operator is held there: Escape quits, quit and help work, and every other shell
 key is inert until a store is opened.
+
+The configuration screen opens from a tab, the store search and Detail (`Model.openConfig`), and
+not from the picker: with no store open the picker has nothing below it.
+
+- It has one section, Appearance, with a row for the theme and one for the glyph set. Each row
+  is the selection gutter, the label padded to `labelWidth`, and the value between
+  `Glyphs.StepPrev` and `Glyphs.StepNext`: the markers say the value is stepped, not typed.
+- `move_up` and `move_down` of the board context move the cursor, clamped. `left`, `right` and
+  `enter` step the value through `styles.Themes()` or `styles.GlyphSets()` and wrap at both ends.
+  The three are matched as the keys themselves, without Alt, so an `alt+` chord stays a shell key.
+- Of the shell key switch it reaches only Escape, quit and help (`handleShellKey`). Every other
+  shell action is inert there, the tab cycle, the store picker, the search and reload included:
+  nothing below the screen is drawn. This is stricter than the picker.
+- The screen changes nothing itself. A step emits `configscreen.ChangeMsg` with both values, and
+  the shell validates, writes the config file, applies and then calls the screen's `SetValues`,
+  so a write that fails leaves the screen showing what is drawn
+  ([CONFIGURATION.md](CONFIGURATION.md#the-configuration-screen-writes-the-file)).
+- The first line names the file a change is written to. A path too long for the line loses its
+  front, so the file name stays.
+- A frame too short for the section loses its first lines, as far as it takes to draw the
+  selected row (`Render`, `internal/ui/configscreen/configscreen.go`).
+- A selection that lands under the screen starts no detail load; Escape starts it
+  (`ensureDetailForCurrentSelectionCmd`), so the Detail below shows the issue its keys act on.
+- It takes no mouse event. The bar button opens it and the keys work it.
 
 When nothing resolved for the working directory, the picker offers to create a store there as two
 action rows above the registry — `Row.Action` in `internal/ui/storepicker`. An action is a row, not
@@ -334,6 +367,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`. The store
   button rests in that colour and weight, so under the pointer it takes an underline instead.
 - A click on a menu-bar button runs the method its key runs (`Model.mouseOnHeader`).
+- The configuration screen takes no mouse event: `handleMouse` returns before the header and the
+  surface are measured. Text selection still works there, because it runs before the routing.
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release sends the box

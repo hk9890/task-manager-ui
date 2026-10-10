@@ -25,6 +25,7 @@ the query. The actions sit on `alt+` chords and on keys that print nothing.
 - `delete` — close selected issue
 - `alt+a` — add comment to selected issue
 - `alt+s` — open the store picker: every central task store on this machine
+- `alt+c` — open the configuration screen: the theme and the glyph set
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
@@ -147,6 +148,34 @@ do anything. Two rows at the top of the list offer to create a local or a
 central store for that directory: select one and press `enter` to fill in its
 name and ID prefix.
 
+## Configuration Screen
+
+The full-screen list of settings, opened with `alt+c` or the `config` button on
+the menu bar, from a tab, the store search or detail. It does not open from the
+store picker. It has one section, Appearance, with two rows: `theme` and
+`glyphs`.
+
+- `up`, `down` — move between the rows
+- `left`, `right` — step the value of the row back or forward; the list wraps at both ends
+- `enter` — step the value forward, as `right` does
+- `esc` — return to where you opened it from
+- `alt+h`, `ctrl+c` — help and quit, as everywhere
+
+`up` and `down` follow the board keymap. `left`, `right` and `enter` are built
+in and cannot be rebound. Every other key does nothing here, and the mouse only
+selects text.
+
+A change shows at once and is written to the config file at once; the first
+line of the screen names that file. The file keeps its comments, its order and
+its layout: only the one value changes, and a missing `ui:` section or key is
+added. A file that does not exist yet is created.
+
+When the file cannot be changed safely, nothing changes and a toast reads
+`Config not changed:` with the reason, which ends in `change it by hand`. This
+happens, for example, when `ui:` is written as `ui: {}` on one line without the
+key, when the value uses a YAML anchor or alias, or when the file no longer
+loads.
+
 ## Modal Dialogs
 
 - `tab`, `down` — move to next field
@@ -182,8 +211,9 @@ instead.
   that store.
 - **Click a view tab** — Board, Docs — to switch to it.
 - **Click a button** on the menu bar, the first line — the name of the open store, `search`,
-  `reload`, `help`, `quit` — to do what the key shown beside it does. The store's name opens the
-  store picker. `reload` reloads the view on screen.
+  `reload`, `config`, `help`, `quit` — to do what the key shown beside it does. The store's name
+  opens the store picker. `reload` reloads the view on screen. `config` opens the configuration
+  screen, which takes keys only.
 - **Click a pane** in detail mode to focus it.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.

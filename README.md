@@ -22,7 +22,7 @@ What it does:
 - **Mouse** — click, wheel and drag-select do what the keys do. A plain drag belongs to the app;
   hold `shift` and drag for the terminal's own selection.
 - **Themes and glyph sets** — four Catppuccin themes, and issue tokens as letters or as Nerd Font
-  icons.
+  icons. `alt+c` changes both while the app runs and writes the choice to the config file.
 - **No daemon** — the store is opened in-process through the task-manager Go SDK.
 
 ## Getting Started
@@ -77,7 +77,8 @@ on the store picker, where you can open a registered store or create one for the
 directory.
 
 The default theme, `catppuccin-mocha`, is dark and does not follow the terminal background. On a
-light terminal put this in `~/.config/taskmgr-ui/config.yaml`:
+light terminal press `alt+c` and step the theme to `catppuccin-latte`, or put this in
+`~/.config/taskmgr-ui/config.yaml`:
 
 ```yaml
 ui:
@@ -85,7 +86,7 @@ ui:
 ```
 
 With a [Nerd Font](https://www.nerdfonts.com/), `ui.glyphs: nerd` draws type, priority and status
-as icons.
+as icons. `alt+c` sets it too.
 
 ## CLI surface
 

@@ -59,6 +59,7 @@ type startupOptions struct {
 	logManager  *logging.Manager
 	repoFlag    string // "taskmgr" (default) or "memory"
 	repoFile    string // resolved path; source of truth for --repo memory, ignored by taskmgr
+	configPath  string // resolved config file; the configuration screen writes a change there
 }
 
 // buildRepository selects and opens the repository backend for startInteractive.
@@ -184,6 +185,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	services.StoreCatalog = storecatalogtaskmgr.New(resolveAuthor())
 	services.ActiveStorePath = selected.storePath
 	services.StoreName = selected.storeName
+	services.ConfigPath = opts.configPath
 
 	model, err := app.NewModelWithOptions(services, app.RuntimeOptions{
 		DisableAutoRefresh: !opts.autoRefresh,
@@ -385,6 +387,7 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		logManager:  logManager,
 		repoFlag:    opts.repo,
 		repoFile:    resolvedRepoFile,
+		configPath:  configResult.Path,
 	})
 	if logManager != nil {
 		logManager.SetStderrSuppressed(false)

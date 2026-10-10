@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
+	configscreenmode "github.com/hk9890/task-manager-ui/internal/mode/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	docsmode "github.com/hk9890/task-manager-ui/internal/mode/docs"
 	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
@@ -121,6 +122,11 @@ type Model struct {
 	// were rather than on the home tab.
 	storePicker  *storepickermode.Model
 	pickerReturn mode.ID
+
+	// configScreen is the full-screen configuration screen, and configReturn
+	// the surface the operator opened it from, where Escape puts them back.
+	configScreen *configscreenmode.Model
+	configReturn mode.ID
 
 	detail detail.Model
 	// detailLoadFailedID is the issue whose detail load failure the operator
@@ -239,6 +245,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		// application's context and survives every store switch.
 		storePicker: storepickermode.NewModel(ctx, services.StoreCatalog,
 			logging.WithComponent(services.Logger, "storepicker"), keys),
+		configScreen:         configscreenmode.NewModel(keys),
 		toast:                toaster.New(),
 		help:                 help,
 		width:                defaultViewportWidth,
@@ -630,8 +637,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The picker renders instead of the shell, so it takes the whole
 		// terminal rather than the workspace the browse tabs share.
 		m.storePicker.SetSize(m.width, m.height)
+		m.configScreen.SetSize(m.width, m.height)
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
+	case configscreenmode.ChangeMsg:
+		return m, batchCmds(modeCmd, m.applyConfigChange(msg))
 	case storepickermode.StoresLoadedMsg:
 		return m, batchCmds(modeCmd, m.storePicker.Update(msg))
 	case unresolvedStoreMsg:
@@ -737,8 +747,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The picker is not a browse tab and shows no detail, so a selection
 		// landing under it must not start a detail load: currentSelection() would
 		// answer from lastBrowse, retargeting the Detail surface the operator
-		// returns to and raising its failure toast over the store list.
-		if m.active == mode.StorePicker {
+		// returns to and raising its failure toast over the store list. The
+		// configuration screen is the same case, and a Detail it was opened
+		// from may show a drilled-in issue that is not that row.
+		if m.active == mode.StorePicker || m.active == mode.Config {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
@@ -845,6 +857,21 @@ func (m *Model) openStorePicker() tea.Cmd {
 	return m.storePicker.Init()
 }
 
+// openConfig puts the configuration screen on screen, from a browse tab, the
+// store search or Detail. It does not open over the store picker, as the
+// search does not: with no store open the picker has nothing below it.
+func (m *Model) openConfig() tea.Cmd {
+	if m.active == mode.Config || m.active == mode.StorePicker {
+		return nil
+	}
+	m.configReturn = m.active
+	m.active = mode.Config
+	m.configScreen.SetSize(m.width, m.height)
+	ui := m.services.Config.UI
+	m.configScreen.Open(m.services.ConfigPath, ui.Theme, ui.Glyphs)
+	return nil
+}
+
 // openSearch puts the store search on screen, from a browse tab or Detail. From
 // a Detail that was opened from the search it is the way back to the results.
 func (m *Model) openSearch() tea.Cmd {
@@ -941,6 +968,20 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 	}
 
+	// The configuration screen takes its keys the same way. It has no issue
+	// selection and no tab strip, and nothing below it is on screen, so of the
+	// shell switch below it reaches only Escape, quit and help.
+	if m.active == mode.Config {
+		if consumed, configCmd := m.configScreen.HandleKey(msg); consumed {
+			return m, batchCmds(modeCmd, configCmd)
+		}
+		if !m.keys.Match(config.ShellContext, config.ShellActionEscape, msg) &&
+			!m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) &&
+			!m.keys.Match(config.ShellContext, config.ShellActionHelp, msg) {
+			return m, modeCmd
+		}
+	}
+
 	// A key the active tab takes for itself is that tab's alone. The tab
 	// already has it from forwardModeMessages, so no shell action runs on it.
 	if tab := m.browseController(m.active); tab != nil && tab.TakesKey(msg) {
@@ -963,6 +1004,8 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		return m, batchCmds(modeCmd, m.openStorePicker())
 	case m.keys.Match(config.ShellContext, config.ShellActionOpenSearch, msg):
 		return m, batchCmds(modeCmd, m.openSearch())
+	case m.keys.Match(config.ShellContext, config.ShellActionOpenConfig, msg):
+		return m, batchCmds(modeCmd, m.openConfig())
 	case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
 		m.applyModeCycle(nextMode(m.active, m.lastBrowse))
 		return m, batchCmds(modeCmd, m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
@@ -984,6 +1027,12 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if m.active == mode.StorePicker {
 			m.active = m.pickerReturn
 			return m, modeCmd
+		}
+		if m.active == mode.Config {
+			// A selection that landed under the screen started no detail
+			// load, so the surface below catches up here.
+			m.active = m.configReturn
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 		}
 		if m.active == mode.Detail {
 			// Opened from the store search, Detail returns there: the query,

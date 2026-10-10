@@ -143,6 +143,10 @@ suppressed for the interactive session.
 - `failed to create task-manager store` — creating a store from the picker failed, most
   often on a registry name already taken. The form stays open with what was typed, and
   the toast carries the same cause.
+- `failed to change the ui configuration` (with `path` and `error`) — a theme or glyph set
+  stepped on the configuration screen was not written to the config file
+  (`Model.applyConfigChange`, `internal/app/config_screen.go`). Nothing changed on screen, and
+  the toast carries the same cause.
 - `store change watch not started; the refresh tick is the only trigger` (WARN, with `error`),
   `store change watch ended; the refresh tick is the only trigger` (WARN) — the watch
   `Model.watchStore` starts on the active store (`internal/app/storewatch.go`) is off: the

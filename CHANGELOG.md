@@ -8,6 +8,16 @@ carries its `vX.Y.Z` section of this file as its notes.
 
 ## Unreleased
 
+- **Action required if your config binds `alt+c` in the shell context.** `alt+c`
+  now opens the configuration screen, and a config that already binds it to
+  another shell action fails startup with `key "alt+c" conflicts between actions
+  ... in shell context`. Rebind one of the two; the new action is `open_config`.
+- **Added: a configuration screen.** `alt+c`, or the new `config` button on the
+  menu bar, opens a screen where `left` and `right` step the theme and the
+  glyph set. A change shows at once and is written to the config file, which
+  keeps its comments and its layout; a missing file is created. When the file
+  cannot be changed safely, nothing changes and a toast says why. `esc` returns
+  to where you came from.
 - **Changed: the header.** The first button on the menu bar is the name of the
   open store, in bold; it opens the store picker, as `stores` did. The text at
   the right of the tab line — the store, the view, the selected issue and

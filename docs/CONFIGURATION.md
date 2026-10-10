@@ -9,7 +9,8 @@ and which can refuse the app's writes.
 
 Configuration lives in `internal/config` and is loaded once at startup via
 `config.LoadWithOptions(...)` (the startup path used by `cmd/taskmgr-ui/main.go`;
-`config.Load()` is the simpler no-options variant).
+`config.Load()` is the simpler no-options variant). The running app never reads the file
+again, and writes it from one place: [the configuration screen](#the-configuration-screen-writes-the-file).
 
 Config path resolution, in order:
 
@@ -81,6 +82,8 @@ The model is intentionally small and only covers app-shell concerns:
   - `ascii` is for a terminal whose font is not yours.
 - An unknown theme or glyph set fails startup, and `--check-config`, with the valid names.
   `styles.Validate` (`internal/ui/styles/theme.go`) owns both lists.
+- Both change while the app runs, on the configuration screen (`open_config`), which writes the
+  new value to this file.
 
 Example config:
 
@@ -123,6 +126,43 @@ keybindings:
     enter: [space]
     escape: [q]
 ```
+
+## The configuration screen writes the file
+
+The `open_config` shell action opens a screen with one section, Appearance, whose two rows step
+`UI.Theme` and `UI.Glyphs` through `styles.Themes()` and `styles.GlyphSets()`. Each step is one
+`Model.applyConfigChange` (`internal/app/config_screen.go`), in this order: `styles.Validate`,
+`config.Set`, `styles.Apply`, then `Services.Config.UI`.
+
+- The file comes before the apply. A write that fails changes nothing on screen, raises the toast
+  `Config not changed:` with the error, and logs one record ([MONITORING.md](MONITORING.md)).
+- The file written is `Result.Path`, the path the loader resolved: the `--config` file, or the
+  default path. A default file that does not exist is created, with its directory.
+- Only the key that changed is written, as `ui.theme` or `ui.glyphs`. Every other value the app
+  holds stays the one of startup: an edit made by hand while the app runs takes effect at the
+  next start.
+
+`config.Set(path, section, key, value)` (`internal/config/set.go`) edits the file as text, at the
+position the YAML parser reports, and keeps every other byte: comments, key order, blank lines,
+indentation and CRLF line ends.
+
+- An existing value is replaced in place, in block or flow style. The new value is quoted only
+  when YAML needs it, so the quotes of an old value go.
+- A missing key becomes a line after the last entry of its section, at the indentation of that
+  entry. A missing section is added at the end of the file; so is the first section of an empty,
+  comment-only or missing file.
+- The new text must pass the loader's own decode and validation, and must decode to the old
+  document with only that key changed, before it is written.
+- A shape it cannot edit is refused with `config "<path>": cannot set ui.theme: <reason>; change
+  it by hand`, and the file is untouched: a section that is not a plain mapping, a missing key in
+  a flow-style section, a missing section in a flow-style file, a value that is an alias, a
+  mapping, a block scalar or longer than one line, a value with an anchor or a tag, a key written
+  twice, a file with more than one YAML document, and a file the loader rejects as it stands.
+- The write is whole or nothing: a temp file in the same directory, synced, then a rename. An
+  existing file keeps its mode, and a symlinked config stays a link, with its target written. A
+  link whose target is missing is replaced by a regular file.
+- A file the operator cannot write is refused with the permission error, although the rename
+  needs the directory only: `chmod a-w` on the config file holds against the screen.
 
 ## The store's own config
 
@@ -175,10 +215,10 @@ Keybindings are resolved once at startup from the `keybindings` section.
 Supported actions by context:
 
 - `shell`
-  - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `mode_cycle_next`,
-    `mode_cycle_prev`, `escape`, `reload_detail`, `edit_issue`, `create_issue`,
-    `update_issue`, `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
-    `launch_shell_command`
+  - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `open_config`,
+    `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `edit_issue`,
+    `create_issue`, `update_issue`, `close_issue`, `comment_issue`, `launch_nvim`,
+    `launch_opencode`, `launch_shell_command`
 - `board`
   - `move_left`, `move_right`, `move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
     `page_down`, `open_detail`, `reload`
@@ -188,6 +228,8 @@ Supported actions by context:
     surfaces together, which is deliberate — each is a single list of rows, and a context
     of its own would ask for the same movement to be rebound twice. In the picker
     `open_detail` opens the highlighted store.
+  - The configuration screen reads `move_up` and `move_down` from this context. The keys that
+    step a value there, `left`, `right` and `enter`, are built in and follow no binding.
 - `detail`
   - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
 - `modal`

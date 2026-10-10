@@ -36,7 +36,8 @@ func init() {
 	}
 }
 
-// Themes and GlyphSets report the valid names, sorted, for an error message.
+// Themes and GlyphSets report the valid names, sorted: for an error message,
+// and in the order the configuration screen steps through them.
 func Themes() []string    { return sortedKeys(flavors) }
 func GlyphSets() []string { return sortedKeys(glyphSets) }
 
@@ -54,8 +55,10 @@ func Validate(theme, glyphs string) error {
 }
 
 // Apply makes a theme and a glyph set the ones every surface draws with. It
-// runs once, at startup, before the first render: the roles are package
-// variables and nothing guards a change under a running program.
+// runs at startup, before the first render, and again when the operator
+// changes either on the configuration screen. The roles are package variables
+// and nothing guards them, so a call under a running program comes from the
+// Bubble Tea event loop, which is also the only reader, never from a tea.Cmd.
 func Apply(theme, glyphs string) error {
 	if err := Validate(theme, glyphs); err != nil {
 		return err

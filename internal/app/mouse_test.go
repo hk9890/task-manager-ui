@@ -219,7 +219,7 @@ func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 		"the tab line": {{0, headerTabsRow}, {headerTabsStart() - 1, headerTabsRow}, {docsX + len(" Docs "), headerTabsRow}, {80, headerTabsRow}},
 		// The cell before the first button, the `·` after it, and the space
 		// before the version.
-		"the menu bar": {{storesX - 1, headerMenuRow}, {storesX + len(storesText) + 1, headerMenuRow}, {80, headerMenuRow}},
+		"the menu bar": {{storesX - 1, headerMenuRow}, {storesX + len(storesText) + 1, headerMenuRow}, {100, headerMenuRow}},
 		// The rule draws nothing to press, under a button or over a tab.
 		"the rule": {{docsX + 1, 1}, {storesX + 1, 1}},
 	}
@@ -354,6 +354,12 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 			t.Helper()
 			if m.active != mode.Search || m.searchFrom != mode.Board {
 				t.Errorf("on %q opened from %q, want the search opened from the board", m.active, m.searchFrom)
+			}
+		}},
+		{label: "config", action: config.ShellActionOpenConfig, check: func(t *testing.T, m Model) {
+			t.Helper()
+			if m.active != mode.Config || m.configReturn != mode.Board {
+				t.Errorf("on %q returning to %q, want the configuration screen returning to the board", m.active, m.configReturn)
 			}
 		}},
 		{label: "help", action: config.ShellActionHelp, check: func(t *testing.T, m Model) {

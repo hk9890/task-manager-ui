@@ -104,13 +104,13 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 }
 
 // TestMenuBarDropsTheVersionThenTheRightmostButton narrows the terminal one
-// column at a time. The version goes first, then quit, help, reload, search: the
-// store's name is the last button standing.
+// column at a time. The version goes first, then quit, help, config, reload,
+// search: the store's name is the last button standing.
 func TestMenuBarDropsTheVersionThenTheRightmostButton(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
-	all := []string{"task-manager-ui", "search", "reload", "help", "quit"}
+	all := []string{"task-manager-ui", "search", "reload", "config", "help", "quit"}
 
 	previous, hadVersion := 0, false
 	for width := 0; width <= 220; width++ {

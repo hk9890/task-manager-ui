@@ -552,6 +552,37 @@ func TestRunPassesStoreNameToStartup(t *testing.T) {
 	}
 }
 
+// TestRunPassesTheResolvedConfigPathToStartup pins the wiring between the
+// config file the loader resolved and the file the configuration screen
+// writes a change to.
+func TestRunPassesTheResolvedConfigPathToStartup(t *testing.T) {
+	restoreStyles(t)
+
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	var seenOpts startupOptions
+	var stderr bytes.Buffer
+	code := runWithLogger(
+		[]string{"--cwd", t.TempDir()},
+		&bytes.Buffer{},
+		&stderr,
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Default(), Path: configPath}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			seenOpts = opts
+			return nil
+		},
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr=%q)", code, stderr.String())
+	}
+	if seenOpts.configPath != configPath {
+		t.Errorf("configPath: got %q, want %q", seenOpts.configPath, configPath)
+	}
+}
+
 // TestRunRepoMemoryWithoutFileExitsCode2 verifies that --repo=memory without
 // --repo-file exits with code 2 and a clear message.
 func TestRunRepoMemoryWithoutFileExitsCode2(t *testing.T) {
