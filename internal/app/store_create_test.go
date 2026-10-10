@@ -161,6 +161,22 @@ func TestCreatingALocalStoreOpensIt(t *testing.T) {
 	}
 }
 
+// The request travels as a Cmd, so the help key can open the overlay before it
+// arrives. A form under the help overlay takes every key the operator presses
+// to close the overlay, Enter on its create button included.
+func TestACreateRequestUnderTheHelpOverlayOpensNoForm(t *testing.T) {
+	s := newStorelessStart(t)
+
+	m := s.m
+	m.showHelp = true
+	next, _ := m.Update(storepickermode.CreateMsg{Kind: storepickermode.LocalStore, Dir: storelessDir})
+	m = next.(Model)
+
+	if m.showActionModal || m.storeForm.kind != 0 {
+		t.Errorf("a store form opened under the help overlay (open = %v, kind = %v)", m.showActionModal, m.storeForm.kind)
+	}
+}
+
 func TestCreatingACentralStoreSendsItsName(t *testing.T) {
 	s := newStorelessStart(t)
 

@@ -135,7 +135,7 @@ store large enough to page.
 ### Closed-limit scales with terminal height
 
 **Proves:** `sectionItemCapacity()` scales with the height the mode receives (`height - 3`, floored
-at 1, and `20` before the first `WindowSizeMsg`), and a refresh re-reads it.
+at 1, and `20` before the first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
 
 Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
 rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-7 of M`, where
@@ -143,8 +143,8 @@ rows of shell chrome, so at a terminal of `H` rows the Done column header reads 
 resize to 200 rows, press `r`: the header must read `193 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
-`DashboardOptions.ClosedLimit`, or the `WindowSizeMsg` handler never saw the new size — both in
-`internal/mode/board/model.go`. `M` equal to `N` means `ClosedTotal` is computed after the limit
+`DashboardOptions.ClosedLimit` in `internal/mode/board/model.go`, or `applyWorkspaceSizeToBrowseModes`
+in `internal/app/render.go` never gave the board the new size. `M` equal to `N` means `ClosedTotal` is computed after the limit
 slice instead of before.
 
 ### The selection bar follows the selection

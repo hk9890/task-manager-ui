@@ -183,6 +183,6 @@ instead.
 - Data views refresh by themselves when the store changes, whoever wrote it — the
   `taskmgr` CLI, an agent, another `taskmgr-ui` — also while the terminal is not
   focused. A change that arrives under a dialog or the help overlay shows when it
-  closes. They also refresh when the app regains focus and once a minute, which
-  is what remains where the store cannot be watched. `--no-auto-refresh` turns
-  all three off; `r` reloads at once either way.
+  closes. Where the store cannot be watched, they refresh when the app regains
+  focus and once a minute. `--no-auto-refresh` turns all three off; `r` reloads
+  at once either way.

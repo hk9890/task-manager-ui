@@ -109,6 +109,9 @@ type Model struct {
 	pickerReturn mode.ID
 
 	detail detail.Model
+	// detailLoadFailedID is the issue whose detail load failure the operator
+	// was already told about.
+	detailLoadFailedID string
 
 	toast toaster.Model
 
@@ -274,6 +277,7 @@ func (m *Model) bindStore(services Services) {
 	m.selectedByMode = make(map[mode.ID]*mode.Selection)
 	m.drillSelection = nil
 	m.pendingDialog = pendingDialogGuard{}
+	m.detailLoadFailedID = ""
 	m.showActionModal = false
 	m.storeForm = storeForm{}
 	m.fatalErrTitle, m.fatalErrBody = "", ""
@@ -548,8 +552,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		modeCmd = m.forwardModeMessages(msg)
 	}
 
-	if model, cmd, handled := m.handleOverlayMessage(msg, modeCmd); handled {
-		return model, cmd
+	if m.overlayConsumes(msg) {
+		return m.handleOverlayMessage(msg, modeCmd)
+	}
+	if m.showActionModal {
+		// The focused input of the modal owns messages the shell cannot name:
+		// its cursor blink and the result of a paste.
+		nextModal, cmd := m.actionModal.Update(msg)
+		m.actionModal = nextModal
+		modeCmd = batchCmds(modeCmd, cmd)
 	}
 
 	switch msg := msg.(type) {
@@ -560,7 +571,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !wasBlurred {
 			return m, modeCmd
 		}
-		if m.runtime.DisableAutoRefresh {
+		// The watch reloads a surface also while the terminal is not focused,
+		// so on a watched store there is nothing to catch up on.
+		if m.runtime.DisableAutoRefresh || m.storeWatched() {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
@@ -578,6 +591,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.waitForStoreChangeCmd())
 	case storeWatchEndedMsg:
 		m.storeChanges = nil
+		// A watch that ends in the burst of a write sends no signal for it, and
+		// on a watched store no handler reloaded for that write. Count the end
+		// as a change, so the write is read.
+		m.storeChangeSeq++
 		m.logger().Warn("store change watch ended; the refresh tick is the only trigger")
 		return m, modeCmd
 	case loading.TickMsg:
@@ -590,8 +607,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.applyWorkspaceSizeToBrowseModes()
-		// Both overlays are sized here, open or not: handleOverlayMessage
-		// passes a resize through rather than consuming it.
+		// Both overlays are sized here, open or not: an overlay does not
+		// consume a resize.
 		m.help.SetSize(m.width, m.height)
 		m.actionModal.SetSize(m.width, m.height)
 		// The picker renders instead of the shell, so it takes the whole
@@ -617,6 +634,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, openStoreCmd(m.appCtx, m.services.StoreCatalog, entry.Name))
 	case storepickermode.CreateMsg:
+		// A store form rides the action-modal slot. Like the two dialog
+		// requests below, it does not open over an overlay.
+		if m.overlayOpen() {
+			return m, modeCmd
+		}
 		return m, batchCmds(modeCmd, m.openStoreForm(msg.Kind, msg.Dir))
 	case storeCreatedMsg:
 		return m, batchCmds(modeCmd, m.handleStoreCreated(msg))
@@ -634,8 +656,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail.FinishLoad(msg.err)
 		m.markSurfaceRefreshed(mode.Detail)
 		if msg.err != nil {
+			// The store watch reloads a failed Detail on every change, so the
+			// toast is shown for the first failure of an issue and not again.
+			if msg.issueID == m.detailLoadFailedID {
+				return m, modeCmd
+			}
+			m.detailLoadFailedID = msg.issueID
 			return m, batchCmds(modeCmd, m.showToast("Failed to load selected issue details", toaster.StyleError))
 		}
+		m.detailLoadFailedID = ""
 
 		if strings.TrimSpace(msg.issueID) == strings.TrimSpace(m.detail.SelectionID()) {
 			m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
@@ -668,6 +697,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, modeCmd
 		}
 		m.pendingDialog = pendingDialogGuard{}
+		// An overlay opened while the catalogs loaded. Opening the dialog now
+		// would replace the modal on screen, and a store form in it would then
+		// submit the values of the wrong dialog.
+		if m.overlayOpen() {
+			return m, modeCmd
+		}
 
 		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
 		return m, batchCmds(modeCmd, m.openMutationModal(dialog))
@@ -703,6 +738,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// target from a surface that is no longer on screen — and an ESC that
 		// left the mode is what cancels the request.
 		if msg.Mode != m.active {
+			return m, modeCmd
+		}
+		// A dialog request does not open a dialog over an overlay, for the
+		// reason the catalog result above does not.
+		if m.overlayOpen() && msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
 		}
 		switch msg.Action {
@@ -795,6 +835,8 @@ func (m *Model) quit() tea.Cmd {
 // reloadActiveSurface does what the reload key of the surface on screen does.
 func (m *Model) reloadActiveSurface() tea.Cmd {
 	if m.active == mode.Detail {
+		// The operator asked, so a load that fails again is told again.
+		m.detailLoadFailedID = ""
 		return m.reloadDetailCmd()
 	}
 	// Board is the shell's home tab, so an unknown active mode draws it
@@ -952,7 +994,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, m.reloadDetailCmd())
+		return m, batchCmds(modeCmd, m.reloadActiveSurface())
 	case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
 		issueID, ok := m.selectedIssueID()
 		if !ok {
@@ -1001,105 +1043,82 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 	return m, modeCmd
 }
 
-// handleOverlayMessage routes msg to whichever overlay is open. handled is
-// false when none is, in which case the caller falls through to the message
-// switch. An open overlay consumes the message: that is why this runs before
-// routing and not inside it.
-func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, tea.Cmd, bool) {
-	// These message types are the shell's own and an overlay never consumes
-	// them. Both tick chains re-arm only from their own handlers in update(),
-	// so a swallowed tick froze the spinner and stopped auto-refresh for the
-	// rest of the session; and the shell's resize case is the only caller of
-	// applyWorkspaceSizeToBrowseModes and detail.ClampScroll, so a swallowed
-	// resize left every browse tab sized to the raw terminal until the next
-	// resize with no overlay open. That case sizes the overlays too.
-	//
-	// A swallowed store listing is the same shape of bug: the picker's in-flight
-	// state is cleared only by its own result, so losing one leaves it reading
-	// "Reading the central store registry…" and spinning for the rest of the
-	// session. A swallowed open request or opened store silently drops a switch
-	// the operator asked for. A created store arrives while its form is still
-	// open, by design, so swallowing it would leave the form stuck on
-	// "creating" for good. The store form also raises toasts while it stays
-	// open; a swallowed dismiss timer leaves that toast on screen for good.
-	//
-	// The store watch is a third chain of that kind: a swallowed change stops
-	// the wait from re-arming, and the watch is dead for the rest of the session.
-	//
-	// The watch also starts loads at moments the operator does not choose, so
-	// one can land under an overlay opened a moment later. A swallowed detail
-	// result leaves Detail loading for good, which stops every later reload of
-	// it, the reload key included. A swallowed selection leaves the shell
-	// acting on the row the reload moved the cursor away from.
-	switch msg.(type) {
-	case loading.TickMsg, refreshTickMsg, storeChangedMsg, storeWatchEndedMsg,
-		detailLoadedMsg, mode.SelectionChangedMsg,
-		tea.WindowSizeMsg, toaster.DismissMsg,
-		storepickermode.StoresLoadedMsg, storepickermode.OpenMsg, storeOpenedMsg,
-		storepickermode.CreateMsg, storeCreatedMsg:
-		return m, nil, false
-	}
+// overlayOpen reports whether the help overlay or the action modal is on screen.
+func (m Model) overlayOpen() bool {
+	return m.showHelp || m.showActionModal
+}
 
+// overlayConsumes reports whether an open overlay takes msg from the shell: the
+// keys, and the two messages a modal answers a key with. The mouse never
+// arrives here; handleMouse takes it first.
+//
+// Every other message is the result of work the shell started, a tick or the
+// store watch, and its handler in update() is the only thing that ends a
+// loading state, re-arms a chain or reports an outcome. The rule was once the
+// opposite, a list of the messages an overlay let through, and each message
+// missing from that list stalled its chain for the rest of the session.
+func (m Model) overlayConsumes(msg tea.Msg) bool {
+	if !m.overlayOpen() {
+		return false
+	}
+	switch msg.(type) {
+	case tea.KeyMsg, modal.SubmitMsg, modal.CancelMsg:
+		return true
+	}
+	return false
+}
+
+// handleOverlayMessage gives the open overlay a message it consumes
+// (overlayConsumes).
+func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	if m.showActionModal {
 		if _, ok := msg.(modal.CancelMsg); ok {
 			m.showActionModal = false
 			m.storeForm = storeForm{}
-			return m, modeCmd, true
+			return m, modeCmd
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
 			if m.storeForm.kind != 0 {
-				return m, batchCmds(modeCmd, m.submitStoreForm(submit.Values)), true
+				return m, batchCmds(modeCmd, m.submitStoreForm(submit.Values))
 			}
 			m.showActionModal = false
-			return m, batchCmds(modeCmd, m.scoped(submitMutationCmd(m.services, m.actionState, submit.Values))), true
+			return m, batchCmds(modeCmd, m.scoped(submitMutationCmd(m.services, m.actionState, submit.Values)))
 		}
 
 		nextModal, cmd := m.actionModal.Update(msg)
 		m.actionModal = nextModal
-		return m, batchCmds(modeCmd, cmd), true
+		return m, batchCmds(modeCmd, cmd)
 	}
 
-	if m.showHelp {
-		// Close through the same action that opens it. Matching a literal "?"
-		// made the toggle one-way for anyone who rebound toggle_help — the
-		// example config in docs/CONFIGURATION.md binds it to F1 — leaving
-		// Escape as the only way out.
-		if k, ok := msg.(tea.KeyMsg); ok && m.keys.Match(config.ShellContext, config.ShellActionHelp, k) {
-			m.showHelp = false
-			return m, modeCmd, true
-		}
-
-		if _, ok := msg.(modal.CancelMsg); ok {
-			m.showHelp = false
-			return m, modeCmd, true
-		}
-		if _, ok := msg.(modal.SubmitMsg); ok {
-			m.showHelp = false
-			return m, modeCmd, true
-		}
-
-		if k, ok := msg.(tea.KeyMsg); ok {
-			if scrolled, ok := m.scrollHelp(k); ok {
-				m.help = scrolled
-				return m, modeCmd, true
-			}
-		}
-
-		nextHelp, cmd := m.help.Update(msg)
-		m.help = nextHelp
-
-		if size, ok := msg.(tea.WindowSizeMsg); ok {
-			m.sizeKnown = true
-			m.width = size.Width
-			m.height = size.Height
-			m.help.SetSize(m.width, m.height)
-		}
-
-		return m, batchCmds(modeCmd, cmd), true
+	// Close through the same action that opens it. Matching a literal "?"
+	// made the toggle one-way for anyone who rebound toggle_help — the
+	// example config in docs/CONFIGURATION.md binds it to F1 — leaving
+	// Escape as the only way out.
+	if k, ok := msg.(tea.KeyMsg); ok && m.keys.Match(config.ShellContext, config.ShellActionHelp, k) {
+		m.showHelp = false
+		return m, modeCmd
 	}
 
-	return m, nil, false
+	if _, ok := msg.(modal.CancelMsg); ok {
+		m.showHelp = false
+		return m, modeCmd
+	}
+	if _, ok := msg.(modal.SubmitMsg); ok {
+		m.showHelp = false
+		return m, modeCmd
+	}
+
+	if k, ok := msg.(tea.KeyMsg); ok {
+		if scrolled, ok := m.scrollHelp(k); ok {
+			m.help = scrolled
+			return m, modeCmd
+		}
+	}
+
+	nextHelp, cmd := m.help.Update(msg)
+	m.help = nextHelp
+	return m, batchCmds(modeCmd, cmd)
 }
 
 // scrollHelp scrolls the help overlay on the keys that scroll a detail pane.

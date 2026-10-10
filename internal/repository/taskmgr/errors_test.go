@@ -2,6 +2,7 @@ package taskmgr
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -126,14 +127,6 @@ func TestMapWriteErrHookDeniedKeepsTheHookReason(t *testing.T) {
 
 	got := mapWriteErr("close issue", denied)
 
-	var re domain.RepositoryError
-	if !errors.As(got, &re) {
-		t.Fatalf("mapWriteErr returned %T (%v), want domain.RepositoryError", got, got)
-	}
-	if re.Message != denied.Reason {
-		t.Errorf("message = %q, want the hook's reason %q", re.Message, denied.Reason)
-	}
-
 	text := got.Error()
 	if strings.Contains(text, string(domain.ErrorCodeUnknown)) {
 		t.Errorf("rendered error still frames the refusal as unknown: %q", text)
@@ -143,6 +136,88 @@ func TestMapWriteErrHookDeniedKeepsTheHookReason(t *testing.T) {
 	}
 	if !strings.Contains(text, denied.Reason) {
 		t.Errorf("rendered error does not carry the denial reason: %q", text)
+	}
+	// A toast is one line cut to the terminal width. With the hook id before
+	// it, the reason was past the cut at 80 columns.
+	if reason, hook := strings.Index(text, denied.Reason), strings.Index(text, denied.Hook); reason > hook {
+		t.Errorf("the hook id stands before the denial reason, where a narrow toast cuts the reason: %q", text)
+	}
+}
+
+// TestMappedErrorTextNamesTheSDKMessageOnce pins the text of the error toast.
+// The mapped error carried the SDK message in its own message and again in the
+// printed cause, so a refused title edit read "update: title is required:
+// title: title is required". The SDK error must still be reachable: the text
+// names it one time, the chain keeps it.
+func TestMappedErrorTextNamesTheSDKMessageOnce(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		mapped error
+		once   string
+		want   string
+		found  func(error) bool
+	}{
+		{
+			name:   "write validation",
+			mapped: mapWriteErr("update", &tasks.ValidationError{Field: "title", Message: "title is required"}),
+			once:   "title is required",
+			want:   "update: title: title is required",
+			found:  func(err error) bool { var target *tasks.ValidationError; return errors.As(err, &target) },
+		},
+		{
+			name: "write hook denied",
+			mapped: mapWriteErr("close issue", &tasks.HookDeniedError{
+				Event:   "pre-close",
+				Hook:    "pkg:deny-closes:deny-closes",
+				IssueID: "tm-42",
+				Exit:    1,
+				Reason:  "refused by the machine-wide policy",
+			}),
+			once:  "refused by the machine-wide policy",
+			want:  `close issue: refused by the machine-wide policy: pre-close denied for tm-42 by hook "pkg:deny-closes:deny-closes"`,
+			found: func(err error) bool { var target *tasks.HookDeniedError; return errors.As(err, &target) },
+		},
+		{
+			name:   "write validation the SDK wrapped",
+			mapped: mapWriteErr("create issue", fmt.Errorf("entry 2: %w", &tasks.ValidationError{Field: "title", Message: "title is required"})),
+			once:   "title is required",
+			want:   "create issue: entry 2: title: title is required",
+			found:  func(err error) bool { var target *tasks.ValidationError; return errors.As(err, &target) },
+		},
+		{
+			name:   "read validation",
+			mapped: mapReadErr("search", &tasks.ValidationError{Field: "statuses", Message: `unknown status "nope"`}),
+			once:   `unknown status "nope"`,
+			want:   `search: statuses: unknown status "nope"`,
+			found:  func(err error) bool { var target *tasks.ValidationError; return errors.As(err, &target) },
+		},
+		{
+			name:   "read parse",
+			mapped: mapReadErr("search", &tasks.ParseError{Pos: 3, Message: "bad filter expression"}),
+			once:   "bad filter expression",
+			want:   "search: parse error at byte 3: bad filter expression",
+			found:  func(err error) bool { var target *tasks.ParseError; return errors.As(err, &target) },
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			text := tc.mapped.Error()
+			if got := strings.Count(text, tc.once); got != 1 {
+				t.Errorf("text holds %q %d times, want 1: %q", tc.once, got, text)
+			}
+			if text != tc.want {
+				t.Errorf("text = %q, want %q", text, tc.want)
+			}
+			if !tc.found(tc.mapped) {
+				t.Errorf("errors.As does not find the SDK error in %T", tc.mapped)
+			}
+		})
 	}
 }
 

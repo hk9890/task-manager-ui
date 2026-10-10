@@ -300,47 +300,36 @@ func (m Model) handleMutationResult(modeCmd tea.Cmd, msg mutationResultMsg) (tea
 		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("No changes saved for issue %s", msg.issueID), toaster.StyleInfo))
 	}
 
-	m.markBrowseSurfacesDirty()
-
+	var done string
 	switch msg.kind {
 	case mutationCreate:
-		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Created issue %s", emptyFallback(msg.createdID, "(unknown)")), toaster.StyleSuccess),
-			m.maybeAutoRefreshActiveSurfaceCmd(),
-		)
+		done = fmt.Sprintf("Created issue %s", emptyFallback(msg.createdID, "(unknown)"))
 	case mutationUpdate:
-		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess),
-			m.reloadDetailAfterMutationCmd(msg.issueID),
-			m.maybeAutoRefreshActiveSurfaceCmd(),
-		)
+		done = fmt.Sprintf("Updated issue %s", msg.issueID)
 	case mutationClose:
-		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Closed issue %s", msg.issueID), toaster.StyleSuccess),
-			m.reloadDetailAfterMutationCmd(msg.issueID),
-			m.maybeAutoRefreshActiveSurfaceCmd(),
-		)
+		done = fmt.Sprintf("Closed issue %s", msg.issueID)
 	case mutationComment:
-		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Added comment to %s", msg.issueID), toaster.StyleSuccess),
-			m.reloadDetailAfterMutationCmd(msg.issueID),
-			m.maybeAutoRefreshActiveSurfaceCmd(),
-		)
+		done = fmt.Sprintf("Added comment to %s", msg.issueID)
 	case mutationStatus:
-		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Updated issue status for %s", msg.issueID), toaster.StyleSuccess),
-			m.reloadDetailAfterMutationCmd(msg.issueID),
-			m.maybeAutoRefreshActiveSurfaceCmd(),
-		)
+		done = fmt.Sprintf("Updated issue status for %s", msg.issueID)
 	case mutationPriority:
-		return m, batchCmds(modeCmd,
-			m.showToast(fmt.Sprintf("Updated issue priority for %s", msg.issueID), toaster.StyleSuccess),
-			m.reloadDetailAfterMutationCmd(msg.issueID),
-			m.maybeAutoRefreshActiveSurfaceCmd(),
-		)
+		done = fmt.Sprintf("Updated issue priority for %s", msg.issueID)
 	default:
+		m.markBrowseSurfacesDirty()
 		return m, modeCmd
 	}
+	toastCmd := m.showToast(done, toaster.StyleSuccess)
+
+	if m.storeWatched() {
+		return m, batchCmds(modeCmd, toastCmd)
+	}
+
+	m.markBrowseSurfacesDirty()
+	return m, batchCmds(modeCmd,
+		toastCmd,
+		m.reloadDetailAfterMutationCmd(msg.issueID),
+		m.maybeAutoRefreshActiveSurfaceCmd(),
+	)
 }
 
 func submitMutationCmd(services Services, state mutationDialogState, values map[string]string) tea.Cmd {

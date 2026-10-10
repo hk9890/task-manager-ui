@@ -98,22 +98,28 @@ func TestRepositoryErrorUnwrapPropagatesThroughMultipleLayers(t *testing.T) {
 	}
 }
 
-func TestRepositoryErrorErrorWithCauseAppendsCauseForAllBaseFormats(t *testing.T) {
+// TestRepositoryErrorErrorAppendsCauseOnlyWithoutMessage pins that the text
+// names the failure one time. A mapper puts the cause's own words in Message, so
+// appending the cause as well showed the operator the same sentence twice.
+func TestRepositoryErrorErrorAppendsCauseOnlyWithoutMessage(t *testing.T) {
 	t.Parallel()
 
 	cause := errors.New("transport reset")
 
 	tests := []struct {
-		name string
-		err  RepositoryError
+		name        string
+		err         RepositoryError
+		appendCause bool
 	}{
 		{
-			name: "code only",
-			err:  RepositoryError{Code: ErrorCodeCommandFailed, Cause: cause},
+			name:        "code only",
+			err:         RepositoryError{Code: ErrorCodeCommandFailed, Cause: cause},
+			appendCause: true,
 		},
 		{
-			name: "operation plus code",
-			err:  RepositoryError{Code: ErrorCodeCommandFailed, Operation: "list issues", Cause: cause},
+			name:        "operation plus code",
+			err:         RepositoryError{Code: ErrorCodeCommandFailed, Operation: "list issues", Cause: cause},
+			appendCause: true,
 		},
 		{
 			name: "message only",
@@ -132,10 +138,16 @@ func TestRepositoryErrorErrorWithCauseAppendsCauseForAllBaseFormats(t *testing.T
 
 			nilCause := tc.err
 			nilCause.Cause = nil
-			want := fmt.Sprintf("%s: %s", nilCause.Error(), cause.Error())
+			want := nilCause.Error()
+			if tc.appendCause {
+				want = fmt.Sprintf("%s: %s", want, cause.Error())
+			}
 
 			if got := tc.err.Error(); got != want {
 				t.Fatalf("unexpected error string: got %q want %q", got, want)
+			}
+			if !errors.Is(tc.err, cause) {
+				t.Fatal("errors.Is(err, cause) = false; want true — Unwrap must return the cause whether or not Error prints it")
 			}
 		})
 	}

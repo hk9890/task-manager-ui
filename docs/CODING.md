@@ -107,9 +107,12 @@ still holds: each repository instance is bound to one store, and switching repla
   handler, so a dropped tick stops the chain for the rest of the session.
 - The store watch (`internal/app/storewatch.go`) is the opposite case and is scoped: `bindStore`
   starts one per store on that store's context, so the previous store's wait ends by itself and
-  its last message must not reach the new store's chain. Its two messages are on the pass-through
-  list in `handleOverlayMessage`, as the ticks are, because the wait also re-arms only from its
-  own handler.
+  its last message must not reach the new store's chain. The wait also re-arms only from its own
+  handler; an open overlay does not stop it, because `Model.overlayConsumes` takes only keys and
+  the modal's own messages from the shell.
+- On a watched store (`Model.storeWatched`) the watch owns the reload after a write, the app's own
+  writes included. Do not reload from the handler of a write result there: the signal for that
+  write reloads a second time.
 
 `TASKMGR_DIR` is rejected by the SDK rather than honored; unset it and use `--cwd` or
 `--store-name`.

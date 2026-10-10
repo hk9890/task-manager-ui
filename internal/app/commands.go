@@ -67,6 +67,13 @@ func (m Model) handleEditIssuePrepared(modeCmd tea.Cmd, msg editIssuePreparedMsg
 		m.logger().Error("failed to prepare the issue edit document", "issue_id", msg.issueID, "error", msg.err.Error())
 		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to edit issue %s: %v", msg.issueID, msg.err), toaster.StyleError))
 	}
+	if m.showActionModal {
+		// A dialog opened while the document was prepared. Its fields hold the
+		// issue as it was, so a submit after the editor would write the old
+		// values back over the edit.
+		_ = os.Remove(msg.prepared.TempPath)
+		return m, modeCmd
+	}
 	editorCmd, err := m.services.Editor.BuildEditorCmd(msg.prepared.TempPath)
 	if err != nil {
 		// PrepareDocument already wrote the temp doc (containing the issue's
@@ -130,6 +137,13 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 		return m, batchCmds(modeCmd, toastCmd)
 	}
 
+	toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
+	notifyEditResult()
+
+	if m.storeWatched() {
+		return m, batchCmds(modeCmd, toastCmd)
+	}
+
 	// Marking the surfaces dirty only makes the *next* refresh tick reload
 	// them, and that tick is a minute away — so the edited row kept its old
 	// title under a toast saying the update succeeded, which reads as a failed
@@ -138,14 +152,10 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 
 	selection := m.currentSelection()
 	if selection == nil || selection.Issue.ID == "" {
-		toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
-		notifyEditResult()
 		return m, batchCmds(modeCmd, toastCmd, m.maybeAutoRefreshActiveSurfaceCmd())
 	}
 
 	m.detail.BeginLoad(selection.Issue.ID, detail.BeginLoadOptions{})
-	toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
-	notifyEditResult()
 	// After BeginLoad, so the detail-is-loading guard in refreshActiveSurfaceCmd
 	// suppresses a second load of the detail this path already issues.
 	return m, batchCmds(modeCmd,
