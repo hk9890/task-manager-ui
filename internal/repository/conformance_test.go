@@ -772,26 +772,24 @@ func TestUpdateDedupesLabelsConformance(t *testing.T) {
 	}
 }
 
-// TestSearchCompletenessConformance pins what a paged search reports about the
-// matches it did not return. The memory backend applied Limit and Offset and
-// still reported every window Exact, so a fixture-backed search view was told a
-// truncated page was the whole result set and offered no further page. The rule
-// belongs to both backends or the parity claim in repository.go is prose.
-func TestSearchCompletenessConformance(t *testing.T) {
+// TestSearchPagingConformance pins what a paged search reports about the
+// matches it did not return: the window holds what Limit and Offset leave, and
+// Total counts every match. The rule belongs to both backends or the parity
+// claim in repository.go is prose.
+func TestSearchPagingConformance(t *testing.T) {
 	const matches = 3
 
 	cases := []struct {
-		name         string
-		limit        int
-		offset       int
-		wantResults  int
-		wantComplete domain.SearchResultCompleteness
+		name        string
+		limit       int
+		offset      int
+		wantResults int
 	}{
-		{"no limit returns every match", 0, 0, matches, domain.SearchResultCompletenessExact},
-		{"window shorter than the match set", 2, 0, 2, domain.SearchResultCompletenessMaybeMore},
-		{"offset window stopping one short", 1, 1, 1, domain.SearchResultCompletenessMaybeMore},
-		{"window exactly the match set", matches, 0, matches, domain.SearchResultCompletenessExact},
-		{"last window reaching the end", 2, 2, 1, domain.SearchResultCompletenessExact},
+		{"no limit returns every match", 0, 0, matches},
+		{"window shorter than the match set", 2, 0, 2},
+		{"offset window stopping one short", 1, 1, 1},
+		{"window exactly the match set", matches, 0, matches},
+		{"last window reaching the end", 2, 2, 1},
 	}
 
 	for _, tc := range cases {
@@ -817,10 +815,6 @@ func TestSearchCompletenessConformance(t *testing.T) {
 				if len(page.Results) != tc.wantResults {
 					t.Errorf("%s: Search(limit=%d offset=%d) returned %d results, want %d",
 						b.name, tc.limit, tc.offset, len(page.Results), tc.wantResults)
-				}
-				if got := page.Metadata.Completeness; got != tc.wantComplete {
-					t.Errorf("%s: Completeness = %v, want %v (limit=%d offset=%d, %d results)",
-						b.name, got, tc.wantComplete, tc.limit, tc.offset, len(page.Results))
 				}
 				if got := page.Metadata.Total; got != matches {
 					t.Errorf("%s: Total = %d, want every match in scope, %d (limit=%d offset=%d)",

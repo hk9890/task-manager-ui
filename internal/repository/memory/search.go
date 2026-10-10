@@ -17,11 +17,7 @@ import (
 // semantics across fields; OR semantics within Labels). PriorityMin/Max bound
 // priority (nil = unbounded). WorkState=ready and WorkState=blocked derive
 // from dep-closure state (not stored status). Limit and Offset apply after all
-// filters.
-//
-// The returned Metadata.Completeness is Exact unless a positive Limit left
-// matches beyond the window, which is MaybeMore — the same rule the taskmgr
-// backend applies, so the two agree on a truncated page.
+// filters; Metadata.Total counts the matches before them.
 func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.SearchResultPage{}, err
@@ -37,11 +33,7 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 			continue
 		}
 
-		snippet := r.buildSnippet(si, query.Text)
-		results = append(results, domain.SearchResult{
-			Issue:   r.toSummaryLocked(si),
-			Snippet: snippet,
-		})
+		results = append(results, domain.SearchResult{Issue: r.toSummaryLocked(si)})
 	}
 
 	// Sort consistently: by ID for determinism (mirrors typical list behavior).
@@ -51,7 +43,7 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 
 	// total counts every match in scope, before Offset and Limit cut the
 	// window, so it is the memory equivalent of the taskmgr backend's
-	// Page.Total and feeds the same completeness rule below.
+	// Page.Total.
 	total := len(results)
 
 	// Apply offset and limit.
@@ -69,22 +61,9 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 		results = []domain.SearchResult{}
 	}
 
-	// The window is complete unless a positive Limit truncated matches that lie
-	// beyond it.
-	completeness := domain.SearchResultCompletenessExact
-	if query.Limit > 0 && total > query.Offset+len(results) {
-		completeness = domain.SearchResultCompletenessMaybeMore
-	}
-
 	return domain.SearchResultPage{
-		Results: results,
-		Metadata: domain.SearchResultMetadata{
-			ReturnedCount:  len(results),
-			RequestedLimit: query.Limit,
-			Total:          total,
-			Completeness:   completeness,
-			Source:         domain.SearchResultSourceBDSearch,
-		},
+		Results:  results,
+		Metadata: domain.SearchResultMetadata{Total: total},
 	}, nil
 }
 
@@ -195,24 +174,4 @@ func (r *Repository) matchesSearchLocked(si *storedIssue, q domain.SearchIssuesQ
 	}
 
 	return true
-}
-
-// buildSnippet produces a short snippet from the matched field. Returns the
-// field where the needle was found; empty string when no match (shouldn't
-// happen after matchesSearch returns true, but guards edge cases).
-func (r *Repository) buildSnippet(si *storedIssue, text string) string {
-	if text == "" {
-		return ""
-	}
-	needle := strings.ToLower(text)
-	if strings.Contains(strings.ToLower(si.title), needle) {
-		return si.title
-	}
-	if strings.Contains(strings.ToLower(si.description), needle) {
-		return si.description
-	}
-	if strings.Contains(strings.ToLower(si.notes), needle) {
-		return si.notes
-	}
-	return ""
 }

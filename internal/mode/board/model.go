@@ -293,10 +293,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
 			return m.moveRowCmd(len(m.columns[m.focusedColumn].shown))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
-			if m.currentSelection() == nil {
+			selection := m.currentSelection()
+			if selection == nil {
 				return nil
 			}
-			return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
+			return mode.RequestOpenDetailCmd(mode.Board, selection)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			return m.Reload()
 		}
@@ -578,6 +579,12 @@ func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
 	cmd = m.queryChanged()
 	m.keepFocusedColumnDrawn()
 	return true, cmd
+}
+
+// TakesKey reports whether msg is a key of the query, which the board takes
+// before any binding.
+func (m *Model) TakesKey(msg tea.KeyMsg) bool {
+	return mode.IsQueryKey(msg)
 }
 
 // queryChanged narrows every column to the new query. A column keeps its

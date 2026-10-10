@@ -14,49 +14,18 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 	// the selection the Enter was pressed on. So does the pointer leaving, which
 	// is also what the shell sends a surface it no longer draws.
 	if msg.Kind != mode.MouseMove {
-		m.heldOpen = noHeldOpen
+		m.heldOpen = false
 	}
-	m.pointer = msg.Pointer()
-	if m.pointer == nil {
-		return nil
+	moved, open := m.list.Mouse(msg, m.viewState(0))
+	if open {
+		return m.openDetail()
 	}
-
-	hit, ok := uiboard.HitTest(m.viewState(0), msg.X, msg.Y)
-	if !ok {
-		return nil
-	}
-
-	switch msg.Kind {
-	case mode.MouseWheelUp:
-		return m.moveRow(-1)
-	case mode.MouseWheelDown:
-		return m.moveRow(1)
-	case mode.MouseClick:
-		target := ""
-		if hit.Row >= 0 {
-			target = m.issues[hit.Row].ID
-		}
-		if m.clicks.Double(target, m.selectedIssueID(), msg) {
-			return m.openDetail()
-		}
-		if target == "" {
-			return nil
-		}
-		return m.moveRow(hit.Row - m.selectedRow)
-	}
-	return nil
-}
-
-func (m *Model) selectedIssueID() string {
-	if selection := m.currentSelection(); selection != nil {
-		return selection.Issue.ID
-	}
-	return ""
+	return m.selectionMovedCmd(moved)
 }
 
 // viewState is the results column as the renderer sees it. View and the hit
 // test build the same value, so a click lands on the row that is drawn under
-// it.
+// it. The column draws no age markers, so the state carries no clock.
 func (m *Model) viewState(skeletonPhase int) uiboard.State {
 	return uiboard.State{
 		Query:         m.query.Text(),
@@ -68,16 +37,4 @@ func (m *Model) viewState(skeletonPhase int) uiboard.State {
 		Height:        m.height,
 		SkeletonPhase: skeletonPhase,
 	}
-}
-
-// hover is the result under the pointer, or nil.
-func (m *Model) hover(state uiboard.State) *uiboard.Hit {
-	if m.pointer == nil {
-		return nil
-	}
-	hit, ok := uiboard.HitTest(state, m.pointer.X, m.pointer.Y)
-	if !ok || hit.Row < 0 {
-		return nil
-	}
-	return &hit
 }

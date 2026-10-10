@@ -12,6 +12,15 @@ carries its `vX.Y.Z` section of this file as its notes.
   open store, in bold; it opens the store picker, as `stores` did. The text at
   the right of the tab line — the store, the view, the selected issue and
   `Idle` — is gone: each part repeated what the screen already shows.
+- **Changed: the store search waits until you stop typing.** A search runs 150 ms
+  after the last key, so a typed word is one search and not one for each
+  letter. `enter` pressed inside that time opens the result of what you typed.
+- **Action required if your config binds `backspace`, `ctrl+w`, `ctrl+u` or
+  `ctrl+t`.** An entry in the `shell` or `board` context on one of these keys
+  now fails startup and `--check-config`, with an error that names the key, the
+  action and the context. The filter and the store search take these keys
+  first, so such a binding did not run on those screens. The `detail` and
+  `modal` contexts still take them.
 - **Action required: the keys changed.** No action is on a bare letter, digit or
   symbol key any more, because those keys now type into the filter. The new
   defaults: `alt+h` help, `alt+s` stores, `alt+f` search, `alt+r` reload,

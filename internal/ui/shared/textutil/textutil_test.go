@@ -89,6 +89,56 @@ func TestTruncateStringPreservesWellFormedANSI(t *testing.T) {
 	}
 }
 
+func TestTruncateStringFront(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		s        string
+		maxWidth int
+		want     string
+	}{
+		{name: "fits", s: "hello", maxWidth: 10, want: "hello"},
+		{name: "exact fit", s: "hello", maxWidth: 5, want: "hello"},
+		{name: "cut keeps the tail", s: "hello world", maxWidth: 5, want: "…orld"},
+		{name: "one cell over", s: "abcdef", maxWidth: 5, want: "…cdef"},
+		{name: "width 2", s: "abcdef", maxWidth: 2, want: "…f"},
+		{name: "width 1 is the ellipsis", s: "abcdef", maxWidth: 1, want: "…"},
+		{name: "width 1 that fits", s: "a", maxWidth: 1, want: "a"},
+		{name: "width 0", s: "abcdef", maxWidth: 0, want: ""},
+		{name: "negative width", s: "abcdef", maxWidth: -3, want: ""},
+		{name: "empty", s: "", maxWidth: 4, want: ""},
+		{name: "wide runes that fit", s: "世界", maxWidth: 4, want: "世界"},
+		{name: "wide runes cut on a rune edge", s: "世界世界", maxWidth: 5, want: "…世界"},
+		{name: "wide rune that straddles the cut is dropped", s: "世界世界", maxWidth: 4, want: "…界"},
+		{name: "wide rune with no room beside the ellipsis", s: "a世", maxWidth: 2, want: "…"},
+		{name: "wide rune after narrow ones", s: "abc世", maxWidth: 3, want: "…世"},
+	}
+	for _, tc := range cases {
+		got := textutil.TruncateStringFront(tc.s, tc.maxWidth)
+		if got != tc.want {
+			t.Errorf("%s: TruncateStringFront(%q, %d) = %q, want %q", tc.name, tc.s, tc.maxWidth, got, tc.want)
+		}
+		if width := lipgloss.Width(got); tc.maxWidth >= 0 && width > tc.maxWidth {
+			t.Errorf("%s: result %q is %d cells wide, over %d", tc.name, got, width, tc.maxWidth)
+		}
+	}
+}
+
+func TestTruncateStringFrontPreservesWellFormedANSI(t *testing.T) {
+	t.Parallel()
+
+	styled := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render(strings.Repeat("x", 63) + "y")
+	truncated := textutil.TruncateStringFront(styled, 18)
+
+	if got := lipgloss.Width(truncated); got != 18 {
+		t.Fatalf("expected display width 18, got %d", got)
+	}
+	if got, want := ansi.Strip(truncated), "…"+strings.Repeat("x", 16)+"y"; got != want {
+		t.Fatalf("stripped value %q, want %q", got, want)
+	}
+}
+
 func TestWrapLines(t *testing.T) {
 	t.Parallel()
 

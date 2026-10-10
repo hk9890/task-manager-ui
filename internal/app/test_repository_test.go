@@ -142,6 +142,8 @@ func seedInProgress(g *fakes.TrackedRepository, id, title string, issueType stri
 // mustNewModel wraps NewModel and fails the test if an error is returned.
 // It pre-sets sizeKnown=true and installs no-op scheduler functions so that
 // tests run without real time-based ticks and without any global shared state.
+// The store search waits no pause after an edit, for the same reason; a store
+// switch builds a new search, which waits the real one.
 // Tests that specifically validate the sizeKnown=false/empty-view behaviour
 // should call NewModelWithOptions directly and leave sizeKnown at its zero value.
 func mustNewModel(t *testing.T, services Services) Model {
@@ -155,6 +157,7 @@ func mustNewModel(t *testing.T, services Services) Model {
 	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
 	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 	m.awaitStoreChange = func(<-chan struct{}) tea.Cmd { return nil }
+	m.search.SetEditPause(0)
 	return m
 }
 
@@ -174,6 +177,7 @@ func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOpt
 	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
 	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 	m.awaitStoreChange = func(<-chan struct{}) tea.Cmd { return nil }
+	m.search.SetEditPause(0)
 	return m
 }
 

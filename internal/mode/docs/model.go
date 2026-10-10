@@ -11,9 +11,9 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/rowlist"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
-	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 const (
@@ -25,10 +25,6 @@ const (
 
 	// queryPlaceholder is what the query line says while nothing is typed.
 	queryPlaceholder = "filter docs"
-
-	// defaultItemCapacity is the row window used before the first
-	// tea.WindowSizeMsg sets a real height.
-	defaultItemCapacity = 20
 )
 
 // docsLoadedMsg carries the result of a docs Search repository call.
@@ -68,11 +64,8 @@ type Model struct {
 	loading  bool
 	inflight bool
 
-	selectedRow  int
-	scrollOffset int
-
-	pointer *mode.Pointer
-	clicks  mode.ClickTracker
+	// list is the selection, the scroll window and the pointer over shown.
+	list rowlist.List
 
 	// anchorIssueID is the issue selected when an auto-refresh started. The
 	// load handler restores the cursor onto it when it survives the refresh.
@@ -142,24 +135,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return m.queryChanged()
 		}
+		if moved, handled := m.list.MoveKey(m.keys, msg, m.viewState(0)); handled {
+			return m.selectionMovedCmd(moved)
+		}
 		switch {
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
-			return m.moveRow(-1)
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
-			return m.moveRow(1)
-		case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
-			return m.moveRow(-m.pageRows())
-		case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
-			return m.moveRow(m.pageRows())
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveHome, msg):
-			return m.moveRow(-len(m.shown))
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
-			return m.moveRow(len(m.shown))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
-			if m.currentSelection() == nil {
+			selection := m.currentSelection()
+			if selection == nil {
 				return nil
 			}
-			return mode.RequestActionCmd(mode.Docs, mode.ActionOpenDetail)
+			return mode.RequestOpenDetailCmd(mode.Docs, selection)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			return m.Reload()
 		}
@@ -171,7 +156,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // View renders the docs column.
 func (m *Model) View(skeletonPhase int) string {
 	state := m.viewState(skeletonPhase)
-	state.Hover = m.hover(state)
+	state.Hover = m.list.Hover(state)
 	return uiboard.Render(state)
 }
 
@@ -186,8 +171,8 @@ func (m *Model) uiColumn() uiboard.Column {
 	return uiboard.Column{
 		Title:        columnTitle,
 		Rows:         m.shown,
-		SelectedRow:  m.selectedRow,
-		ScrollOffset: m.scrollOffset,
+		SelectedRow:  m.list.SelectedRow,
+		ScrollOffset: m.list.ScrollOffset,
 		Total:        m.total,
 		TotalIsExact: true,
 		Loaded:       len(m.issues),
@@ -198,8 +183,8 @@ func (m *Model) uiColumn() uiboard.Column {
 }
 
 // SetSize updates render dimensions. The clamp is what board's SetSize does and
-// for the same reason: itemCapacity() is derived from the height, so a resize
-// leaves an offset that was valid for the old window.
+// for the same reason: the capacity of the column is derived from the height,
+// so a resize leaves an offset that was valid for the old window.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -234,8 +219,8 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 
 	m.anchorIssueID = ""
 	if rm == mode.RefreshReload {
-		m.selectedRow = 0
-		m.scrollOffset = 0
+		m.list.SelectedRow = 0
+		m.list.ScrollOffset = 0
 	} else if selection := m.currentSelection(); selection != nil {
 		m.anchorIssueID = selection.Issue.ID
 	}
@@ -273,7 +258,7 @@ func (m *Model) apply(msg docsLoadedMsg) tea.Cmd {
 
 	if anchor := m.anchorIssueID; anchor != "" {
 		if idx, ok := m.findIssue(anchor); ok {
-			m.selectedRow = idx
+			m.list.SelectedRow = idx
 		}
 	}
 	m.anchorIssueID = ""
@@ -301,13 +286,19 @@ func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
 	return true, m.queryChanged()
 }
 
+// TakesKey reports whether msg is a key of the query, which the docs tab
+// takes before any binding.
+func (m *Model) TakesKey(msg tea.KeyMsg) bool {
+	return mode.IsQueryKey(msg)
+}
+
 // queryChanged narrows the column to the new query. The selection stays on the
 // same doc when that doc still matches, and otherwise takes the first match.
 func (m *Model) queryChanged() tea.Cmd {
 	previous := m.selectedIssueID()
 
 	m.shown = m.query.Filter(m.issues)
-	m.selectedRow, _ = m.findIssue(previous)
+	m.list.SelectedRow, _ = m.findIssue(previous)
 	m.clampSelection()
 
 	if m.selectedIssueID() == previous {
@@ -317,68 +308,23 @@ func (m *Model) queryChanged() tea.Cmd {
 }
 
 func (m *Model) clampSelection() {
-	if len(m.shown) == 0 {
-		m.selectedRow = 0
-		m.scrollOffset = 0
-		return
-	}
-	if m.selectedRow < 0 {
-		m.selectedRow = 0
-	}
-	if m.selectedRow >= len(m.shown) {
-		m.selectedRow = len(m.shown) - 1
-	}
-	// Pull the window back inside the list first, as board's clampScrollOffsets
-	// does. EnsureVisible only slides far enough to reveal the selected row, so
-	// on its own a list that shrank under a scrolled offset keeps the offset and
-	// draws its last rows with the ones above unreachable until the operator
-	// moves up. MaxOffset counts the lines the renderer draws, as capacity does.
-	capacity := m.itemCapacity()
-	m.scrollOffset = min(m.scrollOffset, uiboard.MaxOffset(m.uiColumn(), capacity, m.now()))
-	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, m.now())
-}
-
-func (m *Model) moveRow(delta int) tea.Cmd {
-	if len(m.shown) == 0 {
-		m.selectedRow = 0
-		return nil
-	}
-
-	previous := m.selectedRow
-	m.selectedRow += delta
-	m.clampSelection()
-	if m.selectedRow == previous {
-		return nil
-	}
-	return m.selectionChangedCmd()
-}
-
-// itemCapacity returns the number of content rows the column holds at the
-// current terminal height. It mirrors the board's section capacity; which of
-// those rows are issues is uiboard.EnsureVisible's business.
-func (m *Model) itemCapacity() int {
-	if m.height == 0 {
-		return defaultItemCapacity
-	}
-	return uiboard.ContentRows(m.height)
-}
-
-// pageRows is the number of docs a page key moves the selection by: the docs
-// the column shows at the current height.
-func (m *Model) pageRows() int {
-	return max(1, m.itemCapacity()/issuerow.Height)
+	m.list.Clamp(m.viewState(0))
 }
 
 func (m *Model) currentSelection() *mode.Selection {
-	if len(m.shown) == 0 {
+	return m.list.Selection(m.shown)
+}
+
+func (m *Model) selectedIssueID() string {
+	return m.list.SelectedID(m.shown)
+}
+
+// selectionMovedCmd announces the selection after a key or the mouse moved it.
+func (m *Model) selectionMovedCmd(moved bool) tea.Cmd {
+	if !moved {
 		return nil
 	}
-	row := m.selectedRow
-	if row < 0 || row >= len(m.shown) {
-		row = 0
-	}
-	selection := mode.Selection{Issue: m.shown[row]}
-	return &selection
+	return m.selectionChangedCmd()
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {
