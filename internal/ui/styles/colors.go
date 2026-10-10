@@ -21,7 +21,6 @@ var (
 	ShellTabActiveBgColor       lipgloss.Color
 	ShellTabInactiveColor       lipgloss.Color
 	ShellTabHoverColor          lipgloss.Color
-	ShellContextColor           lipgloss.Color
 	ShellFooterHelpColor        lipgloss.Color
 	RowSelectedBgColor          lipgloss.Color
 	RowHoverBgColor             lipgloss.Color

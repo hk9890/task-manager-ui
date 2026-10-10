@@ -75,8 +75,8 @@ type Services struct {
 	// ActiveStorePath is the store directory Repo reads, used to mark the
 	// active row in the picker. Empty when the caller did not resolve one.
 	ActiveStorePath string
-	// StoreName is what the header calls the active store. Empty leaves the
-	// header as it was before stores could be switched.
+	// StoreName is what the menu bar calls the active store, on the button that
+	// opens the store picker. Empty leaves that button labelled `stores`.
 	StoreName string
 	// ProjectRoot is the project the active store tracks: what Launcher
 	// interpolates as {{project.root}}.

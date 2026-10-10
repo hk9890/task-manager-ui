@@ -64,7 +64,7 @@ func TestPostMutationDetailReloadReportsItsLoad(t *testing.T) {
 			m = next.(Model)
 
 			if !m.detail.IsLoading() {
-				t.Error("the post-mutation reload runs with detail.loading false: no spinner and no status line while it waits")
+				t.Error("the post-mutation reload runs with detail.loading false: no spinner while it waits")
 			}
 			if m.detail.TargetID() != "tm-1" {
 				t.Errorf("detail target after the mutation = %q, want tm-1; the response fails the target guard", m.detail.TargetID())

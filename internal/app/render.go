@@ -99,9 +99,11 @@ const (
 	headerSpinnerCols = 2
 	headerTabPadding  = 1
 	headerTabGap      = 1
-	// headerBarGap is the least space between the last button and the version,
-	// and between the last tab and the context.
+	// headerBarGap is the least space between the last button and the version.
 	headerBarGap = 2
+	// storeLabelMax is the widest a store name is drawn on the menu bar: a
+	// longer one is cut, so it cannot push the other buttons off the bar.
+	storeLabelMax = 24
 	// barSeparator stands between two buttons, as it does between two key
 	// hints on the legend.
 	barSeparator = " · "
@@ -118,21 +120,40 @@ var tabLabels = map[mode.ID]string{
 // action — the bar is a second way to reach the same thing, never the only
 // way.
 type barAction struct {
-	label string
+	label func(Model) string
 	key   func(Model) string
 	run   func(*Model) tea.Cmd
+	// strong draws the label as the store's name is drawn: the one button that
+	// says something about the session.
+	strong bool
+}
+
+func barLabel(label string) func(Model) string {
+	return func(Model) string { return label }
 }
 
 func shellKey(action string) func(Model) string {
 	return func(m Model) string { return m.keys.DisplayPrimary(config.ShellContext, action) }
 }
 
+// The store button comes first: which store is on screen is the first thing
+// the header must say, and the first button is the last one a narrow bar drops.
 var barActions = []barAction{
-	{label: "search", key: shellKey(config.ShellActionOpenSearch), run: (*Model).openSearch},
-	{label: "stores", key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker},
-	{label: "reload", key: Model.reloadKey, run: (*Model).reloadActiveSurface},
-	{label: "help", key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
-	{label: "quit", key: shellKey(config.ShellActionQuit), run: (*Model).quit},
+	{label: Model.storeLabel, key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker, strong: true},
+	{label: barLabel("search"), key: shellKey(config.ShellActionOpenSearch), run: (*Model).openSearch},
+	{label: barLabel("reload"), key: Model.reloadKey, run: (*Model).reloadActiveSurface},
+	{label: barLabel("help"), key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
+	{label: barLabel("quit"), key: shellKey(config.ShellActionQuit), run: (*Model).quit},
+}
+
+// storeLabel is the store button's label: the name of the active store, so the
+// button says which store is open and what a click on it changes.
+func (m Model) storeLabel() string {
+	name := strings.TrimSpace(m.services.StoreName)
+	if name == "" {
+		return "stores"
+	}
+	return textutil.TruncateString(name, storeLabelMax)
 }
 
 // reloadKey is the key that reloads the active surface: each surface binds its
@@ -147,6 +168,7 @@ func (m Model) reloadKey() string {
 // barCell is a button's place on the bar: its text, and the columns it covers.
 type barCell struct {
 	action barAction
+	label  string
 	key    string
 	x0, x1 int
 }
@@ -174,7 +196,7 @@ func (m Model) barCells() []barCell {
 	cells := make([]barCell, 0, len(barActions))
 	x := headerMenuStart
 	for _, action := range barActions {
-		cell := barCell{action: action, key: action.key(m), x0: x}
+		cell := barCell{action: action, label: action.label(m), key: action.key(m), x0: x}
 		cell.x1 = x + lipgloss.Width(cell.text())
 		if cell.x1 > m.width {
 			break
@@ -187,9 +209,9 @@ func (m Model) barCells() []barCell {
 
 func (c barCell) text() string {
 	if c.key == "" {
-		return c.action.label
+		return c.label
 	}
-	return c.action.label + " " + c.key
+	return c.label + " " + c.key
 }
 
 func (c barCell) covers(x int) bool {
@@ -208,7 +230,7 @@ func (m Model) headerSpinnerCell() string {
 }
 
 // renderHeader draws the three lines above the workspace: the menu bar, the
-// rule under it, and the view tabs with the context.
+// rule under it, and the view tabs.
 func (m Model) renderHeader() string {
 	return m.renderMenuBar() + "\n" + m.renderRule() + "\n" + m.renderTabs()
 }
@@ -217,6 +239,7 @@ func (m Model) renderHeader() string {
 // The version is the first to go when the two do not fit.
 func (m Model) renderMenuBar() string {
 	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
+	strong := lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
 
 	cells := m.barCells()
@@ -227,10 +250,15 @@ func (m Model) renderMenuBar() string {
 			lead = strings.Repeat(" ", headerMenuStart)
 		}
 		labelStyle := label
-		if m.barPointer != nil && cell.covers(*m.barPointer) {
+		hovered := m.barPointer != nil && cell.covers(*m.barPointer)
+		switch {
+		case cell.action.strong:
+			// The strong label already has the hover's colour and weight.
+			labelStyle = strong.Underline(hovered)
+		case hovered:
 			labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
 		}
-		bar += lead + labelStyle.Render(cell.action.label)
+		bar += lead + labelStyle.Render(cell.label)
 		if cell.key != "" {
 			bar += " " + muted.Render(cell.key)
 		}
@@ -248,9 +276,9 @@ func (m Model) renderRule() string {
 	return styles.Rule(m.width)
 }
 
-// renderTabs draws the view tabs on the left and, flush right, the store and
-// what the surface shows. The tabs come first: the context is cut to what is
-// left beside them.
+// renderTabs draws the view tabs. The menu bar names the store, the active tab
+// the surface and the highlighted row the selection, so the line says nothing
+// more.
 func (m Model) renderTabs() string {
 	tab := func(id mode.ID) string {
 		base := lipgloss.NewStyle().Padding(0, headerTabPadding)
@@ -272,14 +300,7 @@ func (m Model) renderTabs() string {
 		}
 		parts = append(parts, tab(id))
 	}
-	line := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
-
-	context := textutil.TruncateString(m.headerContext(), m.contextRoom())
-	if context == "" {
-		return line
-	}
-	gap := m.width - headerTabsEnd() - lipgloss.Width(context)
-	return line + strings.Repeat(" ", gap) + lipgloss.NewStyle().Foreground(styles.ShellContextColor).Render(context)
+	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }
 
 // renderBody renders the active surface. Like every other renderer here it is
@@ -366,7 +387,7 @@ func (m Model) loadingStates() []loading.State {
 		}
 	}
 	if m.detail.IsLoading() {
-		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail, Target: m.detail.TargetID()})
+		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeDetail})
 	}
 	// The picker draws its own spinner, and this is what arms the tick that
 	// advances it. Reported only while the picker is on screen: a listing still
@@ -376,97 +397,6 @@ func (m Model) loadingStates() []loading.State {
 		loadingStates = append(loadingStates, loading.State{Scope: loading.ScopeStores})
 	}
 	return loadingStates
-}
-
-func (m Model) headerContext() string {
-	variants := m.headerContextVariants()
-	if len(variants) == 0 {
-		return ""
-	}
-
-	if m.width <= 0 {
-		return variants[0]
-	}
-
-	// Half the line at most, and no more than stands free beside the tabs: a
-	// variant drawn whole comes before a longer one cut short.
-	budget := min(m.width/2, m.contextRoom())
-	for _, v := range variants {
-		if lipgloss.Width(v) <= budget {
-			return v
-		}
-	}
-
-	return variants[len(variants)-1]
-}
-
-// contextRoom is the cells the tab line has for the context, clear of the tabs.
-func (m Model) contextRoom() int {
-	return m.width - headerTabsEnd() - headerBarGap
-}
-
-// headerContextVariants returns the right-hand header text, widest first.
-//
-// With stores switchable, which store is on screen is the first thing the
-// header must say, so every variant leads with its name and the name survives
-// narrowing until nothing but the surface fits beside it. The unnamed variants
-// stay as the last resort for a terminal too narrow even for that.
-func (m Model) headerContextVariants() []string {
-	variants := m.surfaceContextVariants()
-	name := strings.TrimSpace(m.services.StoreName)
-	if name == "" {
-		return variants
-	}
-
-	named := make([]string, 0, 2*len(variants))
-	for _, variant := range variants {
-		named = append(named, name+" · "+variant)
-	}
-	return append(named, variants...)
-}
-
-func (m Model) surfaceContextVariants() []string {
-	if m.active == mode.Detail {
-		id := strings.TrimSpace(m.detail.Detail.Summary.ID)
-		if id == "" {
-			id = strings.TrimSpace(m.detail.SelectionID())
-		}
-		status := strings.TrimSpace(m.detail.Detail.Summary.Status)
-		if id != "" && status != "" {
-			return []string{fmt.Sprintf("Detail: %s · %s", id, status), fmt.Sprintf("Detail: %s", id), "Detail"}
-		}
-		if id != "" {
-			return []string{fmt.Sprintf("Detail: %s", id), "Detail"}
-		}
-		return []string{"Detail"}
-	}
-
-	prefix := "Board"
-	switch m.active {
-	case mode.Docs:
-		prefix = "Docs"
-	case mode.Search:
-		prefix = "Search"
-	}
-
-	selectedLong, selectedShort := "Selected: none", "Sel: none"
-	if sel := m.currentSelection(); sel != nil {
-		selectedLong = fmt.Sprintf("Selected: %s (%s)", sel.Issue.ID, sel.Issue.Status)
-		selectedShort = fmt.Sprintf("Sel: %s", sel.Issue.ID)
-	}
-
-	loadingSummary := loading.Summary(m.loadingStates())
-	loadingShort := loadingSummary
-	if loadingSummary == "Idle" {
-		loadingShort = "idle"
-	}
-
-	return []string{
-		fmt.Sprintf("%s · %s · %s", prefix, selectedLong, loadingSummary),
-		fmt.Sprintf("%s · %s", prefix, selectedLong),
-		fmt.Sprintf("%s · %s · %s", prefix, selectedShort, loadingShort),
-		prefix,
-	}
 }
 
 func shellKeyHelp(keys config.ResolvedKeyBindings) string {

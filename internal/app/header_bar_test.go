@@ -52,7 +52,7 @@ func drawnButtons(t *testing.T, m Model, bar string) []string {
 	var labels []string
 	last := -1
 	for _, action := range barActions {
-		text := action.label + " " + action.key(m)
+		text := action.label(m) + " " + action.key(m)
 		if !strings.Contains(bar, text) {
 			continue
 		}
@@ -61,7 +61,7 @@ func drawnButtons(t *testing.T, m Model, bar string) []string {
 			t.Fatalf("button %q is drawn at column %d, left of the one before it:\n%s", text, x, bar)
 		}
 		last = x
-		labels = append(labels, action.label)
+		labels = append(labels, action.label(m))
 	}
 	return labels
 }
@@ -104,13 +104,13 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 }
 
 // TestMenuBarDropsTheVersionThenTheRightmostButton narrows the terminal one
-// column at a time. The version goes first, then quit, help, reload, stores: search is
-// the last button standing.
+// column at a time. The version goes first, then quit, help, reload, search: the
+// store's name is the last button standing.
 func TestMenuBarDropsTheVersionThenTheRightmostButton(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
-	all := []string{"search", "stores", "reload", "help", "quit"}
+	all := []string{"task-manager-ui", "search", "reload", "help", "quit"}
 
 	previous, hadVersion := 0, false
 	for width := 0; width <= 220; width++ {
@@ -209,44 +209,66 @@ func TestReloadButtonShowsTheKeyOfTheActiveSurface(t *testing.T) {
 	}
 }
 
-// TestTabLineSetsTheContextFlushRightAndCutsIt pins the line of the view tabs:
-// the context ends on the last column, keeps its gap from the tabs, and is cut
-// with an ellipsis or gone when it does not fit beside them. It is cut only
-// when no variant fits: a shorter one drawn whole comes first.
-func TestTabLineSetsTheContextFlushRightAndCutsIt(t *testing.T) {
+// TestStoreButtonNamesTheActiveStore: the first button is the store's name
+// with the key that opens the store list, and `stores` when no name is known.
+func TestStoreButtonNamesTheActiveStore(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	key := m.keys.DisplayPrimary(config.ShellContext, config.ShellActionStorePicker)
+
+	for name, want := range map[string]string{
+		"task-manager-ui": "task-manager-ui",
+		"":                "stores",
+		"   ":             "stores",
+	} {
+		m.services.StoreName = name
+		bar := headerLines(m, 120)[headerMenuRow]
+		if !strings.HasPrefix(bar, strings.Repeat(" ", headerMenuStart)+want+" "+key+barSeparator) {
+			t.Errorf("with the store name %q the bar does not start with %q and its key:\n%s", name, want, bar)
+		}
+	}
+}
+
+// TestStoreButtonCutsALongName: a store name is as long as its operator made
+// it. The bar cuts it, so at 80 columns search is still beside it, and at 120
+// every button is.
+func TestStoreButtonCutsALongName(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	m.services.StoreName = "a-store-with-a-name-far-longer-than-any-bar-has-room-for"
+
+	bar := headerLines(m, 80)[headerMenuRow]
+	label := m.storeLabel()
+	if lipgloss.Width(label) != storeLabelMax || !strings.HasSuffix(label, "…") || !strings.HasPrefix(label, "a-store-with-a-name") {
+		t.Errorf("the store label is %q, want the name cut to %d cells with an ellipsis", label, storeLabelMax)
+	}
+	search := "search " + m.keys.DisplayPrimary(config.ShellContext, config.ShellActionOpenSearch)
+	if !strings.Contains(bar, label+" ") || !strings.Contains(bar, search) {
+		t.Errorf("at width 80 the bar does not draw %q and %q:\n%s", label, search, bar)
+	}
+
+	m.width = 120
+	if cells := m.barCells(); len(cells) != len(barActions) {
+		t.Errorf("at width 120 the bar places %d of %d buttons", len(cells), len(barActions))
+	}
+}
+
+// TestTabLineHoldsTheTabsAlone: the menu bar names the store, the active tab
+// the surface and the highlighted row the selection, so nothing stands right
+// of the tabs on any surface.
+func TestTabLineHoldsTheTabsAlone(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
 
 	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search, mode.Detail} {
 		m.active = active
-		for width := headerTabsEnd(); width <= 220; width++ {
+		for _, width := range []int{headerTabsEnd(), 80, 220} {
 			line := headerLines(m, width)[headerTabsRow]
-			m.width = width
-			context := m.headerContext()
-			free := width - headerTabsEnd() - headerBarGap
-
-			switch {
-			case free <= 0:
-				if lipgloss.Width(line) != headerTabsEnd() {
-					t.Fatalf("%s at width %d: want the tabs alone, got %q", active, width, line)
-				}
-			case lipgloss.Width(context) <= free:
-				if !strings.HasSuffix(line, context) || lipgloss.Width(line) != width {
-					t.Fatalf("%s at width %d: the context %q is not flush right: %q", active, width, context, line)
-				}
-			default:
-				for _, variant := range m.headerContextVariants() {
-					if lipgloss.Width(variant) <= free {
-						t.Fatalf("%s at width %d: the context %q is cut while %q fits whole: %q", active, width, context, variant, line)
-					}
-				}
-				if !strings.HasSuffix(line, "…") || lipgloss.Width(line) != width {
-					t.Fatalf("%s at width %d: want the context cut with an ellipsis at the edge, got %q", active, width, line)
-				}
-				if gap := line[headerTabsEnd() : headerTabsEnd()+headerBarGap]; strings.TrimSpace(gap) != "" {
-					t.Fatalf("%s at width %d: the cut context touches the tabs: %q", active, width, line)
-				}
+			if lipgloss.Width(line) != headerTabsEnd() || strings.TrimSpace(line) != "Board   Docs" {
+				t.Errorf("%s at width %d: want the tabs alone, got %q", active, width, line)
 			}
 		}
 	}

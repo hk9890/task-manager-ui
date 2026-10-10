@@ -204,7 +204,7 @@ func litButton(m Model) string {
 		return ""
 	}
 	cell, _ := m.buttonAt(*m.barPointer)
-	return cell.action.label
+	return cell.label
 }
 
 func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
@@ -215,7 +215,7 @@ func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 
 	dead := map[string][][2]int{
 		// The spinner cell, the cell before the first tab, the first cell
-		// after the last tab, and the space before the context.
+		// after the last tab, and the empty line right of the tabs.
 		"the tab line": {{0, headerTabsRow}, {headerTabsStart() - 1, headerTabsRow}, {docsX + len(" Docs "), headerTabsRow}, {80, headerTabsRow}},
 		// The cell before the first button, the `·` after it, and the space
 		// before the version.
@@ -317,7 +317,7 @@ func TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface(t *testin
 		t.Fatalf("fixture: on %q with help at column %d, want detail and help moved from column %d", m.active, moved, x)
 	}
 	under, ok := m.buttonAt(x)
-	if !ok || litButton(m) != under.action.label {
+	if !ok || litButton(m) != under.label {
 		t.Errorf("the bar lights %q and draws %q under the pointer", litButton(m), under.text())
 	}
 }

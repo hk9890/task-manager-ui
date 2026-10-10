@@ -42,7 +42,6 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 			"ShellTabActiveBgColor":       ShellTabActiveBgColor,
 			"ShellTabInactiveColor":       ShellTabInactiveColor,
 			"ShellTabHoverColor":          ShellTabHoverColor,
-			"ShellContextColor":           ShellContextColor,
 			"ShellFooterHelpColor":        ShellFooterHelpColor,
 			"ShellRuleColor":              ShellRuleColor,
 			"ShellActionColor":            ShellActionColor,

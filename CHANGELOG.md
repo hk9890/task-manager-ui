@@ -8,6 +8,10 @@ carries its `vX.Y.Z` section of this file as its notes.
 
 ## Unreleased
 
+- **Changed: the header.** The first button on the menu bar is the name of the
+  open store, in bold; it opens the store picker, as `stores` did. The text at
+  the right of the tab line — the store, the view, the selected issue and
+  `Idle` — is gone: each part repeated what the screen already shows.
 - **Action required: the keys changed.** No action is on a bare letter, digit or
   symbol key any more, because those keys now type into the filter. The new
   defaults: `alt+h` help, `alt+s` stores, `alt+f` search, `alt+r` reload,

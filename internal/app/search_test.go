@@ -74,9 +74,6 @@ func TestSearchOpensByKeyAndByButtonFromBoardDocsAndDetail(t *testing.T) {
 				t.Fatalf("fixture: on %q, want %q", base.active, surface.from)
 			}
 			x, text := barButton(t, base, "search", config.ShellActionOpenSearch)
-			if x != headerMenuStart {
-				t.Fatalf("the search button is at column %d, want it first on the bar", x)
-			}
 
 			byKey := press(t, base, "alt+f")
 			byClick := send(t, base, leftClick(x+len(text)-1, headerMenuRow))
@@ -180,7 +177,7 @@ func TestSearchEnterOpensDetailAndEscapeReturnsWithStateKept(t *testing.T) {
 		t.Fatalf("esc left detail for %q (opened from %q), want the search", m.active, m.searchFrom)
 	}
 	view := plainShell(m)
-	if !strings.Contains(view, "❯ login") || !strings.Contains(view, "Selected: tm-3") {
+	if sel := m.currentSelection(); !strings.Contains(view, "❯ login") || sel == nil || sel.Issue.ID != "tm-3" {
 		t.Fatalf("the search did not keep its query and selection:\n%s", view)
 	}
 	if got := storeSearchCount(gw); got != searches {
