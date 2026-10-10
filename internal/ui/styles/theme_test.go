@@ -47,6 +47,8 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 			"ShellActionColor":            ShellActionColor,
 			"QueryAccentColor":            QueryAccentColor,
 			"MatchTextColor":              MatchTextColor,
+			"SectionHeadingColor":         SectionHeadingColor,
+			"SettingLabelColor":           SettingLabelColor,
 			"RowSelectedBgColor":          RowSelectedBgColor,
 			"RowHoverBgColor":             RowHoverBgColor,
 			"BorderDefaultColor":          BorderDefaultColor,

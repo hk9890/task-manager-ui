@@ -11,8 +11,9 @@ cmd/taskmgr-ui/           entrypoint: flag parsing, config resolution, logging s
                           store is opened through storecatalog/ from the picker
 internal/
   app/                    the root shell: mode lifecycle, routing, selection and detail coordination
-  mode/                   board, docs, search, detail and storepicker feature models, plus the
-                          shell message contracts and Query, the typed filter text (query.go).
+  mode/                   board, docs, search, detail, storepicker and configscreen feature
+                          models, plus the shell message contracts and Query, the typed filter
+                          text (query.go).
                           Type.IsWork() is false for doc, so doc issues reach no board column —
                           docs/ is the tab that browses them. search/ is the store search: a
                           browse surface that is not a tab. rowlist/ is the list code those
@@ -25,6 +26,8 @@ internal/
                             store search draw through it too
     detail/                 the issue detail panes
     storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
+    configscreen/           the full-screen configuration screen: the theme and the glyph set;
+                            it renders instead of the shell too
     modal/ toaster/ overlay/ loading/ scroll/ fatalerror/   shared shell primitives
   domain/                 issue, query, mutation, catalog and error models
   repository/             the Repository interface, plus shared errors and types
@@ -37,7 +40,8 @@ internal/
                           repository/, which reads the issues inside one. taskmgr/ is the SDK
                           implementation over tasks.Stores
   dashboard/              Compose: dashboard.Inputs in, dashboard.Columns out
-  config/                 config model, defaults, YAML loading, keybinding resolution
+  config/                 config model, defaults, YAML loading, keybinding resolution, and Set,
+                          the one writer of the config file (set.go)
   launcher/               external tool launch actions and the process runner; editor/ is the edit handoff
   logging/                the single logging entrypoint: session IDs, JSON Lines sink, stderr mirroring
   testing/                repository fakes, the UI test harness, and repofixture — the writer for

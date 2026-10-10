@@ -64,10 +64,13 @@ func (m Model) View() string {
 //
 // The picker is not a tab and not a drill-in: it renders instead of the shell,
 // so the header and the legend are absent while it is up and it draws its own
-// legend (docs/DESIGN-GUIDE.md).
+// legend (docs/DESIGN-GUIDE.md). The configuration screen is the same.
 func (m Model) renderSurface() string {
-	if m.active == mode.StorePicker {
+	switch m.active {
+	case mode.StorePicker:
 		return firstLines(m.storePicker.View(m.spinnerFrame, styles.KeyLegend(storePickerHints(m.keys, m.storeOpen), m.width)), m.height)
+	case mode.Config:
+		return firstLines(m.configScreen.View(styles.KeyLegend(configScreenHints(m.keys), m.width)), m.height)
 	}
 
 	// A renderer keeps a floor of rows however short the workspace is. The body
@@ -144,6 +147,7 @@ var barActions = []barAction{
 	{label: Model.storeLabel, key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker, name: true},
 	{label: barLabel("search"), key: shellKey(config.ShellActionOpenSearch), run: (*Model).openSearch},
 	{label: barLabel("reload"), key: Model.reloadKey, run: (*Model).reloadActiveSurface},
+	{label: barLabel("config"), key: shellKey(config.ShellActionOpenConfig), run: (*Model).openConfig},
 	{label: barLabel("help"), key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
 	{label: barLabel("quit"), key: shellKey(config.ShellActionQuit), run: (*Model).quit},
 }
@@ -438,6 +442,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
 		fmt.Sprintf("  %s = return from detail to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
 		fmt.Sprintf("  %s = list the central task stores on this machine and open one", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
+		fmt.Sprintf("  %s = open the configuration screen: the theme and the glyph set", keys.DisplayLabel(config.ShellContext, config.ShellActionOpenConfig)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
 		"",
@@ -468,6 +473,19 @@ func storePickerHints(keys config.ResolvedKeyBindings, storeOpen bool) []styles.
 		{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "open"},
 		{Key: primary(config.BoardContext, config.BoardActionReload), Desc: "reload"},
 		{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: escape},
+		{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"},
+	}
+}
+
+// configScreenHints is the configuration screen's own legend, for the reason
+// the picker has one. Left, Right and Enter are built in there, so the legend
+// names the keys themselves rather than a binding.
+func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
+	primary := keys.DisplayPrimary
+	return []styles.KeyHint{
+		{Key: primary(config.BoardContext, config.BoardActionMoveDown) + "/" + primary(config.BoardContext, config.BoardActionMoveUp), Desc: "move"},
+		{Key: "left/right", Desc: "change"},
+		{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "back"},
 		{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"},
 	}
 }

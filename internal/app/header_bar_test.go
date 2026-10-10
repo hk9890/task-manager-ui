@@ -109,14 +109,14 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 }
 
 // TestMenuBarDropsTheVersionThenTheRightmostButton narrows the terminal one
-// column at a time. The version goes first, then quit, help, reload, search,
-// each after the store's name is cut to its floor: the name is the last button
-// standing.
+// column at a time. The version goes first, then quit, help, config, reload,
+// search, each after the store's name is cut to its floor: the name is the last
+// button standing.
 func TestMenuBarDropsTheVersionThenTheRightmostButton(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
-	all := []string{"task-manager-ui", "search", "reload", "help", "quit"}
+	all := []string{"task-manager-ui", "search", "reload", "config", "help", "quit"}
 
 	previous, hadVersion := 0, false
 	for width := 0; width <= 220; width++ {
@@ -249,7 +249,7 @@ func TestStoreButtonCutsALongName(t *testing.T) {
 		width, buttons, label int
 	}{
 		{width: 120, buttons: len(barActions), label: storeLabelMax},
-		{width: 80, buttons: len(barActions)},
+		{width: 90, buttons: len(barActions)},
 		{width: 20, buttons: 1},
 	} {
 		m.width = tc.width
@@ -319,7 +319,7 @@ func TestNarrowBarDropsAButtonBeforeTheNameGoesUnderItsFloor(t *testing.T) {
 
 	m := newHeaderShell(t, config.Default())
 	m.services.StoreName = "demo"
-	m.width = 80
+	m.width = 120
 	full := m.barCells()
 
 	m.width = full[len(full)-1].x1 - 1

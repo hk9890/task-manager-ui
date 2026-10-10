@@ -27,6 +27,9 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 	if !resolved.Match(ShellContext, ShellActionOpenSearch, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true}) {
 		t.Fatal("expected shell open-search to match alt+f")
 	}
+	if !resolved.Match(ShellContext, ShellActionOpenConfig, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}, Alt: true}) {
+		t.Fatal("expected shell open-config to match alt+c")
+	}
 	if !resolved.Match(ShellContext, ShellActionCloseIssue, tea.KeyMsg{Type: tea.KeyDelete}) {
 		t.Fatal("expected shell close-issue to match delete")
 	}

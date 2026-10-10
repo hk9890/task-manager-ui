@@ -33,6 +33,7 @@ const (
 	ShellActionLaunchShell    = "launch_shell_command"
 	ShellActionStorePicker    = "open_store_picker"
 	ShellActionOpenSearch     = "open_search"
+	ShellActionOpenConfig     = "open_config"
 
 	BoardActionMoveLeft   = "move_left"
 	BoardActionMoveRight  = "move_right"
@@ -108,6 +109,7 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionLaunchShell:    {"alt+l"},
 			ShellActionStorePicker:    {"alt+s"},
 			ShellActionOpenSearch:     {"alt+f"},
+			ShellActionOpenConfig:     {"alt+c"},
 		},
 		Board: map[string][]string{
 			BoardActionMoveLeft:   {"left"},
@@ -404,6 +406,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionLaunchShell,
 			ShellActionStorePicker,
 			ShellActionOpenSearch,
+			ShellActionOpenConfig,
 		} {
 			allowed[action] = struct{}{}
 		}

@@ -128,6 +128,10 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 - **Surfaces** — board, docs, detail and the store search (`alt+f`) each render and stay readable
   at your terminal size.
+- **Configuration screen** — `alt+c` opens it; `right` on each row redraws the screen in the next
+  theme or glyph set, and `esc` returns to a surface drawn in it. Launch with `--config` on an
+  existing scratch file, or the run rewrites your own config; afterwards the file holds the new
+  value and still has its comments.
 - **Filter** — typing on Board and on Docs narrows the rows, marks the matched text and turns the
   header counts into `N of M`; `esc` clears it.
 - **External tools** — `alt+v`, `alt+p` and `alt+l` from detail leave the app alive with the

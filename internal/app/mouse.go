@@ -66,6 +66,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.clearHeaderHover()
 		return m, m.storePicker.Update(event)
 	}
+	// The configuration screen does nothing on the mouse, and the header is
+	// not drawn while it is up.
+	if m.active == mode.Config {
+		m.clearHeaderHover()
+		return m, nil
+	}
 
 	headerHeight := lipgloss.Height(m.renderHeader())
 	_, workspaceHeight := m.workspaceSize()
@@ -106,6 +112,8 @@ func (m *Model) mouseToSurface(event mode.MouseMsg) tea.Cmd {
 	switch m.active {
 	case mode.StorePicker:
 		return m.storePicker.Update(event)
+	case mode.Config:
+		return nil
 	case mode.Detail:
 		// One measure for both: each viewport getter renders the header and
 		// the footer to take theirs, and the pointer asks on every cell.

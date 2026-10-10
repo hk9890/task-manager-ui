@@ -8,8 +8,9 @@ import "strconv"
 // marks of the unicode set are: the toaster budgets for the wider one.
 //
 // The set covers the markers that carry meaning: the selection bar, the
-// spinner, the query prompt, the toast severities and the issue vocabulary. Section borders, the
-// `…` of truncated text and the skeleton bar are the same in every set.
+// spinner, the query prompt, the step markers of a setting, the toast
+// severities and the issue vocabulary. Section borders, the `…` of truncated
+// text and the skeleton bar are the same in every set.
 type GlyphSet struct {
 	// Cursor is the bar down the left of the selected row.
 	Cursor string
@@ -17,6 +18,10 @@ type GlyphSet struct {
 	Spinner []string
 	// Prompt stands in front of a query line.
 	Prompt string
+	// StepPrev and StepNext stand on either side of a value the operator
+	// steps through.
+	StepPrev string
+	StepNext string
 
 	ToastSuccess string
 	ToastError   string
@@ -62,6 +67,8 @@ var glyphSets = map[string]GlyphSet{
 		Cursor:       "▌",
 		Spinner:      brailleFrames,
 		Prompt:       "❯",
+		StepPrev:     "‹",
+		StepNext:     "›",
 		ToastSuccess: "✅", ToastError: "❌", ToastInfo: "ℹ", ToastWarn: "⚠",
 		issueType: letterTypes, issueTypeUnknown: "?",
 	},
@@ -69,6 +76,8 @@ var glyphSets = map[string]GlyphSet{
 		Cursor:       "▌",
 		Spinner:      brailleFrames,
 		Prompt:       "❯",
+		StepPrev:     "‹",
+		StepNext:     "›",
 		ToastSuccess: "", // nf-fa-check
 		ToastError:   "", // nf-fa-times
 		ToastInfo:    "", // nf-fa-info
@@ -100,8 +109,10 @@ var glyphSets = map[string]GlyphSet{
 		statusUnknown: "", // nf-fa-question
 	},
 	"ascii": {
-		Cursor: ">",
-		Prompt: ">",
+		Cursor:   ">",
+		Prompt:   ">",
+		StepPrev: "<",
+		StepNext: ">",
 		// Five frames: the shell counts ten, and a cycle that divides it does
 		// not jump where the count wraps.
 		Spinner:      []string{".", "o", "O", "o", "."},
