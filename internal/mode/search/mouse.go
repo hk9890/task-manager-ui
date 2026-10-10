@@ -31,7 +31,7 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 			target = m.issues[hit.Row].ID
 		}
 		if m.clicks.Double(target, m.selectedIssueID(), msg) {
-			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+			return m.openDetail()
 		}
 		if target == "" {
 			return nil

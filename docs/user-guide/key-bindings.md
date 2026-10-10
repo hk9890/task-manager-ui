@@ -101,8 +101,8 @@ the filter of a tab reads only the titles and IDs of the rows already loaded.
   open issues; the column title reads `Results · open` or `Results · all`
 - `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move in the results
 - `enter` — open selected result in detail mode; `esc` there returns to the results.
-  While a search is still running, `enter` waits for it and opens its first
-  result; any other key before that cancels the wait
+  While a search is still running, `enter` waits for it and opens the result it
+  selects; any other key before that cancels the wait
 - `alt+r` — run the search again
 - `esc` — clear the query; with an empty query, return to where the search was opened from
 - `tab`, `shift+tab` — leave the search for a tab

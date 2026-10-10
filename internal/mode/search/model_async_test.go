@@ -8,6 +8,7 @@ package search
 // the test sends further keys — the cadence of a real tea.Program.
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -130,7 +131,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		return m.Update(announced())
 	}
 
-	t.Run("enter during a search opens the first row of its result", func(t *testing.T) {
+	t.Run("enter during a search opens the selected row of its result", func(t *testing.T) {
 		m, delayed, typed := inFlightSearch(t, "tri")
 
 		if cmd := m.Update(enter); cmd != nil {
@@ -178,6 +179,50 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 		if got := len(m.issues); got != 0 {
 			t.Fatalf("setup: %d results, want none", got)
+		}
+	})
+
+	t.Run("a second click during a search is held as enter is", func(t *testing.T) {
+		m, delayed, typed := inFlightSearch(t, "tri")
+
+		m.Update(mouseAt(t, m, mode.MouseClick, "Fix login prompt", 0))
+		if cmd := m.Update(mouseAt(t, m, mode.MouseClick, "Fix login prompt", 200)); cmd != nil {
+			t.Fatalf("the second click opened the detail on the rows of the older query: %#v", cmd())
+		}
+
+		if next := settle(t, m, delayed, typed); !opensDetail(next) {
+			t.Fatal("the held click opened nothing when the result arrived")
+		}
+		if got := m.selectedIssueID(); got != "tm-2" {
+			t.Fatalf("the detail opens on %q, want tm-2", got)
+		}
+	})
+
+	t.Run("a held enter opens nothing on a failed result", func(t *testing.T) {
+		gw := fakes.NewTracked()
+		seedStore(gw)
+		failing := fakes.NewErrorInjecting(gw)
+		delayed := fakes.NewDelayingSearchRepository(failing)
+		t.Cleanup(delayed.ReleaseAll)
+
+		m := newModel(t, delayed)
+		opening := startAsync(m.Init())
+		waitForInFlight(t, delayed, 1)
+		delayed.Release()
+		m.Update(receive(t, opening))
+
+		failing.SetError(fakes.MethodSearch, errors.New("store unreadable"))
+		typed := startAsync(typeText(m, "tri"))
+		waitForInFlight(t, delayed, 1)
+		m.Update(enter)
+
+		// The stale rows stay on screen under the error row: opening one of
+		// them is the fault the hold exists to prevent.
+		if next := settle(t, m, delayed, typed); next != nil {
+			t.Fatalf("a failed result opened a detail: %#v", next())
+		}
+		if m.err == nil || len(m.issues) == 0 {
+			t.Fatalf("setup: error %v with %d stale rows, want an error over the stale rows", m.err, len(m.issues))
 		}
 	})
 

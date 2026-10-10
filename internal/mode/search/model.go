@@ -223,20 +223,27 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
 			return m.moveRow(len(m.issues))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
-			if m.loading && m.inFlight != landInPlace {
-				m.heldOpen = openOnResult
-				return nil
-			}
-			if m.currentSelection() == nil {
-				return nil
-			}
-			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+			return m.openDetail()
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			return m.Reload()
 		}
 	}
 
 	return nil
+}
+
+// openDetail is Enter and the second click on a row. While a search the
+// operator asked for is in flight it holds the open for that result; an auto
+// refresh keeps the selection where it is, so nothing waits for one.
+func (m *Model) openDetail() tea.Cmd {
+	if m.loading && m.inFlight != landInPlace {
+		m.heldOpen = openOnResult
+		return nil
+	}
+	if m.currentSelection() == nil {
+		return nil
+	}
+	return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
 }
 
 // View renders the results column under the query line.
