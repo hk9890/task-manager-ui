@@ -17,7 +17,7 @@ func newShortShell(t *testing.T, tab mode.ID, height int) Model {
 	m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: 140, Height: height})
 	if tab != mode.Board {
 		x, _ := testui.FindCell(t, tabLine(m), " "+tabLabels[tab]+" ")
-		m = send(t, m, leftClick(x+1, headerTabsRow))
+		m = send(t, m, onScreen(m, leftClick(x+1, headerTabsRow)))
 	}
 	if m.active != tab {
 		t.Fatalf("fixture: the shell is on %q, want %q", m.active, tab)
@@ -30,7 +30,7 @@ func newShortShell(t *testing.T, tab mode.ID, height int) Model {
 // on the screen.
 func terminalScreen(m Model) string {
 	lines := strings.Split(m.View(), "\n")
-	return strings.Join(lines[max(0, len(lines)-m.height):], "\n")
+	return strings.Join(lines[max(0, len(lines)-m.height-2*m.marginRows):], "\n")
 }
 
 // TestTheFrameIsNeverTallerThanTheTerminal: a renderer keeps a floor of rows
@@ -49,7 +49,8 @@ func TestTheFrameIsNeverTallerThanTheTerminal(t *testing.T) {
 			if !strings.Contains(lines[headerMenuRow], "stores") || !strings.Contains(lines[headerTabsRow], "Docs") {
 				t.Fatalf("the header is not on the first rows:\n%s", view)
 			}
-			if legend := testui.AnsiEscapePattern.ReplaceAllString(m.renderFooter(), ""); strings.TrimRight(lines[height-1], " ") != legend {
+			// A terminal this short keeps the side margin and has no blank row.
+			if legend := "  " + testui.AnsiEscapePattern.ReplaceAllString(m.renderFooter(), ""); strings.TrimRight(lines[height-1], " ") != legend {
 				t.Fatalf("the last row is %q, want the key legend %q", lines[height-1], legend)
 			}
 		})

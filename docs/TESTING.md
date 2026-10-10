@@ -146,11 +146,23 @@ not always what you want: an open modal schedules a repeating tick, so step thos
 Screen assertions (`internal/testing/ui/assertions.go`): `AssertContainsAll`,
 `AssertStartupBoardLayoutSanity`, `AssertNoObviousRuntimeErrorPanels`, `AssertActionRequest`.
 
+Size, cells and colour in an `internal/app` test:
+
+- Size the model with `m.setTerminalSize(tea.WindowSizeMsg{...})` or by sending the message.
+  `m.width` and `m.height` are the screen inside the margin
+  ([DESIGN-GUIDE.md](DESIGN-GUIDE.md#the-screen-margin)); set them directly only to measure one
+  renderer at a screen width.
+- Send a cell found with `testui.FindCell(m.View(), ...)` as it is: it is a terminal cell. Pass a
+  cell counted on `m.screen()` or on one header line through `onScreen`
+  (`internal/app/mouse_test.go`), which adds the margin.
+- Assert a foreground, a background or bold on the escape codes, under `testui.ForceTrueColor`.
+  A stripped golden passes with the wrong colour.
+
 Golden file convention:
 
 - Store golden files under the tested package's `testdata/` directory.
 - Keep one scenario per golden for readable diffs.
-- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `board_columns_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test.
+- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `board_columns_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test. In `internal/app` the suffix is the terminal width, so from `_w100` the content is 4 columns narrower.
 - When the width comes from a layout constant rather than a literal, use a symbolic suffix — `_w3col`, `_w2col`, `_w3col_less1` — so the filename cannot go stale if the constant moves.
 
 ### Regenerating goldens

@@ -63,13 +63,15 @@ func TestConfigScreenOpensOnItsKeyAndShowsWhatIsInUse(t *testing.T) {
 	// and the screen then cuts the path from its front.
 	testui.AssertContainsAll(t, plainShell(m),
 		"Configuration", "taskmgr-ui/config.yaml as it changes",
-		"Appearance", "▌ theme     ‹ catppuccin-mocha ›", "  glyphs    ‹ unicode ›",
-		"down/up move · left/right change · esc back · ctrl+c quit",
+		"Appearance", "▌ theme         ‹ catppuccin-mocha ›", "  glyphs        ‹ unicode ›",
+		"down/up move • left/right change • esc back • ctrl+c quit",
 	)
 }
 
-// The screen renders instead of the shell, so the three header lines and the
-// shell footer are absent while it is up (docs/DESIGN-GUIDE.md).
+// The screen renders instead of the shell, so the menu bar, the tab line and
+// the shell footer are absent while it is up (docs/DESIGN-GUIDE.md). The rule
+// under the bar is the one line the two share: the screen's title takes the
+// bar's place over it.
 func TestConfigScreenReplacesTheShellChrome(t *testing.T) {
 	m, _ := configShell(t)
 
@@ -84,13 +86,21 @@ func TestConfigScreenReplacesTheShellChrome(t *testing.T) {
 
 	m = openConfigScreen(t, m)
 	view := plainShell(m)
-	for _, gone := range append(chrome, footer, " Board ", " Docs ", "config alt+c", "Fix login prompt") {
+	for _, gone := range []string{chrome[headerMenuRow], chrome[headerTabsRow], footer, " Board ", " Docs ", "config alt+c", "Fix login prompt"} {
 		if strings.Contains(view, gone) {
 			t.Errorf("%q is still rendered under the configuration screen:\n%s", gone, view)
 		}
 	}
-	if lines := strings.Split(view, "\n"); len(lines) != m.height {
-		t.Errorf("the screen draws %d lines on a terminal of %d", len(lines), m.height)
+	screen := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(m.screen(), ""), "\n")
+	if !strings.HasPrefix(screen[0], " Configuration") || !strings.HasSuffix(screen[0], "dev") {
+		t.Errorf("the first line is not the title and the version: %q", screen[0])
+	}
+	if screen[1] != chrome[1] {
+		t.Errorf("the second line is not the rule the shell draws under its bar: %q", screen[1])
+	}
+	// configShell is 30 rows: the screen fills what the margin leaves of them.
+	if lines := strings.Split(m.screen(), "\n"); len(lines) != 28 || m.height != 28 {
+		t.Errorf("the screen draws %d lines on a screen of %d, want 28", len(lines), m.height)
 	}
 }
 
@@ -207,10 +217,10 @@ func TestQuitAndHelpWorkOnTheConfigScreen(t *testing.T) {
 
 	m = press(t, m, "alt+h")
 	if !m.showHelp || !strings.Contains(plainShell(m), "Keyboard Help") {
-		t.Fatalf("the help overlay is not drawn over the configuration screen (showHelp %v):\n%s", m.showHelp, plainShell(m))
+		t.Fatalf("the help screen is not drawn in the place of the configuration screen (showHelp %v):\n%s", m.showHelp, plainShell(m))
 	}
-	if help := shellKeyHelp(m.keys); !strings.Contains(help, "alt+c = open the configuration screen") {
-		t.Errorf("the help does not name the configuration key:\n%s", help)
+	if lines := screenLines(m); !strings.HasPrefix(lines[0], " Keyboard Help") || strings.Contains(strings.Join(lines, "\n"), "written to") {
+		t.Errorf("the help screen does not stand in the place of the configuration screen:\n%s", plainShell(m))
 	}
 	// Help holds the keyboard: a step key under it changes nothing.
 	if m = press(t, m, "right", "alt+h"); m.showHelp || m.active != mode.Config || m.services.Config.UI.Theme != "catppuccin-mocha" {
@@ -252,7 +262,7 @@ func TestTheMouseIsDeadOnTheConfigScreen(t *testing.T) {
 	}
 	before := m.View()
 	for name, cell := range cells {
-		for _, event := range []tea.MouseMsg{pointerMove(cell[0], cell[1]), leftClick(cell[0], cell[1]), leftClick(cell[0], cell[1])} {
+		for _, event := range []tea.MouseMsg{onScreen(m, pointerMove(cell[0], cell[1])), onScreen(m, leftClick(cell[0], cell[1])), onScreen(m, leftClick(cell[0], cell[1]))} {
 			next, cmd := m.Update(event)
 			m = next.(Model)
 			if cmd != nil {
@@ -349,7 +359,7 @@ func TestAChangeIsWrittenAppliedAndKept(t *testing.T) {
 	if styles.TextPrimaryColor == textBefore {
 		t.Error("the theme was not applied: the text colour is the one of catppuccin-mocha")
 	}
-	testui.AssertContainsAll(t, plainShell(m), "▌ theme     ‹ catppuccin-frappe ›")
+	testui.AssertContainsAll(t, plainShell(m), "▌ theme         ‹ catppuccin-frappe ›")
 
 	// Left of unicode is nerd, and Enter steps as Right does: ascii, after a
 	// wrap.
@@ -364,7 +374,7 @@ func TestAChangeIsWrittenAppliedAndKept(t *testing.T) {
 	if styles.Glyphs.Cursor != ">" {
 		t.Errorf("the glyph set was not applied: the cursor is %q", styles.Glyphs.Cursor)
 	}
-	testui.AssertContainsAll(t, plainShell(m), "  theme     < catppuccin-frappe >", "> glyphs    < ascii >")
+	testui.AssertContainsAll(t, plainShell(m), "  theme         < catppuccin-frappe >", "> glyphs        < ascii >")
 	if m.toast.Visible() {
 		t.Errorf("a change that was written raised a toast:\n%s", plainShell(m))
 	}
@@ -397,7 +407,7 @@ func TestConfigScreenReopensOnTheValuesInUse(t *testing.T) {
 	}
 
 	m = openConfigScreen(t, m)
-	testui.AssertContainsAll(t, plainShell(m), "> theme     < catppuccin-mocha >", "  glyphs    < ascii >")
+	testui.AssertContainsAll(t, plainShell(m), "> theme         < catppuccin-mocha >", "  glyphs        < ascii >")
 }
 
 // A write that fails changes nothing: not the styles, not the config the app

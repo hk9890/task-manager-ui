@@ -124,27 +124,28 @@ func TestResizeWhileAnOverlayIsOpenSizesTheBrowseTabs(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 40}})
 
-	if got := lipgloss.Height(m.View()); got > m.height {
-		t.Fatalf("setup: the frame is %d rows in a %d-row terminal", got, m.height)
+	if got := lipgloss.Height(m.screen()); got > m.height {
+		t.Fatalf("setup: the frame is %d rows in a %d-row screen", got, m.height)
 	}
 
 	m.showHelp = true
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 100, Height: 24}})
 
-	if m.height != 24 || m.width != 100 {
-		t.Fatalf("the shell did not record the new terminal size: %dx%d", m.width, m.height)
+	// A terminal of 100x24 is the smallest that has the whole margin.
+	if m.height != 22 || m.width != 96 {
+		t.Fatalf("the shell did not record the screen of the new terminal size: %dx%d", m.width, m.height)
 	}
 	// The browse tab is sized by the shell's resize case alone. Left with the
 	// raw terminal size it draws a frame taller than the terminal, which scrolls
 	// the alt screen and leaves the stale column-top borders behind.
-	if got := lipgloss.Height(m.View()); got > m.height {
-		t.Errorf("frame is %d rows in a %d-row terminal after a resize behind an overlay", got, m.height)
+	if got := lipgloss.Height(m.screen()); got > m.height {
+		t.Errorf("frame is %d rows in a %d-row screen after a resize behind an overlay", got, m.height)
 	}
 
 	// Closing the overlay must not be what heals it.
 	m.showHelp = false
-	if got := lipgloss.Height(m.View()); got > m.height {
-		t.Errorf("frame is still %d rows in a %d-row terminal after the overlay closed", got, m.height)
+	if got := lipgloss.Height(m.screen()); got > m.height {
+		t.Errorf("frame is still %d rows in a %d-row screen after the overlay closed", got, m.height)
 	}
 }
 

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,7 +15,35 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/version"
 )
 
-// View renders the root shell.
+// The screen margin: the blank cells between the terminal's edge and
+// everything the app draws. A terminal under marginMinWidth columns has none,
+// and one under marginMinHeight rows keeps the side columns and gives up the
+// rows.
+const (
+	screenMarginRows = 1
+	screenMarginCols = 2
+	marginMinWidth   = 100
+	marginMinHeight  = 24
+)
+
+// setTerminalSize takes the terminal's size apart into the margin and the
+// screen inside it. Nothing else reads the terminal's size.
+func (m *Model) setTerminalSize(msg tea.WindowSizeMsg) {
+	m.sizeKnown = true
+	m.marginRows, m.marginCols = 0, 0
+	if msg.Width >= marginMinWidth {
+		m.marginCols = screenMarginCols
+		if msg.Height >= marginMinHeight {
+			m.marginRows = screenMarginRows
+		}
+	}
+	m.width = msg.Width - 2*m.marginCols
+	m.height = msg.Height - 2*m.marginRows
+}
+
+// View renders the screen inside the margin. It is the only place the margin
+// is drawn: every surface, overlay and toast is on the screen, and so inside
+// it.
 func (m Model) View() string {
 	// Suppress the very first render until the terminal has sent us its real
 	// dimensions via WindowSizeMsg. Without this guard the TUI emits a short
@@ -28,6 +55,17 @@ func (m Model) View() string {
 		return ""
 	}
 
+	lines := strings.Split(m.screen(), "\n")
+	left := strings.Repeat(" ", m.marginCols)
+	for idx := range lines {
+		lines[idx] = left + lines[idx]
+	}
+	blank := strings.Repeat("\n", m.marginRows)
+	return blank + strings.Join(lines, "\n") + blank
+}
+
+// screen renders the root shell at the size the margin leaves.
+func (m Model) screen() string {
 	// A drag selects text on the screen as it was when the drag began.
 	if m.sel.active {
 		return m.sel.view()
@@ -53,9 +91,6 @@ func (m Model) View() string {
 	if m.showActionModal {
 		view = m.actionModal.Overlay(view)
 	}
-	if m.showHelp {
-		view = m.help.Overlay(view)
-	}
 
 	return view
 }
@@ -64,19 +99,25 @@ func (m Model) View() string {
 //
 // The picker is not a tab and not a drill-in: it renders instead of the shell,
 // so the header and the legend are absent while it is up and it draws its own
-// legend (docs/DESIGN-GUIDE.md). The configuration screen is the same.
+// legend (docs/DESIGN-GUIDE.md). The configuration screen is the same, and so
+// is the help screen, which stands in the place of whatever surface is active.
 func (m Model) renderSurface() string {
+	if m.showHelp {
+		return firstLines(m.renderHelp(), m.height)
+	}
+
 	switch m.active {
 	case mode.StorePicker:
 		return firstLines(m.storePicker.View(m.spinnerFrame, styles.KeyLegend(storePickerHints(m.keys, m.storeOpen), m.width)), m.height)
 	case mode.Config:
-		return firstLines(m.configScreen.View(styles.KeyLegend(configScreenHints(m.keys), m.width)), m.height)
+		return firstLines(m.configScreen.View(version.Version, styles.KeyLegend(configScreenHints(m.keys), styles.ScreenTextWidth(m.width))), m.height)
 	}
 
 	// A renderer keeps a floor of rows however short the workspace is. The body
-	// is cut to the workspace, so the header stays on row 0 and the legend on
-	// the row handleMouse takes for it: Bubble Tea drops the top of a frame
-	// taller than the terminal, and every click then lands a row off.
+	// is cut to the workspace, so the header stays on the screen's row 0 and
+	// the legend on the row handleMouse takes for it: Bubble Tea drops the top
+	// of a frame taller than the terminal, and every click then lands a row
+	// off.
 	header, footer := m.renderHeader(), m.renderFooter()
 	body := firstLines(m.renderBody(), m.workspaceHeight(header, footer))
 	return firstLines(lipgloss.JoinVertical(lipgloss.Left, header, body, footer), m.height)
@@ -98,7 +139,6 @@ const (
 	headerMenuRow = 0
 	headerTabsRow = 2
 
-	headerMenuStart   = 1
 	headerSpinnerCols = 2
 	headerTabPadding  = 1
 	headerTabGap      = 1
@@ -108,8 +148,7 @@ const (
 	// storeLabelFloor the narrowest it is cut to before a button is dropped.
 	storeLabelMax   = 24
 	storeLabelFloor = 8
-	// barSeparator stands between two buttons, as it does between two key
-	// hints on the legend.
+	// barSeparator stands between two buttons.
 	barSeparator = " · "
 )
 
@@ -171,7 +210,8 @@ func (m Model) reloadKey() string {
 	return m.keys.DisplayPrimary(config.BoardContext, config.BoardActionReload)
 }
 
-// barCell is a button's place on the bar: its text, and the columns it covers.
+// barCell is a button's place on the bar: its text, and the columns it covers,
+// the space on each side of it included.
 type barCell struct {
 	action barAction
 	label  string
@@ -196,7 +236,8 @@ func headerTabsEnd() int {
 	return end
 }
 
-// barCells places the buttons from the left edge. A bar that does not fit
+// barCells places the buttons from the left edge: the first button's own
+// leading space is the line's gutter. A bar that does not fit
 // first cuts the store's name down to storeLabelFloor, then drops buttons, the
 // rightmost first. The last button left gives up its floor too, so the bar
 // names the store at any width that holds a cell of it.
@@ -218,14 +259,14 @@ func (m Model) barCells() []barCell {
 // to floor cells.
 func (m Model) placeBar(actions []barAction, floor int) ([]barCell, bool) {
 	cells := make([]barCell, 0, len(actions))
-	used := headerMenuStart + (len(actions)-1)*lipgloss.Width(barSeparator)
+	used := (len(actions) - 1) * lipgloss.Width(barSeparator)
 	for _, action := range actions {
 		cell := barCell{action: action, label: action.label(m), key: action.key(m)}
 		cells = append(cells, cell)
 		used += lipgloss.Width(cell.text())
 	}
 
-	x := headerMenuStart
+	x := 0
 	for idx := range cells {
 		cell := &cells[idx]
 		if cell.action.name {
@@ -244,11 +285,19 @@ func (m Model) placeBar(actions []barAction, floor int) ([]barCell, bool) {
 	return cells, used <= m.width
 }
 
-func (c barCell) text() string {
+// runs is a button's two runs as they are drawn: the label, and the key after
+// it where the action has one. A space stands on each side of the button, so
+// the pointer lights, and a click takes, a cell wider than the words.
+func (c barCell) runs() (label, key string) {
 	if c.key == "" {
-		return c.label
+		return " " + c.label + " ", ""
 	}
-	return c.label + " " + c.key
+	return " " + c.label + " ", c.key + " "
+}
+
+func (c barCell) text() string {
+	label, key := c.runs()
+	return label + key
 }
 
 func (c barCell) covers(x int) bool {
@@ -273,7 +322,9 @@ func (m Model) renderHeader() string {
 }
 
 // renderMenuBar draws the buttons from the left and the version flush right.
-// The version is the first to go when the two do not fit.
+// The version is the first to go when the two do not fit. The button under the
+// pointer takes the hover background over its whole cell, a step below the
+// selected row's, and a bold label.
 func (m Model) renderMenuBar() string {
 	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
 	muted := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
@@ -281,17 +332,18 @@ func (m Model) renderMenuBar() string {
 	cells := m.barCells()
 	bar := ""
 	for idx, cell := range cells {
-		lead := muted.Render(barSeparator)
-		if idx == 0 {
-			lead = strings.Repeat(" ", headerMenuStart)
+		if idx > 0 {
+			bar += muted.Render(barSeparator)
 		}
-		labelStyle := label.Bold(cell.action.name)
+		labelStyle, keyStyle := label.Bold(cell.action.name), muted
 		if m.barPointer != nil && cell.covers(*m.barPointer) {
-			labelStyle = label.Foreground(styles.ShellTabHoverColor).Bold(true)
+			labelStyle = label.Background(styles.ShellHoverBgColor).Bold(true)
+			keyStyle = muted.Background(styles.ShellHoverBgColor)
 		}
-		bar += lead + labelStyle.Render(cell.label)
-		if cell.key != "" {
-			bar += " " + muted.Render(cell.key)
+		text, key := cell.runs()
+		bar += labelStyle.Render(text)
+		if key != "" {
+			bar += keyStyle.Render(key)
 		}
 	}
 
@@ -304,7 +356,7 @@ func (m Model) renderMenuBar() string {
 
 // renderRule is the line between the menu bar and the view tabs.
 func (m Model) renderRule() string {
-	return styles.Rule(m.width)
+	return styles.InsetRule(m.width)
 }
 
 // renderTabs draws the view tabs. The menu bar names the store, the active tab
@@ -317,7 +369,7 @@ func (m Model) renderTabs() string {
 		case m.active == id:
 			base = base.Foreground(styles.ShellTabActiveTextColor).Background(styles.ShellTabActiveBgColor).Bold(true)
 		case m.hoverTab == id:
-			base = base.Foreground(styles.ShellTabHoverColor)
+			base = base.Foreground(styles.ShellTabHoverColor).Background(styles.ShellHoverBgColor)
 		default:
 			base = base.Foreground(styles.ShellTabInactiveColor)
 		}
@@ -364,7 +416,7 @@ func (m Model) workspaceSize() (int, int) {
 	return max(1, m.width), m.workspaceHeight(m.renderHeader(), m.renderFooter())
 }
 
-// workspaceHeight is the rows the terminal has left between a rendered header
+// workspaceHeight is the rows the screen has left between a rendered header
 // and footer.
 func (m Model) workspaceHeight(header, footer string) int {
 	return max(1, m.height-lipgloss.Height(header)-lipgloss.Height(footer))
@@ -377,9 +429,9 @@ func (m Model) applyWorkspaceSizeToBrowseModes() {
 	}
 }
 
-// renderFooter draws the key legend. It is one line whatever the width: the
-// workspace height is computed from it, so a hint that does not fit is dropped
-// rather than wrapped.
+// renderFooter draws the key legend, one cell in. It is one line whatever the
+// width: the workspace height is computed from it, so a hint that does not fit
+// is dropped rather than wrapped.
 func (m Model) renderFooter() string {
 	if !m.services.Config.UI.ShowModeSwitcherHelp {
 		return ""
@@ -392,7 +444,9 @@ func (m Model) renderFooter() string {
 	if m.active == mode.Detail && m.projectRootMissing {
 		hints = append([]styles.KeyHint{{Desc: "launchers off: project path missing"}}, hints...)
 	}
-	return styles.KeyLegend(hints, m.width)
+	// The legend starts under the label of the first button, as it does on a
+	// full screen, so it stays in place when one opens.
+	return textutil.TruncateString(" "+styles.KeyLegend(hints, max(1, styles.ScreenTextWidth(m.width))), m.width)
 }
 
 // workInFlight reports whether a browse surface or the detail is loading, on
@@ -412,51 +466,6 @@ func (m Model) workInFlight() bool {
 	// in flight after the operator switched to a browse tab would otherwise spin
 	// that tab's header for a surface nobody is looking at.
 	return m.active == mode.StorePicker && m.storePicker != nil && m.storePicker.IsLoading()
-}
-
-func shellKeyHelp(keys config.ResolvedKeyBindings) string {
-	return strings.Join([]string{
-		"Mode switching:",
-		fmt.Sprintf("  %s/%s = next/previous tab (Board, Docs)", keys.DisplayLabel(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayLabel(config.ShellContext, config.ShellActionModeCyclePrev)),
-		"",
-		"Selection:",
-		fmt.Sprintf("  Board: %s switch columns, %s move within a column", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
-		fmt.Sprintf("  Docs: %s move within the doc list (docs use the board keymap)", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
-		"  Board and Docs: type to filter the rows by title or ID; every word must match",
-		fmt.Sprintf("  backspace, ctrl+w and ctrl+u edit the filter, %s clears it", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
-		fmt.Sprintf("  Search: %s opens the store search; type to search titles, IDs and descriptions", keys.DisplayLabel(config.ShellContext, config.ShellActionOpenSearch)),
-		fmt.Sprintf("  ctrl+t switches it between open issues and all of them, %s clears the query and then goes back", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
-		fmt.Sprintf("  Board, Docs, Search and the store list: %s/%s move a page, %s/%s go to the first and last row", keys.DisplayLabel(config.BoardContext, config.BoardActionPageUp), keys.DisplayLabel(config.BoardContext, config.BoardActionPageDown), keys.DisplayLabel(config.BoardContext, config.BoardActionMoveHome), keys.DisplayLabel(config.BoardContext, config.BoardActionMoveEnd)),
-		"",
-		"Actions:",
-		fmt.Sprintf("  %s = create issue (inline modal)", keys.DisplayLabel(config.ShellContext, config.ShellActionCreateIssue)),
-		fmt.Sprintf("  %s = update selected issue metadata", keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue)),
-		fmt.Sprintf("  %s = close selected issue", keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue)),
-		fmt.Sprintf("  %s = add comment to selected issue", keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue)),
-		fmt.Sprintf("  %s = edit selected issue in external editor", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
-		fmt.Sprintf("  %s/%s/%s = launch external tools (detail mode, background fire-and-forget)", keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchNvim), keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchOpencode), keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchShell)),
-		"  launcher actions do not provide in-app return/save handling",
-		fmt.Sprintf("  use %s for edit/save round-trip that reloads detail", keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue)),
-		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
-		fmt.Sprintf("  scroll detail and this help: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
-		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
-		fmt.Sprintf("  %s = return from detail to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
-		fmt.Sprintf("  %s = list the central task stores on this machine and open one", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
-		fmt.Sprintf("  %s = open the configuration screen: the theme and the glyph set", keys.DisplayLabel(config.ShellContext, config.ShellActionOpenConfig)),
-		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
-		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
-		"",
-		"Mouse:",
-		"  click = select a row, switch to a tab, press a menu-bar button, or focus a pane",
-		"  second click on a row = open it",
-		"  wheel = move the selection, or scroll detail text and this help",
-		"  drag = select a box of text; letting go sends it to the terminal clipboard",
-		"  shift+drag = select text with the terminal instead",
-		"",
-		"Detail presentation model (v1): dedicated detail mode",
-		"  - Board prioritizes overview triage density",
-		fmt.Sprintf("  - %s opens full issue detail view", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
-	}, "\n")
 }
 
 // storePickerHints is the picker's own legend. The shell footer is not
@@ -488,18 +497,6 @@ func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
 		{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "back"},
 		{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"},
 	}
-}
-
-func combineDisplayLabels(keys config.ResolvedKeyBindings, context, first, second string) string {
-	left := keys.DisplayLabel(context, first)
-	right := keys.DisplayLabel(context, second)
-	if left == "" {
-		return right
-	}
-	if right == "" {
-		return left
-	}
-	return left + " or " + right
 }
 
 // footerHints is the legend of the active surface, the keys an operator needs

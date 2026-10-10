@@ -115,6 +115,12 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   type text one `send-key` per character, and clear it with `ESC` before a step that counts rows.
 - **A modal holds the keyboard until it is dismissed.** Keys sent meanwhile are typed into the
   overlay. Send `ESC`, then wait for the overlay to be gone rather than counting keystrokes.
+- **From `--width 100` the content is 4 columns narrower than the terminal, and from `--height 24`
+  also 2 rows shorter** ([the screen margin](DESIGN-GUIDE.md#the-screen-margin)). A `send-mouse`
+  cell is a terminal cell, margin included: read it off a checkpoint screen. Capture under 100
+  columns to drive a layout at its exact width.
+- **A stripped screen does not show a colour.** Add `--dump-raw` and read the escape codes in the
+  `raw` key of the JSON to check a foreground, a background or bold; set `COLORTERM=truecolor`.
 - **`ALT+E` hands the terminal to `$EDITOR` and swallows every key until that program exits.** A
   script that follows it with `CTRL+C` sends the quit to the editor and hangs.
 - **During a capture, `--debug` output reaches the persistent log, not stderr** — tail the log
@@ -126,8 +132,11 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 ## What to check in a manual run
 
-- **Surfaces** — board, docs, detail and the store search (`alt+f`) each render and stay readable
-  at your terminal size.
+- **Surfaces** — board, docs, detail, the store search (`alt+f`), the store picker (`alt+s`) and
+  help (`alt+h`) each render and stay readable at your terminal size, inside a blank margin from
+  100 columns and 24 rows.
+- **Pointer** — the row, the tab and the menu-bar button under the pointer are each lit, and a
+  click on a lit cell does what the key does.
 - **Configuration screen** — `alt+c` opens it; `right` on each row redraws the screen in the next
   theme or glyph set, and `esc` returns to a surface drawn in it. Launch with `--config` on an
   existing scratch file, or the run rewrites your own config; afterwards the file holds the new
@@ -148,10 +157,11 @@ store large enough to page.
 the height less the two head lines and the two column borders, floored at 1, and `20` before the
 first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
 
-Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
-rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-8 of M`, where
-`M` is the true closed total: `32 of M` at height 40, `22 of M` at height 30. Keep the app running,
-resize to 200 rows, press `alt+r`: the header must read `192 of M`, with `M` unchanged.
+Seed a store with more than 200 closed issues. The mode receives the terminal height minus the
+two rows of the screen margin and four rows of shell chrome, so at a terminal of `H` rows the Done
+column header reads `H-10 of M`, where `M` is the true closed total: `30 of M` at height 40,
+`20 of M` at height 30. Keep the app running, resize to 200 rows, press `alt+r`: the header must
+read `190 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
 `DashboardOptions.ClosedLimit` in `internal/mode/board/model.go`, or `applyWorkspaceSizeToBrowseModes`

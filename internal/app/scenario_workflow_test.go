@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -29,7 +31,7 @@ func TestModelReusableBoardDetailScenarioCoversScrollAndBack(t *testing.T) {
 	}
 
 	m := testui.InitializeModel(mustNewModel(t, services)).(Model)
-	m.width, m.height = 120, 24
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 24})
 
 	m = testui.ApplyKeySequence(m, testui.OpenDetailKeys()...).(Model)
 	if m.active != mode.Detail {

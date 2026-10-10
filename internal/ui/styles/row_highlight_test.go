@@ -61,11 +61,42 @@ func TestRowHighlightBandsTheWholeRow(t *testing.T) {
 	}
 }
 
-// TestHoverRolesStayDistinctOnEveryTerminal: a hover role says something only
-// while it differs from the role next to it. The light values of the two bands
-// were one 256-colour palette entry, and the hovered tab's light value was the
-// inactive tab's, so on those terminals the pointer marked nothing.
-func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
+// TestHoverIsOneSurfaceBelowTheSelectionInEveryTheme: the row or the button
+// under the pointer is lit a step below the selected row, and both are lighter
+// than the terminal's background. In true colour the two bands are two colours
+// in every theme.
+func TestHoverIsOneSurfaceBelowTheSelectionInEveryTheme(t *testing.T) {
+	forceTrueColor(t)
+	restoreInitialStyles(t)
+
+	for _, theme := range Themes() {
+		if err := Apply(theme, initialGlyphs); err != nil {
+			t.Fatalf("Apply(%q): %v", theme, err)
+		}
+
+		flavor := flavors[theme]
+		surface0, surface1 := lipgloss.Color(flavor.Surface0().Hex), lipgloss.Color(flavor.Surface1().Hex)
+		if RowHoverBgColor != surface0 || ShellHoverBgColor != surface0 {
+			t.Errorf("%s: the hover is %q on a row and %q on the header, want surface0 %q", theme, RowHoverBgColor, ShellHoverBgColor, surface0)
+		}
+		if RowSelectedBgColor != surface1 {
+			t.Errorf("%s: the selection is %q, want surface1 %q", theme, RowSelectedBgColor, surface1)
+		}
+		if bandOf(RowSelectedBgColor) == bandOf(RowHoverBgColor) {
+			t.Errorf("%s: the hover band is the selection band %q", theme, bandOf(RowHoverBgColor))
+		}
+	}
+}
+
+// TestHoveredTabStaysDistinctOnEveryTerminal: a hover role says something only
+// while it differs from the role next to it. The hovered tab's light value was
+// the inactive tab's, so on a terminal without true colour the pointer marked
+// nothing.
+//
+// The two row bands are not held to this. The hover is the surface next to the
+// selection's, and a 256- or a 16-colour terminal can draw the two as one
+// palette entry: the selection's gutter bar tells the rows apart there.
+func TestHoveredTabStaysDistinctOnEveryTerminal(t *testing.T) {
 	previousProfile := lipgloss.ColorProfile()
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 	restoreInitialStyles(t)
@@ -79,9 +110,6 @@ func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
 				t.Fatalf("Apply(%q): %v", theme, err)
 			}
 
-			if bandOf(RowSelectedBgColor) == bandOf(RowHoverBgColor) {
-				t.Errorf("%s, %s: the hover band is the selection band %q", name, theme, bandOf(RowHoverBgColor))
-			}
 			tabsAlike := sameStyle(lipgloss.NewStyle().Foreground(ShellTabHoverColor), lipgloss.NewStyle().Foreground(ShellTabInactiveColor))
 			if tabsAlike {
 				t.Errorf("%s, %s: a hovered tab is drawn as an inactive one", name, theme)

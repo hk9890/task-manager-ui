@@ -165,8 +165,8 @@ store picker. It has one section, Appearance, with two rows: `theme` and
 in and cannot be rebound. Every other key does nothing here, and the mouse only
 selects text.
 
-A change shows at once and is written to the config file at once; the first
-line of the screen names that file. The file keeps its comments, its order and
+A change shows at once and is written to the config file at once; the line
+under the title names that file. The file keeps its comments, its order and
 its layout: only the one value changes, and a missing `ui:` section or key is
 added. A file that does not exist yet is created.
 
@@ -175,6 +175,22 @@ When the file cannot be changed safely, nothing changes and a toast reads
 happens, for example, when `ui:` is written as `ui: {}` on one line without the
 key, when the value uses a YAML anchor or alias, or when the file no longer
 loads.
+
+## Help
+
+`alt+h`, or the `help` button on the menu bar, opens help from any screen, the
+store picker and the configuration screen included. It is a full screen: every
+key in sections, by what the keys act on, with the keys as your config binds
+them.
+
+- `up` / `down` — scroll one line
+- `pgup` / `pgdown` — scroll one page
+- `home` / `end` — jump to the top or the bottom
+- `alt+h`, `esc` — close it and return to the screen it opened over; it opens at the top again
+
+The scroll keys are the Detail Mode scroll keys and follow a rebind of them.
+Every other key does nothing while help is open, `ctrl+c` included: close help
+first.
 
 ## Modal Dialogs
 
@@ -187,15 +203,6 @@ loads.
 - `y` — submit when button row is focused
 - `n` — cancel when the button row is focused, except in the Status and Priority dialogs, which require a value
 
-The help overlay is taller than most terminals and shows `… N more lines` where
-it is cut. It scrolls on the Detail Mode scroll keys, and follows them when a
-config rebinds them:
-
-- `up` / `down` — scroll one line
-- `pgup` / `pgdown` — scroll one page
-- `home` / `end` — jump to the top or the bottom
-- `alt+h`, `esc`, `enter` — close it; it opens at the top again
-
 ## Mouse
 
 The mouse does what the keys above do. It has no bindings to configure and
@@ -204,7 +211,12 @@ cannot be turned off: the app takes every click, wheel notch and plain drag.
 instead.
 
 - The selected row carries a band of colour across its width. The row under the
-  pointer carries a quieter one, and a tab under the pointer brightens.
+  pointer carries a quieter one, a step nearer the background. On a terminal
+  without true colour the two can be one shade; the bar at the left of the
+  selected row tells them apart.
+- A tab or a menu-bar button under the pointer is lit: its text brightens over a
+  band that covers the space on each side of it. A click anywhere on the band
+  counts.
 - **Click a row** to select it. **Click it again** within 0.4 s to open it, as
   `enter` does: an issue, a doc or a search result opens in detail mode, a row of
   the detail Dependencies pane navigates to that issue, a store picker row opens
@@ -217,13 +229,14 @@ instead.
 - **Click a pane** in detail mode to focus it.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.
-- **Wheel** over the detail Content or Metadata pane, or over the help overlay,
+- **Wheel** over the detail Content or Metadata pane, or on the help screen,
   scrolls it three lines a notch.
-- While help or a dialog is open, the mouse reaches nothing under it. A dialog
-  takes keys only.
+- While a dialog is open, the mouse reaches nothing under it: a dialog takes
+  keys only. On the help screen the wheel scrolls and a click does nothing.
 - **Drag** to select a box of text; `esc` during the drag drops it. The box can
   cross panes and overlays, and the screen holds still under it until you let
-  go.
+  go. A drag that runs into the blank margin stops the box at the last drawn
+  cell.
 - Letting go sends the text to the clipboard through the terminal, with the
   OSC 52 sequence, and a toast reads `Sent N characters to the clipboard;
   shift+drag if not copied`. The app cannot tell whether the terminal took it.
@@ -232,6 +245,9 @@ instead.
 
 ## Notes
 
+- On a terminal of 100 columns or more the app leaves 2 blank columns on each
+  side, and from 24 rows also a blank row above and below. A narrower terminal
+  has no margin. A click in the margin does nothing.
 - Keybindings are context-specific. The same key may do different things in
   shell, board, detail, and modal contexts.
 - `tab`/`shift+tab` belong to the view tabs everywhere except in a modal,
@@ -248,7 +264,7 @@ instead.
   (the default since tmux 3.5); over a slow link, clear the filter with `ctrl+u`.
 - Data views refresh by themselves when the store changes, whoever wrote it — the
   `taskmgr` CLI, an agent, another `taskmgr-ui` — also while the terminal is not
-  focused. A change that arrives under a dialog or the help overlay shows when it
+  focused. A change that arrives under a dialog or the help screen shows when it
   closes. Where the store cannot be watched, they refresh when the app regains
   focus and once a minute. `--no-auto-refresh` turns all three off; `alt+r` reloads
   at once either way.

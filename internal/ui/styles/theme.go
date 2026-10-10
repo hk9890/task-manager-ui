@@ -88,21 +88,25 @@ func applyFlavor(f catppuccin.Flavor) {
 	ShellTabActiveBgColor = c(f.Mauve())
 	ShellTabInactiveColor = c(f.Overlay1())
 	ShellTabHoverColor = c(f.Text())
+	ShellHoverBgColor = c(f.Surface0())
 	ShellFooterHelpColor = c(f.Overlay0())
 	ShellRuleColor = c(f.Surface1())
-	ShellActionColor = c(f.Subtext0())
+	ShellActionColor = c(f.Text())
 
 	QueryAccentColor = c(f.Mauve())
 	MatchTextColor = c(f.Yellow())
 
+	ScreenSubtitleColor = c(f.Blue())
 	SectionHeadingColor = c(f.Blue())
 	SettingLabelColor = c(f.Blue())
 
-	// The two bands must stay two colours on a 256- and a 16-colour terminal,
-	// where the surfaces of a dark flavour collapse into one palette entry. The
-	// mantle is the nearest shade that does not.
+	// The hover is one surface below the selection, so it is lighter than the
+	// terminal's background as the selection is. The two bands are two colours
+	// on a true-colour terminal only: on a 256- or a 16-colour one the surfaces
+	// of a flavour can collapse into one palette entry, and the selection's
+	// gutter bar is then what tells the two rows apart.
 	RowSelectedBgColor = c(f.Surface1())
-	RowHoverBgColor = c(f.Mantle())
+	RowHoverBgColor = c(f.Surface0())
 
 	BorderDefaultColor = c(f.Surface2())
 	OverlayTitleColor = c(f.Text())

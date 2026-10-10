@@ -10,7 +10,9 @@ cmd/taskmgr-ui/           entrypoint: flag parsing, config resolution, logging s
                           backend selection. Resolves the store the app starts on; every later
                           store is opened through storecatalog/ from the picker
 internal/
-  app/                    the root shell: mode lifecycle, routing, selection and detail coordination
+  app/                    the root shell: mode lifecycle, routing, selection and detail
+                          coordination, the screen margin, and the content of the help screen
+                          (help.go)
   mode/                   board, docs, search, detail, storepicker and configscreen feature
                           models, plus the shell message contracts and Query, the typed filter
                           text (query.go).
@@ -19,8 +21,8 @@ internal/
                           browse surface that is not a tab. rowlist/ is the list code those
                           two share
   ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
-    styles/                 every colour role, the themes, the glyph sets, the key legend and the
-                            shared FormSection chrome
+    styles/                 every colour role, the themes, the glyph sets, the key legend, the
+                            shared FormSection chrome and Screen, the chrome of the full screens
     shared/                 issuerow, markdown, renderhelpers, textutil — reused across modes
     board/                  the columns and the query line above them; the docs tab and the
                             store search draw through it too
@@ -28,6 +30,8 @@ internal/
     storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
     configscreen/           the full-screen configuration screen: the theme and the glyph set;
                             it renders instead of the shell too
+    helpscreen/             the full-screen help: every key, in sections; it renders instead of
+                            the shell too
     modal/ toaster/ overlay/ loading/ scroll/ fatalerror/   shared shell primitives
   domain/                 issue, query, mutation, catalog and error models
   repository/             the Repository interface, plus shared errors and types

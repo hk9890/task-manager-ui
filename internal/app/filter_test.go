@@ -36,7 +36,6 @@ func filterShell(t *testing.T, keys ...func(*config.Model)) (Model, *fakes.Track
 		t.Fatalf("NewServices returned error: %v", err)
 	}
 	m := mustNewModel(t, services)
-	m.width, m.height = 160, 30
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 30}})
 	m = applyMessages(t, m, runBatch(m.Init()))
 	if m.active != mode.Board {

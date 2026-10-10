@@ -19,12 +19,17 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
-// footerSeparator stands between two hints of the legend.
-const footerSeparator = " · "
+// footerSeparator stands between two hints of the legend, and footerCut ends
+// a legend that dropped hints.
+const (
+	footerSeparator = " • "
+	footerCut       = " …"
+)
 
 // TestFooterLegendDropsTrailingHintsRatherThanOverflow pins the legend's fit
 // rule for every mode that has its own footer: a legend that does not fit loses
-// hints from its end, whole, and never reaches past the terminal.
+// hints from its end, whole, marks the drop, and never reaches past the
+// terminal.
 //
 // One column too many is a footer the terminal wraps onto a second line, which
 // the workspace height did not leave room for.
@@ -67,16 +72,20 @@ func TestFooterLegendDropsTrailingHintsRatherThanOverflow(t *testing.T) {
 				t.Fatalf("%s at width %d: the legend is %d cells wide: %q", active, width, cells, legend)
 			}
 			// Dropped from the end, whole: what is left is the start of the
-			// full legend, and it ends on a hint, not on a separator. Only
-			// the first hint is cut, where not even it fits.
+			// full legend, and it ends on a hint or on the mark of the drop,
+			// not on a separator. Only the first hint is cut, where not even
+			// it fits.
+			kept := strings.TrimSuffix(legend, footerCut)
 			if first, _, _ := strings.Cut(full, footerSeparator); width < lipgloss.Width(first) {
 				if !strings.HasSuffix(legend, "…") {
 					t.Fatalf("%s at width %d: the first hint is not cut to fit: %q", active, width, legend)
 				}
-			} else if !strings.HasPrefix(full, legend) {
+			} else if !strings.HasPrefix(full, kept) {
 				t.Fatalf("%s at width %d: %q is not the start of %q", active, width, legend, full)
+			} else if kept == legend && kept != full && lipgloss.Width(kept)+lipgloss.Width(footerCut) <= width {
+				t.Fatalf("%s at width %d: the legend dropped hints and has room for the mark, but draws none: %q", active, width, legend)
 			}
-			if strings.HasSuffix(legend, strings.TrimRight(footerSeparator, " ")) {
+			if strings.HasSuffix(kept, strings.TrimRight(footerSeparator, " ")) {
 				t.Fatalf("%s at width %d: the legend ends on a separator: %q", active, width, legend)
 			}
 			if cells < previous {
@@ -143,7 +152,7 @@ func TestFooterKeepsTheLaunchersOffNoticeAtANarrowWidth(t *testing.T) {
 
 	m.width = 200
 	wide := m.renderFooter()
-	if !strings.HasPrefix(wide, notice+footerSeparator) {
+	if !strings.HasPrefix(wide, " "+notice+footerSeparator) {
 		t.Fatalf("the notice does not lead the legend: %q", wide)
 	}
 	hints := footerHints(mode.Detail, m.keys)
@@ -152,21 +161,22 @@ func TestFooterKeepsTheLaunchersOffNoticeAtANarrowWidth(t *testing.T) {
 	}
 
 	// Room for the notice and one hint behind it, and no more.
-	m.width = lipgloss.Width(notice) + 15
+	m.width = lipgloss.Width(notice) + 16
 	narrow := m.renderFooter()
-	if !strings.HasPrefix(narrow, notice) {
+	if !strings.HasPrefix(narrow, " "+notice) {
 		t.Fatalf("at width %d the notice is gone: %q", m.width, narrow)
 	}
 	if strings.Count(narrow, footerSeparator) >= strings.Count(wide, footerSeparator) {
 		t.Fatalf("at width %d no hint was dropped: %q", m.width, narrow)
 	}
-	if !strings.HasPrefix(wide, narrow) {
+	if !strings.HasPrefix(wide, strings.TrimSuffix(narrow, footerCut)) {
 		t.Fatalf("at width %d the legend %q is not the start of %q", m.width, narrow, wide)
 	}
 
-	m.width = lipgloss.Width(notice)
-	if got := m.renderFooter(); got != notice {
-		t.Fatalf("at width %d, exactly the notice's: got %q, want %q", m.width, got, notice)
+	// The legend starts one cell in, so the notice needs that cell too.
+	m.width = lipgloss.Width(notice) + 1
+	if got := m.renderFooter(); got != " "+notice {
+		t.Fatalf("at width %d, exactly the notice's: got %q, want %q", m.width, got, " "+notice)
 	}
 
 	// The notice belongs to Detail: no other surface launches anything.

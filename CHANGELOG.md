@@ -23,6 +23,22 @@ carries its `vX.Y.Z` section of this file as its notes.
   is cut to the room the bar has, before a button is dropped. The text at
   the right of the tab line — the store, the view, the selected issue and
   `Idle` — is gone: each part repeated what the screen already shows.
+- **Changed: the look of the screen.** On a terminal of 100 columns or more the
+  app leaves 2 blank columns on each side, and from 24 rows a blank row above
+  and below. Help is a full screen and no longer a box over the screen: the
+  keys stand in sections in one column, `alt+h` or `esc` closes it, and `enter`
+  no longer does. The configuration screen has the same chrome in place of its
+  box: a title line, a rule, one blue line that says what the screen holds, and
+  a second rule. A menu-bar button has a space on each side, and the button
+  or the tab under the pointer is lit over that whole cell; a click anywhere on
+  it counts. A button's label is the text colour, and the rule under the bar
+  starts under the first label. In the key legend the key is now the dim part
+  and what it does the bright part, the hints are joined by `•`, the line
+  starts one column in, and it ends in `…` when hints are left off. The bar is 11 columns wider, so a narrow terminal drops the
+  version and the last buttons sooner. The row under the pointer is now lighter
+  than the background, one step below the selected row. On a terminal without
+  true colour the two can be one shade, and the bar at the left of the selected
+  row tells them apart.
 - **Changed: the store search waits until you stop typing.** A search runs 150 ms
   after the last key, so a typed word is one search and not one for each
   letter. `enter` pressed inside that time opens the result of what you typed.

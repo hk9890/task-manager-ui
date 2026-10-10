@@ -7,9 +7,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 )
 
-// helpWheelLines is how far one wheel notch scrolls the help overlay.
-const helpWheelLines = 3
-
 // mouseKind maps a Bubble Tea mouse event onto the few the surfaces act on:
 // the wheel, the pointer moving, and a press of the left button. A drag is a
 // move, and a release or another button is nothing.
@@ -32,7 +29,7 @@ func mouseKind(msg tea.MouseMsg) (mode.MouseKind, bool) {
 // shell, then the header and the active surface.
 //
 // An open overlay holds the screen as it holds the keyboard, so nothing below
-// it sees the event — the help overlay scrolls under the wheel and a dialog
+// it sees the event — the help screen scrolls under the wheel and a dialog
 // ignores the mouse. Each surface gets the event in its own coordinates.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	kind, ok := mouseKind(msg)
@@ -55,9 +52,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case !m.showHelp:
 		case kind == mode.MouseWheelUp:
-			m.help = m.help.Scroll(-helpWheelLines)
+			m.scrollHelpBy(-helpWheelLines)
 		case kind == mode.MouseWheelDown:
-			m.help = m.help.Scroll(helpWheelLines)
+			m.scrollHelpBy(helpWheelLines)
 		}
 		return m, cmd
 	}

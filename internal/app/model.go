@@ -135,8 +135,10 @@ type Model struct {
 
 	toast toaster.Model
 
-	help     modal.Model
-	showHelp bool
+	// showHelp puts the help screen in the surface's place, and helpOffset is
+	// the first of its lines on screen.
+	showHelp   bool
+	helpOffset int
 
 	actionModal     modal.Model
 	showActionModal bool
@@ -168,8 +170,13 @@ type Model struct {
 	// while something is loading, and there is at most one chain at a time.
 	spinnerTicking bool
 
-	width  int
-	height int
+	// width and height are the size every surface is drawn for: the terminal
+	// less the screen margin, which marginRows and marginCols hold. The model
+	// does not keep the terminal's own size, so no surface can be sized to it.
+	width      int
+	height     int
+	marginRows int
+	marginCols int
 
 	// sizeKnown is set to true once the first tea.WindowSizeMsg has been
 	// processed. View() returns an empty string until sizeKnown is true so that
@@ -224,15 +231,6 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		return Model{}, fmt.Errorf("invalid keybindings in app model: %w", err)
 	}
 
-	helpText := shellKeyHelp(keys)
-	help := modal.NewWithKeys(modal.Config{
-		Title:       "Keyboard Help",
-		Message:     helpText,
-		HideButtons: true,
-		Required:    false,
-		MinWidth:    72,
-	}, modal.BindingsFromConfig(keys))
-
 	ctx := runtime.Ctx
 	if ctx == nil {
 		ctx = context.Background()
@@ -247,7 +245,6 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 			logging.WithComponent(services.Logger, "storepicker"), keys),
 		configScreen:         configscreenmode.NewModel(keys),
 		toast:                toaster.New(),
-		help:                 help,
 		width:                defaultViewportWidth,
 		height:               defaultViewportHeight,
 		runtime:              runtime,
@@ -547,9 +544,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.fatalErrTitle != "" {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
-			m.sizeKnown = true
-			m.width = msg.Width
-			m.height = msg.Height
+			m.setTerminalSize(msg)
 		case tea.KeyMsg:
 			if m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) ||
 				msg.String() == "q" || msg.String() == "ctrl+c" {
@@ -560,6 +555,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if mouse, ok := msg.(tea.MouseMsg); ok {
+		// The one place a mouse event leaves the terminal's coordinates for
+		// the screen's: everything after this counts from the cell the margin
+		// puts the screen's first cell on.
+		mouse.X -= m.marginCols
+		mouse.Y -= m.marginRows
 		next, cmd, handled := m.mouseHeld(mouse)
 		if handled {
 			return next, cmd
@@ -626,16 +626,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinnerTicking = false
 		return m, modeCmd
 	case tea.WindowSizeMsg:
-		m.sizeKnown = true
-		m.width = msg.Width
-		m.height = msg.Height
+		m.setTerminalSize(msg)
 		m.applyWorkspaceSizeToBrowseModes()
-		// Both overlays are sized here, open or not: an overlay does not
-		// consume a resize.
-		m.help.SetSize(m.width, m.height)
+		// The modal is sized here, open or not: an overlay does not consume a
+		// resize.
 		m.actionModal.SetSize(m.width, m.height)
 		// The picker renders instead of the shell, so it takes the whole
-		// terminal rather than the workspace the browse tabs share.
+		// screen rather than the workspace the browse tabs share.
 		m.storePicker.SetSize(m.width, m.height)
 		m.configScreen.SetSize(m.width, m.height)
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
@@ -839,8 +836,7 @@ var issueScopedShellActions = []string{
 
 func (m *Model) openHelp() tea.Cmd {
 	m.showHelp = true
-	m.help = m.help.ScrollToTop()
-	m.help.SetSize(m.width, m.height)
+	m.helpOffset = 0
 	return nil
 }
 
@@ -1115,7 +1111,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 	return m, modeCmd
 }
 
-// overlayOpen reports whether the help overlay or the action modal is on screen.
+// overlayOpen reports whether the help screen or the action modal is on screen.
 func (m Model) overlayOpen() bool {
 	return m.showHelp || m.showActionModal
 }
@@ -1163,54 +1159,8 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 		return m, batchCmds(modeCmd, cmd)
 	}
 
-	// Close through the same action that opens it. Matching a literal "?"
-	// made the toggle one-way for anyone who rebound toggle_help — the
-	// example config in docs/CONFIGURATION.md binds it to F1 — leaving
-	// Escape as the only way out.
-	if k, ok := msg.(tea.KeyMsg); ok && m.keys.Match(config.ShellContext, config.ShellActionHelp, k) {
-		m.showHelp = false
-		return m, modeCmd
-	}
-
-	if _, ok := msg.(modal.CancelMsg); ok {
-		m.showHelp = false
-		return m, modeCmd
-	}
-	if _, ok := msg.(modal.SubmitMsg); ok {
-		m.showHelp = false
-		return m, modeCmd
-	}
-
 	if k, ok := msg.(tea.KeyMsg); ok {
-		if scrolled, ok := m.scrollHelp(k); ok {
-			m.help = scrolled
-			return m, modeCmd
-		}
+		m.helpKey(k)
 	}
-
-	nextHelp, cmd := m.help.Update(msg)
-	m.help = nextHelp
-	return m, batchCmds(modeCmd, cmd)
-}
-
-// scrollHelp scrolls the help overlay on the keys that scroll a detail pane.
-// The wheel scrolls it too, and the mouse only repeats what a key does
-// (docs/DESIGN-GUIDE.md).
-func (m Model) scrollHelp(k tea.KeyMsg) (modal.Model, bool) {
-	detailKey := func(action string) bool { return m.keys.Match(config.DetailContext, action, k) }
-	switch {
-	case detailKey(config.DetailActionScrollUp):
-		return m.help.Scroll(-1), true
-	case detailKey(config.DetailActionScrollDown):
-		return m.help.Scroll(1), true
-	case detailKey(config.DetailActionPageUp):
-		return m.help.Scroll(-m.help.PageLines()), true
-	case detailKey(config.DetailActionPageDown):
-		return m.help.Scroll(m.help.PageLines()), true
-	case detailKey(config.DetailActionHome):
-		return m.help.ScrollToTop(), true
-	case detailKey(config.DetailActionEnd):
-		return m.help.ScrollToEnd(), true
-	}
-	return m.help, false
+	return m, modeCmd
 }

@@ -1,0 +1,16 @@
+ Keyboard Help                                                                                                    v1.2.3
+ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ every key taskmgr-ui answers to
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Moving and opening ───────────────────────────────────────────────────────────────────────────────────────────────────
+   up / down            the row above / below
+   enter                open the selected issue in Detail
+   esc                  back to where the surface was opened from; hide a toast
+
+ Tabs ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   tab/ctrl+pgdown      next tab: Board, Docs
+   shift+tab/ctrl+pgup  previous tab
+
+ Mouse ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   click                select a row, switch to a tab, press a menu-bar button or focus a pane
+ down/up scroll • esc back • pgup/pgdown page • home/end bounds

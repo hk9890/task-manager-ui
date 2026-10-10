@@ -212,11 +212,11 @@ func TestSelectingWorksOverTheHelpOverlay(t *testing.T) {
 	m, copied := newSelectingShell(t)
 	m = pressKey(t, m, "alt+h")
 
-	x, y := testui.FindCell(t, m.View(), "Mode switching:")
+	x, y := testui.FindCell(t, m.View(), "Moving and opening")
 	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(x+len("Mode switching:")-1, y))
-	m = send(t, m, leftRelease(x+len("Mode switching:")-1, y))
-	if len(*copied) != 1 || (*copied)[0] != "Mode switching:" {
+	m = send(t, m, leftDrag(x+len("Moving and opening")-1, y))
+	m = send(t, m, leftRelease(x+len("Moving and opening")-1, y))
+	if len(*copied) != 1 || (*copied)[0] != "Moving and opening" {
 		t.Fatalf("copied %q, want the help line", *copied)
 	}
 	if !m.showHelp {
