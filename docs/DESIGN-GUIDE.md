@@ -208,7 +208,7 @@ what gives it forwarding, sizing, a loading scope, auto refresh and a rebuild at
 is absent from `mode.BrowseModes`, so the tab cycle never lands on it and `lastBrowse` never names
 it.
 
-- A shell action opens it — `open_search`, the first menu-bar button — from a tab or from Detail
+- A shell action opens it — `open_search`, a menu-bar button — from a tab or from Detail
   (`Model.openSearch`). `Model.searchFrom` holds the surface it was opened from and is empty while
   the search is not up.
 - While it is up it owns the selection, also under a Detail opened from it: `currentSelection`
