@@ -391,8 +391,9 @@ func (m Model) renderFooter() string {
 	return styles.KeyLegend(hints, m.width)
 }
 
-// workInFlight reports whether a surface on screen is loading: it is what
-// draws the header spinner and arms its tick.
+// workInFlight reports whether a browse surface or the detail is loading, on
+// screen or not, or the store picker while it is up: it is what draws the
+// header spinner and arms its tick.
 func (m Model) workInFlight() bool {
 	for _, entry := range m.browseTabs() {
 		if entry.Tab.IsLoading() {

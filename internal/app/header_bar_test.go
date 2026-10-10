@@ -13,7 +13,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -260,7 +259,8 @@ func TestStoreButtonCutsALongName(t *testing.T) {
 			continue
 		}
 		label := cells[0].label
-		if !strings.HasSuffix(label, "…") || cells[len(cells)-1].x1 > tc.width {
+		kept, cut := strings.CutSuffix(label, "…")
+		if !cut || !strings.HasPrefix(m.services.StoreName, kept) || cells[len(cells)-1].x1 > tc.width {
 			t.Errorf("at width %d the store label is %q and the bar ends at column %d", tc.width, label, cells[len(cells)-1].x1)
 		}
 		if tc.label != 0 && lipgloss.Width(label) != tc.label {
@@ -272,6 +272,43 @@ func TestStoreButtonCutsALongName(t *testing.T) {
 		if bar := headerLines(m, tc.width)[headerMenuRow]; !strings.Contains(bar, label+" ") {
 			t.Errorf("at width %d the bar does not draw %q:\n%s", tc.width, label, bar)
 		}
+	}
+}
+
+// TestLongStoreNameGivesABarItsButtonsBackAtTheFloor widens the terminal one
+// column at a time under a long name. A button comes back as soon as the name
+// has storeLabelFloor cells beside it, and the name is never shorter beside
+// another button. The store button alone starts at one cell.
+func TestLongStoreNameGivesABarItsButtonsBackAtTheFloor(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	m.services.StoreName = "a-store-with-a-name-far-longer-than-any-bar-has-room-for"
+
+	previous := 0
+	for width := 0; width <= 120; width++ {
+		m.width = width
+		cells := m.barCells()
+		if len(cells) == 0 {
+			continue
+		}
+		got := lipgloss.Width(cells[0].label)
+
+		want := storeLabelFloor
+		if len(cells) == 1 {
+			want = 1
+		}
+		switch {
+		case len(cells) > previous && got != want:
+			t.Errorf("at width %d the bar gained button %d with the store label at %d cells, want %d", width, len(cells), got, want)
+		case got < want:
+			t.Errorf("at width %d the store label is %d cells beside %d other buttons, want %d or more", width, got, len(cells)-1, want)
+		}
+		previous = len(cells)
+	}
+
+	if previous != len(barActions) {
+		t.Fatalf("at width 120 the bar places %d of %d buttons", previous, len(barActions))
 	}
 }
 
@@ -295,9 +332,7 @@ func TestNarrowBarDropsAButtonBeforeTheNameGoesUnderItsFloor(t *testing.T) {
 // TestHoveredStoreButtonTakesTheCommonHover: the store's name rests bold in the
 // buttons' colour, so the pointer changes its colour as it does on any button.
 func TestHoveredStoreButtonTakesTheCommonHover(t *testing.T) {
-	previous := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+	testui.ForceTrueColor(t)
 
 	m := newHeaderShell(t, config.Default())
 	m.width = 120
@@ -307,7 +342,11 @@ func TestHoveredStoreButtonTakesTheCommonHover(t *testing.T) {
 	m.barPointer = &x
 	hovered := m.renderMenuBar()
 
-	want := lipgloss.NewStyle().Foreground(styles.ShellTabHoverColor).Bold(true).Render(m.storeLabel())
+	bold := lipgloss.NewStyle().Bold(true)
+	if want := bold.Foreground(styles.ShellActionColor).Render(m.storeLabel()); !strings.HasPrefix(strings.TrimLeft(rest, " "), want) {
+		t.Errorf("the store button at rest is not bold in the buttons' colour:\n%q", rest)
+	}
+	want := bold.Foreground(styles.ShellTabHoverColor).Render(m.storeLabel())
 	if hovered == rest || !strings.HasPrefix(strings.TrimLeft(hovered, " "), want) {
 		t.Errorf("the hovered store button is not drawn in the hover style:\nrest    %q\nhovered %q", rest, hovered)
 	}

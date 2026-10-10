@@ -116,7 +116,8 @@ func (c Catalog) resolve(opts tasks.ResolveOptions) (storecatalog.Opened, error)
 // registry name, which is the name of its directory under the central root; a
 // local store's directory is always .tasks, so it is named after its project.
 // A directory name may hold a newline or a tab, and the name is drawn on one
-// line: each run of control characters becomes one space.
+// line: each run of control characters and white space becomes one space, and
+// none stays at either end.
 func StoreName(info tasks.ResolveInfo) string {
 	dir := info.StorePath
 	if info.Kind == tasks.ResolvedLocal {
