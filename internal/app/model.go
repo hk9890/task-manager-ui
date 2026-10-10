@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -816,8 +818,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, modeCmd
 }
 
+// showToast is the one way a toast reaches the screen. A toast often carries
+// a path, a store name or an error text, so the message is cleaned here, line
+// by line: the line feeds in it are the app's own.
 func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
-	m.toast = m.toast.Show(message, style)
+	m.toast = m.toast.Show(displaytext.Lines(message), style)
 	// Tag the dismiss timer with this toast's identity so a stale timer from an
 	// earlier toast cannot dismiss the one now on screen (see DismissMsg handler).
 	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())

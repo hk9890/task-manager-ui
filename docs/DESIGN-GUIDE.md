@@ -397,9 +397,20 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`,
   `TruncateStringFront`, `WrapLines`, `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
   `styles` owns colour and chrome, not text math.
-- Pass a string the app did not write and draws on one line — a directory name, a path — through
-  `textutil.OneLine` first. A newline in it adds a line to the frame and puts every click below a
-  row off; a bidirectional override reorders the cells beside it.
+- A string the app did not write — a directory name, a path, an error text that embeds one — is
+  cleaned with `internal/displaytext` before it is drawn. A newline in it adds a line to the frame
+  and puts every click below a row off; an escape sequence runs in the terminal; a bidirectional
+  override reorders the cells beside it. The value a file or store operation uses stays raw, so
+  the cleaning is at the places such a text passes on its way to the screen:
+  - where a display-only value enters: `StoreName`, and the path and detail of a catalog entry
+    (`internal/storecatalog/taskmgr`);
+  - `Model.showToast`, with `displaytext.Lines`, because a toast may hold line feeds the app wrote;
+  - `Model.openStoreForm`, the configuration screen's `Model.Open`, and the store picker's
+    `renderRow` and `renderError`, each of which draws a value that is also a key;
+  - the error row of a board column and the error text of the detail view.
+
+  A new place that draws such a string calls `displaytext.OneLine` itself. The log keeps the raw
+  value ([MONITORING.md](MONITORING.md)).
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.
 

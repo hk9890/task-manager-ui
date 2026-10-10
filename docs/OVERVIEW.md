@@ -40,6 +40,8 @@ internal/
                           repository/, which reads the issues inside one. taskmgr/ is the SDK
                           implementation over tasks.Stores
   dashboard/              Compose: dashboard.Inputs in, dashboard.Columns out
+  displaytext/            OneLine and Lines: make a path, a name or an error text from outside
+                          safe to draw. Standard library only, so every layer may import it
   config/                 config model, defaults, YAML loading, keybinding resolution, and Set,
                           the one writer of the config file (set.go)
   launcher/               external tool launch actions and the process runner; editor/ is the edit handoff

@@ -6,16 +6,11 @@
 // owns colour roles and shell chrome. The split forced DESIGN-GUIDE.md to spell
 // out which package held which operation, and made textutil import styles to
 // finish its own work.
-//
-// OneLine is the sixth, and the one that is not ANSI-aware: it cleans a string
-// the app did not write, before that string is styled or measured. The store
-// catalog calls it too, for the name of a store.
 package textutil
 
 import (
 	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -37,27 +32,6 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 // StripANSI removes SGR (color/style) escape sequences from s.
 func StripANSI(s string) string {
 	return ansiPattern.ReplaceAllString(s, "")
-}
-
-// zeroWidthJoiner is the one format character OneLine keeps: it joins the
-// parts of an emoji sequence.
-const zeroWidthJoiner = '\u200d'
-
-// OneLine makes a string the app did not write, such as a directory name,
-// safe to draw on one line: each control character and each line or paragraph
-// separator becomes a space, and each format character is dropped, because a
-// newline breaks the frame and a bidirectional override reorders the cells
-// beside it.
-func OneLine(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case unicode.IsControl(r), unicode.In(r, unicode.Zl, unicode.Zp):
-			return ' '
-		case unicode.Is(unicode.Cf, r) && r != zeroWidthJoiner:
-			return -1
-		}
-		return r
-	}, s)
 }
 
 // PadToWidth right-pads value with spaces to the given rendered width, or

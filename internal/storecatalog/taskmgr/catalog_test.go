@@ -268,6 +268,8 @@ func TestStoreNameDropsFormatCharacters(t *testing.T) {
 		"/dev/a\u202eb":                   "ab",
 		"/dev/\u200b\ufeff":               "",
 		"/dev/\U0001F468\u200d\U0001F4BB": "\U0001F468\u200d\U0001F4BB",
+		// A name of joiners alone draws no cell, so it is no name.
+		"/dev/" + string(rune(0x200d)): "",
 	} {
 		info := tasks.ResolveInfo{Kind: tasks.ResolvedLocal, ProjectPath: path}
 		if got := StoreName(info); got != want {

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
@@ -34,19 +36,24 @@ func (m *Model) openStoreForm(kind storepickermode.StoreKind, dir string) tea.Cm
 		prefix = m.services.StoreCatalog.DerivePrefix(dir)
 	}
 
+	// The form draws the directory and prefills from it; storeForm.dir keeps
+	// the raw path the store is created in.
+	shown := displaytext.OneLine(dir)
+	prefix = displaytext.OneLine(prefix)
+
 	cfg := modal.Config{ConfirmText: "Create", MinWidth: 72}
 	switch kind {
 	case storepickermode.LocalStore:
 		cfg.Title = "Create Local Store"
-		cfg.Message = "Creates a .tasks store in " + dir
+		cfg.Message = "Creates a .tasks store in " + shown
 		cfg.Inputs = []modal.InputConfig{
 			{Key: "prefix", Label: "ID prefix", Value: prefix},
 		}
 	case storepickermode.CentralStore:
 		cfg.Title = "Create Central Store"
-		cfg.Message = "Registers a central store for " + dir
+		cfg.Message = "Registers a central store for " + shown
 		cfg.Inputs = []modal.InputConfig{
-			{Key: "name", Label: "Name", Value: filepath.Base(dir)},
+			{Key: "name", Label: "Name", Value: displaytext.OneLine(filepath.Base(dir))},
 			{Key: "prefix", Label: "ID prefix", Value: prefix},
 		}
 	}
