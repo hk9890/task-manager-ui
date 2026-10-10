@@ -9,12 +9,15 @@ What it does:
 - **Board** — issues in Not Ready, Ready, In Progress and Done columns, with the Done column paging
   in closed history as you scroll.
 - **Docs tab** — every `doc`-type issue, open and closed, in one column.
-- **Search** — query issues, widen to closed work, drill into any result.
+- **Type to filter** — on the Board and Docs tabs every key you type narrows the rows to the
+  titles and IDs that match, and marks the match.
+- **Search** — `alt+f` searches the whole store as you type, widens to closed work, and drills
+  into any result.
 - **Detail** — the full issue with its dependencies, content and metadata panes.
-- **Edit in place** — create, update, close and comment on issues; `e` opens the full issue in
+- **Edit in place** — create, update, close and comment on issues; `alt+e` opens the full issue in
   `$EDITOR` and applies what you save.
 - **Launch external tools** — run `nvim`, `opencode` or your own command against the selected issue.
-- **Stores** — `s` lists every central task store on the machine and switches to one in place;
+- **Stores** — `alt+s` lists every central task store on the machine and switches to one in place;
   started somewhere with no store, it opens there instead of exiting and offers to create one.
 - **Mouse** — click, wheel and drag-select do what the keys do. A plain drag belongs to the app;
   hold `shift` and drag for the terminal's own selection.

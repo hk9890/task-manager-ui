@@ -12,8 +12,11 @@ import (
 type ID string
 
 const (
-	Board  ID = "board"
-	Docs   ID = "docs"
+	Board ID = "board"
+	Docs  ID = "docs"
+	// Search is the store search. It satisfies Browse and holds a selection,
+	// but it is not a tab: it is absent from BrowseModes and is opened by a
+	// shell action instead.
 	Search ID = "search"
 	Detail ID = "detail"
 	// StorePicker lists the central task-manager stores on this machine. It is
@@ -25,7 +28,7 @@ const (
 // BrowseModes lists the browse tabs in header order. Neither Detail nor
 // StorePicker is a tab: Detail is a drill-in reached from a browse mode and
 // left with Escape, and StorePicker is a full-screen surface above all of them.
-var BrowseModes = []ID{Board, Docs, Search}
+var BrowseModes = []ID{Board, Docs}
 
 // IsBrowse reports whether id is one of the browse tabs. The shell keeps
 // lastBrowse pointing at one of these, so selection lookups always resolve.
@@ -38,8 +41,8 @@ func IsBrowse(id ID) bool {
 	return false
 }
 
-// Browse is the contract every browse tab satisfies. Board, Docs and Search
-// already had this exact method set; without an interface to hold them the
+// Browse is the contract every browse tab satisfies, and the store search with
+// them. Board and Docs already had this exact method set; without an interface to hold them the
 // shell hand-wrote the same dispatch once per tab at eight sites, and a missed
 // site was silent behavioural drift rather than a build error.
 //
@@ -70,6 +73,11 @@ type Browse interface {
 	// Reload is what the tab's reload key runs, which the shell's reload
 	// button runs too. It returns nil while a load is already in flight.
 	Reload() tea.Cmd
+
+	// ClearQuery empties the tab's filter query. The shell calls it on Escape
+	// before its own handling: cleared is false when the query was already
+	// empty, and Escape then does what it does without a query.
+	ClearQuery() (cleared bool, cmd tea.Cmd)
 }
 
 // RefreshMode distinguishes the two reasons a browse tab reloads. It lives here
@@ -93,7 +101,7 @@ type Selection struct {
 	Issue domain.IssueSummary
 }
 
-// SelectionChangedMsg is emitted by board/search modes whenever the selected
+// SelectionChangedMsg is emitted by browse modes whenever the selected
 // issue changes so the shell can update detail presentation state.
 type SelectionChangedMsg struct {
 	Mode      ID
@@ -109,9 +117,8 @@ type ActionRequestMsg struct {
 // RequestActionCmd returns the Cmd that asks the shell for a shell-owned action
 // on behalf of the mode with this id.
 //
-// One constructor for the whole contract: detail and search each carried a
-// private copy of it, and board and docs built the message inline, so four
-// packages spelled the same two lines four ways.
+// One constructor for the whole contract, so no mode builds the message
+// inline.
 func RequestActionCmd(id ID, action Action) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: action}

@@ -8,6 +8,14 @@ import (
 
 const selectionIdlePrefix = "  "
 
+const ruleGlyph = "─"
+
+// Rule is a thin line across width: under the menu bar, and above the query
+// line of a list.
+func Rule(width int) string {
+	return lipgloss.NewStyle().Foreground(ShellRuleColor).Render(strings.Repeat(ruleGlyph, max(0, width)))
+}
+
 // SelectionPrefix returns the shared 2-character selection gutter prefix.
 // The plain variant is unstyled and should be used for width math/truncation.
 // The rendered variant applies app-wide selection styling when requested.

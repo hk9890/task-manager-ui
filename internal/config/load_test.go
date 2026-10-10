@@ -185,9 +185,9 @@ func TestLoad_KeyBindingOverridesMergeAndValidate(t *testing.T) {
 keybindings:
   shell:
     quit: ["ctrl+q"]
-    toggle_search: ["ctrl+s"]
+    toggle_help: ["f1"]
   board:
-    move_left: ["a"]
+    move_left: ["alt+a"]
 `))
 
 	result, err := Load()
@@ -202,13 +202,13 @@ keybindings:
 	if resolved.Primary(ShellContext, ShellActionQuit) != "ctrl+q" {
 		t.Fatalf("expected shell quit override, got %q", resolved.Primary(ShellContext, ShellActionQuit))
 	}
-	if resolved.Primary(ShellContext, ShellActionToggleSearch) != "ctrl+s" {
-		t.Fatalf("expected toggle search override, got %q", resolved.Primary(ShellContext, ShellActionToggleSearch))
+	if resolved.Primary(ShellContext, ShellActionHelp) != "f1" {
+		t.Fatalf("expected help override, got %q", resolved.Primary(ShellContext, ShellActionHelp))
 	}
-	if resolved.Primary(BoardContext, BoardActionMoveLeft) != "a" {
+	if resolved.Primary(BoardContext, BoardActionMoveLeft) != "alt+a" {
 		t.Fatalf("expected board left override, got %q", resolved.Primary(BoardContext, BoardActionMoveLeft))
 	}
-	if resolved.Primary(BoardContext, BoardActionMoveRight) != "l" {
+	if resolved.Primary(BoardContext, BoardActionMoveRight) != "right" {
 		t.Fatalf("expected other board bindings to remain default, got %q", resolved.Primary(BoardContext, BoardActionMoveRight))
 	}
 }
@@ -220,8 +220,8 @@ func TestLoad_KeyBindingConflictReturnsError(t *testing.T) {
 	writeConfig(t, configHome, strings.TrimSpace(`
 keybindings:
   board:
-    move_left: ["h"]
-    move_right: ["h"]
+    move_left: ["alt+h"]
+    move_right: ["alt+h"]
 `))
 
 	_, err := Load()
@@ -230,6 +230,57 @@ keybindings:
 	}
 	if !strings.Contains(err.Error(), "conflicts") {
 		t.Fatalf("expected conflict error, got %v", err)
+	}
+}
+
+func TestLoad_PrintableKeyOutsideModalReturnsError(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, strings.TrimSpace(`
+keybindings:
+  shell:
+    create_issue: ["c"]
+`))
+
+	_, err := Load()
+	want := `key "c" for action "create_issue" in shell context is a printable key, which types into the filter; bind it with alt+ or ctrl+`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Load error = %v, want it to contain %q", err, want)
+	}
+}
+
+// TestLoad_RemovedActionsAndSearchContextAreWarnings pins that a config written
+// for the old key set still starts: what no longer exists is dropped and named.
+func TestLoad_RemovedActionsAndSearchContextAreWarnings(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, strings.TrimSpace(`
+keybindings:
+  shell:
+    mode_board: ["1"]
+    toggle_search: ["ctrl+s"]
+  board:
+    load_more: [">"]
+  search:
+    focus_query: ["/"]
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	joined := strings.Join(result.Warnings, "\n")
+	for _, expected := range []string{
+		`unknown config key "keybindings.shell.mode_board" ignored`,
+		`unknown config key "keybindings.shell.toggle_search" ignored`,
+		`unknown config key "keybindings.board.load_more" ignored`,
+		`unknown config key "keybindings.search" ignored`,
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected warning %q in %q", expected, joined)
+		}
 	}
 }
 

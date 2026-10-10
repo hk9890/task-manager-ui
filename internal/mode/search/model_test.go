@@ -1,16 +1,13 @@
 package search
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -19,1008 +16,381 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	"github.com/hk9890/task-manager-ui/internal/ui/detail"
-	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
 )
 
-// hasSearchCall reports whether any Search call appears in calls.
-func hasSearchCall(calls []fakes.Call) bool {
-	return countSearchCalls(calls) > 0
+// seedStore seeds three open issues and one closed. "login" is in the title of
+// tm-1 and tm-4 and only in the description of tm-3.
+func seedStore(gw *fakes.TrackedRepository) {
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Fix login prompt", Status: "open", Type: "bug", Priority: 1})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Triage inbox", Status: "open", Type: "task", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Session notes", Description: "what the login audit found", Status: "open", Type: "doc", Priority: 2})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-4", Title: "Old login page", Status: "closed", Type: "task", Priority: 3})
 }
 
-// TestSearchQueryAcceptsSpaceForMultiWord guards the query box against dropping
-// spaces. Bubble Tea delivers a lone space as tea.KeySpace (not tea.KeyRunes), so
-// the query handler must accept KeySpace too; otherwise multi-word (AND-of-words)
-// queries could never be typed and the backend's AND-of-words semantics would be
-// unreachable from the UI.
-func TestSearchQueryAcceptsSpaceForMultiWord(t *testing.T) {
-	gw := fakes.NewTracked()
-	m := NewModel(context.Background(), gw, nil)
-	m.SetSize(120, 30)
+func newModel(t *testing.T, repo repository.Repository) *Model {
+	t.Helper()
 
-	for _, r := range "delta gamma" {
-		if r == ' ' {
-			_ = m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
-			continue
-		}
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-
-	if m.draftQuery != "delta gamma" {
-		t.Fatalf("draftQuery = %q, want %q (space dropped?)", m.draftQuery, "delta gamma")
-	}
-}
-
-func TestSearchModeTextEntryRendersResultsInProgramHarness(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Backend search", Status: "open", Type: "task", Priority: 1})
-
-	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: NewModel(context.Background(), gw, nil)}, 120, 30)
-	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
-
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		view := string(bts)
-		return strings.Contains(view, "b│") && strings.Contains(view, "Backend search") && strings.Contains(view, "Content")
-	})
-
-	if err := tm.Quit(); err != nil {
-		t.Fatalf("failed to quit teatest model: %v", err)
-	}
-}
-
-func TestSearchModeInitLoadsDefaultResultsForEmptyQuery(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default one", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	if !hasSearchCall(gw.Calls()) {
-		t.Fatalf("expected empty init query to load default search results, calls=%#v", gw.Calls())
-	}
-
-	if !strings.Contains(m.View(0), "Default one") {
-		t.Fatalf("expected default results view after init, got:\n%s", m.View(0))
-	}
-}
-
-func TestSearchModeTextQuerySendsRepositorySearch(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "gw test issue", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	callsBefore := len(gw.Calls())
-	pressAndResolve(m, testui.SearchTypeTextKeys("gw")...)
-	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
-		t.Fatalf("expected no search call before explicit enter, got %#v", gw.Calls()[callsBefore:])
-	}
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Verify the applied query was set to "gw" (observable state instead of arg capture).
-	if m.appliedQuery != "gw" {
-		t.Fatalf("expected appliedQuery=%q after enter, got %q", "gw", m.appliedQuery)
-	}
-}
-
-func TestSearchModeFocusNavigationAndSelection(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	// Titles contain "g" so the query "g" matches both.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected initial search focus, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected right in query to be no-op, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected down to move focus to results, got %v", m.focus)
-	}
-
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = applyMessages(m, testui.DrainCmd(cmd))
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
-		t.Fatalf("expected down to move selection to tm-2, got %#v", got)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if m.focus != uisearch.FocusContent {
-		t.Fatalf("expected right to move focus to content, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected left to move focus back to results, got %v", m.focus)
-	}
-}
-
-func TestSearchModeUpOnFirstResultReturnsFocusToQuery(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	// Titles contain "g" so the query "g" matches both.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
-		t.Fatalf("expected first result selected after search, got %#v", got)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected down from query to move focus to results, got %v", m.focus)
-	}
-
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyUp})
-	if cmd != nil {
-		m = applyMessages(m, testui.DrainCmd(cmd))
-	}
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected up on first result to return focus to query, got %v", m.focus)
-	}
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
-		t.Fatalf("expected first result selection to stay on tm-1, got %#v", got)
-	}
-	// Expect exactly 2 Search calls: init empty-query load + explicit enter search.
-	if n := countSearchCalls(gw.Calls()); n != 2 {
-		t.Fatalf("expected only init + explicit enter search calls (2), got %d", n)
-	}
-}
-
-func TestSearchModeClearingQueryRestoresDefaultResults(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	// Seed issues: tm-1 and tm-2 match any query (no filter text), tm-9 matches "x".
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Default second", Status: "in_progress", Type: "bug", Priority: 2})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-9", Title: "Filtered x only", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
-		t.Fatalf("expected initial selection on default results, got %#v", got)
-	}
-
-	// Search for "x" — only tm-9 matches.
-	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-9" {
-		t.Fatalf("expected filtered selection tm-9, got %#v", got)
-	}
-
-	// Clear query with backspace and re-submit — default results restore.
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyBackspace})
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.appliedQuery != "" {
-		t.Fatalf("expected appliedQuery empty after clear+enter, got %q", m.appliedQuery)
-	}
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
-		t.Fatalf("expected selection reset to first default result, got %#v", got)
-	}
-	if !strings.Contains(m.View(0), "Default first") || !strings.Contains(m.View(0), "Default second") {
-		t.Fatalf("expected restored default results in view, got:\n%s", m.View(0))
-	}
-}
-
-func TestSearchModeRepresentativeStates(t *testing.T) {
-	t.Parallel()
-
-	t.Run("error state", func(t *testing.T) {
-		m := NewModel(context.Background(), fakes.NewTracked(), nil)
-		_ = m.Update(searchLoadedMsg{err: errors.New("boom")})
-
-		view := m.View(0)
-		if !strings.Contains(view, "Search failed.") || !strings.Contains(view, "boom") || !strings.Contains(view, "failed") {
-			t.Fatalf("expected error state in view, got:\n%s", view)
-		}
-	})
-
-	t.Run("no results state", func(t *testing.T) {
-		m := NewModel(context.Background(), fakes.NewTracked(), nil)
-		m.draftQuery = "xyz"
-		cmd := m.Update(searchLoadedMsg{appliedQuery: "xyz", page: domain.SearchResultPage{}})
-		if cmd != nil {
-			_ = cmd()
-		}
-
-		if !strings.Contains(m.View(0), "No matches for \"xyz\".") {
-			t.Fatalf("expected no-results state in view, got:\n%s", m.View(0))
-		}
-	})
-
-	t.Run("open detail action from results", func(t *testing.T) {
-		gw := fakes.NewTracked()
-		// Title contains "b" so the query "b" returns this result.
-		gw.Memory.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Backend result", Status: "open", Type: "task", Priority: 1})
-		m := initModel(gw)
-		pressAndResolve(m, testui.SearchTypeTextKeys("b")...)
-		pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-		cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if cmd == nil {
-			t.Fatalf("expected action request command on enter")
-		}
-		msg := cmd()
-		testui.AssertActionRequest(t, msg, mode.Search, mode.ActionOpenDetail)
-	})
-}
-
-// Pane cycling moved off tab/shift+tab when those became the shell tab strip
-// keys: search cycles panes with ctrl+j/ctrl+k, and must let tab through even
-// while the query field is focused so the shell can switch tabs mid-query.
-func TestSearchModePaneCycleUsesCtrlJKAndLeavesTabToTheShell(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	// Title contains "g" so query "g" matches.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-7", Title: "Repository result", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected query focus after typing, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected ctrl+j to cycle query->results, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
-	if m.focus != uisearch.FocusContent {
-		t.Fatalf("expected ctrl+j to cycle results->content, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected ctrl+k to cycle content->results, got %v", m.focus)
-	}
-
-	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyCtrlJ}) {
-		t.Fatalf("expected search mode to capture ctrl+j for shell-level routing")
-	}
-	if m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
-		t.Fatalf("expected search mode to leave tab to the shell tab strip")
-	}
-	// Back to query focus: tab must still reach the shell while typing.
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyTab}) {
-		t.Fatalf("expected search mode to leave tab to the shell tab strip with the query focused")
-	}
-}
-
-func TestSearchModeQueryFocusAllowsPreviouslySwallowedLetters(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "jkhlr test issue", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	callsBefore := len(gw.Calls())
-	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
-	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
-		t.Fatalf("expected no search before enter, got %#v", gw.Calls()[callsBefore:])
-	}
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.appliedQuery != "jkhlr" {
-		t.Fatalf("expected appliedQuery=%q after enter, got %q", "jkhlr", m.appliedQuery)
-	}
-}
-
-func TestSearchModeReloadPreservesQueryAndSelection(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	// Titles contain "x" so the query "x" matches both.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyDown})
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
-		t.Fatalf("expected second result selected before reload, got %#v", got)
-	}
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected focus-query binding before reload, got %v", m.focus)
-	}
-
-	callsBefore := len(gw.Calls())
-	cmd := m.Reload()
-	m = applyMessages(m, testui.DrainCmd(cmd))
-
-	newCalls := gw.Calls()[callsBefore:]
-	if !hasSearchCall(newCalls) {
-		t.Fatalf("expected at least one Search call after Reload, got %#v", newCalls)
-	}
-	if m.appliedQuery != "x" {
-		t.Fatalf("expected reload to preserve query %q, got %q", "x", m.appliedQuery)
-	}
-	if m.draftQuery != "x" {
-		t.Fatalf("expected reload to preserve draft query, got %q", m.draftQuery)
-	}
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
-		t.Fatalf("expected reload to preserve selected result, got %#v", got)
-	}
-}
-
-func TestSearchModeAutoRefreshSkipsWhileActivelyTypingInQuery(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	m := initModel(gw)
-
-	callsBefore := len(gw.Calls())
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if cmd != nil {
-		t.Fatalf("expected typing not to trigger search until enter")
-	}
-	if !m.typing {
-		t.Fatalf("expected typing flag while editing query")
-	}
-
-	auto := m.AutoRefresh()
-	if auto != nil {
-		t.Fatalf("expected auto refresh suppression while actively typing")
-	}
-
-	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
-		t.Fatalf("expected no repository calls while editing query, got %#v", gw.Calls()[callsBefore:])
-	}
-
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = applyMessages(m, testui.DrainCmd(cmd))
-	newCalls := gw.Calls()[callsBefore:]
-	if countSearchCalls(newCalls) != 1 {
-		t.Fatalf("expected exactly one enter-triggered search call, got %d (%#v)", countSearchCalls(newCalls), newCalls)
-	}
-	if m.typing {
-		t.Fatalf("expected typing false after search resolves")
-	}
-}
-
-func TestSearchModeAutoRefreshPreservesQueryAndSelectionWhenPossible(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	// Titles contain "x" so the query "x" matches both.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Exact one", Status: "open", Type: "task", Priority: 1})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Exact two", Status: "in_progress", Type: "bug", Priority: 2})
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("x")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyDown})
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
-		t.Fatalf("expected second result selected before auto refresh, got %#v", got)
-	}
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected focus-query binding before auto refresh, got %v", m.focus)
-	}
-
-	callsBefore := len(gw.Calls())
-	cmd := m.AutoRefresh()
-	m = applyMessages(m, testui.DrainCmd(cmd))
-
-	newCalls := gw.Calls()[callsBefore:]
-	if !hasSearchCall(newCalls) {
-		t.Fatalf("expected at least one Search call after AutoRefresh, got %#v", newCalls)
-	}
-	if m.appliedQuery != "x" {
-		t.Fatalf("expected auto refresh to preserve applied query, got %q", m.appliedQuery)
-	}
-	if m.draftQuery != "x" {
-		t.Fatalf("expected auto refresh to preserve query, got %q", m.draftQuery)
-	}
-	if got := m.SessionState().AppliedQuery; got != "x" {
-		t.Fatalf("expected applied query to remain x after auto refresh, got %q", got)
-	}
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
-		t.Fatalf("expected auto refresh to preserve selected result, got %#v", got)
-	}
-}
-
-func TestSearchModeSessionStatePreservesLastLoadedResultsDuringReloadAndError(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First abc", Status: "open", Type: "task", Priority: 1,
-		Description: "abc tag"})
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("abc")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	session := m.SessionState()
-	if session.DraftQuery != "abc" || session.AppliedQuery != "abc" {
-		t.Fatalf("expected synced draft/applied query after search, got %#v", session)
-	}
-	if len(session.Page.Results) != 1 {
-		t.Fatalf("expected 1 result after abc search, got %d", len(session.Page.Results))
-	}
-
-	cmd := m.Reload()
-	if cmd == nil {
-		t.Fatal("expected reload command")
-	}
-	session = m.SessionState()
-	if !session.Loading || !session.Reloading {
-		t.Fatalf("expected reload state while request in flight, got %#v", session)
-	}
-	if len(session.Page.Results) != 1 {
-		t.Fatalf("expected prior results retained during reload, got %#v", session.Page.Results)
-	}
-
-	m = applyMessages(m, []tea.Msg{searchLoadedMsg{appliedQuery: "abc", err: errors.New("reload failed")}})
-	session = m.SessionState()
-	if session.Error != "reload failed" {
-		t.Fatalf("expected reload error captured, got %#v", session)
-	}
-	if len(session.Page.Results) != 1 {
-		t.Fatalf("expected last loaded results retained on reload error, got %#v", session.Page.Results)
-	}
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
-		t.Fatalf("expected selection retained on reload error, got %#v", got)
-	}
-	if !strings.Contains(m.View(0), "reload failed") || !strings.Contains(m.View(0), "First abc") || !strings.Contains(m.View(0), "failed") || !strings.Contains(m.View(0), "abc") {
-		t.Fatalf("expected view to preserve rows and show refresh error, got:\n%s", m.View(0))
-	}
-}
-
-func TestSearchModeSessionStateDistinguishesDraftAndAppliedQuery(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	m := initModel(gw)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("foo")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-
-	session := m.SessionState()
-	if session.DraftQuery != "foox" {
-		t.Fatalf("expected draft query to include unsent edit, got %#v", session)
-	}
-	if session.AppliedQuery != "foo" {
-		t.Fatalf("expected applied query to remain last submitted value, got %#v", session)
-	}
-}
-
-func TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Default first", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	callsBefore := len(gw.Calls())
-	pressAndResolve(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...)
-	if countSearchCalls(gw.Calls()[callsBefore:]) != 0 {
-		t.Fatalf("expected no search before enter, got %#v", gw.Calls()[callsBefore:])
-	}
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.appliedQuery != testui.SearchFragileQueryRunes() {
-		t.Fatalf("expected appliedQuery=%q after fragile rune enter, got %q", testui.SearchFragileQueryRunes(), m.appliedQuery)
-	}
-
-	pressAndResolve(m, testui.SearchClearQueryKeys()...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.appliedQuery != "" {
-		t.Fatalf("expected appliedQuery empty after clear+enter, got %q", m.appliedQuery)
-	}
-}
-
-func TestSearchModeUsesConfiguredBindingsAndPassesShellKeysThrough(t *testing.T) {
-	t.Parallel()
-
-	keys, err := config.ResolveKeyBindings(config.MergeKeyBindings(config.DefaultKeyBindings(), &config.KeyBindingOverride{
-		Search: map[string][]string{
-			config.SearchActionMoveDown:       {"n"},
-			config.SearchActionMoveUp:         {"p"},
-			config.SearchActionFocusLeft:      {"a"},
-			config.SearchActionFocusRight:     {"d"},
-			config.SearchActionFocusQuery:     {"ctrl+f"},
-			config.SearchActionReload:         {"ctrl+r"},
-			config.SearchActionOpenDetail:     {"space"},
-			config.SearchActionCycleFocusNext: {"ctrl+n"},
-			config.SearchActionCycleFocusPrev: {"ctrl+p"},
-		},
-		Shell: map[string][]string{
-			config.ShellActionQuit: {"ctrl+q"},
-		},
-	}))
+	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
 	if err != nil {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
-
-	gw := fakes.NewTracked()
-	// Titles contain "g" so the query "g" matches both.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Gig one", Status: "open", Type: "task", Priority: 1})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Gig two", Status: "in_progress", Type: "bug", Priority: 2})
-	m := testui.InitializeController(NewModel(context.Background(), gw, nil, keys)).(*Model)
-
-	pressAndResolve(m, testui.SearchTypeTextKeys("g")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected configured next-focus binding to reach results, got %v", m.focus)
-	}
-
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
-	m = applyMessages(m, testui.DrainCmd(cmd))
-	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
-		t.Fatalf("expected configured move-down binding to select tm-2, got %#v", got)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected configured focus-left binding to stay on results, got %v", m.focus)
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
-	if m.focus != uisearch.FocusQuery {
-		t.Fatalf("expected configured focus-query binding to keep query focus, got %v", m.focus)
-	}
-
-	if m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyCtrlQ}) {
-		t.Fatal("expected configured shell quit key to pass through search capture")
-	}
-	if !m.CapturesShellKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")}) {
-		t.Fatal("expected plain text rune to be captured while query focused")
-	}
-
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-	if m.focus != uisearch.FocusContent {
-		t.Fatalf("expected configured focus-right binding to reach content, got %v", m.focus)
-	}
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected configured focus-left binding to return to results, got %v", m.focus)
-	}
-
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
-	if cmd == nil {
-		t.Fatal("expected configured open-detail binding to emit action request")
-	}
-	if action, ok := cmd().(mode.ActionRequestMsg); !ok || action.Action != mode.ActionOpenDetail {
-		t.Fatalf("expected open detail action request, got %#v", cmd())
-	}
-}
-
-func newSearchFakeRepository() *fakes.TrackedRepository {
-	return fakes.NewTracked()
-}
-
-func initModel(repository repository.Repository) *Model {
-	return testui.InitializeController(NewModel(context.Background(), repository, nil)).(*Model)
-}
-
-func pressAndResolve(m *Model, keys ...tea.KeyMsg) {
-	resolved := testui.ApplyControllerKeySequence(m, keys...).(*Model)
-	*m = *resolved
-}
-
-func applyMessages(m *Model, msgs []tea.Msg) *Model {
-	for _, msg := range msgs {
-		cmd := m.Update(msg)
-		for _, follow := range testui.DrainCmd(cmd) {
-			_ = m.Update(follow)
-		}
-	}
+	m := NewModel(context.Background(), repo, nil, keys)
+	m.SetSize(100, 24)
 	return m
 }
 
-func TestSearchItemCapacity(t *testing.T) {
-	t.Parallel()
+// resolve runs cmd and feeds the resulting message back into the model,
+// returning whatever the handler dispatched next.
+func resolve(t *testing.T, m *Model, cmd tea.Cmd) tea.Cmd {
+	t.Helper()
 
-	cases := []struct {
-		height int
-		want   int
-	}{
-		{height: 0, want: 9},   // before first WindowSizeMsg: the 24 lines the renderer draws with
-		{height: 1, want: 1},   // min clamp
-		{height: 6, want: 1},   // the shell cuts the frame: (6 - 4) / 2 = 1
-		{height: 8, want: 2},   // (8 - 4) / 2 = 2
-		{height: 9, want: 2},   // (9 - 5) / 2 = 2
-		{height: 10, want: 2},  // (10 - 5) / 2 = 2, one line spare
-		{height: 24, want: 9},  // (24 - 5) / 2 = 9, one line spare
-		{height: 25, want: 10}, // (25 - 5) / 2 = 10
-		{height: 30, want: 12}, // (30 - 5) / 2 = 12, one line spare
-	}
-
-	for _, tc := range cases {
-		m := &Model{height: tc.height}
-		got := m.searchItemCapacity()
-		if got != tc.want {
-			t.Errorf("searchItemCapacity() with height=%d: got %d, want %d", tc.height, got, tc.want)
-		}
-	}
-}
-
-// TestSearchItemCapacityIsTheResultsThePaneDrawsWhole asks the renderer
-// whether the scroll window is the list the results pane draws whole: both
-// lines of every result in it and not the second line of the next, at even
-// and odd heights, with the stale-results banner up and without it.
-func TestSearchItemCapacityIsTheResultsThePaneDrawsWhole(t *testing.T) {
-	t.Parallel()
-
-	for height := 9; height <= 31; height++ {
-		results := make([]domain.IssueSummary, height)
-		for idx := range results {
-			results[idx] = domain.IssueSummary{
-				ID: fmt.Sprintf("tm-%02d", idx), Title: fmt.Sprintf("fit-%02d", idx), Type: "task", Status: "open", Priority: 2,
-			}
-		}
-
-		for _, query := range []string{"fit", "other"} {
-			m := &Model{height: height, draftQuery: query, appliedQuery: "fit"}
-			for _, issue := range results {
-				m.page.Results = append(m.page.Results, domain.SearchResult{Issue: issue})
-			}
-			capacity := m.searchItemCapacity()
-
-			state := m.viewState(0)
-			state.Width = 160
-			view := testui.AnsiEscapePattern.ReplaceAllString(uisearch.Render(state), "")
-			if banner := strings.Contains(view, "are stale"); banner != (query == "other") {
-				t.Fatalf("height %d, query %q: stale banner drawn = %v:\n%s", height, query, banner, view)
-			}
-			for _, issue := range results[:capacity] {
-				for _, want := range []string{"T " + issue.Title, "  P2 OPN " + issue.ID} {
-					if !strings.Contains(view, want) {
-						t.Errorf("height %d, query %q: %d results in the window, %q is not drawn:\n%s", height, query, capacity, want, view)
-					}
-				}
-			}
-			if next := "  P2 OPN " + results[capacity].ID; strings.Contains(view, next) {
-				t.Errorf("height %d, query %q: the window is %d results and the pane draws %q whole too:\n%s", height, query, capacity, next, view)
-			}
-		}
-	}
-}
-
-func TestSearchModeWindowSizeDoesNotTriggerRequery(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	// Record call count after init.
-	callsBefore := len(gw.Calls())
-
-	// Send a resize; must not issue a new search.
-	cmd := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
-	if cmd != nil {
-		t.Fatalf("expected WindowSizeMsg handler to return nil cmd, got %T", cmd)
-	}
-
-	if len(gw.Calls()) != callsBefore {
-		t.Fatalf("expected no new repository calls on resize, got %d new call(s)", len(gw.Calls())-callsBefore)
-	}
-}
-
-// TestSearchModeLoadingStaysSetDuringReload verifies that m.loading remains
-// true while a reload request is in flight. The app-level loadingStates()
-// function depends on this to drive the header spinner for the search surface.
-func TestSearchModeLoadingStaysSetDuringReload(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-
-	// After init+resolve, loading should be false.
-	if m.loading {
-		t.Fatalf("expected loading=false after init resolves, got true")
-	}
-
-	// Trigger a reload — loading must become true before the response arrives.
-	cmd := m.Reload()
 	if cmd == nil {
-		t.Fatal("expected Reload to return a command")
+		t.Fatal("expected a command to resolve, got nil")
 	}
-	if !m.loading {
-		t.Fatalf("expected m.loading=true while reload is in flight, got false")
-	}
-	if !m.reloading {
-		t.Fatalf("expected m.reloading=true while reload is in flight (has prior page), got false")
-	}
+	return m.Update(cmd())
 }
 
-// TestSearchModeTypingWhileLoadingIsAccepted is a regression test verifying
-// that handleKey accepts query edits even when m.loading is true. The model
-// must not gate text input on the loading flag.
-func TestSearchModeTypingWhileLoadingIsAccepted(t *testing.T) {
-	t.Parallel()
+func openedModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
+	t.Helper()
 
+	m := newModel(t, gw)
+	resolve(t, m, m.Init())
+	return m
+}
+
+func typeText(m *Model, text string) tea.Cmd {
+	return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
+}
+
+func resultIDs(m *Model) string {
+	ids := make([]string, len(m.issues))
+	for i, issue := range m.issues {
+		ids[i] = issue.ID
+	}
+	return strings.Join(ids, ",")
+}
+
+func plainView(m *Model) string {
+	return testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
+}
+
+// lastSearch is the query of the latest Search call the repository received.
+func lastSearch(t *testing.T, gw *fakes.TrackedRepository) domain.SearchIssuesQuery {
+	t.Helper()
+	calls := gw.CallsFor(fakes.MethodSearch)
+	if len(calls) == 0 {
+		t.Fatal("the repository received no Search call")
+	}
+	return calls[len(calls)-1].Args.(domain.SearchIssuesQuery)
+}
+
+func selection(t *testing.T, cmd tea.Cmd) *mode.Selection {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected a selection change, got no command")
+	}
+	msg, ok := cmd().(mode.SelectionChangedMsg)
+	if !ok || msg.Mode != mode.Search {
+		t.Fatalf("expected a search selection change, got %#v", msg)
+	}
+	return msg.Selection
+}
+
+func TestOpeningWithAnEmptyQueryListsTheOpenIssues(t *testing.T) {
 	gw := fakes.NewTracked()
-	m := NewModel(context.Background(), gw, nil)
+	seedStore(gw)
 
-	// Manually set loading=true (simulating an in-flight request).
-	m.loading = true
-	m.focus = uisearch.FocusQuery
-
-	// Type a rune — should update draftQuery without blocking.
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if cmd != nil {
-		t.Fatalf("expected typing while loading to return nil cmd (no new search), got %T", cmd)
+	m := newModel(t, gw)
+	init := m.Init()
+	if !m.IsLoading() {
+		t.Fatal("the first search is not reported as loading")
 	}
-	if m.draftQuery != "x" {
-		t.Fatalf("expected draftQuery to accept typed rune while loading, got %q", m.draftQuery)
+	if got := selection(t, resolve(t, m, init)); got == nil || got.Issue.ID != "tm-1" {
+		t.Fatalf("the first result is not announced as the selection: %#v", got)
 	}
 
-	// Backspace should also work.
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	if cmd != nil {
-		t.Fatalf("expected backspace while loading to return nil cmd, got %T", cmd)
+	if m.IsLoading() {
+		t.Fatal("loading did not clear once the page landed")
 	}
-	if m.draftQuery != "" {
-		t.Fatalf("expected backspace to remove typed rune while loading, got %q", m.draftQuery)
+	if got := lastSearch(t, gw); got.Text != "" || got.IncludeClosed || got.Limit != resultLimit {
+		t.Fatalf("the opening search asked for %#v", got)
+	}
+	if got := resultIDs(m); got != "tm-1,tm-2,tm-3" {
+		t.Fatalf("the opening search lists %q, want the open issues", got)
+	}
+	view := plainView(m)
+	for _, want := range []string{"❯ search the store", "─ Results · open ", " 3 ─", "Fix login prompt"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the surface does not draw %q:\n%s", want, view)
+		}
 	}
 }
 
-// TestSearchModeMetadataPaneFocusAndSelection exercises ensureMetadataSelection
-// and moveMetadataSelection by driving focus to the metadata pane and sending
-// up/down arrow keys. It also verifies that ensureMetadataSelection resets a
-// stale (invalid) metadataSelectedField value before navigating.
-func TestSearchModeMetadataPaneFocusAndSelection(t *testing.T) {
-	t.Parallel()
-
+func TestEveryEditSearchesTheStoreForTheQuery(t *testing.T) {
 	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "First", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
+	seedStore(gw)
+	m := openedModel(t, gw)
 
-	// Navigate: Query -> Results -> Content -> Metadata.
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.focus != uisearch.FocusResults {
-		t.Fatalf("expected down from query to move focus to results, got %v", m.focus)
+	before := len(gw.CallsFor(fakes.MethodSearch))
+	resolve(t, m, typeText(m, "log"))
+	resolve(t, m, typeText(m, "in"))
+	if got := len(gw.CallsFor(fakes.MethodSearch)) - before; got != 2 {
+		t.Fatalf("two edits ran %d searches", got)
 	}
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if m.focus != uisearch.FocusContent {
-		t.Fatalf("expected right from results to move focus to content, got %v", m.focus)
+	if got := lastSearch(t, gw); got.Text != "login" || got.IncludeClosed || got.Limit != resultLimit {
+		t.Fatalf("the search asked for %#v, want the text login in open issues", got)
 	}
-	// This right-key triggers moveFocusRight -> ensureMetadataSelection.
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if m.focus != uisearch.FocusMetadata {
-		t.Fatalf("expected right from content to move focus to metadata, got %v", m.focus)
+	// tm-3 holds the word in its description only.
+	if got := resultIDs(m); got != "tm-1,tm-3" {
+		t.Fatalf("the results are %q, want tm-1,tm-3", got)
 	}
-	// ensureMetadataSelection should have left a valid field selected.
-	if m.metadataSelectedField != detail.MetadataFieldStatus && m.metadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected valid metadata field after entering metadata pane, got %q", m.metadataSelectedField)
+	view := plainView(m)
+	for _, want := range []string{"❯ login", " 2 ─", "Session notes"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the surface does not draw %q:\n%s", want, view)
+		}
 	}
-
-	// Initially on status; move down to priority (covers moveMetadataSelection(+1)).
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.metadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected down to move metadata selection to priority, got %q", m.metadataSelectedField)
+	if strings.Contains(view, " of ") {
+		t.Errorf("a complete result is counted against something:\n%s", view)
 	}
 
-	// Move up back to status (covers moveMetadataSelection(-1)).
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
-	if m.metadataSelectedField != detail.MetadataFieldStatus {
-		t.Fatalf("expected up to move metadata selection to status, got %q", m.metadataSelectedField)
+	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyBackspace}))
+	if got := lastSearch(t, gw); got.Text != "logi" {
+		t.Fatalf("backspace searched for %q, want logi", got.Text)
+	}
+	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlU}))
+	if got := lastSearch(t, gw); got.Text != "" {
+		t.Fatalf("ctrl+u searched for %q, want the empty query", got.Text)
 	}
 
-	// Verify clamping: down past the end stays at the last field.
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // status -> priority
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // already at last; must stay at priority
-	if m.metadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected selection clamped at priority on over-scroll, got %q", m.metadataSelectedField)
+	// A key that leaves the text as it is searches nothing.
+	before = len(gw.CallsFor(fakes.MethodSearch))
+	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyBackspace}); cmd != nil {
+		t.Fatal("backspace on an empty query returned a command")
 	}
-
-	// Verify clamping at top: move up past first field stays at status.
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // priority -> status
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp}) // already at first; must stay at status
-	if m.metadataSelectedField != detail.MetadataFieldStatus {
-		t.Fatalf("expected selection clamped at status on over-scroll, got %q", m.metadataSelectedField)
-	}
-
-	// Verify ensureMetadataSelection resets a stale/invalid field value.
-	// Inject an invalid MetadataFieldKey directly, then trigger ensureMetadataSelection
-	// via cycleFocus reaching the metadata pane.
-	m.metadataSelectedField = detail.MetadataFieldKey("stale-invalid")
-	m.ensureMetadataSelection()
-	if m.metadataSelectedField != detail.MetadataFieldStatus {
-		t.Fatalf("expected ensureMetadataSelection to reset stale field to status, got %q", m.metadataSelectedField)
+	if got := len(gw.CallsFor(fakes.MethodSearch)); got != before {
+		t.Fatal("backspace on an empty query ran a search")
 	}
 }
 
-// TestSearchModeStaleDraftIndicatorAppearsAndClears verifies the end-to-end
-// stale-results state machine:
-//
-//   - After typing a new draft (before Enter), the view shows the stale banner
-//     and the Results badge contains "stale".
-//   - After pressing Enter (search applied), the stale indicator is gone.
-func TestSearchModeStaleDraftIndicatorAppearsAndClears(t *testing.T) {
-	t.Parallel()
-
+func TestMatchedWordsAreMarkedInTitleAndIDOnly(t *testing.T) {
+	testui.ForceTrueColor(t)
 	gw := fakes.NewTracked()
-	// Seed an issue matching "backend" so the first search returns a result.
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Prior backend result", Status: "open", Type: "task", Priority: 1})
-	m := initModel(gw)
-	m.SetSize(120, 28)
+	seedStore(gw)
+	m := openedModel(t, gw)
+	resolve(t, m, typeText(m, "login"))
 
-	// Apply an initial search so we have prior results.
-	pressAndResolve(m, testui.SearchTypeTextKeys("backend")...)
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	// Now type a new draft without pressing Enter.
-	pressAndResolve(m, testui.SearchTypeTextKeys("zqx")...)
-
-	// The draft differs from applied: stale indicator must appear.
-	if m.draftQuery != "backendzqx" {
-		t.Fatalf("expected draftQuery=backendzqx, got %q", m.draftQuery)
+	lines := strings.Split(m.View(0), "\n")
+	_, titleRow := testui.FindCell(t, m.View(0), "Fix login prompt")
+	_, descriptionRow := testui.FindCell(t, m.View(0), "Session notes")
+	// A marked word is drawn apart from the text around it.
+	if strings.Contains(lines[titleRow], "Fix login prompt") {
+		t.Errorf("the matched word is not marked in the title:\n%q", lines[titleRow])
 	}
-	if m.appliedQuery != "backend" {
-		t.Fatalf("expected appliedQuery=backend, got %q", m.appliedQuery)
-	}
-	viewStale := m.View(0)
-	plain := testui.AnsiEscapePattern.ReplaceAllString(viewStale, "")
-	if !strings.Contains(plain, "stale") {
-		t.Fatalf("expected 'stale' badge in view while draft != applied, got:\n%s", plain)
-	}
-	if !strings.Contains(plain, "Results below are stale") {
-		t.Fatalf("expected stale banner in view while draft != applied, got:\n%s", plain)
-	}
-
-	// Press Enter to apply the draft search (backendzqx — no issues match).
-	pressAndResolve(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	// After search applied, stale indicator must be gone.
-	viewApplied := m.View(0)
-	plainApplied := testui.AnsiEscapePattern.ReplaceAllString(viewApplied, "")
-	if strings.Contains(plainApplied, "stale") {
-		t.Fatalf("expected no 'stale' badge after search is applied, got:\n%s", plainApplied)
-	}
-	if strings.Contains(plainApplied, "Results below are stale") {
-		t.Fatalf("expected no stale banner after search is applied, got:\n%s", plainApplied)
+	if !strings.Contains(lines[descriptionRow], "Session notes") {
+		t.Errorf("a row found through its description carries a mark:\n%q", lines[descriptionRow])
 	}
 }
 
-// TestSearchModeLogCarriesComponentSearch asserts that debug records emitted by
-// the search model carry component=search (not component=dashboard or any
-// other inherited value).
-// Regression test for component-logging in search mode.
-func TestSearchModeLogCarriesComponentSearch(t *testing.T) {
-	t.Parallel()
-
-	// Use a root logger (no component attached) — matching what main.go now
-	// passes via services.Logger after the fix.
-	var buf bytes.Buffer
-	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	rootLogger := slog.New(jsonHandler)
-	// Derive the search logger exactly as NewModelWithOptions does via modeLogger.
-	searchLogger := rootLogger.With("component", "search")
-
-	repo := memoryrepo.New()
-	gw := fakes.NewErrorInjecting(repo)
-	m := NewModel(context.Background(), gw, searchLogger)
-
-	// Put the model into a loading state and call Reload(). The guard path in
-	// Reload (and triggerSearchWithAnchor) emits a Debug log when loading is
-	// already in flight — giving us a real slog record to inspect.
-	m.loading = true
-	_ = m.Reload()
-
-	output := buf.String()
-	if output == "" {
-		t.Fatal("expected at least one slog debug record, got empty output")
-	}
-
-	// Every emitted record must carry exactly one "component" key with value "search".
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if line == "" {
-			continue
-		}
-		count := strings.Count(line, `"component":`)
-		if count != 1 {
-			t.Errorf("expected exactly 1 \"component\" key, got %d\nline: %s", count, line)
-		}
-		if !strings.Contains(line, `"component":"search"`) {
-			t.Errorf("expected component=search in log line, got:\n%s", line)
-		}
-	}
-}
-
-// TestSearchScopeToggleWidensToClosedAndBack pins the ctrl+t scope control end to
-// end: the default search reaches open work only, the toggle widens it to closed
-// history, and toggling back narrows it again.
-//
-// The scope has to be a control key. While the query box has focus every
-// printable rune is appended to the query, so a letter binding would be typed
-// rather than acted on.
-func TestSearchScopeToggleWidensToClosedAndBack(t *testing.T) {
+func TestScopeKeyTogglesBetweenOpenAndAllAndSearchesAgain(t *testing.T) {
 	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "s-1", Title: "widget active", Status: "open"})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "s-2", Title: "widget archived", Status: "closed"})
+	seedStore(gw)
+	m := openedModel(t, gw)
+	resolve(t, m, typeText(m, "login"))
 
-	m := NewModel(context.Background(), gw, nil)
-	m.SetSize(120, 30)
+	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}))
+	if got := lastSearch(t, gw); got.Text != "login" || !got.IncludeClosed {
+		t.Fatalf("ctrl+t searched for %#v, want login in all issues", got)
+	}
+	if got := resultIDs(m); got != "tm-1,tm-3,tm-4" {
+		t.Fatalf("the results are %q, want the closed tm-4 too", got)
+	}
+	if view := plainView(m); !strings.Contains(view, "─ Results · all ") {
+		t.Fatalf("the column title does not name the scope:\n%s", view)
+	}
 
-	search := func(t *testing.T) []string {
-		t.Helper()
-		page, err := gw.Search(context.Background(), domain.SearchIssuesQuery{
-			Text:          "widget",
-			IncludeClosed: m.includeClosed,
-		})
-		if err != nil {
-			t.Fatalf("Search: %v", err)
+	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}))
+	if got := lastSearch(t, gw); got.IncludeClosed {
+		t.Fatal("a second ctrl+t did not return to open issues")
+	}
+	if view := plainView(m); !strings.Contains(view, "─ Results · open ") {
+		t.Fatalf("the column title does not name the scope:\n%s", view)
+	}
+}
+
+func TestHeaderCountsThePageAgainstEveryMatchWhenTheStoreHoldsMore(t *testing.T) {
+	gw := fakes.NewTracked()
+	for i := 0; i < resultLimit+5; i++ {
+		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%03d", i), Title: "Issue", Status: "open", Type: "task"})
+	}
+	m := openedModel(t, gw)
+
+	if len(m.issues) != resultLimit {
+		t.Fatalf("the page holds %d results, want %d", len(m.issues), resultLimit)
+	}
+	if view := plainView(m); !strings.Contains(view, fmt.Sprintf(" %d of %d ─", resultLimit, resultLimit+5)) {
+		t.Fatalf("the header does not count the page against every match:\n%s", view)
+	}
+}
+
+func TestMovementOpenDetailAndReloadReadTheBoardContext(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedStore(gw)
+	m := openedModel(t, gw)
+
+	if got := selection(t, m.Update(tea.KeyMsg{Type: tea.KeyDown})); got.Issue.ID != "tm-2" {
+		t.Fatalf("down selected %q, want tm-2", got.Issue.ID)
+	}
+	if got := selection(t, m.Update(tea.KeyMsg{Type: tea.KeyEnd})); got.Issue.ID != "tm-3" {
+		t.Fatalf("end selected %q, want tm-3", got.Issue.ID)
+	}
+	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown}); cmd != nil {
+		t.Fatal("down on the last result returned a command")
+	}
+	testui.AssertActionRequest(t, m.Update(tea.KeyMsg{Type: tea.KeyEnter})(), mode.Search, mode.ActionOpenDetail)
+
+	// The reload key runs the query again and returns to the first result.
+	before := len(gw.CallsFor(fakes.MethodSearch))
+	reload := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
+	if cmd := m.Reload(); cmd != nil {
+		t.Fatal("a reload during a search in flight was not dropped")
+	}
+	if got := selection(t, resolve(t, m, reload)); got.Issue.ID != "tm-1" {
+		t.Fatalf("reload left the selection on %q, want the first result", got.Issue.ID)
+	}
+	if got := len(gw.CallsFor(fakes.MethodSearch)) - before; got != 1 {
+		t.Fatalf("reload ran %d searches, want 1", got)
+	}
+}
+
+func TestEnterWithoutAResultOpensNothing(t *testing.T) {
+	m := openedModel(t, fakes.NewTracked())
+	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
+		t.Fatal("enter on an empty result list returned a command")
+	}
+}
+
+func TestAutoRefreshRunsTheQueryAgainAndKeepsTheSelectedIssue(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedStore(gw)
+	m := openedModel(t, gw)
+	resolve(t, m, typeText(m, "login"))
+	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if got := m.selectedIssueID(); got != "tm-3" {
+		t.Fatalf("setup: selected %q, want tm-3", got)
+	}
+
+	// A new match sorts ahead of the selected issue.
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-0", Title: "Login banner", Status: "open", Type: "task"})
+	refresh := m.AutoRefresh()
+	if m.AutoRefresh() != nil {
+		t.Fatal("an auto refresh during a search in flight was not dropped")
+	}
+	resolve(t, m, refresh)
+
+	if got := lastSearch(t, gw); got.Text != "login" {
+		t.Fatalf("the refresh searched for %q, want the query login", got.Text)
+	}
+	if got := resultIDs(m); got != "tm-0,tm-1,tm-3" {
+		t.Fatalf("the refreshed results are %q", got)
+	}
+	if got := m.selectedIssueID(); got != "tm-3" {
+		t.Fatalf("the refresh moved the selection to %q, want tm-3", got)
+	}
+}
+
+// TestAutoRefreshKeepsThePlaceInTheList: the operator did not ask for an auto
+// refresh, so the list stays scrolled as it was, a move made while the search
+// was in flight holds, and the selection stays on its row when its issue left
+// the result.
+func TestAutoRefreshKeepsThePlaceInTheList(t *testing.T) {
+	gw := fakes.NewTracked()
+	for i := 0; i < 60; i++ {
+		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%03d", i), Title: "Issue", Status: "open", Type: "task"})
+	}
+	m := openedModel(t, gw)
+
+	// The selection stands above the last row of the window.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	for i := 0; i < 5; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	row, offset := m.selectedRow, m.scrollOffset
+	if row == offset || offset == 0 {
+		t.Fatalf("setup: row %d at offset %d, want a row inside a scrolled window", row, offset)
+	}
+
+	resolve(t, m, m.AutoRefresh())
+	if m.selectedRow != row || m.scrollOffset != offset {
+		t.Fatalf("the refresh left row %d at offset %d, want row %d at offset %d", m.selectedRow, m.scrollOffset, row, offset)
+	}
+
+	refresh := m.AutoRefresh()
+	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	moved := m.selectedIssueID()
+	resolve(t, m, refresh)
+	if got := m.selectedIssueID(); got != moved {
+		t.Fatalf("the refresh took the selection to %q, want %q, where it moved meanwhile", got, moved)
+	}
+
+	row = m.selectedRow
+	if err := gw.Memory.CloseIssue(context.Background(), moved, domain.CloseIssueInput{}); err != nil {
+		t.Fatalf("CloseIssue returned error: %v", err)
+	}
+	resolve(t, m, m.AutoRefresh())
+	if got := m.selectedIssueID(); m.selectedRow != row || got == moved {
+		t.Fatalf("with its issue gone the selection is on row %d (%q), want row %d", m.selectedRow, got, row)
+	}
+}
+
+func TestClearQueryEmptiesTheQueryAndSearchesAgain(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedStore(gw)
+	m := openedModel(t, gw)
+
+	if cleared, cmd := m.ClearQuery(); cleared || cmd != nil {
+		t.Fatal("an empty query reported a clear")
+	}
+
+	resolve(t, m, typeText(m, "login"))
+	cleared, cmd := m.ClearQuery()
+	if !cleared {
+		t.Fatal("a query with text did not report a clear")
+	}
+	resolve(t, m, cmd)
+	if got := lastSearch(t, gw); got.Text != "" {
+		t.Fatalf("the clear searched for %q, want the empty query", got.Text)
+	}
+	if got := resultIDs(m); got != "tm-1,tm-2,tm-3" {
+		t.Fatalf("the cleared search lists %q, want the open issues", got)
+	}
+}
+
+func TestFailedSearchKeepsTheRowsAndSaysSo(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedStore(gw)
+	m := openedModel(t, gw)
+
+	gw.SetError(fakes.MethodSearch, errors.New("store unreadable"))
+	resolve(t, m, typeText(m, "x"))
+
+	if m.IsLoading() {
+		t.Fatal("a failed search left the surface loading")
+	}
+	view := plainView(m)
+	for _, want := range []string{"load failed: store unreadable", "Fix login prompt"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the surface does not draw %q:\n%s", want, view)
 		}
-		ids := make([]string, 0, len(page.Results))
-		for _, res := range page.Results {
-			ids = append(ids, res.Issue.ID)
-		}
-		return ids
 	}
+}
 
-	if m.includeClosed {
-		t.Fatal("search must open on the narrow scope; a store's closed history outgrows its open work without bound")
-	}
-	if got := search(t); len(got) != 1 || got[0] != "s-1" {
-		t.Fatalf("default scope returned %v, want only the open issue [s-1]", got)
-	}
+func TestSurfaceGolden(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedStore(gw)
+	m := openedModel(t, gw)
+	resolve(t, m, typeText(m, "login"))
+	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}))
 
-	// The toggle must be owned by search in every focus state, not just the
-	// query box, or it is unreachable once the user moves to the results.
-	m.focus = uisearch.FocusResults
-	if !m.CapturesShellKey(tea.KeyMsg{Type: toggleScopeKey}) {
-		t.Fatal("search must capture the scope key while the results pane has focus")
-	}
-
-	// Each toggle re-runs the search; deliver its result before the next press,
-	// because the toggle is suppressed while a search is in flight (otherwise
-	// the badge would name a scope the visible results did not come from).
-	settle := func(t *testing.T, cmd tea.Cmd) {
-		t.Helper()
-		if cmd == nil {
-			t.Fatal("expected the scope toggle to re-run the search")
-		}
-		_ = m.Update(cmd())
-	}
-
-	settle(t, m.Update(tea.KeyMsg{Type: toggleScopeKey}))
-	if !m.includeClosed {
-		t.Fatal("scope key did not widen the search to closed issues")
-	}
-	if got := search(t); len(got) != 2 {
-		t.Fatalf("widened scope returned %v, want both the open and the closed issue", got)
-	}
-
-	settle(t, m.Update(tea.KeyMsg{Type: toggleScopeKey}))
-	if m.includeClosed {
-		t.Fatal("scope key did not narrow the search back to open issues")
-	}
-	if got := search(t); len(got) != 1 || got[0] != "s-1" {
-		t.Fatalf("narrowed scope returned %v, want only the open issue [s-1]", got)
-	}
+	testui.AssertMatchesGoldenNormalized(t, []byte(m.View(0)), "model_results_all_w100.golden")
 }

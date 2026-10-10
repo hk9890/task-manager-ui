@@ -39,6 +39,7 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 func (m *Model) wheel(column, delta int) tea.Cmd {
 	previous := m.selectedIssueID()
 	m.focusedColumn = column
+	m.queryHome = -1
 	m.moveRow(delta)
 	if m.selectedIssueID() == previous {
 		return nil
@@ -49,7 +50,7 @@ func (m *Model) wheel(column, delta int) tea.Cmd {
 func (m *Model) click(hit uiboard.Hit, msg mode.MouseMsg) tea.Cmd {
 	target := ""
 	if hit.Row >= 0 {
-		target = m.columns[hit.Column].issues[hit.Row].ID
+		target = m.columns[hit.Column].shown[hit.Row].ID
 	}
 	previous := m.selectedIssueID()
 	if m.clicks.Double(target, previous, msg) {
@@ -60,6 +61,7 @@ func (m *Model) click(hit uiboard.Hit, msg mode.MouseMsg) tea.Cmd {
 	}
 
 	m.focusedColumn = hit.Column
+	m.queryHome = -1
 	m.selectedRow[hit.Column] = hit.Row
 	m.moveRow(0)
 	if m.selectedIssueID() == previous {
@@ -88,14 +90,15 @@ func (m *Model) viewState(skeletonPhase int) uiboard.State {
 	}
 
 	return uiboard.State{
-		DashboardTitle: dashboardTitle,
-		Columns:        uiColumns,
-		FocusedColumn:  m.focusedColumn,
-		ColumnStart:    m.columnStart,
-		Width:          m.width,
-		Height:         m.height,
-		SkeletonPhase:  skeletonPhase,
-		Now:            m.now(),
+		Query:         m.query.Text(),
+		Placeholder:   queryPlaceholder,
+		Columns:       uiColumns,
+		FocusedColumn: m.focusedColumn,
+		ColumnStart:   m.columnStart,
+		Width:         m.width,
+		Height:        m.height,
+		SkeletonPhase: skeletonPhase,
+		Now:           m.now(),
 	}
 }
 

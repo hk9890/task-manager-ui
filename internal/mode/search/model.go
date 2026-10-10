@@ -2,8 +2,10 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"strings"
+	"slices"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -11,91 +13,97 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
-	"github.com/hk9890/task-manager-ui/internal/ui/detail"
-	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
-	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
+	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
-// searchPageSize is how many results one search loads. The Results pane
-// scrolls through them, so it is a fixed page well above a screen, not the
-// number of rows that fit.
-const searchPageSize = 100
+const (
+	// resultLimit is the page a search asks the store for. The header says so
+	// when the store holds more matches than that.
+	resultLimit = 100
 
-type searchLoadedMsg struct {
-	appliedQuery string
-	page         domain.SearchResultPage
-	err          error
+	// queryPlaceholder is what the query line says while nothing is typed.
+	queryPlaceholder = "search the store"
+
+	// The column title names the scope the scope key toggles.
+	titleOpen = "Results · open"
+	titleAll  = "Results · all"
+
+	// defaultItemCapacity is the row window used before the first
+	// tea.WindowSizeMsg sets a real height.
+	defaultItemCapacity = 20
+)
+
+// landing is where the selection goes when the result of a search is applied.
+type landing int
+
+const (
+	// landFirst puts the selection on the first result: the opening search and
+	// the reload key.
+	landFirst landing = iota
+	// landOnIssue keeps the selection on its issue while the result holds it,
+	// and otherwise puts it on the first result: an edit of the query or of the
+	// scope.
+	landOnIssue
+	// landInPlace keeps the selection on its issue too, and otherwise on its
+	// row, with the list scrolled as it was: an auto refresh, which the
+	// operator did not ask for.
+	landInPlace
+)
+
+// loadedMsg carries the result of one Search repository call.
+type loadedMsg struct {
+	// generation is the search this result answers. Every edit starts a new
+	// one, so only the result of the latest is applied.
+	generation int
+	landing    landing
+	page       domain.SearchResultPage
+	err        error
 }
 
-type selectionAnchor struct {
-	issueID string
-	row     int
-}
-
-// SessionState captures the current search session state for shell integration.
-type SessionState struct {
-	DraftQuery   string
-	AppliedQuery string
-	Page         domain.SearchResultPage
-	Loading      bool
-	Reloading    bool
-	Error        string
-}
-
-// Model is the standalone search mode controller.
-// toggleScopeKey widens the search to closed history and back. It is a control
-// key by necessity, not taste: while the query box has focus every printable
-// rune is typed into the query, so a letter binding would be unreachable.
-const toggleScopeKey = tea.KeyCtrlT
-
+// Model is the store search controller backed by repository calls.
 type Model struct {
 	ctx    context.Context
 	repo   repository.Repository
 	logger *slog.Logger
 	keys   config.ResolvedKeyBindings
-
 	width  int
 	height int
 
-	loading       bool
-	reloading     bool
-	hasLoadedPage bool
-	errText       string
-
-	draftQuery   string
-	appliedQuery string
-	focus        uisearch.FocusPane
-
-	// includeClosed widens the search to closed history. It starts false so the
-	// first screen shows live work; toggleScopeKey flips it and re-runs.
+	// query is the text the store is searched for. Unlike the filter of a tab
+	// it is not matched here: every edit runs a search.
+	query mode.Query
+	// includeClosed is the scope: open issues, or all of them.
 	includeClosed bool
 
-	page         domain.SearchResultPage
+	// issues is the page the latest applied search returned, in the store's
+	// order, and total every match the store holds for it.
+	issues []domain.IssueSummary
+	total  int
+	err    error
+
+	// generation counts the searches started. loading is true until the
+	// result of the latest one arrives; settled once any result has.
+	generation int
+	loading    bool
+	settled    bool
+
 	selectedRow  int
 	scrollOffset int
-	typing       bool
-
-	selectedDetail        domain.IssueDetail
-	selectedDetailLoading bool
-	metadataSelectedField detail.MetadataFieldKey
-
-	pendingSelectionAnchor *selectionAnchor
 
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
-
-	// pendingDraft holds a typed+submitted draft query that arrived while a
-	// search was already in flight. When the in-flight search resolves, this
-	// pending submit is automatically re-fired so the user's Enter intent is
-	// never silently discarded.
-	pendingDraft *string
 }
 
-// NewModel creates a search mode controller.
-// ctx is stored on the model and used for repository calls; callers should
-// pass the application lifecycle context so repository operations can be
-// cancelled when the app exits.
-// logger may be nil; a nil logger falls back to slog.Default().
+// IsScopeKey reports whether msg is the key that toggles the scope between
+// open issues and all of them. It is built in, as the query keys are, and the
+// shell asks so that a key the search took runs no shell action.
+func IsScopeKey(msg tea.KeyMsg) bool {
+	return msg.Type == tea.KeyCtrlT && !msg.Alt
+}
+
+// NewModel builds the store search controller. Keybindings default to the
+// resolved defaults when no resolved set is supplied.
 func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logger, resolved ...config.ResolvedKeyBindings) *Model {
 	if logger == nil {
 		logger = slog.Default()
@@ -107,630 +115,277 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		var err error
 		keys, err = config.ResolveKeyBindings(config.DefaultKeyBindings())
 		if err != nil {
-			panic(err)
+			panic(fmt.Sprintf("invalid default search keybindings: %v", err))
 		}
 	}
+
 	return &Model{
-		ctx:                   ctx,
-		repo:                  repo,
-		logger:                logger,
-		keys:                  keys,
-		focus:                 uisearch.FocusQuery,
-		metadataSelectedField: detail.MetadataFieldStatus,
+		ctx:    ctx,
+		repo:   repo,
+		logger: logger,
+		keys:   keys,
 	}
 }
 
-// Init loads default all-issues search results for empty query.
+// Init runs the first search. With nothing typed it lists the open issues.
 func (m *Model) Init() tea.Cmd {
-	m.loading = true
-	m.reloading = false
-	m.errText = ""
-	m.typing = false
-	return loadSearchCmd(m.ctx, m.repo, domain.SearchIssuesQuery{Limit: searchPageSize, Offset: 0, IncludeClosed: m.includeClosed})
+	return m.search(landFirst)
 }
 
-// Update processes search-specific messages and keybindings.
-func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	cmd := m.update(msg)
-	// A typed draft or a failed search puts the banner up, and the pane then
-	// draws one result fewer.
-	m.keepSelectionVisible()
-	return cmd
-}
-
-func (m *Model) update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.SetSize(msg.Width, msg.Height)
-		return nil
-	case searchLoadedMsg:
-		m.loading = false
-		m.reloading = false
-		m.typing = false
-		anchor := m.pendingSelectionAnchor
-		m.pendingSelectionAnchor = nil
-		if msg.err != nil {
-			m.errText = msg.err.Error()
-			// A queued Enter-submit must fire even when the in-flight search errored
-			// — the user's submit intent is never silently dropped. Force the re-fire
-			// (the failed search may have applied a different query, and retrying the
-			// same text is still desirable since the prior attempt failed).
-			if cmd := m.consumePendingDraft(m.appliedQuery, true); cmd != nil {
-				return cmd
-			}
-			if !m.hasResults() {
-				m.selectedRow = 0
-				m.selectedDetail = domain.IssueDetail{}
-				m.selectedDetailLoading = false
-				return m.selectionChangedCmd()
-			}
-			return nil
-		}
-
-		m.errText = ""
-		m.appliedQuery = msg.appliedQuery
-		m.page = msg.page
-		m.hasLoadedPage = true
-		m.selectedDetailLoading = false
-		if anchor != nil {
-			m.restoreSelectionFromAnchor(anchor)
-		} else {
-			// Only a reload carries an anchor. Any other result set is a new
-			// one and starts on its first result, with the window at the top.
-			m.selectedRow = 0
-			m.normalizeSelection()
-		}
-		m.selectedDetail = domain.IssueDetail{}
-
-		// If the user pressed Enter while this search was in flight, consume the
-		// queued intent and fire the pending search now that we're no longer loading.
-		// Only re-fire when the pending query actually differs from what just landed;
-		// if they match, the result set is already correct.
-		if cmd := m.consumePendingDraft(m.appliedQuery, false); cmd != nil {
-			return cmd
-		}
-
-		return m.selectionChangedCmd()
-	case tea.KeyMsg:
-		return m.handleKey(msg)
-	case mode.MouseMsg:
-		return m.handleMouse(msg)
-	}
-
-	return nil
-}
-
-func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.KeyEsc:
-		// Only consume Esc when the query input is focused; Esc has a
-		// specific local meaning there (clear / unfocus). For all other
-		// focus states, let the key fall through so the shell-level
-		// escape action can fire (CapturesShellKey already returns false
-		// for Esc in non-query focus states, so the shell handler runs).
-		return nil
-	case tea.KeyBackspace:
-		if m.focus != uisearch.FocusQuery {
-			return nil
-		}
-		if m.draftQuery == "" {
-			return nil
-		}
-		runes := []rune(m.draftQuery)
-		m.draftQuery = string(runes[:len(runes)-1])
-		m.typing = true
-		return nil
-	case tea.KeyCtrlU:
-		if m.focus != uisearch.FocusQuery {
-			return nil
-		}
-		if m.draftQuery == "" {
-			return nil
-		}
-		m.draftQuery = ""
-		m.typing = false
-		return nil
-	case toggleScopeKey:
-		// Widen to, or narrow from, the closed history and re-run the applied
-		// query so the visible result set always matches the badge.
-		//
-		// The flip waits on the re-run being dispatched: triggerSearchWithAnchor
-		// returns nil while a search is already in flight, and flipping anyway
-		// left the Results header naming a scope the visible results did not
-		// come from, with no key that restored agreement.
-		if m.loading {
-			m.logger.Debug("search scope toggle suppressed; search already in flight",
-				"include_closed", m.includeClosed)
-			return nil
-		}
-		m.includeClosed = !m.includeClosed
-		m.logger.Debug("search scope toggled", "include_closed", m.includeClosed)
-		return m.triggerSearchWithAnchor(m.appliedQuery, nil)
-	}
-
-	switch {
-	case (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) && m.focus == uisearch.FocusQuery:
-		// Bubble Tea delivers a lone space as KeySpace (not KeyRunes) with
-		// Runes==[]rune{' '}; without accepting it the query box would silently
-		// drop spaces, making multi-word (AND-of-words) search impossible to type.
-		m.draftQuery += string(msg.Runes)
-		m.typing = true
-		return nil
-	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusQuery:
-		if m.loading {
-			// A search is already in flight (often the Init empty-query load).
-			// Queue this submit so it fires once the in-flight search resolves.
-			// The searchLoadedMsg handler will consume pendingDraft and re-fire.
-			draft := strings.TrimSpace(m.draftQuery)
-			m.pendingDraft = &draft
-			return nil
-		}
-		return m.triggerSearch()
-	case msg.Type == tea.KeyEnter && m.focus == uisearch.FocusMetadata:
-		switch m.metadataSelectedField {
-		case detail.MetadataFieldStatus:
-			return mode.RequestActionCmd(mode.Search, mode.ActionOpenStatusDialog)
-		case detail.MetadataFieldPriority:
-			return mode.RequestActionCmd(mode.Search, mode.ActionOpenPriorityDialog)
-		}
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionOpenDetail, msg):
-		if m.focus == uisearch.FocusResults && m.currentSelection() != nil {
-			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
-		}
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionMoveUp, msg):
-		if m.focus == uisearch.FocusResults && m.selectedRow <= 0 {
-			m.focus = uisearch.FocusQuery
-			return nil
-		}
-		if m.focus == uisearch.FocusResults && m.moveSelection(-1) {
-			m.selectedDetailLoading = true
-			m.selectedDetail = domain.IssueDetail{}
-			return m.selectionChangedCmd()
-		}
-		if m.focus == uisearch.FocusMetadata {
-			m.moveMetadataSelection(-1)
-			return nil
-		}
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionMoveDown, msg):
-		if m.focus == uisearch.FocusQuery {
-			if m.hasResults() {
-				m.focus = uisearch.FocusResults
-			}
-			return nil
-		}
-		if m.focus == uisearch.FocusResults && m.moveSelection(1) {
-			m.selectedDetailLoading = true
-			m.selectedDetail = domain.IssueDetail{}
-			return m.selectionChangedCmd()
-		}
-		if m.focus == uisearch.FocusMetadata {
-			m.moveMetadataSelection(1)
-			return nil
-		}
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionFocusLeft, msg):
-		m.moveFocusLeft()
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionFocusRight, msg):
-		m.moveFocusRight()
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionCycleFocusNext, msg):
-		m.cycleFocus(1)
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionCycleFocusPrev, msg):
-		m.cycleFocus(-1)
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionFocusQuery, msg):
-		m.focus = uisearch.FocusQuery
-		return nil
-	case m.keys.Match(config.SearchContext, config.SearchActionReload, msg):
-		return m.Reload()
-	case msg.Type == tea.KeyRunes:
-		return nil
-	default:
-		return nil
-	}
-}
-
-func (m *Model) moveFocusLeft() {
-	switch m.focus {
-	case uisearch.FocusMetadata:
-		m.focus = uisearch.FocusContent
-	case uisearch.FocusContent:
-		m.focus = uisearch.FocusResults
-	}
-}
-
-func (m *Model) moveFocusRight() {
-	switch m.focus {
-	case uisearch.FocusResults:
-		m.focus = uisearch.FocusContent
-	case uisearch.FocusContent:
-		m.focus = uisearch.FocusMetadata
-		m.ensureMetadataSelection()
-	}
-}
-
-func (m *Model) cycleFocus(delta int) {
-	order := []uisearch.FocusPane{uisearch.FocusQuery, uisearch.FocusResults, uisearch.FocusContent, uisearch.FocusMetadata}
-	idx := 0
-	for i, focus := range order {
-		if focus == m.focus {
-			idx = i
-			break
-		}
-	}
-	idx += delta
-	if idx < 0 {
-		idx = len(order) - 1
-	}
-	if idx >= len(order) {
-		idx = 0
-	}
-	if !m.hasResults() && order[idx] != uisearch.FocusQuery {
-		m.focus = uisearch.FocusQuery
-		return
-	}
-	m.focus = order[idx]
-	if m.focus == uisearch.FocusMetadata {
-		m.ensureMetadataSelection()
-	}
-}
-
-// consumePendingDraft fires a queued Enter-submit that arrived while a search
-// was in flight, then clears it. It returns the search command to run, or nil
-// when there is no queued submit (or, with forceRefire=false, when the queued
-// query already matches appliedQuery so the result set is already correct).
-// forceRefire is set on the error path so a queued submit still runs even if the
-// failed search left appliedQuery equal to the pending text.
-func (m *Model) consumePendingDraft(appliedQuery string, forceRefire bool) tea.Cmd {
-	if m.pendingDraft == nil {
-		return nil
-	}
-	pending := *m.pendingDraft
-	m.pendingDraft = nil
-	if forceRefire || pending != appliedQuery {
-		return m.triggerSearchWithAnchor(pending, nil)
-	}
-	return nil
-}
-
-func (m *Model) triggerSearch() tea.Cmd {
-	return m.triggerSearchWithAnchor(strings.TrimSpace(m.draftQuery), nil)
-}
-
-func (m *Model) triggerSearchPreservingSelection() tea.Cmd {
-	anchor := m.captureSelectionAnchor()
-	return m.triggerSearchWithAnchor(strings.TrimSpace(m.appliedQuery), anchor)
-}
-
-func (m *Model) triggerSearchWithAnchor(queryText string, anchor *selectionAnchor) tea.Cmd {
-	// Defense-in-depth: guard against re-entrant calls from future callers that
-	// may not check m.loading at the call site. The call-site guard in Reload()
-	// is the primary protection; this guard is a second line of defense
-	// so the invariant is maintained regardless of how triggerSearchWithAnchor is called.
-	if m.loading {
-		m.logger.Debug("triggerSearchWithAnchor re-entry suppressed; search already in flight",
-			"query", queryText)
-		return nil
-	}
-	query := domain.SearchIssuesQuery{
-		Text:          queryText,
-		Limit:         searchPageSize,
-		Offset:        0,
-		IncludeClosed: m.includeClosed,
-	}
-	m.loading = true
-	m.reloading = m.hasLoadedPage
-	m.errText = ""
-	m.pendingSelectionAnchor = anchor
-	return loadSearchCmd(m.ctx, m.repo, query)
-}
-
-// View renders the standalone search surface.
-func (m *Model) View(skeletonPhase int) string {
-	state := m.viewState(skeletonPhase)
-	state.Hover = m.hover(state)
-	return uisearch.Render(state)
-}
-
-// viewState is the search surface as the renderer sees it. View and the hit
-// test build the same value, so a click lands on the row that is drawn under
-// it.
-func (m *Model) viewState(skeletonPhase int) uisearch.State {
-	return uisearch.State{
-		Loading:               m.loading,
-		Reloading:             m.reloading,
-		Error:                 m.errText,
-		Query:                 m.draftQuery,
-		AppliedQuery:          m.appliedQuery,
-		Focus:                 m.focus,
-		Typing:                m.typing,
-		Results:               m.results(),
-		Metadata:              m.page.Metadata,
-		ScrollOffset:          m.scrollOffset,
-		SelectedID:            m.selectedIssueID(),
-		SelectedDetail:        m.selectedDetail,
-		DetailLoading:         m.selectedDetailLoading,
-		MetadataSelectedField: m.metadataSelectedField,
-		IncludeClosed:         m.includeClosed,
-		QuickActions: detail.QuickActionLabels{
-			EditIssue:    m.keys.DisplayLabel(config.ShellContext, config.ShellActionEditIssue),
-			UpdateIssue:  m.keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
-			AddComment:   m.keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
-			CloseIssue:   m.keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
-			ReloadDetail: m.keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
-		},
-		Width:         m.width,
-		Height:        m.height,
-		SkeletonPhase: skeletonPhase,
-	}
-}
-
-// SetSize updates render dimensions.
-func (m *Model) SetSize(width, height int) {
-	m.width = width
-	m.height = height
-	m.keepSelectionVisible()
-}
-
-// searchItemCapacity returns the number of result rows the scroll window
-// holds. The renderer answers for the state it draws, also at the height it
-// draws with before the first size is set, so the window and the rows drawn
-// cannot disagree.
-func (m *Model) searchItemCapacity() int {
-	return uisearch.RowCapacity(m.viewState(0))
-}
-
-// keepSelectionVisible slides the scroll window to the selected result, and
-// back up when the list no longer reaches the bottom of it.
-func (m *Model) keepSelectionVisible() {
-	capacity := m.searchItemCapacity()
-	offset := min(m.scrollOffset, max(0, len(m.page.Results)-capacity))
-	m.scrollOffset = scroll.EnsureVisible(offset, m.selectedRow, capacity)
-}
-
-// IsLoading reports whether a repository search is active.
-func (m *Model) IsLoading() bool {
-	return m.loading
-}
-
-// Reload refreshes current search results without mutating query input state.
+// Reload is the manual refresh: the query runs again and the selection goes
+// back to the first result. It is dropped while a search is in flight.
 func (m *Model) Reload() tea.Cmd {
 	if m.loading {
-		m.logger.Debug("manual search refresh suppressed; refresh already in flight",
+		m.logger.Debug("manual search refresh suppressed; search already in flight",
 			"trigger", "search-manual")
 		return nil
 	}
-	return m.triggerSearchPreservingSelection()
+	return m.search(landFirst)
 }
 
-// AutoRefresh refreshes search when safe for active query editing.
+// AutoRefresh runs the query again and keeps the selection on the same issue
+// when the store still returns it, and on the same row when it does not.
 func (m *Model) AutoRefresh() tea.Cmd {
 	if m.loading {
 		return nil
 	}
-	if m.focus == uisearch.FocusQuery && m.typing {
+	return m.search(landInPlace)
+}
+
+// Update processes search messages and keys. Row movement, open detail and
+// reload reuse the board keybinding context, as the docs tab does.
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.SetSize(msg.Width, msg.Height)
+		return nil
+
+	case loadedMsg:
+		return m.apply(msg)
+
+	case mode.MouseMsg:
+		return m.handleMouse(msg)
+
+	case tea.KeyMsg:
+		if consumed, changed := m.query.HandleKey(msg); consumed {
+			if !changed {
+				return nil
+			}
+			return m.search(landOnIssue)
+		}
+		if IsScopeKey(msg) {
+			m.includeClosed = !m.includeClosed
+			return m.search(landOnIssue)
+		}
+		switch {
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
+			return m.moveRow(-1)
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
+			return m.moveRow(1)
+		case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
+			return m.moveRow(-m.pageRows())
+		case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
+			return m.moveRow(m.pageRows())
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveHome, msg):
+			return m.moveRow(-len(m.issues))
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
+			return m.moveRow(len(m.issues))
+		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
+			if m.currentSelection() == nil {
+				return nil
+			}
+			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
+			return m.Reload()
+		}
+	}
+
+	return nil
+}
+
+// View renders the results column under the query line.
+func (m *Model) View(skeletonPhase int) string {
+	state := m.viewState(skeletonPhase)
+	state.Hover = m.hover(state)
+	return uiboard.Render(state)
+}
+
+// uiColumn is the results column as the renderer sees it. View and
+// clampSelection build the same value, so the stored offset is computed
+// against the rows View draws.
+func (m *Model) uiColumn() uiboard.Column {
+	errText := ""
+	if m.err != nil {
+		errText = m.err.Error()
+	}
+	title := titleOpen
+	if m.includeClosed {
+		title = titleAll
+	}
+	return uiboard.Column{
+		Title:        title,
+		Rows:         m.issues,
+		SelectedRow:  m.selectedRow,
+		ScrollOffset: m.scrollOffset,
+		Total:        m.total,
+		TotalIsExact: m.total <= len(m.issues),
+		// Only the first search draws the column as loading. A search runs on
+		// every key, and dimming the rows for each one would flicker them; the
+		// header spinner says a search is in flight.
+		Loading: m.loading && !m.settled,
+		Error:   errText,
+	}
+}
+
+// SetSize updates render dimensions and clamps the scroll offset to the new
+// window, as the docs tab does.
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	m.clampSelection()
+}
+
+// IsLoading reports whether a search is in flight.
+func (m *Model) IsLoading() bool {
+	return m.loading
+}
+
+// search starts a search for the query and scope as they are now. It
+// supersedes the one in flight: that result is dropped when it arrives. land
+// says where the selection goes when this one does.
+func (m *Model) search(land landing) tea.Cmd {
+	m.generation++
+	m.loading = true
+
+	generation := m.generation
+	ctx, repo := m.ctx, m.repo
+	query := domain.SearchIssuesQuery{
+		Text:          m.query.Text(),
+		IncludeClosed: m.includeClosed,
+		Limit:         resultLimit,
+	}
+	return func() tea.Msg {
+		page, err := repo.Search(ctx, query)
+		return loadedMsg{generation: generation, landing: land, page: page, err: err}
+	}
+}
+
+// apply settles the model from a completed search.
+func (m *Model) apply(msg loadedMsg) tea.Cmd {
+	if msg.generation != m.generation {
+		m.logger.Debug("search result dropped; a later search superseded it",
+			"generation", msg.generation, "latest", m.generation)
 		return nil
 	}
-	return m.triggerSearchPreservingSelection()
-}
+	m.loading = false
+	m.settled = true
+	m.err = msg.err
 
-// ResultCount returns the current result count.
-func (m *Model) ResultCount() int {
-	if m.page.Metadata.ReturnedCount > 0 {
-		return m.page.Metadata.ReturnedCount
+	if msg.err != nil {
+		// Keep the stale rows on screen; the inline error row explains why they
+		// may be out of date.
+		return m.selectionChangedCmd()
 	}
-	return len(m.page.Results)
-}
 
-// SessionState returns the current search session snapshot.
-func (m *Model) SessionState() SessionState {
-	return SessionState{
-		DraftQuery:   m.draftQuery,
-		AppliedQuery: m.appliedQuery,
-		Page:         cloneSearchResultPage(m.page),
-		Loading:      m.loading,
-		Reloading:    m.reloading,
-		Error:        m.errText,
+	// The selection is read now, not when the search started: the rows stay on
+	// screen while it is in flight, and the operator can move on them.
+	selectedIssueID := m.selectedIssueID()
+
+	m.issues = make([]domain.IssueSummary, 0, len(msg.page.Results))
+	for _, result := range msg.page.Results {
+		m.issues = append(m.issues, result.Issue)
 	}
-}
+	m.total = msg.page.Metadata.Total
 
-func (m *Model) moveSelection(delta int) bool {
-	if !m.hasResults() {
-		return false
+	if msg.landing != landInPlace {
+		m.selectedRow, m.scrollOffset = 0, 0
 	}
-	previous := m.selectedRow
-	m.selectedRow += delta
-	m.normalizeSelection()
-	return m.selectedRow != previous
+	if msg.landing != landFirst {
+		if row := slices.IndexFunc(m.issues, func(issue domain.IssueSummary) bool {
+			return issue.ID == selectedIssueID
+		}); row >= 0 {
+			m.selectedRow = row
+		}
+	}
+	m.clampSelection()
+	return m.selectionChangedCmd()
 }
 
-func (m *Model) normalizeSelection() {
-	if !m.hasResults() {
+// ClearQuery empties the query and searches again, which the shell asks for
+// on Escape. cleared is false when there was no text, and Escape is then the
+// shell's.
+func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
+	if !m.query.Clear() {
+		return false, nil
+	}
+	return true, m.search(landOnIssue)
+}
+
+func (m *Model) clampSelection() {
+	if len(m.issues) == 0 {
 		m.selectedRow = 0
 		m.scrollOffset = 0
-		m.selectedDetail = domain.IssueDetail{}
-		m.selectedDetailLoading = false
 		return
 	}
 	if m.selectedRow < 0 {
 		m.selectedRow = 0
 	}
-	if m.selectedRow >= len(m.page.Results) {
-		m.selectedRow = len(m.page.Results) - 1
+	if m.selectedRow >= len(m.issues) {
+		m.selectedRow = len(m.issues) - 1
 	}
-	m.keepSelectionVisible()
+	// Pull the window back inside the list before sliding it to the selection,
+	// as the docs tab does: a list that shrank under a scrolled offset would
+	// otherwise keep the rows above its last ones out of reach. The column
+	// draws no age markers, so the instant they measure against is not read.
+	capacity := m.itemCapacity()
+	m.scrollOffset = min(m.scrollOffset, uiboard.MaxOffset(m.uiColumn(), capacity, time.Time{}))
+	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, time.Time{})
 }
 
-func (m *Model) ensureMetadataSelection() {
-	if m.metadataSelectedField != detail.MetadataFieldStatus && m.metadataSelectedField != detail.MetadataFieldPriority {
-		m.metadataSelectedField = detail.MetadataFieldStatus
+func (m *Model) moveRow(delta int) tea.Cmd {
+	if len(m.issues) == 0 {
+		m.selectedRow = 0
+		return nil
 	}
+
+	previous := m.selectedRow
+	m.selectedRow += delta
+	m.clampSelection()
+	if m.selectedRow == previous {
+		return nil
+	}
+	return m.selectionChangedCmd()
 }
 
-func (m *Model) moveMetadataSelection(delta int) {
-	fields := []detail.MetadataFieldKey{detail.MetadataFieldStatus, detail.MetadataFieldPriority}
-	m.ensureMetadataSelection()
-	idx := 0
-	if m.metadataSelectedField == detail.MetadataFieldPriority {
-		idx = 1
+// itemCapacity returns the number of content rows the column holds at the
+// current terminal height, as the docs tab counts them.
+func (m *Model) itemCapacity() int {
+	if m.height == 0 {
+		return defaultItemCapacity
 	}
-	next := idx + delta
-	if next < 0 {
-		next = 0
-	}
-	if next >= len(fields) {
-		next = len(fields) - 1
-	}
-	m.metadataSelectedField = fields[next]
+	return uiboard.ContentRows(m.height)
 }
 
-func (m *Model) selectedIssueID() string {
-	selection := m.currentSelection()
-	if selection == nil {
-		return ""
-	}
-	return selection.Issue.ID
-}
-
-func (m *Model) captureSelectionAnchor() *selectionAnchor {
-	anchor := &selectionAnchor{row: m.selectedRow}
-	if sel := m.currentSelection(); sel != nil {
-		anchor.issueID = sel.Issue.ID
-	}
-	return anchor
-}
-
-func (m *Model) restoreSelectionFromAnchor(anchor *selectionAnchor) {
-	if anchor == nil {
-		m.normalizeSelection()
-		return
-	}
-	if anchor.issueID != "" {
-		for idx, result := range m.page.Results {
-			if result.Issue.ID == anchor.issueID {
-				m.selectedRow = idx
-				m.normalizeSelection()
-				return
-			}
-		}
-	}
-	m.selectedRow = anchor.row
-	m.normalizeSelection()
+// pageRows is the number of results a page key moves the selection by.
+func (m *Model) pageRows() int {
+	return max(1, m.itemCapacity()/issuerow.Height)
 }
 
 func (m *Model) currentSelection() *mode.Selection {
-	if !m.hasResults() || m.selectedRow < 0 || m.selectedRow >= len(m.page.Results) {
+	if len(m.issues) == 0 {
 		return nil
 	}
-	selection := mode.Selection{Issue: m.page.Results[m.selectedRow].Issue}
+	row := m.selectedRow
+	if row < 0 || row >= len(m.issues) {
+		row = 0
+	}
+	selection := mode.Selection{Issue: m.issues[row]}
 	return &selection
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {
 	selection := m.currentSelection()
-	if selection == nil {
-		m.selectedDetailLoading = false
-	}
 	return func() tea.Msg {
 		return mode.SelectionChangedMsg{Mode: mode.Search, Selection: selection}
 	}
-}
-
-// loadSearchCmd fires the Search repository call and wraps the result in a
-// searchLoadedMsg. ctx is the model's lifetime context set at construction;
-// it does not change after NewModel returns, so reading it inside the closure
-// at BubbleTea-execute time is safe.
-func loadSearchCmd(ctx context.Context, repo repository.Repository, query domain.SearchIssuesQuery) tea.Cmd {
-	return func() tea.Msg {
-		appliedQuery := strings.TrimSpace(query.Text)
-		page, err := repo.Search(ctx, query)
-		if err != nil {
-			return searchLoadedMsg{appliedQuery: appliedQuery, err: err}
-		}
-
-		return searchLoadedMsg{appliedQuery: appliedQuery, page: page}
-	}
-}
-
-// CapturesShellKey reports whether active search input should consume a key
-// before shell-level keybindings are evaluated.
-func (m *Model) CapturesShellKey(msg tea.KeyMsg) bool {
-	if m.keys.Match(config.SearchContext, config.SearchActionCycleFocusNext, msg) || m.keys.Match(config.SearchContext, config.SearchActionCycleFocusPrev, msg) {
-		return true
-	}
-	if msg.Type == toggleScopeKey {
-		// Owned by search in every focus state, not just the query box.
-		return true
-	}
-	if msg.Type == tea.KeyEnter && (m.focus == uisearch.FocusMetadata || m.focus == uisearch.FocusResults) {
-		// Enter on a result row or a metadata row is search's own: it has
-		// already returned the action request the shell will answer. Detail
-		// short-circuits the shell switch for the same key; letting it fall
-		// through here meant an operator who bound a shell action to enter got
-		// that action as well, on one of the two surfaces only.
-		return true
-	}
-
-	if m.focus != uisearch.FocusQuery {
-		return false
-	}
-	if msg.Type == tea.KeyRunes {
-		return true
-	}
-	if shellKeysPassThrough(m.keys, msg) {
-		return false
-	}
-	switch msg.Type {
-	case tea.KeyBackspace, tea.KeyCtrlU:
-		return true
-	default:
-		return false
-	}
-}
-
-func shellKeysPassThrough(keys config.ResolvedKeyBindings, msg tea.KeyMsg) bool {
-	for _, action := range []string{
-		config.ShellActionQuit,
-		config.ShellActionHelp,
-		config.ShellActionModeBoard,
-		config.ShellActionModeSearch,
-		config.ShellActionToggleSearch,
-		config.ShellActionModeDetail,
-		config.ShellActionModeCycleNext,
-		config.ShellActionModeCyclePrev,
-		config.ShellActionEscape,
-	} {
-		if keys.Match(config.ShellContext, action, msg) {
-			return true
-		}
-	}
-	return false
-}
-
-// SetSelectedDetail updates shell-owned loaded detail for the current selection.
-func (m *Model) SetSelectedDetail(detail domain.IssueDetail, loading bool) {
-	m.selectedDetail = detail
-	m.selectedDetailLoading = loading
-}
-
-func (m *Model) results() []domain.IssueSummary {
-	issues := make([]domain.IssueSummary, 0, len(m.page.Results))
-	for _, result := range m.page.Results {
-		issues = append(issues, result.Issue)
-	}
-	return issues
-}
-
-func (m *Model) hasResults() bool {
-	return len(m.page.Results) > 0
-}
-
-func cloneSearchResultPage(page domain.SearchResultPage) domain.SearchResultPage {
-	results := append([]domain.SearchResult(nil), page.Results...)
-	return domain.SearchResultPage{Results: results, Metadata: page.Metadata}
 }

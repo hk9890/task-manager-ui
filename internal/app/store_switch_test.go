@@ -70,16 +70,7 @@ func newTwoStores(t *testing.T) twoStores {
 func press(t *testing.T, m Model, keys ...string) Model {
 	t.Helper()
 	for _, k := range keys {
-		var msg tea.KeyMsg
-		switch k {
-		case "enter":
-			msg = tea.KeyMsg{Type: tea.KeyEnter}
-		case "esc":
-			msg = tea.KeyMsg{Type: tea.KeyEsc}
-		default:
-			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
-		}
-		next, cmd := m.Update(msg)
+		next, cmd := m.Update(testKey(k))
 		m = applyMessages(t, next.(Model), runBatch(cmd))
 	}
 	return m
@@ -88,7 +79,7 @@ func press(t *testing.T, m Model, keys ...string) Model {
 // switchToBravo opens the picker, moves to the bravo row and opens it.
 func switchToBravo(t *testing.T, m Model) Model {
 	t.Helper()
-	return press(t, m, "s", "j", "enter")
+	return press(t, m, "alt+s", "down", "enter")
 }
 
 func TestSwitchingStoresReplacesEverySurfaceInPlace(t *testing.T) {
@@ -116,11 +107,11 @@ func TestSwitchingStoresReplacesEverySurfaceInPlace(t *testing.T) {
 		t.Errorf("catalog opened %v, want [bravo]", got)
 	}
 
-	// Docs and search are rebuilt too, not only the board: their first open
-	// after the switch reads the new store.
-	m = press(t, m, "2")
-	if m.search == nil || m.active != mode.Search {
-		t.Fatalf("expected to reach Search after the switch, got %q", m.active)
+	// Docs is rebuilt too, not only the board: its first open after the
+	// switch reads the new store.
+	m = press(t, m, "tab")
+	if m.docs == nil || m.active != mode.Docs {
+		t.Fatalf("expected to reach Docs after the switch, got %q", m.active)
 	}
 }
 
@@ -132,7 +123,7 @@ func TestResultIssuedAgainstThePreviousStoreIsDropped(t *testing.T) {
 
 	// A board reload against alpha: run the command so its result exists, but
 	// hold the messages back until after the switch.
-	next, reload := s.m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	next, reload := s.m.Update(testKey("alt+r"))
 	m := next.(Model)
 	stale := runBatch(reload)
 	if len(stale) == 0 {
@@ -175,11 +166,11 @@ func TestLauncherRunsInTheOpenedStoresProject(t *testing.T) {
 	s := newTwoStores(t)
 	m := switchToBravo(t, s.m)
 
-	m = press(t, m, "3") // Detail on bravo's issue
+	m = press(t, m, "enter") // Detail on bravo's issue
 	if m.active != mode.Detail {
 		t.Fatalf("expected Detail after the switch, got %q", m.active)
 	}
-	m = press(t, m, "l") // launch_shell_command; its default definition has no work_dir
+	m = press(t, m, "alt+l") // launch_shell_command; its default definition has no work_dir
 
 	calls := s.runner.Calls()
 	if len(calls) != 1 {
@@ -196,7 +187,7 @@ func TestOpeningTheActiveStoreIsANoOp(t *testing.T) {
 	s := newTwoStores(t)
 	epoch := s.m.storeEpoch
 
-	m := press(t, s.m, "s", "enter") // the first row is alpha, the active store
+	m := press(t, s.m, "alt+s", "enter") // the first row is alpha, the active store
 
 	if m.active != mode.Board {
 		t.Errorf("active mode: got %q, want the board the picker was opened from", m.active)
@@ -213,7 +204,7 @@ func TestAnUnusableStoreIsNotOpened(t *testing.T) {
 	s := newTwoStores(t)
 	epoch := s.m.storeEpoch
 
-	m := press(t, s.m, "s", "j", "j", "enter") // the dangling row
+	m := press(t, s.m, "alt+s", "down", "down", "enter") // the dangling row
 
 	if m.storeEpoch != epoch {
 		t.Error("an unusable store was switched to")
@@ -282,7 +273,7 @@ func TestAFailedOpenKeepsTheCurrentStore(t *testing.T) {
 func TestThePickerMarksTheOpenedStoreActive(t *testing.T) {
 	s := newTwoStores(t)
 	m := switchToBravo(t, s.m)
-	m = press(t, m, "s")
+	m = press(t, m, "alt+s")
 	// The switch raises an "Opened store bravo" toast over the picker; it would
 	// match the row assertions below without being a row.
 	m.toast = m.toast.Hide()

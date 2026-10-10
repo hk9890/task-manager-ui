@@ -125,7 +125,7 @@ func TestRenderWindowsOnIssueIndexAcrossDividers(t *testing.T) {
 	t.Parallel()
 
 	rows := agedRows(time.Hour, 2*day, 3*day, 8*day, 9*day, 10*day)
-	const height = 10 // 7 content rows: a divider and three two-line issues
+	const height = 11 // 7 content rows: a divider and three two-line issues
 
 	// Scrolled to the fourth issue: the divider drawn directly above it opens
 	// the window, the selected row is on screen, and the header counts issues
@@ -171,11 +171,11 @@ func TestRenderSlidesTheWindowToKeepTheSelectedRowDrawn(t *testing.T) {
 		}
 	}
 	rows := agedRows(ages...)
-	plain := renderAged(rows, 0, 8, 21, true, markerNow)
+	plain := renderAged(rows, 0, 8, 22, true, markerNow)
 	testui.AssertContainsAll(t, plain, append(selectedLines(8), "Issue 00", "9 of 12")...)
 	testui.AssertNotContainsAny(t, plain, "older than")
 
-	plain = renderAged(rows, 0, 8, 21, true, markerNow.Add(25*time.Minute))
+	plain = renderAged(rows, 0, 8, 22, true, markerNow.Add(25*time.Minute))
 	testui.AssertContainsAll(t, plain, append(selectedLines(8), "tm-00", "Issue 01", "older than 1 day", "8 of 12")...)
 	testui.AssertNotContainsAny(t, plain, "Issue 00")
 
@@ -183,13 +183,13 @@ func TestRenderSlidesTheWindowToKeepTheSelectedRowDrawn(t *testing.T) {
 	// keeps the divider it has room for and both lines of the selected row,
 	// never two dividers and half an issue.
 	rows = agedRows(30*day, 31*day, 32*day)
-	plain = renderAged(rows, 0, 0, 6, true, markerNow)
+	plain = renderAged(rows, 0, 0, 7, true, markerNow)
 	testui.AssertContainsAll(t, plain, append(selectedLines(0), "older than 1 week", "1 of 3")...)
 	testui.AssertNotContainsAny(t, plain, "older than 1 day")
 
 	// One content row cannot hold an issue. It draws the title of the selected
 	// one, which says which issue it is, and counts no issue as visible.
-	plain = renderAged(rows, 0, 1, 4, true, markerNow)
+	plain = renderAged(rows, 0, 1, 5, true, markerNow)
 	testui.AssertContainsAll(t, plain, selectedLines(1)[0], "0 of 3")
 	testui.AssertNotContainsAny(t, plain, "older than", "tm-01")
 }
@@ -208,7 +208,7 @@ func TestEnsureVisibleCountsOnlyTheDividersInsideTheWindow(t *testing.T) {
 	offset := 0
 	for sel := 0; sel < len(rows); sel++ {
 		offset = EnsureVisible(column(offset, sel), capacity, markerNow)
-		plain := renderAged(rows, offset, sel, capacity+3, true, markerNow)
+		plain := renderAged(rows, offset, sel, capacity+headLines+2, true, markerNow)
 		for _, want := range selectedLines(sel) {
 			if !strings.Contains(plain, want) {
 				t.Fatalf("sel %d offset %d: %q not drawn:\n%s", sel, offset, want, plain)
@@ -227,7 +227,7 @@ func TestEnsureVisibleCountsOnlyTheDividersInsideTheWindow(t *testing.T) {
 	if offset != 11 {
 		t.Fatalf("expected offset 11 at the last row, got %d", offset)
 	}
-	plain := renderAged(rows, offset, 19, capacity+3, true, markerNow)
+	plain := renderAged(rows, offset, 19, capacity+headLines+2, true, markerNow)
 	testui.AssertContainsAll(t, plain, append(selectedLines(19), "tm-11", "9 of 20")...)
 	testui.AssertNotContainsAny(t, plain, "older than")
 
@@ -284,7 +284,7 @@ func TestEnsureVisibleKeepsBothLinesOfTheSelectedIssueDrawn(t *testing.T) {
 				state := State{
 					Columns: []Column{{Title: "Ready", Rows: rows, Total: len(rows), TotalIsExact: true, AgeMarkers: tc.markers, Error: tc.err}},
 					Width:   60,
-					Height:  capacity + 3,
+					Height:  capacity + headLines + 2,
 					Now:     markerNow,
 				}
 				col := &state.Columns[0]
@@ -326,7 +326,7 @@ func TestRenderCountsOnlyTheIssuesDrawnWhole(t *testing.T) {
 	state := State{
 		Columns: []Column{{Title: "Ready", Rows: rows, SelectedRow: 0, Total: len(rows), TotalIsExact: true}},
 		Width:   60,
-		Height:  8, // 5 content rows: two issues and the title of a third
+		Height:  9, // 5 content rows: two issues and the title of a third
 		Now:     markerNow,
 	}
 	view := Render(state)
@@ -340,13 +340,13 @@ func TestRenderCountsOnlyTheIssuesDrawnWhole(t *testing.T) {
 	}
 
 	// An even number of content rows holds whole issues only.
-	state.Height = 9
+	state.Height = 10
 	plain = testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
 	testui.AssertContainsAll(t, plain, "tm-02", " 3 of 4 ")
 	testui.AssertNotContainsAny(t, plain, "Issue 03")
 
 	// With every issue drawn whole the header is the plain total.
-	state.Height = 11
+	state.Height = 12
 	plain = testui.AnsiEscapePattern.ReplaceAllString(Render(state), "")
 	testui.AssertContainsAll(t, plain, "tm-03", " 4 ")
 	testui.AssertNotContainsAny(t, plain, " of 4")
@@ -397,7 +397,7 @@ func TestMaxOffsetIsTheFirstIssueTheRestOfTheListFitsFrom(t *testing.T) {
 			draws := func(offset int) bool {
 				col := tc.col
 				col.ScrollOffset, col.SelectedRow, col.TotalIsExact = offset, -1, true
-				view := Render(State{Columns: []Column{col}, Width: 60, Height: tc.capacity + 3, Now: markerNow})
+				view := Render(State{Columns: []Column{col}, Width: 60, Height: tc.capacity + headLines + 2, Now: markerNow})
 				return strings.Contains(testui.AnsiEscapePattern.ReplaceAllString(view, ""), lastID)
 			}
 			if tc.capacity >= 2 && !draws(got) {

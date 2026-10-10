@@ -43,7 +43,7 @@ func boardApplyMessages(t *testing.T, m *Model, msgs []tea.Msg) {
 
 // reloadKeyMsg returns a tea.KeyMsg for the 'r' key (the BoardActionReload default).
 func reloadKeyMsg() tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true}
 }
 
 // newPopulatedRepo returns a memory repository with enough data for all 4 columns.

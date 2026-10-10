@@ -49,7 +49,7 @@ func pickerView(m Model) string {
 func openPicker(t *testing.T, m Model) Model {
 	t.Helper()
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	next, cmd := m.Update(testKey("alt+s"))
 	m = next.(Model)
 	if m.active != mode.StorePicker {
 		t.Fatalf("active mode after the picker key: got %q, want %q", m.active, mode.StorePicker)
@@ -99,7 +99,7 @@ func TestStorePickerReplacesTheShellChrome(t *testing.T) {
 
 	m = openPicker(t, m)
 	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
-	for _, gone := range append(chrome, footer, " Board ", " Docs ", " Search ", "stores s") {
+	for _, gone := range append(chrome, footer, " Board ", " Docs ", "stores s") {
 		if strings.Contains(view, gone) {
 			t.Errorf("the shell chrome %q is still rendered under the picker:\n%s", gone, view)
 		}
@@ -142,7 +142,7 @@ func TestStorePickerEscapeReturnsToTheTabItWasOpenedFrom(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
+	next, cmd := m.Update(testKey("tab"))
 	m = applyMessages(t, next.(Model), runBatch(cmd))
 	if m.active != mode.Docs {
 		t.Fatalf("expected to be on Docs, got %q", m.active)
@@ -190,25 +190,6 @@ func TestStorePickerRelistsOnEveryOpen(t *testing.T) {
 	}
 }
 
-// The picker key must not reach a browse tab as a keystroke, and typing it
-// into the search query must not open the picker.
-func TestStorePickerKeyDoesNotOpenFromTheSearchQueryField(t *testing.T) {
-	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
-	m = applyMessages(t, next.(Model), runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	m = applyMessages(t, next.(Model), runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
-	m = applyMessages(t, next.(Model), runBatch(cmd))
-
-	if m.active == mode.StorePicker {
-		t.Error("the picker key opened the picker while the search query field had focus")
-	}
-}
-
 // The picker is not a tab, so cycling the header strip must never land on it.
 func TestStorePickerIsNotInTheTabCycle(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
@@ -231,7 +212,7 @@ func TestOverlaysRenderOverThePicker(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m = openPicker(t, m)
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	next, cmd := m.Update(testKey("alt+h"))
 	m = applyMessages(t, next.(Model), runBatch(cmd))
 	if !m.showHelp {
 		t.Fatal("expected the help overlay to open over the picker")
@@ -274,12 +255,12 @@ func TestOpenOverlayDoesNotSwallowTheStoreListing(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, catalog, ""))
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	next, cmd := m.Update(testKey("alt+s"))
 	m = next.(Model)
 	listing := runBatch(cmd)
 
 	// The help overlay opens before the listing lands.
-	next, helpCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	next, helpCmd := m.Update(testKey("alt+h"))
 	m = applyMessages(t, next.(Model), runBatch(helpCmd))
 
 	m = applyMessages(t, m, listing)
@@ -300,7 +281,7 @@ func TestOpenOverlayDoesNotSwallowTheStoreListing(t *testing.T) {
 // commenting on an issue the operator cannot see is the worst outcome
 // available, so the picker swallows them.
 func TestIssueActionsAreInertOnThePicker(t *testing.T) {
-	for _, key := range []string{"e", "c", "u", "x", "a"} {
+	for _, key := range []string{"alt+e", "alt+n", "alt+u", "delete", "alt+a"} {
 		t.Run(key, func(t *testing.T) {
 			gw := fakes.NewTracked()
 			seedReady(gw, "tm-1", "Ready first", "task", 1)
@@ -314,7 +295,7 @@ func TestIssueActionsAreInertOnThePicker(t *testing.T) {
 			m = applyMessages(t, m, runBatch(m.Init()))
 			m = openPicker(t, m)
 
-			next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+			next, cmd := m.Update(testKey(key))
 			m = applyMessages(t, next.(Model), runBatch(cmd))
 
 			if m.showActionModal {
@@ -366,7 +347,7 @@ func TestPickerLoadingIsNotReportedOnAnotherTab(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	next, cmd := m.Update(testKey("alt+s"))
 	m = next.(Model)
 	listing := runBatch(cmd) // held back, so the listing is still in flight
 
@@ -374,13 +355,13 @@ func TestPickerLoadingIsNotReportedOnAnotherTab(t *testing.T) {
 		t.Fatal("expected the in-flight listing to be reported while the picker is on screen")
 	}
 
-	next, tabCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	next, tabCmd := m.Update(testKey("tab"))
 	m = applyMessages(t, next.(Model), runBatch(tabCmd))
-	if m.active != mode.Board {
-		t.Fatalf("expected to be on Board, got %q", m.active)
+	if m.active != mode.Docs {
+		t.Fatalf("expected to be on Docs, got %q", m.active)
 	}
 	if got := m.loadingStates(); len(got) != 0 {
-		t.Errorf("Board reports the picker's listing as in flight: %+v", got)
+		t.Errorf("Docs reports the picker's listing as in flight: %+v", got)
 	}
 
 	m = applyMessages(t, m, listing)

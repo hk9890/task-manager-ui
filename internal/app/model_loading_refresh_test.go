@@ -242,16 +242,16 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// are still visible.
 
 	// Switch to Search (lazy init fires).
-	searchNext, searchCmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	searchNext, searchCmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = searchNext.(Model)
 	m = applyMessages(t, m, runBatch(searchCmd))
 
-	if m.active != mode.Search {
+	if m.active != mode.Docs {
 		t.Fatalf("expected search mode after ctrl+space toggle, got %s", m.active)
 	}
 
 	// Switch back to Board.
-	boardNext, boardBackCmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	boardNext, boardBackCmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = boardNext.(Model)
 	m = applyMessages(t, m, runBatch(boardBackCmd))
 
@@ -407,7 +407,7 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
@@ -447,15 +447,15 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
+	if m.active != mode.Docs {
 		t.Fatalf("expected active mode search before tick, got %s", m.active)
 	}
 
-	m.markSurfaceDirty(mode.Search)
-	m.markSurfaceDirty(mode.Search)
+	m.markSurfaceDirty(mode.Docs)
+	m.markSurfaceDirty(mode.Docs)
 	mark := gw.CallCount()
 	next, cmd = m.Update(refreshTickMsg{})
 	m = next.(Model)
@@ -524,10 +524,10 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
+	if m.active != mode.Docs {
 		t.Fatalf("expected search active before refresh, got %s", m.active)
 	}
 
@@ -541,7 +541,7 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if m.active != mode.Search {
+	if m.active != mode.Docs {
 		t.Fatalf("expected search auto-refresh not to force mode switch, got %s", m.active)
 	}
 	if m.detail.Detail.Summary.ID != "tm-9" || m.detail.Detail.Description != "cached detail" {
@@ -549,113 +549,6 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	}
 	if gw.HasCallSince(mark, fakes.MethodIssue) {
 		t.Fatalf("expected search auto-refresh not to force detail reload when selection remains, calls=%#v", gw.Calls())
-	}
-}
-
-func TestModelFocusRegainInSearchReloadsWithoutMutatingQuery(t *testing.T) {
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected active mode search before focus refresh, got %s", m.active)
-	}
-
-	mark := gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if gw.CallCountSince(mark, fakes.MethodSearch) != 0 {
-		t.Fatalf("expected query edit not to search before enter, got %#v", gw.Calls())
-	}
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if got := m.search.SessionState().AppliedQuery; got != "x" {
-		t.Fatalf("expected applied search query %q, got %q", "x", got)
-	}
-	m.markSurfaceRefreshed(mode.Search)
-	mark = gw.CallCount()
-
-	next, cmd = m.Update(tea.BlurMsg{})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.FocusMsg{})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	if !gw.HasCallSince(mark, fakes.MethodSearch) {
-		t.Fatalf("expected focus regain in search to refresh immediately, calls=%#v", gw.Calls())
-	}
-	if gw.HasCallSince(mark, fakes.MethodDashboard) || gw.HasCallSince(mark, fakes.MethodIssue) {
-		t.Fatalf("expected search focus regain to refresh only active search surface, calls=%#v", gw.Calls())
-	}
-	if got := m.search.SessionState().AppliedQuery; got != "x" {
-		t.Fatalf("expected applied search query preserved as %q after focus regain, got %q", "x", got)
-	}
-}
-
-func TestModelRefreshTickInSearchSkipsAutoRefreshWhileUserTyping(t *testing.T) {
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected search active before typing suppression test, got %s", m.active)
-	}
-
-	mark := gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = next.(Model)
-	if cmd != nil {
-		t.Fatalf("expected query typing not to issue search command until enter")
-	}
-	if !m.search.CapturesShellKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}) {
-		t.Fatalf("expected search query to be focused for typing suppression case")
-	}
-
-	next, tickCmd := m.Update(refreshTickMsg{})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(tickCmd))
-
-	if gw.CallCountSince(mark, fakes.MethodSearch) != 0 {
-		t.Fatalf("expected no repository calls before queued typing command resolves, got %#v", gw.Calls())
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	calls := gw.Calls()
-	if gw.CallCountSince(mark, fakes.MethodSearch) != 1 {
-		t.Fatalf("expected only one enter-triggered search call while auto-refresh is suppressed, got %#v", calls)
-	}
-	if m.search.IsLoading() {
-		t.Fatalf("expected typing-triggered search to settle")
 	}
 }
 
@@ -739,16 +632,16 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	if state := m.refreshStateBySurface[mode.Board]; state.dirty {
 		t.Fatalf("expected active board dirty flag to clear after refresh")
 	}
-	if state := m.refreshStateBySurface[mode.Search]; !state.dirty {
+	if state := m.refreshStateBySurface[mode.Docs]; !state.dirty {
 		t.Fatalf("expected inactive search to remain dirty until next eligible refresh")
 	}
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if m.active != mode.Search {
+	if m.active != mode.Docs {
 		t.Fatalf("expected active mode search after toggle, got %s", m.active)
 	}
 	if !gw.HasCallSince(mark, fakes.MethodSearch) {
@@ -757,7 +650,7 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	if gw.HasCallSince(mark, fakes.MethodDashboard) {
 		t.Fatalf("expected only newly active search to refresh on activation, calls=%#v", gw.Calls())
 	}
-	if state := m.refreshStateBySurface[mode.Search]; state.dirty {
+	if state := m.refreshStateBySurface[mode.Docs]; state.dirty {
 		t.Fatalf("expected search dirty flag to clear after activation refresh")
 	}
 }
@@ -861,7 +754,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	}
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	next, cmd = m.Update(testKey("alt+r"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -885,7 +778,7 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {

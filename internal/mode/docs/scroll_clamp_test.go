@@ -67,6 +67,7 @@ func TestClampPullsTheWindowBackInsideAShrunkList(t *testing.T) {
 
 	// The list shrinks under the offset, as an auto-refresh that drops rows does.
 	m.issues = m.issues[:6]
+	m.shown = m.issues
 	m.total = 6
 	m.clampSelection()
 
@@ -106,7 +107,7 @@ func TestClampKeepsAWindowTheOperatorScrolledTo(t *testing.T) {
 		})
 	}
 
-	// Height 30 leaves 27 lines: thirteen docs and a spare line. Forty steps
+	// Height 30 leaves 26 lines: thirteen docs. Forty steps
 	// down scroll the window to rows 28..40, five steps up keep it there.
 	m := loadedModel(t, gw)
 	for range 40 {

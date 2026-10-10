@@ -234,6 +234,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "tm-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "tm-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "tm-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
 	}
+	m.filterColumns()
 	m.focusedColumn = 0
 	m.selectedRow[0] = 0
 	m.selectedRow[1] = 0
@@ -286,12 +287,12 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 
 	keys, err := config.ResolveKeyBindings(config.MergeKeyBindings(config.DefaultKeyBindings(), &config.KeyBindingOverride{
 		Board: map[string][]string{
-			config.BoardActionMoveLeft:   {"a"},
-			config.BoardActionMoveRight:  {"d"},
-			config.BoardActionMoveUp:     {"w"},
-			config.BoardActionMoveDown:   {"s"},
-			config.BoardActionOpenDetail: {"space"},
-			config.BoardActionReload:     {"R"},
+			config.BoardActionMoveLeft:   {"alt+a"},
+			config.BoardActionMoveRight:  {"alt+d"},
+			config.BoardActionMoveUp:     {"alt+w"},
+			config.BoardActionMoveDown:   {"alt+s"},
+			config.BoardActionOpenDetail: {"f2"},
+			config.BoardActionReload:     {"f5"},
 		},
 	}))
 	if err != nil {
@@ -303,17 +304,18 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "tm-1", Title: "Ready first", Priority: 1, Status: "open", Type: "task"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "tm-7", Title: "Progress one", Priority: 2, Status: "in_progress", Type: "task"}, {ID: "tm-8", Title: "Progress two", Priority: 1, Status: "in_progress", Type: "bug"}}, total: 2, exact: true},
 	}
+	m.filterColumns()
 	m.focusedColumn = 0
 	m.selectedRow[0] = 0
 	m.selectedRow[1] = 0
 	m.SetSize(100, 24)
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d"), Alt: true})
 	if cmd == nil {
 		t.Fatal("expected selection change after configured move-right key")
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s"), Alt: true})
 	if cmd == nil {
 		t.Fatal("expected selection change after configured move-down key")
 	}
@@ -323,7 +325,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("expected configured move-down to select tm-8, got %#v", msg)
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyF2})
 	if cmd == nil {
 		t.Fatal("expected action request from configured open key")
 	}
@@ -331,7 +333,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("expected open detail action request, got %#v", cmd())
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	cmd = m.Update(tea.KeyMsg{Type: tea.KeyF5})
 	if cmd == nil || !m.IsLoading() {
 		t.Fatal("expected configured reload key to trigger board reload")
 	}
@@ -345,6 +347,7 @@ func populatedModel(repo repository.Repository, keys config.ResolvedKeyBindings)
 		{title: sectionTitleReady, issues: []domain.IssueSummary{{ID: "tm-1", Title: "Ready one"}}, total: 1, exact: true},
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "tm-2", Title: "Progress one"}, {ID: "tm-3", Title: "Progress two"}}, total: 2, exact: true},
 	}
+	m.filterColumns()
 	m.focusedColumn = 1
 	m.selectedRow[0] = 0
 	m.selectedRow[1] = 1
@@ -432,7 +435,7 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 
 	m := populatedModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
 	if cmd == nil {
 		t.Fatalf("expected manual reload command")
 	}
@@ -604,6 +607,7 @@ func TestBoardModeRefreshKeepsStaleIssuesVisible(t *testing.T) {
 		{title: sectionTitleInProgress, issues: []domain.IssueSummary{{ID: "tm-2", Title: "IP one"}}, loading: false, total: 1, exact: true},
 		{title: sectionTitleDone, issues: nil, loading: false},
 	}
+	m.filterColumns()
 
 	// Trigger auto-refresh (marks columns loading while preserving issues).
 	_ = m.AutoRefresh()
@@ -634,12 +638,12 @@ func TestSectionItemCapacity(t *testing.T) {
 		want   int
 	}{
 		{height: 0, want: 20},  // safe default before first WindowSizeMsg
-		{height: 1, want: 1},   // clamp: 1-3=-2, clamped to 1
-		{height: 3, want: 1},   // clamp: 3-3=0, clamped to 1
-		{height: 4, want: 1},   // 4-3=1
-		{height: 24, want: 21}, // 24-3=21
-		{height: 30, want: 27}, // 30-3=27
-		{height: 34, want: 31}, // 34-3=31
+		{height: 1, want: 1},   // clamp: 1-4=-3, clamped to 1
+		{height: 4, want: 1},   // clamp: 4-4=0, clamped to 1
+		{height: 5, want: 1},   // 5-4=1
+		{height: 24, want: 20}, // 24-4=20
+		{height: 30, want: 26}, // 30-4=26
+		{height: 34, want: 30}, // 34-4=30
 	}
 
 	for _, tc := range tests {
@@ -985,7 +989,7 @@ func TestStartReload_PassesClosedLimit(t *testing.T) {
 // --- Scroll-window tests ---
 
 // TestBoardModeScrollWindowAdvancesWithSelection verifies that pressing j×30
-// on a column with 80 rows (height=25, sectionItemCapacity=22 lines, eleven
+// on a column with 80 rows (height=26, sectionItemCapacity=22 lines, eleven
 // two-line issues) advances the selection to row 30 and moves ScrollOffset so
 // the selection stays within the visible window.
 func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
@@ -1006,10 +1010,11 @@ func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: issues, total: rowCount, exact: true},
 	}
+	m.filterColumns()
 	m.focusedColumn = 0
 	m.selectedRow[0] = 0
 	m.scrollOffset[0] = 0
-	m.SetSize(120, 25) // sectionItemCapacity = 25-3 = 22
+	m.SetSize(120, 26) // sectionItemCapacity = 26-4 = 22
 
 	capacity := issueCapacity(m) // 11
 
@@ -1058,11 +1063,12 @@ func TestBoardModeScrollWindowRendererSlicesRows(t *testing.T) {
 	m.columns = []columnData{
 		{title: sectionTitleReady, issues: issues, total: rowCount, exact: true},
 	}
+	m.filterColumns()
 	m.focusedColumn = 0
 	m.selectedRow[0] = 30
 	m.scrollOffset[0] = 20 // window shows rows 20..30
 
-	m.SetSize(120, 25) // capacity = 22 lines, eleven two-line issues
+	m.SetSize(120, 26) // capacity = 22 lines, eleven two-line issues
 
 	view := m.View(0)
 
@@ -1111,7 +1117,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	}
 
 	m := newBoardModel(repo, resolvedBoardKeys(t))
-	m.SetSize(120, 25)
+	m.SetSize(120, 26)
 
 	// InitializeController runs Init and drains all resulting commands
 	// synchronously. For the memory repo this resolves the Dashboard load
@@ -1129,7 +1135,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	}
 
 	// Apply a WindowSizeMsg so sectionItemCapacity is set.
-	_ = bm.Update(tea.WindowSizeMsg{Width: 120, Height: 25})
+	_ = bm.Update(tea.WindowSizeMsg{Width: 120, Height: 26})
 
 	// Apply 30 j (down) keypresses synchronously.
 	const steps = 30
@@ -1188,7 +1194,7 @@ func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
 
 	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
-	m.SetSize(120, 25) // sectionItemCapacity = 22; closedPageSize = max(44,50) = 50
+	m.SetSize(120, 26) // sectionItemCapacity = 22; closedPageSize = max(44,50) = 50
 
 	// Pre-populate the 4 fixed columns; Done has 35 loaded issues.
 	const loaded = 35
@@ -1199,6 +1205,7 @@ func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: closedIssues, total: 736, exact: false},
 	}
+	m.filterColumns()
 
 	// Initialise load-more state as if compose() already ran.
 	m.doneLoadedCount = loaded
@@ -1245,7 +1252,7 @@ func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
 	}
 	// Literal, not m.closedPageSize(): comparing the captured value against the
 	// same call that produced it passes for any page size, including a broken
-	// one. At SetSize(120, 25) the page size is max(2*22, 50) = 50.
+	// one. At SetSize(120, 26) the page size is max(2*22, 50) = 50.
 	const wantLimit = 50
 	if opts[0].ClosedLimit != wantLimit {
 		t.Errorf("expected ClosedLimit=%d, got %d", wantLimit, opts[0].ClosedLimit)
@@ -1289,7 +1296,7 @@ func TestDoneLoadMore_ThresholdBoundary(t *testing.T) {
 
 			stub := newDashboardStub(repository.DashboardData{})
 			m := newBoardModel(stub, resolvedBoardKeys(t))
-			m.SetSize(120, 25)
+			m.SetSize(120, 26)
 
 			const loaded = 35
 			m.columns = []columnData{
@@ -1298,6 +1305,7 @@ func TestDoneLoadMore_ThresholdBoundary(t *testing.T) {
 				{title: sectionTitleInProgress},
 				{title: sectionTitleDone, issues: makeClosedIssues(loaded), total: 736, exact: false},
 			}
+			m.filterColumns()
 			m.doneLoadedCount = loaded
 			m.doneClosedTotal = 736
 			m.focusedColumn = doneColumnIndex
@@ -1325,7 +1333,7 @@ func TestDoneLoadMore_NoDispatchAtSliceEnd(t *testing.T) {
 
 	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
-	m.SetSize(120, 25)
+	m.SetSize(120, 26)
 
 	const total = 35
 	closedIssues := makeClosedIssues(total)
@@ -1335,6 +1343,7 @@ func TestDoneLoadMore_NoDispatchAtSliceEnd(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: closedIssues, total: total, exact: true},
 	}
+	m.filterColumns()
 
 	// All issues loaded: doneLoadedCount == doneClosedTotal.
 	m.doneLoadedCount = total
@@ -1376,7 +1385,7 @@ func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 	t.Parallel()
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
-	m.SetSize(120, 25)
+	m.SetSize(120, 26)
 
 	const priorCount = 35
 	const incomingCount = 50
@@ -1388,6 +1397,7 @@ func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: priorIssues, total: 736, exact: false},
 	}
+	m.filterColumns()
 	m.doneLoadedCount = priorCount
 	m.doneClosedTotal = 736
 	m.doneLoadInFlight = true // simulates the in-flight state before response arrives
@@ -1430,52 +1440,6 @@ func TestDoneLoadMore_MergesIncomingPage(t *testing.T) {
 	}
 }
 
-// TestDoneLoadMore_ExplicitKey verifies that pressing the > key while focused
-// on the Done column dispatches a load-more even when the cursor is not near
-// the end of the loaded slice.
-func TestDoneLoadMore_ExplicitKey(t *testing.T) {
-	t.Parallel()
-
-	stub := newDashboardStub(repository.DashboardData{})
-	m := newBoardModel(stub, resolvedBoardKeys(t))
-	m.SetSize(120, 25)
-
-	const loaded = 35
-	closedIssues := makeClosedIssues(loaded)
-	m.columns = []columnData{
-		{title: sectionTitleNotReady},
-		{title: sectionTitleReady},
-		{title: sectionTitleInProgress},
-		{title: sectionTitleDone, issues: closedIssues, total: 736, exact: false},
-	}
-	m.doneLoadedCount = loaded
-	m.doneClosedTotal = 736
-
-	// Focus Done at row 0 — cursor is far from the end (remaining=35 >> threshold=5).
-	m.focusedColumn = doneColumnIndex
-	m.selectedRow[doneColumnIndex] = 0
-
-	// Press >: explicit load-more key.
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
-	if cmd == nil {
-		t.Fatal("expected non-nil Cmd after > press on Done column")
-	}
-
-	// Execute the cmd.
-	_ = cmd()
-
-	opts := stub.capturedOpts()
-	if len(opts) != 1 {
-		t.Fatalf("expected exactly 1 Dashboard call from explicit > key, got %d: %v", len(opts), opts)
-	}
-	if opts[0].ClosedOffset != loaded {
-		t.Errorf("expected ClosedOffset=%d, got %d", loaded, opts[0].ClosedOffset)
-	}
-	if !m.doneLoadInFlight {
-		t.Error("expected doneLoadInFlight=true after explicit load-more dispatch")
-	}
-}
-
 // --- Done column load-more reset tests ---
 
 // TestDoneLoadMore_ManualReloadResetsToPage1 verifies that pressing r (manual
@@ -1513,6 +1477,7 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: staleClosed, total: 736, exact: false},
 	}
+	m.filterColumns()
 	m.doneLoadedCount = staleLoaded
 	m.doneClosedTotal = 736
 	m.doneLoadInFlight = false
@@ -1520,7 +1485,7 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	m.selectedRow[doneColumnIndex] = 50
 
 	// AC: pressing r dispatches a reload command.
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
 	if cmd == nil {
 		t.Fatal("expected non-nil Cmd after r press (manual reload)")
 	}
@@ -1597,6 +1562,7 @@ func TestDoneLoadMore_AutoRefreshKeepsThePagedDepth(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: closed, total: 736, exact: false},
 	}
+	m.filterColumns()
 	m.doneLoadedCount = loaded
 	m.doneClosedTotal = 736
 	m.focusedColumn = doneColumnIndex
@@ -1647,7 +1613,7 @@ func TestDoneLoadMore_ReloadResetsState(t *testing.T) {
 
 	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
-	m.SetSize(120, 25) // sectionItemCapacity=22
+	m.SetSize(120, 26) // sectionItemCapacity=22
 
 	// Arrange: model has fetched two load-more pages and has a stale in-flight.
 	m.doneLoadedCount = 120
@@ -1704,7 +1670,7 @@ func TestDoneLoadMore_EmptyDoneColumnNoDispatch(t *testing.T) {
 
 	stub := newDashboardStub(repository.DashboardData{})
 	m := newBoardModel(stub, resolvedBoardKeys(t))
-	m.SetSize(120, 25)
+	m.SetSize(120, 26)
 
 	// Simulate a completed Dashboard load with no closed issues. compose() sets
 	// doneLoadedCount=0 and doneClosedTotal=0 from this empty result. Feeding the
@@ -1719,9 +1685,9 @@ func TestDoneLoadMore_EmptyDoneColumnNoDispatch(t *testing.T) {
 		t.Fatalf("precondition: expected doneLoadedCount=0 for empty Done, got %d", m.doneLoadedCount)
 	}
 
-	// Focus the (empty) Done column and trigger an explicit load-more (>).
+	// Focus the (empty) Done column and run the load-more check a row move runs.
 	m.focusedColumn = doneColumnIndex
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	cmd := m.maybeLoadMoreClosed()
 
 	// FIX #14: empty Done must short-circuit — no Cmd, no in-flight flag.
 	if cmd != nil {
@@ -1760,7 +1726,7 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 	t.Parallel()
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
-	m.SetSize(120, 25)
+	m.SetSize(120, 26)
 
 	const priorCount = 35
 	const incomingCount = 50
@@ -1771,6 +1737,7 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: priorIssues, total: 736, exact: false},
 	}
+	m.filterColumns()
 	m.doneLoadedCount = priorCount
 	m.doneClosedTotal = 736
 	m.doneLoadInFlight = true // simulates the in-flight state before the response
@@ -1835,7 +1802,7 @@ func TestDoneLoadMore_MergeReSyncsSelectionWhenDoneFocused(t *testing.T) {
 // cut in half.
 func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
-	m.SetSize(40, 13) // sectionItemCapacity() == 13-3 == 10 lines, five issues
+	m.SetSize(40, 14) // sectionItemCapacity() == 14-4 == 10 lines, five issues
 
 	const n = 20
 	issues := make([]domain.IssueSummary, n)
@@ -1845,6 +1812,7 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 	// Focused Done column carrying an inline error alongside loaded rows
 	// (the failed-load-more shape that keeps its issues).
 	m.columns[doneColumnIndex] = columnData{title: sectionTitleDone, issues: issues, total: n, exact: true, err: errors.New("load failed")}
+	m.filterColumns()
 	m.focusedColumn = doneColumnIndex
 	m.keepFocusedColumnDrawn()
 	m.selectedRow[doneColumnIndex] = 0
@@ -1882,7 +1850,7 @@ func TestMoveRow_ErrorColumnReservesPrefixRowInScrollWindow(t *testing.T) {
 func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 	t.Parallel()
 
-	// SetSize(120, 25) leaves 22 content lines: eleven two-line issues, so the
+	// SetSize(120, 26) leaves 22 content lines: eleven two-line issues, so the
 	// last full window of the 40 rows opens on row 29.
 	const n = 40
 	cases := []struct {
@@ -1908,13 +1876,14 @@ func TestClampScrollOffsetsKeepsTheSelectedRowInsideTheWindow(t *testing.T) {
 			t.Parallel()
 
 			m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
-			m.SetSize(120, 25)
+			m.SetSize(120, 26)
 			m.columns[doneColumnIndex] = columnData{
 				title:  sectionTitleDone,
 				issues: makeClosedIssues(n),
 				total:  n,
 				exact:  true,
 			}
+			m.filterColumns()
 			m.selectedRow[doneColumnIndex] = tc.selected
 			m.scrollOffset[doneColumnIndex] = tc.startingOffset
 
@@ -2395,5 +2364,81 @@ func TestAutoRefreshThatSupersedesTheSearchLeavesACursorTheOperatorMoved(t *test
 	}
 	if m.anchorSearch != nil || m.doneLoadInFlight {
 		t.Error("the superseded search did not end")
+	}
+}
+
+// TestBoardPageAndBoundKeysMoveTheSelection walks a column with the page, home
+// and end keys: each moves the selection of the focused column, clamps at both
+// ends and keeps the selected issue drawn.
+func TestBoardPageAndBoundKeysMoveTheSelection(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(newDashboardStub(repository.DashboardData{}), resolvedBoardKeys(t))
+	m.SetSize(120, 26)
+	const rows = 30
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady, issues: makeClosedIssues(rows), total: rows, exact: true},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone},
+	}
+	m.filterColumns()
+	m.focusedColumn = 1
+	page := m.pageRows()
+
+	steps := []struct {
+		key  tea.KeyMsg
+		want int
+	}{
+		{tea.KeyMsg{Type: tea.KeyPgDown}, page},
+		{tea.KeyMsg{Type: tea.KeyPgDown}, 2 * page},
+		{tea.KeyMsg{Type: tea.KeyPgUp}, page},
+		{tea.KeyMsg{Type: tea.KeyEnd}, rows - 1},
+		{tea.KeyMsg{Type: tea.KeyPgDown}, rows - 1},
+		{tea.KeyMsg{Type: tea.KeyHome}, 0},
+		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
+	}
+	for _, step := range steps {
+		before := m.selectedRow[1]
+		cmd := m.Update(step.key)
+		if got := m.selectedRow[1]; got != step.want {
+			t.Fatalf("after %q: selected row %d, want %d", step.key.String(), got, step.want)
+		}
+		if moved := step.want != before; (cmd != nil) != moved {
+			t.Fatalf("after %q: selection command %v, want %v", step.key.String(), cmd != nil, moved)
+		}
+		assertSelectionDrawn(t, m)
+	}
+}
+
+// TestDoneLoadMore_EndKeyLoadsTheNextPage: the end key lands on the last loaded
+// Done row, which is inside the load-more threshold, so the next page loads
+// with no key of its own.
+func TestDoneLoadMore_EndKeyLoadsTheNextPage(t *testing.T) {
+	t.Parallel()
+
+	stub := newDashboardStub(repository.DashboardData{})
+	m := newBoardModel(stub, resolvedBoardKeys(t))
+	m.SetSize(120, 26)
+
+	const loaded = 35
+	m.columns = []columnData{
+		{title: sectionTitleNotReady},
+		{title: sectionTitleReady},
+		{title: sectionTitleInProgress},
+		{title: sectionTitleDone, issues: makeClosedIssues(loaded), total: 736, exact: false},
+	}
+	m.filterColumns()
+	m.doneLoadedCount = loaded
+	m.doneClosedTotal = 736
+	m.focusedColumn = doneColumnIndex
+
+	testui.DrainCmd(m.Update(tea.KeyMsg{Type: tea.KeyEnd}))
+	if got := m.selectedRow[doneColumnIndex]; got != loaded-1 {
+		t.Fatalf("end selected row %d, want %d", got, loaded-1)
+	}
+	opts := stub.capturedOpts()
+	if len(opts) != 1 || opts[0].ClosedOffset != loaded {
+		t.Fatalf("Dashboard calls after end = %v, want one at offset %d", opts, loaded)
 	}
 }

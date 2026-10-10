@@ -100,7 +100,7 @@ type QuickActionLabels struct {
 func Render(state State) string {
 	selected := strings.TrimSpace(state.SelectionID)
 	if selected == "" {
-		return "No selected issue.\nSelect an issue in board/search first."
+		return "No selected issue.\nSelect an issue on a browse tab first."
 	}
 
 	if state.Loading && strings.TrimSpace(state.Detail.Summary.ID) == "" {
@@ -617,24 +617,8 @@ func contentHeaderRule(width int) string {
 	return lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width))
 }
 
-// isPlaceholderSummary reports whether the summary is the search "no selection"
-// placeholder built in internal/ui/search/search.go.  The placeholder is
-// identified by the sentinel pair ID=="(none)" and Type==""; neither value can
-// appear on a real issue.
-func isPlaceholderSummary(s domain.IssueSummary) bool {
-	return strings.TrimSpace(s.ID) == "(none)" && strings.TrimSpace(s.Type) == ""
-}
-
 func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int, skeleton bool, skeletonPhase int) []string {
 	upper := make([]string, 0, 48)
-
-	if isPlaceholderSummary(detail.Summary) {
-		// Placeholder case (search "no selection"): suppress the meta row and
-		// thin rule; render only the title line so the pane stays clean.
-		upper = append(upper, textutil.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
-		upper = append(upper, renderMarkdownMultiline(detail.Description, "(no description)", width)...)
-		return upper
-	}
 
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
 	// title, then a thin rule that visually separates the header from the body below.

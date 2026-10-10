@@ -198,7 +198,7 @@ func TestStoreChangeDuringALoadReloadsWhenThatLoadLands(t *testing.T) {
 	m, _ := watchedModel(t, repo, RuntimeOptions{})
 
 	mark := repo.CallCount()
-	next, load := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	next, load := m.Update(testKey("alt+r"))
 	m = next.(Model)
 	if !m.board.IsLoading() {
 		t.Fatal("setup: the board reload key started no load")
@@ -240,95 +240,6 @@ func TestStoreChangeReloadsTheOpenDetail(t *testing.T) {
 	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEsc}})
 	if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 1 {
 		t.Errorf("board reads on return from Detail = %d, want 1", got)
-	}
-}
-
-// Search holds an auto-refresh back while its query is typed. The change is
-// still owed once the typing ends.
-func TestStoreChangeWhileTheSearchQueryIsTypedReloadsWhenTheTypingEnds(t *testing.T) {
-	t.Parallel()
-
-	repo := newWatchedRepository()
-	m, _ := watchedModel(t, repo, RuntimeOptions{})
-	// Two steps: a landing search ends the typing, so the first one lands first.
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlAt}})
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")}})
-	if m.active != mode.Search {
-		t.Fatalf("setup: active = %v, want Search", m.active)
-	}
-
-	mark := repo.CallCount()
-	m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
-	if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 0 {
-		t.Fatalf("search reads while the query is typed = %d, want 0", got)
-	}
-
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}})
-	if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 1 {
-		t.Errorf("search reads once the typing ended = %d, want 1: the change was dropped", got)
-	}
-}
-
-// The same debt on a store with no watch, where a write of this process leaves
-// the tabs dirty: a tab that could not reload is still owed the reload. The
-// search the operator submits pays it, and no second one follows.
-func TestOwnWriteWhileTheSearchQueryIsTypedReloadsWhenTheTypingEnds(t *testing.T) {
-	t.Parallel()
-
-	for name, end := range map[string]tea.KeyMsg{
-		"draft cleared":   {Type: tea.KeyCtrlU},
-		"draft submitted": {Type: tea.KeyEnter},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			repo := newWatchedRepository()
-			m, _ := watchedModel(t, repo, RuntimeOptions{DisableAutoRefresh: true})
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlAt}})
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")}})
-			if m.active != mode.Search || m.storeWatched() {
-				t.Fatalf("setup: active = %v, watched = %v; want Search on a store with no watch", m.active, m.storeWatched())
-			}
-
-			mark := repo.CallCount()
-			m = applyMessages(t, m, []tea.Msg{mutationResultMsg{kind: mutationComment, issueID: "tm-1"}})
-			if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 0 {
-				t.Fatalf("search reads while the query is typed = %d, want 0", got)
-			}
-
-			applyMessages(t, m, []tea.Msg{end})
-			if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 1 {
-				t.Errorf("search reads once the typing ended = %d, want 1", got)
-			}
-		})
-	}
-}
-
-// The Search preview draws the selected issue from the detail the shell holds,
-// so that detail must follow the results it sits next to.
-func TestStoreChangeReloadsTheSearchPreviewWithTheResults(t *testing.T) {
-	t.Parallel()
-
-	repo := newWatchedRepository()
-	m, _ := watchedModel(t, repo, RuntimeOptions{})
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlAt}})
-	if m.active != mode.Search || firstSelectionID(m, mode.Search) != "tm-1" {
-		t.Fatalf("setup: active = %v, selection = %q", m.active, firstSelectionID(m, mode.Search))
-	}
-
-	mark := repo.CallCount()
-	m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
-	if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 1 {
-		t.Errorf("search reads after one store change = %d, want 1", got)
-	}
-	if got := repo.CallCountSince(mark, fakes.MethodIssue); got != 1 {
-		t.Errorf("preview reads after one store change = %d, want 1: the preview is behind its row", got)
-	}
-
-	mark = repo.CallCount()
-	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 40}})
-	if got := storeReads(repo, mark); got != 0 {
-		t.Errorf("store reads on a later message = %d, want 0", got)
 	}
 }
 
@@ -410,7 +321,7 @@ func TestMutationResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayC
 				t.Errorf("board reads under the overlay = %d, want 0", got)
 			}
 
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}})
+			m = applyMessages(t, m, []tea.Msg{testKey("alt+h")})
 			if m.showHelp {
 				t.Fatal("setup: the help key did not close the overlay")
 			}
@@ -529,7 +440,7 @@ func TestDetailLoadFailureToastShowsOnceForOneIssue(t *testing.T) {
 	}
 
 	// The reload key is a question, and the answer is not held back.
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}})
+	m = applyMessages(t, m, []tea.Msg{testKey("alt+r")})
 	if got := m.toast.Seq() - shown; got != 3 {
 		t.Errorf("failure toasts after the reload key = %d, want 3", got)
 	}

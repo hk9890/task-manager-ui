@@ -2,674 +2,110 @@ package search
 
 // Controller-async contract tests.
 //
-// These tests exercise the controller against a deliberately-delayed repository
-// so that async command overlap is exercised — the gap that hid the Enter-drop bug.
-//
-// # Why a separate test tier
-//
-// The existing model_test.go helpers (pressAndResolve → ApplyControllerKeySequence)
-// synchronously drain every Cmd before the next key arrives. That means m.loading
-// is always false by the time the next key is processed, making the race window
-// that made the Enter-drop race window completely invisible.
-//
-// Here we use a goroutine-based driver: the search Cmd runs in a goroutine
-// (blocked inside fakes.DelayingRepository.Search), while the test synchronously
-// sends additional key presses to the model. Release() unblocks the goroutine,
-// which returns the Msg to the model for processing. This matches real tea.Program
-// cadence: user events can arrive before a prior async Cmd returns its Msg.
-//
-// # Regression pin
-//
-// Each of these tests passes on current code (post-commit 2d60d94). If commit
-// 2d60d94 were reverted (removing pendingDraft from model.go and re-introducing
-// --status all in lean_reads.go), the following tests would fail:
-//
-//   - TypeAndEnterDuringInitialLoad_EventuallySubmitsTypedQuery
-//   - TypeAndEnterDuringPriorSearch_EventuallySubmitsLatestDraft
-//   - EnterIsNotSilentlyDropped
-//   - HasDraftChangesResolves
-//   - EmptyAutoInitDoesNotForceStatusFilterUnderTypedDraft
+// The helpers of model_test.go run every Cmd to its message before the next
+// key arrives, so a search is never in flight when a key is processed. Here
+// each Cmd runs in a goroutine, blocked inside fakes.DelayingRepository, while
+// the test sends further keys — the cadence of a real tea.Program.
 
 import (
-	"context"
-	"errors"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/repository"
-	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
-	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// searchQueries returns the SearchIssuesQuery of every recorded Search call.
-// fakes.Call carries the operation's typed input, so no per-package capture
-// stub is needed to assert on the query contract.
-func searchQueries(t *testing.T, rec *fakes.ErrorInjectingRepository) []domain.SearchIssuesQuery {
-	t.Helper()
-	var out []domain.SearchIssuesQuery
-	for _, c := range rec.CallsFor(fakes.MethodSearch) {
-		query, ok := c.Args.(domain.SearchIssuesQuery)
-		if !ok {
-			t.Fatalf("expected a SearchIssuesQuery in Call.Args, got %T", c.Args)
-		}
-		out = append(out, query)
-	}
-	return out
-}
-
-// ---- erroringSearchRepo ----
-
-// erroringSearchRepo wraps a repository.Repository and forces every Search call
-// to return err (delegating all other methods). It drives the searchLoadedMsg
-// ERROR branch through the real repository seam — combined with
-// fakes.DelayingRepository it produces a genuine in-flight search that resolves
-// with an error, exactly as a failing backend would.
-type erroringSearchRepo struct {
-	repository.Repository
-	err error
-}
-
-func (r *erroringSearchRepo) Search(_ context.Context, _ domain.SearchIssuesQuery) (domain.SearchResultPage, error) {
-	return domain.SearchResultPage{}, r.err
-}
-
-// ---- test driver helpers ----
-
-// runCmdAsync executes cmd in a goroutine and returns a channel that receives
-// the single resulting tea.Msg. The caller must eventually read from the
-// channel (or the goroutine will leak if the test exits early).
-func runCmdAsync(cmd tea.Cmd) <-chan tea.Msg {
+// startAsync runs cmd in a goroutine and returns the channel its message
+// arrives on.
+func startAsync(cmd tea.Cmd) <-chan tea.Msg {
 	ch := make(chan tea.Msg, 1)
-	if cmd == nil {
-		close(ch)
-		return ch
-	}
-	go func() {
-		ch <- cmd()
-	}()
+	go func() { ch <- cmd() }()
 	return ch
 }
 
-// ---- controller-async contract tests ----
+func waitForInFlight(t *testing.T, delayed *fakes.DelayingRepository, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if delayed.InFlight() == want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("%d searches in flight, want %d", delayed.InFlight(), want)
+}
 
-// TestSearchControllerAsyncContracts is the parent test for the five
-// controller-async contract subtests. Each subtest exercises the
-// search controller against a fakes.DelayingRepository to simulate real
-// tea.Program cadence: user events may arrive before a prior async Cmd
-// returns its Msg.
+func receive(t *testing.T, ch <-chan tea.Msg) tea.Msg {
+	t.Helper()
+	select {
+	case msg := <-ch:
+		return msg
+	case <-time.After(2 * time.Second):
+		t.Fatal("the search did not return")
+		return nil
+	}
+}
+
+// TestSearchControllerAsyncContracts pins what the controller does with a key
+// that arrives while a search is still in flight.
 func TestSearchControllerAsyncContracts(t *testing.T) {
-	t.Parallel()
+	t.Run("a result of an older generation is dropped", func(t *testing.T) {
+		gw := fakes.NewTracked()
+		seedStore(gw)
+		delayed := fakes.NewDelayingSearchRepository(gw)
+		t.Cleanup(delayed.ReleaseAll)
 
-	// TypeAndEnterDuringInitialLoad_EventuallySubmitsTypedQuery verifies that
-	// when the user types "task" and presses Enter while Init's empty-query
-	// search is still in flight, the result set eventually reflects the typed
-	// query (not the Init empty-query results).
-	//
-	// Regression pin: on pre-2d60d94 code (no pendingDraft), Enter while
-	// loading was silently dropped and appliedQuery remained "" after Init
-	// resolved.
-	t.Run("TypeAndEnterDuringInitialLoad_EventuallySubmitsTypedQuery", func(t *testing.T) {
-		t.Parallel()
+		m := newModel(t, delayed)
+		opening := startAsync(m.Init())
+		waitForInFlight(t, delayed, 1)
 
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
-		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "bug beta", Status: "open", Type: "bug", Priority: 2})
-		inner.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "closed task", Status: "closed", Type: "task", Priority: 3})
+		// Two keys arrive while the opening search is still out.
+		first := startAsync(typeText(m, "tri"))
+		waitForInFlight(t, delayed, 2)
+		second := startAsync(typeText(m, "age"))
+		waitForInFlight(t, delayed, 3)
 
-		delayed := fakes.NewDelayingSearchRepository(inner)
+		// The searches return in the order they were started. Each call of the
+		// gate lets one through, and which one is not ours to choose, so all
+		// three are released and their messages applied oldest first.
+		delayed.ReleaseAll()
+		stale := []tea.Msg{receive(t, opening), receive(t, first)}
+		latest := receive(t, second)
 
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		// Start Init — the Cmd will block in delayed.Search.
-		initCmd := m.Init()
-		if initCmd == nil {
-			t.Fatal("expected non-nil Cmd from Init()")
-		}
-		initMsgCh := runCmdAsync(initCmd)
-
-		// Verify loading before the search returns.
-		if !m.loading {
-			t.Fatal("expected loading=true before Init resolves")
-		}
-
-		// Type "task" synchronously — model updates state only, no Cmds.
-		for _, r := range []rune("task") {
-			cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-			if cmd != nil {
-				t.Fatalf("unexpected non-nil Cmd from rune input: %v", cmd)
+		for _, msg := range stale {
+			if cmd := m.Update(msg); cmd != nil {
+				t.Fatalf("a superseded result announced a selection: %#v", msg)
 			}
-		}
-		if m.draftQuery != "task" {
-			t.Fatalf("draftQuery: got %q, want %q", m.draftQuery, "task")
-		}
-
-		// Press Enter while Init is still in flight.
-		enterCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if enterCmd != nil {
-			t.Fatal("expected nil Cmd from Enter while loading (should queue, not fire)")
-		}
-		if m.pendingDraft == nil || *m.pendingDraft != "task" {
-			t.Fatalf("expected pendingDraft=%q, got %v", "task", m.pendingDraft)
-		}
-
-		// Unblock Init search.
-		delayed.Release()
-		initMsg := <-initMsgCh
-
-		// Deliver Init's result — should consume pendingDraft and fire "task" search.
-		pendingCmd := m.Update(initMsg)
-		if pendingCmd == nil {
-			t.Fatal("expected non-nil Cmd after Init resolves with queued pendingDraft")
-		}
-		if m.pendingDraft != nil {
-			t.Fatalf("expected pendingDraft cleared, got %v", *m.pendingDraft)
-		}
-
-		// Unblock and drain the "task" search.
-		delayed.Release()
-		taskMsgCh := runCmdAsync(pendingCmd)
-		taskMsg := <-taskMsgCh
-
-		_ = m.Update(taskMsg)
-
-		// Assert the typed query was applied.
-		if m.appliedQuery != "task" {
-			t.Fatalf("appliedQuery: got %q, want %q", m.appliedQuery, "task")
-		}
-		if m.loading {
-			t.Fatal("expected loading=false after task search resolves")
-		}
-	})
-
-	// TypeAndEnterDuringPriorSearch_EventuallySubmitsLatestDraft verifies that
-	// when the user types "bar" + Enter while a previous "foo" search is still
-	// in flight, the final visible page reflects "bar" (the latest draft wins;
-	// the "foo" result is discarded).
-	//
-	// Regression pin: on pre-2d60d94 code, Enter during a loading state was
-	// silently dropped so "bar" would never be applied.
-	t.Run("TypeAndEnterDuringPriorSearch_EventuallySubmitsLatestDraft", func(t *testing.T) {
-		t.Parallel()
-
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "foo issue", Status: "open", Type: "task", Priority: 1})
-		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "bar issue", Status: "open", Type: "task", Priority: 2})
-		inner.Seed(memoryrepo.Issue{ID: "bwf-3", Title: "unrelated", Status: "open", Type: "task", Priority: 3})
-
-		delayed := fakes.NewDelayingSearchRepository(inner)
-
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		// Step 1: Init fires — let it complete immediately.
-		initCmd := m.Init()
-		delayed.Release() // unblock Init search
-		initMsgCh := runCmdAsync(initCmd)
-		initMsg := <-initMsgCh
-		cmd := m.Update(initMsg)
-		// drain selectionChangedCmd
-		for _, msg := range testui.DrainCmd(cmd) {
-			_ = m.Update(msg)
-		}
-
-		if m.loading {
-			t.Fatal("setup: expected loading=false after Init resolves")
-		}
-
-		// Step 2: Type "foo" + Enter to start a "foo" search (stays in flight).
-		for _, r := range []rune("foo") {
-			_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		}
-		fooCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if fooCmd == nil {
-			t.Fatal("expected non-nil Cmd from Enter for 'foo' search")
-		}
-		if !m.loading {
-			t.Fatal("expected loading=true after 'foo' search starts")
-		}
-		fooMsgCh := runCmdAsync(fooCmd)
-
-		// Step 3: While "foo" is in flight, type "bar" + Enter.
-		// Simulate the user clearing the query and typing the next search.
-		m.draftQuery = ""
-		for _, r := range []rune("bar") {
-			_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		}
-		barEnterCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if barEnterCmd != nil {
-			t.Fatal("expected nil Cmd from Enter while 'foo' is loading (should queue)")
-		}
-		if m.pendingDraft == nil || *m.pendingDraft != "bar" {
-			t.Fatalf("expected pendingDraft=%q, got %v", "bar", m.pendingDraft)
-		}
-
-		// Step 4: Unblock "foo" search.
-		delayed.Release()
-		fooMsg := <-fooMsgCh
-
-		// Deliver "foo" result — should consume pendingDraft and fire "bar" search.
-		barCmd := m.Update(fooMsg)
-		if barCmd == nil {
-			t.Fatal("expected non-nil Cmd after 'foo' resolves with queued 'bar' pendingDraft")
-		}
-		if m.pendingDraft != nil {
-			t.Fatalf("expected pendingDraft cleared, got %v", *m.pendingDraft)
-		}
-
-		// Step 5: Unblock and drain "bar" search.
-		delayed.Release()
-		barMsgCh := runCmdAsync(barCmd)
-		barMsg := <-barMsgCh
-		_ = m.Update(barMsg)
-
-		// Assert: the latest draft wins.
-		if m.appliedQuery != "bar" {
-			t.Fatalf("appliedQuery: got %q, want %q (latest draft must win)", m.appliedQuery, "bar")
-		}
-		if m.loading {
-			t.Fatal("expected loading=false after 'bar' search resolves")
-		}
-	})
-
-	// EnterIsNotSilentlyDropped verifies that pressing Enter while Init is in
-	// flight is not silently discarded: after all async operations resolve, the
-	// applied query must equal the typed draft.
-	//
-	// Regression pin: on pre-2d60d94 code, m.loading==true caused Enter to
-	// return nil without setting pendingDraft, so the query was never applied.
-	t.Run("EnterIsNotSilentlyDropped", func(t *testing.T) {
-		t.Parallel()
-
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task thing", Status: "open", Type: "task", Priority: 1})
-
-		delayed := fakes.NewDelayingSearchRepository(inner)
-
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		initCmd := m.Init()
-		initMsgCh := runCmdAsync(initCmd)
-
-		// Type "task" and press Enter while Init is in flight.
-		for _, r := range []rune("task") {
-			_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		}
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-		// Unblock Init.
-		delayed.Release()
-		initMsg := <-initMsgCh
-		pendingCmd := m.Update(initMsg)
-
-		// pendingCmd must be non-nil: Enter was not silently dropped.
-		if pendingCmd == nil {
-			t.Fatal("Enter was silently dropped: no Cmd emitted after Init resolved with queued pendingDraft")
-		}
-
-		// Unblock the "task" search.
-		delayed.Release()
-		taskMsgCh := runCmdAsync(pendingCmd)
-		taskMsg := <-taskMsgCh
-		_ = m.Update(taskMsg)
-
-		if m.appliedQuery != "task" {
-			t.Fatalf("Enter was silently dropped: appliedQuery=%q, want %q", m.appliedQuery, "task")
-		}
-	})
-
-	// HasDraftChangesResolves verifies that after the sequence "open → type
-	// 'task' → Enter → drain all", the state satisfies draftQuery ==
-	// appliedQuery so hasDraftChanges is false and the "stale results" banner
-	// is absent.
-	//
-	// Regression pin: on pre-2d60d94 code, Enter during loading was dropped so
-	// appliedQuery never matched draftQuery and the stale banner stayed visible.
-	t.Run("HasDraftChangesResolves", func(t *testing.T) {
-		t.Parallel()
-
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task item", Status: "open", Type: "task", Priority: 1})
-
-		delayed := fakes.NewDelayingSearchRepository(inner)
-
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		initCmd := m.Init()
-		initMsgCh := runCmdAsync(initCmd)
-
-		// Type + Enter while Init is in flight.
-		for _, r := range []rune("task") {
-			_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		}
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-		// Unblock Init.
-		delayed.Release()
-		initMsg := <-initMsgCh
-		taskCmd := m.Update(initMsg)
-
-		// Unblock and drain the "task" search.
-		delayed.Release()
-		taskMsgCh := runCmdAsync(taskCmd)
-		taskMsg := <-taskMsgCh
-		// Deliver the result; drain any follow-up Cmds (e.g. selectionChangedCmd).
-		followCmd := m.Update(taskMsg)
-		for _, msg := range testui.DrainCmd(followCmd) {
-			_ = m.Update(msg)
-		}
-
-		// hasDraftChanges is defined as draftQuery != appliedQuery in the view layer.
-		if m.draftQuery != m.appliedQuery {
-			t.Fatalf("hasDraftChanges should be false: draftQuery=%q, appliedQuery=%q", m.draftQuery, m.appliedQuery)
-		}
-		if m.loading {
-			t.Fatal("expected loading=false after all searches resolve")
-		}
-	})
-
-	// EmptyAutoInitDoesNotForceStatusFilterUnderTypedDraft verifies that when the
-	// user types a query + Enter after Init, the model does NOT inject a forced
-	// Statuses filter into the SearchIssuesQuery it passes to the repository.
-	// The absence of Statuses: []string{"all"} is the controller-level contract
-	// that corresponds to the lean_reads.go change in commit 2d60d94.
-	//
-	// Before 2d60d94: lean_reads forced filterStatuses = []string{"all"} when
-	// query.Statuses was empty. This caused the Init result page to remain
-	// visible when Enter was silently dropped, because the in-flight Init result
-	// was displayed instead of a fresh typed query.
-	//
-	// Regression pin: if the model were to set Statuses: []string{"all"} in
-	// the SearchIssuesQuery it emits, this test would fail. Combined with the
-	// pendingDraft fix, this is the complete regression guard.
-	//
-	// Note: the real taskmgr backend sets IncludeClosed:true unconditionally, so
-	// a default-Statuses search INCLUDES closed issues. Both the typed "task"
-	// query and the Init empty query can return closed issues; the assertion here
-	// pins query-shape (no forced Statuses) and that Enter was not dropped.
-	t.Run("EmptyAutoInitDoesNotForceStatusFilterUnderTypedDraft", func(t *testing.T) {
-		t.Parallel()
-
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task open", Status: "open", Type: "task", Priority: 1})
-		inner.Seed(memoryrepo.Issue{ID: "bwf-2", Title: "task closed", Status: "closed", Type: "task", Priority: 2})
-
-		// Stack: inner → queryRecordingRepo → delayed.
-		// Assertions check query-shape (no forced Statuses) and that Enter was not
-		// silently dropped (the typed "task" query was executed).
-		recording := fakes.NewErrorInjecting(inner)
-		delayed := fakes.NewDelayingSearchRepository(recording)
-
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		initCmd := m.Init()
-		initMsgCh := runCmdAsync(initCmd)
-
-		// Type "task" + Enter while Init is in flight.
-		for _, r := range []rune("task") {
-			_ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		}
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-
-		// Unblock Init.
-		delayed.Release()
-		initMsg := <-initMsgCh
-		taskCmd := m.Update(initMsg)
-
-		// Unblock and drain the "task" search.
-		delayed.Release()
-		taskMsgCh := runCmdAsync(taskCmd)
-		taskMsg := <-taskMsgCh
-		_ = m.Update(taskMsg)
-
-		// Applied query must be the typed query, not the Init empty string.
-		if m.appliedQuery != "task" {
-			t.Fatalf("appliedQuery: got %q, want %q", m.appliedQuery, "task")
-		}
-
-		// Assert: neither the Init query nor the typed "task" query passed any
-		// non-empty Statuses. The model must not inject a forced status filter
-		// — that responsibility belongs to the repository layer (taskmgr sets
-		// IncludeClosed:true unconditionally, including closed issues by default).
-		queries := searchQueries(t, recording)
-		if len(queries) == 0 {
-			t.Fatal("expected at least one recorded Search query")
-		}
-		for _, q := range queries {
-			if len(q.Statuses) > 0 {
-				t.Errorf("controller injected Statuses=%v into Search query (text=%q); model must not force --status all",
-					q.Statuses, q.Text)
+			if len(m.issues) != 0 || !m.IsLoading() {
+				t.Fatalf("a superseded result was applied: results %q, loading %v", resultIDs(m), m.IsLoading())
 			}
 		}
 
-		// Verify that a typed-query search was actually executed (not just Init).
-		// This is the Enter-drop regression pin: if Enter were silently dropped,
-		// no Search with Text=="task" would be recorded.
-		foundTypedQuery := false
-		for _, q := range queries {
-			if q.Text == "task" {
-				foundTypedQuery = true
-			}
+		if got := selection(t, m.Update(latest)); got == nil || got.Issue.ID != "tm-2" {
+			t.Fatalf("the latest result did not announce its selection: %#v", got)
 		}
-		if !foundTypedQuery {
-			t.Errorf("no Search call with Text=%q found; queries seen: %v", "task", queries)
-		}
-
-		// Assert result-set content: the typed "task" search must return the open
-		// issue (bwf-1). The memory backend (like the real taskmgr backend with
-		// IncludeClosed:true) also returns the closed issue (bwf-2) — that is
-		// correct and expected, not a bug.
-		if len(m.page.Results) == 0 {
-			t.Error("expected non-empty Results after 'task' search resolves")
-		}
-		foundOpen := false
-		for _, result := range m.page.Results {
-			if result.Issue.ID == "bwf-1" {
-				foundOpen = true
-			}
-		}
-		if !foundOpen {
-			t.Errorf("open issue bwf-1 missing from results; got %v", m.page.Results)
+		if got := resultIDs(m); got != "tm-2" || m.IsLoading() {
+			t.Fatalf("after the latest result: results %q, loading %v; want tm-2 and settled", got, m.IsLoading())
 		}
 	})
 
-	// PendingDraftFiresWhenInFlightSearchErrors verifies that a queued Enter-submit
-	// survives an in-flight search that resolves with an ERROR: the user types a
-	// query + Enter while a search is in flight (queuing pendingDraft), the
-	// in-flight search then fails (searchLoadedMsg{err: ...}), and the model must
-	// re-fire a search for the queued text rather than silently dropping it.
-	//
-	// Regression pin (FIX #4): the searchLoadedMsg ERROR branch used to return
-	// without consuming pendingDraft, so a queued submit was lost whenever the
-	// in-flight search errored. The fix calls consumePendingDraft(appliedQuery,
-	// forceRefire=true) on the error path. If that call were removed, pendingDraft
-	// would stay set, no second Search would fire, and m.IsLoading() would stay
-	// false — each of the assertions below would fail.
-	t.Run("PendingDraftFiresWhenInFlightSearchErrors", func(t *testing.T) {
-		t.Parallel()
+	t.Run("a late result of an older generation does not replace the latest", func(t *testing.T) {
+		gw := fakes.NewTracked()
+		seedStore(gw)
+		m := openedModel(t, gw)
 
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
-
-		// Stack: inner → erroring (every Search fails) → recording (observe queries) → delayed (gate).
-		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
-		recording := fakes.NewErrorInjecting(erroring)
-		delayed := fakes.NewDelayingSearchRepository(recording)
-
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		// Init fires and blocks inside delayed.Search.
-		initCmd := m.Init()
-		if initCmd == nil {
-			t.Fatal("expected non-nil Cmd from Init()")
-		}
-		initMsgCh := runCmdAsync(initCmd)
-		if !m.loading {
-			t.Fatal("expected loading=true before Init resolves")
+		older := typeText(m, "login")()
+		resolve(t, m, typeText(m, " prompt"))
+		if got := resultIDs(m); got != "tm-1" {
+			t.Fatalf("setup: results %q, want tm-1", got)
 		}
 
-		// Type "task" + Enter while the search is in flight — Enter must queue,
-		// not fire.
-		for _, r := range []rune("task") {
-			cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-			if cmd != nil {
-				t.Fatalf("unexpected non-nil Cmd from rune input: %v", cmd)
-			}
+		if cmd := m.Update(older); cmd != nil {
+			t.Fatal("a result that arrived after its successor announced a selection")
 		}
-		enterCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		if enterCmd != nil {
-			t.Fatal("expected nil Cmd from Enter while loading (should queue, not fire)")
+		if got := resultIDs(m); got != "tm-1" {
+			t.Fatalf("a late result replaced the latest: results %q", got)
 		}
-		if m.pendingDraft == nil || *m.pendingDraft != "task" {
-			t.Fatalf("expected pendingDraft=%q, got %v", "task", m.pendingDraft)
-		}
-
-		// Unblock the in-flight search — it resolves with an ERROR.
-		delayed.Release()
-		initMsg := <-initMsgCh
-		errMsg, ok := initMsg.(searchLoadedMsg)
-		if !ok || errMsg.err == nil {
-			t.Fatalf("expected in-flight search to resolve with an error searchLoadedMsg, got %#v", initMsg)
-		}
-
-		// Deliver the error result. The ERROR branch must consume the queued draft
-		// and re-fire a search for "task" — the queued submit is NOT dropped.
-		pendingCmd := m.Update(errMsg)
-		if pendingCmd == nil {
-			t.Fatal("queued submit dropped: error branch returned no Cmd despite pendingDraft set")
-		}
-		if m.pendingDraft != nil {
-			t.Fatalf("expected pendingDraft cleared after error resolution, got %q", *m.pendingDraft)
-		}
-		if !m.IsLoading() {
-			t.Fatal("expected loading=true: a new search for the queued draft must be in flight")
-		}
-
-		// Drain the re-fired search (also errors) so the goroutine does not leak.
-		delayed.Release()
-		pendingMsg := <-runCmdAsync(pendingCmd)
-		_ = m.Update(pendingMsg)
-
-		// A second Search call for the queued text must have been issued.
-		queries := searchQueries(t, recording)
-		foundTask := false
-		for _, q := range queries {
-			if q.Text == "task" {
-				if len(q.Statuses) > 0 {
-					t.Errorf("re-fired search injected Statuses=%v; model must not force a status filter", q.Statuses)
-				}
-				foundTask = true
-			}
-		}
-		if !foundTask {
-			t.Errorf("no Search call for queued text %q after in-flight error; queries seen: %v", "task", queries)
-		}
-	})
-
-	// SameQueryRetryAfterErrorStillRefires pins the forceRefire=true choice on the
-	// error path. When the queued draft equals the last applied query, a
-	// forceRefire=false consume would NOT re-fire (pending == appliedQuery), so a
-	// retry-after-error of the same text would be lost. With forceRefire=true the
-	// error branch re-fires regardless. The other sub-test cannot catch this
-	// because the failed Init search leaves appliedQuery=="" (≠ the queued text),
-	// so it re-fires even with forceRefire=false.
-	t.Run("SameQueryRetryAfterErrorStillRefires", func(t *testing.T) {
-		t.Parallel()
-
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
-		erroring := &erroringSearchRepo{Repository: inner, err: errors.New("backend unavailable")}
-		recording := fakes.NewErrorInjecting(erroring)
-
-		m := NewModel(context.Background(), recording, nil)
-		m.SetSize(120, 30)
-
-		// Simulate: a prior search for "task" already applied, a fresh search for
-		// the SAME text now in flight, and the user re-queued "task" via Enter.
-		m.appliedQuery = "task"
-		m.hasLoadedPage = true
-		m.loading = true
-		draft := "task"
-		m.pendingDraft = &draft
-
-		// The in-flight search resolves with an error and appliedQuery still "task".
-		cmd := m.Update(searchLoadedMsg{appliedQuery: "task", err: errors.New("backend unavailable")})
-		if cmd == nil {
-			t.Fatal("same-query queued submit dropped after error: expected a re-fire (forceRefire must be true)")
-		}
-		if m.pendingDraft != nil {
-			t.Fatalf("expected pendingDraft cleared, got %q", *m.pendingDraft)
-		}
-		if !m.IsLoading() {
-			t.Fatal("expected loading=true: the same-query retry must be in flight (forceRefire=false would NOT re-fire here)")
-		}
-
-		// Drain the re-fired search so the recording repo observes the retry.
-		_ = m.Update(cmd())
-		foundTask := false
-		for _, q := range searchQueries(t, recording) {
-			if q.Text == "task" {
-				foundTask = true
-			}
-		}
-		if !foundTask {
-			t.Errorf("no re-fired Search for the same queued text %q after error", "task")
-		}
-	})
-
-	// ScopeToggleDuringInFlightSearch_LeavesBadgeMatchingVisibleResults pins
-	// that ctrl+t does not flip the Results header's scope badge when the
-	// re-run it depends on is suppressed. triggerSearchWithAnchor returns nil
-	// while a search is in flight, so the badge used to claim "all" while the
-	// results on screen were the open set, with no key that restored agreement
-	// until the next successful search.
-	t.Run("ScopeToggleDuringInFlightSearch_LeavesBadgeMatchingVisibleResults", func(t *testing.T) {
-		t.Parallel()
-
-		inner := memoryrepo.New()
-		inner.Seed(memoryrepo.Issue{ID: "bwf-1", Title: "task alpha", Status: "open", Type: "task", Priority: 1})
-
-		delayed := fakes.NewDelayingSearchRepository(inner)
-		m := NewModel(context.Background(), delayed, nil)
-		m.SetSize(120, 30)
-
-		initCmd := m.Init()
-		if initCmd == nil {
-			t.Fatal("expected non-nil Cmd from Init()")
-		}
-		initMsgCh := runCmdAsync(initCmd)
-
-		if !m.loading {
-			t.Fatal("expected loading=true before Init resolves")
-		}
-		scopeBefore := m.includeClosed
-
-		if cmd := m.Update(tea.KeyMsg{Type: toggleScopeKey}); cmd != nil {
-			t.Fatal("expected nil Cmd from ctrl+t while a search is in flight")
-		}
-		if m.includeClosed != scopeBefore {
-			t.Errorf("scope flipped to %v while the re-run was suppressed: the header would name a scope the visible results did not come from", m.includeClosed)
-		}
-
-		delayed.Release()
-		_ = m.Update(<-initMsgCh)
-
-		// Once the search has settled, the toggle works normally.
-		cmd := m.Update(tea.KeyMsg{Type: toggleScopeKey})
-		if cmd == nil {
-			t.Fatal("expected ctrl+t to re-run the search once nothing is in flight")
-		}
-		if m.includeClosed == scopeBefore {
-			t.Error("scope did not flip when the re-run was dispatched")
-		}
-		delayed.Release()
-		_ = m.Update(<-runCmdAsync(cmd))
 	})
 }

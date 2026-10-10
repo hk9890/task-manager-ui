@@ -29,7 +29,7 @@ import (
 // Model is the root Bubble Tea shell for Task Manager UI.
 //
 // v1 detail presentation model keeps browse and full detail separated:
-//   - Board/Search prioritize high-density triage browsing.
+//   - Board prioritizes high-density triage browsing.
 //   - Full issue inspection stays in dedicated detail mode.
 type Model struct {
 	services Services
@@ -70,8 +70,22 @@ type Model struct {
 	fatalErrTitle string
 	fatalErrBody  string
 
-	active     mode.ID
+	active mode.ID
+	// lastBrowse is the browse tab the operator was last on. It is always a
+	// tab (mode.IsBrowse), never Detail and never the store search: the tab
+	// cycle steps from it, and Detail returns to it unless the search is up.
 	lastBrowse mode.ID
+	// searchFrom is the surface the store search was opened from — a browse
+	// tab or Detail — and "" while the search is not up. The search is up from
+	// openSearch until the operator leaves it for a tab or for that surface;
+	// meanwhile it owns the selection, also under a Detail opened from it, and
+	// is where that Detail returns to. It is what lets the search hold a
+	// selection without lastBrowse ever naming something that is not a tab.
+	searchFrom mode.ID
+	// searchFromDrill is the drill-in of the Detail the store search was opened
+	// from, or nil. The search takes the selection while it is up, so the
+	// drill-in waits here until closeSearch returns to that Detail.
+	searchFromDrill *mode.Selection
 
 	// hoverTab is the header tab under the pointer, or "".
 	hoverTab mode.ID
@@ -127,8 +141,8 @@ type Model struct {
 	terminalFocused bool
 
 	// initDone records which browse tabs have had their first lazy Init()
-	// fired. Docs and Search are not pre-loaded at startup; the first switch to
-	// one triggers Init() and marks it here so later entries do not reload.
+	// fired. Docs is not pre-loaded at startup; the first switch to it triggers
+	// Init() and marks it here so later entries do not reload.
 	initDone map[mode.ID]bool
 
 	refreshStateBySurface map[mode.ID]surfaceRefreshState
@@ -273,6 +287,8 @@ func (m *Model) bindStore(services Services) {
 
 	m.active = mode.Board
 	m.lastBrowse = mode.Board
+	m.searchFrom = ""
+	m.searchFromDrill = nil
 	m.pickerReturn = mode.Board
 	m.selectedByMode = make(map[mode.ID]*mode.Selection)
 	m.drillSelection = nil
@@ -399,8 +415,8 @@ func (m Model) logger() *slog.Logger {
 
 // Init fires the startup health check and the spinner tick. Board loads are
 // deferred until the health check passes (see startupHealthCheckMsg handler in
-// Update). Search is deferred further until the user first switches to search
-// mode; see lazyInitActiveTabCmd.
+// Update). Docs is deferred further until the user first switches to it; see
+// lazyInitActiveTabCmd.
 func (m Model) Init() tea.Cmd {
 	if !m.storeOpen {
 		// Nothing to health-check and no board to load: the app opens on the
@@ -434,16 +450,17 @@ func (m Model) Init() tea.Cmd {
 	return batchCmds(healthCheckCmd, sweepCmd, m.scheduleRefreshTick(), m.waitForStoreChangeCmd())
 }
 
-// lazyInitActiveTabCmd fires the active browse tab's Init() exactly once — the
-// first time that tab becomes active. Neither Docs nor Search is pre-loaded at
-// startup, so the shell opens on Board with one repository read rather than
-// three; the first switch pays for that tab and later switches reuse the
-// already-loaded state until an explicit reload or the auto-refresh interval.
+// lazyInitActiveTabCmd fires the active browse surface's Init() exactly once —
+// the first time that surface becomes active. Docs and the store search are
+// not pre-loaded at startup, so the shell opens on Board with one repository
+// read rather than three; the first switch pays for that surface and later
+// switches reuse the already-loaded state until an explicit reload or the
+// auto-refresh interval.
 //
 // Board is initialised eagerly by Init(), so it is absent from initDone and
 // never re-fires here.
 func (m *Model) lazyInitActiveTabCmd() tea.Cmd {
-	if !mode.IsBrowse(m.active) || m.initDone[m.active] {
+	if m.initDone[m.active] {
 		return nil
 	}
 	tab := m.browseController(m.active)
@@ -469,7 +486,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return next, cmd
 	}
-	model.syncSearchPreviewDetailState()
 	refreshCmd := model.refreshAfterStoreChangeCmd()
 	model.trackSurfaceLoads()
 	return model, batchCmds(cmd, refreshCmd, model.ensureSpinnerTickCmd())
@@ -688,7 +704,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launcher action %q failed: %v", msg.action, msg.err), toaster.StyleError))
 		}
-		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow). Use e for edit/save round-trip.", msg.action), toaster.StyleInfo))
+		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow). Use %s for edit/save round-trip.", msg.action, m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue)), toaster.StyleInfo))
 	case mutationCatalogsLoadedMsg:
 		if msg.err != nil {
 			m.pendingDialog = pendingDialogGuard{}
@@ -714,11 +730,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case mutationResultMsg:
 		return m.handleMutationResult(modeCmd, msg)
 	case mode.SelectionChangedMsg:
-		if !mode.IsBrowse(msg.Mode) {
+		if m.browseController(msg.Mode) == nil {
 			return m, modeCmd
 		}
 		m.selectedByMode[msg.Mode] = msg.Selection
-		if msg.Mode == m.active {
+		if msg.Mode == m.active && mode.IsBrowse(msg.Mode) {
 			m.lastBrowse = msg.Mode
 		}
 		// A browse tab moving its own selection supersedes any drill-in — but
@@ -840,6 +856,34 @@ func (m *Model) openStorePicker() tea.Cmd {
 	return m.storePicker.Init()
 }
 
+// openSearch puts the store search on screen, from a browse tab or Detail. From
+// a Detail that was opened from the search it is the way back to the results.
+func (m *Model) openSearch() tea.Cmd {
+	switch {
+	case m.active == mode.Search, m.active == mode.StorePicker:
+		return nil
+	case m.searchFrom == "":
+		m.searchFrom = m.active
+		m.searchFromDrill = m.drillSelection
+	}
+	m.active = mode.Search
+	m.clearDrillSelection()
+	return batchCmds(m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
+}
+
+// closeSearch returns to the surface the store search was opened from: a tab,
+// or Detail on the issue it showed, a drilled-in one included.
+func (m *Model) closeSearch() tea.Cmd {
+	from, drill := m.searchFrom, m.searchFromDrill
+	m.searchFrom, m.searchFromDrill = "", nil
+	if from == mode.Detail {
+		m.active = mode.Detail
+		m.drillSelection = drill
+		return m.ensureDetailForCurrentSelectionCmd()
+	}
+	return m.switchToTab(from)
+}
+
 func (m *Model) quit() tea.Cmd {
 	return tea.Quit
 }
@@ -877,16 +921,6 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 	hadPendingDialog := m.pendingDialog.active
 	m.pendingDialog = pendingDialogGuard{}
 
-	searchCaptured := false
-	if m.active == mode.Search {
-		if m.search.CapturesShellKey(msg) {
-			searchCaptured = true
-		}
-	}
-	if searchCaptured {
-		return m, modeCmd
-	}
-
 	// The picker gets first refusal on a key while it is up, then the shell
 	// switch below still sees Escape, quit, help and the tab keys.
 	if m.active == mode.StorePicker {
@@ -918,6 +952,16 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 	}
 
+	// A key the active tab typed into its query is that tab's alone. The tab
+	// already has it from forwardModeMessages; without this a shell action
+	// rebound to ctrl+u would also run on every line clear.
+	if m.browseController(m.active) != nil && mode.IsQueryKey(msg) {
+		return m, modeCmd
+	}
+	if m.active == mode.Search && searchmode.IsScopeKey(msg) {
+		return m, modeCmd
+	}
+
 	if m.active == mode.Detail {
 		m.detail.Keys = m.keys
 		if consumed, detailCmd := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight()); consumed {
@@ -932,35 +976,8 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		return m, batchCmds(modeCmd, m.openHelp())
 	case m.keys.Match(config.ShellContext, config.ShellActionStorePicker, msg):
 		return m, batchCmds(modeCmd, m.openStorePicker())
-	case m.keys.Match(config.ShellContext, config.ShellActionModeBoard, msg):
-		return m, batchCmds(modeCmd, m.switchToTab(mode.Board))
-	case m.keys.Match(config.ShellContext, config.ShellActionModeDocs, msg):
-		return m, batchCmds(modeCmd, m.switchToTab(mode.Docs))
-	case m.keys.Match(config.ShellContext, config.ShellActionModeSearch, msg):
-		return m, batchCmds(modeCmd, m.switchToTab(mode.Search))
-	case m.keys.Match(config.ShellContext, config.ShellActionToggleSearch, msg):
-		if m.active == mode.Detail {
-			m.enterBrowseMode(mode.Board)
-			return m, modeCmd
-		}
-		if m.active == mode.Search {
-			m.enterBrowseMode(mode.Board)
-			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-		}
-		m.enterBrowseMode(mode.Search)
-		return m, batchCmds(modeCmd, m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
-	case m.keys.Match(config.ShellContext, config.ShellActionModeDetail, msg):
-		if mode.IsBrowse(m.active) {
-			m.lastBrowse = m.active
-		}
-		if m.currentSelection() == nil {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
-		}
-		// Opening Detail from a browse tab starts from that tab's row, not
-		// from wherever an earlier drill-in ended up.
-		m.clearDrillSelection()
-		m.active = mode.Detail
-		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+	case m.keys.Match(config.ShellContext, config.ShellActionOpenSearch, msg):
+		return m, batchCmds(modeCmd, m.openSearch())
 	case m.keys.Match(config.ShellContext, config.ShellActionModeCycleNext, msg):
 		m.applyModeCycle(nextMode(m.active, m.lastBrowse))
 		return m, batchCmds(modeCmd, m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
@@ -971,7 +988,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		// If a dialog-open was in flight when ESC arrived, the guard has
 		// already been cleared at the top of this branch. Consume ESC as
 		// "cancel the pending open" and keep the current mode — do NOT pop
-		// Detail → Board (or Search → Board) while the load is in progress.
+		// Detail → Board while the load is in progress.
 		if hadPendingDialog {
 			return m, modeCmd
 		}
@@ -984,8 +1001,24 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 			return m, modeCmd
 		}
 		if m.active == mode.Detail {
+			// Opened from the store search, Detail returns there: the query,
+			// the results and the selection are as they were left.
+			if m.searchFrom != "" {
+				m.active = mode.Search
+				m.clearDrillSelection()
+				return m, modeCmd
+			}
 			m.enterBrowseMode(m.lastBrowse)
 			return m, modeCmd
+		}
+		// A tab with a query spends Escape on clearing it.
+		if tab := m.browseController(m.active); tab != nil {
+			if cleared, clearCmd := tab.ClearQuery(); cleared {
+				return m, batchCmds(modeCmd, m.scoped(clearCmd))
+			}
+		}
+		if m.active == mode.Search {
+			return m, batchCmds(modeCmd, m.closeSearch())
 		}
 		// Board is the home tab: Escape from any other browse tab returns
 		// there before it starts dismissing toasts.

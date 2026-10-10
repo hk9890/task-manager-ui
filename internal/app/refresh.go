@@ -42,8 +42,8 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 	}
 	cmd := tab.AutoRefresh()
 	if cmd == nil {
-		// The tab cannot take a reload now, such as a search whose query is
-		// being typed. It is not refreshed, so what it is owed stays owed.
+		// The tab cannot take a reload now. It is not refreshed, so what it is
+		// owed stays owed.
 		return nil
 	}
 	m.markSurfaceRefreshed(m.active)
@@ -65,7 +65,7 @@ func (m *Model) reloadDetailCmd() tea.Cmd {
 	// Every browse tab suppresses a manual refresh that arrives while its own
 	// is still in flight; Detail did not. Each repeat press issued another read
 	// against the store, and each extra ApplyLoadedDetail decremented the live
-	// drill-focus counter, so holding r moved focus off the Dependencies rail.
+	// drill-focus counter, so holding the reload key moved focus off the Dependencies rail.
 	if m.detail.IsLoading() && m.detail.TargetID() == selection.Issue.ID {
 		m.logger().Debug("manual detail refresh suppressed; refresh already in flight",
 			"issue_id", selection.Issue.ID)
@@ -77,7 +77,7 @@ func (m *Model) reloadDetailCmd() tea.Cmd {
 }
 
 func (m *Model) markBrowseSurfacesDirty() {
-	m.markSurfaceDirty(mode.BrowseModes...)
+	m.markSurfaceDirty(browseSurfaces...)
 }
 
 func (m *Model) markSurfaceDirty(surfaces ...mode.ID) {

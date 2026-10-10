@@ -100,12 +100,12 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		targetID:    "tm-2",
 		Keys: mustResolveDetailKeys(t, &config.KeyBindingOverride{
 			Detail: map[string][]string{
-				config.DetailActionScrollDown: {"n"},
-				config.DetailActionScrollUp:   {"p"},
+				config.DetailActionScrollDown: {"ctrl+n"},
+				config.DetailActionScrollUp:   {"ctrl+p"},
 				config.DetailActionPageDown:   {"ctrl+f"},
 				config.DetailActionPageUp:     {"ctrl+b"},
-				config.DetailActionHome:       {"g"},
-				config.DetailActionEnd:        {"G"},
+				config.DetailActionHome:       {"alt+g"},
+				config.DetailActionEnd:        {"f8"},
 			},
 		}),
 		Detail: domain.IssueDetail{
@@ -114,19 +114,19 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		},
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlN}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
 		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ContentScrollOffset)
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlP}, 80, 10); !consumed {
 		t.Fatal("expected configured scroll-up key to be consumed")
 	}
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
 		t.Fatal("expected configured page-down key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyF8}, 80, 10); !consumed {
 		t.Fatal("expected configured end key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g"), Alt: true}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
 		t.Fatalf("expected configured home key to reset offset, got %d", m.ContentScrollOffset)
 	}
 }

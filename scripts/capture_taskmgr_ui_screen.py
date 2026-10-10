@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import codecs
 import json
 import os
 import pty
@@ -55,6 +56,7 @@ def feed_keys(fd: int, keys: str) -> None:
         "TAB": "\t",
         "SPACE": " ",
         "BACKSPACE": "\x7f",
+        "DELETE": ESC + "[3~",
         "CTRL+C": "\x03",
         "CTRL+Q": "\x11",
         "CTRL+SPACE": "\x00",
@@ -72,10 +74,13 @@ def feed_keys(fd: int, keys: str) -> None:
     # the app adds is drivable without touching this table.
     if keys not in keymap and len(keys) == 6 and keys.startswith("CTRL+") and keys[5].isalpha():
         keymap[keys] = chr(ord(keys[5].upper()) - ord("A") + 1)
+    # ALT+<letter> is ESC followed by the letter, as a terminal sends it.
+    if keys not in keymap and len(keys) == 5 and keys.startswith("ALT+") and keys[4].isalpha():
+        keymap[keys] = ESC + keys[4].lower()
 
     if keys not in keymap and len(keys) != 1:
         raise ValueError(
-            f"unknown send-key name {keys!r}; pass a single character, CTRL+<letter>, "
+            f"unknown send-key name {keys!r}; pass a single character, CTRL+<letter>, ALT+<letter>, "
             f"or one of {sorted(keymap)}"
         )
     data = keymap.get(keys, keys).encode()
@@ -117,10 +122,14 @@ def feed_mouse(fd: int, spec: str) -> None:
 
 
 def answer_terminal_queries(fd: int, chunk: bytes) -> None:
-    if b"\x1b[6n" in chunk:
-        os.write(fd, b"\x1b[1;1R")
+    # The colour reply goes before the cursor report, as a terminal sends them.
+    # termenv asks for both and stops reading at a cursor report that comes
+    # first; the colour reply then reaches the app as typed text, and the board
+    # starts with "11;rgb:0000/0000/0000" in its filter.
     if b"\x1b]11;?\x1b\\" in chunk or b"\x1b]11;?\a" in chunk:
         os.write(fd, b"\x1b]11;rgb:0000/0000/0000\x1b\\")
+    if b"\x1b[6n" in chunk:
+        os.write(fd, b"\x1b[1;1R")
     if b"\x1b[c" in chunk:
         os.write(fd, b"\x1b[?64;1;2;6;9;15;18;21;22c")
 
@@ -294,6 +303,9 @@ def capture(
 ) -> CaptureResult:
     screen = pyte.Screen(width, height)
     stream = pyte.Stream(screen)
+    # A read can end inside a multi-byte character. Decoding each chunk alone
+    # drops that character and draws the rest of its row one cell to the left.
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
     buffer = bytearray()
     started_at = now_rfc3339()
     step_results: list[dict[str, Any]] = []
@@ -324,7 +336,7 @@ def capture(
             return
         buffer.extend(chunk)
         answer_terminal_queries(master_fd, chunk)
-        stream.feed(chunk.decode("utf-8", errors="ignore"))
+        stream.feed(decoder.decode(chunk))
 
     def run_wait_step(step: Step, result: dict[str, Any], timeout_ms: int) -> None:
         nonlocal timed_out

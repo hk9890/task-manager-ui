@@ -15,17 +15,23 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	if !resolved.Match(ShellContext, ShellActionQuit, tea.KeyMsg{Type: tea.KeyCtrlQ}) {
-		t.Fatal("expected shell quit to match ctrl+q")
+	if !resolved.Match(ShellContext, ShellActionQuit, tea.KeyMsg{Type: tea.KeyCtrlC}) {
+		t.Fatal("expected shell quit to match ctrl+c")
+	}
+	if !resolved.Match(ShellContext, ShellActionHelp, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}, Alt: true}) {
+		t.Fatal("expected shell help to match alt+h")
+	}
+	if resolved.Match(ShellContext, ShellActionHelp, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}) {
+		t.Fatal("expected shell help not to match a bare h")
+	}
+	if !resolved.Match(ShellContext, ShellActionOpenSearch, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true}) {
+		t.Fatal("expected shell open-search to match alt+f")
+	}
+	if !resolved.Match(ShellContext, ShellActionCloseIssue, tea.KeyMsg{Type: tea.KeyDelete}) {
+		t.Fatal("expected shell close-issue to match delete")
 	}
 	if !resolved.Match(BoardContext, BoardActionMoveLeft, tea.KeyMsg{Type: tea.KeyLeft}) {
 		t.Fatal("expected board move-left to match left arrow")
-	}
-	if resolved.Primary(ShellContext, ShellActionModeBoard) != "1" {
-		t.Fatalf("expected board mode key to be 1, got %q", resolved.Primary(ShellContext, ShellActionModeBoard))
-	}
-	if resolved.Primary(ShellContext, ShellActionToggleSearch) != "ctrl+@" {
-		t.Fatalf("expected search toggle key ctrl+@, got %q", resolved.Primary(ShellContext, ShellActionToggleSearch))
 	}
 	if resolved.Primary(ShellContext, ShellActionModeCycleNext) != "tab" {
 		t.Fatalf("expected mode cycle next key to be tab, got %q", resolved.Primary(ShellContext, ShellActionModeCycleNext))
@@ -33,19 +39,91 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 	if resolved.Primary(ShellContext, ShellActionModeCyclePrev) != "shift+tab" {
 		t.Fatalf("expected mode cycle prev key to be shift+tab, got %q", resolved.Primary(ShellContext, ShellActionModeCyclePrev))
 	}
-	if resolved.Primary(ShellContext, ShellActionModeDocs) != "4" {
-		t.Fatalf("expected docs mode key to be 4, got %q", resolved.Primary(ShellContext, ShellActionModeDocs))
+	// tab/shift+tab belong to the shell tab strip: no other context outside a
+	// modal may bind them, or a browse surface would claim the key first.
+	for _, context := range []string{BoardContext, DetailContext} {
+		for action, keys := range bindingsOf(DefaultKeyBindings(), context) {
+			for _, key := range keys {
+				if key == "tab" || key == "shift+tab" {
+					t.Fatalf("%s action %q binds %q, which belongs to the tab strip", context, action, key)
+				}
+			}
+		}
 	}
-	// tab/shift+tab belong to the shell tab strip: the board must not also
-	// consume them as column movement, and search must not cycle panes with them.
-	if resolved.Match(BoardContext, BoardActionMoveRight, tea.KeyMsg{Type: tea.KeyTab}) {
-		t.Fatal("expected board move-right not to match tab")
+}
+
+func bindingsOf(k KeyBindings, context string) map[string][]string {
+	switch context {
+	case ShellContext:
+		return k.Shell
+	case BoardContext:
+		return k.Board
+	case DetailContext:
+		return k.Detail
 	}
-	if resolved.Match(SearchContext, SearchActionCycleFocusNext, tea.KeyMsg{Type: tea.KeyTab}) {
-		t.Fatal("expected search cycle-focus-next not to match tab")
+	return k.Modal
+}
+
+// TestDefaultKeyBindingsOutsideModalAreNotPrintable pins the rule the filter
+// depends on: a printable key types into the query, so no default binding
+// outside a modal may be one.
+func TestDefaultKeyBindingsOutsideModalAreNotPrintable(t *testing.T) {
+	t.Parallel()
+
+	for _, context := range []string{ShellContext, BoardContext, DetailContext} {
+		for action, keys := range bindingsOf(DefaultKeyBindings(), context) {
+			for _, key := range keys {
+				if isPrintableKey(canonicalKeyName(key)) {
+					t.Errorf("%s action %q is bound to the printable key %q", context, action, key)
+				}
+			}
+		}
 	}
-	if resolved.Match(SearchContext, SearchActionCycleFocusPrev, tea.KeyMsg{Type: tea.KeyShiftTab}) {
-		t.Fatal("expected search cycle-focus-prev not to match shift+tab")
+}
+
+func TestResolveKeyBindingsRejectsPrintableKeysOutsideModal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		bind    func(k *KeyBindings)
+		wantErr string
+	}{
+		{
+			name:    "shell letter",
+			bind:    func(k *KeyBindings) { k.Shell[ShellActionHelp] = []string{"?"} },
+			wantErr: `key "?" for action "toggle_help" in shell context is a printable key, which types into the filter; bind it with alt+ or ctrl+`,
+		},
+		{
+			name:    "board letter beside a valid key",
+			bind:    func(k *KeyBindings) { k.Board[BoardActionMoveDown] = []string{"down", "j"} },
+			wantErr: `key "j" for action "move_down" in board context is a printable key, which types into the filter; bind it with alt+ or ctrl+`,
+		},
+		{
+			name:    "detail space",
+			bind:    func(k *KeyBindings) { k.Detail[DetailActionPageDown] = []string{" "} },
+			wantErr: `key "space" for action "page_down" in detail context is a printable key, which types into the filter; bind it with alt+ or ctrl+`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			bindings := DefaultKeyBindings()
+			tc.bind(&bindings)
+			_, err := ResolveKeyBindings(bindings)
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+
+	// A modal takes no filter text, so its keys stay free.
+	modal := DefaultKeyBindings()
+	modal.Modal[ModalActionEscape] = []string{"q"}
+	modal.Modal[ModalActionEnter] = []string{"space"}
+	if _, err := ResolveKeyBindings(modal); err != nil {
+		t.Fatalf("printable modal keys rejected: %v", err)
 	}
 }
 
@@ -54,16 +132,16 @@ func TestMergeKeyBindingsOverridesPerAction(t *testing.T) {
 
 	merged := MergeKeyBindings(DefaultKeyBindings(), &KeyBindingOverride{
 		Shell: map[string][]string{ShellActionQuit: {"ctrl+q"}},
-		Board: map[string][]string{BoardActionMoveLeft: {"a"}},
+		Board: map[string][]string{BoardActionMoveLeft: {"alt+a"}},
 	})
 
 	if got := strings.Join(merged.Shell[ShellActionQuit], ","); got != "ctrl+q" {
 		t.Fatalf("expected shell quit override, got %q", got)
 	}
-	if got := strings.Join(merged.Board[BoardActionMoveLeft], ","); got != "a" {
+	if got := strings.Join(merged.Board[BoardActionMoveLeft], ","); got != "alt+a" {
 		t.Fatalf("expected board move-left override, got %q", got)
 	}
-	if got := strings.Join(merged.Board[BoardActionMoveRight], ","); got != "l,right" {
+	if got := strings.Join(merged.Board[BoardActionMoveRight], ","); got != "right" {
 		t.Fatalf("expected unspecified bindings to remain, got %q", got)
 	}
 }
@@ -72,14 +150,14 @@ func TestResolveKeyBindingsRejectsConflictsAndUnknownActions(t *testing.T) {
 	t.Parallel()
 
 	conflicting := DefaultKeyBindings()
-	conflicting.Board[BoardActionMoveLeft] = []string{"h"}
-	conflicting.Board[BoardActionMoveRight] = []string{"h"}
+	conflicting.Board[BoardActionMoveLeft] = []string{"alt+h"}
+	conflicting.Board[BoardActionMoveRight] = []string{"alt+h"}
 	if _, err := ResolveKeyBindings(conflicting); err == nil || !strings.Contains(err.Error(), "conflicts") {
 		t.Fatalf("expected conflict error, got %v", err)
 	}
 
 	unknown := DefaultKeyBindings()
-	unknown.Shell["mystery"] = []string{"z"}
+	unknown.Shell["mystery"] = []string{"alt+z"}
 	if _, err := ResolveKeyBindings(unknown); err == nil || !strings.Contains(err.Error(), "unknown keybinding action") {
 		t.Fatalf("expected unknown action error, got %v", err)
 	}
@@ -101,7 +179,6 @@ func TestResolveKeyBindingsRejectsAContextMissingARequiredAction(t *testing.T) {
 	}{
 		{ShellContext, func(k *KeyBindings) string { delete(k.Shell, ShellActionQuit); return ShellActionQuit }},
 		{BoardContext, func(k *KeyBindings) string { delete(k.Board, BoardActionMoveLeft); return BoardActionMoveLeft }},
-		{SearchContext, func(k *KeyBindings) string { delete(k.Search, SearchActionMoveUp); return SearchActionMoveUp }},
 		{DetailContext, func(k *KeyBindings) string { delete(k.Detail, DetailActionScrollUp); return DetailActionScrollUp }},
 		{ModalContext, func(k *KeyBindings) string { delete(k.Modal, ModalActionEnter); return ModalActionEnter }},
 	}
@@ -134,7 +211,7 @@ func TestMergeKeyBindingsDoesNotMutateBase(t *testing.T) {
 
 	// Apply an override that changes shell quit.
 	_ = MergeKeyBindings(DefaultKeyBindings(), &KeyBindingOverride{
-		Shell: map[string][]string{ShellActionQuit: {"ctrl+c"}},
+		Shell: map[string][]string{ShellActionQuit: {"ctrl+q"}},
 	})
 
 	// The original base must be unchanged.
@@ -200,16 +277,19 @@ func TestResolvedKeyBindingsDisplayPrimary(t *testing.T) {
 
 	r := resolvedDefault(t)
 
-	// The toggle-search action uses ctrl+@ canonical; DisplayPrimary must return "ctrl+space".
-	got := r.DisplayPrimary(ShellContext, ShellActionToggleSearch)
-	if got != "ctrl+space" {
-		t.Errorf("DisplayPrimary(shell, toggle_search) = %q, want %q", got, "ctrl+space")
+	// ctrl+@ is the canonical name of ctrl+space; DisplayPrimary must return "ctrl+space".
+	bindings := DefaultKeyBindings()
+	bindings.Shell[ShellActionHelp] = []string{"ctrl+@"}
+	rebound, err := ResolveKeyBindings(bindings)
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+	if got := rebound.DisplayPrimary(ShellContext, ShellActionHelp); got != "ctrl+space" {
+		t.Errorf("DisplayPrimary(shell, toggle_help) = %q, want %q", got, "ctrl+space")
 	}
 
-	// A regular single-char binding: shell quit is ctrl+q.
-	got = r.DisplayPrimary(ShellContext, ShellActionQuit)
-	if got != "ctrl+q" {
-		t.Errorf("DisplayPrimary(shell, quit) = %q, want %q", got, "ctrl+q")
+	if got := r.DisplayPrimary(ShellContext, ShellActionQuit); got != "ctrl+c" {
+		t.Errorf("DisplayPrimary(shell, quit) = %q, want %q", got, "ctrl+c")
 	}
 }
 
@@ -231,10 +311,10 @@ func TestResolvedKeyBindingsDisplayLabel(t *testing.T) {
 
 	r := resolvedDefault(t)
 
-	// board move-right has keys "l", "right" → label is "l/right".
-	got := r.DisplayLabel(BoardContext, BoardActionMoveRight)
-	if got != "l/right" {
-		t.Errorf("DisplayLabel(board, move_right) = %q, want %q", got, "l/right")
+	// shell mode_cycle_next has keys "tab", "ctrl+pgdown" → label is "tab/ctrl+pgdown".
+	got := r.DisplayLabel(ShellContext, ShellActionModeCycleNext)
+	if got != "tab/ctrl+pgdown" {
+		t.Errorf("DisplayLabel(shell, mode_cycle_next) = %q, want %q", got, "tab/ctrl+pgdown")
 	}
 
 	// Missing context / action must return "".

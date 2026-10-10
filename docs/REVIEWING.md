@@ -86,5 +86,3 @@ How finished code must look. Each rule is a condition to check on the diff, with
 
 - Anything `mise run ci` already rejects. Report only what a green gate would still ship broken.
 - Style the narrow lint scope accepts ([CODING.md](CODING.md)) is a suggestion, never a blocker.
-- The absence of a shared board/search list container. That is a recorded decision, not an oversight
-  ([DESIGN-GUIDE.md](DESIGN-GUIDE.md)).

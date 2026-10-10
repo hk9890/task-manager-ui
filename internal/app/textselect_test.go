@@ -116,8 +116,8 @@ func TestNothingChangesTheScreenUnderASelection(t *testing.T) {
 		"click":     tea.MouseMsg{X: 5, Y: 5, Action: tea.MouseActionPress, Button: tea.MouseButtonRight},
 		"move key":  tea.KeyMsg{Type: tea.KeyDown},
 		"tab key":   tea.KeyMsg{Type: tea.KeyTab},
-		"help key":  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")},
-		"close key": tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")},
+		"help key":  testKey("alt+h"),
+		"close key": testKey("delete"),
 	} {
 		next, cmd := m.Update(msg)
 		m = next.(Model)
@@ -210,7 +210,7 @@ func TestABoxEdgeInsideAWideGlyphTakesTheWholeGlyph(t *testing.T) {
 // screen, so the help text can be copied too.
 func TestSelectingWorksOverTheHelpOverlay(t *testing.T) {
 	m, copied := newSelectingShell(t)
-	m = pressKey(t, m, "?")
+	m = pressKey(t, m, "alt+h")
 
 	x, y := testui.FindCell(t, m.View(), "Mode switching:")
 	m = send(t, m, leftClick(x, y))

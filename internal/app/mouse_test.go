@@ -68,9 +68,9 @@ func send(t *testing.T, m Model, msg tea.Msg) Model {
 	return applyMessages(t, m, []tea.Msg{msg})
 }
 
-func pressKey(t *testing.T, m Model, runes string) Model {
+func pressKey(t *testing.T, m Model, name string) Model {
 	t.Helper()
-	return send(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(runes)})
+	return send(t, m, testKey(name))
 }
 
 func TestMouseKindMapsOnlyTheEventsTheSurfacesActOn(t *testing.T) {
@@ -151,7 +151,7 @@ func TestClickOnATabSwitchesToIt(t *testing.T) {
 	for _, tab := range []struct {
 		label string
 		want  mode.ID
-	}{{"Docs", mode.Docs}, {"Search", mode.Search}, {"Board", mode.Board}} {
+	}{{"Docs", mode.Docs}, {"Board", mode.Board}} {
 		x, _ := testui.FindCell(t, tabLine(m), " "+tab.label+" ")
 		// Both padding cells and the label belong to the tab.
 		for _, column := range []int{x, x + 1, x + len(tab.label) + 1} {
@@ -211,13 +211,12 @@ func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 	m := newMouseShell(t)
 
 	storesX, storesText := barButton(t, m, "stores", config.ShellActionStorePicker)
-	searchX, _ := testui.FindCell(t, tabLine(m), " Search ")
 	docsX, _ := testui.FindCell(t, tabLine(m), " Docs ")
 
 	dead := map[string][][2]int{
 		// The spinner cell, the cell before the first tab, the first cell
 		// after the last tab, and the space before the context.
-		"the tab line": {{0, headerTabsRow}, {headerTabsStart() - 1, headerTabsRow}, {searchX + len(" Search "), headerTabsRow}, {80, headerTabsRow}},
+		"the tab line": {{0, headerTabsRow}, {headerTabsStart() - 1, headerTabsRow}, {docsX + len(" Docs "), headerTabsRow}, {80, headerTabsRow}},
 		// The cell before the first button, the `·` after it, and the space
 		// before the version.
 		"the menu bar": {{storesX - 1, headerMenuRow}, {storesX + len(storesText) + 1, headerMenuRow}, {80, headerMenuRow}},
@@ -273,7 +272,7 @@ func TestClickOnReloadAndQuit(t *testing.T) {
 // load it starts is the one of the surface under it and of no other.
 func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
 	tab := tea.KeyMsg{Type: tea.KeyTab}
-	detail := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}
+	detail := testKey("enter")
 
 	for _, tc := range []struct {
 		surface mode.ID
@@ -282,7 +281,6 @@ func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
 	}{
 		{surface: mode.Board, want: loading.ScopeBoard},
 		{surface: mode.Docs, reach: []tea.Msg{tab}, want: loading.ScopeDocs},
-		{surface: mode.Search, reach: []tea.Msg{tab, tab}, want: loading.ScopeSearch},
 		{surface: mode.Detail, reach: []tea.Msg{detail}, want: loading.ScopeDetail},
 	} {
 		m := applyMessages(t, newMouseShell(t), tc.reach)
@@ -305,7 +303,7 @@ func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
 func TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface(t *testing.T) {
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
-		Search: map[string][]string{config.SearchActionReload: {"ctrl+r"}},
+		Shell: map[string][]string{config.ShellActionReloadDetail: {"ctrl+alt+r"}},
 	})
 	m := send(t, newHeaderShell(t, cfg), tea.WindowSizeMsg{Width: 160, Height: 30})
 
@@ -314,9 +312,9 @@ func TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface(t *testin
 		t.Fatalf("fixture: pointer over help lights %q", litButton(m))
 	}
 
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyTab}, tea.KeyMsg{Type: tea.KeyTab}})
-	if moved, _ := barButton(t, m, "help", config.ShellActionHelp); m.active != mode.Search || moved == x {
-		t.Fatalf("fixture: on %q with help at column %d, want search and help moved from column %d", m.active, moved, x)
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	if moved, _ := barButton(t, m, "help", config.ShellActionHelp); m.active != mode.Detail || moved == x {
+		t.Fatalf("fixture: on %q with help at column %d, want detail and help moved from column %d", m.active, moved, x)
 	}
 	under, ok := m.buttonAt(x)
 	if !ok || litButton(m) != under.action.label {
@@ -352,6 +350,12 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 				t.Errorf("on %q returning to %q, want the picker returning to the board", m.active, m.pickerReturn)
 			}
 		}},
+		{label: "search", action: config.ShellActionOpenSearch, check: func(t *testing.T, m Model) {
+			t.Helper()
+			if m.active != mode.Search || m.searchFrom != mode.Board {
+				t.Errorf("on %q opened from %q, want the search opened from the board", m.active, m.searchFrom)
+			}
+		}},
 		{label: "help", action: config.ShellActionHelp, check: func(t *testing.T, m Model) {
 			t.Helper()
 			if !m.showHelp || !strings.Contains(plain(m), "Keyboard Help") {
@@ -365,7 +369,7 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 			x, text := barButton(t, base, tc.label, tc.action)
 			key := base.keys.Primary(config.ShellContext, tc.action)
 
-			byKey := step(base, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+			byKey := step(base, testKey(key))
 			tc.check(t, byKey)
 
 			// Every cell of the button is the button: the label, the space
@@ -392,7 +396,7 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 // TestBarButtonsWorkFromDetail: the bar stands over the drill-in too, and the
 // picker a click opens from there returns to it, as the key's does.
 func TestBarButtonsWorkFromDetail(t *testing.T) {
-	m := pressKey(t, newMouseShell(t), "3")
+	m := pressKey(t, newMouseShell(t), "enter")
 	if m.active != mode.Detail {
 		t.Fatalf("fixture did not reach Detail, on %q", m.active)
 	}
@@ -424,9 +428,9 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 		buttons[label], _ = barButton(t, base, label, action)
 	}
 
-	for name, key := range map[string]string{"help": "?", "close dialog": "x"} {
+	for name, key := range map[string]string{"help": "alt+h", "close dialog": "delete"} {
 		// Stepped by hand: an open dialog schedules a repeating cursor tick.
-		next, _ := newMouseShell(t).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+		next, _ := newMouseShell(t).Update(testKey(key))
 		m := next.(Model)
 		if !m.showHelp && !m.showActionModal {
 			t.Fatalf("%s: the overlay did not open", name)
@@ -451,7 +455,7 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 		}
 	}
 
-	m := pressKey(t, newMouseShell(t), "s")
+	m := pressKey(t, newMouseShell(t), "alt+s")
 	if m.active != mode.StorePicker {
 		t.Fatalf("fixture did not open the picker, on %q", m.active)
 	}
@@ -527,12 +531,12 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	}
 
 	// The bar forgets the pointer once the picker is up, and under an overlay.
-	picker := pressKey(t, onButton(m), "s")
+	picker := pressKey(t, onButton(m), "alt+s")
 	picker = send(t, picker, pointerMove(x+1, 5))
 	if picker = send(t, picker, tea.KeyMsg{Type: tea.KeyEsc}); picker.active != mode.Board || litButton(picker) != "" {
 		t.Errorf("back on %q the %q button is lit under a cell the pointer left", picker.active, litButton(picker))
 	}
-	help := pressKey(t, onButton(m), "?")
+	help := pressKey(t, onButton(m), "alt+h")
 	if help = send(t, help, pointerMove(x+1, 0)); !help.showHelp || litButton(help) != "" {
 		t.Errorf("under the help overlay (%v) the %q button is lit", help.showHelp, litButton(help))
 	}
@@ -584,8 +588,8 @@ func TestAnOverlayKeepsTheMouseFromTheSurfaceBelow(t *testing.T) {
 		return next.(Model)
 	}
 
-	for name, key := range map[string]string{"help": "?", "close dialog": "x"} {
-		m := step(newMouseShell(t), tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+	for name, key := range map[string]string{"help": "alt+h", "close dialog": "delete"} {
+		m := step(newMouseShell(t), testKey(key))
 		if !m.showHelp && !m.showActionModal {
 			t.Fatalf("%s: the overlay did not open", name)
 		}
@@ -611,7 +615,7 @@ func TestAnOverlayKeepsTheMouseFromTheSurfaceBelow(t *testing.T) {
 	}
 
 	// The help text is taller than this terminal, so the wheel has somewhere to go.
-	m := pressKey(t, newMouseShell(t), "?")
+	m := pressKey(t, newMouseShell(t), "alt+h")
 	top := m.View()
 	if !strings.Contains(top, "more lines") {
 		t.Fatalf("fixture: the help overlay is not clipped at this height:\n%s", top)
@@ -621,7 +625,7 @@ func TestAnOverlayKeepsTheMouseFromTheSurfaceBelow(t *testing.T) {
 		t.Fatal("the wheel did not scroll the help overlay")
 	}
 	// Reopening starts at the top again.
-	m = pressKey(t, pressKey(t, m, "?"), "?")
+	m = pressKey(t, pressKey(t, m, "alt+h"), "alt+h")
 	if m.View() != top {
 		t.Fatal("the help overlay reopened where it was scrolled to")
 	}
@@ -667,7 +671,7 @@ func TestTheStorePickerTakesTheMouseInsteadOfTheBoard(t *testing.T) {
 	m := newMouseShell(t)
 	x, y := testui.FindCell(t, m.View(), "progress-second")
 
-	m = pressKey(t, m, "s")
+	m = pressKey(t, m, "alt+s")
 	if m.active != mode.StorePicker {
 		t.Fatalf("fixture did not open the picker, on %q", m.active)
 	}
@@ -691,7 +695,7 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 		t.Fatal("fixture: the row under the pointer is not lit")
 	}
 
-	m = pressKey(t, m, "3")
+	m = pressKey(t, m, "enter")
 	if m.active != mode.Detail {
 		t.Fatalf("fixture did not reach Detail, on %q", m.active)
 	}
@@ -707,7 +711,7 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 	if m.hoverTab != mode.Docs {
 		t.Fatalf("fixture: hovered tab is %q, want docs", m.hoverTab)
 	}
-	m = pressKey(t, m, "s")
+	m = pressKey(t, m, "alt+s")
 	m = send(t, m, pointerMove(tabX+1, 5))
 	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if m.active != mode.Board || m.hoverTab != "" {

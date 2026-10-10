@@ -21,4 +21,4 @@
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-j/k move · enter open · r reload · esc quit · ctrl+q quit
+down/up move · enter open · alt+r reload · esc quit · ctrl+c quit

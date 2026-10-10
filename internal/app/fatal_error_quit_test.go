@@ -70,16 +70,13 @@ func TestFatalErrorScreen_QKeyQuits(t *testing.T) {
 	}
 }
 
-// TestFatalErrorScreen_CtrlQQuits pins the ctrl+q-is-global-quit claim:
-// ctrl+q is the documented global quit shortcut (docs/user-guide/key-bindings.md
-// "Shell / Global"). It must work on the fatal screen too.
-//
-// Regression guard: ctrl+q must continue to quit the fatal screen.
-func TestFatalErrorScreen_CtrlQQuits(t *testing.T) {
+// TestFatalErrorScreen_QuitKeyQuits pins that the shell quit key, ctrl+c by
+// default, works on the fatal screen too.
+func TestFatalErrorScreen_QuitKeyQuits(t *testing.T) {
 	m := enterFatalErrorState(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if !isQuitCmd(cmd) {
-		t.Fatalf("expected ctrl+q to produce tea.Quit on fatal screen; got cmd=%v", cmd)
+		t.Fatalf("expected ctrl+c to produce tea.Quit on fatal screen; got cmd=%v", cmd)
 	}
 }
 

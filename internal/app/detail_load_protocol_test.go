@@ -31,7 +31,7 @@ func detailModelOnIssue(t *testing.T, gw *fakes.TrackedRepository) Model {
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 40}})
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -94,7 +94,7 @@ func TestRepeatedDetailRefreshIsSuppressedWhileOneIsInFlight(t *testing.T) {
 	gw := fakes.NewTracked()
 	m := detailModelOnIssue(t, gw)
 
-	reload := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}
+	reload := testKey("alt+r")
 
 	mark := gw.CallCount()
 	next, first := m.Update(reload)

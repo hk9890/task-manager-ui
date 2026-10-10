@@ -144,7 +144,7 @@ func TestEditFlowSuccessPathTeatest(t *testing.T) {
 	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, originalTitle)
 
 	// Press 'e' to trigger the edit flow.
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	tm.Send(testKey("alt+e"))
 
 	// Gate 1: tea.Exec dispatched and FakeExecCommand.Run ran.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
@@ -237,7 +237,7 @@ func TestEditFlowNoChangeTeatest(t *testing.T) {
 	// Drain the board init so a selection exists.
 	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, "Unchanged Title")
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	tm.Send(testKey("alt+e"))
 
 	// Gate 1: tea.Exec dispatched and FakeExecCommand.Run ran.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
@@ -321,7 +321,7 @@ func TestEditFlowEditorErrorTeatest(t *testing.T) {
 
 	testui.WaitForOutputContainsAllWithTimeout(t, tm.Output(), editFlowTimeout, "Error Test Title")
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	tm.Send(testKey("alt+e"))
 
 	// Gate 1: tea.Exec dispatched and FakeExecCommand.Run ran.
 	testui.WaitForConditionWithTimeout(t, editFlowTimeout, func() bool {
@@ -392,7 +392,7 @@ func TestModelEditHotkeyUsesEditorService(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	next, cmd := m.Update(testKey("alt+e"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -424,7 +424,7 @@ func TestModelEditHotkeyShowsErrorToastWhenEditorFails(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	next, cmd := m.Update(testKey("alt+e"))
 	m = next.(Model)
 
 	if cmd == nil {
@@ -481,7 +481,7 @@ func TestModelEditIssueActionUsesEditorServiceAndUpdatesDetail(t *testing.T) {
 	mark := gw.CallCount()
 
 	// Phase 1: press 'e' → prepareEditCmd.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	next, cmd := m.Update(testKey("alt+e"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected edit command from edit hotkey")
@@ -548,12 +548,12 @@ func TestModelEditHotkeyInDetailModeUsesEditorService(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	mark := gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	next, cmd = m.Update(testKey("alt+e"))
 	m = next.(Model)
 
 	if cmd == nil {
@@ -595,11 +595,11 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	next, cmd = m.Update(testKey("alt+v"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -609,10 +609,10 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 
 	next, _ = m.Update(launchActionResultMsg{action: "nvim", err: nil})
 	m = next.(Model)
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	next, cmd = m.Update(testKey("alt+p"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	next, cmd = m.Update(testKey("alt+l"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -646,7 +646,7 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 	m = next.(Model)
 
 	view := m.View()
-	if !strings.Contains(view, "background (no return flow)") || !strings.Contains(view, "Use e for edit/save round-trip") {
+	if !strings.Contains(view, "background (no return flow)") || !strings.Contains(view, "Use alt+e for edit/save round-trip") {
 		t.Fatalf("expected launcher lifecycle guidance toast, got:\n%s", view)
 	}
 }
@@ -704,8 +704,7 @@ func TestModelEditResultReloadsTheActiveBrowseSurface(t *testing.T) {
 		reloads fakes.Method
 	}{
 		{name: "board", tabKey: "", reloads: fakes.MethodDashboard},
-		{name: "search", tabKey: "2", reloads: fakes.MethodSearch},
-		{name: "docs", tabKey: "4", reloads: fakes.MethodSearch},
+		{name: "docs", tabKey: "tab", reloads: fakes.MethodSearch},
 	}
 
 	for _, tc := range tests {
@@ -724,7 +723,7 @@ func TestModelEditResultReloadsTheActiveBrowseSurface(t *testing.T) {
 			m = applyMessages(t, m, runBatch(m.Init()))
 
 			if tc.tabKey != "" {
-				next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.tabKey)})
+				next, cmd := m.Update(testKey(tc.tabKey))
 				m = next.(Model)
 				m = applyMessages(t, m, runBatch(cmd))
 			}

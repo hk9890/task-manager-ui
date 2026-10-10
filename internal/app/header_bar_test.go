@@ -91,7 +91,7 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 			// The tabs are never dropped: a terminal narrower than the tab
 			// strip cuts them off at its edge. From there up the line fits.
 			tabs := lines[headerTabsRow]
-			for _, label := range []string{" Board ", " Docs ", " Search "} {
+			for _, label := range []string{" Board ", " Docs "} {
 				if !strings.Contains(tabs, label) {
 					t.Fatalf("%s at width %d: the tab line lost the tab %q:\n%s", active, width, label, tabs)
 				}
@@ -104,13 +104,13 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 }
 
 // TestMenuBarDropsTheVersionThenTheRightmostButton narrows the terminal one
-// column at a time. The version goes first, then quit, help, reload: stores is
+// column at a time. The version goes first, then quit, help, reload, stores: search is
 // the last button standing.
 func TestMenuBarDropsTheVersionThenTheRightmostButton(t *testing.T) {
 	t.Parallel()
 
 	m := newHeaderShell(t, config.Default())
-	all := []string{"stores", "reload", "help", "quit"}
+	all := []string{"search", "stores", "reload", "help", "quit"}
 
 	previous, hadVersion := 0, false
 	for width := 0; width <= 220; width++ {
@@ -196,12 +196,12 @@ func TestReloadButtonShowsTheKeyOfTheActiveSurface(t *testing.T) {
 
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
-		Shell:  map[string][]string{config.ShellActionReloadDetail: {"f5"}},
-		Search: map[string][]string{config.SearchActionReload: {"f6"}},
+		Shell: map[string][]string{config.ShellActionReloadDetail: {"f5"}},
+		Board: map[string][]string{config.BoardActionReload: {"f6"}},
 	})
 	m := newHeaderShell(t, cfg)
 
-	for active, want := range map[mode.ID]string{mode.Board: "reload r", mode.Docs: "reload r", mode.Search: "reload f6", mode.Detail: "reload f5"} {
+	for active, want := range map[mode.ID]string{mode.Board: "reload f6", mode.Docs: "reload f6", mode.Detail: "reload f5"} {
 		m.active = active
 		if bar := headerLines(m, 120)[headerMenuRow]; !strings.Contains(bar, want+" ") {
 			t.Errorf("on %s the bar does not draw %q:\n%s", active, want, bar)

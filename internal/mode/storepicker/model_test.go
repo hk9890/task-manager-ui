@@ -52,9 +52,8 @@ func run(t *testing.T, m *Model, cmd tea.Cmd) {
 	m.Update(cmd())
 }
 
-func key(runes string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(runes)}
-}
+// reloadKey is the default board reload key, which the picker reads.
+var reloadKey = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true}
 
 func TestInitListsTheCatalog(t *testing.T) {
 	t.Parallel()
@@ -101,7 +100,7 @@ func TestReloadIsSuppressedWhileOneIsInFlight(t *testing.T) {
 	m := newModel(t, catalog)
 
 	first := m.Init()
-	consumed, second := m.HandleKey(key("r"))
+	consumed, second := m.HandleKey(reloadKey)
 	if !consumed {
 		t.Fatal("expected the reload key to be consumed")
 	}
@@ -122,7 +121,7 @@ func TestReloadAfterTheListingSettlesReadsAgain(t *testing.T) {
 	m := newModel(t, catalog)
 	run(t, m, m.Init())
 
-	_, cmd := m.HandleKey(key("r"))
+	_, cmd := m.HandleKey(reloadKey)
 	run(t, m, cmd)
 
 	if got := catalog.Calls(); got != 2 {
@@ -138,7 +137,7 @@ func TestMovementClampsToTheList(t *testing.T) {
 	run(t, m, m.Init())
 
 	for i := 0; i < 5; i++ {
-		m.HandleKey(key("j"))
+		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	selected, _ := m.SelectedEntry()
 	if selected.Name != "charlie" {
@@ -146,11 +145,48 @@ func TestMovementClampsToTheList(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		m.HandleKey(key("k"))
+		m.HandleKey(tea.KeyMsg{Type: tea.KeyUp})
 	}
 	selected, _ = m.SelectedEntry()
 	if selected.Name != "alpha" {
 		t.Errorf("after moving past the start: got %q, want the first entry", selected.Name)
+	}
+}
+
+func TestPageAndBoundKeysMoveTheSelection(t *testing.T) {
+	t.Parallel()
+
+	names := make([]string, 0, 30)
+	for i := 0; i < 30; i++ {
+		names = append(names, fmt.Sprintf("store-%02d", i))
+	}
+	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries(names...)})
+	m.SetSize(100, 24)
+	run(t, m, m.Init())
+	page := m.itemCapacity()
+
+	steps := []struct {
+		key  tea.KeyMsg
+		want int
+	}{
+		{tea.KeyMsg{Type: tea.KeyPgDown}, page},
+		{tea.KeyMsg{Type: tea.KeyPgDown}, 2 * page},
+		{tea.KeyMsg{Type: tea.KeyPgUp}, page},
+		{tea.KeyMsg{Type: tea.KeyEnd}, 29},
+		{tea.KeyMsg{Type: tea.KeyPgDown}, 29},
+		{tea.KeyMsg{Type: tea.KeyHome}, 0},
+		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
+	}
+	for _, step := range steps {
+		if consumed, _ := m.HandleKey(step.key); !consumed {
+			t.Fatalf("picker did not consume %q", step.key.String())
+		}
+		if m.selectedRow != step.want {
+			t.Fatalf("after %q: selected row %d, want %d", step.key.String(), m.selectedRow, step.want)
+		}
+		if m.selectedRow < m.scrollOffset || m.selectedRow >= m.scrollOffset+page {
+			t.Fatalf("after %q: row %d is outside the window [%d, %d)", step.key.String(), m.selectedRow, m.scrollOffset, m.scrollOffset+page)
+		}
 	}
 }
 
@@ -160,7 +196,7 @@ func TestMovementOnAnEmptyListIsSafe(t *testing.T) {
 	m := newModel(t, &fakes.FakeStoreCatalog{})
 	run(t, m, m.Init())
 
-	m.HandleKey(key("j"))
+	m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 	if _, ok := m.SelectedEntry(); ok {
 		t.Error("an empty registry has no selected entry")
 	}
@@ -177,7 +213,7 @@ func TestFailedReloadKeepsTheStaleRows(t *testing.T) {
 	run(t, m, m.Init())
 
 	catalog.Err = errors.New("registry is corrupt")
-	_, cmd := m.HandleKey(key("r"))
+	_, cmd := m.HandleKey(reloadKey)
 	run(t, m, cmd)
 
 	if got := len(m.Entries()); got != 2 {
@@ -317,14 +353,14 @@ func TestFailedReloadKeepsTheChevronOnScreen(t *testing.T) {
 	run(t, m, m.Init())
 
 	for i := 0; i < 40; i++ {
-		m.HandleKey(key("j"))
+		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	if m.scrollOffset == 0 {
 		t.Fatal("expected a scrolled window; the fixture no longer exercises the clamp")
 	}
 
 	catalog.Err = errors.New("registry is corrupt")
-	_, cmd := m.HandleKey(key("r"))
+	_, cmd := m.HandleKey(reloadKey)
 	run(t, m, cmd)
 
 	// The selection bar runs down both lines of the selected row; a window one
@@ -351,7 +387,7 @@ func TestScrollWindowFollowsTheSelectionThroughALongList(t *testing.T) {
 
 	capacity := m.itemCapacity()
 	for i := 0; i < 49; i++ {
-		m.HandleKey(key("j"))
+		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 		if m.selectedRow < m.scrollOffset || m.selectedRow >= m.scrollOffset+capacity {
 			t.Fatalf("selection %d left the window [%d,%d) after %d moves", m.selectedRow, m.scrollOffset, m.scrollOffset+capacity, i+1)
 		}
@@ -361,7 +397,7 @@ func TestScrollWindowFollowsTheSelectionThroughALongList(t *testing.T) {
 	}
 
 	for i := 0; i < 49; i++ {
-		m.HandleKey(key("k"))
+		m.HandleKey(tea.KeyMsg{Type: tea.KeyUp})
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("scrollOffset back at the top: got %d, want 0", m.scrollOffset)
@@ -384,7 +420,7 @@ func TestSelectionStaysOnScreenBeforeTheFirstResize(t *testing.T) {
 
 	gutter, _ := styles.SelectionPrefix(true, false)
 	for i := 0; i < 29; i++ {
-		m.HandleKey(key("j"))
+		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
 		view := ansi.ReplaceAllString(m.View(0, "help"), "")
 		if got := strings.Count(view, "│"+gutter); got != 2 {
 			t.Fatalf("after %d moves the selection bar is on %d lines, want both lines of the selected row:\n%s", i+1, got, view)
@@ -409,14 +445,14 @@ func TestSelectedRowIsDrawnWholeAtEvenAndOddHeights(t *testing.T) {
 		m.SetSize(100, height)
 		run(t, m, m.Init())
 
-		for _, move := range []string{"j", "k"} {
+		for _, move := range []tea.KeyMsg{{Type: tea.KeyDown}, {Type: tea.KeyUp}} {
 			for i := 0; i < len(names); i++ {
-				m.HandleKey(key(move))
+				m.HandleKey(move)
 				view := ansi.ReplaceAllString(m.View(0, "help"), "")
 				name := names[m.selectedRow]
 				for _, want := range []string{"│" + gutter + name + " ", "│" + gutter + "/home/hans/dev/" + name + " "} {
 					if !strings.Contains(view, want) {
-						t.Fatalf("height %d, row %d after %q: %q is not drawn:\n%s", height, m.selectedRow, move, want, view)
+						t.Fatalf("height %d, row %d after %q: %q is not drawn:\n%s", height, m.selectedRow, move.String(), want, view)
 					}
 				}
 			}
@@ -432,7 +468,7 @@ func TestUnclaimedKeysFallThroughToTheShell(t *testing.T) {
 	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries("alpha")})
 	run(t, m, m.Init())
 
-	for _, k := range []tea.KeyMsg{{Type: tea.KeyEsc}, key("?"), key("s"), key("1"), {Type: tea.KeyTab}} {
+	for _, k := range []tea.KeyMsg{{Type: tea.KeyEsc}, {Type: tea.KeyRunes, Runes: []rune("h"), Alt: true}, {Type: tea.KeyRunes, Runes: []rune("s"), Alt: true}, {Type: tea.KeyRunes, Runes: []rune("j")}, {Type: tea.KeyTab}} {
 		if consumed, _ := m.HandleKey(k); consumed {
 			t.Errorf("picker consumed %q; it must reach the shell", k.String())
 		}
@@ -481,8 +517,8 @@ func TestWithdrawingTheCreateOfferKeepsTheSelectionOnARow(t *testing.T) {
 	m.SetSize(100, 24)
 	m.SetCreateTarget("/home/hans/dev/widget")
 	run(t, m, m.Init())
-	m.HandleKey(key("j"))
-	m.HandleKey(key("j")) // on alpha, the third row
+	m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+	m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}) // on alpha, the third row
 
 	m.SetCreateTarget("")
 

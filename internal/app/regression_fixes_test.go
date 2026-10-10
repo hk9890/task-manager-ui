@@ -273,16 +273,16 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 		t.Fatalf("expected board selection tm-1 after init, got %q", got)
 	}
 
-	// ModeCyclePrev (shift+tab / ctrl+pgup): prevMode(Board) == Search, the far
+	// ModeCyclePrev (shift+tab / ctrl+pgup): prevMode(Board) == Docs, the far
 	// end of the tab strip.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlPgUp})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected ModeCyclePrev from Board to wrap to Search, got %s", m.active)
+	if m.active != mode.Docs {
+		t.Fatalf("expected ModeCyclePrev from Board to wrap to Docs, got %s", m.active)
 	}
-	if m.lastBrowse != mode.Search {
-		t.Fatalf("expected lastBrowse to follow the cycle to Search, got %s", m.lastBrowse)
+	if m.lastBrowse != mode.Docs {
+		t.Fatalf("expected lastBrowse to follow the cycle to Docs, got %s", m.lastBrowse)
 	}
 
 	// Back to Board, then drill into Detail: lastBrowse must stay Board so the
@@ -291,13 +291,14 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Board {
-		t.Fatalf("expected ModeCycleNext from Search to wrap to Board, got %s", m.active)
+		t.Fatalf("expected ModeCycleNext from Docs to wrap to Board, got %s", m.active)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd = m.Update(testKey("enter"))
 	m = next.(Model)
+	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
-		t.Fatalf("expected hotkey 3 to enter Detail, got %s", m.active)
+		t.Fatalf("expected enter to open Detail, got %s", m.active)
 	}
 	if m.lastBrowse != mode.Board {
 		t.Fatalf("expected lastBrowse to stay Board while in Detail, got %s", m.lastBrowse)
@@ -307,8 +308,6 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 		t.Fatalf("expected selection preserved as tm-1 in Detail, got %#v (regression: lastBrowse clobbered to Detail)", sel)
 	}
 
-	// Drain the detail load so Detail reflects the preserved selection.
-	m = applyMessages(t, m, runBatch(cmd))
 	if m.detail.TargetID() != "tm-1" && m.detail.Detail.Summary.ID != "tm-1" {
 		t.Fatalf("expected Detail to track tm-1 selection, target=%q detail=%q", m.detail.TargetID(), m.detail.Detail.Summary.ID)
 	}

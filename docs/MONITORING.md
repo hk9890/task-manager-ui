@@ -122,7 +122,7 @@ suppressed for the interactive session.
   store shows nothing on screen and the board simply renders whatever the first
   `Dashboard` call returned.
 - `failed to prepare the issue edit document`, `failed to apply the issue edit` —
-  an `e` round trip that did not save. The toast carries the same cause.
+  an edit (`alt+e`) round trip that did not save. The toast carries the same cause.
 - `dashboard refresh failed; keeping the last loaded columns` (WARN) — the rows on the
   board are the previous load's.
 - `cardinality threshold exceeded` (WARN) — an active group (Ready, Blocked or In Progress)
@@ -147,7 +147,7 @@ suppressed for the interactive session.
   `store change watch ended; the refresh tick is the only trigger` (WARN) — the watch
   `Model.watchStore` starts on the active store (`internal/app/storewatch.go`) is off: the
   operating system refused it, or the store directory was removed or renamed. No toast. The views
-  refresh on the one-minute tick, on focus regain and on `r` until another store is opened.
+  refresh on the one-minute tick, on focus regain and on the reload key until another store is opened.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.
@@ -160,13 +160,14 @@ fault, and none reaches the log without `--debug`:
 
 | Record | Emitted by |
 |---|---|
-| `manual <surface> refresh suppressed; refresh already in flight` | board, docs, search, and detail (`internal/app/refresh.go`) |
-| `startReload re-entry suppressed`, `triggerSearchWithAnchor re-entry suppressed` | the same reload paths, one level in |
+| `manual <surface> refresh suppressed; refresh already in flight` | board, docs, and detail (`internal/app/refresh.go`) |
+| `manual search refresh suppressed; search already in flight` | the store search's reload key (`internal/mode/search/model.go`) |
+| `startReload re-entry suppressed` | the board and docs reload paths, one level in |
 | `store listing re-entry suppressed; one is already in flight` | the store picker's reload key (`internal/mode/storepicker/model.go`). Opening the picker is never suppressed — it always lists again |
 | `load-more suppressed; already in flight`, `load-more suppressed; all closed issues loaded` | `internal/mode/board/model.go` |
-| `search scope toggle suppressed; search already in flight`, `search scope toggled` | `internal/mode/search/model.go` |
+| `search result dropped; a later search superseded it` | `internal/mode/search/model.go` — every edit of the query starts a search, and only the latest result is applied |
 
-Repeats of one of these under a key held down are the guard working. The Done-column
+Repeats of one of these under a key held down, or under typing in the store search, are the guard working. The Done-column
 runbook in [RUNNING.md](RUNNING.md) reads them that way.
 
 ## `--debug` coverage

@@ -54,7 +54,7 @@ func launcherModel(t *testing.T, cfg config.Model, projectRoot string, catalog s
 
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
-	m = press(t, m, "3")
+	m = press(t, m, "enter")
 	if m.active != mode.Detail {
 		t.Fatalf("fixture: expected Detail, got %q", m.active)
 	}
@@ -65,7 +65,7 @@ func TestLaunchersAreRefusedWhenTheProjectPathIsGone(t *testing.T) {
 	gone := goneDir(t)
 	m, runner := launcherModel(t, config.Default(), gone, nil)
 
-	for _, key := range []string{"n", "p", "l"} {
+	for _, key := range []string{"alt+v", "alt+p", "alt+l"} {
 		after := press(t, m, key)
 		if !after.toast.Visible() || !strings.Contains(after.toast.View(), "not accessible") {
 			t.Errorf("%q: expected a toast saying the project path is not accessible, got %q", key, after.toast.View())
@@ -90,7 +90,7 @@ func TestTheFooterFlagsLaunchersOff(t *testing.T) {
 func TestLaunchersRunWhenTheProjectPathExists(t *testing.T) {
 	m, runner := launcherModel(t, config.Default(), t.TempDir(), nil)
 
-	press(t, m, "l")
+	press(t, m, "alt+l")
 
 	if calls := runner.Calls(); len(calls) != 1 {
 		t.Errorf("launcher ran %d processes, want 1", len(calls))
@@ -112,7 +112,7 @@ func TestALauncherWithItsOwnWorkdirStillRuns(t *testing.T) {
 	}
 	m, runner := launcherModel(t, cfg, goneDir(t), nil)
 
-	press(t, m, "l")
+	press(t, m, "alt+l")
 
 	calls := runner.Calls()
 	if len(calls) != 1 || calls[0].Dir != own {
@@ -137,7 +137,7 @@ func TestSwitchingToAStoreWithAProjectReEnablesLaunchers(t *testing.T) {
 	}
 	m, runner := launcherModel(t, config.Default(), goneDir(t), catalog)
 
-	m = press(t, m, "s", "enter", "3")
+	m = press(t, m, "alt+s", "enter", "enter")
 	if m.active != mode.Detail {
 		t.Fatalf("expected Detail on the switched-to store, got %q", m.active)
 	}
@@ -145,7 +145,7 @@ func TestSwitchingToAStoreWithAProjectReEnablesLaunchers(t *testing.T) {
 		t.Error("launchers are still flagged off after switching to a store whose project exists")
 	}
 
-	press(t, m, "l")
+	press(t, m, "alt+l")
 	calls := runner.Calls()
 	if len(calls) != 1 || calls[0].Dir != present {
 		t.Errorf("calls: got %+v, want one run in the switched-to project %q", calls, present)
@@ -158,7 +158,7 @@ func TestRestoringTheProjectPathReEnablesLaunchers(t *testing.T) {
 	gone := goneDir(t)
 	m, runner := launcherModel(t, config.Default(), gone, nil)
 
-	m = press(t, m, "l")
+	m = press(t, m, "alt+l")
 	if len(runner.Calls()) != 0 {
 		t.Fatal("fixture: the launcher ran while the project path was gone")
 	}
@@ -166,7 +166,7 @@ func TestRestoringTheProjectPathReEnablesLaunchers(t *testing.T) {
 	if err := os.Mkdir(gone, 0o755); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	m = press(t, m, "l")
+	m = press(t, m, "alt+l")
 
 	if calls := runner.Calls(); len(calls) != 1 || calls[0].Dir != gone {
 		t.Errorf("calls: got %+v, want one run in the restored project %q", calls, gone)

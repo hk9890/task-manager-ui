@@ -63,8 +63,8 @@ func (m *Model) refreshAfterStoreChangeCmd() tea.Cmd {
 	}
 	cmd := m.refreshActiveSurfaceCmd()
 	if cmd == nil {
-		// The surface cannot take the change yet, such as a search whose query
-		// is being typed. The change stays owed and the next message asks again.
+		// The surface cannot take the change yet. The change stays owed and the
+		// next message asks again.
 		return nil
 	}
 	// Recorded here and not only by trackSurfaceLoads, which sees no load start
