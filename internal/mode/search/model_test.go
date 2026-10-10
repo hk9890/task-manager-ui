@@ -299,6 +299,50 @@ func TestAutoRefreshRunsTheQueryAgainAndKeepsTheSelectedIssue(t *testing.T) {
 	}
 }
 
+// TestAutoRefreshKeepsThePlaceInTheList: the operator did not ask for an auto
+// refresh, so the list stays scrolled as it was, a move made while the search
+// was in flight holds, and the selection stays on its row when its issue left
+// the result.
+func TestAutoRefreshKeepsThePlaceInTheList(t *testing.T) {
+	gw := fakes.NewTracked()
+	for i := 0; i < 60; i++ {
+		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%03d", i), Title: "Issue", Status: "open", Type: "task"})
+	}
+	m := openedModel(t, gw)
+
+	// The selection stands above the last row of the window.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	for i := 0; i < 5; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	row, offset := m.selectedRow, m.scrollOffset
+	if row == offset || offset == 0 {
+		t.Fatalf("setup: row %d at offset %d, want a row inside a scrolled window", row, offset)
+	}
+
+	resolve(t, m, m.AutoRefresh())
+	if m.selectedRow != row || m.scrollOffset != offset {
+		t.Fatalf("the refresh left row %d at offset %d, want row %d at offset %d", m.selectedRow, m.scrollOffset, row, offset)
+	}
+
+	refresh := m.AutoRefresh()
+	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	moved := m.selectedIssueID()
+	resolve(t, m, refresh)
+	if got := m.selectedIssueID(); got != moved {
+		t.Fatalf("the refresh took the selection to %q, want %q, where it moved meanwhile", got, moved)
+	}
+
+	row = m.selectedRow
+	if err := gw.Memory.CloseIssue(context.Background(), moved, domain.CloseIssueInput{}); err != nil {
+		t.Fatalf("CloseIssue returned error: %v", err)
+	}
+	resolve(t, m, m.AutoRefresh())
+	if got := m.selectedIssueID(); m.selectedRow != row || got == moved {
+		t.Fatalf("with its issue gone the selection is on row %d (%q), want row %d", m.selectedRow, got, row)
+	}
+}
+
 func TestClearQueryEmptiesTheQueryAndSearchesAgain(t *testing.T) {
 	gw := fakes.NewTracked()
 	seedStore(gw)

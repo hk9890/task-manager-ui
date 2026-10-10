@@ -190,6 +190,7 @@ func TestEmptyColumnSaysWhetherTheQueryEmptiedIt(t *testing.T) {
 		{name: "no query", want: "(no issues)"},
 		{name: "filter on a column with no rows", query: "login", want: "(no issues)"},
 		{name: "filter that emptied a column", col: Column{Loaded: 3}, query: "login", want: "(no matches)"},
+		{name: "filter that emptied a column whose rows reload", col: Column{Loaded: 3, Loading: true}, query: "login", want: "(no matches)"},
 		{name: "search with no query", search: true, want: "(no issues)"},
 		{name: "search that found nothing", query: "login", search: true, want: "(no matches)"},
 	}

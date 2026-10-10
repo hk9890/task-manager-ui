@@ -454,6 +454,9 @@ func errorRows(col Column) int {
 	return 0
 }
 
+// noMatchesRow is what a column draws when the query left it no row.
+const noMatchesRow = "(no matches)"
+
 // renderColumnRows renders col. hover is the index of the issue under the
 // pointer, or -1, and query the filter text whose words the rows mark. search
 // says the query chose the rows in the store, so an empty column is a miss.
@@ -470,6 +473,12 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 
 	if col.Loading {
 		if len(col.Rows) == 0 {
+			if query != "" && !search && col.Loaded > 0 {
+				// The filter left none of the loaded rows, and they reload
+				// behind it: a skeleton here would pulse on every refresh.
+				out.rows = append(out.rows, noMatchesRow)
+				return out
+			}
 			// Cold-start: no data yet — show skeleton rows.
 			out.rows = append(out.rows, skeletonRows(maxWidth, skeletonPhase, colIndex)...)
 			return out
@@ -496,7 +505,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 	// Not loading — render normally.
 	if out.prefix == 0 && len(col.Rows) == 0 {
 		if query != "" && (search || col.Loaded > 0) {
-			out.rows = append(out.rows, "(no matches)")
+			out.rows = append(out.rows, noMatchesRow)
 			return out
 		}
 		out.rows = append(out.rows, "(no issues)")

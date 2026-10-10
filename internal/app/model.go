@@ -82,6 +82,10 @@ type Model struct {
 	// is where that Detail returns to. It is what lets the search hold a
 	// selection without lastBrowse ever naming something that is not a tab.
 	searchFrom mode.ID
+	// searchFromDrill is the drill-in of the Detail the store search was opened
+	// from, or nil. The search takes the selection while it is up, so the
+	// drill-in waits here until closeSearch returns to that Detail.
+	searchFromDrill *mode.Selection
 
 	// hoverTab is the header tab under the pointer, or "".
 	hoverTab mode.ID
@@ -284,6 +288,7 @@ func (m *Model) bindStore(services Services) {
 	m.active = mode.Board
 	m.lastBrowse = mode.Board
 	m.searchFrom = ""
+	m.searchFromDrill = nil
 	m.pickerReturn = mode.Board
 	m.selectedByMode = make(map[mode.ID]*mode.Selection)
 	m.drillSelection = nil
@@ -859,18 +864,21 @@ func (m *Model) openSearch() tea.Cmd {
 		return nil
 	case m.searchFrom == "":
 		m.searchFrom = m.active
+		m.searchFromDrill = m.drillSelection
 	}
 	m.active = mode.Search
 	m.clearDrillSelection()
 	return batchCmds(m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 }
 
-// closeSearch returns to the surface the store search was opened from.
+// closeSearch returns to the surface the store search was opened from: a tab,
+// or Detail on the issue it showed, a drilled-in one included.
 func (m *Model) closeSearch() tea.Cmd {
-	from := m.searchFrom
-	m.searchFrom = ""
+	from, drill := m.searchFrom, m.searchFromDrill
+	m.searchFrom, m.searchFromDrill = "", nil
 	if from == mode.Detail {
 		m.active = mode.Detail
+		m.drillSelection = drill
 		return m.ensureDetailForCurrentSelectionCmd()
 	}
 	return m.switchToTab(from)

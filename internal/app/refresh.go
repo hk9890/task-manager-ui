@@ -77,7 +77,7 @@ func (m *Model) reloadDetailCmd() tea.Cmd {
 }
 
 func (m *Model) markBrowseSurfacesDirty() {
-	m.markSurfaceDirty(browseSurfaces()...)
+	m.markSurfaceDirty(browseSurfaces...)
 }
 
 func (m *Model) markSurfaceDirty(surfaces ...mode.ID) {

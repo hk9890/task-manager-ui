@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,16 +34,31 @@ const (
 	defaultItemCapacity = 20
 )
 
+// landing is where the selection goes when the result of a search is applied.
+type landing int
+
+const (
+	// landFirst puts the selection on the first result: the opening search and
+	// the reload key.
+	landFirst landing = iota
+	// landOnIssue keeps the selection on its issue while the result holds it,
+	// and otherwise puts it on the first result: an edit of the query or of the
+	// scope.
+	landOnIssue
+	// landInPlace keeps the selection on its issue too, and otherwise on its
+	// row, with the list scrolled as it was: an auto refresh, which the
+	// operator did not ask for.
+	landInPlace
+)
+
 // loadedMsg carries the result of one Search repository call.
 type loadedMsg struct {
 	// generation is the search this result answers. Every edit starts a new
 	// one, so only the result of the latest is applied.
 	generation int
-	// anchorIssueID is the issue selected when the search started, or "" for
-	// a search that resets the selection.
-	anchorIssueID string
-	page          domain.SearchResultPage
-	err           error
+	landing    landing
+	page       domain.SearchResultPage
+	err        error
 }
 
 // Model is the store search controller backed by repository calls.
@@ -113,7 +129,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 
 // Init runs the first search. With nothing typed it lists the open issues.
 func (m *Model) Init() tea.Cmd {
-	return m.search("")
+	return m.search(landFirst)
 }
 
 // Reload is the manual refresh: the query runs again and the selection goes
@@ -124,16 +140,16 @@ func (m *Model) Reload() tea.Cmd {
 			"trigger", "search-manual")
 		return nil
 	}
-	return m.search("")
+	return m.search(landFirst)
 }
 
 // AutoRefresh runs the query again and keeps the selection on the same issue
-// when the store still returns it.
+// when the store still returns it, and on the same row when it does not.
 func (m *Model) AutoRefresh() tea.Cmd {
 	if m.loading {
 		return nil
 	}
-	return m.search(m.selectedIssueID())
+	return m.search(landInPlace)
 }
 
 // Update processes search messages and keys. Row movement, open detail and
@@ -155,11 +171,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			if !changed {
 				return nil
 			}
-			return m.search(m.selectedIssueID())
+			return m.search(landOnIssue)
 		}
 		if IsScopeKey(msg) {
 			m.includeClosed = !m.includeClosed
-			return m.search(m.selectedIssueID())
+			return m.search(landOnIssue)
 		}
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
@@ -235,10 +251,9 @@ func (m *Model) IsLoading() bool {
 }
 
 // search starts a search for the query and scope as they are now. It
-// supersedes the one in flight: that result is dropped when it arrives. The
-// selection returns to anchorIssueID when the result holds it, and to the
-// first row otherwise.
-func (m *Model) search(anchorIssueID string) tea.Cmd {
+// supersedes the one in flight: that result is dropped when it arrives. land
+// says where the selection goes when this one does.
+func (m *Model) search(land landing) tea.Cmd {
 	m.generation++
 	m.loading = true
 
@@ -251,7 +266,7 @@ func (m *Model) search(anchorIssueID string) tea.Cmd {
 	}
 	return func() tea.Msg {
 		page, err := repo.Search(ctx, query)
-		return loadedMsg{generation: generation, anchorIssueID: anchorIssueID, page: page, err: err}
+		return loadedMsg{generation: generation, landing: land, page: page, err: err}
 	}
 }
 
@@ -272,17 +287,24 @@ func (m *Model) apply(msg loadedMsg) tea.Cmd {
 		return m.selectionChangedCmd()
 	}
 
+	// The selection is read now, not when the search started: the rows stay on
+	// screen while it is in flight, and the operator can move on them.
+	selectedIssueID := m.selectedIssueID()
+
 	m.issues = make([]domain.IssueSummary, 0, len(msg.page.Results))
 	for _, result := range msg.page.Results {
 		m.issues = append(m.issues, result.Issue)
 	}
 	m.total = msg.page.Metadata.Total
 
-	m.selectedRow, m.scrollOffset = 0, 0
-	for idx, issue := range m.issues {
-		if issue.ID == msg.anchorIssueID {
-			m.selectedRow = idx
-			break
+	if msg.landing != landInPlace {
+		m.selectedRow, m.scrollOffset = 0, 0
+	}
+	if msg.landing != landFirst {
+		if row := slices.IndexFunc(m.issues, func(issue domain.IssueSummary) bool {
+			return issue.ID == selectedIssueID
+		}); row >= 0 {
+			m.selectedRow = row
 		}
 	}
 	m.clampSelection()
@@ -296,7 +318,7 @@ func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
 	if !m.query.Clear() {
 		return false, nil
 	}
-	return true, m.search(m.selectedIssueID())
+	return true, m.search(landOnIssue)
 }
 
 func (m *Model) clampSelection() {

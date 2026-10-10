@@ -228,6 +228,30 @@ func TestSearchEscapeClearsTheQueryThenReturnsToTheOpeningSurface(t *testing.T) 
 	}
 }
 
+// TestSearchClosedFromADrilledDetailReturnsToTheDrilledIssue: the Detail the
+// search returns to shows the issue it showed, not the browse row under it.
+func TestSearchClosedFromADrilledDetailReturnsToTheDrilledIssue(t *testing.T) {
+	m := drilledIntoChild(t, fakes.NewTracked())
+
+	m = press(t, m, "alt+f")
+	if m.active != mode.Search || m.searchFrom != mode.Detail {
+		t.Fatalf("fixture: on %q opened from %q, want the search opened from detail", m.active, m.searchFrom)
+	}
+
+	m = press(t, m, "esc")
+	if m.active != mode.Detail || m.detail.Detail.Summary.ID != "tm-child" {
+		t.Fatalf("esc left the search for %q showing %q, want detail of tm-child", m.active, m.detail.Detail.Summary.ID)
+	}
+	if got, _ := m.selectedIssueID(); got != "tm-child" {
+		t.Fatalf("back in detail the shell acts on %q, want the drilled issue tm-child", got)
+	}
+
+	m = press(t, m, "esc")
+	if got, _ := m.selectedIssueID(); m.active != mode.Board || got != "tm-epic" {
+		t.Fatalf("esc from detail went to %q acting on %q, want the board row tm-epic", m.active, got)
+	}
+}
+
 // TestSearchIsLeftForATabByTheTabKeysAndAClick: the tab keys step from the tab
 // the operator was last on.
 func TestSearchIsLeftForATabByTheTabKeysAndAClick(t *testing.T) {

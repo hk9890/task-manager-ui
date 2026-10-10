@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -8,9 +10,7 @@ import (
 
 // browseSurfaces lists every surface that satisfies mode.Browse: the tabs, and
 // the store search, which is a browse surface in everything but the tab line.
-func browseSurfaces() []mode.ID {
-	return append(append([]mode.ID(nil), mode.BrowseModes...), mode.Search)
-}
+var browseSurfaces = append(slices.Clone(mode.BrowseModes), mode.Search)
 
 // browseTab pairs a browse surface with its controller.
 type browseTab struct {
@@ -25,9 +25,8 @@ type browseTab struct {
 //
 // A tab the shell has not constructed yet is skipped rather than dereferenced.
 func (m *Model) browseTabs() []browseTab {
-	surfaces := browseSurfaces()
-	out := make([]browseTab, 0, len(surfaces))
-	for _, id := range surfaces {
+	out := make([]browseTab, 0, len(browseSurfaces))
+	for _, id := range browseSurfaces {
 		if tab := m.browseController(id); tab != nil {
 			out = append(out, browseTab{ID: id, Tab: tab})
 		}
