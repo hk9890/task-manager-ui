@@ -835,8 +835,8 @@ func TestSpinnerTickRunsOnlyWhileSomethingIsLoading(t *testing.T) {
 	}
 
 	m = applyMessages(t, m, runBatch(m.Init()))
-	if len(m.loadingStates()) != 0 {
-		t.Fatalf("setup: expected an idle app after the initial load, loading=%v", m.loadingStates())
+	if m.workInFlight() {
+		t.Fatal("setup: expected an idle app after the initial load")
 	}
 
 	// Idle: the outstanding tick fires once more and is not re-armed.

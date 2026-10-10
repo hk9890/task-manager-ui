@@ -91,7 +91,7 @@ type BeginLoadOptions struct {
 // belongs to the issue being navigated away from. The placeholder
 // ApplyLoadedDetail below rebuilds the rail from the target and anchors it.
 //
-// loadingStates() reads the loading flag to drive the header spinner, so
+// workInFlight() reads the loading flag to drive the header spinner, so
 // BeginLoad must be what precedes every loadDetailCmd.
 func (m *Model) BeginLoad(issueID string, opts BeginLoadOptions) {
 	issueID = strings.TrimSpace(issueID)

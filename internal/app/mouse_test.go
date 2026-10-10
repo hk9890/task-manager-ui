@@ -17,7 +17,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
 
 // newMouseShell is a loaded shell on the Board at 160x30: one ready issue and
@@ -277,24 +276,36 @@ func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
 	for _, tc := range []struct {
 		surface mode.ID
 		reach   []tea.Msg
-		want    loading.Scope
 	}{
-		{surface: mode.Board, want: loading.ScopeBoard},
-		{surface: mode.Docs, reach: []tea.Msg{tab}, want: loading.ScopeDocs},
-		{surface: mode.Detail, reach: []tea.Msg{detail}, want: loading.ScopeDetail},
+		{surface: mode.Board},
+		{surface: mode.Docs, reach: []tea.Msg{tab}},
+		{surface: mode.Detail, reach: []tea.Msg{detail}},
 	} {
 		m := applyMessages(t, newMouseShell(t), tc.reach)
-		if m.active != tc.surface || len(m.loadingStates()) != 0 {
-			t.Fatalf("fixture: on %q with %d loads in flight, want %q at rest", m.active, len(m.loadingStates()), tc.surface)
+		if m.active != tc.surface || m.workInFlight() {
+			t.Fatalf("fixture: on %q with work in flight %v, want %q at rest", m.active, m.workInFlight(), tc.surface)
 		}
 
 		x, _ := testui.FindCell(t, topBar(m), "reload "+m.reloadKey())
 		next, cmd := m.Update(leftClick(x, headerMenuRow))
-		states := next.(Model).loadingStates()
-		if cmd == nil || len(states) != 1 || states[0].Scope != tc.want {
-			t.Errorf("click on reload on %q: command %v, loading %v; want %q alone", tc.surface, cmd != nil, states, tc.want)
+		if got := surfacesLoading(next.(Model)); cmd == nil || len(got) != 1 || got[0] != tc.surface {
+			t.Errorf("click on reload on %q: command %v, loading %v; want %q alone", tc.surface, cmd != nil, got, tc.surface)
 		}
 	}
+}
+
+// surfacesLoading lists the surfaces with a load in flight.
+func surfacesLoading(m Model) []mode.ID {
+	var ids []mode.ID
+	for _, entry := range m.browseTabs() {
+		if entry.Tab.IsLoading() {
+			ids = append(ids, entry.ID)
+		}
+	}
+	if m.detail.IsLoading() {
+		ids = append(ids, mode.Detail)
+	}
+	return ids
 }
 
 // TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface: the reload
