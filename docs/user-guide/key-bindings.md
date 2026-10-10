@@ -209,6 +209,8 @@ instead.
   sees them. From the store search they leave it for a tab.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.
 - The startup-error screen also quits on `q`.
+- An `esc` pressed while a dialog is still opening cancels the dialog and leaves
+  the filter as it is.
 - A terminal sends `alt+e` as `esc` followed by `e`, so `esc` and a letter that
   reach the app together are read as the `alt+` key: `esc` then a quick `e`
   opens the editor where you meant to clear the filter and type. A local

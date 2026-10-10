@@ -195,7 +195,8 @@ Give each outcome [DESIGN-GUIDE.md](DESIGN-GUIDE.md) names for such a key its ow
 result, the empty result, the failed result. An outcome with no case has a guard no test holds.
 
 The store search waits a pause after an edit. Tests run with a pause of zero: `newModel` in the
-search package and `mustNewModel` in `internal/app` set it (`Model.SetEditPause`). A shell test
+search package sets the `pause` field, and `mustNewModel` and `mustNewModelWithOptions` in
+`internal/app` call `Model.SetEditPause`. A shell test
 that types into the search after a store switch sets it again, because `bindStore` builds a new
 search.
 

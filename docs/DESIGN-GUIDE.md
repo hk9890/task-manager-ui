@@ -4,8 +4,8 @@ The interaction and rendering law for every surface under `internal/ui/` and `in
 
 Three rules here are gated — type/colour parity (`renderhelpers/type_style_parity_test.go`), the
 tab strip's ownership of `tab`/`shift+tab`, and no action on a key a browse surface takes for
-itself (both `internal/config/keybindings_test.go`). The rest is held at review
-([REVIEWING.md](REVIEWING.md)).
+itself (both `internal/config/keybindings_test.go`; `internal/mode/search/model_test.go` pins the
+reserved keys to the surfaces). The rest is held at review ([REVIEWING.md](REVIEWING.md)).
 
 [CODING.md](CODING.md)'s rule 8 owns the `internal/ui/` and `internal/mode/` boundary. `modal` and
 `toaster` are the exception to it — they carry Bubble Tea state of their own. `loading` is stateless
