@@ -2299,8 +2299,8 @@ func TestAutoRefreshStopsTheSearchForARemovedDoneIssue(t *testing.T) {
 	boardApplyMessages(t, m, testui.DrainCmd(m.AutoRefresh()))
 
 	pageReads := len(repo.CallsFor(fakes.MethodDashboard)) - readsBefore - 1
-	if pageReads < 1 || pageReads > anchorSearchPageLimit {
-		t.Errorf("the refresh read %d further pages, want 1 to %d", pageReads, anchorSearchPageLimit)
+	if pageReads != anchorSearchPageLimit {
+		t.Errorf("the refresh read %d further pages, want %d", pageReads, anchorSearchPageLimit)
 	}
 	if _, _, found := m.findIssue(selected); found {
 		t.Fatalf("setup: %s is still on the board", selected)
@@ -2333,5 +2333,67 @@ func TestAutoRefreshSearchLeavesACursorTheOperatorMoved(t *testing.T) {
 
 	if got := m.currentSelection().Issue.ID; got != moved {
 		t.Errorf("the cursor is on %s after the search, want %s where the operator moved it", got, moved)
+	}
+}
+
+// supersededSearchModel returns a board whose auto refresh started a search for
+// the selected Done issue, with a second store change seeded behind it. The
+// commands are the page of the search, not yet read, and the second refresh.
+func supersededSearchModel(t *testing.T) (m *Model, selected string, searching, superseding tea.Cmd) {
+	t.Helper()
+
+	m, repo := newThreePageDoneModel(t)
+	m.selectedRow[doneColumnIndex] = m.doneLoadedCount - 3
+	selected = m.currentSelection().Issue.ID
+
+	for i := range 3 {
+		seedClosed(repo.Memory, fmt.Sprintf("closed-new-%d", i), pagedDoneClosedAt.Add(time.Duration(i+1)*time.Hour))
+	}
+	searching = m.Update(m.AutoRefresh()())
+	if m.anchorSearch == nil {
+		t.Fatal("setup: the refresh started no search")
+	}
+
+	for i := range 3 {
+		seedClosed(repo.Memory, fmt.Sprintf("closed-newer-%d", i), pagedDoneClosedAt.Add(time.Duration(i+4)*time.Hour))
+	}
+	return m, selected, searching, m.AutoRefresh()
+}
+
+// TestAutoRefreshThatSupersedesTheSearchLooksForTheSameIssue pins the cursor
+// when the store changes again before a page of the search lands. The second
+// refresh drops that page, and took the issue on the fallback row as its anchor.
+func TestAutoRefreshThatSupersedesTheSearchLooksForTheSameIssue(t *testing.T) {
+	t.Parallel()
+
+	m, selected, searching, superseding := supersededSearchModel(t)
+	boardApplyMessages(t, m, testui.DrainCmd(searching))
+	boardApplyMessages(t, m, testui.DrainCmd(superseding))
+
+	if got := m.currentSelection().Issue.ID; got != selected {
+		t.Errorf("the cursor is on %s after the second refresh, want %s where it was", got, selected)
+	}
+	if m.anchorSearch != nil || m.doneLoadInFlight {
+		t.Error("the search for the selected issue did not end")
+	}
+	assertSelectionDrawn(t, m)
+}
+
+// TestAutoRefreshThatSupersedesTheSearchLeavesACursorTheOperatorMoved pins that
+// the second refresh anchors on the row the operator went to meanwhile.
+func TestAutoRefreshThatSupersedesTheSearchLeavesACursorTheOperatorMoved(t *testing.T) {
+	t.Parallel()
+
+	m, _, searching, superseding := supersededSearchModel(t)
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	moved := m.currentSelection().Issue.ID
+	boardApplyMessages(t, m, testui.DrainCmd(searching))
+	boardApplyMessages(t, m, testui.DrainCmd(superseding))
+
+	if got := m.currentSelection().Issue.ID; got != moved {
+		t.Errorf("the cursor is on %s after the second refresh, want %s where the operator moved it", got, moved)
+	}
+	if m.anchorSearch != nil || m.doneLoadInFlight {
+		t.Error("the superseded search did not end")
 	}
 }

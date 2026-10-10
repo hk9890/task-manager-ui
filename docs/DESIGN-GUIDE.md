@@ -231,7 +231,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Test a `HitTest` against the renderer, not against arithmetic: `testui.FindCell` finds where
   `Render` drew a text, and the test asserts `HitTest` reports that row there.
 - One click selects a row and a second opens it. Take the decision from `mode.ClickTracker`: a
-  second click on the row the first one selected opens it.
+  second click on the same cell opens the row the first one selected, because selecting a row drawn
+  with only its first line scrolls the list and slides another row under the pointer.
 - The wheel moves a list's selection one row a notch — on the board the selection of the column
   under the pointer, which takes the focus — and scrolls a pane of text.
 - A focus change must not move what is under the pointer. A board too narrow for all its columns

@@ -15,6 +15,7 @@ func TestClickTrackerTellsADoubleClickFromTwoSingleOnes(t *testing.T) {
 	type click struct {
 		target   string
 		selected string
+		x, y     int
 		ms       int
 		want     bool
 	}
@@ -22,21 +23,25 @@ func TestClickTrackerTellsADoubleClickFromTwoSingleOnes(t *testing.T) {
 		name   string
 		clicks []click
 	}{
-		{name: "two fast clicks on one row", clicks: []click{{"a", "", 0, false}, {"a", "a", 200, true}}},
-		{name: "two slow clicks", clicks: []click{{"a", "", 0, false}, {"a", "a", 400, false}}},
-		{name: "two rows", clicks: []click{{"a", "", 0, false}, {"b", "a", 100, false}}},
-		{name: "a double click is consumed", clicks: []click{{"a", "", 0, false}, {"a", "a", 100, true}, {"a", "a", 200, false}, {"a", "a", 300, true}}},
-		{name: "no row under the second click", clicks: []click{{"a", "", 0, false}, {"", "a", 100, false}}},
-		{name: "the first click selected nothing", clicks: []click{{"", "", 0, false}, {"", "", 100, false}, {"a", "", 200, false}}},
+		{name: "two fast clicks on one row", clicks: []click{{"a", "", 5, 5, 0, false}, {"a", "a", 9, 5, 200, true}}},
+		{name: "two slow clicks", clicks: []click{{"a", "", 5, 5, 0, false}, {"a", "a", 5, 5, 400, false}}},
+		{name: "two rows", clicks: []click{{"a", "", 5, 5, 0, false}, {"b", "a", 5, 6, 100, false}}},
+		{name: "a double click is consumed", clicks: []click{{"a", "", 5, 5, 0, false}, {"a", "a", 5, 5, 100, true}, {"a", "a", 5, 5, 200, false}, {"a", "a", 5, 5, 300, true}}},
+		// The first click scrolled the row away: the same cell now holds another
+		// row, or none, and the operator still means the row they selected.
+		{name: "same cell, another row under it", clicks: []click{{"a", "", 5, 5, 0, false}, {"b", "a", 5, 5, 100, true}}},
+		{name: "same cell, no row under it", clicks: []click{{"a", "", 5, 5, 0, false}, {"", "a", 5, 5, 100, true}}},
+		{name: "another cell, no row under it", clicks: []click{{"a", "", 5, 5, 0, false}, {"", "a", 5, 9, 100, false}}},
+		{name: "the first click selected nothing", clicks: []click{{"", "", 5, 5, 0, false}, {"", "", 5, 5, 100, false}, {"a", "", 5, 5, 200, false}}},
 		// A wheel notch or a key moved the selection off the clicked row:
 		// opening the selection would open a row nobody clicked.
-		{name: "the selection moved between the clicks", clicks: []click{{"a", "", 0, false}, {"a", "b", 100, false}}},
+		{name: "the selection moved between the clicks", clicks: []click{{"a", "", 5, 5, 0, false}, {"a", "b", 5, 5, 100, false}}},
 	}
 
 	for _, tc := range cases {
 		var tracker ClickTracker
 		for idx, c := range tc.clicks {
-			msg := MouseMsg{Kind: MouseClick, At: start.Add(time.Duration(c.ms) * time.Millisecond)}
+			msg := MouseMsg{Kind: MouseClick, X: c.x, Y: c.y, At: start.Add(time.Duration(c.ms) * time.Millisecond)}
 			if got := tracker.Double(c.target, c.selected, msg); got != c.want {
 				t.Errorf("%s: click %d on %q = %v, want %v", tc.name, idx, c.target, got, c.want)
 			}

@@ -156,14 +156,14 @@ func glamourStyleName(dark bool) string {
 type Renderer struct {
 	EmptyFallback string
 
-	// renderANSI renders markdown to ANSI. A nil value, as in a Renderer
-	// literal, means renderMarkdownANSIMemoized.
+	// renderANSI renders markdown to ANSI. Nil means
+	// renderMarkdownANSIMemoized; only a test sets it.
 	renderANSI func(string, int) (string, error)
 }
 
 // NewRenderer returns a renderer configured for read-only markdown viewing.
 func NewRenderer() Renderer {
-	return Renderer{EmptyFallback: DefaultEmptyFallback, renderANSI: renderMarkdownANSIMemoized}
+	return Renderer{EmptyFallback: DefaultEmptyFallback}
 }
 
 // RenderReadOnly renders markdown as ANSI output when markdown structure is

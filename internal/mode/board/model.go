@@ -151,7 +151,8 @@ type Model struct {
 
 	// anchorSearch is set while an auto refresh pages Done to find the issue
 	// the cursor was on. Closes by another process push a loaded row down, so
-	// the issue can be below the depth the refresh read.
+	// the issue can be below the depth the refresh read. An auto refresh that
+	// starts meanwhile looks for the same issue (captureRefreshAnchor).
 	anchorSearch *anchorSearch
 }
 
@@ -418,9 +419,11 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	// it onto the reloaded list, which is what used to leave a hole in the
 	// middle of the Done column. composeFailed restores doneLoadedCount when
 	// the reload fails, because the old rows stay on screen.
+	//
+	// An anchor search stays set through an auto refresh: its page is dropped
+	// with the others, and compose takes over the issue it was looking for.
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
-	m.anchorSearch = nil
 	m.reloadSeq++
 
 	if rm == mode.RefreshReload {
@@ -429,6 +432,7 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 		m.selectedRow = map[int]int{}
 		m.scrollOffset = map[int]int{}
 		m.columns = initialLoadingColumns()
+		m.anchorSearch = nil
 	}
 
 	// Build opts before entering the Cmd closure so no model state is read
@@ -473,6 +477,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	if m.refreshMode == mode.RefreshAuto {
 		anchor = m.captureRefreshAnchor()
 	}
+	m.anchorSearch = nil
 
 	// Build the four fixed columns, clearing loading flags atomically.
 	m.columns = []columnData{
@@ -502,11 +507,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	// Composition complete — clear the in-flight flag so future reload requests
 	// (keyboard or auto-refresh) are permitted.
 	m.inflight = false
-	selectionChanged := m.selectionChangedCmd()
-	if search := m.startAnchorSearch(anchor); search != nil {
-		return tea.Batch(selectionChanged, search)
-	}
-	return selectionChanged
+	return tea.Batch(m.selectionChangedCmd(), m.startAnchorSearch(anchor))
 }
 
 // composeFailed keeps the rows, counts and selection the last successful load
@@ -536,7 +537,8 @@ func (m *Model) composeFailed(loadErr error) tea.Cmd {
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 
 	// A failed refresh restores nothing: the rows it keeps are the ones the
-	// selection is already on.
+	// selection is already on. A search it superseded ends with it.
+	m.anchorSearch = nil
 	m.refreshMode = mode.RefreshReload
 	m.clampScrollOffsets()
 	m.inflight = false
@@ -630,7 +632,16 @@ func (m *Model) captureRefreshAnchor() *refreshAnchor {
 	if selection := m.currentSelection(); selection != nil {
 		anchor.selectedIssueID = selection.Issue.ID
 	}
+	// A refresh that superseded a search takes over its issue: the cursor waits
+	// on the fallback row of that search, which holds another issue.
+	if search := m.anchorSearch; search != nil && m.cursorOnFallbackRow(search) {
+		anchor.selectedIssueID = search.issueID
+	}
 	return anchor
+}
+
+func (m *Model) cursorOnFallbackRow(search *anchorSearch) bool {
+	return m.focusedColumn == doneColumnIndex && m.selectedRow[doneColumnIndex] == search.fallbackRow
 }
 
 func (m *Model) restoreFromAnchor(anchor *refreshAnchor) {
@@ -672,7 +683,7 @@ func (m *Model) startAnchorSearch(anchor *refreshAnchor) tea.Cmd {
 	if anchor == nil || anchor.focusedColumn != doneColumnIndex || anchor.selectedIssueID == "" {
 		return nil
 	}
-	if _, _, found := m.findIssue(anchor.selectedIssueID); found {
+	if m.selectedIssueID() == anchor.selectedIssueID {
 		return nil
 	}
 	page := m.dispatchLoadMoreClosed()
@@ -697,7 +708,7 @@ func (m *Model) continueAnchorSearch() tea.Cmd {
 	}
 	m.anchorSearch = nil
 
-	if m.focusedColumn != doneColumnIndex || m.selectedRow[doneColumnIndex] != search.fallbackRow {
+	if !m.cursorOnFallbackRow(search) {
 		return nil
 	}
 	if col, row, found := m.findIssue(search.issueID); found {
@@ -927,10 +938,7 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 	if m.focusedColumn != doneColumnIndex {
 		return nextPage
 	}
-	if nextPage != nil {
-		return tea.Batch(m.selectionChangedCmd(), nextPage)
-	}
-	return m.selectionChangedCmd()
+	return tea.Batch(m.selectionChangedCmd(), nextPage)
 }
 
 // closedPageSize returns the number of closed issues to request per load-more

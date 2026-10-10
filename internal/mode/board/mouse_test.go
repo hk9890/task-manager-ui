@@ -1,6 +1,7 @@
 package board
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,33 @@ func TestAClickLeavesTheColumnsUnderThePointer(t *testing.T) {
 	click.At = click.At.Add(200 * time.Millisecond)
 	if !opensDetail(m.Update(click)) {
 		t.Fatal("a second click on the row of a column that was not focused did not open Detail")
+	}
+}
+
+// TestADoubleClickOnAHalfDrawnRowOpensIt: at 24 lines a column draws ten issues
+// and the first line of the next. A click on that line selects the issue and
+// scrolls it into the window, so the second click of the pair finds another
+// issue under the same cell. It opens the one the first click selected.
+func TestADoubleClickOnAHalfDrawnRowOpensIt(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
+	issues := make([]domain.IssueSummary, 12)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("row-%02d", i), Status: "open", Type: "task"}
+	}
+	m.columns = []columnData{{title: sectionTitleReady, issues: issues, total: len(issues), exact: true}}
+	m.SetSize(100, 24)
+
+	click := mouseAt(t, m, mode.MouseClick, "row-10", 0)
+	cmd := m.Update(click)
+	if got := selectionFrom(t, cmd); got != "tm-10" || m.scrollOffset[0] == 0 {
+		t.Fatalf("setup: the click selected %q at offset %d, want tm-10 scrolled into the window", got, m.scrollOffset[0])
+	}
+
+	click.At = click.At.Add(200 * time.Millisecond)
+	if cmd = m.Update(click); !opensDetail(cmd) || m.selectedIssueID() != "tm-10" {
+		t.Fatalf("the second click at the same cell did not open tm-10; the selection is %q", m.selectedIssueID())
 	}
 }
 
