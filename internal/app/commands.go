@@ -130,6 +130,12 @@ func (m Model) handleEditIssueResult(modeCmd tea.Cmd, msg editIssueResultMsg) (t
 		return m, batchCmds(modeCmd, toastCmd)
 	}
 
+	if m.storeWatched() {
+		toastCmd := m.showToast(fmt.Sprintf("Updated issue %s", msg.issueID), toaster.StyleSuccess)
+		notifyEditResult()
+		return m, batchCmds(modeCmd, toastCmd)
+	}
+
 	// Marking the surfaces dirty only makes the *next* refresh tick reload
 	// them, and that tick is a minute away — so the edited row kept its old
 	// title under a toast saying the update succeeded, which reads as a failed

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +12,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 // watchedRepository gives a tracked repository the optional change watch. The
@@ -341,6 +343,154 @@ func TestALoadAStoreChangeStartedLandsUnderAnOverlay(t *testing.T) {
 				t.Errorf("the overlay swallowed the selection of the reloaded board: the shell still acts on %+v", selection)
 			}
 		})
+	}
+}
+
+// An overlay consumes keys and the messages of its own modal. A mutation result
+// is neither, and its handler is the only thing that reports the write.
+func TestMutationResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayCloses(t *testing.T) {
+	t.Parallel()
+
+	for name, runtime := range map[string]RuntimeOptions{
+		"watched store":   {},
+		"unwatched store": {DisableAutoRefresh: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := newWatchedRepository()
+			m, _ := watchedModel(t, repo, runtime)
+
+			m.showHelp = true
+			mark := repo.CallCount()
+			m = applyMessages(t, m, []tea.Msg{mutationResultMsg{kind: mutationComment, issueID: "tm-1"}})
+			if m.storeWatched() {
+				m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+			}
+
+			if !m.toast.Visible() || !strings.Contains(m.toast.View(), "Added comment to tm-1") {
+				t.Errorf("the overlay swallowed the mutation result: toast = %q", m.toast.View())
+			}
+			if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 0 {
+				t.Errorf("board reads under the overlay = %d, want 0", got)
+			}
+
+			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}})
+			if m.showHelp {
+				t.Fatal("setup: the help key did not close the overlay")
+			}
+			if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 1 {
+				t.Errorf("board reads once the overlay closed = %d, want 1", got)
+			}
+		})
+	}
+}
+
+// A dialog that opened over an overlay would replace the modal on screen.
+func TestCatalogResultUnderAnOverlayOpensNoDialog(t *testing.T) {
+	t.Parallel()
+
+	repo := newWatchedRepository()
+	m, _ := watchedModel(t, repo, RuntimeOptions{})
+
+	m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
+	m.showHelp = true
+	m = applyMessages(t, m, []tea.Msg{mutationCatalogsLoadedMsg{kind: mutationStatus}})
+
+	if m.showActionModal || m.pendingDialog.active {
+		t.Errorf("a status dialog opened or stayed pending under the help overlay (open = %v, pending = %v)",
+			m.showActionModal, m.pendingDialog.active)
+	}
+}
+
+// The watch signals the writes of this process too. The handler of the write
+// and the signal must not both reload.
+func TestOneCommentSubmitIsOneBoardRead(t *testing.T) {
+	t.Parallel()
+
+	for name, runtime := range map[string]RuntimeOptions{
+		"watched store":   {},
+		"unwatched store": {DisableAutoRefresh: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := newWatchedRepository()
+			m, _ := watchedModel(t, repo, runtime)
+			// The modal is opened without its Init: a drain would follow the
+			// cursor blink of the input for good.
+			m.actionState = buildMutationDialog(mutationComment, domain.IssueSummary{ID: "tm-1"}, nil, nil, nil)
+			m.showActionModal = true
+
+			mark := repo.CallCount()
+			m = applyMessages(t, m, []tea.Msg{modal.SubmitMsg{Values: map[string]string{"body": "seen"}}})
+			if m.storeWatched() {
+				m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+			}
+
+			if got := repo.CallCountSince(mark, fakes.MethodAddComment); got != 1 {
+				t.Fatalf("setup: comment writes = %d, want 1", got)
+			}
+			if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 1 {
+				t.Errorf("board reads for one comment submit = %d, want 1", got)
+			}
+		})
+	}
+}
+
+func TestFocusRegainOnAWatchedStoreReadsNothing(t *testing.T) {
+	t.Parallel()
+
+	repo := newWatchedRepository()
+	m, _ := watchedModel(t, repo, RuntimeOptions{})
+
+	mark := repo.CallCount()
+	m = applyMessages(t, m, []tea.Msg{tea.BlurMsg{}, tea.FocusMsg{}})
+	if got := storeReads(repo, mark); got != 0 {
+		t.Errorf("store reads on focus regain = %d, want 0: the watch kept the board current", got)
+	}
+	if !m.terminalFocused {
+		t.Error("the focus regain was not recorded")
+	}
+}
+
+// The watch reloads a Detail whose load failed on every store change. The
+// operator is told one time that the issue is gone.
+func TestDetailLoadFailureToastShowsOnceForOneIssue(t *testing.T) {
+	t.Parallel()
+
+	repo := newWatchedRepository()
+	m, _ := watchedModel(t, repo, RuntimeOptions{})
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	if m.active != mode.Detail {
+		t.Fatalf("setup: active = %v, want Detail", m.active)
+	}
+
+	// Another process deleted the issue.
+	repo.SetError(fakes.MethodIssue, errors.New("issue not found"))
+	mark, shown := repo.CallCount(), m.toast.Seq()
+	// One at a time: changes that arrive during one load are one reload.
+	for range 3 {
+		m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+	}
+
+	if got := repo.CallCountSince(mark, fakes.MethodIssue); got != 3 {
+		t.Fatalf("setup: detail reads after three store changes = %d, want 3", got)
+	}
+	if got := m.toast.Seq() - shown; got != 1 {
+		t.Errorf("failure toasts after three failed reloads = %d, want 1", got)
+	}
+	if !strings.Contains(m.toast.View(), "Failed to load selected issue details") {
+		t.Errorf("toast = %q, want the detail load failure", m.toast.View())
+	}
+
+	// A load that succeeds ends the failure, so the next one is news again.
+	repo.SetError(fakes.MethodIssue, nil)
+	m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+	repo.SetError(fakes.MethodIssue, errors.New("issue not found"))
+	m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
+	if got := m.toast.Seq() - shown; got != 2 {
+		t.Errorf("failure toasts after a recovery and a new failure = %d, want 2", got)
 	}
 }
 

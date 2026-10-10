@@ -38,17 +38,27 @@ func (m Model) waitForStoreChangeCmd() tea.Cmd {
 	return m.scoped(m.awaitStoreChange(changes))
 }
 
+// storeWatched reports whether a watch signals the changes of the active store,
+// the writes of this process included. The watch then owns every reload that
+// follows a write: a handler that reloaded for its own write would read the
+// store a second time when the signal for that write arrives.
+func (m Model) storeWatched() bool {
+	return m.storeChanges != nil
+}
+
 // refreshAfterStoreChangeCmd reloads the active surface when the store changed
-// after that surface's latest load started. Update runs it after every message,
-// so a change that arrives during a load, under an overlay or while another
-// surface is active is applied as soon as the surface can take it. The terminal
-// focus does not gate it: a board in view while an agent writes in another pane
-// is the case the watch exists for.
+// after that surface's latest load started, or when a write of this process
+// left it dirty. Update runs it after every message, so a change that arrives
+// during a load, under an overlay or while another surface is active is applied
+// as soon as the surface can take it. The terminal focus does not gate it: a
+// board in view while an agent writes in another pane is the case the watch
+// exists for.
 func (m *Model) refreshAfterStoreChangeCmd() tea.Cmd {
-	if m.showHelp || m.showActionModal {
+	if m.overlayOpen() {
 		return nil
 	}
-	if !m.behindStore(m.active) || m.surfaceLoading(m.active) {
+	owed := m.behindStore(m.active) || m.refreshStateBySurface[m.active].dirty
+	if !owed || m.surfaceLoading(m.active) {
 		return nil
 	}
 	cmd := m.refreshActiveSurfaceCmd()
