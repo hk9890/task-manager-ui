@@ -29,15 +29,9 @@ func renderQueryLine(query, placeholder string, width int) string {
 
 	// One cell is the cursor's.
 	room := width - lipgloss.Width(prompt) - 1
-	text := []rune(query)
-	if lipgloss.Width(query) > room {
-		for len(text) > 0 && lipgloss.Width(string(text))+1 > room {
-			text = text[1:]
-		}
-		text = append([]rune("…"), text...)
-	}
+	text := textutil.TruncateStringFront(query, room)
 	line := accent.Render(prompt) +
-		lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Render(string(text)) +
+		lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Render(text) +
 		cursor.Render(" ")
 	return textutil.TruncateString(line, width)
 }

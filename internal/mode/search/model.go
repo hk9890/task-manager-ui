@@ -12,9 +12,9 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/rowlist"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
-	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 const (
@@ -29,9 +29,9 @@ const (
 	titleOpen = "Results · open"
 	titleAll  = "Results · all"
 
-	// defaultItemCapacity is the row window used before the first
-	// tea.WindowSizeMsg sets a real height.
-	defaultItemCapacity = 20
+	// editPause is how long an edit of the query waits before its search runs.
+	// Keys typed inside it run one search, for the text as it is when it ends.
+	editPause = 150 * time.Millisecond
 )
 
 // landing is where the selection goes when the result of a search is applied.
@@ -61,6 +61,13 @@ type loadedMsg struct {
 	err        error
 }
 
+// editPauseEndedMsg says the pause after an edit of the query is over.
+type editPauseEndedMsg struct {
+	// generation is the edit the pause followed. A later edit, or any other
+	// search, supersedes it, and its pause then runs nothing.
+	generation int
+}
+
 // Model is the store search controller backed by repository calls.
 type Model struct {
 	ctx    context.Context
@@ -71,7 +78,7 @@ type Model struct {
 	height int
 
 	// query is the text the store is searched for. Unlike the filter of a tab
-	// it is not matched here: every edit runs a search.
+	// it is not matched here: every edit runs a search, after editPause.
 	query mode.Query
 	// includeClosed is the scope: open issues, or all of them.
 	includeClosed bool
@@ -82,43 +89,35 @@ type Model struct {
 	total  int
 	err    error
 
-	// generation counts the searches started. loading is true until the
-	// result of the latest one arrives; settled once any result has.
+	// generation counts the searches started, the pause before the search of
+	// an edit included. loading is true until the result of the latest one
+	// arrives; settled once any result has.
 	generation int
 	loading    bool
 	settled    bool
+	// pause is editPause. A test shortens it.
+	pause time.Duration
 
-	selectedRow  int
-	scrollOffset int
+	// list is the selection, the scroll window and the pointer over issues.
+	list rowlist.List
 
 	// heldOpen is an Enter that arrived while a search the operator asked for
 	// was in flight. The rows on screen then answer an older query, so the
 	// detail opens on the result of the newest one. Any later key, click or
 	// wheel notch drops it.
-	heldOpen heldOpen
-
-	pointer *mode.Pointer
-	clicks  mode.ClickTracker
+	heldOpen bool
 }
 
-// heldOpen is how far a held Enter has come.
-type heldOpen int
-
-const (
-	noHeldOpen heldOpen = iota
-	// openOnResult waits for the result of the search in flight.
-	openOnResult
-	// openOnSelection waits for the shell to hold the selection of that
-	// result: the open request resolves its target there, so it follows the
-	// SelectionChangedMsg and never races it.
-	openOnSelection
-)
-
-// IsScopeKey reports whether msg is the key that toggles the scope between
-// open issues and all of them. It is built in, as the query keys are, and the
-// shell asks so that a key the search took runs no shell action.
-func IsScopeKey(msg tea.KeyMsg) bool {
+// isScopeKey reports whether msg is the key that toggles the scope between
+// open issues and all of them. It is built in, as the query keys are.
+func isScopeKey(msg tea.KeyMsg) bool {
 	return msg.Type == tea.KeyCtrlT && !msg.Alt
+}
+
+// TakesKey reports whether msg is a key of the query or the scope key, which
+// the search takes before any binding.
+func (m *Model) TakesKey(msg tea.KeyMsg) bool {
+	return mode.IsQueryKey(msg) || isScopeKey(msg)
 }
 
 // NewModel builds the store search controller. Keybindings default to the
@@ -143,7 +142,15 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		repo:   repo,
 		logger: logger,
 		keys:   keys,
+		pause:  editPause,
 	}
+}
+
+// SetEditPause replaces the pause an edit of the query waits before its search
+// runs. A test of the shell passes zero: it runs every command to its message,
+// and would otherwise sleep through each pause.
+func (m *Model) SetEditPause(pause time.Duration) {
+	m.pause = pause
 }
 
 // Init runs the first search. With nothing typed it lists the open issues.
@@ -182,37 +189,31 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case loadedMsg:
 		return m.apply(msg)
 
+	case editPauseEndedMsg:
+		if msg.generation != m.generation {
+			return nil
+		}
+		return m.searchCmd(msg.generation, landOnIssue)
+
 	case mode.MouseMsg:
 		return m.handleMouse(msg)
 
-	case mode.SelectionChangedMsg:
-		return m.openHeld(msg)
-
 	case tea.KeyMsg:
-		m.heldOpen = noHeldOpen
+		m.heldOpen = false
 		if consumed, changed := m.query.HandleKey(msg); consumed {
 			if !changed {
 				return nil
 			}
-			return m.search(landOnIssue)
+			return m.searchAfterPause()
 		}
-		if IsScopeKey(msg) {
+		if isScopeKey(msg) {
 			m.includeClosed = !m.includeClosed
 			return m.search(landOnIssue)
 		}
+		if moved, handled := m.list.MoveKey(m.keys, msg, m.viewState(0)); handled {
+			return m.selectionMovedCmd(moved)
+		}
 		switch {
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
-			return m.moveRow(-1)
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
-			return m.moveRow(1)
-		case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
-			return m.moveRow(-m.pageRows())
-		case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
-			return m.moveRow(m.pageRows())
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveHome, msg):
-			return m.moveRow(-len(m.issues))
-		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
-			return m.moveRow(len(m.issues))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
 			return m.openDetail()
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
@@ -224,46 +225,29 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 // openDetail is Enter and the second click on a row. While a search is in
-// flight it holds the open for that result: an edit answers another query, and
-// an auto refresh moves the selection when its issue left the store's answer.
+// flight, or the pause before the search of an edit runs, it holds the open
+// for that result: an edit answers another query, and an auto refresh moves
+// the selection when its issue left the store's answer.
 // The opening search has no rows the operator pressed Enter on, so it holds
-// nothing.
+// nothing. Text typed before its result arrives is what the operator chose:
+// the pause of that edit supersedes the opening search, so no result has
+// settled yet, and the open is held for the result of the text.
 func (m *Model) openDetail() tea.Cmd {
-	if m.loading && m.settled {
-		m.heldOpen = openOnResult
+	if m.loading && (m.settled || !m.query.Empty()) {
+		m.heldOpen = true
 		return nil
 	}
-	if m.currentSelection() == nil {
+	selection := m.currentSelection()
+	if selection == nil {
 		return nil
 	}
-	return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
-}
-
-// openHeld opens the detail for a held Enter once the shell holds the selected
-// row of the result. Only the change that announces that row counts: one from
-// a move on the older rows can still be on its way when the result arrives.
-func (m *Model) openHeld(msg mode.SelectionChangedMsg) tea.Cmd {
-	if msg.Mode != mode.Search || m.heldOpen != openOnSelection {
-		return nil
-	}
-	announced := ""
-	if msg.Selection != nil {
-		announced = msg.Selection.Issue.ID
-	}
-	if announced != m.selectedIssueID() {
-		return nil
-	}
-	m.heldOpen = noHeldOpen
-	if announced == "" {
-		return nil
-	}
-	return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+	return mode.RequestOpenDetailCmd(mode.Search, selection)
 }
 
 // View renders the results column under the query line.
 func (m *Model) View(skeletonPhase int) string {
 	state := m.viewState(skeletonPhase)
-	state.Hover = m.hover(state)
+	state.Hover = m.list.Hover(state)
 	return uiboard.Render(state)
 }
 
@@ -282,12 +266,12 @@ func (m *Model) uiColumn() uiboard.Column {
 	return uiboard.Column{
 		Title:        title,
 		Rows:         m.issues,
-		SelectedRow:  m.selectedRow,
-		ScrollOffset: m.scrollOffset,
+		SelectedRow:  m.list.SelectedRow,
+		ScrollOffset: m.list.ScrollOffset,
 		Total:        m.total,
 		TotalIsExact: m.total <= len(m.issues),
-		// Only the first search draws the column as loading. A search runs on
-		// every key, and dimming the rows for each one would flicker them; the
+		// Only the first search draws the column as loading. A search runs after
+		// every edit, and dimming the rows for each one would flicker them; the
 		// header spinner says a search is in flight.
 		Loading: m.loading && !m.settled,
 		Error:   errText,
@@ -302,7 +286,8 @@ func (m *Model) SetSize(width, height int) {
 	m.clampSelection()
 }
 
-// IsLoading reports whether a search is in flight.
+// IsLoading reports whether a search is in flight, or the pause before the
+// search of an edit is running.
 func (m *Model) IsLoading() bool {
 	return m.loading
 }
@@ -311,10 +296,31 @@ func (m *Model) IsLoading() bool {
 // supersedes the one in flight: that result is dropped when it arrives. land
 // says where the selection goes when this one does.
 func (m *Model) search(land landing) tea.Cmd {
+	return m.searchCmd(m.nextGeneration(), land)
+}
+
+// searchAfterPause is the search of an edit of the query. The pause counts as
+// that search in flight, so an Enter pressed inside it is held for the result
+// of the typed text, and a reload or an auto refresh is dropped. Another edit
+// inside the pause starts the pause again; only the last one runs a search.
+func (m *Model) searchAfterPause() tea.Cmd {
+	generation := m.nextGeneration()
+	return tea.Tick(m.pause, func(time.Time) tea.Msg {
+		return editPauseEndedMsg{generation: generation}
+	})
+}
+
+// nextGeneration starts a generation, which supersedes the search in flight
+// and a pause that has not ended.
+func (m *Model) nextGeneration() int {
 	m.generation++
 	m.loading = true
+	return m.generation
+}
 
-	generation := m.generation
+// searchCmd runs the search of generation for the query and scope as they are
+// now.
+func (m *Model) searchCmd(generation int, land landing) tea.Cmd {
 	ctx, repo := m.ctx, m.repo
 	query := domain.SearchIssuesQuery{
 		Text:          m.query.Text(),
@@ -327,7 +333,9 @@ func (m *Model) search(land landing) tea.Cmd {
 	}
 }
 
-// apply settles the model from a completed search.
+// apply settles the model from a completed search. A held Enter opens the
+// detail of the row the result selects: the request carries that row, so it
+// does not wait for the shell to hold the selection change sent with it.
 func (m *Model) apply(msg loadedMsg) tea.Cmd {
 	if msg.generation != m.generation {
 		m.logger.Debug("search result dropped; a later search superseded it",
@@ -337,15 +345,13 @@ func (m *Model) apply(msg loadedMsg) tea.Cmd {
 	m.loading = false
 	m.settled = true
 	m.err = msg.err
+	held := m.heldOpen
+	m.heldOpen = false
 
 	if msg.err != nil {
 		// Keep the stale rows on screen; the inline error row explains why they
 		// may be out of date. A held Enter opens nothing on them.
-		m.heldOpen = noHeldOpen
 		return m.selectionChangedCmd()
-	}
-	if m.heldOpen == openOnResult {
-		m.heldOpen = openOnSelection
 	}
 
 	// The selection is read now, not when the search started: the rows stay on
@@ -359,17 +365,22 @@ func (m *Model) apply(msg loadedMsg) tea.Cmd {
 	m.total = msg.page.Metadata.Total
 
 	if msg.landing != landInPlace {
-		m.selectedRow, m.scrollOffset = 0, 0
+		m.list.SelectedRow, m.list.ScrollOffset = 0, 0
 	}
 	if msg.landing != landFirst {
 		if row := slices.IndexFunc(m.issues, func(issue domain.IssueSummary) bool {
 			return issue.ID == selectedIssueID
 		}); row >= 0 {
-			m.selectedRow = row
+			m.list.SelectedRow = row
 		}
 	}
 	m.clampSelection()
-	return m.selectionChangedCmd()
+
+	selection := m.currentSelection()
+	if !held || selection == nil {
+		return m.selectionChangedCmd()
+	}
+	return tea.Batch(m.selectionChangedCmd(), mode.RequestOpenDetailCmd(mode.Search, selection))
 }
 
 // ClearQuery empties the query and searches again, which the shell asks for
@@ -383,65 +394,23 @@ func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
 }
 
 func (m *Model) clampSelection() {
-	if len(m.issues) == 0 {
-		m.selectedRow = 0
-		m.scrollOffset = 0
-		return
-	}
-	if m.selectedRow < 0 {
-		m.selectedRow = 0
-	}
-	if m.selectedRow >= len(m.issues) {
-		m.selectedRow = len(m.issues) - 1
-	}
-	// Pull the window back inside the list before sliding it to the selection,
-	// as the docs tab does: a list that shrank under a scrolled offset would
-	// otherwise keep the rows above its last ones out of reach. The column
-	// draws no age markers, so the instant they measure against is not read.
-	capacity := m.itemCapacity()
-	m.scrollOffset = min(m.scrollOffset, uiboard.MaxOffset(m.uiColumn(), capacity, time.Time{}))
-	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, time.Time{})
-}
-
-func (m *Model) moveRow(delta int) tea.Cmd {
-	if len(m.issues) == 0 {
-		m.selectedRow = 0
-		return nil
-	}
-
-	previous := m.selectedRow
-	m.selectedRow += delta
-	m.clampSelection()
-	if m.selectedRow == previous {
-		return nil
-	}
-	return m.selectionChangedCmd()
-}
-
-// itemCapacity returns the number of content rows the column holds at the
-// current terminal height, as the docs tab counts them.
-func (m *Model) itemCapacity() int {
-	if m.height == 0 {
-		return defaultItemCapacity
-	}
-	return uiboard.ContentRows(m.height)
-}
-
-// pageRows is the number of results a page key moves the selection by.
-func (m *Model) pageRows() int {
-	return max(1, m.itemCapacity()/issuerow.Height)
+	m.list.Clamp(m.viewState(0))
 }
 
 func (m *Model) currentSelection() *mode.Selection {
-	if len(m.issues) == 0 {
+	return m.list.Selection(m.issues)
+}
+
+func (m *Model) selectedIssueID() string {
+	return m.list.SelectedID(m.issues)
+}
+
+// selectionMovedCmd announces the selection after a key or the mouse moved it.
+func (m *Model) selectionMovedCmd(moved bool) tea.Cmd {
+	if !moved {
 		return nil
 	}
-	row := m.selectedRow
-	if row < 0 || row >= len(m.issues) {
-		row = 0
-	}
-	selection := mode.Selection{Issue: m.issues[row]}
-	return &selection
+	return m.selectionChangedCmd()
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {

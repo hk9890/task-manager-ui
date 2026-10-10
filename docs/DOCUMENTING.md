@@ -58,7 +58,8 @@ Adding a doc under `docs/` takes two registrations, in this order, or nothing wi
 - [user-guide/](user-guide/) is written for someone who runs `taskmgr-ui` and never opens this
   repository. It may name a source path only where the reader sets the thing themselves — the
   keybinding defaults cite `internal/config/keybindings.go` because that is what a config override
-  replaces.
+  replaces. A sentence there about behaviour says what [DESIGN-GUIDE.md](DESIGN-GUIDE.md) says
+  about the same behaviour: change both in one edit.
 
 ## Decisions
 

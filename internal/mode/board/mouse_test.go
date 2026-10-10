@@ -62,12 +62,18 @@ func selectionFrom(t *testing.T, cmd tea.Cmd) string {
 }
 
 func opensDetail(cmd tea.Cmd) bool {
+	return openedIssueID(cmd) != ""
+}
+
+// openedIssueID is the issue cmd asks the shell to open the detail of, or ""
+// for none.
+func openedIssueID(cmd tea.Cmd) string {
 	for _, msg := range testui.DrainCmd(cmd) {
-		if request, ok := msg.(mode.ActionRequestMsg); ok && request.Mode == mode.Board && request.Action == mode.ActionOpenDetail {
-			return true
+		if request, ok := msg.(mode.ActionRequestMsg); ok && request.Mode == mode.Board && request.Action == mode.ActionOpenDetail && request.Selection != nil {
+			return request.Selection.Issue.ID
 		}
 	}
-	return false
+	return ""
 }
 
 // TestClickSelectsAndASecondClickOpens is the click contract: one click moves
@@ -89,8 +95,8 @@ func TestClickSelectsAndASecondClickOpens(t *testing.T) {
 		t.Fatal("a single click opened Detail")
 	}
 
-	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "progress-two", 200)); !opensDetail(cmd) {
-		t.Fatal("a second click on the same row inside the window did not open Detail")
+	if got := openedIssueID(m.Update(mouseAt(t, m, mode.MouseClick, "progress-two", 200))); got != "tm-8" {
+		t.Fatalf("a second click on the same row inside the window opened %q, want Detail of tm-8", got)
 	}
 
 	// The double click was consumed: the next pair starts over, and a pair too

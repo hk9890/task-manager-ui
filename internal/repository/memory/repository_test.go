@@ -1243,23 +1243,14 @@ func TestSearch_LimitOffset(t *testing.T) {
 	if len(page.Results) != 2 {
 		t.Errorf("Search limit=2: want 2, got %d", len(page.Results))
 	}
-	if page.Metadata.ReturnedCount != 2 {
-		t.Errorf("ReturnedCount: want 2, got %d", page.Metadata.ReturnedCount)
+	if page.Metadata.Total != 5 {
+		t.Errorf("Total: want 5, got %d", page.Metadata.Total)
 	}
 
 	// Offset 3, no limit.
 	pageOff, _ := r.Search(context.Background(), domain.SearchIssuesQuery{Offset: 3})
 	if len(pageOff.Results) != 2 {
 		t.Errorf("Search offset=3: want 2, got %d", len(pageOff.Results))
-	}
-}
-
-func TestSearch_Completeness(t *testing.T) {
-	r := memory.New()
-	r.Seed(memory.Issue{ID: "s1", Status: "open"})
-	page, _ := r.Search(context.Background(), domain.SearchIssuesQuery{})
-	if page.Metadata.Completeness != domain.SearchResultCompletenessExact {
-		t.Errorf("Completeness: want Exact, got %v", page.Metadata.Completeness)
 	}
 }
 

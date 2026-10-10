@@ -149,29 +149,32 @@ func TestQueriesSurviveTabSwitchDetailRoundTripAndAutoRefresh(t *testing.T) {
 	}
 }
 
-// TestAQueryKeyRunsNoShellAction: ctrl+u is the query's on a browse tab, also
-// when a shell action is bound to it; in Detail the binding works.
+// TestAQueryKeyRunsNoShellAction: a key the query takes is the query's on a
+// browse tab, also when a shell action is bound to it; in Detail the binding
+// works. Config refuses a binding on every single key the query takes, so the
+// binding here is a name of two runes, which is how a paste arrives.
 func TestAQueryKeyRunsNoShellAction(t *testing.T) {
 	m, _ := filterShell(t, func(cfg *config.Model) {
-		cfg.KeyBindings.Shell[config.ShellActionHelp] = []string{"ctrl+u"}
+		cfg.KeyBindings.Shell[config.ShellActionHelp] = []string{"ab"}
 	})
 	m = typeInto(t, m, "login")
 
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}})
+	pasted := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")}
+	m = applyMessages(t, m, []tea.Msg{pasted})
 	if m.showHelp {
-		t.Fatal("ctrl+u on the board opened help")
+		t.Fatal("a query key on the board opened help")
 	}
-	if view := plainShell(m); !strings.Contains(view, "❯ filter issues") {
-		t.Fatalf("ctrl+u did not clear the query:\n%s", view)
+	if view := plainShell(m); !strings.Contains(view, "❯ loginab") {
+		t.Fatalf("the query did not take the key:\n%s", view)
 	}
 
-	m = applyMessages(t, m, []tea.Msg{testKey("enter")})
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}, testKey("enter")})
 	if m.active != mode.Detail {
 		t.Fatalf("fixture: on %q, want detail", m.active)
 	}
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	next, _ := m.Update(pasted)
 	if !next.(Model).showHelp {
-		t.Fatal("ctrl+u in detail did not run the action bound to it")
+		t.Fatal("the key in detail did not run the action bound to it")
 	}
 }
 

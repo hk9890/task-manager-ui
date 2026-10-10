@@ -18,6 +18,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // startAsync runs cmd in a goroutine and returns the channel its message
@@ -127,17 +128,29 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		return m, delayed, typed
 	}
 
-	// settle applies the result of the search in flight and hands the model the
-	// selection change it announced, as the shell does. It returns what the
-	// model asked for next.
-	settle := func(t *testing.T, m *Model, delayed *fakes.DelayingRepository, result <-chan tea.Msg) tea.Cmd {
+	// settle applies the result of the search in flight and returns the issue
+	// the model asks the shell to open the detail of, "" for none. The result
+	// announces its selection either way.
+	settle := func(t *testing.T, m *Model, delayed *fakes.DelayingRepository, result <-chan tea.Msg) string {
 		t.Helper()
 		delayed.Release()
-		announced := m.Update(receive(t, result))
-		if announced == nil {
+		announced, opened := false, ""
+		for _, msg := range testui.DrainCmd(m.Update(receive(t, result))) {
+			switch msg := msg.(type) {
+			case mode.SelectionChangedMsg:
+				announced = msg.Mode == mode.Search
+			case mode.ActionRequestMsg:
+				testui.AssertActionRequest(t, msg, mode.Search, mode.ActionOpenDetail)
+				if msg.Selection == nil {
+					t.Fatal("the open request carries no selection")
+				}
+				opened = msg.Selection.Issue.ID
+			}
+		}
+		if !announced {
 			t.Fatal("the result announced no selection")
 		}
-		return m.Update(announced())
+		return opened
 	}
 
 	t.Run("enter during a search opens the selected row of its result", func(t *testing.T) {
@@ -147,17 +160,15 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 			t.Fatalf("enter opened the detail on the rows of the older query: %#v", cmd())
 		}
 
-		if next := settle(t, m, delayed, typed); !opensDetail(next) {
-			t.Fatal("the held enter opened nothing when the result arrived")
-		}
-		if got := m.selectedIssueID(); got != "tm-2" {
-			t.Fatalf("the detail opens on %q, want tm-2", got)
+		if got := settle(t, m, delayed, typed); got != "tm-2" || m.selectedIssueID() != "tm-2" {
+			t.Fatalf("the held enter opened %q with %q selected, want tm-2, the row of the result", got, m.selectedIssueID())
 		}
 
-		// One enter opens one detail: the same selection announced again asks
-		// for nothing.
-		if cmd := m.Update(m.selectionChangedCmd()()); cmd != nil {
-			t.Fatalf("the held enter fired a second time: %#v", cmd())
+		// One enter opens one detail: the next result opens nothing.
+		refresh := startAsync(m.AutoRefresh())
+		waitForInFlight(t, delayed, 1)
+		if got := settle(t, m, delayed, refresh); got != "" {
+			t.Fatalf("the held enter fired a second time, on %q", got)
 		}
 	})
 
@@ -170,8 +181,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Two searches are out, and settle releases the other one.
 		delayed.Release()
 
-		if next := settle(t, m, delayed, retyped); next != nil {
-			t.Fatalf("a dropped enter still opened the detail: %#v", next())
+		if got := settle(t, m, delayed, retyped); got != "" {
+			t.Fatalf("a dropped enter still opened the detail of %q", got)
 		}
 	})
 
@@ -181,27 +192,9 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 			m.Update(enter)
 			m.Update(mouseAt(t, m, kind, "Session notes", 0))
-			if next := settle(t, m, delayed, typed); next != nil {
-				t.Fatalf("%s: a dropped enter still opened the detail: %#v", name, next())
+			if got := settle(t, m, delayed, typed); got != "" {
+				t.Fatalf("%s: a dropped enter still opened the detail of %q", name, got)
 			}
-		}
-	})
-
-	t.Run("a selection change older than the result does not open the detail", func(t *testing.T) {
-		m, delayed, typed := inFlightSearch(t, "tri")
-
-		// The move announces tm-3, and that change is still on its way when the
-		// result selects tm-2.
-		older := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
-		m.Update(enter)
-		delayed.Release()
-		announced := m.Update(receive(t, typed))
-
-		if cmd := m.Update(older()); cmd != nil {
-			t.Fatalf("the detail opened before the shell held the selection of the result: %#v", cmd())
-		}
-		if !opensDetail(m.Update(announced())) {
-			t.Fatal("the held enter opened nothing once the shell held the selection of the result")
 		}
 	})
 
@@ -209,8 +202,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		m, delayed, typed := inFlightSearch(t, "zzzz")
 
 		m.Update(enter)
-		if next := settle(t, m, delayed, typed); next != nil {
-			t.Fatalf("an empty result opened a detail: %#v", next())
+		if got := settle(t, m, delayed, typed); got != "" {
+			t.Fatalf("an empty result opened the detail of %q", got)
 		}
 		if got := len(m.issues); got != 0 {
 			t.Fatalf("setup: %d results, want none", got)
@@ -225,11 +218,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 			t.Fatalf("the second click opened the detail on the rows of the older query: %#v", cmd())
 		}
 
-		if next := settle(t, m, delayed, typed); !opensDetail(next) {
-			t.Fatal("the held click opened nothing when the result arrived")
-		}
-		if got := m.selectedIssueID(); got != "tm-2" {
-			t.Fatalf("the detail opens on %q, want tm-2", got)
+		if got := settle(t, m, delayed, typed); got != "tm-2" || m.selectedIssueID() != "tm-2" {
+			t.Fatalf("the held click opened %q with %q selected, want tm-2, the row of the result", got, m.selectedIssueID())
 		}
 	})
 
@@ -243,8 +233,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		// The stale rows stay on screen under the error row: opening one of
 		// them is the fault the hold exists to prevent.
-		if next := settle(t, m, delayed, typed); next != nil {
-			t.Fatalf("a failed result opened a detail: %#v", next())
+		if got := settle(t, m, delayed, typed); got != "" {
+			t.Fatalf("a failed result opened the detail of %q", got)
 		}
 		if m.err == nil || len(m.issues) == 0 {
 			t.Fatalf("setup: error %v with %d stale rows, want an error over the stale rows", m.err, len(m.issues))
@@ -264,11 +254,8 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		if cmd := m.Update(enter); cmd != nil {
 			t.Fatalf("enter opened the detail of an issue the refresh is about to drop: %#v", cmd())
 		}
-		if next := settle(t, m, delayed, refresh); !opensDetail(next) {
-			t.Fatal("the held enter opened nothing when the refresh arrived")
-		}
-		if got := m.selectedIssueID(); got != "tm-2" {
-			t.Fatalf("the detail opens on %q, want tm-2, the row in the place of the closed issue", got)
+		if got := settle(t, m, delayed, refresh); got != "tm-2" || m.selectedIssueID() != "tm-2" {
+			t.Fatalf("the held enter opened %q with %q selected, want tm-2, the row in the place of the closed issue", got, m.selectedIssueID())
 		}
 	})
 
@@ -286,8 +273,36 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		if cmd := m.Update(enter); cmd != nil {
 			t.Fatalf("enter with no rows on screen asked for %#v", cmd())
 		}
-		if next := settle(t, m, delayed, opening); next != nil {
-			t.Fatalf("the opening result opened a detail nobody chose: %#v", next())
+		if got := settle(t, m, delayed, opening); got != "" {
+			t.Fatalf("the opening result opened the detail of %q, which nobody chose", got)
+		}
+	})
+
+	t.Run("enter after text typed before the opening result opens the selected row of the result", func(t *testing.T) {
+		gw := fakes.NewTracked()
+		seedStore(gw)
+		delayed := fakes.NewDelayingSearchRepository(gw)
+		t.Cleanup(delayed.ReleaseAll)
+
+		m := newModel(t, delayed)
+		opening := startAsync(m.Init())
+		waitForInFlight(t, delayed, 1)
+
+		// The pause of the edit supersedes the opening search, so no result
+		// settles before the one for the text.
+		pause := m.Update(runes("tri"))()
+		if cmd := m.Update(enter); cmd != nil {
+			t.Fatalf("enter with no rows on screen asked for %#v", cmd())
+		}
+		delayed.Release()
+		if cmd := m.Update(receive(t, opening)); cmd != nil || len(m.issues) != 0 {
+			t.Fatalf("the superseded opening result was applied: results %q", resultIDs(m))
+		}
+		typed := startAsync(m.Update(pause))
+		waitForInFlight(t, delayed, 1)
+
+		if got := settle(t, m, delayed, typed); got != "tm-2" || m.selectedIssueID() != "tm-2" {
+			t.Fatalf("the held enter opened %q with %q selected, want tm-2, the row of the result", got, m.selectedIssueID())
 		}
 	})
 
@@ -296,8 +311,124 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		m.Update(enter)
 		m.Update(mode.MouseMsg{Kind: mode.MouseLeave})
-		if next := settle(t, m, delayed, typed); next != nil {
-			t.Fatalf("a held enter outlived the surface leaving the screen: %#v", next())
+		if got := settle(t, m, delayed, typed); got != "" {
+			t.Fatalf("a held enter outlived the surface leaving the screen and opened %q", got)
+		}
+	})
+
+	// searchCalls is the Search calls the store received.
+	searchCalls := func(gw *fakes.TrackedRepository) int {
+		return len(gw.CallsFor(fakes.MethodSearch))
+	}
+
+	t.Run("keys typed inside the pause run one search for the whole text", func(t *testing.T) {
+		gw := fakes.NewTracked()
+		seedStore(gw)
+		m := openedModel(t, gw)
+		before := searchCalls(gw)
+
+		// Each pause is over, and the model has not been told so yet.
+		var pauses []tea.Msg
+		for _, key := range []string{"t", "r", "i"} {
+			pauses = append(pauses, m.Update(runes(key))())
+		}
+		if !m.IsLoading() || m.Reload() != nil || m.AutoRefresh() != nil {
+			t.Fatalf("the pause does not count as a search in flight: loading %v", m.IsLoading())
+		}
+
+		for _, superseded := range pauses[:2] {
+			if cmd := m.Update(superseded); cmd != nil {
+				t.Fatalf("the pause of an earlier key ran a search: %#v", superseded)
+			}
+		}
+		if got := searchCalls(gw) - before; got != 0 {
+			t.Fatalf("%d searches ran before the last pause ended", got)
+		}
+
+		if got := selection(t, resolve(t, m, m.Update(pauses[2]))); got == nil || got.Issue.ID != "tm-2" {
+			t.Fatalf("the search of the last key did not announce its selection: %#v", got)
+		}
+		if got := searchCalls(gw) - before; got != 1 {
+			t.Fatalf("three keys ran %d searches, want 1", got)
+		}
+		if got := lastSearch(t, gw); got.Text != "tri" || got.IncludeClosed {
+			t.Fatalf("the search asked for %#v, want the whole text tri in open issues", got)
+		}
+		if got := resultIDs(m); got != "tm-2" || m.IsLoading() {
+			t.Fatalf("after the search: results %q, loading %v; want tm-2 and settled", got, m.IsLoading())
+		}
+	})
+
+	t.Run("the scope key or escape during the pause searches at once, and the pause runs nothing", func(t *testing.T) {
+		supersede := map[string]func(*Model) tea.Cmd{
+			"scope key": func(m *Model) tea.Cmd { return m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}) },
+			"escape": func(m *Model) tea.Cmd {
+				_, cmd := m.ClearQuery()
+				return cmd
+			},
+		}
+		want := map[string]domain.SearchIssuesQuery{
+			"scope key": {Text: "tri", IncludeClosed: true, Limit: resultLimit},
+			"escape":    {Limit: resultLimit},
+		}
+		for name, act := range supersede {
+			gw := fakes.NewTracked()
+			seedStore(gw)
+			m := openedModel(t, gw)
+			before := searchCalls(gw)
+
+			pause := m.Update(runes("tri"))()
+			immediate := act(m)
+			if cmd := m.Update(pause); cmd != nil {
+				t.Fatalf("%s: the superseded pause ran a search of its own", name)
+			}
+			resolve(t, m, immediate)
+
+			if got := searchCalls(gw) - before; got != 1 {
+				t.Fatalf("%s: %d searches ran, want 1", name, got)
+			}
+			got := lastSearch(t, gw)
+			if got.Text != want[name].Text || got.IncludeClosed != want[name].IncludeClosed || got.Limit != want[name].Limit {
+				t.Fatalf("%s: the search asked for %#v, want %#v", name, got, want[name])
+			}
+			if m.IsLoading() {
+				t.Fatalf("%s: the surface is still loading after its search returned", name)
+			}
+		}
+	})
+
+	t.Run("enter during the pause opens the selected row of the result", func(t *testing.T) {
+		m, _, delayed := openedSearch(t)
+
+		pause := m.Update(runes("tri"))()
+		if cmd := m.Update(enter); cmd != nil {
+			t.Fatalf("enter opened the detail on the rows of the older query: %#v", cmd())
+		}
+		typed := startAsync(m.Update(pause))
+		waitForInFlight(t, delayed, 1)
+
+		if got := settle(t, m, delayed, typed); got != "tm-2" || m.selectedIssueID() != "tm-2" {
+			t.Fatalf("the held enter opened %q with %q selected, want tm-2, the row of the result", got, m.selectedIssueID())
+		}
+	})
+
+	t.Run("a key after an enter during the pause drops it", func(t *testing.T) {
+		m, _, delayed := openedSearch(t)
+
+		first := m.Update(runes("tr"))()
+		m.Update(enter)
+		second := m.Update(runes("i"))()
+		if cmd := m.Update(first); cmd != nil {
+			t.Fatal("the pause of the earlier key ran a search")
+		}
+		typed := startAsync(m.Update(second))
+		waitForInFlight(t, delayed, 1)
+
+		if got := settle(t, m, delayed, typed); got != "" {
+			t.Fatalf("a dropped enter still opened the detail of %q", got)
+		}
+		if got := resultIDs(m); got != "tm-2" {
+			t.Fatalf("the results are %q, want tm-2, the answer to the whole text", got)
 		}
 	})
 

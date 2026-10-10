@@ -38,12 +38,18 @@ func mouseAt(t *testing.T, m *Model, kind mode.MouseKind, text string, ms int) m
 }
 
 func opensDetail(cmd tea.Cmd) bool {
+	return openedIssueID(cmd) != ""
+}
+
+// openedIssueID is the issue cmd asks the shell to open the detail of, or ""
+// for none.
+func openedIssueID(cmd tea.Cmd) string {
 	for _, msg := range testui.DrainCmd(cmd) {
-		if request, ok := msg.(mode.ActionRequestMsg); ok && request.Mode == mode.Docs && request.Action == mode.ActionOpenDetail {
-			return true
+		if request, ok := msg.(mode.ActionRequestMsg); ok && request.Mode == mode.Docs && request.Action == mode.ActionOpenDetail && request.Selection != nil {
+			return request.Selection.Issue.ID
 		}
 	}
-	return false
+	return ""
 }
 
 func TestMouseSelectsOpensAndScrollsTheDocList(t *testing.T) {
@@ -52,24 +58,24 @@ func TestMouseSelectsOpensAndScrollsTheDocList(t *testing.T) {
 	m := mouseDocs(t)
 
 	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "doc-three", 0))
-	if m.selectedRow != 2 || cmd == nil || opensDetail(cmd) {
-		t.Fatalf("first click: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.selectedRow, cmd != nil)
+	if m.list.SelectedRow != 2 || cmd == nil || opensDetail(cmd) {
+		t.Fatalf("first click: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.list.SelectedRow, cmd != nil)
 	}
-	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "doc-three", 200)); !opensDetail(cmd) {
-		t.Fatal("a second click on the same doc did not open Detail")
+	if got := openedIssueID(m.Update(mouseAt(t, m, mode.MouseClick, "doc-three", 200))); got != "tm-3" {
+		t.Fatalf("a second click on the same doc opened %q, want Detail of tm-3", got)
 	}
 
-	if cmd = m.Update(mouseAt(t, m, mode.MouseWheelUp, "doc-one", 1000)); m.selectedRow != 1 || cmd == nil {
-		t.Fatalf("wheel up left the selection on row %d, want row 1", m.selectedRow)
+	if cmd = m.Update(mouseAt(t, m, mode.MouseWheelUp, "doc-one", 1000)); m.list.SelectedRow != 1 || cmd == nil {
+		t.Fatalf("wheel up left the selection on row %d, want row 1", m.list.SelectedRow)
 	}
 	_ = m.Update(mouseAt(t, m, mode.MouseWheelUp, "doc-one", 1010))
-	if cmd = m.Update(mouseAt(t, m, mode.MouseWheelUp, "doc-one", 1020)); m.selectedRow != 0 || cmd != nil {
-		t.Fatalf("a notch past the first row moved to row %d or reported a change", m.selectedRow)
+	if cmd = m.Update(mouseAt(t, m, mode.MouseWheelUp, "doc-one", 1020)); m.list.SelectedRow != 0 || cmd != nil {
+		t.Fatalf("a notch past the first row moved to row %d or reported a change", m.list.SelectedRow)
 	}
 
 	// The column title is not a row.
 	x, y := testui.FindCell(t, m.View(0), "Docs ─")
-	if cmd = m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}); cmd != nil || m.selectedRow != 0 {
+	if cmd = m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}); cmd != nil || m.list.SelectedRow != 0 {
 		t.Fatal("a click on the column title changed the selection")
 	}
 }
@@ -87,8 +93,8 @@ func TestClickOnEitherLineOfADocSelectsAndOpensIt(t *testing.T) {
 	}
 
 	cmd := m.Update(mouseAt(t, m, mode.MouseClick, "tm-3", 0))
-	if m.selectedRow != 2 || cmd == nil || opensDetail(cmd) {
-		t.Fatalf("a click on the second line: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.selectedRow, cmd != nil)
+	if m.list.SelectedRow != 2 || cmd == nil || opensDetail(cmd) {
+		t.Fatalf("a click on the second line: selected row %d, cmd %v; want row 2 selected and Detail not opened", m.list.SelectedRow, cmd != nil)
 	}
 	assertSelectionDrawn(t, m)
 	if cmd = m.Update(mouseAt(t, m, mode.MouseClick, "doc-three", 200)); !opensDetail(cmd) {
@@ -98,8 +104,8 @@ func TestClickOnEitherLineOfADocSelectsAndOpensIt(t *testing.T) {
 	// The second line of the last doc is its last line: the one below is empty.
 	x, y := testui.FindCell(t, m.View(0), "tm-3")
 	cmd = m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y + 1, At: mouseStart.Add(5 * time.Second)})
-	if cmd != nil || m.selectedRow != 2 {
-		t.Fatalf("a click below the last doc changed the selection (row %d, cmd %v)", m.selectedRow, cmd != nil)
+	if cmd != nil || m.list.SelectedRow != 2 {
+		t.Fatalf("a click below the last doc changed the selection (row %d, cmd %v)", m.list.SelectedRow, cmd != nil)
 	}
 }
 
@@ -110,7 +116,7 @@ func TestHoverFollowsThePointerAndClearsWhenItLeaves(t *testing.T) {
 	idle := m.View(0)
 
 	_ = m.Update(mouseAt(t, m, mode.MouseMove, "doc-two", 0))
-	if m.selectedRow != 0 {
+	if m.list.SelectedRow != 0 {
 		t.Fatal("moving the pointer changed the selection")
 	}
 	if hovered := m.View(0); hovered == idle {

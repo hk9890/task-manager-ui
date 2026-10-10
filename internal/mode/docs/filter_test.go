@@ -75,8 +75,8 @@ func TestDocsFilterKeepsTheSelectionOnItsDoc(t *testing.T) {
 	if cmd := typeText(m, "notes"); cmd != nil {
 		t.Fatal("the selection did not change, so the query must report none")
 	}
-	if m.selectedIssueID() != "tm-3" || m.selectedRow != 1 {
-		t.Fatalf("selection %q on row %d, want tm-3 on row 1", m.selectedIssueID(), m.selectedRow)
+	if m.selectedIssueID() != "tm-3" || m.list.SelectedRow != 1 {
+		t.Fatalf("selection %q on row %d, want tm-3 on row 1", m.selectedIssueID(), m.list.SelectedRow)
 	}
 	assertSelectionDrawn(t, m)
 
@@ -117,8 +117,8 @@ func TestDocsClearQueryRestoresTheColumn(t *testing.T) {
 	if got := shownIDs(m); got != "tm-1,tm-2,tm-3" {
 		t.Fatalf("after the clear the column shows %q", got)
 	}
-	if m.selectedIssueID() != "tm-3" || m.selectedRow != 2 {
-		t.Fatalf("after the clear: selection %q on row %d, want tm-3 on row 2", m.selectedIssueID(), m.selectedRow)
+	if m.selectedIssueID() != "tm-3" || m.list.SelectedRow != 2 {
+		t.Fatalf("after the clear: selection %q on row %d, want tm-3 on row 2", m.selectedIssueID(), m.list.SelectedRow)
 	}
 }
 

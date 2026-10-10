@@ -3,8 +3,9 @@
 The interaction and rendering law for every surface under `internal/ui/` and `internal/mode/`.
 
 Three rules here are gated — type/colour parity (`renderhelpers/type_style_parity_test.go`), the
-tab strip's ownership of `tab`/`shift+tab`, and no printable key on an action outside a modal (both
-`internal/config/keybindings_test.go`). The rest is held at review ([REVIEWING.md](REVIEWING.md)).
+tab strip's ownership of `tab`/`shift+tab`, and no action on a key a browse surface takes for
+itself (both `internal/config/keybindings_test.go`; `internal/mode/search/model_test.go` pins the
+reserved keys to the surfaces). The rest is held at review ([REVIEWING.md](REVIEWING.md)).
 
 [CODING.md](CODING.md)'s rule 8 owns the `internal/ui/` and `internal/mode/` boundary. `modal` and
 `toaster` are the exception to it — they carry Bubble Tea state of their own. `loading` is stateless
@@ -81,7 +82,7 @@ The rest is the same in every set, and each has one definition:
 
 | Glyph | Means | Defined in |
 |---|---|---|
-| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString` |
+| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString`, `textutil.TruncateStringFront` |
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
@@ -114,7 +115,9 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 - `ui/board` is the one list container. The docs tab and the store search are each a board column
   by another name, so they draw through `board.Render` with a single `Column` rather than growing a
   renderer of their own. Each takes the content lines its column holds from `board.ContentRows`,
-  which subtracts the list head and the two borders; none repeats that arithmetic.
+  which subtracts the list head and the two borders; none repeats that arithmetic. Both hold a
+  `rowlist.List` (`internal/mode/rowlist`) for the selection, the scroll offset, the move keys and
+  the mouse.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ## The shell chrome
@@ -169,14 +172,22 @@ focuses it.
 
 - **No action is bound to a printable key outside a modal.** `mode.IsQueryKey` names the keys a
   query takes — every rune key and `space` without alt, `backspace`, `ctrl+w`, `ctrl+u` — and the
-  surface offers each key to `Query.HandleKey` before its bindings. `handleShellKey` asks
-  `IsQueryKey` too, so a key the query took runs no shell action. Bind a new action to an `alt+`
-  chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything else
-  ([CONFIGURATION.md](CONFIGURATION.md#keybindings)).
+  surface offers each key to `Query.HandleKey` before its bindings. `handleShellKey` asks the
+  surface on screen (`Browse.TakesKey`), so a key it took runs no shell action. Bind a new action
+  to an `alt+` chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything
+  else ([CONFIGURATION.md](CONFIGURATION.md#keybindings)).
+- A built-in key that prints nothing — `backspace`, `ctrl+w`, `ctrl+u`, the scope key of the store
+  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in the
+  `shell` and `board` contexts. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
+  (`internal/mode/search/model_test.go`) fails while that list and the surfaces disagree.
+- The startup-error screen (`internal/ui/fatalerror`) is the one exception: it quits on `q` as well
+  as on the quit key. It has no query line and no other action, so the key can type into nothing.
 - The query has no cursor and is edited at its end only, so the arrow keys stay with the list.
   `mode.QueryLimit` caps it.
-- Escape clears a non-empty query before it does anything else: the shell calls `Browse.ClearQuery`
-  first and acts on Escape itself only when that reports nothing cleared.
+- On a tab or the store search, Escape clears a non-empty query before it leaves the surface or
+  hides a toast: the shell calls `Browse.ClearQuery` and acts on Escape itself only when that
+  reports nothing cleared. One thing comes first: an Escape that arrives while a dialog is still
+  loading cancels that dialog and leaves the query as it is (`pendingDialog`, `handleShellKey`).
 - A tab's query is a filter over the rows in memory: `Query.Filter` keeps the rows where every word
   is in the title or the ID, in their order. The model keeps the loaded rows and the matching rows
   apart (`issues` and `shown` in `internal/mode/board/model.go`); selection, scroll, hit test and
@@ -213,22 +224,25 @@ it.
   the search is not up.
 - While it is up it owns the selection, also under a Detail opened from it: `currentSelection`
   reads the search row, and Escape in that Detail returns to the results as they were left.
-- Its query is not matched in memory. Every edit runs `Repository.Search`; each search carries a
-  generation and a result of an older one is dropped. `State.Search` tells the renderer so: the
-  header then counts as a column without a query does.
+- Its query is not matched in memory. An edit waits `editPause`, and one `Repository.Search` runs
+  for the text as it is when the pause ends (`Model.searchAfterPause`), so a typed word costs one
+  search. The pause and each search carry a generation, and an older one is dropped. The scope key
+  and Escape search at once and replace a waiting edit; a reload and an auto refresh are dropped
+  during the pause, as they are during a search. `State.Search` tells the renderer that the
+  store matched the rows: the header then counts as a column without a query does.
 - Enter, or the second click on a row, while a search is in flight is held (`Model.openDetail`,
   `heldOpen`): the rows on screen answer an older query, or an auto refresh is about to move the
-  selection off an issue that left the result. The detail opens on the selected row of the newest
-  result, after the shell holds that selection — the open request follows the
-  `SelectionChangedMsg` that announces that row, never races it. Any later key, click or wheel
-  notch drops the held Enter, and so does the pointer leaving the surface. An empty or failed
-  result opens nothing, and the opening search, which has no rows yet, holds nothing.
-- `ctrl+t` toggles the scope between open issues and all of them (`search.IsScopeKey`). It is
-  built in, as the query keys are, and the column title names the scope.
+  selection off an issue that left the result. The pause of an edit counts as in flight. The
+  detail opens on the selected row of the newest result. Any later key, click or wheel notch drops
+  the held Enter, and so does the pointer leaving the surface. An empty or failed result opens
+  nothing, and the opening search, which has no rows yet, holds nothing.
+- `ctrl+t` toggles the scope between open issues and all of them (`isScopeKey` in
+  `internal/mode/search/model.go`). It is built in, as the query keys are, and the column title
+  names the scope.
 - Escape clears a non-empty query, and with an empty one returns to `searchFrom`
   (`Model.closeSearch`).
-- Only the first search draws the column as loading. A search runs on every key, and dimming the
-  rows for each one would flicker them.
+- Only the first search draws the column as loading. A search runs after every edit, and dimming
+  the rows for each one would flicker them.
 
 ## Surfaces above the shell
 
@@ -302,6 +316,10 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   `viewState` — so a click cannot land on a row other than the one drawn under it.
 - Test a `HitTest` against the renderer, not against arithmetic: `testui.FindCell` finds where
   `Render` drew a text, and the test asserts `HitTest` reports that row there.
+- An open request names its row: a surface builds it with `mode.RequestOpenDetailCmd` from the
+  selection it holds, and the shell adopts that selection (`Model.adoptSelection`) before it opens
+  the detail. The request so does not depend on the `SelectionChangedMsg` of that row arriving
+  first.
 - One click selects a row and a second opens it. Take the decision from `mode.ClickTracker`: a
   second click on the same cell opens the row the first one selected, because selecting a row drawn
   with only its first line scrolls the list and slides another row under the pointer.
@@ -337,8 +355,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 
 - Measure rendered width with `lipgloss.Width`, never `len` — a styled string carries escape bytes
   and a wide rune covers two cells.
-- Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`, `WrapLines`,
-  `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
+- Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`,
+  `TruncateStringFront`, `WrapLines`, `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
   `styles` owns colour and chrome, not text math.
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.

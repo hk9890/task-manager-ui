@@ -733,18 +733,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.browseController(msg.Mode) == nil {
 			return m, modeCmd
 		}
-		m.selectedByMode[msg.Mode] = msg.Selection
-		if msg.Mode == m.active && mode.IsBrowse(msg.Mode) {
-			m.lastBrowse = msg.Mode
-		}
-		// A browse tab moving its own selection supersedes any drill-in — but
-		// only the tab the operator is actually on. A background load
-		// completing in another tab used to clear the drill selection too,
-		// silently retargeting every shell mutation at that tab's row while
-		// Detail still showed the drilled-in issue.
-		if msg.Mode == m.active {
-			m.clearDrillSelection()
-		}
+		m.adoptSelection(msg.Mode, msg.Selection)
 		// The picker is not a browse tab and shows no detail, so a selection
 		// landing under it must not start a detail load: currentSelection() would
 		// answer from lastBrowse, retargeting the Detail surface the operator
@@ -784,13 +773,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
 		}
-		if mode.IsBrowse(msg.Mode) {
-			m.lastBrowse = msg.Mode
-		}
-		m.clearDrillSelection()
-		if m.currentSelection() == nil {
+		if msg.Selection == nil {
 			return m, batchCmds(modeCmd, m.showToast("No selected issue to open in detail mode", toaster.StyleWarn))
 		}
+		// The request carries the row it opens. The SelectionChangedMsg that
+		// announces that row travels as a Cmd of its own and can arrive after
+		// the request, so the stored selection may still be an older row.
+		m.adoptSelection(msg.Mode, msg.Selection)
 		m.active = mode.Detail
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case detail.OpenRelatedIssueMsg:
@@ -952,13 +941,9 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 	}
 
-	// A key the active tab typed into its query is that tab's alone. The tab
-	// already has it from forwardModeMessages; without this a shell action
-	// rebound to ctrl+u would also run on every line clear.
-	if m.browseController(m.active) != nil && mode.IsQueryKey(msg) {
-		return m, modeCmd
-	}
-	if m.active == mode.Search && searchmode.IsScopeKey(msg) {
+	// A key the active tab takes for itself is that tab's alone. The tab
+	// already has it from forwardModeMessages, so no shell action runs on it.
+	if tab := m.browseController(m.active); tab != nil && tab.TakesKey(msg) {
 		return m, modeCmd
 	}
 

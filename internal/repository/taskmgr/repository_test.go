@@ -195,44 +195,38 @@ func TestSearch(t *testing.T) {
 	if len(page.Results) != 1 {
 		t.Errorf("expected 1 result, got %d (%v)", len(page.Results), ids)
 	}
-	if page.Metadata.ReturnedCount != len(page.Results) {
-		t.Errorf("ReturnedCount=%d != len=%d", page.Metadata.ReturnedCount, len(page.Results))
-	}
-	if page.Metadata.Source != domain.SearchResultSourceTaskmgrFind {
-		t.Errorf("Source = %q", page.Metadata.Source)
-	}
-	if page.Metadata.Completeness != domain.SearchResultCompletenessExact {
-		t.Errorf("Completeness = %v, want exact for an unbounded query", page.Metadata.Completeness)
+	if page.Metadata.Total != len(page.Results) {
+		t.Errorf("Total = %d, want %d for an unbounded query", page.Metadata.Total, len(page.Results))
 	}
 }
 
-// TestSearchCompleteness pins the paging signal the search view reads to decide
-// whether to offer another page. It is computed on every Search against this
-// backend — the one the shipped binary uses — and was asserted nowhere.
+// TestSearchPaging pins the window a paged search returns and the total the
+// search view counts its rows against, on the backend the shipped binary uses.
 //
-// Three matching issues make the boundary explicit: a window ending exactly at
-// the last match is Exact, one stopping short of it is MaybeMore, and Limit 0
-// means unbounded and is always Exact.
-func TestSearchCompleteness(t *testing.T) {
+// Three matching issues make the boundary explicit: Limit 0 means unbounded,
+// a window past the last match is cut there, and Total is every match
+// whatever the window.
+func TestSearchPaging(t *testing.T) {
 	r, _ := newTestRepo(t)
 	ctx := context.Background()
 
+	const matches = 3
 	for _, title := range []string{"Widget alpha", "Widget beta", "Widget gamma"} {
 		_ = mustCreate(t, r, domain.CreateIssueInput{Title: title})
 	}
 
 	cases := []struct {
-		name   string
-		limit  int
-		offset int
-		want   domain.SearchResultCompleteness
+		name        string
+		limit       int
+		offset      int
+		wantResults int
 	}{
-		{"unbounded", 0, 0, domain.SearchResultCompletenessExact},
-		{"window shorter than the match set", 2, 0, domain.SearchResultCompletenessMaybeMore},
-		{"window exactly the match set", 3, 0, domain.SearchResultCompletenessExact},
-		{"window longer than the match set", 4, 0, domain.SearchResultCompletenessExact},
-		{"offset window ending at the last match", 2, 1, domain.SearchResultCompletenessExact},
-		{"offset window stopping one short", 1, 1, domain.SearchResultCompletenessMaybeMore},
+		{"unbounded", 0, 0, matches},
+		{"window shorter than the match set", 2, 0, 2},
+		{"window exactly the match set", 3, 0, matches},
+		{"window longer than the match set", 4, 0, matches},
+		{"offset window ending at the last match", 2, 1, 2},
+		{"offset window stopping one short", 1, 1, 1},
 	}
 
 	for _, tc := range cases {
@@ -245,9 +239,13 @@ func TestSearchCompleteness(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Search: %v", err)
 			}
-			if page.Metadata.Completeness != tc.want {
-				t.Errorf("Completeness = %v, want %v (limit=%d offset=%d, %d results)",
-					page.Metadata.Completeness, tc.want, tc.limit, tc.offset, len(page.Results))
+			if len(page.Results) != tc.wantResults {
+				t.Errorf("Search(limit=%d offset=%d) returned %d results, want %d",
+					tc.limit, tc.offset, len(page.Results), tc.wantResults)
+			}
+			if page.Metadata.Total != matches {
+				t.Errorf("Total = %d, want every match in scope, %d (limit=%d offset=%d)",
+					page.Metadata.Total, matches, tc.limit, tc.offset)
 			}
 		})
 	}

@@ -64,42 +64,13 @@ type BlockedIssueView struct {
 
 // SearchResult is a single matched issue for search responses.
 type SearchResult struct {
-	Issue   IssueSummary
-	Snippet string
+	Issue IssueSummary
 }
-
-// SearchResultCompleteness describes whether a search page is complete.
-type SearchResultCompleteness string
-
-const (
-	SearchResultCompletenessExact     SearchResultCompleteness = "exact"
-	SearchResultCompletenessMaybeMore SearchResultCompleteness = "maybe_more"
-	SearchResultCompletenessPartial   SearchResultCompleteness = "partial"
-)
-
-// SearchResultSource identifies how the repository produced a search page.
-type SearchResultSource string
-
-const (
-	SearchResultSourceBDSearch       SearchResultSource = "bd_search"
-	SearchResultSourceBDListFallback SearchResultSource = "bd_list_fallback"
-	SearchResultSourceReadyFilter    SearchResultSource = "bd_ready_filtered"
-	SearchResultSourceBlockedFilter  SearchResultSource = "bd_blocked_filtered"
-	// SearchResultSourceTaskmgrFind identifies a page produced by the in-process
-	// task-manager backend via Criteria.Build plus Store.ListPage. The value is
-	// part of the recorded search metadata, so it keeps its name.
-	SearchResultSourceTaskmgrFind SearchResultSource = "taskmgr_find"
-)
 
 // SearchResultMetadata carries operator-facing page metadata.
 type SearchResultMetadata struct {
-	ReturnedCount  int
-	RequestedLimit int
 	// Total is every match in scope, before Offset and Limit cut the page.
-	Total        int
-	Completeness SearchResultCompleteness
-	Source       SearchResultSource
-	Notice       string
+	Total int
 }
 
 // SearchResultPage represents a paged search response from the repository.

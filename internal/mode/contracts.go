@@ -78,6 +78,11 @@ type Browse interface {
 	// before its own handling: cleared is false when the query was already
 	// empty, and Escape then does what it does without a query.
 	ClearQuery() (cleared bool, cmd tea.Cmd)
+
+	// TakesKey reports whether the tab takes this key for itself before any
+	// binding. The shell asks the tab on screen, and runs no action on a key
+	// it takes.
+	TakesKey(msg tea.KeyMsg) bool
 }
 
 // RefreshMode distinguishes the two reasons a browse tab reloads. It lives here
@@ -112,16 +117,29 @@ type SelectionChangedMsg struct {
 type ActionRequestMsg struct {
 	Mode   ID
 	Action Action
+	// Selection is the row an ActionOpenDetail opens: the selection the mode
+	// held when it asked. The shell adopts it before it opens the detail, so
+	// the request does not depend on a SelectionChangedMsg arriving first. The
+	// dialog actions leave it nil.
+	Selection *Selection
 }
 
 // RequestActionCmd returns the Cmd that asks the shell for a shell-owned action
 // on behalf of the mode with this id.
 //
-// One constructor for the whole contract, so no mode builds the message
-// inline.
+// It and RequestOpenDetailCmd are the constructors of the whole contract, so
+// no mode builds the message inline.
 func RequestActionCmd(id ID, action Action) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: action}
+	}
+}
+
+// RequestOpenDetailCmd returns the Cmd that asks the shell to open the detail
+// of selection, the row the mode with this id holds selected.
+func RequestOpenDetailCmd(id ID, selection *Selection) tea.Cmd {
+	return func() tea.Msg {
+		return ActionRequestMsg{Mode: id, Action: ActionOpenDetail, Selection: selection}
 	}
 }
 

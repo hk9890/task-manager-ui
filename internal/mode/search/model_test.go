@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,6 +36,11 @@ func newModel(t *testing.T, repo repository.Repository) *Model {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 	m := NewModel(context.Background(), repo, nil, keys)
+	if m.pause != editPause {
+		t.Fatalf("a new search waits %v after an edit, want %v", m.pause, editPause)
+	}
+	// The pause ends when its message arrives, which the test decides.
+	m.pause = 0
 	m.SetSize(100, 24)
 	return m
 }
@@ -58,8 +64,18 @@ func openedModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
 	return m
 }
 
+// edit sends a key that changes the query and lets its pause end. It returns
+// the search for the text.
+func edit(m *Model, key tea.KeyMsg) tea.Cmd {
+	return m.Update(m.Update(key)())
+}
+
 func typeText(m *Model, text string) tea.Cmd {
-	return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
+	return edit(m, runes(text))
+}
+
+func runes(text string) tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}
 }
 
 func resultIDs(m *Model) string {
@@ -154,11 +170,11 @@ func TestEveryEditSearchesTheStoreForTheQuery(t *testing.T) {
 		t.Errorf("a complete result is counted against something:\n%s", view)
 	}
 
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyBackspace}))
+	resolve(t, m, edit(m, tea.KeyMsg{Type: tea.KeyBackspace}))
 	if got := lastSearch(t, gw); got.Text != "logi" {
 		t.Fatalf("backspace searched for %q, want logi", got.Text)
 	}
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlU}))
+	resolve(t, m, edit(m, tea.KeyMsg{Type: tea.KeyCtrlU}))
 	if got := lastSearch(t, gw); got.Text != "" {
 		t.Fatalf("ctrl+u searched for %q, want the empty query", got.Text)
 	}
@@ -218,6 +234,34 @@ func TestScopeKeyTogglesBetweenOpenAndAllAndSearchesAgain(t *testing.T) {
 	}
 }
 
+// TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake pins the list config
+// refuses a binding on against the code that takes those keys: every key that
+// prints nothing and is the query's or the scope's is reserved, and nothing
+// else is.
+func TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake(t *testing.T) {
+	reserved := config.ReservedKeys()
+	var taken []string
+	for keyType := tea.KeyType(-128); keyType <= 127; keyType++ {
+		// A rune key and space are printable, which config refuses by rule.
+		if keyType == tea.KeyRunes || keyType == tea.KeySpace {
+			continue
+		}
+		msg := tea.KeyMsg{Type: keyType}
+		if !mode.IsQueryKey(msg) && !isScopeKey(msg) {
+			if slices.Contains(reserved, msg.String()) {
+				t.Errorf("config reserves %q, which no surface takes", msg.String())
+			}
+			continue
+		}
+		taken = append(taken, msg.String())
+	}
+
+	slices.Sort(taken)
+	if !slices.Equal(taken, reserved) {
+		t.Fatalf("the surfaces take %v before any binding, config reserves %v", taken, reserved)
+	}
+}
+
 func TestHeaderCountsThePageAgainstEveryMatchWhenTheStoreHoldsMore(t *testing.T) {
 	gw := fakes.NewTracked()
 	for i := 0; i < resultLimit+5; i++ {
@@ -247,7 +291,11 @@ func TestMovementOpenDetailAndReloadReadTheBoardContext(t *testing.T) {
 	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown}); cmd != nil {
 		t.Fatal("down on the last result returned a command")
 	}
-	testui.AssertActionRequest(t, m.Update(tea.KeyMsg{Type: tea.KeyEnter})(), mode.Search, mode.ActionOpenDetail)
+	request := m.Update(tea.KeyMsg{Type: tea.KeyEnter})()
+	testui.AssertActionRequest(t, request, mode.Search, mode.ActionOpenDetail)
+	if carried := request.(mode.ActionRequestMsg).Selection; carried == nil || carried.Issue.ID != "tm-3" {
+		t.Fatalf("enter asked for the detail of %#v, want the selected result tm-3", carried)
+	}
 
 	// The reload key runs the query again and returns to the first result.
 	before := len(gw.CallsFor(fakes.MethodSearch))
@@ -315,14 +363,14 @@ func TestAutoRefreshKeepsThePlaceInTheList(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	}
-	row, offset := m.selectedRow, m.scrollOffset
+	row, offset := m.list.SelectedRow, m.list.ScrollOffset
 	if row == offset || offset == 0 {
 		t.Fatalf("setup: row %d at offset %d, want a row inside a scrolled window", row, offset)
 	}
 
 	resolve(t, m, m.AutoRefresh())
-	if m.selectedRow != row || m.scrollOffset != offset {
-		t.Fatalf("the refresh left row %d at offset %d, want row %d at offset %d", m.selectedRow, m.scrollOffset, row, offset)
+	if m.list.SelectedRow != row || m.list.ScrollOffset != offset {
+		t.Fatalf("the refresh left row %d at offset %d, want row %d at offset %d", m.list.SelectedRow, m.list.ScrollOffset, row, offset)
 	}
 
 	refresh := m.AutoRefresh()
@@ -333,13 +381,13 @@ func TestAutoRefreshKeepsThePlaceInTheList(t *testing.T) {
 		t.Fatalf("the refresh took the selection to %q, want %q, where it moved meanwhile", got, moved)
 	}
 
-	row = m.selectedRow
+	row = m.list.SelectedRow
 	if err := gw.Memory.CloseIssue(context.Background(), moved, domain.CloseIssueInput{}); err != nil {
 		t.Fatalf("CloseIssue returned error: %v", err)
 	}
 	resolve(t, m, m.AutoRefresh())
-	if got := m.selectedIssueID(); m.selectedRow != row || got == moved {
-		t.Fatalf("with its issue gone the selection is on row %d (%q), want row %d", m.selectedRow, got, row)
+	if got := m.selectedIssueID(); m.list.SelectedRow != row || got == moved {
+		t.Fatalf("with its issue gone the selection is on row %d (%q), want row %d", m.list.SelectedRow, got, row)
 	}
 }
 

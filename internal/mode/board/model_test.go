@@ -278,6 +278,9 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 	if action.Action != mode.ActionOpenDetail {
 		t.Fatalf("expected action %q got %q", mode.ActionOpenDetail, action.Action)
 	}
+	if action.Selection == nil || action.Selection.Issue.ID != "tm-8" {
+		t.Fatalf("expected the request to carry the selected issue tm-8, got %#v", action.Selection)
+	}
 
 	testui.AssertMatchesGoldenNormalized(t, []byte(m.View(0)), "model_navigation.golden")
 }

@@ -93,15 +93,15 @@ columns; this tab is where they are browsed. Docs mode reuses the board keymap:
 
 `alt+f`, or the `search` button on the menu bar, opens the store search from a
 tab or from detail. It is not a tab: no tab is marked while it is up. It asks
-the store on every edit, and it also finds an issue through its description;
+the store when you stop typing, and it also finds an issue through its description;
 the filter of a tab reads only the titles and IDs of the rows already loaded.
 
-- type, `backspace`, `ctrl+w`, `ctrl+u` — edit the query, as in the filter; each edit searches again
+- type, `backspace`, `ctrl+w`, `ctrl+u` — edit the query, as in the filter; the search runs a moment after the last key
 - `ctrl+t` — switch between open issues and all issues. The search starts on
   open issues; the column title reads `Results · open` or `Results · all`
 - `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move in the results
 - `enter` — open selected result in detail mode; `esc` there returns to the results.
-  While a search is still running, `enter` waits for it and opens the result it
+  While a search is still running or about to run, `enter` waits for it and opens the result it
   selects; any other key, a click or the wheel before that cancels the wait
 - `alt+r` — run the search again
 - `esc` — clear the query; with an empty query, return to where the search was opened from
@@ -209,6 +209,8 @@ instead.
   sees them. From the store search they leave it for a tab.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.
 - The startup-error screen also quits on `q`.
+- An `esc` pressed while a dialog is still opening cancels the dialog and leaves
+  the filter as it is.
 - A terminal sends `alt+e` as `esc` followed by `e`, so `esc` and a letter that
   reach the app together are read as the `alt+` key: `esc` then a quick `e`
   opens the editor where you meant to clear the filter and type. A local

@@ -127,6 +127,73 @@ func TestResolveKeyBindingsRejectsPrintableKeysOutsideModal(t *testing.T) {
 	}
 }
 
+// TestDefaultKeyBindingsOutsideModalAreNotReserved: a browse surface takes a
+// reserved key before any binding, so no default binding outside a modal may
+// be one.
+func TestDefaultKeyBindingsOutsideModalAreNotReserved(t *testing.T) {
+	t.Parallel()
+
+	for _, context := range []string{ShellContext, BoardContext, DetailContext} {
+		for action, keys := range bindingsOf(DefaultKeyBindings(), context) {
+			for _, key := range keys {
+				if _, reserved := reservedKeys[canonicalKeyName(key)]; reserved {
+					t.Errorf("%s action %q is bound to the reserved key %q", context, action, key)
+				}
+			}
+		}
+	}
+}
+
+func TestResolveKeyBindingsRejectsReservedKeysInShellAndBoard(t *testing.T) {
+	t.Parallel()
+
+	contexts := []struct {
+		context string
+		action  string
+		bind    func(k *KeyBindings, keys []string)
+	}{
+		{ShellContext, ShellActionHelp, func(k *KeyBindings, keys []string) { k.Shell[ShellActionHelp] = keys }},
+		{BoardContext, BoardActionReload, func(k *KeyBindings, keys []string) { k.Board[BoardActionReload] = keys }},
+	}
+	uses := map[string]string{
+		"backspace": "edits the filter",
+		"ctrl+w":    "edits the filter",
+		"ctrl+u":    "edits the filter",
+		"ctrl+t":    "toggles the scope of the store search",
+	}
+	if got := ReservedKeys(); len(got) != len(uses) {
+		t.Fatalf("ReservedKeys() = %v, want the %d keys of this test", got, len(uses))
+	}
+
+	for _, tc := range contexts {
+		for _, key := range ReservedKeys() {
+			t.Run(tc.context+" "+key, func(t *testing.T) {
+				t.Parallel()
+
+				bindings := DefaultKeyBindings()
+				// The raw name is upper case: the check reads the canonical one.
+				tc.bind(&bindings, []string{"alt+z", strings.ToUpper(key)})
+				_, err := ResolveKeyBindings(bindings)
+				want := `key "` + key + `" for action "` + tc.action + `" in ` + tc.context + ` context ` + uses[key] + `, which takes it before any binding; bind another key`
+				if err == nil || err.Error() != want {
+					t.Fatalf("error = %v, want %q", err, want)
+				}
+			})
+		}
+	}
+
+	// The detail has no query and a modal is above every browse surface, so
+	// their keys stay free.
+	modal := DefaultKeyBindings()
+	modal.Detail[DetailActionPageUp] = []string{"ctrl+u"}
+	modal.Modal[ModalActionPrev] = []string{"backspace", "ctrl+w"}
+	modal.Modal[ModalActionLeft] = []string{"ctrl+u"}
+	modal.Modal[ModalActionRight] = []string{"ctrl+t"}
+	if _, err := ResolveKeyBindings(modal); err != nil {
+		t.Fatalf("reserved modal keys rejected: %v", err)
+	}
+}
+
 func TestMergeKeyBindingsOverridesPerAction(t *testing.T) {
 	t.Parallel()
 
