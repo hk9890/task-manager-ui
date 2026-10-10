@@ -143,8 +143,8 @@ rows of shell chrome, so at a terminal of `H` rows the Done column header reads 
 resize to 200 rows, press `r`: the header must read `193 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
-`DashboardOptions.ClosedLimit`, or the `WindowSizeMsg` handler never saw the new size — both in
-`internal/mode/board/model.go`. `M` equal to `N` means `ClosedTotal` is computed after the limit
+`DashboardOptions.ClosedLimit` in `internal/mode/board/model.go`, or `applyWorkspaceSizeToBrowseModes`
+in `internal/app/render.go` never gave the board the new size. `M` equal to `N` means `ClosedTotal` is computed after the limit
 slice instead of before.
 
 ### The selection bar follows the selection

@@ -492,6 +492,12 @@ func TestDetailLoadFailureToastShowsOnceForOneIssue(t *testing.T) {
 	if got := m.toast.Seq() - shown; got != 2 {
 		t.Errorf("failure toasts after a recovery and a new failure = %d, want 2", got)
 	}
+
+	// The reload key is a question, and the answer is not held back.
+	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}})
+	if got := m.toast.Seq() - shown; got != 3 {
+		t.Errorf("failure toasts after the reload key = %d, want 3", got)
+	}
 }
 
 func TestStoreWatchEndStopsTheWaitAndAStaleStoreCannotEndIt(t *testing.T) {

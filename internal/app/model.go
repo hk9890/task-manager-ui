@@ -826,6 +826,8 @@ func (m *Model) quit() tea.Cmd {
 // reloadActiveSurface does what the reload key of the surface on screen does.
 func (m *Model) reloadActiveSurface() tea.Cmd {
 	if m.active == mode.Detail {
+		// The operator asked, so a load that fails again is told again.
+		m.detailLoadFailedID = ""
 		return m.reloadDetailCmd()
 	}
 	// Board is the shell's home tab, so an unknown active mode draws it
@@ -983,7 +985,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, m.reloadDetailCmd())
+		return m, batchCmds(modeCmd, m.reloadActiveSurface())
 	case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
 		issueID, ok := m.selectedIssueID()
 		if !ok {
