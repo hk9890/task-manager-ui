@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hk9890/task-manager-ui/internal/displaytext"
-
 	"github.com/hk9890/task-manager/sdk/tasks"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )

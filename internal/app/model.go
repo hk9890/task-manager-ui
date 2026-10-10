@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hk9890/task-manager-ui/internal/displaytext"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/mode"

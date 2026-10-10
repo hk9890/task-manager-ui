@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hk9890/task-manager-ui/internal/displaytext"
-
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"

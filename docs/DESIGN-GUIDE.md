@@ -409,8 +409,9 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
     `renderRow` and `renderError`, each of which draws a value that is also a key;
   - the error row of a board column and the error text of the detail view.
 
-  A new place that draws such a string calls `displaytext.OneLine` itself. The log keeps the raw
-  value ([MONITORING.md](MONITORING.md)).
+  A new place that draws such a string calls `displaytext.OneLine` itself. A log record is not
+  cleaned: it holds what the app holds, so a path there is raw, and a store's name is the cleaned
+  one `StoreName` returned.
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.
 

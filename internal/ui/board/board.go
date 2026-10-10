@@ -5,10 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hk9890/task-manager-ui/internal/displaytext"
-
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
