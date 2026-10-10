@@ -502,7 +502,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // is already scheduled: long work renders the spinner (docs/DESIGN-GUIDE.md,
 // Loading feedback), and nothing spins while nothing waits.
 func (m *Model) ensureSpinnerTickCmd() tea.Cmd {
-	if m.spinnerTicking || len(m.loadingStates()) == 0 {
+	if m.spinnerTicking || !m.workInFlight() {
 		return nil
 	}
 	m.spinnerTicking = true

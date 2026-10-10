@@ -45,19 +45,3 @@ func Glyph(frame int) string {
 func SpinnerTickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return TickMsg{} })
 }
-
-// Scope identifies which shell surface is loading.
-type Scope string
-
-const (
-	ScopeBoard  Scope = "board"
-	ScopeDocs   Scope = "docs"
-	ScopeSearch Scope = "search"
-	ScopeDetail Scope = "detail"
-	ScopeStores Scope = "stores"
-)
-
-// State describes one loading state.
-type State struct {
-	Scope Scope
-}

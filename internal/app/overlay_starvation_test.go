@@ -67,7 +67,7 @@ func TestSpinnerTickSurvivesAnOverlay(t *testing.T) {
 			if m.spinnerTicking && ticks == armed {
 				t.Fatal("the overlay swallowed the tick: spinnerTicking stayed latched and nothing re-armed, so the spinner never advances again")
 			}
-			if len(m.loadingStates()) > 0 && ticks == armed {
+			if m.workInFlight() && ticks == armed {
 				t.Errorf("work is still in flight but no further tick was armed")
 			}
 		})

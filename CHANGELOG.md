@@ -19,7 +19,8 @@ carries its `vX.Y.Z` section of this file as its notes.
   cannot be changed safely, nothing changes and a toast says why. `esc` returns
   to where you came from.
 - **Changed: the header.** The first button on the menu bar is the name of the
-  open store, in bold; it opens the store picker, as `stores` did. The text at
+  open store, in bold; it opens the store picker, as `stores` did. A long name
+  is cut to the room the bar has, before a button is dropped. The text at
   the right of the tab line — the store, the view, the selected issue and
   `Idle` — is gone: each part repeated what the screen already shows.
 - **Changed: the store search waits until you stop typing.** A search runs 150 ms

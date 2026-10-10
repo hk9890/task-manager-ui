@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"unicode"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
@@ -113,11 +115,21 @@ func (c Catalog) resolve(opts tasks.ResolveOptions) (storecatalog.Opened, error)
 // StoreName is what the header calls a resolved store. A central store is its
 // registry name, which is the name of its directory under the central root; a
 // local store's directory is always .tasks, so it is named after its project.
+// A directory name may hold a newline or a tab, and the name is drawn on one
+// line: each run of control characters and white space becomes one space, and
+// none stays at either end.
 func StoreName(info tasks.ResolveInfo) string {
+	dir := info.StorePath
 	if info.Kind == tasks.ResolvedLocal {
-		return filepath.Base(info.ProjectPath)
+		dir = info.ProjectPath
 	}
-	return filepath.Base(info.StorePath)
+	spaced := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, filepath.Base(dir))
+	return strings.Join(strings.Fields(spaced), " ")
 }
 
 func convertHealth(health tasks.StoreHealth) storecatalog.Health {

@@ -271,8 +271,8 @@ func TestOpenOverlayDoesNotSwallowTheStoreListing(t *testing.T) {
 	if len(m.storePicker.Entries()) != len(registryEntries()) {
 		t.Errorf("the picker listed %d entries, want %d", len(m.storePicker.Entries()), len(registryEntries()))
 	}
-	if len(m.loadingStates()) != 0 {
-		t.Errorf("the shell still reports work in flight: %+v", m.loadingStates())
+	if m.workInFlight() {
+		t.Error("the shell still reports work in flight")
 	}
 }
 
@@ -351,7 +351,7 @@ func TestPickerLoadingIsNotReportedOnAnotherTab(t *testing.T) {
 	m = next.(Model)
 	listing := runBatch(cmd) // held back, so the listing is still in flight
 
-	if len(m.loadingStates()) == 0 {
+	if !m.workInFlight() {
 		t.Fatal("expected the in-flight listing to be reported while the picker is on screen")
 	}
 
@@ -360,8 +360,8 @@ func TestPickerLoadingIsNotReportedOnAnotherTab(t *testing.T) {
 	if m.active != mode.Docs {
 		t.Fatalf("expected to be on Docs, got %q", m.active)
 	}
-	if got := m.loadingStates(); len(got) != 0 {
-		t.Errorf("Docs reports the picker's listing as in flight: %+v", got)
+	if m.workInFlight() {
+		t.Error("Docs reports the picker's listing as in flight")
 	}
 
 	m = applyMessages(t, m, listing)

@@ -9,7 +9,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
-	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
 
 // detailModelOnIssue returns a model in Detail with tm-1 loaded and settled.
@@ -70,15 +69,8 @@ func TestPostMutationDetailReloadReportsItsLoad(t *testing.T) {
 				t.Errorf("detail target after the mutation = %q, want tm-1; the response fails the target guard", m.detail.TargetID())
 			}
 
-			states := m.loadingStates()
-			found := false
-			for _, state := range states {
-				if state.Scope == loading.ScopeDetail {
-					found = true
-				}
-			}
-			if !found {
-				t.Errorf("loadingStates() reports %v, with no detail scope for the reload in flight", states)
+			if !m.workInFlight() {
+				t.Error("the shell reports no work in flight during the reload: the header draws no spinner")
 			}
 		})
 	}

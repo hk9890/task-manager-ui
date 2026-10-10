@@ -12,7 +12,6 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
 
 // searchSurfaces are the surfaces the store search opens from, each with the
@@ -453,14 +452,14 @@ func TestSearchReloadsOnAStoreChangeAndKeepsTheSelectedIssue(t *testing.T) {
 	}
 }
 
-// TestSearchReportsItsOwnLoadingScope: a search in flight spins the header as
-// the search's work, not as a tab's.
-func TestSearchReportsItsOwnLoadingScope(t *testing.T) {
+// TestSearchInFlightSpinsTheHeader: the search is no tab, and its work in
+// flight still draws the header spinner.
+func TestSearchInFlightSpinsTheHeader(t *testing.T) {
 	m, _ := filterShell(t)
 	next, _ := m.Update(testKey("alt+f"))
-	states := next.(Model).loadingStates()
-	if len(states) != 1 || states[0].Scope != loading.ScopeSearch {
-		t.Fatalf("the opening search reports %#v, want the search scope", states)
+	opened := next.(Model)
+	if !opened.search.IsLoading() || !opened.workInFlight() {
+		t.Fatalf("the opening search: search loading %v, work in flight %v; want both", opened.search.IsLoading(), opened.workInFlight())
 	}
 }
 
