@@ -205,7 +205,7 @@ focuses it.
 
 The store search (`internal/mode/search`) is a browse surface in everything but the tab line. It
 satisfies `mode.Browse` and is registered in `browseSurfaces` (`internal/app/routing.go`), which is
-what gives it forwarding, sizing, a loading scope, auto refresh and a rebuild at a store switch. It
+what gives it forwarding, sizing, the header spinner, auto refresh and a rebuild at a store switch. It
 is absent from `mode.BrowseModes`, so the tab cycle never lands on it and `lastBrowse` never names
 it.
 
