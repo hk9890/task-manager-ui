@@ -5,6 +5,7 @@ package app
 // value a file or store operation uses stays raw.
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,10 +26,12 @@ func TestToastCleansEachLineAndKeepsTheLineFeeds(t *testing.T) {
 	if strings.Contains(view, "\x1b[2J") || strings.Contains(view, "\t") {
 		t.Errorf("the toast draws a control character from its message:\n%q", view)
 	}
-	for _, want := range []string{"Store a b is not usable", "cause: x [2Jy"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("the toast lost the line %q:\n%s", want, view)
-		}
+	lineOf := func(text string) int {
+		return slices.IndexFunc(strings.Split(view, "\n"), func(line string) bool { return strings.Contains(line, text) })
+	}
+	first, second := lineOf("Store a b is not usable"), lineOf("cause: x [2Jy")
+	if first < 0 || second != first+1 {
+		t.Errorf("the toast draws its two lines on lines %d and %d, want the second under the first:\n%s", first, second, view)
 	}
 }
 

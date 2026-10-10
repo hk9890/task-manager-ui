@@ -17,6 +17,9 @@ var (
 	zeroWidthSpace      = string(rune(0x200b))
 	zeroWidthNonJoiner  = string(rune(0x200c))
 	zeroWidthJoiner     = string(rune(0x200d))
+	variationSelector16 = string(rune(0xfe0f))
+	combiningAcute      = string(rune(0x0301))
+	hangulFiller        = string(rune(0x3164))
 	technologist        = string(rune(0x1f468)) + zeroWidthJoiner + string(rune(0x1f4bb))
 	// The flag of England: a black flag and a tag sequence.
 	taggedFlag = string([]rune{0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f})
@@ -58,7 +61,11 @@ func TestVisible(t *testing.T) {
 		"":                               false,
 		" \t":                            false,
 		zeroWidthJoiner + zeroWidthSpace: false,
+		variationSelector16:              false,
+		combiningAcute:                   false,
+		hangulFiller:                     false,
 		"a":                              true,
+		"e" + combiningAcute:             true,
 		technologist:                     true,
 	} {
 		if got := displaytext.Visible(in); got != want {

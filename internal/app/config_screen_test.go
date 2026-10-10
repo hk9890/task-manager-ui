@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -456,5 +457,33 @@ func TestAFailedWriteChangesNothingAndShowsAToast(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The reason names the config file, and a control character in that path has
+// no width until the toast draws it as a space. The reason is cleaned before
+// it is wrapped, so no line of the toast is wider than the terminal.
+func TestAFailedWriteUnderAHostilePathKeepsTheToastInsideTheTerminal(t *testing.T) {
+	restoreStyles(t)
+
+	// A directory in the place of the config file: the read fails, and its
+	// error names the path as it is.
+	path := filepath.Join(t.TempDir(), "conf"+strings.Repeat("\x1b[2J", 40)+"ig", "config.yaml")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	m, _ := configShell(t)
+	m.services.ConfigPath = path
+	m = openConfigScreen(t, m)
+	m = press(t, m, "right")
+
+	if !m.toast.Visible() {
+		t.Fatal("no toast after a write that failed")
+	}
+	for _, line := range strings.Split(m.toast.View(), "\n") {
+		if got := lipgloss.Width(line); got > m.width {
+			t.Errorf("a toast line is %d cells in a terminal of %d:\n%s", got, m.width, line)
+		}
 	}
 }

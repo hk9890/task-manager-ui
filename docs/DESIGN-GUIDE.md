@@ -404,10 +404,13 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   the cleaning is at the places such a text passes on its way to the screen:
   - where a display-only value enters: `StoreName`, and the path and detail of a catalog entry
     (`internal/storecatalog/taskmgr`);
-  - `Model.showToast`, with `displaytext.Lines`, because a toast may hold line feeds the app wrote;
-  - `Model.openStoreForm`, the configuration screen's `Model.Open`, and the store picker's
-    `renderRow` and `renderError`, each of which draws a value that is also a key;
-  - the error row of a board column and the error text of the detail view.
+  - `Model.showToast`, with `displaytext.Lines`, because a toast may hold line feeds the app wrote.
+    A caller that wraps the text first cleans it before the wrap, as `Model.applyConfigChange`
+    does: a control character has no width until it is drawn as a space;
+  - `Model.openStoreForm`, the configuration screen's `Model.Open` and the store picker's
+    `renderRow`, each of which draws a value that is also a key;
+  - the error row of a board column, the error text of the detail view and the store picker's
+    `renderError`.
 
   A new place that draws such a string calls `displaytext.OneLine` itself. A log record is not
   cleaned: it holds what the app holds, so a path there is raw, and a store's name is the cleaned

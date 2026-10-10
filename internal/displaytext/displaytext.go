@@ -9,29 +9,20 @@ import (
 	"unicode"
 )
 
-// reordering holds the format characters that change the order in which a
-// terminal draws the cells beside them, and the byte order mark. Every other
-// format character stays: a joiner shapes an emoji sequence or a script.
-var reordering = &unicode.RangeTable{
-	R16: []unicode.Range16{
-		{Lo: 0x061c, Hi: 0x061c, Stride: 1},
-		{Lo: 0x200e, Hi: 0x200f, Stride: 1},
-		{Lo: 0x202a, Hi: 0x202e, Stride: 1},
-		{Lo: 0x2066, Hi: 0x2069, Stride: 1},
-		{Lo: 0xfeff, Hi: 0xfeff, Stride: 1},
-	},
-}
+const byteOrderMark rune = 0xfeff
 
 // OneLine returns s as one drawable line: each control character and each
 // line or paragraph separator becomes a space, because a newline adds a line
-// to the frame and an escape sequence runs in the terminal, and each
-// reordering character is dropped.
+// to the frame and an escape sequence runs in the terminal. Each bidirectional
+// control is dropped, because it changes the order in which a terminal draws
+// the cells beside it, and so is the byte order mark. Every other format
+// character stays: a joiner shapes an emoji sequence or a script.
 func OneLine(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
 		case unicode.IsControl(r), unicode.In(r, unicode.Zl, unicode.Zp):
 			return ' '
-		case unicode.Is(reordering, r):
+		case unicode.Is(unicode.Bidi_Control, r), r == byteOrderMark:
 			return -1
 		}
 		return r
@@ -48,9 +39,13 @@ func Lines(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// Visible reports whether s draws at least one cell that is not blank.
+// Visible reports whether s draws at least one cell that is not blank. White
+// space and a format character draw none of their own, nor does a combining
+// mark or a variation selector with no character before it, and a filler
+// draws a blank one.
 func Visible(s string) bool {
 	return strings.ContainsFunc(s, func(r rune) bool {
-		return !unicode.IsSpace(r) && !unicode.Is(unicode.Cf, r)
+		return !unicode.IsSpace(r) &&
+			!unicode.In(r, unicode.Cf, unicode.Mn, unicode.Me, unicode.Other_Default_Ignorable_Code_Point)
 	})
 }
