@@ -188,6 +188,29 @@ func TestSearchEnterOpensDetailAndEscapeReturnsWithStateKept(t *testing.T) {
 	}
 }
 
+// TestSearchEnterDuringASearchOpensTheDetailOfItsResult: the rows on screen
+// answer the query before the last key, so Enter waits for the search in
+// flight and the detail opens on what that search found.
+func TestSearchEnterDuringASearchOpensTheDetailOfItsResult(t *testing.T) {
+	m, _ := searchShell(t)
+
+	// The key's search is held back: its command is not run yet.
+	next, typed := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("triage")})
+	next, entered := next.(Model).Update(testKey("enter"))
+	m = applyMessages(t, next.(Model), runBatch(entered))
+	if m.active != mode.Search {
+		t.Fatalf("enter left the search for %q before the result arrived", m.active)
+	}
+
+	m = applyMessages(t, m, runBatch(typed))
+	if m.active != mode.Detail || m.detail.TargetID() != "tm-2" {
+		t.Fatalf("the result left the shell on %q showing %q, want detail of tm-2", m.active, m.detail.TargetID())
+	}
+	if got, ok := m.selectedIssueID(); !ok || got != "tm-2" {
+		t.Fatalf("under detail the shell acts on %q, want the search result tm-2", got)
+	}
+}
+
 // TestSearchEscapeClearsTheQueryThenReturnsToTheOpeningSurface covers the three
 // surfaces the search opens from.
 func TestSearchEscapeClearsTheQueryThenReturnsToTheOpeningSurface(t *testing.T) {

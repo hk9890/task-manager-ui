@@ -87,13 +87,34 @@ type Model struct {
 	generation int
 	loading    bool
 	settled    bool
+	// inFlight is the landing of the search in flight. An auto refresh keeps
+	// the selection where it is, so Enter need not wait for it.
+	inFlight landing
 
 	selectedRow  int
 	scrollOffset int
 
+	// heldOpen is an Enter that arrived while a search the operator asked for
+	// was in flight. The rows on screen then answer an older query, so the
+	// detail opens on the result of the newest one. Any later key drops it.
+	heldOpen heldOpen
+
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
 }
+
+// heldOpen is how far a held Enter has come.
+type heldOpen int
+
+const (
+	noHeldOpen heldOpen = iota
+	// openOnResult waits for the result of the search in flight.
+	openOnResult
+	// openOnSelection waits for the shell to hold the selection of that
+	// result: the open request resolves its target there, so it follows the
+	// SelectionChangedMsg and never races it.
+	openOnSelection
+)
 
 // IsScopeKey reports whether msg is the key that toggles the scope between
 // open issues and all of them. It is built in, as the query keys are, and the
@@ -166,7 +187,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case mode.MouseMsg:
 		return m.handleMouse(msg)
 
+	case mode.SelectionChangedMsg:
+		if msg.Mode != mode.Search || m.heldOpen != openOnSelection {
+			return nil
+		}
+		m.heldOpen = noHeldOpen
+		if m.currentSelection() == nil {
+			return nil
+		}
+		return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+
 	case tea.KeyMsg:
+		m.heldOpen = noHeldOpen
 		if consumed, changed := m.query.HandleKey(msg); consumed {
 			if !changed {
 				return nil
@@ -191,6 +223,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
 			return m.moveRow(len(m.issues))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
+			if m.loading && m.inFlight != landInPlace {
+				m.heldOpen = openOnResult
+				return nil
+			}
 			if m.currentSelection() == nil {
 				return nil
 			}
@@ -256,6 +292,7 @@ func (m *Model) IsLoading() bool {
 func (m *Model) search(land landing) tea.Cmd {
 	m.generation++
 	m.loading = true
+	m.inFlight = land
 
 	generation := m.generation
 	ctx, repo := m.ctx, m.repo
@@ -281,9 +318,14 @@ func (m *Model) apply(msg loadedMsg) tea.Cmd {
 	m.settled = true
 	m.err = msg.err
 
+	if m.heldOpen == openOnResult {
+		m.heldOpen = openOnSelection
+	}
+
 	if msg.err != nil {
 		// Keep the stale rows on screen; the inline error row explains why they
-		// may be out of date.
+		// may be out of date. A held Enter opens nothing on them.
+		m.heldOpen = noHeldOpen
 		return m.selectionChangedCmd()
 	}
 
