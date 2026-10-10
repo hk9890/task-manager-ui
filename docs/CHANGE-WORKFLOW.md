@@ -45,8 +45,10 @@ docs-only.
   re-read every symbol you cited and re-run every command you quoted.
 
 `scripts/git-hooks/pre-commit` formats staged `*.go` files and checks nothing else — it is not a
-gate. `core.hooksPath` is relative, so it fires inside each worktree too. Installing it is a
-once-per-clone step ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+gate. Each worktree runs its own copy: `EnterWorktree` rewrites `core.hooksPath` to the absolute
+path of the main checkout's hooks, so the copy git runs hands over to the copy in the tree of the
+commit. A tree with no hook is served by the copy git ran. Installing it is a once-per-clone step
+([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ## Landing the plane
 
