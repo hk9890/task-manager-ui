@@ -175,9 +175,9 @@ func (m Model) mutationTargetIssue() (domain.IssueSummary, bool) {
 
 // reloadDetailAfterMutationCmd starts the post-mutation detail reload, pairing
 // BeginLoad with loadDetailCmd as every other load site does. Without the
-// pairing the header shows neither the spinner nor "Loading: detail" while the
-// read runs, and a browse selection that moves in that window makes the
-// response fail the target-id guard in update() and be discarded.
+// pairing the header shows no spinner while the read runs, and a browse
+// selection that moves in that window makes the response fail the target-id
+// guard in update() and be discarded.
 func (m *Model) reloadDetailAfterMutationCmd(issueID string) tea.Cmd {
 	if strings.TrimSpace(issueID) == "" {
 		return nil

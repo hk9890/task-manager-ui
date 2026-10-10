@@ -306,7 +306,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   passes it in `State.ColumnStart`.
 - Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
   scrolls or reloads under a still pointer is the one marked. It draws as the quieter row band
-  (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`.
+  (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`. The store
+  button rests in that colour and weight, so under the pointer it takes an underline instead.
 - A click on a menu-bar button runs the method its key runs (`Model.mouseOnHeader`).
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a

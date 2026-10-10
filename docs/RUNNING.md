@@ -73,7 +73,7 @@ python3 scripts/capture_taskmgr_ui_screen.py \
   --cwd "$repoPath" --width 200 --height 34 --startup-wait 1.2 --timeout 25 \
   --step 'wait-for-text:Ready:3000' \
   --step 'send-key:ENTER' \
-  --step 'wait-for-text:Detail:3000' \
+  --step 'wait-for-text:Metadata:3000' \
   --step 'checkpoint:detail-open' \
   --step 'send-key:ESC' \
   --step 'wait-for-text:Board:2000' \
