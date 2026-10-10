@@ -75,7 +75,7 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 		return hit, true
 	}
 	// The banner and the blank line under it sit above the rows.
-	if bannerShown(state, frameHeight(state)) {
+	if bannerShown(state) {
 		line -= bannerLines
 	}
 	if row := firstResult(state) + line/issuerow.Height; line >= 0 && row < len(state.Results) {

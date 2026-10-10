@@ -2,6 +2,7 @@ package taskmgr
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -136,6 +137,11 @@ func TestMapWriteErrHookDeniedKeepsTheHookReason(t *testing.T) {
 	if !strings.Contains(text, denied.Reason) {
 		t.Errorf("rendered error does not carry the denial reason: %q", text)
 	}
+	// A toast is one line cut to the terminal width. With the hook id before
+	// it, the reason was past the cut at 80 columns.
+	if reason, hook := strings.Index(text, denied.Reason), strings.Index(text, denied.Hook); reason > hook {
+		t.Errorf("the hook id stands before the denial reason, where a narrow toast cuts the reason: %q", text)
+	}
 }
 
 // TestMappedErrorTextNamesTheSDKMessageOnce pins the text of the error toast.
@@ -170,8 +176,15 @@ func TestMappedErrorTextNamesTheSDKMessageOnce(t *testing.T) {
 				Reason:  "refused by the machine-wide policy",
 			}),
 			once:  "refused by the machine-wide policy",
-			want:  `close issue: pre-close denied for tm-42 by hook "pkg:deny-closes:deny-closes": refused by the machine-wide policy`,
+			want:  `close issue: refused by the machine-wide policy: pre-close denied for tm-42 by hook "pkg:deny-closes:deny-closes"`,
 			found: func(err error) bool { var target *tasks.HookDeniedError; return errors.As(err, &target) },
+		},
+		{
+			name:   "write validation the SDK wrapped",
+			mapped: mapWriteErr("create issue", fmt.Errorf("entry 2: %w", &tasks.ValidationError{Field: "title", Message: "title is required"})),
+			once:   "title is required",
+			want:   "create issue: entry 2: title: title is required",
+			found:  func(err error) bool { var target *tasks.ValidationError; return errors.As(err, &target) },
 		},
 		{
 			name:   "read validation",

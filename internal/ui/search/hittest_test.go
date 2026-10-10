@@ -277,7 +277,8 @@ func TestRenderResultsContentStopsAtTheLastRowThePaneHasALineFor(t *testing.T) {
 		{height: 9, rows: 2},  // four lines inside the pane
 		{height: 10, rows: 3}, // five: two rows and the title of a third
 	} {
-		lines := renderResultsContent(state, 60, tc.height)
+		state.Height = tc.height
+		lines := renderResultsContent(state, 60)
 		if len(lines) != tc.rows*issuerow.Height {
 			t.Fatalf("frame of %d: rendered %d lines, want the %d of %d rows", tc.height, len(lines), tc.rows*issuerow.Height, tc.rows)
 		}

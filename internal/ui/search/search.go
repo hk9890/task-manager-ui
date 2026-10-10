@@ -116,8 +116,8 @@ func renderWideLayout(state State, selectedDetail domain.IssueDetail, width, hei
 		Width:              railWidth,
 		Height:             resultsHeight,
 		TopLeft:            resultsTitle,
-		TopRight:           resultCountTitle(state, railWidth, height),
-		Content:            renderResultsContent(state, railWidth-2, height),
+		TopRight:           resultCountTitle(state, railWidth),
+		Content:            renderResultsContent(state, railWidth-2),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -173,8 +173,8 @@ func renderNarrowLayout(state State, selectedDetail domain.IssueDetail, width, h
 		Width:              leftWidth,
 		Height:             resultsHeight,
 		TopLeft:            resultsTitle,
-		TopRight:           resultCountTitle(state, leftWidth, height),
-		Content:            renderResultsContent(state, leftWidth-2, height),
+		TopRight:           resultCountTitle(state, leftWidth),
+		Content:            renderResultsContent(state, leftWidth-2),
 		Focused:            state.Focus == FocusResults,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
@@ -303,7 +303,7 @@ const resultsTitle = "Results"
 // only N of the loaded results, and with `N/` when the rail is too narrow for
 // that beside the title. The scope stays whole: a rail too narrow for the
 // short form too loses the word for whether the backend had more.
-func resultCountTitle(state State, paneWidth, height int) string {
+func resultCountTitle(state State, paneWidth int) string {
 	scope := searchScopeLabel(state)
 	tail := scope
 	if badge := strings.TrimSpace(resultCompletenessBadge(state)); badge != "" {
@@ -311,7 +311,7 @@ func resultCountTitle(state State, paneWidth, height int) string {
 	}
 
 	loaded := displayedResultCount(state)
-	drawn := drawnResultCount(state, height)
+	drawn := drawnResultCount(state)
 	if drawn >= len(state.Results) {
 		return fmt.Sprintf("%d %s", loaded, tail)
 	}
@@ -356,15 +356,15 @@ const bannerLines = 2
 // bannerShown reports whether the pane draws the banner: there is one, and
 // the pane has the lines of a whole result under it. In a shorter pane the
 // banner gives way to the selected result.
-func bannerShown(state State, height int) bool {
-	return len(renderResultsBanner(state, 0)) > 0 && resultsPaneLines(height)-bannerLines >= issuerow.Height
+func bannerShown(state State) bool {
+	return len(renderResultsBanner(state, 0)) > 0 && resultsPaneLines(frameHeight(state))-bannerLines >= issuerow.Height
 }
 
-// resultLines is the lines on screen for the rows in a frame of the given
-// height: the inside of the results box, less the banner while that is up.
-func resultLines(state State, height int) int {
-	lines := resultsPaneLines(height)
-	if bannerShown(state, height) {
+// resultLines is the lines on screen for the rows: the inside of the results
+// box, less the banner while that is up.
+func resultLines(state State) int {
+	lines := resultsPaneLines(frameHeight(state))
+	if bannerShown(state) {
 		lines -= bannerLines
 	}
 	return lines
@@ -374,7 +374,7 @@ func resultLines(state State, height int) int {
 // controller takes its scroll window from it, so the window is the rows drawn,
 // with the banner up or not.
 func RowCapacity(state State) int {
-	return max(1, resultLines(state, frameHeight(state))/issuerow.Height)
+	return max(1, resultLines(state)/issuerow.Height)
 }
 
 // firstResult is the scroll offset held inside the result list.
@@ -383,8 +383,8 @@ func firstResult(state State) int {
 }
 
 // drawnResultCount is the number of results the pane draws whole.
-func drawnResultCount(state State, height int) int {
-	return min(resultLines(state, height)/issuerow.Height, len(state.Results)-firstResult(state))
+func drawnResultCount(state State) int {
+	return min(resultLines(state)/issuerow.Height, len(state.Results)-firstResult(state))
 }
 
 // searchScopeLabel names the active scope for the results header.
@@ -395,9 +395,9 @@ func searchScopeLabel(state State) string {
 	return "open"
 }
 
-func renderResultsContent(state State, width, height int) []string {
-	body := renderResultsBody(state, width, height)
-	if !bannerShown(state, height) {
+func renderResultsContent(state State, width int) []string {
+	body := renderResultsBody(state, width)
+	if !bannerShown(state) {
 		return body
 	}
 	return append(append(renderResultsBanner(state, width), ""), body...)
@@ -420,7 +420,7 @@ func renderResultsBanner(state State, width int) []string {
 	return nil
 }
 
-func renderResultsBody(state State, width, height int) []string {
+func renderResultsBody(state State, width int) []string {
 	if strings.TrimSpace(state.Error) != "" && len(state.Results) == 0 {
 		lines := []string{"Search failed."}
 		lines = append(lines, textutil.WrapLines(state.Error, width)...)
@@ -438,7 +438,7 @@ func renderResultsBody(state State, width, height int) []string {
 		return renderEmptyResultsBody(state, width)
 	}
 
-	return renderResultRows(state, width, height)
+	return renderResultRows(state, width)
 }
 
 func renderEmptyResultsBody(state State, width int) []string {
@@ -454,13 +454,13 @@ func renderEmptyResultsBody(state State, width int) []string {
 	return lines
 }
 
-func renderResultRows(state State, width, height int) []string {
+func renderResultRows(state State, width int) []string {
 	// Dim rows when a refresh is in flight (stale data visible, new data pending).
 	dim := state.Loading && len(state.Results) > 0
 	first := firstResult(state)
 	// A search loads far more results than the pane has lines for. The last
 	// row drawn may have a line for its title only.
-	fitting := (resultLines(state, height) + issuerow.Height - 1) / issuerow.Height
+	fitting := (resultLines(state) + issuerow.Height - 1) / issuerow.Height
 	end := min(len(state.Results), first+fitting)
 	lines := make([]string, 0, issuerow.Height*(end-first))
 	hover := -1

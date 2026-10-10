@@ -591,6 +591,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.waitForStoreChangeCmd())
 	case storeWatchEndedMsg:
 		m.storeChanges = nil
+		// A watch that ends in the burst of a write sends no signal for it, and
+		// on a watched store no handler reloaded for that write. Count the end
+		// as a change, so the write is read.
+		m.storeChangeSeq++
 		m.logger().Warn("store change watch ended; the refresh tick is the only trigger")
 		return m, modeCmd
 	case loading.TickMsg:
@@ -630,6 +634,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, openStoreCmd(m.appCtx, m.services.StoreCatalog, entry.Name))
 	case storepickermode.CreateMsg:
+		// A store form rides the action-modal slot. Like the two dialog
+		// requests below, it does not open over an overlay.
+		if m.overlayOpen() {
+			return m, modeCmd
+		}
 		return m, batchCmds(modeCmd, m.openStoreForm(msg.Kind, msg.Dir))
 	case storeCreatedMsg:
 		return m, batchCmds(modeCmd, m.handleStoreCreated(msg))

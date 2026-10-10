@@ -269,6 +269,41 @@ func TestStoreChangeWhileTheSearchQueryIsTypedReloadsWhenTheTypingEnds(t *testin
 	}
 }
 
+// The same debt on a store with no watch, where a write of this process leaves
+// the tabs dirty: a tab that could not reload is still owed the reload. The
+// search the operator submits pays it, and no second one follows.
+func TestOwnWriteWhileTheSearchQueryIsTypedReloadsWhenTheTypingEnds(t *testing.T) {
+	t.Parallel()
+
+	for name, end := range map[string]tea.KeyMsg{
+		"draft cleared":   {Type: tea.KeyCtrlU},
+		"draft submitted": {Type: tea.KeyEnter},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := newWatchedRepository()
+			m, _ := watchedModel(t, repo, RuntimeOptions{DisableAutoRefresh: true})
+			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlAt}})
+			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")}})
+			if m.active != mode.Search || m.storeWatched() {
+				t.Fatalf("setup: active = %v, watched = %v; want Search on a store with no watch", m.active, m.storeWatched())
+			}
+
+			mark := repo.CallCount()
+			m = applyMessages(t, m, []tea.Msg{mutationResultMsg{kind: mutationComment, issueID: "tm-1"}})
+			if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 0 {
+				t.Fatalf("search reads while the query is typed = %d, want 0", got)
+			}
+
+			applyMessages(t, m, []tea.Msg{end})
+			if got := repo.CallCountSince(mark, fakes.MethodSearch); got != 1 {
+				t.Errorf("search reads once the typing ended = %d, want 1", got)
+			}
+		})
+	}
+}
+
 // The Search preview draws the selected issue from the detail the shell holds,
 // so that detail must follow the results it sits next to.
 func TestStoreChangeReloadsTheSearchPreviewWithTheResults(t *testing.T) {
@@ -515,6 +550,29 @@ func TestStoreWatchEndStopsTheWaitAndAStaleStoreCannotEndIt(t *testing.T) {
 	m = applyMessages(t, m, []tea.Msg{scopedMsg{epoch: m.storeEpoch, msg: storeWatchEndedMsg{}}})
 	if m.storeChanges != nil || *waits != armed {
 		t.Errorf("an ended watch left a channel or re-armed a wait (waits = %d)", *waits-armed)
+	}
+}
+
+// The watch can end in the burst of a write and send no signal for it: the
+// operating system refused the watch on the directory the write created. No
+// handler reloads for a write on a watched store, so the end of the watch must.
+func TestAWriteWhoseSignalTheEndingWatchDroppedIsRead(t *testing.T) {
+	t.Parallel()
+
+	repo := newWatchedRepository()
+	m, _ := watchedModel(t, repo, RuntimeOptions{})
+
+	mark := repo.CallCount()
+	m = applyMessages(t, m, []tea.Msg{
+		mutationResultMsg{kind: mutationComment, issueID: "tm-1"},
+		storeWatchEndedMsg{},
+	})
+
+	if m.storeWatched() {
+		t.Fatal("setup: the store is still watched")
+	}
+	if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 1 {
+		t.Errorf("board reads after a write and the end of the watch = %d, want 1", got)
 	}
 }
 

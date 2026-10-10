@@ -83,13 +83,15 @@ func (m *Model) behindStore(surface mode.ID) bool {
 }
 
 // trackSurfaceLoads records, for each surface whose load started in this
-// update, the store change it started after. Every path that starts a load is
-// covered, the reload keys the modes handle themselves included.
+// update, the store change it started after, and that the load reads what a
+// write of this process left the surface dirty for. Every path that starts a
+// load is covered, the reload keys the modes handle themselves included.
 func (m *Model) trackSurfaceLoads() {
 	for surface, state := range m.refreshStateBySurface {
 		loading := m.surfaceLoading(surface)
 		if loading && !state.loading {
 			state.loadedAtChange = m.storeChangeSeq
+			state.dirty = false
 		}
 		state.loading = loading
 		m.refreshStateBySurface[surface] = state

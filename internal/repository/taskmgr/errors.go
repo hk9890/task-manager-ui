@@ -2,6 +2,7 @@ package taskmgr
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
@@ -10,11 +11,19 @@ import (
 )
 
 // repoError wraps an SDK error. domain.RepositoryError prints its message and
-// not its cause, so the mappers below give a typed SDK error its own text as the
-// message, not its bare Message or Reason field: the field, the byte position
-// or the hook must be in the message to reach the toast and the log.
+// not its cause, so the mappers below give a typed SDK error the text of the
+// error they received as the message, not its bare Message field: the field,
+// the byte position and what the SDK wrapped it in must be in the message to
+// reach the toast and the log.
 func repoError(code domain.ErrorCode, op, message string, cause error) domain.RepositoryError {
 	return domain.RepositoryError{Code: code, Operation: op, Message: message, Cause: cause}
+}
+
+// hookDeniedMessage names a refused write with the hook's reason first. A toast
+// is one line cut to the terminal width, and the SDK's own text puts the event,
+// the issue and the hook id before the reason: at 80 columns the reason was cut.
+func hookDeniedMessage(denied *tasks.HookDeniedError) string {
+	return fmt.Sprintf("%s: %s denied for %s by hook %q", denied.Reason, denied.Event, denied.IssueID, denied.Hook)
 }
 
 // mapIssueErr normalizes errors from the single-issue Issue() read. An unknown
@@ -42,10 +51,8 @@ func mapReadErr(op string, err error) error {
 	switch {
 	case errors.Is(err, tasks.ErrNoStore):
 		return repoError(domain.ErrorCodeNoDatabaseFound, op, "", err)
-	case errors.As(err, &ve):
-		return repoError(domain.ErrorCodeValidationFailed, op, ve.Error(), err)
-	case errors.As(err, &pe):
-		return repoError(domain.ErrorCodeValidationFailed, op, pe.Error(), err)
+	case errors.As(err, &ve), errors.As(err, &pe):
+		return repoError(domain.ErrorCodeValidationFailed, op, err.Error(), err)
 	default:
 		return repoError(domain.ErrorCodeUnknown, op, "", err)
 	}
@@ -70,9 +77,9 @@ func mapWriteErr(op string, err error) error {
 	case errors.Is(err, tasks.ErrNotFound):
 		return repoError(domain.ErrorCodeCommandFailed, op, "issue not found", err)
 	case errors.As(err, &ve):
-		return repoError(domain.ErrorCodeValidationFailed, op, ve.Error(), err)
+		return repoError(domain.ErrorCodeValidationFailed, op, err.Error(), err)
 	case errors.As(err, &hde):
-		return repoError(domain.ErrorCodeHookDenied, op, hde.Error(), err)
+		return repoError(domain.ErrorCodeHookDenied, op, hookDeniedMessage(hde), err)
 	case errors.Is(err, tasks.ErrImmutable):
 		return repoError(domain.ErrorCodeConflict, op, "issue is closed; reopen it before editing", err)
 	case errors.Is(err, tasks.ErrNoStore):

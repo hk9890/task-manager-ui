@@ -16,7 +16,7 @@ func (m *Model) maybeAutoRefreshActiveSurfaceCmdOnFocusRegain() tea.Cmd {
 }
 
 func (m *Model) maybeAutoRefreshActiveSurfaceCmdWithPolicy(force bool) tea.Cmd {
-	if m.showHelp || m.showActionModal {
+	if m.overlayOpen() {
 		return nil
 	}
 	if m.focusKnown && !m.terminalFocused {
@@ -40,8 +40,14 @@ func (m *Model) refreshActiveSurfaceCmd() tea.Cmd {
 	if tab == nil || tab.IsLoading() {
 		return nil
 	}
+	cmd := tab.AutoRefresh()
+	if cmd == nil {
+		// The tab cannot take a reload now, such as a search whose query is
+		// being typed. It is not refreshed, so what it is owed stays owed.
+		return nil
+	}
 	m.markSurfaceRefreshed(m.active)
-	return m.scoped(tab.AutoRefresh())
+	return m.scoped(cmd)
 }
 
 // reloadDetailCmd issues a detail load for the current selection and marks the

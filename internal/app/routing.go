@@ -80,7 +80,7 @@ func (m Model) shouldForwardTo(id mode.ID, msg tea.Msg) bool {
 }
 
 func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
-	if !m.showHelp && !m.showActionModal {
+	if !m.overlayOpen() {
 		return false
 	}
 	_, isKey := msg.(tea.KeyMsg)
