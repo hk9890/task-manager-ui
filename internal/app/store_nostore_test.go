@@ -148,13 +148,13 @@ func TestNoStoreStartEscapeQuits(t *testing.T) {
 func TestNoStoreStartHoldsTheOperatorOnThePicker(t *testing.T) {
 	s := newNoStoreStart(t)
 
-	for _, key := range []string{"1", "2", "3", "4", "e", "c"} {
+	for _, key := range []string{"tab", "shift+tab", "alt+e", "alt+n"} {
 		m := press(t, s.m, key)
 		if m.active != mode.StorePicker {
 			t.Errorf("%q left the picker for %q with no store open", key, m.active)
 		}
 	}
-	m := press(t, s.m, "?")
+	m := press(t, s.m, "alt+h")
 	if !m.showHelp {
 		t.Error("help does not open over the picker with no store open")
 	}
@@ -178,7 +178,7 @@ func TestNoStoreStartOpeningAStoreLeavesTheNoStoreState(t *testing.T) {
 		t.Errorf("the opened store's board is not shown:\n%s", pickerView(m))
 	}
 
-	m = press(t, m, "s")
+	m = press(t, m, "alt+s")
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if quits(cmd) {
 		t.Fatal("Escape quit the app with a store open; it must return to the board")

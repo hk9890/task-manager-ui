@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -11,7 +12,6 @@ import (
 const (
 	ShellContext  = "shell"
 	BoardContext  = "board"
-	SearchContext = "search"
 	DetailContext = "detail"
 	ModalContext  = "modal"
 )
@@ -19,11 +19,6 @@ const (
 const (
 	ShellActionQuit           = "quit"
 	ShellActionHelp           = "toggle_help"
-	ShellActionModeBoard      = "mode_board"
-	ShellActionModeDocs       = "mode_docs"
-	ShellActionModeSearch     = "mode_search"
-	ShellActionToggleSearch   = "toggle_search"
-	ShellActionModeDetail     = "mode_detail"
 	ShellActionModeCycleNext  = "mode_cycle_next"
 	ShellActionModeCyclePrev  = "mode_cycle_prev"
 	ShellActionEscape         = "escape"
@@ -37,24 +32,18 @@ const (
 	ShellActionLaunchOpencode = "launch_opencode"
 	ShellActionLaunchShell    = "launch_shell_command"
 	ShellActionStorePicker    = "open_store_picker"
+	ShellActionOpenSearch     = "open_search"
 
 	BoardActionMoveLeft   = "move_left"
 	BoardActionMoveRight  = "move_right"
 	BoardActionMoveUp     = "move_up"
 	BoardActionMoveDown   = "move_down"
+	BoardActionMoveHome   = "move_home"
+	BoardActionMoveEnd    = "move_end"
+	BoardActionPageUp     = "page_up"
+	BoardActionPageDown   = "page_down"
 	BoardActionOpenDetail = "open_detail"
 	BoardActionReload     = "reload"
-	BoardActionLoadMore   = "load_more"
-
-	SearchActionMoveUp         = "move_up"
-	SearchActionMoveDown       = "move_down"
-	SearchActionFocusLeft      = "focus_left"
-	SearchActionFocusRight     = "focus_right"
-	SearchActionFocusQuery     = "focus_query"
-	SearchActionReload         = "reload"
-	SearchActionOpenDetail     = "open_detail"
-	SearchActionCycleFocusNext = "cycle_focus_next"
-	SearchActionCycleFocusPrev = "cycle_focus_prev"
 
 	DetailActionScrollUp   = "scroll_up"
 	DetailActionScrollDown = "scroll_down"
@@ -74,7 +63,6 @@ const (
 type KeyBindings struct {
 	Shell  map[string][]string
 	Board  map[string][]string
-	Search map[string][]string
 	Detail map[string][]string
 	Modal  map[string][]string
 }
@@ -82,7 +70,6 @@ type KeyBindings struct {
 type KeyBindingOverride struct {
 	Shell  map[string][]string `yaml:"shell"`
 	Board  map[string][]string `yaml:"board"`
-	Search map[string][]string `yaml:"search"`
 	Detail map[string][]string `yaml:"detail"`
 	Modal  map[string][]string `yaml:"modal"`
 }
@@ -105,50 +92,38 @@ type ActionBinding struct {
 func DefaultKeyBindings() KeyBindings {
 	return KeyBindings{
 		Shell: map[string][]string{
-			ShellActionQuit:           {"ctrl+q"},
-			ShellActionHelp:           {"?"},
-			ShellActionModeBoard:      {"1"},
-			ShellActionModeSearch:     {"2"},
-			ShellActionToggleSearch:   {"ctrl+@"},
-			ShellActionModeDetail:     {"3"},
-			ShellActionModeDocs:       {"4"},
+			ShellActionQuit:           {"ctrl+c"},
+			ShellActionHelp:           {"alt+h"},
 			ShellActionModeCycleNext:  {"tab", "ctrl+pgdown"},
 			ShellActionModeCyclePrev:  {"shift+tab", "ctrl+pgup"},
 			ShellActionEscape:         {"esc"},
-			ShellActionReloadDetail:   {"r"},
-			ShellActionEditIssue:      {"e"},
-			ShellActionCreateIssue:    {"c"},
-			ShellActionUpdateIssue:    {"u"},
-			ShellActionCloseIssue:     {"x"},
-			ShellActionCommentIssue:   {"a"},
-			ShellActionLaunchNvim:     {"n"},
-			ShellActionLaunchOpencode: {"p"},
-			ShellActionLaunchShell:    {"l"},
-			ShellActionStorePicker:    {"s"},
+			ShellActionReloadDetail:   {"alt+r"},
+			ShellActionEditIssue:      {"alt+e"},
+			ShellActionCreateIssue:    {"alt+n"},
+			ShellActionUpdateIssue:    {"alt+u"},
+			ShellActionCloseIssue:     {"delete"},
+			ShellActionCommentIssue:   {"alt+a"},
+			ShellActionLaunchNvim:     {"alt+v"},
+			ShellActionLaunchOpencode: {"alt+p"},
+			ShellActionLaunchShell:    {"alt+l"},
+			ShellActionStorePicker:    {"alt+s"},
+			ShellActionOpenSearch:     {"alt+f"},
 		},
 		Board: map[string][]string{
-			BoardActionMoveLeft:   {"h", "left"},
-			BoardActionMoveRight:  {"l", "right"},
-			BoardActionMoveUp:     {"k", "up"},
-			BoardActionMoveDown:   {"j", "down"},
-			BoardActionOpenDetail: {"enter", "o"},
-			BoardActionReload:     {"r"},
-			BoardActionLoadMore:   {">"},
-		},
-		Search: map[string][]string{
-			SearchActionMoveUp:         {"k", "up"},
-			SearchActionMoveDown:       {"j", "down"},
-			SearchActionFocusLeft:      {"h", "left"},
-			SearchActionFocusRight:     {"l", "right"},
-			SearchActionFocusQuery:     {"/"},
-			SearchActionReload:         {"r"},
-			SearchActionOpenDetail:     {"enter"},
-			SearchActionCycleFocusNext: {"ctrl+j"},
-			SearchActionCycleFocusPrev: {"ctrl+k"},
+			BoardActionMoveLeft:   {"left"},
+			BoardActionMoveRight:  {"right"},
+			BoardActionMoveUp:     {"up"},
+			BoardActionMoveDown:   {"down"},
+			BoardActionMoveHome:   {"home"},
+			BoardActionMoveEnd:    {"end"},
+			BoardActionPageUp:     {"pgup"},
+			BoardActionPageDown:   {"pgdown"},
+			BoardActionOpenDetail: {"enter"},
+			BoardActionReload:     {"alt+r"},
 		},
 		Detail: map[string][]string{
-			DetailActionScrollUp:   {"k", "up"},
-			DetailActionScrollDown: {"j", "down"},
+			DetailActionScrollUp:   {"up"},
+			DetailActionScrollDown: {"down"},
 			DetailActionPageUp:     {"pgup"},
 			DetailActionPageDown:   {"pgdown"},
 			DetailActionHome:       {"home"},
@@ -169,7 +144,6 @@ func (k KeyBindings) Clone() KeyBindings {
 	return KeyBindings{
 		Shell:  cloneBindingMap(k.Shell),
 		Board:  cloneBindingMap(k.Board),
-		Search: cloneBindingMap(k.Search),
 		Detail: cloneBindingMap(k.Detail),
 		Modal:  cloneBindingMap(k.Modal),
 	}
@@ -182,7 +156,6 @@ func MergeKeyBindings(base KeyBindings, override *KeyBindingOverride) KeyBinding
 	}
 	merged.Shell = mergeContextBindingsInPlace(merged.Shell, override.Shell)
 	merged.Board = mergeContextBindingsInPlace(merged.Board, override.Board)
-	merged.Search = mergeContextBindingsInPlace(merged.Search, override.Search)
 	merged.Detail = mergeContextBindingsInPlace(merged.Detail, override.Detail)
 	merged.Modal = mergeContextBindingsInPlace(merged.Modal, override.Modal)
 	return merged
@@ -207,7 +180,6 @@ func ResolveKeyBindings(k KeyBindings) (ResolvedKeyBindings, error) {
 	contexts := map[string]map[string][]string{
 		ShellContext:  k.Shell,
 		BoardContext:  k.Board,
-		SearchContext: k.Search,
 		DetailContext: k.Detail,
 		ModalContext:  k.Modal,
 	}
@@ -216,7 +188,7 @@ func ResolveKeyBindings(k KeyBindings) (ResolvedKeyBindings, error) {
 		contexts: make(map[string]ContextBindings, len(contexts)),
 	}
 
-	for _, context := range []string{ShellContext, BoardContext, SearchContext, DetailContext, ModalContext} {
+	for _, context := range []string{ShellContext, BoardContext, DetailContext, ModalContext} {
 		bindings, err := buildContextBindings(context, contexts[context], allowedActionsForContext(context))
 		if err != nil {
 			return ResolvedKeyBindings{}, err
@@ -313,6 +285,9 @@ func buildContextBindings(context string, input map[string][]string, allowed map
 			if !isValidKeyName(key) {
 				return ContextBindings{}, fmt.Errorf("invalid key %q for action %q in %s context", raw, action, context)
 			}
+			if context != ModalContext && isPrintableKey(key) {
+				return ContextBindings{}, fmt.Errorf("key %q for action %q in %s context is a printable key, which types into the filter; bind it with alt+ or ctrl+", key, action, context)
+			}
 			if existing, exists := ctx.index[key]; exists {
 				return ContextBindings{}, fmt.Errorf("key %q conflicts between actions %q and %q in %s context", key, existing, action, context)
 			}
@@ -340,6 +315,16 @@ func isValidKeyName(key string) bool {
 		return key == "space"
 	}
 	return true
+}
+
+// isPrintableKey reports whether a canonical key name is one a text field
+// takes as text: a single printable rune, or space.
+func isPrintableKey(key string) bool {
+	if key == "space" {
+		return true
+	}
+	runes := []rune(key)
+	return len(runes) == 1 && unicode.IsPrint(runes[0])
 }
 
 func canonicalKeyName(key string) string {
@@ -379,11 +364,6 @@ func allowedActionsForContext(context string) map[string]struct{} {
 		for _, action := range []string{
 			ShellActionQuit,
 			ShellActionHelp,
-			ShellActionModeBoard,
-			ShellActionModeDocs,
-			ShellActionModeSearch,
-			ShellActionToggleSearch,
-			ShellActionModeDetail,
 			ShellActionModeCycleNext,
 			ShellActionModeCyclePrev,
 			ShellActionEscape,
@@ -397,6 +377,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionLaunchOpencode,
 			ShellActionLaunchShell,
 			ShellActionStorePicker,
+			ShellActionOpenSearch,
 		} {
 			allowed[action] = struct{}{}
 		}
@@ -406,23 +387,12 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			BoardActionMoveRight,
 			BoardActionMoveUp,
 			BoardActionMoveDown,
+			BoardActionMoveHome,
+			BoardActionMoveEnd,
+			BoardActionPageUp,
+			BoardActionPageDown,
 			BoardActionOpenDetail,
 			BoardActionReload,
-			BoardActionLoadMore,
-		} {
-			allowed[action] = struct{}{}
-		}
-	case SearchContext:
-		for _, action := range []string{
-			SearchActionMoveUp,
-			SearchActionMoveDown,
-			SearchActionFocusLeft,
-			SearchActionFocusRight,
-			SearchActionFocusQuery,
-			SearchActionReload,
-			SearchActionOpenDetail,
-			SearchActionCycleFocusNext,
-			SearchActionCycleFocusPrev,
 		} {
 			allowed[action] = struct{}{}
 		}

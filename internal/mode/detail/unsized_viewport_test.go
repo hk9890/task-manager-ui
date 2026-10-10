@@ -48,7 +48,7 @@ func TestHandleKeyDeclinesEveryKeyBeforeThePaneIsSized(t *testing.T) {
 		{Type: tea.KeyEnter},
 		{Type: tea.KeyLeft},
 		{Type: tea.KeyRight},
-		{Type: tea.KeyRunes, Runes: []rune("j")},
+		{Type: tea.KeyPgDown},
 	}
 
 	for _, height := range []int{0, -1} {

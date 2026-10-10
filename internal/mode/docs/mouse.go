@@ -28,7 +28,7 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 	case mode.MouseClick:
 		target := ""
 		if hit.Row >= 0 {
-			target = m.issues[hit.Row].ID
+			target = m.shown[hit.Row].ID
 		}
 		if m.clicks.Double(target, m.selectedIssueID(), msg) {
 			return mode.RequestActionCmd(mode.Docs, mode.ActionOpenDetail)
@@ -50,11 +50,10 @@ func (m *Model) selectedIssueID() string {
 
 // viewState is the docs column as the renderer sees it. View and the hit test
 // build the same value, so a click lands on the row that is drawn under it.
-//
-// No dashboard title: with a single column the tab chip and the column header
-// already name the surface, so the board's title line would only repeat them.
 func (m *Model) viewState(skeletonPhase int) uiboard.State {
 	return uiboard.State{
+		Query:         m.query.Text(),
+		Placeholder:   queryPlaceholder,
 		Columns:       []uiboard.Column{m.uiColumn()},
 		FocusedColumn: 0,
 		Width:         m.width,

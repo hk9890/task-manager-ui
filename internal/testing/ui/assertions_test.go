@@ -8,11 +8,11 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 )
 
-func TestAssertionHelpersCoverStartupErrorsSearchAndActions(t *testing.T) {
+func TestAssertionHelpersCoverStartupErrorsAndActions(t *testing.T) {
 	t.Parallel()
 
 	t.Run("startup sanity and no obvious errors", func(t *testing.T) {
-		output := "Default\nNot Ready\nReady\nIn Progress\n│││││"
+		output := "❯ filter issues\nNot Ready\nReady\nIn Progress\n│││││"
 		AssertStartupBoardLayoutSanity(t, output)
 		AssertNoObviousRuntimeErrorPanels(t, output)
 	})

@@ -822,6 +822,10 @@ func TestSearchCompletenessConformance(t *testing.T) {
 					t.Errorf("%s: Completeness = %v, want %v (limit=%d offset=%d, %d results)",
 						b.name, got, tc.wantComplete, tc.limit, tc.offset, len(page.Results))
 				}
+				if got := page.Metadata.Total; got != matches {
+					t.Errorf("%s: Total = %d, want every match in scope, %d (limit=%d offset=%d)",
+						b.name, got, matches, tc.limit, tc.offset)
+				}
 			}
 		})
 	}

@@ -19,7 +19,7 @@ func TestGlyphSetMarkersAreOneCell(t *testing.T) {
 	for _, name := range GlyphSets() {
 		set := glyphSets[name]
 
-		markers := map[string]string{"cursor": set.Cursor, "unknown issue type": set.issueTypeUnknown}
+		markers := map[string]string{"cursor": set.Cursor, "prompt": set.Prompt, "unknown issue type": set.issueTypeUnknown}
 		for i, frame := range set.Spinner {
 			markers["spinner frame "+strconv.Itoa(i)] = frame
 		}

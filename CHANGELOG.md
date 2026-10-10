@@ -8,9 +8,50 @@ carries its `vX.Y.Z` section of this file as its notes.
 
 ## Unreleased
 
+- **Action required: the keys changed.** No action is on a bare letter, digit or
+  symbol key any more, because those keys now type into the filter. The new
+  defaults: `alt+h` help, `alt+s` stores, `alt+f` search, `alt+r` reload,
+  `alt+e` edit, `alt+n` new issue, `alt+u` update, `alt+a` comment, `delete`
+  close, `alt+v` / `alt+p` / `alt+l` the three launchers, `ctrl+c` quit. Move
+  with the arrow keys, `pgup`, `pgdown`, `home` and `end`, and open with
+  `enter`: `h`, `j`, `k`, `l` and `o` no longer move or open. `ctrl+q`, `?`,
+  `1`–`4`, `ctrl+space`, `/` and `>` are gone. The `y` / `n` keys of a dialog
+  are unchanged. The `alt+` keys need a terminal that sends `alt` as an escape
+  prefix; on macOS turn on the Option-as-Meta setting of the terminal.
+  [`docs/user-guide/key-bindings.md`](docs/user-guide/key-bindings.md) has the
+  whole list.
+- **Action required if your config binds keys.** A `keybindings` entry in the
+  `shell`, `board` or `detail` context that binds a single printable character
+  or `space` now fails startup and `--check-config`, with an error that names
+  the key, the action and the context. Bind the action to an `alt+` or `ctrl+`
+  key, for example `quit: [ctrl+q]`. The `modal` context still takes any key.
+  The shell actions `mode_board`, `mode_docs`, `mode_search`, `mode_detail` and
+  `toggle_search`, the board action `load_more` and the whole `search` context
+  no longer exist: an entry for one is ignored with a startup warning, so
+  delete it. New actions are `open_search` in `shell` and `move_home`,
+  `move_end`, `page_up` and `page_down` in `board`.
+- **Added: type to filter.** On the Board and Docs tabs every key you type goes
+  into a filter on the line above the columns. A row stays when every word of
+  the filter is in its title or its ID. The matched text is marked and each
+  column header reads `N of M`, the matching rows of the loaded rows.
+  `backspace`, `ctrl+w` and `ctrl+u` edit the filter and `esc` clears it. The
+  filter stays through a tab switch, a detail round trip and a reload.
+- **Changed: search is no longer a tab.** `alt+f`, or the new `search` button
+  on the menu bar, opens the store search from a tab or from the detail. It is
+  one list of results and searches as you type; there is no `enter` to run the
+  query, no preview pane and no pane focus. `ctrl+t` still switches between
+  open issues and all issues. A search shows at most 100 results and the
+  header reads `100 of M` when the store holds more. `esc` clears the query and
+  then returns to where you opened the search; from a result's detail `esc`
+  returns to the results. The view tabs are Board and Docs.
+- Changed: the Done column loads the next page of closed issues only by itself,
+  when the selection comes near the end of the loaded rows. The `>` key that
+  loaded a page on demand is removed.
+- Added: `pgup`, `pgdown`, `home` and `end` move the selection on the Board, the
+  Docs tab, the store search and the store picker.
 - Changed: when the terminal is too narrow for all board columns, the columns
   stay in place until the focus leaves them, and then move only as far as
-  needed. A click or `h`/`l` on a column already drawn no longer shifts the
+  needed. A click or `left`/`right` on a column already drawn no longer shifts the
   board. The wheel now scrolls the column under the pointer and focuses it.
 - Fixed: one central store directory that cannot be read no longer empties the
   store picker. That store is listed as `broken`, and `enter` on it shows the

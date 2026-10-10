@@ -179,7 +179,7 @@ func TestDocsModeReloadKeyResetsTheCursorToTheTop(t *testing.T) {
 	m := loadedModel(t, gw)
 	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}))
+	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true}))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
 		t.Fatalf("expected manual reload to reset the cursor to tm-1, got %#v", got)
 	}
@@ -289,10 +289,10 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 		wantWithoutErr int
 		wantWithErr    int
 	}{
-		{"roomy column", 9, 7, 8},
-		{"an odd column has a spare line for the error", 8, 8, 8},
-		{"two docs leaves one for the error", 7, 8, 9},
-		{"single row cannot reserve and keeps its row", 4, 9, 9},
+		{"roomy column", 10, 7, 8},
+		{"an odd column has a spare line for the error", 9, 8, 8},
+		{"two docs leaves one for the error", 8, 8, 9},
+		{"single row cannot reserve and keeps its row", 5, 9, 9},
 	}
 
 	for _, tc := range cases {
@@ -316,9 +316,48 @@ func TestScrollOffsetReservesOneRowForAnInlineError(t *testing.T) {
 			if m.scrollOffset != tc.wantWithErr {
 				t.Errorf("offset with an inline error = %d, want %d", m.scrollOffset, tc.wantWithErr)
 			}
-			if tc.height > 4 {
+			if tc.height > 5 {
 				assertSelectionDrawn(t, m)
 			}
 		})
+	}
+}
+
+// TestDocsModePageAndBoundKeysMoveTheSelection: the docs column reads the page,
+// home and end keys from the board context and clamps at both ends.
+func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
+	gw := fakes.NewTracked()
+	const docs = 40
+	for i := 0; i < docs; i++ {
+		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("Doc %02d", i), Status: "open", Type: "doc", Priority: 2})
+	}
+	m := loadedModel(t, gw)
+	page := m.pageRows()
+
+	steps := []struct {
+		key  tea.KeyMsg
+		want int
+	}{
+		{tea.KeyMsg{Type: tea.KeyPgDown}, page},
+		{tea.KeyMsg{Type: tea.KeyPgDown}, 2 * page},
+		{tea.KeyMsg{Type: tea.KeyPgUp}, page},
+		{tea.KeyMsg{Type: tea.KeyEnd}, docs - 1},
+		{tea.KeyMsg{Type: tea.KeyPgDown}, docs - 1},
+		{tea.KeyMsg{Type: tea.KeyHome}, 0},
+		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
+	}
+	for _, step := range steps {
+		before := m.selectedRow
+		cmd := m.Update(step.key)
+		if m.selectedRow != step.want {
+			t.Fatalf("after %q: selected row %d, want %d", step.key.String(), m.selectedRow, step.want)
+		}
+		if moved := step.want != before; (cmd != nil) != moved {
+			t.Fatalf("after %q: selection command %v, want %v", step.key.String(), cmd != nil, moved)
+		}
+		selected := m.issues[m.selectedRow]
+		if view := m.View(0); !strings.Contains(view, selected.ID) {
+			t.Fatalf("after %q: the selected doc %s is not drawn:\n%s", step.key.String(), selected.ID, view)
+		}
 	}
 }

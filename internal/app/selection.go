@@ -13,10 +13,15 @@ import (
 func (m Model) currentSelection() *mode.Selection {
 	// A drill-in owns the selection for as long as Detail is showing it. Every
 	// shell mutation and launcher reads this, so falling through to the browse
-	// row here means `e` opens the board's issue while the screen shows the
+	// row here means the edit key opens the board's issue while the screen shows the
 	// child that was drilled into.
 	if m.active == mode.Detail && m.drillSelection != nil {
 		return m.drillSelection
+	}
+	// While the store search is up it owns the selection, on its own surface
+	// and under a Detail opened from it.
+	if m.searchFrom != "" {
+		return m.selectedByMode[mode.Search]
 	}
 	// The active browse tab owns the selection; from Detail (or any other
 	// non-browse mode) it comes from the tab we drilled in from.
@@ -37,10 +42,11 @@ func (m *Model) clearDrillSelection() {
 }
 
 // enterBrowseMode switches to a browse tab, keeping lastBrowse in step and
-// dropping any drill-in.
+// dropping any drill-in. It leaves the store search when that is up.
 func (m *Model) enterBrowseMode(id mode.ID) {
 	m.active = id
 	m.lastBrowse = id
+	m.searchFrom = ""
 	m.clearDrillSelection()
 }
 

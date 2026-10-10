@@ -22,11 +22,6 @@ func ApplyKeySequence(model tea.Model, keys ...tea.KeyMsg) tea.Model {
 	return current
 }
 
-// BoardToSearchKeys returns the shell key sequence for board→search.
-func BoardToSearchKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyCtrlAt}}
-}
-
 // OpenDetailKeys returns the shell key sequence for opening detail mode.
 func OpenDetailKeys() []tea.KeyMsg {
 	return []tea.KeyMsg{{Type: tea.KeyEnter}}
@@ -40,31 +35,6 @@ func DetailBackKeys() []tea.KeyMsg {
 // DetailScrollKeys returns a representative deterministic detail scroll sequence.
 func DetailScrollKeys() []tea.KeyMsg {
 	return []tea.KeyMsg{{Type: tea.KeyPgDown}, {Type: tea.KeyEnd}}
-}
-
-// SearchFocusResultsKeys returns key sequence that moves search focus to results.
-func SearchFocusResultsKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyDown}}
-}
-
-// SearchClearQueryKeys returns the key sequence used to clear query quickly.
-func SearchClearQueryKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyCtrlU}}
-}
-
-// SearchFragileQueryRunes returns historically fragile query-entry runes.
-func SearchFragileQueryRunes() string {
-	return "jkhlr"
-}
-
-// SearchTypeTextKeys returns key sequence for typing text into search query.
-func SearchTypeTextKeys(text string) []tea.KeyMsg {
-	runes := []rune(text)
-	keys := make([]tea.KeyMsg, 0, len(runes))
-	for _, r := range runes {
-		keys = append(keys, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	return keys
 }
 
 func applyCmd(model tea.Model, cmd tea.Cmd) tea.Model {

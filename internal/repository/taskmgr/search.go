@@ -62,6 +62,7 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 		Metadata: domain.SearchResultMetadata{
 			ReturnedCount:  len(results),
 			RequestedLimit: query.Limit,
+			Total:          page.Total,
 			Completeness:   completeness,
 			Source:         domain.SearchResultSourceTaskmgrFind,
 		},

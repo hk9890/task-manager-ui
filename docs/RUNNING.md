@@ -60,7 +60,7 @@ a sleep guesses:
 
 | Step | Waits for |
 |---|---|
-| `send-key:<KEY>` | nothing; sends the key |
+| `send-key:<KEY>` | nothing; sends the key: a single character, `CTRL+<letter>`, `ALT+<letter>`, or a name from `keymap` in `feed_keys` — `ENTER`, `ESC`, `TAB`, `DELETE`, `UP`, `PGDOWN`, … |
 | `send-mouse:<ACTION>:<COL>:<ROW>` | nothing; sends `click`, `move`, `wheel-up`, `wheel-down`, or one part of a drag — `press`, `drag`, `release` — at that cell, counted from 0 as the checkpoint screens are. Two `click` steps in a row are a double click. Fails with `mouse reporting is off` when the app has not asked the terminal for the mouse, as a real terminal would then send nothing |
 | `wait-for-text:<TEXT>[:timeout-ms]` | `TEXT` to appear on the rendered screen |
 | `wait-for-text-once:<TEXT>[:timeout-ms]` | `TEXT` anywhere in the output stream since this step began — the verb for text already overwritten, such as a toast (they dismiss after 3s) |
@@ -77,7 +77,7 @@ python3 scripts/capture_taskmgr_ui_screen.py \
   --step 'checkpoint:detail-open' \
   --step 'send-key:ESC' \
   --step 'wait-for-text:Board:2000' \
-  --step 'send-key:CTRL+Q' \
+  --step 'send-key:CTRL+C' \
   -- -- /tmp/taskmgr-ui
 ```
 
@@ -110,10 +110,13 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   ([CONFIGURATION.md](CONFIGURATION.md#runtime-configuration)).
 - **The Done column needs a wide terminal.** At `--width 120` only Not Ready, Ready and In Progress
   fit, so a `wait-for-text:Done` never settles. Use `--width 200` for any flow that touches Done.
+- **A single character is typed, not run.** On Board, Docs and the store search `send-key:j` puts
+  `j` in the query and narrows the rows. Every action is an `ALT+<letter>` chord or a named key;
+  type text one `send-key` per character, and clear it with `ESC` before a step that counts rows.
 - **A modal holds the keyboard until it is dismissed.** Keys sent meanwhile are typed into the
   overlay. Send `ESC`, then wait for the overlay to be gone rather than counting keystrokes.
-- **`e` hands the terminal to `$EDITOR` and swallows every key until that program exits.** A script
-  that follows it with `CTRL+Q` types the quit into the editor and hangs.
+- **`ALT+E` hands the terminal to `$EDITOR` and swallows every key until that program exits.** A
+  script that follows it with `CTRL+C` sends the quit to the editor and hangs.
 - **During a capture, `--debug` output reaches the persistent log, not stderr** — tail the log
   ([MONITORING.md](MONITORING.md)), never a stderr redirect.
 - Capture failures name themselves: `step <index> (...) timed out after <N>ms` is one wait that did
@@ -123,9 +126,12 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 ## What to check in a manual run
 
-- **Surfaces** — board, detail and search each render and stay readable at your terminal size.
-- **External tools** — `n`, `p` and `l` from detail leave the app alive with the expected toast, and
-  `e` round-trips through the editor and reloads the detail.
+- **Surfaces** — board, docs, detail and the store search (`alt+f`) each render and stay readable
+  at your terminal size.
+- **Filter** — typing on Board and on Docs narrows the rows, marks the matched text and turns the
+  header counts into `N of M`; `esc` clears it.
+- **External tools** — `alt+v`, `alt+p` and `alt+l` from detail leave the app alive with the
+  expected toast, and `alt+e` round-trips through the editor and reloads the detail.
 
 ## Behaviours that need a real terminal
 
@@ -134,13 +140,14 @@ store large enough to page.
 
 ### Closed-limit scales with terminal height
 
-**Proves:** `sectionItemCapacity()` scales with the height the mode receives (`height - 3`, floored
-at 1, and `20` before the first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
+**Proves:** `sectionItemCapacity()` scales with the height the mode receives (`uiboard.ContentRows`:
+the height less the two head lines and the two column borders, floored at 1, and `20` before the
+first `WindowSizeMsg`), and the reload key re-reads it. An auto refresh keeps the depth already loaded.
 
 Seed a store with more than 200 closed issues. The mode receives the terminal height minus four
-rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-7 of M`, where
-`M` is the true closed total: `33 of M` at height 40, `23 of M` at height 30. Keep the app running,
-resize to 200 rows, press `r`: the header must read `193 of M`, with `M` unchanged.
+rows of shell chrome, so at a terminal of `H` rows the Done column header reads `H-8 of M`, where
+`M` is the true closed total: `32 of M` at height 40, `22 of M` at height 30. Keep the app running,
+resize to 200 rows, press `alt+r`: the header must read `192 of M`, with `M` unchanged.
 
 `N` unchanged after the resize means `loadDashboardCmd` is not passing `sectionItemCapacity()` into
 `DashboardOptions.ClosedLimit` in `internal/mode/board/model.go`, or `applyWorkspaceSizeToBrowseModes`
@@ -151,7 +158,7 @@ slice instead of before.
 
 **Proves:** the scroll window keeps the selected row on screen when it clips the list.
 
-Seed more than 22 ready issues, open at height 25, focus the Ready column and press `j` twenty times.
+Seed more than 22 ready issues, open at height 25, focus the Ready column and press `down` twenty times.
 The `▌` selection bar must still be on screen, on both lines of its row, and the header must read
 `N of M` with `N < M`. Repeat in the
 detail Dependencies pane (press Left to focus it) on an issue with more than 12 relations.
@@ -169,10 +176,10 @@ belongs means the clipping branch in `internal/ui/board/board.go` or the pane he
 
 Seed roughly 89 closed issues and open at 30 rows or fewer. Launch with `--debug` — the load-more
 records are DEBUG level and reach the persistent log only under that flag
-([MONITORING.md](MONITORING.md)). Focus Done and hold `j`: the header `N` grows monotonically toward
+([MONITORING.md](MONITORING.md)). Focus Done and hold `down`: the header `N` grows monotonically toward
 `M`, the selection bar stays visible, and the run logs one `dispatching load-more for Done column` per
 threshold crossing — any `load-more suppressed` beside it is the double-load guard doing its job.
-Press `r`: the header returns to the opening `N` and the selection returns to the top.
+Press `alt+r`: the header returns to the opening `N` and the selection returns to the top.
 
 An auto refresh reads Done to the depth already loaded. When the selected issue is not in those rows
 — closes by another process pushed it down — the refresh reads up to `anchorSearchPageLimit` further
@@ -187,7 +194,7 @@ is loaded the header switches from "loaded of total" to "visible of total"
 `M` is the branch below that, and it needs the loaded list to fit the window as well — which 89 rows
 in a 30-row terminal never do.
 
-`N` stuck means the `loadMoreClosedCmd` threshold or its offset wiring; `r` not resetting means the
+`N` stuck means the `maybeLoadMoreClosed` threshold or the `loadMoreClosedCmd` offset wiring; `alt+r` not resetting means the
 `doneLoadedCount` reset path, repeated loads per crossing mean the `doneLoadInFlight` guard, and a
 cursor on another issue after a refresh means `startAnchorSearch` or `continueAnchorSearch` — all in
 `internal/mode/board/model.go`.

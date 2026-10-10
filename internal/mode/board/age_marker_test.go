@@ -44,7 +44,7 @@ func TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers(t *testing.T) {
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.now = func() time.Time { return now }
-	m.SetSize(80, 21) // 18 content rows: nine two-line issues
+	m.SetSize(80, 22) // 18 content rows: nine two-line issues
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -101,7 +101,7 @@ func TestBoardModeChevronSurvivesADividerAppearingWhileIdle(t *testing.T) {
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.now = func() time.Time { return now }
-	m.SetSize(80, 21) // 18 content rows: nine two-line issues
+	m.SetSize(80, 22) // 18 content rows: nine two-line issues
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -137,7 +137,7 @@ func TestBoardModeTinySectionStillDrawsTheSelectedRow(t *testing.T) {
 
 	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 	m.now = func() time.Time { return now }
-	m.SetSize(80, 6)
+	m.SetSize(80, 7)
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
 		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})

@@ -5,34 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t *testing.T) {
+func TestModelReusableBoardDetailScenarioCoversScrollAndBack(t *testing.T) {
 	t.Parallel()
 
 	gw := fakes.NewTracked()
 	seedReady(gw, "tm-1", "Ready first", "task", 1)
 	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-	// Seed the search result so typing "jkhlr" still matches via text search.
-	// Memory repo Search() matches on Title, Description, Notes.
-	// We include the fragile query runes in Description so memory repo's
-	// text search returns tm-1 for that query.
-	seedSearchResult(gw, memoryrepo.Issue{
-		ID:          "tm-1",
-		Title:       "Ready first",
-		Status:      "open",
-		Type:        "task",
-		Priority:    1,
-		Description: testui.SearchFragileQueryRunes(),
-	})
 	seedIssueDetail(gw, domain.IssueDetail{
 		Summary:     domain.IssueSummary{ID: "tm-1", Title: "Ready first", Status: "open", Type: "task", Priority: 1},
 		Description: longScenarioDetail(90),
@@ -46,29 +31,9 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 	m := testui.InitializeModel(mustNewModel(t, services)).(Model)
 	m.width, m.height = 120, 24
 
-	m = testui.ApplyKeySequence(m, testui.BoardToSearchKeys()...).(Model)
-	if m.active != mode.Search {
-		t.Fatalf("expected board->search scenario to land in search mode, got %s", m.active)
-	}
-
-	m = testui.ApplyKeySequence(m, testui.SearchTypeTextKeys(testui.SearchFragileQueryRunes())...).(Model)
-	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
-	// Verify the applied query directly from search state instead of repository call inspection.
-	if got := m.search.SessionState().AppliedQuery; got != testui.SearchFragileQueryRunes() {
-		t.Fatalf("expected applied query %q after typing, got %q", testui.SearchFragileQueryRunes(), got)
-	}
-
-	m = testui.ApplyKeySequence(m, testui.SearchClearQueryKeys()...).(Model)
-	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyEnter}).(Model)
-	// After clearing, the applied query should be empty.
-	if got := m.search.SessionState().AppliedQuery; got != "" {
-		t.Fatalf("expected empty applied query after clear, got %q", got)
-	}
-
-	m = testui.ApplyKeySequence(m, testui.SearchFocusResultsKeys()...).(Model)
 	m = testui.ApplyKeySequence(m, testui.OpenDetailKeys()...).(Model)
 	if m.active != mode.Detail {
-		t.Fatalf("expected search->detail open scenario, got %s", m.active)
+		t.Fatalf("expected board->detail open scenario, got %s", m.active)
 	}
 
 	m = testui.ApplyKeySequence(m, testui.DetailScrollKeys()...).(Model)
@@ -77,8 +42,8 @@ func TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack(t 
 	}
 
 	m = testui.ApplyKeySequence(m, testui.DetailBackKeys()...).(Model)
-	if m.active != mode.Search {
-		t.Fatalf("expected detail back scenario to return to search, got %s", m.active)
+	if m.active != mode.Board {
+		t.Fatalf("expected detail back scenario to return to board, got %s", m.active)
 	}
 }
 
@@ -107,15 +72,15 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 		t.Fatalf("expected open detail scenario before tool actions, got %s", m.active)
 	}
 
-	m = testui.ApplyKeySequence(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")}).(Model)
+	m = testui.ApplyKeySequence(m, testKey("alt+e")).(Model)
 	if len(fakeEditor.Calls()) != 1 || fakeEditor.Calls()[0].IssueID != "tm-1" {
 		t.Fatalf("expected edit seam call for tm-1, got %#v", fakeEditor.Calls())
 	}
 
 	m = testui.ApplyKeySequence(m,
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")},
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")},
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")},
+		testKey("alt+v"),
+		testKey("alt+p"),
+		testKey("alt+l"),
 	).(Model)
 
 	if len(fakeLauncher.Calls()) != 3 {

@@ -174,9 +174,6 @@ func sanitizeOverride(override overrideModel) overrideModel {
 	if override.KeyBindings.Board != nil {
 		override.KeyBindings.Board = filterBindingOverrideMap(override.KeyBindings.Board, allowedActionsForContext(BoardContext))
 	}
-	if override.KeyBindings.Search != nil {
-		override.KeyBindings.Search = filterBindingOverrideMap(override.KeyBindings.Search, allowedActionsForContext(SearchContext))
-	}
 	if override.KeyBindings.Detail != nil {
 		override.KeyBindings.Detail = filterBindingOverrideMap(override.KeyBindings.Detail, allowedActionsForContext(DetailContext))
 	}
@@ -360,13 +357,11 @@ var allowedMappingKeys = map[string]map[string]struct{}{
 	"keybindings": {
 		"shell":  {},
 		"board":  {},
-		"search": {},
 		"detail": {},
 		"modal":  {},
 	},
 	"keybindings.shell":  allowedActionsForContext(ShellContext),
 	"keybindings.board":  allowedActionsForContext(BoardContext),
-	"keybindings.search": allowedActionsForContext(SearchContext),
 	"keybindings.detail": allowedActionsForContext(DetailContext),
 	"keybindings.modal":  allowedActionsForContext(ModalContext),
 }

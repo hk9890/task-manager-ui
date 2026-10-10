@@ -111,17 +111,14 @@ ui:
 keybindings:
   shell:
     quit: [ctrl+q]
-    toggle_help: [F1]
+    toggle_help: [f1]
+    open_search: [ctrl+f]
   board:
-    move_left: [left]
-    move_right: [right]
-  search:
-    cycle_focus_next: [ctrl+n]
-    cycle_focus_prev: [ctrl+p]
-    open_detail: [space]
+    move_up: [ctrl+p]
+    move_down: [ctrl+n]
   detail:
     scroll_down: [ctrl+d]
-    scroll_up: [ctrl+u]
+    scroll_up: [ctrl+b]
   modal:
     enter: [space]
     escape: [q]
@@ -157,38 +154,37 @@ Migrate by moving each hook entry into a package directory, adding it with
 
 Keybindings are resolved once at startup from the `keybindings` section.
 
-- Supported contexts: `shell`, `board`, `search`, `detail`, `modal`
+- Supported contexts: `shell`, `board`, `detail`, `modal`
 - Overrides merge per action; you only need to specify actions you want to change
-- Unknown actions are dropped with a startup warning, not a failure. Invalid key names,
-  an empty key list for an action, and two actions bound to the same key in one context
-  fail startup.
+- Unknown actions and unknown contexts are dropped with a startup warning, not a failure.
+  Invalid key names, an empty key list for an action, and two actions bound to the same key
+  in one context fail startup.
+- **A printable key is refused outside `modal`.** A key that is one printable character, or
+  `space`, fails startup and `--check-config` in `shell`, `board` and `detail`:
+  `key "s" for action "open_store_picker" in shell context is a printable key, which types
+  into the filter; bind it with alt+ or ctrl+`. The Board and Docs tabs and the store search
+  type every such key into their query (`mode.Query`, `internal/mode/query.go`), so an action
+  on one would never run there. `isPrintableKey` (`internal/config/keybindings.go`) is the test.
+- `backspace`, `ctrl+w` and `ctrl+u` edit that query and `ctrl+t` toggles the scope of the
+  store search. The four are built in: on those surfaces the query takes them before any
+  binding, so bind none of them in `shell` or `board`.
 
 Supported actions by context:
 
 - `shell`
-  - `quit`, `toggle_help`, `mode_board`, `mode_docs`, `mode_search`,
-    `toggle_search`, `mode_detail`, `mode_cycle_next`, `mode_cycle_prev`, `escape`,
-    `reload_detail`, `edit_issue`, `create_issue`, `update_issue`,
-    `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
-    `launch_shell_command`, `open_store_picker`
+  - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `mode_cycle_next`,
+    `mode_cycle_prev`, `escape`, `reload_detail`, `edit_issue`, `create_issue`,
+    `update_issue`, `close_issue`, `comment_issue`, `launch_nvim`, `launch_opencode`,
+    `launch_shell_command`
 - `board`
-  - `move_left`, `move_right`, `move_up`, `move_down`, `open_detail`, `reload`, `load_more`
-  - Docs mode has no context of its own: it reads `move_up`, `move_down`,
-    `open_detail`, and `reload` from this one. Rebinding them moves both
-    surfaces together, which is deliberate — the docs tab is a board column.
-  - The store picker reads `move_up`, `move_down`, `open_detail` and `reload` from
-    this one too; `open_detail` opens the highlighted store.
-    It is a single scrolling list of rows, so a context of its own would ask for
-    the same movement to be rebound twice.
-- `search`
-  - `move_up`, `move_down`, `focus_left`, `focus_right`, `focus_query`,
-    `reload`, `open_detail`, `cycle_focus_next`, `cycle_focus_prev`
-  - `backspace`, `ctrl+u` and `ctrl+t` are built in and cannot be rebound; `ctrl+t`
-    toggles the search scope between open work and all issues. A printable key could not
-    replace any of them — while the query box has focus, every printable rune is typed
-    into the query.
-  - Enter has a built-in submit-query role when the query field is focused (it submits
-    the draft and runs the search), independent of the configurable `open_detail` action.
+  - `move_left`, `move_right`, `move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
+    `page_down`, `open_detail`, `reload`
+  - Docs mode, the store search and the store picker have no context of their own: each
+    reads the row movement (`move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
+    `page_down`), `open_detail` and `reload` from this one. Rebinding them moves all four
+    surfaces together, which is deliberate — each is a single list of rows, and a context
+    of its own would ask for the same movement to be rebound twice. In the picker
+    `open_detail` opens the highlighted store.
 - `detail`
   - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
 - `modal`

@@ -36,7 +36,7 @@ func TestFooterLegendDropsTrailingHintsRatherThanOverflow(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search, mode.Detail} {
+	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Detail} {
 		hints := footerHints(active, keys)
 		full := styles.KeyLegend(hints, 0)
 		fullWidth := lipgloss.Width(full)
@@ -104,7 +104,7 @@ func TestFooterIsOneLineNoWiderThanTheTerminal(t *testing.T) {
 	}
 	m := mustNewModel(t, services)
 
-	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search, mode.Detail} {
+	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Detail} {
 		m.active = active
 		for _, missing := range []bool{false, true} {
 			m.projectRootMissing = missing

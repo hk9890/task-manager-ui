@@ -12,13 +12,17 @@ cmd/taskmgr-ui/           entrypoint: flag parsing, config resolution, logging s
 internal/
   app/                    the root shell: mode lifecycle, routing, selection and detail coordination
   mode/                   board, docs, search, detail and storepicker feature models, plus the
-                          shell message contracts. Type.IsWork() is false for doc, so doc issues
-                          reach no board column — docs/ is the tab that browses them
+                          shell message contracts and Query, the typed filter text (query.go).
+                          Type.IsWork() is false for doc, so doc issues reach no board column —
+                          docs/ is the tab that browses them. search/ is the store search: a
+                          browse surface that is not a tab
   ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
     styles/                 every colour role, the themes, the glyph sets, the key legend and the
                             shared FormSection chrome
     shared/                 issuerow, markdown, renderhelpers, textutil — reused across modes
-    board/ search/ detail/  one renderer per browse surface
+    board/                  the columns and the query line above them; the docs tab and the
+                            store search draw through it too
+    detail/                 the issue detail panes
     storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
     modal/ toaster/ overlay/ loading/ scroll/ fatalerror/   shared shell primitives
   domain/                 issue, query, mutation, catalog and error models

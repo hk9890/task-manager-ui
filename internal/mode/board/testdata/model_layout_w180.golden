@@ -1,4 +1,5 @@
-Default
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ❯ filter issues
 ╭─ Not Ready ───────────────────────── 2 ─╮  ╭─ Ready ───────────────────────────── 3 ─╮  ╭─ In Progress ──────────────────────── 3 ─╮  ╭─ Done ─────────────────────────────── 3 ─╮
 │▌ T Blocked: migration sequencing        │  │  T Ready fix login prompt               │  │  F Implement board keyboard shortcuts    │  │  F Implement board keyboard shortcuts    │
 │▌   P1 BLK tm-9                          │  │    P1 OPN tm-1                          │  │    P1 IP tm-2                            │  │    P1 IP tm-2                            │
@@ -8,7 +9,6 @@ Default
 │    P0 BLK tm-3                          │  │─── older than 1 week ───────────── 1 ───│  │─── older than 1 week ────────────── 1 ───│  │    P2 IP tm-8                            │
 │                                         │  │  C Ready triage inbox                   │  │  D Polish header help copy               │  │                                          │
 │                                         │  │    P2 OPN tm-6                          │  │    P2 IP tm-8                            │  │                                          │
-│                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │
 │                                         │  │                                         │  │                                          │  │                                          │

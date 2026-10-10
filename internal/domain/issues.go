@@ -95,9 +95,11 @@ const (
 type SearchResultMetadata struct {
 	ReturnedCount  int
 	RequestedLimit int
-	Completeness   SearchResultCompleteness
-	Source         SearchResultSource
-	Notice         string
+	// Total is every match in scope, before Offset and Limit cut the page.
+	Total        int
+	Completeness SearchResultCompleteness
+	Source       SearchResultSource
+	Notice       string
 }
 
 // SearchResultPage represents a paged search response from the repository.

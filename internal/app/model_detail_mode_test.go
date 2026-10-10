@@ -47,7 +47,7 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -86,7 +86,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m.height = 16
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -156,7 +156,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -252,7 +252,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -339,7 +339,7 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Open the epic's detail (the ready selection).
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.detail.SelectionID() != "tm-epic" || m.detail.Detail.Summary.ID != "tm-epic" {
@@ -404,7 +404,7 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -481,7 +481,7 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -547,7 +547,7 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -617,7 +617,7 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -689,7 +689,7 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -989,7 +989,7 @@ func drilledIntoChild(t *testing.T, gw *fakes.TrackedRepository) Model {
 	m.height = 34
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -1036,7 +1036,7 @@ func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
 	}
 
 	// The close dialog is built synchronously from the selection.
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	next, _ := m.Update(testKey("delete"))
 	closing := next.(Model)
 	if !closing.showActionModal {
 		t.Fatal("expected the close dialog to open")
@@ -1104,7 +1104,7 @@ func TestModelReloadDetailKeyIssuesALoad(t *testing.T) {
 	m := drilledIntoChild(t, gw)
 
 	mark := gw.CallCount()
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	next, cmd := m.Update(testKey("alt+r"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("the reload key produced no command")

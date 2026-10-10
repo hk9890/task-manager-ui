@@ -173,14 +173,14 @@ func TestActionRequestIsIgnoredWhenItsModeIsNoLongerActive(t *testing.T) {
 	}
 	// Search holds a row of its own: without it the request would resolve no
 	// target and be dropped for the wrong reason.
-	m.selectedByMode[mode.Search] = &mode.Selection{Issue: domain.IssueSummary{
+	m.selectedByMode[mode.Docs] = &mode.Selection{Issue: domain.IssueSummary{
 		ID: "tm-2", Title: "Second row", Status: "open", Type: "task", Priority: 2,
 	}}
 
 	// A request from Search arrives after the operator has moved to the Board.
 	// The flow is stepped by hand rather than drained: an open modal schedules a
 	// repeating cursor blink, which a drain would follow forever.
-	next, cmd := m.Update(mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionOpenStatusDialog})
+	next, cmd := m.Update(mode.ActionRequestMsg{Mode: mode.Docs, Action: mode.ActionOpenStatusDialog})
 	m = next.(Model)
 	_ = cmd
 

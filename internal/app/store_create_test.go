@@ -65,7 +65,7 @@ func newStorelessStart(t *testing.T) storelessStart {
 func openForm(t *testing.T, m Model, rows int) Model {
 	t.Helper()
 	for i := 0; i < rows; i++ {
-		m = press(t, m, "j")
+		m = press(t, m, "down")
 	}
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
@@ -116,7 +116,7 @@ func TestCreationIsNotOfferedWithoutAStorelessDirectory(t *testing.T) {
 			m := mustNewModelWithOptions(t, services, runtime)
 			m = applyMessages(t, m, runBatch(m.Init()))
 			if m.active != mode.StorePicker {
-				m = press(t, m, "s")
+				m = press(t, m, "alt+s")
 			}
 
 			if strings.Contains(pickerView(m), "Create a") {
@@ -155,7 +155,7 @@ func TestCreatingALocalStoreOpensIt(t *testing.T) {
 	}
 
 	// The directory has a store now; the picker stops offering to create one.
-	m = press(t, m, "s")
+	m = press(t, m, "alt+s")
 	if strings.Contains(pickerView(m), "Create a") {
 		t.Errorf("creation is still offered after the store was created:\n%s", pickerView(m))
 	}
