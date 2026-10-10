@@ -1,7 +1,6 @@
 package loading
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -68,21 +67,5 @@ func TestGlyphCyclesTheAppliedSpinnerWithoutAJumpAtTheWrap(t *testing.T) {
 		if got, want := Glyph(-1), frames[len(frames)-1]; got != want {
 			t.Errorf("%s: Glyph(-1) = %q, want the last frame %q", set, got, want)
 		}
-	}
-}
-
-func TestSummaryDeduplicatesScopes(t *testing.T) {
-	summary := Summary([]State{{Scope: ScopeBoard}, {Scope: ScopeDetail, Target: "tm-1"}, {Scope: ScopeBoard}})
-	if !strings.Contains(summary, "Loading: board, detail") {
-		t.Fatalf("expected deduplicated loading summary, got %q", summary)
-	}
-}
-
-func TestSummaryBlankScopesReturnsIdle(t *testing.T) {
-	t.Parallel()
-
-	summary := Summary([]State{{Scope: Scope("   ")}, {Scope: Scope("")}})
-	if !strings.Contains(summary, "Idle") {
-		t.Fatalf("expected idle summary for blank scopes, got %q", summary)
 	}
 }

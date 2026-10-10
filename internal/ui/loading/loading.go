@@ -2,12 +2,9 @@
 package loading
 
 import (
-	"slices"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -60,33 +57,7 @@ const (
 	ScopeStores Scope = "stores"
 )
 
-// State describes one loading state for shared rendering.
+// State describes one loading state.
 type State struct {
-	Scope  Scope
-	Target string
-}
-
-// Summary renders a shared footer/status-line summary for all active loading states.
-func Summary(states []State) string {
-	if len(states) == 0 {
-		return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("Idle")
-	}
-
-	scopes := make([]string, 0, len(states))
-	for _, state := range states {
-		scope := strings.TrimSpace(string(state.Scope))
-		if scope == "" {
-			continue
-		}
-		if slices.Contains(scopes, scope) {
-			continue
-		}
-		scopes = append(scopes, scope)
-	}
-
-	if len(scopes) == 0 {
-		return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("Idle")
-	}
-
-	return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("Loading: " + strings.Join(scopes, ", "))
+	Scope Scope
 }

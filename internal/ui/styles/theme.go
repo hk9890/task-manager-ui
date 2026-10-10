@@ -85,7 +85,6 @@ func applyFlavor(f catppuccin.Flavor) {
 	ShellTabActiveBgColor = c(f.Mauve())
 	ShellTabInactiveColor = c(f.Overlay1())
 	ShellTabHoverColor = c(f.Text())
-	ShellContextColor = c(f.Overlay0())
 	ShellFooterHelpColor = c(f.Overlay0())
 	ShellRuleColor = c(f.Surface1())
 	ShellActionColor = c(f.Subtext0())

@@ -179,8 +179,9 @@ instead.
   the detail Dependencies pane navigates to that issue, a store picker row opens
   that store.
 - **Click a view tab** — Board, Docs — to switch to it.
-- **Click a button** on the menu bar, the first line — `search`, `stores`, `reload`, `help`, `quit` — to
-  do what the key shown beside it does. `reload` reloads the view on screen.
+- **Click a button** on the menu bar, the first line — the name of the open store, `search`,
+  `reload`, `help`, `quit` — to do what the key shown beside it does. The store's name opens the
+  store picker. `reload` reloads the view on screen.
 - **Click a pane** in detail mode to focus it.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.

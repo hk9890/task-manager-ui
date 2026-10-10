@@ -168,8 +168,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 		if !observedVisibleBoardState && !m.board.IsLoading() {
 			body := m.renderBody()
 			if strings.Contains(body, "Ready first") {
-				header := m.renderHeader()
-				if strings.Contains(header, "Selected: tm-1 (open)") {
+				if sel := m.currentSelection(); sel != nil && sel.Issue.ID == "tm-1" {
 					observedVisibleBoardState = true
 				}
 				footer := m.renderFooter()
@@ -186,9 +185,8 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 		t.Fatalf("expected to observe visible startup board state during init flow")
 	}
 
-	header := m.renderHeader()
-	if !strings.Contains(header, "Selected: tm-1 (open)") {
-		t.Fatalf("expected startup header to show active board selection after init messages, got:\n%s", header)
+	if sel := m.currentSelection(); sel == nil || sel.Issue.ID != "tm-1" {
+		t.Fatalf("expected the shell to hold the board selection tm-1 after init messages, got %+v", sel)
 	}
 }
 

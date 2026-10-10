@@ -337,16 +337,16 @@ func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *t
 	if len(headerLines) != 3 {
 		t.Fatalf("expected the menu bar, the rule and the tab line, got %d lines:\n%s", len(headerLines), header)
 	}
-	for _, line := range headerLines {
+	for _, line := range headerLines[:2] {
 		if got := lipgloss.Width(line); got != 120 {
-			t.Fatalf("expected each header line to span the 120 columns, got %d:\n%s", got, header)
+			t.Fatalf("expected the menu bar and the rule to span the 120 columns, got %d:\n%s", got, header)
 		}
 	}
 	if strings.Contains(headerLines[0], " Board ") || !strings.Contains(headerLines[0], "stores") {
 		t.Fatalf("expected the buttons and no tab on the menu bar, got:\n%s", headerLines[0])
 	}
-	if !strings.Contains(headerLines[2], " Board ") || !strings.Contains(headerLines[2], "Selected: tm-3 (blocked)") {
-		t.Fatalf("expected the tabs and the context on the tab line, got:\n%s", headerLines[2])
+	if got := strings.TrimSpace(testui.AnsiEscapePattern.ReplaceAllString(headerLines[2], "")); got != "Board   Docs" {
+		t.Fatalf("expected the tabs alone on the tab line, got %q", got)
 	}
 	if strings.Contains(header, "Detail") {
 		t.Fatalf("expected detail to be contextual and absent from top tabs, got:\n%s", header)

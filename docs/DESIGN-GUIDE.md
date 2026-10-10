@@ -127,13 +127,16 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   a shell action that is not about the selected row, and it shows the key bound to that action: the
   bar is a second way to reach it, never the only one. Add one as an entry in `barActions`, with
   the method the key switch in `handleShellKey` also calls.
+- The first button opens the store picker, and its label is the active store's name
+  (`Model.storeLabel`), bold in `TextPrimaryColor`: the header names the store nowhere else. A
+  name wider than `storeLabelMax` is cut; with no name the label is `stores`.
 - `reload` is one button for every surface: it runs the reload of the surface on screen and shows
   that surface's key (`Model.reloadKey`).
 - When the bar does not fit, the version goes first, then the buttons from the right
   (`Model.barCells`).
-- The tab line holds the view tabs on the left and the context — the store, the surface, the
-  selection — flush right, from `Model.headerContext`. The tabs come first: the context is cut to
-  the space beside them.
+- The tab line holds the spinner cell and the view tabs, and nothing else. Do not repeat there
+  what the screen already says: the active tab is the surface, the highlighted row is the
+  selection.
 - The legend is one line of `styles.KeyHint` values through `styles.KeyLegend`, which drops the
   hints that do not fit from the end. Order a surface's hints in `footerHints` by how much an
   operator needs them. A shell action with no button, such as creating an issue, is named there.
@@ -244,8 +247,7 @@ When nothing resolved for the working directory, the picker offers to create a s
 action rows above the registry — `Row.Action` in `internal/ui/storepicker`. An action is a row, not
 a key: it costs no binding and no config surface, and it disappears once the directory has a
 store. The header count counts stores only. The form rides the shell's action-modal slot and stays
-open until the store is created, so a rejected name or prefix is corrected in place. The header's context text leads
-with the active store's name and keeps it until only the surface name still fits.
+open until the store is created, so a rejected name or prefix is corrected in place.
 
 ## Selection and scrolling
 
@@ -337,7 +339,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 
 - Long work renders the spinner: advance the frame with `loading.NextFrame`, draw it with
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
-- The shell status line comes from `loading.Summary` — `Idle`, or `Loading: ` and the active scopes.
+- The shell says work is in flight with the spinner cell in front of the tabs
+  (`Model.headerSpinnerCell`), drawn while `Model.loadingStates` is not empty; idle draws nothing.
   A new browse surface needs its own `loading.Scope`, or its work reports as somebody else's.
 - A cold start draws skeleton rows (`issuerow.RenderCompactSkeleton`) rather than an empty frame.
   Their shade cycles through `styles.SkeletonShades` on the phase from `loading.SkeletonPhase`, which
