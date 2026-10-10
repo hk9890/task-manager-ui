@@ -6,6 +6,10 @@
 // owns colour roles and shell chrome. The split forced DESIGN-GUIDE.md to spell
 // out which package held which operation, and made textutil import styles to
 // finish its own work.
+//
+// OneLine is the sixth, and the one that is not ANSI-aware: it cleans a string
+// the app did not write, before that string is styled or measured. The store
+// catalog calls it too, for the name of a store.
 package textutil
 
 import (
@@ -40,13 +44,14 @@ func StripANSI(s string) string {
 const zeroWidthJoiner = '\u200d'
 
 // OneLine makes a string the app did not write, such as a directory name,
-// safe to draw on one line: each control character becomes a space, and each
-// format character is dropped, because a newline breaks the frame and a
-// bidirectional override reorders the cells beside it.
+// safe to draw on one line: each control character and each line or paragraph
+// separator becomes a space, and each format character is dropped, because a
+// newline breaks the frame and a bidirectional override reorders the cells
+// beside it.
 func OneLine(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
-		case unicode.IsControl(r):
+		case unicode.IsControl(r), unicode.In(r, unicode.Zl, unicode.Zp):
 			return ' '
 		case unicode.Is(unicode.Cf, r) && r != zeroWidthJoiner:
 			return -1

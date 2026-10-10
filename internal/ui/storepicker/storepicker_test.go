@@ -310,6 +310,24 @@ func TestADirectoryWithALineBreakInItsNameKeepsTheFrame(t *testing.T) {
 	}
 }
 
+// TestAListingErrorWithALineBreakKeepsTheFrame: yaml.v3 reports a type error
+// in the registry file on a line for each value. The error row is one line, so
+// the rows below it stay where HitTest looks for them.
+func TestAListingErrorWithALineBreakKeepsTheFrame(t *testing.T) {
+	t.Parallel()
+
+	render := func(message string) string {
+		return testui.AnsiEscapePattern.ReplaceAllString(Render(State{
+			Rows: sampleRows(), Error: message, Width: 100, Height: 12, Help: "help",
+		}), "")
+	}
+	plain := render("parse registry: yaml: unmarshal errors: line 1: cannot unmarshal")
+	broken := render("parse registry: yaml: unmarshal errors:\nline 1: cannot unmarshal")
+	if broken != plain {
+		t.Errorf("a line break in the error changes the frame:\n%s\nwant\n%s", broken, plain)
+	}
+}
+
 // TestEveryStateFillsTheFrame holds each body to exactly the content lines:
 // rows, the empty state, a cold listing and a failed read with nothing cached,
 // at content heights that leave no line spare and at ones that leave one.

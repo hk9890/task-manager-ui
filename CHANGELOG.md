@@ -26,7 +26,9 @@ carries its `vX.Y.Z` section of this file as its notes.
 - **Fixed: a directory with a line break or a tab in its name broke the store
   picker.** The path drew on two lines, so a click landed one row off. A store
   name and a path now draw on one line, without format characters such as a
-  right-to-left override.
+  right-to-left override. The error of a failed store listing does too: a
+  registry file with a value of the wrong type gave an error of two or more
+  lines.
 - **Changed: the store search waits until you stop typing.** A search runs 150 ms
   after the last key, so a typed word is one search and not one for each
   letter. `enter` pressed inside that time opens the result of what you typed.
