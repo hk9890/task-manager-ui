@@ -26,13 +26,13 @@ type Model struct {
 	loading     bool
 	errText     string
 
-	Detail                domain.IssueDetail
-	PreviewDetail         domain.IssueDetail
-	Keys                  config.ResolvedKeyBindings
-	FocusPane             detail.FocusPane
-	MetadataSelectedField detail.MetadataFieldKey
+	Detail        domain.IssueDetail
+	previewDetail domain.IssueDetail
+	Keys          config.ResolvedKeyBindings
+	FocusPane     detail.FocusPane
+	metadataField detail.MetadataFieldKey
 
-	BrowserGroupParentID string
+	browserGroupParentID string
 	BrowserItems         []domain.IssueReference
 	BrowserSelectedIndex int
 
@@ -187,7 +187,7 @@ func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 		m.DependenciesScrollOffset = 0
 	}
 	m.Detail = d
-	m.PreviewDetail = domain.IssueDetail{}
+	m.previewDetail = domain.IssueDetail{}
 	m.syncBrowserPanel(issueID)
 	if m.drillDepsFocusCalls > 0 {
 		m.drillDepsFocusCalls--
@@ -204,7 +204,7 @@ func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 
 // ApplyPreviewDetail stores loaded preview detail without mutating browser-panel state.
 func (m *Model) ApplyPreviewDetail(d domain.IssueDetail) {
-	m.PreviewDetail = d
+	m.previewDetail = d
 }
 
 // SelectBrowserIssue updates the highlighted browser item for a target issue.
@@ -261,7 +261,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 //     the user sees "(no description)" / "(none)" fallbacks during the in-flight
 //     window, which misrepresents loading state as empty content.
 func (m *Model) skeletonContent() bool {
-	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
+	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.previewDetail.Summary.ID) == ""
 	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
 		strings.TrimSpace(m.Detail.Description) == "" &&
 		len(m.Detail.Comments) == 0 &&
@@ -453,29 +453,29 @@ func (m *Model) moveFocusRight() {
 }
 
 func (m *Model) metadataSelectedField() detail.MetadataFieldKey {
-	if !isEditableMetadataField(m.MetadataSelectedField) {
+	if !isEditableMetadataField(m.metadataField) {
 		return detail.MetadataFieldStatus
 	}
-	return m.MetadataSelectedField
+	return m.metadataField
 }
 
 func (m *Model) ensureMetadataSelection() {
-	if !isEditableMetadataField(m.MetadataSelectedField) {
-		m.MetadataSelectedField = detail.MetadataFieldStatus
+	if !isEditableMetadataField(m.metadataField) {
+		m.metadataField = detail.MetadataFieldStatus
 	}
 }
 
 func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	fields := editableMetadataFields()
 	if len(fields) == 0 {
-		m.MetadataSelectedField = detail.MetadataFieldNone
+		m.metadataField = detail.MetadataFieldNone
 		return
 	}
 
 	m.ensureMetadataSelection()
 	index := 0
 	for i, key := range fields {
-		if key == m.MetadataSelectedField {
+		if key == m.metadataField {
 			index = i
 			break
 		}
@@ -488,10 +488,10 @@ func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	if next >= len(fields) {
 		next = len(fields) - 1
 	}
-	m.MetadataSelectedField = fields[next]
+	m.metadataField = fields[next]
 
 	// Keep the selected field inside the visible window.
-	lineIdx := detail.MetadataFieldLineIndex(m.MetadataSelectedField, m.Detail)
+	lineIdx := detail.MetadataFieldLineIndex(m.metadataField, m.Detail)
 	if lineIdx >= 0 && viewportHeight > 0 {
 		geometry := m.paneGeometry(maxWidth, viewportHeight)
 		total := geometry.Metadata + geometry.MetadataInnerHeight
@@ -549,8 +549,8 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 func (m *Model) RenderDetail() domain.IssueDetail {
 	content := m.Detail
 	if targetID := strings.TrimSpace(m.targetID); targetID != "" && targetID != strings.TrimSpace(m.selectionID) {
-		if strings.TrimSpace(m.PreviewDetail.Summary.ID) == targetID {
-			content = m.PreviewDetail
+		if strings.TrimSpace(m.previewDetail.Summary.ID) == targetID {
+			content = m.previewDetail
 		} else {
 			ref, ok := m.browserReferenceByID(targetID)
 			content = PlaceholderDetail(targetID, ref, ok)
@@ -648,7 +648,7 @@ func (m *Model) browserSelectedIssueID() string {
 
 func (m *Model) syncBrowserPanel(issueID string) {
 	parentID := strings.TrimSpace(m.Detail.ParentGroupBrowser.Parent.ID)
-	m.BrowserGroupParentID = parentID
+	m.browserGroupParentID = parentID
 	m.BrowserItems = browserItemsFromDependencies(m.Detail)
 	if len(m.BrowserItems) == 0 {
 		m.clearBrowserPanel()
@@ -659,7 +659,7 @@ func (m *Model) syncBrowserPanel(issueID string) {
 }
 
 func (m *Model) clearBrowserPanel() {
-	m.BrowserGroupParentID = ""
+	m.browserGroupParentID = ""
 	m.BrowserItems = nil
 	m.BrowserSelectedIndex = -1
 	// Do not flip focus during an in-flight drill sequence: the placeholder has no

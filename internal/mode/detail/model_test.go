@@ -463,24 +463,24 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	if intent != nil {
 		t.Fatalf("expected no intent in metadata pane, got %+v", intent)
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected metadata down to select priority after status, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldPriority {
+		t.Fatalf("expected metadata down to select priority after status, got %q", m.metadataField)
 	}
 
 	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed || intent != nil {
 		t.Fatalf("expected metadata down to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected metadata selection clamped to priority, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldPriority {
+		t.Fatalf("expected metadata selection clamped to priority, got %q", m.metadataField)
 	}
 
 	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
 	if !consumed || intent != nil {
 		t.Fatalf("expected metadata up to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldStatus {
-		t.Fatalf("expected metadata up to select status, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldStatus {
+		t.Fatalf("expected metadata up to select status, got %q", m.metadataField)
 	}
 }
 
@@ -519,10 +519,10 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 	t.Parallel()
 
 	m := Model{
-		selectionID:           "tm-1",
-		targetID:              "tm-1",
-		FocusPane:             detail.FocusPaneMetadata,
-		MetadataSelectedField: detail.MetadataFieldPriority,
+		selectionID:   "tm-1",
+		targetID:      "tm-1",
+		FocusPane:     detail.FocusPaneMetadata,
+		metadataField: detail.MetadataFieldPriority,
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Priority: 1},
 		},
@@ -568,8 +568,8 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndParentGroup(t *te
 	}
 	m.ApplyLoadedDetail("tm-42", first)
 
-	if m.BrowserGroupParentID != "tm-1" {
-		t.Fatalf("expected parent id tm-1, got %q", m.BrowserGroupParentID)
+	if m.browserGroupParentID != "tm-1" {
+		t.Fatalf("expected parent id tm-1, got %q", m.browserGroupParentID)
 	}
 	// Only the parent (tm-1) is appended after the dependency groups; the
 	// currently-viewed issue (tm-42) is excluded entirely.
@@ -679,7 +679,7 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 	t.Parallel()
 
 	m := Model{
-		BrowserGroupParentID: "tm-parent",
+		browserGroupParentID: "tm-parent",
 		BrowserItems:         []domain.IssueReference{{ID: "tm-parent"}, {ID: "tm-child"}},
 		BrowserSelectedIndex: 1,
 		FocusPane:            detail.FocusPaneBrowser,
@@ -687,8 +687,8 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 
 	m.ApplyLoadedDetail("tm-child", domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-child"}})
 
-	if m.BrowserGroupParentID != "" {
-		t.Fatalf("expected browser parent id to clear, got %q", m.BrowserGroupParentID)
+	if m.browserGroupParentID != "" {
+		t.Fatalf("expected browser parent id to clear, got %q", m.browserGroupParentID)
 	}
 	if len(m.BrowserItems) != 0 {
 		t.Fatalf("expected browser items to clear, got %#v", m.BrowserItems)
@@ -720,8 +720,8 @@ func TestModelApplyLoadedDetailWithoutParentGroupBuildsBrowserFromDependencies(t
 		},
 	})
 
-	if m.BrowserGroupParentID != "" {
-		t.Fatalf("expected no parent-group id for dependency-only issue, got %q", m.BrowserGroupParentID)
+	if m.browserGroupParentID != "" {
+		t.Fatalf("expected no parent-group id for dependency-only issue, got %q", m.browserGroupParentID)
 	}
 	// tm-1 is the currently-viewed issue and must be excluded even though it appears
 	// in its own BlockedBy group; the duplicate tm-3 is de-duplicated.
@@ -1313,11 +1313,11 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		selectionID:           "tm-1",
-		targetID:              "tm-1",
-		FocusPane:             detail.FocusPaneMetadata,
-		MetadataSelectedField: detail.MetadataFieldStatus,
-		Keys:                  mustResolveDetailKeys(t, nil),
+		selectionID:   "tm-1",
+		targetID:      "tm-1",
+		FocusPane:     detail.FocusPaneMetadata,
+		metadataField: detail.MetadataFieldStatus,
+		Keys:          mustResolveDetailKeys(t, nil),
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Title: "One", Status: "open", Priority: 1},
 		},
@@ -1333,8 +1333,8 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	if intent != nil {
 		t.Fatalf("expected no intent from metadata nav, got %+v", intent)
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldPriority {
-		t.Errorf("expected field to advance to Priority, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldPriority {
+		t.Errorf("expected field to advance to Priority, got %q", m.metadataField)
 	}
 }
 
