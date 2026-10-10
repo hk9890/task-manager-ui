@@ -53,14 +53,16 @@ func restoreStyles(t *testing.T) {
 }
 
 func TestConfigScreenOpensOnItsKeyAndShowsWhatIsInUse(t *testing.T) {
-	m, path := configShell(t)
+	m, _ := configShell(t)
 	m = openConfigScreen(t, m)
 
 	if m.configReturn != mode.Board {
 		t.Errorf("the screen returns to %q, want the board it was opened from", m.configReturn)
 	}
+	// The end of the path only: a temp directory can be longer than the line,
+	// and the screen then cuts the path from its front.
 	testui.AssertContainsAll(t, plainShell(m),
-		"Configuration", "written to "+path+" as it changes",
+		"Configuration", "taskmgr-ui/config.yaml as it changes",
 		"Appearance", "▌ theme     ‹ catppuccin-mocha ›", "  glyphs    ‹ unicode ›",
 		"down/up move · left/right change · esc back · ctrl+c quit",
 	)
