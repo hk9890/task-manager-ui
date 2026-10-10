@@ -106,7 +106,9 @@ func (s textSelection) view() string {
 // and nothing is copied.
 func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled bool) {
 	// A drag runs on into the margin, and the box stops at the screen's edge.
-	at := screenCell{x: textutil.Clamp(msg.X, 0, m.width-1), y: textutil.Clamp(msg.Y, 0, m.height-1)}
+	// On a screen with no column or no row the box stops at cell 0: it finds
+	// the lines it covers by its rows, and a row of -1 is no line.
+	at := screenCell{x: textutil.Clamp(msg.X, 0, max(m.width-1, 0)), y: textutil.Clamp(msg.Y, 0, max(m.height-1, 0))}
 	leftPress := msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft
 
 	switch {

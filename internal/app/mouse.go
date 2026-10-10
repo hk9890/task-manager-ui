@@ -46,6 +46,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.pendingDialog = pendingDialogGuard{}
 	}
 
+	// Nothing is drawn on a cell of the margin, so the pointer there is on
+	// nothing. The picker and help take the wheel without a hit test, and
+	// would move under it.
+	if msg.X < 0 || msg.X >= m.width || msg.Y < 0 || msg.Y >= m.height {
+		m.clearHeaderHover()
+		return m, m.mouseToSurface(leave)
+	}
+
 	if m.overlayOpen() {
 		m.clearHeaderHover()
 		cmd := m.mouseToSurface(leave)

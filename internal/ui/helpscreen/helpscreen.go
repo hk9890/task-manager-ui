@@ -56,7 +56,7 @@ func Render(state State) string {
 		Title:    title,
 		Version:  state.Version,
 		Subtitle: subtitle,
-		Body:     lines[textutil.Clamp(state.Offset, 0, MaxOffset(state.Sections, state.Height)):],
+		Body:     lines[textutil.Clamp(state.Offset, 0, maxOffset(len(lines), state.Height)):],
 		Legend:   state.Legend,
 		Width:    state.Width,
 		Height:   state.Height,
@@ -66,7 +66,11 @@ func Render(state State) string {
 // MaxOffset is the offset that draws the last line of sections on the last
 // body row of a screen of height: the furthest the screen scrolls.
 func MaxOffset(sections []Section, height int) int {
-	return max(len(sectionLines(sections, 0))-styles.ScreenBodyRows(height), 0)
+	return maxOffset(len(sectionLines(sections, 0)), height)
+}
+
+func maxOffset(lines, height int) int {
+	return max(lines-styles.ScreenBodyRows(height), 0)
 }
 
 // sectionLines draws every section: a blank line between two, the heading

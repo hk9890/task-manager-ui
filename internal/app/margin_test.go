@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -266,8 +267,11 @@ func TestTheMouseLandsOnWhatIsDrawnInsideTheMargin(t *testing.T) {
 // the pointer, and a surface that had it lets it go.
 func TestTheMarginTakesNoMouseEvent(t *testing.T) {
 	base := newMouseShell(t)
-	rowX, rowY := testui.FindCell(t, base.View(), "progress-second")
-	_, barY := testui.FindCell(t, base.View(), "help alt+h")
+	// The board and the picker are each one model under every copy of the
+	// shell, so a frame to compare with is kept as a string.
+	rest := base.View()
+	rowX, rowY := testui.FindCell(t, rest, "progress-second")
+	_, barY := testui.FindCell(t, rest, "help alt+h")
 
 	margin := map[string][2]int{
 		"left of a row":       {1, rowY},
@@ -280,7 +284,10 @@ func TestTheMarginTakesNoMouseEvent(t *testing.T) {
 	}
 	for name, cell := range margin {
 		lit := send(t, base, pointerMove(rowX, rowY))
-		if left := send(t, lit, pointerMove(cell[0], cell[1])); left.View() != base.View() {
+		if lit.View() == rest {
+			t.Fatalf("fixture: the pointer on a row lights nothing")
+		}
+		if left := send(t, lit, pointerMove(cell[0], cell[1])); left.View() != rest {
 			t.Errorf("%s: the row stayed lit after the pointer moved into the margin", name)
 		}
 		for _, event := range []tea.MouseMsg{leftClick(cell[0], cell[1]), leftClick(cell[0], cell[1]), wheel(cell[0], cell[1], tea.MouseButtonWheelDown)} {
@@ -295,10 +302,50 @@ func TestTheMarginTakesNoMouseEvent(t *testing.T) {
 	// Detail and the picker are inside the margin as well.
 	for name, key := range map[string]string{"detail": "enter", "the picker": "alt+s"} {
 		under := pressKey(t, base, key)
+		before := under.View()
 		for where, cell := range margin {
-			if m := send(t, send(t, under, leftClick(cell[0], cell[1])), leftClick(cell[0], cell[1])); m.View() != under.View() {
+			if m := send(t, send(t, under, leftClick(cell[0], cell[1])), leftClick(cell[0], cell[1])); m.View() != before {
 				t.Errorf("%s: a click %s, in the margin, changed the screen", name, where)
 			}
+		}
+	}
+}
+
+// TestTheWheelInTheMarginMovesNothing: the picker moves its selection and help
+// scrolls on a wheel notch wherever the pointer is on them. Neither asks a hit
+// test, so the shell keeps the margin from them.
+func TestTheWheelInTheMarginMovesNothing(t *testing.T) {
+	surfaces := map[string]func() Model{
+		"the store picker": func() Model {
+			return press(t, send(t, newTwoStores(t).m, tea.WindowSizeMsg{Width: 160, Height: 30}), "alt+s")
+		},
+		"help": func() Model { return newHelpShell(t, config.Default(), 30) },
+	}
+
+	for name, open := range surfaces {
+		m := open()
+		if m.marginCols == 0 || m.marginRows == 0 {
+			t.Fatalf("fixture: %s is drawn without a margin", name)
+		}
+		// The picker is one model under every copy of the shell, so the frame
+		// at rest is kept as a string.
+		rest := m.View()
+
+		right, bottom := m.width+2*m.marginCols-1, m.height+2*m.marginRows-1
+		for where, cell := range map[string][2]int{
+			"left of the screen":  {1, 5},
+			"right of the screen": {right, 5},
+			"above the screen":    {10, 0},
+			"under the screen":    {10, bottom},
+		} {
+			if got := send(t, m, wheel(cell[0], cell[1], tea.MouseButtonWheelDown)); got.View() != rest {
+				t.Errorf("%s: a wheel notch %s, in the margin, changed the screen", name, where)
+			}
+		}
+
+		inside := send(t, m, wheel(10, 5, tea.MouseButtonWheelDown))
+		if plainShell(inside) == testui.AnsiEscapePattern.ReplaceAllString(rest, "") {
+			t.Fatalf("fixture: a wheel notch on %s moved nothing", name)
 		}
 	}
 }

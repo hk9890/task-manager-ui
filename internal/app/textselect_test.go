@@ -223,3 +223,21 @@ func TestSelectingWorksOverTheHelpOverlay(t *testing.T) {
 		t.Fatal("selecting text closed the help overlay")
 	}
 }
+
+// TestADragOnAScreenWithoutRowsCopiesNothing: a terminal that reports no rows
+// has no last row to stop the box at. The box took row -1 there and indexed
+// the screen's lines with it.
+func TestADragOnAScreenWithoutRowsCopiesNothing(t *testing.T) {
+	m, copied := newSelectingShell(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 0})
+
+	m = send(t, m, leftClick(3, 0))
+	m = send(t, m, leftDrag(9, 4))
+	if !m.sel.active || m.sel.to.y != 0 {
+		t.Fatalf("the drag ends on row %d (selecting %v), want row 0", m.sel.to.y, m.sel.active)
+	}
+	_ = m.View()
+	if send(t, m, leftRelease(9, 4)); len(*copied) != 0 {
+		t.Fatalf("copied %q from a screen without rows", *copied)
+	}
+}
