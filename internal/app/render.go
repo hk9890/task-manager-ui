@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
-	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
@@ -111,9 +110,8 @@ const (
 
 // tabLabels names each browse tab on the tab line.
 var tabLabels = map[mode.ID]string{
-	mode.Board:  "Board",
-	mode.Docs:   "Docs",
-	mode.Search: "Search",
+	mode.Board: "Board",
+	mode.Docs:  "Docs",
 }
 
 // barAction is one button on the menu bar: what the shell can do that is not
@@ -131,6 +129,7 @@ func shellKey(action string) func(Model) string {
 }
 
 var barActions = []barAction{
+	{label: "search", key: shellKey(config.ShellActionOpenSearch), run: (*Model).openSearch},
 	{label: "stores", key: shellKey(config.ShellActionStorePicker), run: (*Model).openStorePicker},
 	{label: "reload", key: Model.reloadKey, run: (*Model).reloadActiveSurface},
 	{label: "help", key: shellKey(config.ShellActionHelp), run: (*Model).openHelp},
@@ -140,11 +139,8 @@ var barActions = []barAction{
 // reloadKey is the key that reloads the active surface: each surface binds its
 // own.
 func (m Model) reloadKey() string {
-	switch m.active {
-	case mode.Detail:
+	if m.active == mode.Detail {
 		return m.keys.DisplayPrimary(config.ShellContext, config.ShellActionReloadDetail)
-	case mode.Search:
-		return m.keys.DisplayPrimary(config.SearchContext, config.SearchActionReload)
 	}
 	return m.keys.DisplayPrimary(config.BoardContext, config.BoardActionReload)
 }
@@ -288,11 +284,7 @@ func (m Model) renderTabs() string {
 }
 
 // renderBody renders the active surface. Like every other renderer here it is
-// pure: sizing runs from the WindowSizeMsg handler and the search preview's
-// detail is synced from Update, because selection/detail sync is event-driven
-// and not polled (docs/CODING.md, Core Architectural Rule 9). Mutating model
-// state from View() worked only for as long as something re-rendered often
-// enough, which is exactly what the always-on spinner tick was doing.
+// pure: sizing runs from the WindowSizeMsg handler, not from View().
 func (m Model) renderBody() string {
 	skeletonPhase := loading.SkeletonPhase(m.spinnerFrame)
 
@@ -305,35 +297,6 @@ func (m Model) renderBody() string {
 	// Board is the shell's home tab, so an unknown active mode renders it
 	// rather than an empty frame.
 	return m.board.View(skeletonPhase)
-}
-
-func (m *Model) syncSearchPreviewDetailState() {
-	if m.search == nil {
-		return
-	}
-	// ResultCount, not SessionState().Page: this runs on every Update, and
-	// SessionState deep-copies the whole result page to answer "is it empty".
-	if m.search.ResultCount() == 0 {
-		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
-		return
-	}
-	selection := m.selectedByMode[mode.Search]
-	if selection == nil || strings.TrimSpace(selection.Issue.ID) == "" {
-		m.search.SetSelectedDetail(domain.IssueDetail{}, false)
-		return
-	}
-
-	selectedID := strings.TrimSpace(selection.Issue.ID)
-	if m.detail.IsLoading() && strings.TrimSpace(m.detail.TargetID()) == selectedID {
-		m.search.SetSelectedDetail(domain.IssueDetail{}, true)
-		return
-	}
-	if strings.TrimSpace(m.detail.Detail.Summary.ID) == selectedID && !m.detail.IsLoading() && strings.TrimSpace(m.detail.Error()) == "" {
-		m.search.SetSelectedDetail(m.detail.Detail, false)
-		return
-	}
-
-	m.search.SetSelectedDetail(domain.IssueDetail{}, false)
 }
 
 func (m Model) detailViewportHeight() int {
@@ -484,13 +447,7 @@ func (m Model) surfaceContextVariants() []string {
 	case mode.Docs:
 		prefix = "Docs"
 	case mode.Search:
-		// Ask the mode directly: SessionState() deep-copies the whole result
-		// page, which is not worth doing on the render path for one integer.
-		count := 0
-		if m.search != nil {
-			count = m.search.ResultCount()
-		}
-		prefix = fmt.Sprintf("Search: %d results", count)
+		prefix = "Search"
 	}
 
 	selectedLong, selectedShort := "Selected: none", "Sel: none"
@@ -505,34 +462,27 @@ func (m Model) surfaceContextVariants() []string {
 		loadingShort = "idle"
 	}
 
-	variants := []string{
+	return []string{
 		fmt.Sprintf("%s · %s · %s", prefix, selectedLong, loadingSummary),
 		fmt.Sprintf("%s · %s", prefix, selectedLong),
 		fmt.Sprintf("%s · %s · %s", prefix, selectedShort, loadingShort),
 		prefix,
 	}
-
-	if m.active == mode.Search {
-		variants = append(variants, []string{
-			fmt.Sprintf("Search · %s · %s", selectedLong, loadingSummary),
-			fmt.Sprintf("Search · %s", selectedShort),
-		}...)
-	}
-
-	return variants
 }
 
 func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 	return strings.Join([]string{
 		"Mode switching:",
-		fmt.Sprintf("  %s/%s = next/previous tab (Board, Docs, Search)", keys.DisplayLabel(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayLabel(config.ShellContext, config.ShellActionModeCyclePrev)),
-		fmt.Sprintf("  %s = toggle Board/Search", keys.DisplayLabel(config.ShellContext, config.ShellActionToggleSearch)),
-		fmt.Sprintf("  %s = open selected issue detail", keys.DisplayLabel(config.ShellContext, config.ShellActionModeDetail)),
+		fmt.Sprintf("  %s/%s = next/previous tab (Board, Docs)", keys.DisplayLabel(config.ShellContext, config.ShellActionModeCycleNext), keys.DisplayLabel(config.ShellContext, config.ShellActionModeCyclePrev)),
 		"",
 		"Selection:",
 		fmt.Sprintf("  Board: %s switch columns, %s move within a column", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
 		fmt.Sprintf("  Docs: %s move within the doc list (docs use the board keymap)", combineDisplayLabels(keys, config.BoardContext, config.BoardActionMoveUp, config.BoardActionMoveDown)),
-		fmt.Sprintf("  Search: type query text, then Enter to search; %s focuses query; %s/%s switch panes; %s/%s moves query/results and result selection; %s/%s cycles focus; ctrl+t widens the scope to closed issues and back", keys.DisplayLabel(config.SearchContext, config.SearchActionFocusQuery), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusLeft), keys.DisplayLabel(config.SearchContext, config.SearchActionFocusRight), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveDown), keys.DisplayLabel(config.SearchContext, config.SearchActionMoveUp), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusNext), keys.DisplayLabel(config.SearchContext, config.SearchActionCycleFocusPrev)),
+		"  Board and Docs: type to filter the rows by title or ID; every word must match",
+		fmt.Sprintf("  backspace, ctrl+w and ctrl+u edit the filter, %s clears it", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
+		fmt.Sprintf("  Search: %s opens the store search; type to search titles, IDs and descriptions", keys.DisplayLabel(config.ShellContext, config.ShellActionOpenSearch)),
+		fmt.Sprintf("  ctrl+t switches it between open issues and all of them, %s clears the query and then goes back", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
+		fmt.Sprintf("  Board, Docs, Search and the store list: %s/%s move a page, %s/%s go to the first and last row", keys.DisplayLabel(config.BoardContext, config.BoardActionPageUp), keys.DisplayLabel(config.BoardContext, config.BoardActionPageDown), keys.DisplayLabel(config.BoardContext, config.BoardActionMoveHome), keys.DisplayLabel(config.BoardContext, config.BoardActionMoveEnd)),
 		"",
 		"Actions:",
 		fmt.Sprintf("  %s = create issue (inline modal)", keys.DisplayLabel(config.ShellContext, config.ShellActionCreateIssue)),
@@ -546,7 +496,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		fmt.Sprintf("  %s = open selected issue in detail mode", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
 		fmt.Sprintf("  scroll detail and this help: %s/%s, %s/%s, %s/%s", keys.DisplayLabel(config.DetailContext, config.DetailActionScrollDown), keys.DisplayLabel(config.DetailContext, config.DetailActionScrollUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageUp), keys.DisplayLabel(config.DetailContext, config.DetailActionPageDown), keys.DisplayLabel(config.DetailContext, config.DetailActionHome), keys.DisplayLabel(config.DetailContext, config.DetailActionEnd)),
 		fmt.Sprintf("  %s = reload detail mode from repository", keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail)),
-		fmt.Sprintf("  %s = return from detail/search to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
+		fmt.Sprintf("  %s = return from detail to browse / dismiss toast", keys.DisplayLabel(config.ShellContext, config.ShellActionEscape)),
 		fmt.Sprintf("  %s = list the central task stores on this machine and open one", keys.DisplayLabel(config.ShellContext, config.ShellActionStorePicker)),
 		fmt.Sprintf("  %s = toggle help", keys.DisplayLabel(config.ShellContext, config.ShellActionHelp)),
 		fmt.Sprintf("  %s = quit", keys.DisplayLabel(config.ShellContext, config.ShellActionQuit)),
@@ -559,7 +509,7 @@ func shellKeyHelp(keys config.ResolvedKeyBindings) string {
 		"  shift+drag = select text with the terminal instead",
 		"",
 		"Detail presentation model (v1): dedicated detail mode",
-		"  - Board/Search prioritize overview triage density",
+		"  - Board prioritizes overview triage density",
 		fmt.Sprintf("  - %s opens full issue detail view", keys.DisplayLabel(config.BoardContext, config.BoardActionOpenDetail)),
 	}, "\n")
 }
@@ -605,25 +555,30 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 	quit := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionQuit), Desc: "quit"}
 	// Creating an issue has no button: the legend is where its key is named.
 	create := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionCreateIssue), Desc: "new"}
+	// No key enters the filter, so the legend names the typing itself.
+	filter := styles.KeyHint{Key: "type", Desc: "filter"}
+	clear := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "clear"}
 
 	switch active {
 	case mode.Docs:
 		return []styles.KeyHint{
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "docs"},
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			filter, clear,
 			create,
 			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
 		}
 	case mode.Search:
 		return []styles.KeyHint{
-			{Key: "type + enter", Desc: "query"},
-			{Key: primary(config.SearchContext, config.SearchActionFocusQuery), Desc: "focus"},
-			{Key: pair(config.SearchContext, config.SearchActionMoveDown, config.SearchActionMoveUp), Desc: "results"},
-			{Key: primary(config.SearchContext, config.SearchActionOpenDetail), Desc: "detail"},
-			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "board"},
-			{Key: pair(config.SearchContext, config.SearchActionFocusLeft, config.SearchActionFocusRight), Desc: "panes"},
-			{Key: "ctrl+t", Desc: "scope"},
+			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "results"},
+			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			{Key: "type", Desc: "search"},
+			{Key: "ctrl+t", Desc: "open/all"},
+			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "clear, back"},
+			create,
+			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
+			help, quit,
 		}
 	case mode.Detail:
 		return []styles.KeyHint{
@@ -638,8 +593,8 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			{Key: pair(config.BoardContext, config.BoardActionMoveLeft, config.BoardActionMoveRight), Desc: "columns"},
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "issues"},
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+			filter, clear,
 			create,
-			{Key: primary(config.ShellContext, config.ShellActionToggleSearch), Desc: "search"},
 			help, quit,
 		}
 	}

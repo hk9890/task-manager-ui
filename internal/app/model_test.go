@@ -99,39 +99,39 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 	if gw.HasCall(fakes.MethodSearch) {
 		t.Fatalf("expected no Search call during startup; got calls=%#v", gw.Calls())
 	}
-	if m.initDone[mode.Search] {
+	if m.initDone[mode.Docs] {
 		t.Fatalf("expected search init=false after startup")
 	}
 
 	// First switch to search mode: lazy init must fire.
 	mark := gw.CallCount()
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	if m.active != mode.Search {
+	if m.active != mode.Docs {
 		t.Fatalf("expected search active after toggle, got %s", m.active)
 	}
 	if !gw.HasCallSince(mark, fakes.MethodSearch) {
 		t.Fatalf("expected Search call on first search mode activation; got calls=%#v", gw.Calls())
 	}
-	if !m.initDone[mode.Search] {
+	if !m.initDone[mode.Docs] {
 		t.Fatalf("expected search init=true after first search activation")
 	}
 
 	// Return to board and go back to search: should NOT re-trigger Search
 	// from the lazy init path (auto-refresh may run if stale, but lazy init does not).
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt}) // toggle back to board
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // toggle back to board
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt}) // toggle to search again
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // toggle to search again
 	m = next.(Model)
 	// Only run the immediate Update result; don't recurse into auto-refresh
 	// commands — we only want to check that lazyInitActiveTabCmd itself is a no-op.
 	_ = cmd
-	if !m.initDone[mode.Search] {
+	if !m.initDone[mode.Docs] {
 		t.Fatalf("expected search init still true on second search activation")
 	}
 	// The lazy init flag must be set; subsequent refresh is handled by auto-refresh,
@@ -173,7 +173,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 					observedVisibleBoardState = true
 				}
 				footer := m.renderFooter()
-				if !strings.Contains(footer, "h/l columns") {
+				if !strings.Contains(footer, "left/right columns") {
 					t.Fatalf("expected mode-specific help footer in board mode, got:\n%s", footer)
 				}
 			}

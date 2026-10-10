@@ -4,7 +4,9 @@
 package issuerow
 
 import (
+	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -124,6 +126,9 @@ type RenderConfig struct {
 	Hovered bool
 	Width   int
 	Styled  bool
+	// Match is the words of the query that chose this row. A styled row draws
+	// every occurrence of one in its title and its ID as matched text.
+	Match []string
 
 	// Dim, when true, applies a SkeletonShades foreground tint to the rendered
 	// row text — used to signal that the surface is refreshing stale data.
@@ -175,12 +180,12 @@ func RenderCompact(config RenderConfig) []string {
 
 	if config.Styled && textWidth > lipgloss.Width(indent) {
 		first = renderhelpers.CompactIssueTypeStyled(config.Issue.Type) + " " +
-			textutil.TruncateString(title, metaWidth)
+			markMatches(textutil.TruncateString(title, metaWidth), config.Match, lipgloss.NewStyle())
 		if idWidth >= 1 {
 			second = indent + strings.Join([]string{
 				renderhelpers.CompactPriorityStyled(config.Issue.Priority),
 				renderhelpers.CompactIssueStateStyled(config.Issue.Status),
-				renderhelpers.CompactIssueIDMuted(config.Issue.ID, idWidth),
+				markMatches(renderhelpers.CompactIssueID(config.Issue.ID, idWidth), config.Match, styles.IssueIDMutedStyle),
 			}, " ")
 		}
 	}
@@ -198,6 +203,51 @@ func RenderCompact(config RenderConfig) []string {
 		}
 	}
 	return lines
+}
+
+// markMatches draws text in base, and every occurrence of a word in it as
+// matched text, whatever the case. text is plain and already cut to its width:
+// styling a run adds no cell, so the caller's width math holds. A word the cut
+// went through is not marked.
+func markMatches(text string, words []string, base lipgloss.Style) string {
+	runes := []rune(text)
+	folded := foldRunes(runes)
+	matched := make([]bool, len(runes))
+	for _, word := range words {
+		needle := foldRunes([]rune(word))
+		for start := 0; len(needle) > 0 && start+len(needle) <= len(folded); start++ {
+			if slices.Equal(folded[start:start+len(needle)], needle) {
+				for i := range needle {
+					matched[start+i] = true
+				}
+			}
+		}
+	}
+
+	var out strings.Builder
+	for start := 0; start < len(runes); {
+		end := start
+		for end < len(runes) && matched[end] == matched[start] {
+			end++
+		}
+		style := base
+		if matched[start] {
+			style = styles.MatchTextStyle
+		}
+		out.WriteString(style.Render(string(runes[start:end])))
+		start = end
+	}
+	return out.String()
+}
+
+// foldRunes lower-cases rune by rune, so an index into the result is an index
+// into runes. strings.ToLower can change the length of the text.
+func foldRunes(runes []rune) []rune {
+	folded := make([]rune, len(runes))
+	for i, r := range runes {
+		folded[i] = unicode.ToLower(r)
+	}
+	return folded
 }
 
 // RenderReferenceCompact renders a one-line compact row for related issues,

@@ -157,6 +157,18 @@ func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
 		m.moveRow(1)
 		return true, nil
+	case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
+		m.moveRow(-m.itemCapacity())
+		return true, nil
+	case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
+		m.moveRow(m.itemCapacity())
+		return true, nil
+	case m.keys.Match(config.BoardContext, config.BoardActionMoveHome, msg):
+		m.moveRow(-m.rowCount())
+		return true, nil
+	case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
+		m.moveRow(m.rowCount())
+		return true, nil
 	case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 		return true, m.reload()
 	}

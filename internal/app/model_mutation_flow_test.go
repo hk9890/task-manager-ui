@@ -38,7 +38,7 @@ func TestModelCreateIssueFlowUsesRepositoryCatalogsAndCreateIssue(t *testing.T) 
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	next, cmd := m.Update(testKey("alt+n"))
 	m = next.(Model)
 
 	if cmd == nil {
@@ -98,7 +98,7 @@ func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	next, cmd := m.Update(testKey("alt+u"))
 	m = next.(Model)
 
 	if cmd == nil {
@@ -121,7 +121,7 @@ func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	next, cmd = m.Update(testKey("delete"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected modal init command for close flow")
@@ -134,7 +134,7 @@ func TestModelUpdateCloseAndCommentFlowsUseRepositoryWrites(t *testing.T) {
 	next, _ = m.Update(cmd())
 	m = next.(Model)
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	next, cmd = m.Update(testKey("alt+a"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected modal init command for comment flow")
@@ -203,7 +203,7 @@ func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
 	}
 
 	// 'c' opens Create Issue modal.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	next, cmd := m.Update(testKey("alt+n"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("expected create flow command")
@@ -224,7 +224,7 @@ func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
 	}
 
 	// 'u' opens Update Issue modal (title includes selected issue ID).
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	next, cmd = m.Update(testKey("alt+u"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("expected update flow command")
@@ -253,7 +253,7 @@ func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
 	}
 
 	// 'a' opens Comment modal.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	next, cmd = m.Update(testKey("alt+a"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("expected comment flow command")
@@ -296,7 +296,7 @@ func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Navigate to Detail mode.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -398,7 +398,7 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 		m = applyMessages(t, m, runBatch(m.Init()))
 
 		// Press "c" (ShellActionCreateIssue) — dispatches the async catalog load.
-		next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+		next, catalogLoadCmd := m.Update(testKey("alt+n"))
 		m = next.(Model)
 		if catalogLoadCmd == nil {
 			t.Fatal("expected async catalog-load Cmd after Create-issue key")
@@ -463,7 +463,7 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 		m = applyMessages(t, m, runBatch(m.Init()))
 
 		// Press "u" (ShellActionUpdateIssue) — dispatches the async catalog load.
-		next, catalogLoadCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+		next, catalogLoadCmd := m.Update(testKey("alt+u"))
 		m = next.(Model)
 		if catalogLoadCmd == nil {
 			t.Fatal("expected async catalog-load Cmd after Update-issue key")
@@ -545,13 +545,13 @@ func pressAndSettle(t *testing.T, m Model, msg tea.KeyMsg) Model {
 // discarded, rather than through applyMessages: opening the modal returns
 // modal.Init, which is textinput.Blink. Draining that invokes a tick, and each
 // blink schedules the next, so a full drain never terminates.
-func openDialog(t *testing.T, m Model, hotkey rune) Model {
+func openDialog(t *testing.T, m Model, hotkey string) Model {
 	t.Helper()
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{hotkey}})
+	next, cmd := m.Update(testKey(hotkey))
 	m = next.(Model)
 	if cmd == nil {
-		t.Fatalf("expected a catalog-load command from %q", string(hotkey))
+		t.Fatalf("expected a catalog-load command from %q", hotkey)
 	}
 
 	for _, msg := range runBatch(cmd) {
@@ -577,7 +577,7 @@ func TestCommentDialogKeyboardPathWritesTypedBody(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	m = openDialog(t, m, 'a')
+	m = openDialog(t, m, "alt+a")
 	m = typeIntoDialog(m, "looks good")
 
 	// First Enter advances off the input. Nothing may be written yet — this is
@@ -624,7 +624,7 @@ func TestCreateDialogKeyboardPathWritesTypedTitle(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	m = openDialog(t, m, 'c')
+	m = openDialog(t, m, "alt+n")
 	m = typeIntoDialog(m, "Typed from the keyboard")
 
 	// The create dialog has six inputs; Tab off the last one lands on Save.
@@ -666,7 +666,7 @@ func TestMutationDialogEscapeWritesNothing(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	m = openDialog(t, m, 'a')
+	m = openDialog(t, m, "alt+a")
 	m = typeIntoDialog(m, "discard me")
 	m = pressAndSettle(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 

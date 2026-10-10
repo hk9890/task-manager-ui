@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
 
 const (
@@ -21,6 +22,9 @@ const (
 
 	// columnTitle is the title of the single docs column.
 	columnTitle = "Docs"
+
+	// queryPlaceholder is what the query line says while nothing is typed.
+	queryPlaceholder = "filter docs"
 
 	// defaultItemCapacity is the row window used before the first
 	// tea.WindowSizeMsg sets a real height.
@@ -46,9 +50,16 @@ type Model struct {
 	// golden pins which rows fall on which side of a divider.
 	now func() time.Time
 
+	// issues is every loaded doc; shown is the docs of it the query matches,
+	// and is issues itself while the query is empty. Selection, scroll, hit
+	// test, hover and View read shown.
 	issues []domain.IssueSummary
+	shown  []domain.IssueSummary
 	total  int
 	err    error
+
+	// query is the filter over the column. It outlives a reload.
+	query mode.Query
 
 	// loading is the column's visual loading state; inflight guards against
 	// concurrent reloads. Both start false: docs mode is lazily initialised on
@@ -125,11 +136,25 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleMouse(msg)
 
 	case tea.KeyMsg:
+		if consumed, changed := m.query.HandleKey(msg); consumed {
+			if !changed {
+				return nil
+			}
+			return m.queryChanged()
+		}
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 			return m.moveRow(-1)
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
 			return m.moveRow(1)
+		case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
+			return m.moveRow(-m.pageRows())
+		case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
+			return m.moveRow(m.pageRows())
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveHome, msg):
+			return m.moveRow(-len(m.shown))
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
+			return m.moveRow(len(m.shown))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
 			if m.currentSelection() == nil {
 				return nil
@@ -160,18 +185,18 @@ func (m *Model) uiColumn() uiboard.Column {
 	}
 	return uiboard.Column{
 		Title:        columnTitle,
-		Rows:         m.issues,
+		Rows:         m.shown,
 		SelectedRow:  m.selectedRow,
 		ScrollOffset: m.scrollOffset,
 		Total:        m.total,
 		TotalIsExact: true,
+		Loaded:       len(m.issues),
 		Loading:      m.loading,
 		Error:        errText,
 		AgeMarkers:   true,
 	}
 }
 
-// SetSize updates render dimensions.
 // SetSize updates render dimensions. The clamp is what board's SetSize does and
 // for the same reason: itemCapacity() is derived from the height, so a resize
 // leaves an offset that was valid for the old window.
@@ -243,6 +268,7 @@ func (m *Model) apply(msg docsLoadedMsg) tea.Cmd {
 	}
 	domain.SortByLastChange(issues)
 	m.issues = issues
+	m.shown = m.query.Filter(issues)
 	m.total = len(issues)
 
 	if anchor := m.anchorIssueID; anchor != "" {
@@ -256,8 +282,9 @@ func (m *Model) apply(msg docsLoadedMsg) tea.Cmd {
 	return m.selectionChangedCmd()
 }
 
+// findIssue is the row of the issue among the docs the query matches.
 func (m *Model) findIssue(issueID string) (int, bool) {
-	for idx, issue := range m.issues {
+	for idx, issue := range m.shown {
 		if issue.ID == issueID {
 			return idx, true
 		}
@@ -265,8 +292,32 @@ func (m *Model) findIssue(issueID string) (int, bool) {
 	return 0, false
 }
 
+// ClearQuery empties the query, which the shell asks for on Escape. cleared is
+// false when there was no text, and Escape is then the shell's.
+func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
+	if !m.query.Clear() {
+		return false, nil
+	}
+	return true, m.queryChanged()
+}
+
+// queryChanged narrows the column to the new query. The selection stays on the
+// same doc when that doc still matches, and otherwise takes the first match.
+func (m *Model) queryChanged() tea.Cmd {
+	previous := m.selectedIssueID()
+
+	m.shown = m.query.Filter(m.issues)
+	m.selectedRow, _ = m.findIssue(previous)
+	m.clampSelection()
+
+	if m.selectedIssueID() == previous {
+		return nil
+	}
+	return m.selectionChangedCmd()
+}
+
 func (m *Model) clampSelection() {
-	if len(m.issues) == 0 {
+	if len(m.shown) == 0 {
 		m.selectedRow = 0
 		m.scrollOffset = 0
 		return
@@ -274,21 +325,21 @@ func (m *Model) clampSelection() {
 	if m.selectedRow < 0 {
 		m.selectedRow = 0
 	}
-	if m.selectedRow >= len(m.issues) {
-		m.selectedRow = len(m.issues) - 1
+	if m.selectedRow >= len(m.shown) {
+		m.selectedRow = len(m.shown) - 1
 	}
 	// Pull the window back inside the list first, as board's clampScrollOffsets
 	// does. EnsureVisible only slides far enough to reveal the selected row, so
 	// on its own a list that shrank under a scrolled offset keeps the offset and
 	// draws its last rows with the ones above unreachable until the operator
-	// presses k. MaxOffset counts the lines the renderer draws, as capacity does.
+	// moves up. MaxOffset counts the lines the renderer draws, as capacity does.
 	capacity := m.itemCapacity()
 	m.scrollOffset = min(m.scrollOffset, uiboard.MaxOffset(m.uiColumn(), capacity, m.now()))
 	m.scrollOffset = uiboard.EnsureVisible(m.uiColumn(), capacity, m.now())
 }
 
 func (m *Model) moveRow(delta int) tea.Cmd {
-	if len(m.issues) == 0 {
+	if len(m.shown) == 0 {
 		m.selectedRow = 0
 		return nil
 	}
@@ -312,15 +363,21 @@ func (m *Model) itemCapacity() int {
 	return max(m.height-3, 1)
 }
 
+// pageRows is the number of docs a page key moves the selection by: the docs
+// the column shows at the current height.
+func (m *Model) pageRows() int {
+	return max(1, m.itemCapacity()/issuerow.Height)
+}
+
 func (m *Model) currentSelection() *mode.Selection {
-	if len(m.issues) == 0 {
+	if len(m.shown) == 0 {
 		return nil
 	}
 	row := m.selectedRow
-	if row < 0 || row >= len(m.issues) {
+	if row < 0 || row >= len(m.shown) {
 		row = 0
 	}
-	selection := mode.Selection{Issue: m.issues[row]}
+	selection := mode.Selection{Issue: m.shown[row]}
 	return &selection
 }
 

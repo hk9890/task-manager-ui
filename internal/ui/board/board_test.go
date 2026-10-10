@@ -36,7 +36,7 @@ func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
 			Priority: 0,
 		}},
 		SelectedRow: 0,
-	}, 72, 0, 0, time.Time{}, -1).rows
+	}, 72, 0, 0, time.Time{}, -1, "", false).rows
 
 	if len(lines) != issuerow.Height {
 		t.Fatalf("expected the %d lines of one issue, got %d: %q", issuerow.Height, len(lines), lines)
@@ -67,7 +67,7 @@ func TestRenderColumnRowsUsesSharedIssueRowRenderer(t *testing.T) {
 	t.Parallel()
 
 	issue := domain.IssueSummary{ID: "task-manager-ui-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
-	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0, 0, time.Time{}, -1).rows
+	rows := renderColumnRows(Column{Rows: []domain.IssueSummary{issue}, SelectedRow: 0}, 60, 0, 0, time.Time{}, -1, "", false).rows
 	want := issuerow.RenderCompact(issuerow.RenderConfig{Issue: issue, Selected: true, Width: 60, Styled: true})
 	if !slices.Equal(rows, want) {
 		t.Fatalf("expected board row to use shared renderer\nwant: %q\ngot:  %q", want, rows)
@@ -92,10 +92,10 @@ func TestRenderBoardColumnsGolden(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			state := State{
-				DashboardTitle: "Default",
-				FocusedColumn:  0,
-				Width:          tc.width,
-				Height:         tc.height,
+				Placeholder:   "filter issues",
+				FocusedColumn: 0,
+				Width:         tc.width,
+				Height:        tc.height,
 				Columns: []Column{
 					{
 						Title: "Ready",
@@ -148,10 +148,10 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 	t.Parallel()
 
 	state := State{
-		DashboardTitle: "Default",
-		FocusedColumn:  2,
-		Width:          120,
-		Height:         24,
+		Placeholder:   "filter issues",
+		FocusedColumn: 2,
+		Width:         120,
+		Height:        24,
 		Columns: []Column{
 			{Title: "Ready", Rows: []domain.IssueSummary{{ID: "task-manager-ui-yze.4.2", Title: "Implement create update close and comment actions in the app", Type: "task", Status: "open", Priority: 1}}, SelectedRow: -1, Total: 4, TotalIsExact: true},
 			{Title: "In Progress", Rows: []domain.IssueSummary{{ID: "task-manager-ui-yze.4.3", Title: "Implement launcher framework with issue-context interpolation", Type: "feature", Status: "in_progress", Priority: 1}}, SelectedRow: -1, Total: 1, TotalIsExact: true},
@@ -184,7 +184,7 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 			{ID: "tm-1", Title: "Stale Board Issue", Status: "open", Type: "task", Priority: 1},
 		},
 		SelectedRow: -1,
-	}, 80, phase, 0, time.Time{}, -1).rows
+	}, 80, phase, 0, time.Time{}, -1, "", false).rows
 
 	if len(rows) == 0 {
 		t.Fatal("expected at least one rendered row")
@@ -267,10 +267,10 @@ func TestDoneColumnHeaderBadge(t *testing.T) {
 			}
 		}
 		return State{
-			DashboardTitle: "Test",
-			FocusedColumn:  0,
-			Width:          100,
-			Height:         height,
+			Placeholder:   "filter issues",
+			FocusedColumn: 0,
+			Width:         100,
+			Height:        height,
 			Columns: []Column{{
 				Title:        "Done",
 				Rows:         issues,
@@ -346,10 +346,10 @@ func TestRenderLargeColumnScrollWindowGolden(t *testing.T) {
 	}
 
 	state := State{
-		DashboardTitle: "Test",
-		FocusedColumn:  0,
-		Width:          80,
-		Height:         12,
+		Placeholder:   "filter issues",
+		FocusedColumn: 0,
+		Width:         80,
+		Height:        12,
 		Columns: []Column{{
 			Title:        "Ready",
 			Rows:         issues,
@@ -407,10 +407,10 @@ func TestRenderDoneLoadingMore(t *testing.T) {
 	}
 
 	state := State{
-		DashboardTitle: "Default",
-		FocusedColumn:  0,
-		Width:          80,
-		Height:         24,
+		Placeholder:   "filter issues",
+		FocusedColumn: 0,
+		Width:         80,
+		Height:        24,
 		Columns: []Column{{
 			Title:        "Done",
 			Rows:         issues,
@@ -475,10 +475,10 @@ func TestRenderDoneDeepNavigation(t *testing.T) {
 	// rows fit in the window without clipping; this lets the header show the
 	// exact count.
 	state := State{
-		DashboardTitle: "Default",
-		FocusedColumn:  0,
-		Width:          80,
-		Height:         123,
+		Placeholder:   "filter issues",
+		FocusedColumn: 0,
+		Width:         80,
+		Height:        123,
 		Columns: []Column{{
 			Title:        "Done",
 			Rows:         issues,
@@ -543,10 +543,10 @@ func TestRenderErrorRowPinnedAboveScrolledWindow(t *testing.T) {
 	}
 
 	state := State{
-		DashboardTitle: "Test",
-		FocusedColumn:  0,
-		Width:          80,
-		Height:         10,
+		Placeholder:   "filter issues",
+		FocusedColumn: 0,
+		Width:         80,
+		Height:        10,
 		Columns: []Column{{
 			Title:        "Done",
 			Rows:         issues,

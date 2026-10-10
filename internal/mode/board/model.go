@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,6 +15,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
@@ -24,8 +26,8 @@ const (
 	sectionTitleInProgress = "In Progress"
 	sectionTitleDone       = "Done"
 
-	// dashboardTitle is the title shown in the board header.
-	dashboardTitle = "Default"
+	// queryPlaceholder is what the query line says while nothing is typed.
+	queryPlaceholder = "filter issues"
 
 	// doneColumnIndex is the fixed index of the Done column in m.columns.
 	doneColumnIndex = 3
@@ -67,8 +69,12 @@ type loadMoreClosedDoneMsg struct {
 
 // columnData holds the loaded data for one board column after composition.
 type columnData struct {
-	title   string
+	title string
+	// issues is every loaded row; shown is the rows of it the query matches,
+	// and is issues itself while the query is empty. Selection, scroll, hit
+	// test, hover and View read shown. The Done paging reads issues.
 	issues  []domain.IssueSummary
+	shown   []domain.IssueSummary
 	total   int
 	exact   bool
 	loading bool
@@ -115,6 +121,10 @@ type Model struct {
 	inflight bool
 
 	focusedColumn int
+	// queryHome is the column the focus left because the query emptied it, or
+	// -1. The focus returns there when the column has a match again, unless the
+	// operator moved it meanwhile.
+	queryHome int
 	// columnStart is the first column drawn when the terminal is too narrow for
 	// all of them. It moves only when the focus leaves the drawn columns.
 	columnStart int
@@ -124,6 +134,9 @@ type Model struct {
 	scrollOffset map[int]int
 
 	refreshMode mode.RefreshMode
+
+	// query is the filter over all four columns. It outlives a reload.
+	query mode.Query
 
 	// reloadSeq counts the reloads started. A load-more page carries the count
 	// it was dispatched under, so a page from before a reload is never merged
@@ -185,6 +198,7 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		selectedRow:  map[int]int{},
 		scrollOffset: map[int]int{},
 		refreshMode:  mode.RefreshReload,
+		queryHome:    -1,
 	}
 	m.columns = initialLoadingColumns()
 	return m
@@ -237,9 +251,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleMouse(msg)
 
 	case tea.KeyMsg:
+		if consumed, changed := m.query.HandleKey(msg); consumed {
+			if !changed {
+				return nil
+			}
+			return m.queryChanged()
+		}
 		switch {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveLeft, msg):
 			previous := m.focusedColumn
+			m.queryHome = -1
 			if m.focusedColumn > 0 {
 				m.focusedColumn--
 			}
@@ -250,6 +271,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveRight, msg):
 			previous := m.focusedColumn
+			m.queryHome = -1
 			if m.focusedColumn < len(m.columns)-1 {
 				m.focusedColumn++
 			}
@@ -259,19 +281,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return nil
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
-			previous := m.selectedRow[m.focusedColumn]
-			m.moveRow(-1)
-			if m.selectedRow[m.focusedColumn] != previous {
-				return tea.Batch(m.selectionChangedCmd(), m.maybeLoadMoreClosed())
-			}
-			return nil
+			return m.moveRowCmd(-1)
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
-			previous := m.selectedRow[m.focusedColumn]
-			m.moveRow(1)
-			if m.selectedRow[m.focusedColumn] != previous {
-				return tea.Batch(m.selectionChangedCmd(), m.maybeLoadMoreClosed())
-			}
-			return nil
+			return m.moveRowCmd(1)
+		case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
+			return m.moveRowCmd(-m.pageRows())
+		case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
+			return m.moveRowCmd(m.pageRows())
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveHome, msg):
+			return m.moveRowCmd(-len(m.columns[m.focusedColumn].shown))
+		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
+			return m.moveRowCmd(len(m.columns[m.focusedColumn].shown))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
 			if m.currentSelection() == nil {
 				return nil
@@ -279,13 +299,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			return mode.RequestActionCmd(mode.Board, mode.ActionOpenDetail)
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			return m.Reload()
-		case m.keys.Match(config.BoardContext, config.BoardActionLoadMore, msg):
-			// Explicit load-more: dispatch regardless of cursor proximity,
-			// but still respect the in-flight guard and "nothing more" check.
-			if m.focusedColumn != doneColumnIndex {
-				return nil
-			}
-			return m.dispatchLoadMoreClosed()
 		}
 	}
 
@@ -314,11 +327,12 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 	}
 	return uiboard.Column{
 		Title:        col.title,
-		Rows:         col.issues,
+		Rows:         col.shown,
 		SelectedRow:  selectedRow,
 		ScrollOffset: m.scrollOffset[colIdx],
 		Total:        col.total,
 		TotalIsExact: col.exact,
+		Loaded:       len(col.issues),
 		Loading:      col.loading,
 		Error:        errStr,
 		AgeMarkers:   colIdx != doneColumnIndex,
@@ -330,7 +344,7 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 // The scroll window is derived from the height, so a resize that shrinks the
 // terminal shrinks the window under an offset that was valid for the old one:
 // without the clamp the selected row and its selection bar sit below the last
-// drawn row until the operator presses j or k.
+// drawn row until the operator moves the selection.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -486,6 +500,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 		{title: sectionTitleInProgress, issues: cols.InProgress.Issues, total: cols.InProgress.Total, exact: cols.InProgress.TotalIsExact, loading: false},
 		{title: sectionTitleDone, issues: cols.Done.Issues, total: cols.Done.Total, exact: cols.Done.TotalIsExact, loading: false},
 	}
+	m.filterColumns()
 
 	// Ensure selectedRow and scrollOffset maps have an entry for each column.
 	for i := range m.columns {
@@ -550,12 +565,69 @@ func (m *Model) composeFailed(loadErr error) tea.Cmd {
 	return m.selectionChangedCmd()
 }
 
+// filterColumns derives the rows every column draws from its loaded rows. It
+// runs after any change to the loaded rows or to the query.
+func (m *Model) filterColumns() {
+	for i := range m.columns {
+		m.columns[i].shown = m.query.Filter(m.columns[i].issues)
+	}
+}
+
+// ClearQuery empties the query, which the shell asks for on Escape. cleared is
+// false when there was no text, and Escape is then the shell's.
+func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
+	if !m.query.Clear() {
+		return false, nil
+	}
+	cmd = m.queryChanged()
+	m.keepFocusedColumnDrawn()
+	return true, cmd
+}
+
+// queryChanged narrows every column to the new query. A column keeps its
+// selection on the same issue when that issue still matches, and otherwise
+// takes its first match. A focused column left with no match gives the focus
+// to the first column that has one, and takes it back with its first match.
+func (m *Model) queryChanged() tea.Cmd {
+	previous := m.selectedIssueID()
+
+	selected := make([]string, len(m.columns))
+	for i, col := range m.columns {
+		if row := m.selectedRow[i]; row >= 0 && row < len(col.shown) {
+			selected[i] = col.shown[row].ID
+		}
+	}
+	m.filterColumns()
+	for i, col := range m.columns {
+		m.selectedRow[i] = max(0, slices.IndexFunc(col.shown, func(issue domain.IssueSummary) bool {
+			return issue.ID == selected[i]
+		}))
+	}
+	switch {
+	case m.queryHome >= 0 && len(m.columns[m.queryHome].shown) > 0:
+		m.focusedColumn = m.queryHome
+		m.queryHome = -1
+	case len(m.columns[m.focusedColumn].shown) == 0:
+		home := m.focusedColumn
+		m.selectEarliestNonEmptyColumn()
+		if m.queryHome < 0 && m.focusedColumn != home {
+			m.queryHome = home
+		}
+	}
+	m.clampScrollOffsets()
+
+	if m.selectedIssueID() == previous {
+		return nil
+	}
+	return m.selectionChangedCmd()
+}
+
 func (m *Model) currentSelection() *mode.Selection {
 	if len(m.columns) == 0 || m.focusedColumn < 0 || m.focusedColumn >= len(m.columns) {
 		return nil
 	}
 
-	issues := m.columns[m.focusedColumn].issues
+	issues := m.columns[m.focusedColumn].shown
 	if len(issues) == 0 {
 		return nil
 	}
@@ -601,18 +673,18 @@ func (m *Model) settleAfterRefreshLoad(anchor *refreshAnchor) {
 // scrolled offset kept the old one: the renderer clamps the offset to the row
 // count, computes an empty window from it, and the column draws its border and
 // its header count with no rows and no selection bar until the operator
-// presses j or k. Docs mode calls EnsureVisible from its own clamp for the same
+// moves the selection. Docs mode calls EnsureVisible from its own clamp for the same
 // reason.
 func (m *Model) clampScrollOffsets() {
 	capacity := m.sectionItemCapacity()
 	for i := range m.columns {
-		if len(m.columns[i].issues) == 0 {
+		if len(m.columns[i].shown) == 0 {
 			m.scrollOffset[i] = 0
 			continue
 		}
 
 		row := m.selectedRow[i]
-		if row < 0 || row >= len(m.columns[i].issues) {
+		if row < 0 || row >= len(m.columns[i].shown) {
 			row = 0
 		}
 
@@ -665,8 +737,8 @@ func (m *Model) restoreFromAnchor(anchor *refreshAnchor) {
 	}
 
 	m.focusedColumn = textutil.Clamp(anchor.focusedColumn, 0, len(m.columns)-1)
-	if len(m.columns[m.focusedColumn].issues) > 0 {
-		m.selectedRow[m.focusedColumn] = textutil.Clamp(anchor.focusedRow, 0, len(m.columns[m.focusedColumn].issues)-1)
+	if len(m.columns[m.focusedColumn].shown) > 0 {
+		m.selectedRow[m.focusedColumn] = textutil.Clamp(anchor.focusedRow, 0, len(m.columns[m.focusedColumn].shown)-1)
 		m.normalizeSelectionForFocusedColumn()
 		return
 	}
@@ -727,9 +799,11 @@ func (m *Model) continueAnchorSearch() tea.Cmd {
 	return page
 }
 
+// findIssue is where the board draws the issue: its column, and its row among
+// the rows the query matches.
 func (m *Model) findIssue(issueID string) (int, int, bool) {
 	for colIdx, col := range m.columns {
-		for rowIdx, issue := range col.issues {
+		for rowIdx, issue := range col.shown {
 			if issue.ID == issueID {
 				return colIdx, rowIdx, true
 			}
@@ -744,7 +818,7 @@ func (m *Model) selectEarliestNonEmptyColumn() {
 	}
 
 	for idx, col := range m.columns {
-		if len(col.issues) > 0 {
+		if len(col.shown) > 0 {
 			m.focusedColumn = idx
 			m.normalizeSelectionForFocusedColumn()
 			return
@@ -756,7 +830,7 @@ func (m *Model) normalizeSelectionForFocusedColumn() {
 	if len(m.columns) == 0 || m.focusedColumn < 0 || m.focusedColumn >= len(m.columns) {
 		return
 	}
-	issues := m.columns[m.focusedColumn].issues
+	issues := m.columns[m.focusedColumn].shown
 	if len(issues) == 0 {
 		m.selectedRow[m.focusedColumn] = 0
 		return
@@ -776,7 +850,7 @@ func (m *Model) moveRow(delta int) {
 	if len(m.columns) == 0 || m.focusedColumn < 0 || m.focusedColumn >= len(m.columns) {
 		return
 	}
-	issues := m.columns[m.focusedColumn].issues
+	issues := m.columns[m.focusedColumn].shown
 	if len(issues) == 0 {
 		m.selectedRow[m.focusedColumn] = 0
 		return
@@ -797,6 +871,23 @@ func (m *Model) moveRow(delta int) {
 	)
 }
 
+// moveRowCmd moves the selection of the focused column by delta rows, clamped
+// to the column, and reports the new selection when it changed.
+func (m *Model) moveRowCmd(delta int) tea.Cmd {
+	previous := m.selectedRow[m.focusedColumn]
+	m.moveRow(delta)
+	if m.selectedRow[m.focusedColumn] == previous {
+		return nil
+	}
+	return tea.Batch(m.selectionChangedCmd(), m.maybeLoadMoreClosed())
+}
+
+// pageRows is the number of issues a page key moves the selection by: the
+// issues a column shows at the current height.
+func (m *Model) pageRows() int {
+	return max(1, m.sectionItemCapacity()/issuerow.Height)
+}
+
 func (m *Model) selectionChangedCmd() tea.Cmd {
 	selection := m.currentSelection()
 	return func() tea.Msg {
@@ -805,9 +896,13 @@ func (m *Model) selectionChangedCmd() tea.Cmd {
 }
 
 // maybeLoadMoreClosed checks whether the cursor in the Done column is within
-// loadMoreThreshold rows of the end of the loaded slice and, if so, dispatches
+// loadMoreThreshold rows of the end of the rows it draws and, if so, dispatches
 // a background load-more (see dispatchLoadMoreClosed). It is called after every
 // move-row event when the focused column is Done.
+//
+// The count is of the rows the query matches: the filter covers the loaded
+// rows only, so the end of the filtered list is where the next page can add a
+// match.
 //
 // Returns nil (no cmd) when:
 //   - focused column is not Done,
@@ -819,7 +914,7 @@ func (m *Model) maybeLoadMoreClosed() tea.Cmd {
 		return nil
 	}
 	selectedRow := m.selectedRow[m.focusedColumn]
-	remaining := m.doneLoadedCount - selectedRow
+	remaining := len(m.columns[doneColumnIndex].shown) - selectedRow
 	if remaining >= loadMoreThreshold {
 		return nil
 	}
@@ -842,7 +937,7 @@ func (m *Model) dispatchLoadMoreClosed() tea.Cmd {
 	// covers an empty Done column (total == 0, loaded == 0): the initial Dashboard
 	// always sets doneClosedTotal, so 0 means "no closed issues", not "unknown".
 	// The previous `&& doneClosedTotal > 0` clause let the empty case fall through
-	// and dispatch a fresh backend fetch on every cursor move / load-more keypress.
+	// and dispatch a fresh backend fetch on every cursor move.
 	if m.doneLoadedCount >= m.doneClosedTotal {
 		m.logger.Debug("load-more suppressed; all closed issues loaded",
 			"loaded", m.doneLoadedCount,
@@ -924,6 +1019,7 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 			total:  cols.Done.Total,
 			exact:  cols.Done.TotalIsExact,
 		}
+		m.filterColumns()
 	}
 
 	// The merged slice may have shifted the issue under the cursor (dedup/replace

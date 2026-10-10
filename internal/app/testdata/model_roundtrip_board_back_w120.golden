@@ -1,7 +1,7 @@
- stores s · reload r · help ? · quit ctrl+q                                                                          dev
+ search alt+f · stores alt+s · reload alt+r · help alt+h · quit ctrl+c                                               dev
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Board   Docs   Search                                                     Board · Selected: tm-2 (in_progress) · Idle
-Default · cols 1-3/4
+   Board   Docs                                                              Board · Selected: tm-2 (in_progress) · Idle
+❯ filter issues · cols 1-3/4
 ╭─ Not Ready ──────────────────── 1 ─╮  ╭─ Ready ───────────────────────── 1 ─╮  ╭─ In Progress ─────────────────── 1 ─╮
 │  B Blocked now                     │  │  T Ready first                      │  │▌ T In progress one                  │
 │    P0 BLK tm-3                     │  │    P1 OPN tm-1                      │  │▌   P1 IP tm-2                       │
@@ -31,4 +31,4 @@ Default · cols 1-3/4
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
 ╰────────────────────────────────────╯  ╰─────────────────────────────────────╯  ╰─────────────────────────────────────╯
-h/l columns · j/k issues · enter detail · c new · ctrl+space search · ? help · ctrl+q quit
+left/right columns · down/up issues · enter detail · type filter · esc clear · alt+n new · alt+h help · ctrl+c quit

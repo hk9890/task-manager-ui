@@ -30,7 +30,7 @@ func hitTestState(width, height int) State {
 	}
 
 	return State{
-		DashboardTitle: "Default",
+		Placeholder: "filter issues",
 		Columns: []Column{
 			column("aa", 3, time.Hour),
 			// One row a day apart: a divider lands between rows 1 and 2, and a
@@ -76,10 +76,12 @@ func TestHitTestFindsEveryIssueWhereRenderDrewIt(t *testing.T) {
 			drawn:  [][2]int{{1, 0}, {1, 4}},
 		},
 		{
-			name:  "no title line",
+			// The marked words split a title into styled runs; the row stays
+			// where it is.
+			name:  "query active",
 			width: 200, height: 24,
-			mutate: func(s *State) { s.DashboardTitle = "" },
-			drawn:  [][2]int{{0, 0}, {3, 2}},
+			mutate: func(s *State) { s.Query = "issue 0" },
+			drawn:  [][2]int{{0, 0}, {1, 3}, {3, 2}},
 		},
 	}
 
@@ -135,7 +137,7 @@ func TestHitTestReportsNoIssueOffTheRows(t *testing.T) {
 		t.Errorf("HitTest below the last row = %+v, %v; want column 2 with no row", hit, ok)
 	}
 
-	// The gap between two columns, the title line, and outside the frame.
+	// The gap between two columns, the query line, and outside the frame.
 	x, y = testui.FindCell(t, view, "aa-issue-00")
 	gapX, _ := testui.FindCell(t, view, "bb ─")
 	for _, cell := range [][2]int{{gapX - 4, y}, {x, 0}, {x, 24}, {-1, y}, {200, y}} {

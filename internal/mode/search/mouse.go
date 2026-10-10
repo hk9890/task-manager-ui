@@ -3,79 +3,73 @@ package search
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	uisearch "github.com/hk9890/task-manager-ui/internal/ui/search"
+	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 )
 
-// handleMouse is the wheel, the pointer and the left button. The wheel over
-// the results moves the selection. A click focuses the pane it lands on; on a
-// result it also selects it, and a second click opens it.
+// handleMouse is the board's mouse on one column: the wheel moves the
+// selection, one click selects a result and a second opens it.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 	m.pointer = msg.Pointer()
 	if m.pointer == nil {
 		return nil
 	}
 
-	hit, ok := uisearch.HitTest(m.viewState(0), msg.X, msg.Y)
+	hit, ok := uiboard.HitTest(m.viewState(0), msg.X, msg.Y)
 	if !ok {
 		return nil
 	}
 
 	switch msg.Kind {
 	case mode.MouseWheelUp:
-		if hit.Pane == uisearch.FocusResults {
-			return m.selectRow(m.selectedRow - 1)
-		}
+		return m.moveRow(-1)
 	case mode.MouseWheelDown:
-		if hit.Pane == uisearch.FocusResults {
-			return m.selectRow(m.selectedRow + 1)
-		}
+		return m.moveRow(1)
 	case mode.MouseClick:
-		return m.click(hit, msg)
+		target := ""
+		if hit.Row >= 0 {
+			target = m.issues[hit.Row].ID
+		}
+		if m.clicks.Double(target, m.selectedIssueID(), msg) {
+			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+		}
+		if target == "" {
+			return nil
+		}
+		return m.moveRow(hit.Row - m.selectedRow)
 	}
 	return nil
 }
 
-func (m *Model) click(hit uisearch.Hit, msg mode.MouseMsg) tea.Cmd {
-	target := ""
-	if hit.Row >= 0 {
-		target = m.page.Results[hit.Row].Issue.ID
+func (m *Model) selectedIssueID() string {
+	if selection := m.currentSelection(); selection != nil {
+		return selection.Issue.ID
 	}
-	if m.clicks.Double(target, m.selectedIssueID(), msg) {
-		return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
-	}
-
-	// Without results only the query box holds focus, as cycleFocus has it.
-	if hit.Pane != uisearch.FocusQuery && !m.hasResults() {
-		return nil
-	}
-	m.focus = hit.Pane
-	if hit.Pane == uisearch.FocusMetadata {
-		m.ensureMetadataSelection()
-	}
-	if target == "" {
-		return nil
-	}
-	return m.selectRow(hit.Row)
+	return ""
 }
 
-// selectRow moves the result selection to row, as the move keys do.
-func (m *Model) selectRow(row int) tea.Cmd {
-	if !m.moveSelection(row - m.selectedRow) {
-		return nil
+// viewState is the results column as the renderer sees it. View and the hit
+// test build the same value, so a click lands on the row that is drawn under
+// it.
+func (m *Model) viewState(skeletonPhase int) uiboard.State {
+	return uiboard.State{
+		Query:         m.query.Text(),
+		Placeholder:   queryPlaceholder,
+		Search:        true,
+		Columns:       []uiboard.Column{m.uiColumn()},
+		FocusedColumn: 0,
+		Width:         m.width,
+		Height:        m.height,
+		SkeletonPhase: skeletonPhase,
 	}
-	m.selectedDetailLoading = true
-	m.selectedDetail = domain.IssueDetail{}
-	return m.selectionChangedCmd()
 }
 
 // hover is the result under the pointer, or nil.
-func (m *Model) hover(state uisearch.State) *uisearch.Hit {
+func (m *Model) hover(state uiboard.State) *uiboard.Hit {
 	if m.pointer == nil {
 		return nil
 	}
-	hit, ok := uisearch.HitTest(state, m.pointer.X, m.pointer.Y)
+	hit, ok := uiboard.HitTest(state, m.pointer.X, m.pointer.Y)
 	if !ok || hit.Row < 0 {
 		return nil
 	}

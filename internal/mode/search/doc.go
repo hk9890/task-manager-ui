@@ -1,5 +1,4 @@
-// Package search is the search-mode controller: query draft state, result
-// paging, and the async cadence around an in-flight search (a keystroke
-// arriving before the previous query resolves is queued, not dropped).
-// Rendering is internal/ui/search.
+// Package search is the store search controller: one live query the store
+// answers, drawn as a single column through ui/board the way the docs tab is.
+// It is a browse surface to the shell in everything but the tab line.
 package search

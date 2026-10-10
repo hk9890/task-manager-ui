@@ -67,6 +67,7 @@ func TestClampPullsTheWindowBackInsideAShrunkList(t *testing.T) {
 
 	// The list shrinks under the offset, as an auto-refresh that drops rows does.
 	m.issues = m.issues[:6]
+	m.shown = m.issues
 	m.total = 6
 	m.clampSelection()
 

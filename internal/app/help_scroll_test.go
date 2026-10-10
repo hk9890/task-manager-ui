@@ -23,7 +23,7 @@ func newHelpShell(t *testing.T, cfg config.Model, height int) Model {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: height})
-	if m = pressKey(t, m, "?"); !m.showHelp {
+	if m = pressKey(t, m, "alt+h"); !m.showHelp {
 		t.Fatal("fixture: the help overlay did not open")
 	}
 	return m
@@ -43,14 +43,14 @@ func TestTheDetailScrollKeysScrollAClippedHelpOverlay(t *testing.T) {
 	}
 	topLines := helpLines(m)
 
-	down := pressKey(t, pressKey(t, pressKey(t, m, "j"), "j"), "j")
+	down := pressKey(t, pressKey(t, pressKey(t, m, "down"), "down"), "down")
 	if !down.showHelp || !strings.Contains(down.View(), "earlier lines") {
-		t.Fatalf("three presses of j did not scroll the help overlay:\n%s", down.View())
+		t.Fatalf("three presses of down did not scroll the help overlay:\n%s", down.View())
 	}
 	// Row 0 is the border and row 1 the indicator, so row 2 is the line that
 	// stood three rows lower.
 	if got := helpLines(down)[2]; got != topLines[5] {
-		t.Fatalf("three presses of j moved the text to %q, want %q", got, topLines[5])
+		t.Fatalf("three presses of down moved the text to %q, want %q", got, topLines[5])
 	}
 	if up := send(t, down, tea.KeyMsg{Type: tea.KeyUp}); helpLines(up)[2] != topLines[4] {
 		t.Fatal("up did not scroll the help overlay back one line")
@@ -59,7 +59,7 @@ func TestTheDetailScrollKeysScrollAClippedHelpOverlay(t *testing.T) {
 	page := send(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
 	byLine := m
 	for range m.help.PageLines() {
-		byLine = pressKey(t, byLine, "j")
+		byLine = pressKey(t, byLine, "down")
 	}
 	if page.View() == top || page.View() != byLine.View() {
 		t.Fatalf("pgdown did not move the help overlay one page:\n%s", page.View())
@@ -80,14 +80,14 @@ func TestTheDetailScrollKeysScrollAClippedHelpOverlay(t *testing.T) {
 
 	// Closing and reopening starts at the top, by either way out.
 	for name, closeKey := range map[string]tea.KeyMsg{
-		"help key": {Type: tea.KeyRunes, Runes: []rune("?")},
+		"help key": testKey("alt+h"),
 		"escape":   {Type: tea.KeyEsc},
 	} {
 		closed := send(t, end, closeKey)
 		if closed.showHelp {
 			t.Fatalf("%s did not close a scrolled help overlay", name)
 		}
-		if reopened := pressKey(t, closed, "?"); reopened.View() != top {
+		if reopened := pressKey(t, closed, "alt+h"); reopened.View() != top {
 			t.Fatalf("the help overlay closed with the %s reopened where it was scrolled to", name)
 		}
 	}
@@ -98,15 +98,15 @@ func TestTheDetailScrollKeysScrollAClippedHelpOverlay(t *testing.T) {
 func TestTheHelpOverlayScrollsOnReboundDetailKeys(t *testing.T) {
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
-		Detail: map[string][]string{config.DetailActionScrollDown: {"z"}},
+		Detail: map[string][]string{config.DetailActionScrollDown: {"alt+z"}},
 	})
 	m := newHelpShell(t, cfg, 16)
 	top := m.View()
 
-	if still := pressKey(t, m, "j"); still.View() != top || !still.showHelp {
+	if still := pressKey(t, m, "down"); still.View() != top || !still.showHelp {
 		t.Fatal("a key no longer bound to detail scroll_down scrolled or closed the help overlay")
 	}
-	if down := pressKey(t, m, "z"); !strings.Contains(down.View(), "earlier lines") {
+	if down := pressKey(t, m, "alt+z"); !strings.Contains(down.View(), "earlier lines") {
 		t.Fatalf("the rebound scroll_down key did not scroll the help overlay:\n%s", down.View())
 	}
 }
@@ -120,7 +120,7 @@ func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
 		t.Fatalf("fixture: the help overlay is clipped at this height:\n%s", whole)
 	}
 	for _, key := range []tea.KeyMsg{
-		{Type: tea.KeyRunes, Runes: []rune("j")}, {Type: tea.KeyRunes, Runes: []rune("k")},
+		{Type: tea.KeyDown}, {Type: tea.KeyUp},
 		{Type: tea.KeyPgDown}, {Type: tea.KeyPgUp}, {Type: tea.KeyEnd}, {Type: tea.KeyHome},
 	} {
 		if m = send(t, m, key); m.View() != whole || !m.showHelp {

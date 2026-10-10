@@ -39,7 +39,7 @@ func TestHelpModal_RenderedFrameHasClosingBottomBorder(t *testing.T) {
 			m := mustNewModel(t, services)
 			m = applyMessages(t, m, runBatch(m.Init()))
 			m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: size.width, Height: size.height}})
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}})
+			m = applyMessages(t, m, []tea.Msg{testKey("alt+h")})
 
 			view := m.View()
 			lines := strings.Split(view, "\n")
@@ -84,7 +84,7 @@ func TestHelpModal_OverflowIndicatorAppearsInsideFrame(t *testing.T) {
 	// height=20: far smaller than the natural help-modal height (~35 lines),
 	// so the content is guaranteed to overflow and the indicator must appear.
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 120, Height: 20}})
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}})
+	m = applyMessages(t, m, []tea.Msg{testKey("alt+h")})
 
 	view := m.View()
 	lines := strings.Split(view, "\n")

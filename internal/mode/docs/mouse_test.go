@@ -25,6 +25,7 @@ func mouseDocs(t *testing.T) *Model {
 		{ID: "tm-2", Title: "doc-two", Type: "doc", Status: "open"},
 		{ID: "tm-3", Title: "doc-three", Type: "doc", Status: "open"},
 	}
+	m.shown = m.issues
 	m.total = len(m.issues)
 	m.SetSize(100, 24)
 	return m

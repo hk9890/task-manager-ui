@@ -47,18 +47,18 @@ mise run ci          # the merge gate; see What the tools enforce
    [CONFIGURATION.md](CONFIGURATION.md#writing-a-launcher-template-safely) has the
    forbidden shapes and the safe form a config author writes.
 
-7. **Create vs edit ownership boundary is explicit.** Two shell bindings edit the current selection, from any browse tab or detail, and the overlap is deliberate:
+7. **Create vs edit ownership boundary is explicit.** Two shell bindings edit the current selection, from any browse tab, the store search or detail, and the overlap is deliberate:
 
    | Binding | Default key | Path | Fields |
    |---|---|---|---|
-   | `edit_issue` | `e` | the marker-based document flow of rule 5 (`IssueEditDocument` in `internal/domain/issue_edit_document.go`) | `title`, `description`, `status`, `type`, `priority`, `assignee`, `labels` |
-   | `update_issue` | `u` | the in-TUI modal (`mutationModal`, case `mutationUpdate`, in `internal/app/mutation_dialog.go`) | `title`, `status`, `type`, `priority`, `assignee`, `labels` |
+   | `edit_issue` | `alt+e` | the marker-based document flow of rule 5 (`IssueEditDocument` in `internal/domain/issue_edit_document.go`) | `title`, `description`, `status`, `type`, `priority`, `assignee`, `labels` |
+   | `update_issue` | `alt+u` | the in-TUI modal (`mutationModal`, case `mutationUpdate`, in `internal/app/mutation_dialog.go`) | `title`, `status`, `type`, `priority`, `assignee`, `labels` |
 
    - `edit_issue` is the full path and the only path for `description`.
    - `update_issue` is the fast path for metadata.
    - Add a new editable field to the `edit_issue` document always. Add it to the `update_issue` modal too when it is single-line metadata; a multi-line field stays on `edit_issue` alone.
 
-   Issue creation (`create_issue`, default `c`) stays on its own modal and is not coupled to the editor document contract.
+   Issue creation (`create_issue`, default `alt+n`) stays on its own modal and is not coupled to the editor document contract.
 
 8. **App shell owns mode lifecycle and cross-mode coordination.** `internal/app` owns active-mode switching, selection ownership by mode, and detail loading/reloading decisions. `internal/mode/*` packages own feature-local state and emit shell contracts (`SelectionChangedMsg`, `ActionRequestMsg`) instead of reaching across package boundaries.
 

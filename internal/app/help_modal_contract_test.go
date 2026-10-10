@@ -32,7 +32,7 @@ func openHelpModal(t *testing.T) Model {
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Press '?' from board context to open help.
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}})
+	m = applyMessages(t, m, []tea.Msg{testKey("alt+h")})
 	if !m.showHelp {
 		t.Fatalf("setup: expected showHelp=true after '?'; got false")
 	}
@@ -46,7 +46,7 @@ func TestHelpModal_QuestionMarkToggleClosesModal(t *testing.T) {
 	m := openHelpModal(t)
 
 	// Press '?' again — must toggle the modal closed.
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}})
+	m = applyMessages(t, m, []tea.Msg{testKey("alt+h")})
 	if m.showHelp {
 		t.Fatalf("expected showHelp=false after second '?'; modal did not toggle closed")
 	}

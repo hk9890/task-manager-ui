@@ -80,13 +80,12 @@ go test ./internal/repository/taskmgr/... -v
 
 ## Render-regression guards
 
-Four packages guard the artifacts a passing state assertion still ships — frame stacking, doubled
+Three packages guard the artifacts a passing state assertion still ships — frame stacking, doubled
 column headers, and log output bleeding into a rendered frame:
 
 | Package | Guards against |
 |---|---|
 | `internal/mode/board/render_regression_test.go` | frame stacking on the board — asserts the border count per rendered frame |
-| `internal/mode/search/render_regression_test.go` | frame stacking in search mode |
 | `internal/logging/render_regression_test.go` | log output bleeding into a rendered frame |
 | `internal/app/render_regression_test.go` | doubled column headers and frame stacking at app-composition level |
 
@@ -106,7 +105,7 @@ flows — needs more than a green suite.
 quick proof while implementing:
 
 ```bash
-go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsSearchAndActions|TestSearchModeReusableScenarioHelpersCoverTypingFragileAndClear|TestModelReusableBoardSearchDetailScenarioCoversTypingClearScrollAndBack|TestModelStartupBoardLayoutSanityAndNoRuntimeErrors' -v
+go test ./internal/testing/ui ./internal/mode/search ./internal/app -run 'TestAssertionHelpersCoverStartupErrorsAndActions|TestEveryEditSearchesTheStoreForTheQuery|TestModelReusableBoardDetailScenarioCoversScrollAndBack|TestQueriesSurviveTabSwitchDetailRoundTripAndAutoRefresh|TestModelStartupBoardLayoutSanityAndNoRuntimeErrors' -v
 ```
 
 **Then the real app.** A user-facing change is not verified until it has been driven in the built
@@ -139,8 +138,8 @@ Shared helpers live under `internal/testing/ui`:
   rendered layout call `AssertMatchesGoldenNormalized(tb, []byte(m.View()), name)` instead.
 - `WaitForOutputContainsAll`: waits for real runtime output containing required UI snippets before assertions.
 
-Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `BoardToSearchKeys` /
-`OpenDetailKeys` / `DetailBackKeys` / `SearchTypeTextKeys` instead of literal key structs, and
+Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `OpenDetailKeys` /
+`DetailBackKeys` / `DetailScrollKeys` instead of literal key structs, and
 `DrainCmd` to run a `tea.Cmd` to completion with nested `tea.BatchMsg` values flattened. Draining is
 not always what you want: an open modal schedules a repeating tick, so step those flows by hand.
 
@@ -151,7 +150,7 @@ Golden file convention:
 
 - Store golden files under the tested package's `testdata/` directory.
 - Keep one scenario per golden for readable diffs.
-- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `search_results_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test.
+- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `board_columns_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test.
 - When the width comes from a layout constant rather than a literal, use a symbolic suffix — `_w3col`, `_w2col`, `_w3col_less1` — so the filename cannot go stale if the constant moves.
 
 ### Regenerating goldens

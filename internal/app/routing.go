@@ -6,21 +6,28 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 )
 
-// browseTab pairs a browse mode with its controller.
+// browseSurfaces lists every surface that satisfies mode.Browse: the tabs, and
+// the store search, which is a browse surface in everything but the tab line.
+func browseSurfaces() []mode.ID {
+	return append(append([]mode.ID(nil), mode.BrowseModes...), mode.Search)
+}
+
+// browseTab pairs a browse surface with its controller.
 type browseTab struct {
 	ID  mode.ID
 	Tab mode.Browse
 }
 
-// browseTabs returns the browse controllers in BrowseModes order. Registering a
+// browseTabs returns the browse controllers in browseSurfaces order. Registering a
 // tab is what wires it into forwarding, sizing, loading state and auto-refresh
 // at once; before the mode.Browse interface existed the shell hand-wrote each of
 // those once per tab, at eight sites in all.
 //
 // A tab the shell has not constructed yet is skipped rather than dereferenced.
 func (m *Model) browseTabs() []browseTab {
-	out := make([]browseTab, 0, len(mode.BrowseModes))
-	for _, id := range mode.BrowseModes {
+	surfaces := browseSurfaces()
+	out := make([]browseTab, 0, len(surfaces))
+	for _, id := range surfaces {
 		if tab := m.browseController(id); tab != nil {
 			out = append(out, browseTab{ID: id, Tab: tab})
 		}
@@ -53,8 +60,9 @@ func (m *Model) browseController(id mode.ID) mode.Browse {
 }
 
 func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
-	cmds := make([]tea.Cmd, 0, len(mode.BrowseModes))
-	for _, entry := range m.browseTabs() {
+	tabs := m.browseTabs()
+	cmds := make([]tea.Cmd, 0, len(tabs))
+	for _, entry := range tabs {
 		if !m.shouldForwardTo(entry.ID, msg) {
 			continue
 		}
@@ -88,7 +96,7 @@ func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
 }
 
 // applyModeCycle switches the active mode to target while preserving the
-// invariant that lastBrowse is always a browse mode (Board or Search) —
+// invariant that lastBrowse is always a browse mode (Board or Docs) —
 // currentSelection() and the Escape handler rely on it. Entering a browse mode
 // sets lastBrowse to it; entering Detail captures the browse mode we came from
 // (mirroring the explicit Detail handler) and otherwise leaves lastBrowse
@@ -98,12 +106,15 @@ func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
 // Escape (active = lastBrowse) into a no-op.
 // Cycling also drops any drill-in: the tab strip returns the operator to a
 // browse row, and that row is the selection every shell action then uses.
+// The store search is not a tab, so it is never a target and never becomes
+// lastBrowse; cycling to a tab leaves it (searchFrom).
 func (m *Model) applyModeCycle(target mode.ID) {
 	m.clearDrillSelection()
 	switch {
 	case mode.IsBrowse(target):
 		m.active = target
 		m.lastBrowse = target
+		m.searchFrom = ""
 	case target == mode.Detail:
 		if mode.IsBrowse(m.active) {
 			m.lastBrowse = m.active
@@ -114,9 +125,10 @@ func (m *Model) applyModeCycle(target mode.ID) {
 	}
 }
 
-// nextMode and prevMode cycle the header tab strip — Board, Docs, Search — in
+// nextMode and prevMode cycle the header tab strip — Board, Docs — in
 // mode.BrowseModes order. Detail is not a tab: it is a drill-in, so cycling
 // from it steps off the tab lastBrowse points at rather than staying in Detail.
+// The store search is not a tab either, and cycling from it does the same.
 func nextMode(current mode.ID, lastBrowse mode.ID) mode.ID {
 	return cycleBrowse(current, lastBrowse, 1)
 }

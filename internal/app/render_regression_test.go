@@ -255,12 +255,12 @@ func TestModelDetailModeRendersConfigurableFooterHelp(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	next, cmd := m.Update(testKey("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	view := m.View()
-	if !strings.Contains(view, "j/k scroll") || !strings.Contains(view, "home/end bounds") {
+	if !strings.Contains(view, "down/up scroll") || !strings.Contains(view, "home/end bounds") {
 		t.Fatalf("expected detail footer help to include configurable detail bindings, got:\n%s", view)
 	}
 }
@@ -306,8 +306,8 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	if strings.Contains(view, "Title:") || strings.Contains(view, "Description:") {
 		t.Fatalf("expected full detail fields to stay in dedicated detail mode, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Default") {
-		t.Fatalf("expected board header in wide view, got:\n%s", view)
+	if !strings.Contains(view, "filter issues") {
+		t.Fatalf("expected the board query line in wide view, got:\n%s", view)
 	}
 	if !strings.Contains(view, "Implement create update") {
 		t.Fatalf("expected readable board row title text in wide view, got:\n%s", view)
@@ -356,8 +356,8 @@ func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *t
 	if strings.Contains(footer, "\n") {
 		t.Fatalf("expected single-line footer, got:\n%s", footer)
 	}
-	if !strings.Contains(footer, "ctrl+space search") {
-		t.Fatalf("expected board footer help with ctrl+space hint, got:\n%s", footer)
+	if !strings.Contains(footer, "alt+n new") {
+		t.Fatalf("expected board footer help with the create hint, got:\n%s", footer)
 	}
 }
 
@@ -463,10 +463,10 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 		t.Fatal("expected non-empty board body rendering")
 	}
 
-	m.active = mode.Search
+	m.active = mode.Docs
 	body := m.renderBody()
-	if !strings.Contains(body, "Search") {
-		t.Fatalf("expected active search view rendering, got: %q", body)
+	if !strings.Contains(body, "Docs") {
+		t.Fatalf("expected active docs view rendering, got: %q", body)
 	}
 
 	longLines := make([]string, 0, 80)

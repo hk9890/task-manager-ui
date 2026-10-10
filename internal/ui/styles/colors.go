@@ -63,12 +63,17 @@ var (
 	ShellRuleColor lipgloss.Color
 	// ShellActionColor is a menu-bar button's label.
 	ShellActionColor lipgloss.Color
+	// QueryAccentColor is the prompt and the cursor of a query line.
+	QueryAccentColor lipgloss.Color
+	// MatchTextColor is the text of a row that a query word matched.
+	MatchTextColor lipgloss.Color
 )
 
 // The styles built from the roles. Apply rebuilds them with the roles.
 var (
 	SelectionIndicatorStyle     lipgloss.Style
 	IssueIDMutedStyle           lipgloss.Style
+	MatchTextStyle              lipgloss.Style
 	IssuePriorityP0Style        lipgloss.Style
 	IssuePriorityP1Style        lipgloss.Style
 	IssuePriorityP2Style        lipgloss.Style
@@ -104,6 +109,7 @@ func buildStyles() {
 
 	SelectionIndicatorStyle = fg(BorderHighlightFocusColor).Bold(true)
 	IssueIDMutedStyle = fg(TextSecondaryColor)
+	MatchTextStyle = fg(MatchTextColor).Bold(true)
 
 	IssuePriorityP0Style = fg(IssuePriorityP0Color).Bold(true)
 	IssuePriorityP1Style = fg(IssuePriorityP1Color)

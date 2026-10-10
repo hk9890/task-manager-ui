@@ -167,6 +167,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 		{title: sectionTitleInProgress},
 		{title: sectionTitleDone, issues: priorIssues, total: totalClosed, exact: false},
 	}
+	m.filterColumns()
 	m.doneLoadedCount = priorLoaded
 	m.doneClosedTotal = totalClosed
 	m.focusedColumn = doneColumnIndex

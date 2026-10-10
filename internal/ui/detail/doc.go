@@ -3,7 +3,7 @@
 // arranges them (three-pane when wide, stacked below InspectorTwoColumnMinWidth).
 //
 // The boundary is deliberate — compact row and list rendering belongs to
-// ui/board, ui/search, and ui/shared/issuerow, not here. Do not add list
+// ui/board and ui/shared/issuerow, not here. Do not add list
 // rendering to this package.
 //
 // It renders; it owns no state. The controller that drives it is

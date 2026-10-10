@@ -1,10 +1,9 @@
 package app
 
-// Mode switching and in-mode navigation: board selection, search entry and
-// focus, tab behaviour, and the configured keybindings that drive them.
+// Mode switching and in-mode navigation: board selection, tab behaviour, and
+// the configured keybindings that drive them.
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -89,323 +88,7 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 	}
 }
 
-func TestModelSearchTextEntryIsNotHijackedByShellHotkeys(t *testing.T) {
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m.width = 200
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected active mode search before typing, got %s", m.active)
-	}
-
-	mark := gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	if m.active != mode.Search {
-		t.Fatalf("expected active mode to stay search while typing, got %s", m.active)
-	}
-	if gw.CallCountSince(mark, fakes.MethodSearch) != 0 {
-		t.Fatalf("expected typing in search query not to run search until enter, got %#v", gw.Calls())
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if got := m.search.SessionState().AppliedQuery; got != "b" {
-		t.Fatalf("expected applied search query %q, got %q", "b", got)
-	}
-}
-
-func TestModelSearchModeRendersRepresentativeErrorAndEmptyStates(t *testing.T) {
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	// Enter search mode.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	// Trigger a repository-backed search error.
-	gw.SetError(fakes.MethodSearch, errors.New("search boom"))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	if view := m.View(); !strings.Contains(view, "search boom") {
-		t.Fatalf("expected search error state in shell view, got:\n%s", view)
-	}
-
-	// Clear error and run another non-empty query that returns no results.
-	gw.SetError(fakes.MethodSearch, nil)
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	if view := m.View(); !strings.Contains(view, "No matches for \"xy\".") {
-		t.Fatalf("expected search empty state in shell view, got:\n%s", view)
-	}
-
-	if got := firstSelectionID(m, mode.Search); got != "" {
-		t.Fatalf("expected no search selection in empty state, got %q", got)
-	}
-}
-
-func TestModelCtrlSpaceTogglesSearchAndEscReturnsBoard(t *testing.T) {
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected ctrl+space equivalent to enter search, got %s", m.active)
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Board {
-		t.Fatalf("expected esc from search to return to board, got %s", m.active)
-	}
-	if m.lastBrowse != mode.Board {
-		t.Fatalf("expected lastBrowse to return to board, got %s", m.lastBrowse)
-	}
-}
-
-func TestModelSearchEscFromResultsFocusReturnsToBoard(t *testing.T) {
-	// Regression: Esc must trigger shell escape (return to board) even when
-	// search focus is on Results / Content / Metadata, not just on Query.
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-	// tm-3 seeded so empty-query search returns it in the results panel.
-	seedReady(gw, "tm-3", "Search result", "task", 1)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	// Enter search mode.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected search active after ctrl+space, got %s", m.active)
-	}
-
-	// Press down arrow to move search focus from Query to Results.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	// Confirm search focus is now on Results (CapturesShellKey must return false for Esc).
-	if m.search.CapturesShellKey(tea.KeyMsg{Type: tea.KeyEsc}) {
-		t.Fatal("expected CapturesShellKey to return false for Esc when focus is Results — shell escape must be reachable")
-	}
-
-	// Press Esc — shell escape handler should fire and return to board.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	if m.active != mode.Board {
-		t.Fatalf("expected Esc from Results focus to return to board, got %s", m.active)
-	}
-	if m.lastBrowse != mode.Board {
-		t.Fatalf("expected lastBrowse to be board after Esc from search Results, got %s", m.lastBrowse)
-	}
-}
-
-func TestModelSearchHeaderUsesPageMetadataAndDraftQueryState(t *testing.T) {
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-	// Seed tm-9 with "x" in title so the query "x" matches it.
-	seedReady(gw, "tm-9", "x Search result", "task", 1)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	header := m.renderHeader()
-	// Memory repo returns 1 real match; searchResultCount falls back to len(Results).
-	if !strings.Contains(header, "Search: 1 results") {
-		t.Fatalf("expected search header to reflect result count, got:\n%s", header)
-	}
-	if !strings.Contains(header, "Selected: tm-9 (open)") {
-		t.Fatalf("expected header to keep active search selection, got:\n%s", header)
-	}
-	if got := m.search.SessionState(); got.DraftQuery != "xy" || got.AppliedQuery != "x" {
-		t.Fatalf("expected app shell to preserve draft/applied query split, got %#v", got)
-	}
-}
-
-func TestModelSearchPreviewSyncKeepsLastLoadedPreviewDuringReloadAndError(t *testing.T) {
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedInProgress(gw, "tm-2", "In progress", "task", 2)
-	// tm-9 with "x" in title so query "x" finds it.
-	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1}, Description: "cached detail"})
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	if m.detail.Detail.Summary.ID != "tm-9" {
-		t.Fatalf("expected search selection detail to load, got %#v", m.detail.Detail)
-	}
-	if got := m.search.SessionState(); len(got.Page.Results) != 1 {
-		t.Fatalf("expected search page state present before reload, got %#v", got)
-	}
-
-	cmd = m.search.AutoRefresh()
-	if cmd == nil {
-		t.Fatal("expected search auto-refresh command")
-	}
-	if session := m.search.SessionState(); !session.Loading || !session.Reloading {
-		t.Fatalf("expected search session to mark reload in flight, got %#v", session)
-	}
-	gw.SetError(fakes.MethodSearch, errors.New("refresh boom"))
-
-	m = applyMessages(t, m, runBatch(cmd))
-	if got := m.search.SessionState(); got.Error != "refresh boom" || len(got.Page.Results) != 1 {
-		t.Fatalf("expected last search page retained after refresh failure, got %#v", got)
-	}
-	if !strings.Contains(m.View(), "cached detail") {
-		t.Fatalf("expected cached preview detail retained after refresh failure, got:\n%s", m.View())
-	}
-	if !strings.Contains(m.View(), "refresh boom") || !strings.Contains(m.View(), "Search result") || !strings.Contains(m.View(), "failed") || !strings.Contains(m.View(), "x") {
-		t.Fatalf("expected shell view to preserve search context on refresh failure, got:\n%s", m.View())
-	}
-}
-
-// TestSearchPreviewIsSyncedFromUpdateNotFromView pins Core Architectural Rule 9:
-// selection/detail sync is event-driven, not polled. renderBody used to call
-// syncSearchPreviewDetailState, so View() mutated model state and only stayed
-// correct because the always-on spinner tick re-rendered ten times a second.
-func TestSearchPreviewIsSyncedFromUpdateNotFromView(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
-	seedIssueDetail(gw, domain.IssueDetail{
-		Summary:     domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1},
-		Description: "detail from the message path",
-	})
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlAt})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	// The preview is populated by the message path alone — no render needed.
-	if !strings.Contains(m.View(), "detail from the message path") {
-		t.Fatalf("the search preview was not synced by Update, got:\n%s", m.View())
-	}
-
-	// A render must not move it. Change the shell's detail behind View's back:
-	// a pure renderer leaves the preview exactly as the last message left it.
-	m.detail.Detail = domain.IssueDetail{
-		Summary:     domain.IssueSummary{ID: "tm-9", Title: "x Search result", Status: "open", Priority: 1},
-		Description: "detail smuggled in through View",
-	}
-	if strings.Contains(m.View(), "detail smuggled in through View") {
-		t.Fatal("View() mutated the search preview state")
-	}
-}
-
-// tab and shift+tab drive the header tab strip: Board, Docs, Search, in
+// tab and shift+tab drive the header tab strip: Board, Docs, in
 // mode.BrowseModes order. Detail is not a tab, so cycling out of it steps onto
 // the strip rather than staying put.
 func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
@@ -432,7 +115,7 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 	tab := tea.KeyMsg{Type: tea.KeyTab}
 	shiftTab := tea.KeyMsg{Type: tea.KeyShiftTab}
 
-	for _, want := range []mode.ID{mode.Docs, mode.Search, mode.Board} {
+	for _, want := range []mode.ID{mode.Docs, mode.Board} {
 		m = press(m, tab)
 		if m.active != want {
 			t.Fatalf("expected tab to move to %s, got %s", want, m.active)
@@ -442,7 +125,7 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 		}
 	}
 
-	for _, want := range []mode.ID{mode.Search, mode.Docs, mode.Board} {
+	for _, want := range []mode.ID{mode.Docs, mode.Board} {
 		m = press(m, shiftTab)
 		if m.active != want {
 			t.Fatalf("expected shift+tab to move to %s, got %s", want, m.active)
@@ -450,9 +133,9 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 	}
 
 	// From Detail the cycle resumes from the tab we drilled in from.
-	m = press(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = press(m, testKey("enter"))
 	if m.active != mode.Detail {
-		t.Fatalf("expected detail mode after hotkey 3, got %s", m.active)
+		t.Fatalf("expected detail mode after enter, got %s", m.active)
 	}
 	m = press(m, tab)
 	if m.active != mode.Docs {
@@ -525,14 +208,12 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 	cfg := config.Default()
 	cfg.KeyBindings = config.MergeKeyBindings(cfg.KeyBindings, &config.KeyBindingOverride{
 		Shell: map[string][]string{
-			config.ShellActionHelp:         {"F1"},
-			config.ShellActionModeSearch:   {"/"},
-			config.ShellActionToggleSearch: {"ctrl+s"},
-			config.ShellActionQuit:         {"ctrl+q"},
+			config.ShellActionHelp: {"F1"},
+			config.ShellActionQuit: {"ctrl+q"},
 		},
 		Board: map[string][]string{
-			config.BoardActionMoveRight: {"d"},
-			config.BoardActionMoveDown:  {"s"},
+			config.BoardActionMoveRight: {"alt+d"},
+			config.BoardActionMoveDown:  {"alt+s"},
 		},
 	})
 
@@ -544,32 +225,18 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	if footer := m.renderFooter(); !strings.Contains(footer, "ctrl+s search") || !strings.Contains(footer, "ctrl+q quit") {
+	if footer := m.renderFooter(); !strings.Contains(footer, "f1 help") || !strings.Contains(footer, "ctrl+q quit") {
 		t.Fatalf("expected footer to reflect configured bindings, got:\n%s", footer)
 	}
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Search {
-		t.Fatalf("expected configured mode_search key to switch to search, got %s", m.active)
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Board {
-		t.Fatalf("expected configured toggle_search key to return to board, got %s", m.active)
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	next, cmd := m.Update(testKey("alt+d"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if got := firstSelectionID(m, mode.Board); got != "tm-2" {
 		t.Fatalf("expected configured board move-right key to select tm-2, got %q", got)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	next, _ = m.Update(testKey("alt+h"))
 	m = next.(Model)
 	if m.showHelp {
 		t.Fatal("expected default help key to stop working after override")
@@ -607,8 +274,7 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 }
 
 // TestModeCycleDirections asserts that nextMode and prevMode traverse the
-// header tab strip — mode.BrowseModes: Board, Docs, Search — in opposite
-// directions, wrapping at both ends.
+// header tab strip — mode.BrowseModes: Board, Docs — wrapping at both ends.
 //
 // Detail is not a tab. Cycling from it resumes from lastBrowse, so it steps
 // onto the strip instead of staying in Detail.
@@ -621,15 +287,12 @@ func TestModeCycleDirections(t *testing.T) {
 		if got := nextMode(mode.Board, mode.Board); got != mode.Docs {
 			t.Errorf("nextMode(Board, Board) = %s; want Docs", got)
 		}
-		if got := nextMode(mode.Docs, mode.Docs); got != mode.Search {
-			t.Errorf("nextMode(Docs, Docs) = %s; want Search", got)
-		}
-		if got := nextMode(mode.Search, mode.Search); got != mode.Board {
-			t.Errorf("nextMode(Search, Search) = %s; want Board", got)
+		if got := nextMode(mode.Docs, mode.Docs); got != mode.Board {
+			t.Errorf("nextMode(Docs, Docs) = %s; want Board", got)
 		}
 		// From Detail the cycle resumes from lastBrowse.
-		if got := nextMode(mode.Detail, mode.Search); got != mode.Board {
-			t.Errorf("nextMode(Detail, Search) = %s; want Board", got)
+		if got := nextMode(mode.Detail, mode.Docs); got != mode.Board {
+			t.Errorf("nextMode(Detail, Docs) = %s; want Board", got)
 		}
 		if got := nextMode(mode.Detail, mode.Board); got != mode.Docs {
 			t.Errorf("nextMode(Detail, Board) = %s; want Docs", got)
@@ -639,17 +302,14 @@ func TestModeCycleDirections(t *testing.T) {
 	t.Run("prevMode_backward", func(t *testing.T) {
 		t.Parallel()
 
-		if got := prevMode(mode.Board, mode.Board); got != mode.Search {
-			t.Errorf("prevMode(Board, Board) = %s; want Search", got)
-		}
-		if got := prevMode(mode.Search, mode.Search); got != mode.Docs {
-			t.Errorf("prevMode(Search, Search) = %s; want Docs", got)
+		if got := prevMode(mode.Board, mode.Board); got != mode.Docs {
+			t.Errorf("prevMode(Board, Board) = %s; want Docs", got)
 		}
 		if got := prevMode(mode.Docs, mode.Docs); got != mode.Board {
 			t.Errorf("prevMode(Docs, Docs) = %s; want Board", got)
 		}
-		if got := prevMode(mode.Detail, mode.Board); got != mode.Search {
-			t.Errorf("prevMode(Detail, Board) = %s; want Search", got)
+		if got := prevMode(mode.Detail, mode.Board); got != mode.Docs {
+			t.Errorf("prevMode(Detail, Board) = %s; want Docs", got)
 		}
 	})
 
@@ -659,10 +319,6 @@ func TestModeCycleDirections(t *testing.T) {
 		for _, tab := range mode.BrowseModes {
 			if got := prevMode(nextMode(tab, tab), tab); got != tab {
 				t.Errorf("prevMode(nextMode(%s)) = %s; want %s", tab, got, tab)
-			}
-			if nextMode(tab, tab) == prevMode(tab, tab) {
-				t.Errorf("nextMode(%s) and prevMode(%s) both returned %s; they must differ",
-					tab, tab, nextMode(tab, tab))
 			}
 		}
 	})
@@ -675,4 +331,71 @@ func TestModeCycleDirections(t *testing.T) {
 			t.Errorf("nextMode(Detail, Detail) = %s; want Docs (fallback to Board, then forward)", got)
 		}
 	})
+}
+
+// TestBarePrintableKeysTypeIntoTheFilterAndRunNoAction: on a browse tab a bare
+// letter, digit or sign is typed into the query and runs no action: it changes
+// no surface and opens no overlay. The store is read only for the detail of a
+// selection the filter moved.
+func TestBarePrintableKeysTypeIntoTheFilterAndRunNoAction(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-2", "In progress", "task", 2)
+	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-9", Title: "Auth redesign", Status: "open", Type: "doc", Priority: 2})
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+	m := applyMessages(t, mustNewModel(t, services), nil)
+	m = applyMessages(t, m, runBatch(m.Init()))
+
+	for _, tab := range []mode.ID{mode.Board, mode.Docs} {
+		if m.active != tab {
+			m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+		}
+		if m.active != tab {
+			t.Fatalf("fixture: on %q, want %q", m.active, tab)
+		}
+
+		for _, r := range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?/>" {
+			mark := len(gw.Calls())
+			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}})
+			if m.active != tab || m.overlayOpen() {
+				t.Errorf("%q on %s: active %q, overlay %v", string(r), tab, m.active, m.overlayOpen())
+			}
+			if !strings.Contains(m.View(), "❯ "+string(r)) {
+				t.Errorf("%q on %s is not on the query line:\n%s", string(r), tab, m.View())
+			}
+			for _, call := range gw.Calls()[mark:] {
+				if call.Method != fakes.MethodIssue {
+					t.Errorf("%q on %s called %s", string(r), tab, call.Method)
+				}
+			}
+
+			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}})
+		}
+	}
+}
+
+// TestEscapeFromDocsReturnsToBoard: Board is the home tab.
+func TestEscapeFromDocsReturnsToBoard(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Ready first", "task", 1)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices returned error: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m = applyMessages(t, m, runBatch(m.Init()))
+	m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+	if m.active != mode.Docs {
+		t.Fatalf("fixture: on %q, want docs", m.active)
+	}
+
+	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	if m.active != mode.Board || m.lastBrowse != mode.Board {
+		t.Fatalf("esc from docs left the shell on %q (last browse %q)", m.active, m.lastBrowse)
+	}
 }

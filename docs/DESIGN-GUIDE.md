@@ -2,9 +2,9 @@
 
 The interaction and rendering law for every surface under `internal/ui/` and `internal/mode/`.
 
-Two rules here are gated — type/colour parity (`renderhelpers/type_style_parity_test.go`) and the
-tab strip's ownership of `tab`/`shift+tab` (`internal/config/keybindings_test.go`). The rest is held
-at review ([REVIEWING.md](REVIEWING.md)).
+Three rules here are gated — type/colour parity (`renderhelpers/type_style_parity_test.go`), the
+tab strip's ownership of `tab`/`shift+tab`, and no printable key on an action outside a modal (both
+`internal/config/keybindings_test.go`). The rest is held at review ([REVIEWING.md](REVIEWING.md)).
 
 [CODING.md](CODING.md)'s rule 8 owns the `internal/ui/` and `internal/mode/` boundary. `modal` and
 `toaster` are the exception to it — they carry Bubble Tea state of their own. `loading` is stateless
@@ -25,7 +25,7 @@ shell. Every other package is pure.
   starts on; one that applies another restores it in `t.Cleanup` and stays out of `t.Parallel`.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
   `TextSecondaryColor`), shell chrome (`ShellTab*`, `ShellAction*`, `ShellRuleColor`,
-  `ShellFooterHelpColor`),
+  `ShellFooterHelpColor`), the query line and its matches (`QueryAccentColor`, `MatchTextColor`),
   borders and overlays (`BorderDefaultColor`, `OverlayBorderColor`, `BorderHighlightFocusColor`),
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
   (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
@@ -68,6 +68,7 @@ column below shows the `unicode` set:
 |---|---|---|
 | `▌ ` / two spaces | the selection gutter, always 2 cells wide; take it from `styles.SelectionPrefix` | `Cursor` |
 | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight; draw it with `loading.Glyph` | `Spinner` |
+| `❯` | the prompt in front of a query line | `Prompt` |
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
@@ -102,19 +103,17 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   title inlays (`TopLeft` / `TopRight`), focus colouring, and padding each line to the inner width.
 - `FormSection` returns the literal string `too narrow` below width 6. A caller that needs a
   different degraded rendering handles the narrow case before calling.
-- `ui/shared/issuerow` is the single compact issue-row renderer for board- and search-style lists.
-  Row rendering stays there.
+- `ui/shared/issuerow` is the single compact issue-row renderer for every issue list. Row rendering
+  stays there.
 - A row in a list is two lines: what it is, then its details, dimmer. `issuerow.RenderCompact`
   draws the type and the title over the priority, the status and the ID; `ui/storepicker` draws a
   store's name and status over its project path. A list that scrolls, counts or hit-tests its rows
   reads `issuerow.Height` (the picker its own `rowLines`) rather than assuming a line. A relation
   in a detail pane is the exception, `issuerow.RenderReferenceCompact`: those panes are a few rows
   tall.
-- There is intentionally **no shared issue-list component.** Board and search containers differ
-  materially in layout, empty state and focus, so the containers stay mode-specific — `ui/board`
-  columns against `ui/search` panes. The docs tab is a board column by another name, so it draws
-  through `ui/board` rather than growing a renderer of its own. Extract a shared container only when
-  real duplication appears above the row level.
+- `ui/board` is the one list container. The docs tab and the store search are each a board column
+  by another name, so they draw through `board.Render` with a single `Column` rather than growing a
+  renderer of their own.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ## The shell chrome
@@ -144,8 +143,9 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
 
 ### The tabs
 
-- The tabs are the three views in `mode.BrowseModes` order — Board, Docs, Search. Detail
-  never appears there: it is a drill-in, not a tab.
+- The tabs are the two views in `mode.BrowseModes` order — Board, Docs. Detail never appears
+  there: it is a drill-in, not a tab. Nor does [the store search](#the-store-search), and no
+  tab is drawn active while it is up.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
   `ShellTabInactiveColor`. Tabs and buttons are the two surfaces whose state rides a background — on
   a pane or a column it rides the border instead.
@@ -154,8 +154,66 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   registering it there is what wires forwarding, sizing, loading state and auto-refresh at once.
   Adding it anywhere else puts the strip and the cycle order out of step.
 - `tab` / `shift+tab` belong to the tabs everywhere except inside a modal, which consumes keys
-  before the shell sees them. They switch tabs even while the search query field is focused, so a
-  browse surface must not claim either key.
+  before the shell sees them. From the store search they leave it for a tab. A browse surface
+  must not claim either key.
+
+## Keys and the query line
+
+Board, Docs and the store search each hold one `mode.Query` (`internal/mode/query.go`) and draw it
+on the line above their columns. It is always live: no key enters it and nothing focuses it.
+
+- **No action is bound to a printable key outside a modal.** `mode.IsQueryKey` names the keys a
+  query takes — every rune key and `space` without alt, `backspace`, `ctrl+w`, `ctrl+u` — and the
+  surface offers each key to `Query.HandleKey` before its bindings. `handleShellKey` asks
+  `IsQueryKey` too, so a key the query took runs no shell action. Bind a new action to an `alt+`
+  chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything else
+  ([CONFIGURATION.md](CONFIGURATION.md#keybindings)).
+- The query has no cursor and is edited at its end only, so the arrow keys stay with the list.
+  `mode.QueryLimit` caps it.
+- Escape clears a non-empty query before it does anything else: the shell calls `Browse.ClearQuery`
+  first and acts on Escape itself only when that reports nothing cleared.
+- A tab's query is a filter over the rows in memory: `Query.Filter` keeps the rows where every word
+  is in the title or the ID, in their order. The model keeps the loaded rows and the matching rows
+  apart (`issues` and `shown` in `internal/mode/board/model.go`); selection, scroll, hit test and
+  `View` read the matching rows, paging reads the loaded ones.
+- When the query changes, a list keeps its selection on the same issue while that issue still
+  matches and otherwise takes the first match. A focused board column left with no match gives the
+  focus to the first column that has one and takes it back with its first match, unless the
+  operator moved the focus meanwhile (`queryChanged`, `queryHome`).
+- The query outlives a reload, an auto refresh, a tab switch and a detail round trip. It ends with
+  the model, at a store switch.
+- `board.Render` draws the line (`renderQueryLine`, `internal/ui/board/query.go`) from
+  `State.Query` and `State.Placeholder`: `Glyphs.Prompt`, the text, then a cursor block, the prompt
+  and the cursor in `QueryAccentColor`. An empty query shows the placeholder in `TextMutedColor`,
+  so the line says what a key press does. A text wider than the line loses its front. A board too
+  narrow for all its columns names the drawn ones at the right end of the same line.
+- `issuerow.RenderCompact` marks every occurrence of a query word in the title and the ID with
+  `styles.MatchTextStyle` (`RenderConfig.Match`). It marks the text after the cut to width, so a
+  mark adds no cell.
+- The legend names the typing itself — `type` → `filter` — because no key opens the filter.
+
+### The store search
+
+The store search (`internal/mode/search`) is a browse surface in everything but the tab line. It
+satisfies `mode.Browse` and is registered in `browseSurfaces` (`internal/app/routing.go`), which is
+what gives it forwarding, sizing, a loading scope, auto refresh and a rebuild at a store switch. It
+is absent from `mode.BrowseModes`, so the tab cycle never lands on it and `lastBrowse` never names
+it.
+
+- A shell action opens it — `open_search`, the first menu-bar button — from a tab or from Detail
+  (`Model.openSearch`). `Model.searchFrom` holds the surface it was opened from and is empty while
+  the search is not up.
+- While it is up it owns the selection, also under a Detail opened from it: `currentSelection`
+  reads the search row, and Escape in that Detail returns to the results as they were left.
+- Its query is not matched in memory. Every edit runs `Repository.Search`; each search carries a
+  generation and a result of an older one is dropped. `State.Search` tells the renderer so: the
+  header then counts as a column without a query does.
+- `ctrl+t` toggles the scope between open issues and all of them (`search.IsScopeKey`). It is
+  built in, as the query keys are, and the column title names the scope.
+- Escape clears a non-empty query, and with an empty one returns to `searchFrom`
+  (`Model.closeSearch`).
+- Only the first search draws the column as loading. A search runs on every key, and dimming the
+  rows for each one would flicker them.
 
 ## Surfaces above the shell
 
@@ -211,10 +269,10 @@ with the active store's name and keeps it until only the surface name still fits
   backend's close-date order and draws none.
 - A header reads a plain `N` only when the whole list is loaded and fits. A clipped window or a
   paginated column (`TotalIsExact` false, or a load-more in flight) reads `N of M`; a skeleton pane
-  reads `issuerow.SkeletonGlyph`. `internal/ui/board/board.go` holds the board's,
-  `internal/ui/detail/details.go` the detail panes', and `resultCountTitle`
-  (`internal/ui/search/search.go`) the search results', which shortens to `N/M` when the long form
-  does not fit beside the title.
+  reads `issuerow.SkeletonGlyph`. While a filter is active the header reads `N of M` for another
+  pair: the matching rows of the loaded rows (`Column.Loaded`). `internal/ui/board/board.go` holds
+  the board's, which the docs tab and the store search share, and `internal/ui/detail/details.go`
+  the detail panes'.
 
 ## The mouse
 

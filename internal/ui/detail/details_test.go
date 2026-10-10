@@ -892,45 +892,10 @@ func TestColdStartSkeletonContainsAllThreePaneSectionHeaders(t *testing.T) {
 	}
 }
 
-// TestRenderContentPaneLinesPlaceholderSuppressesMetaRowAndRule verifies that
-// the search "no selection" placeholder (ID="(none)", Type="") renders WITHOUT
-// the dashboard-style meta row or the thin rule, while a real issue summary
-// still renders WITH them.
-func TestRenderContentPaneLinesPlaceholderSuppressesMetaRowAndRule(t *testing.T) {
+// TestRenderContentPaneLinesDrawsMetaRowAndRule verifies that an issue summary
+// renders with the dashboard-style meta row and the thin rule.
+func TestRenderContentPaneLinesDrawsMetaRowAndRule(t *testing.T) {
 	t.Parallel()
-
-	t.Run("placeholder omits meta row and rule", func(t *testing.T) {
-		t.Parallel()
-
-		placeholderDetail := domain.IssueDetail{
-			Summary: domain.IssueSummary{
-				Title:    "No selected result.",
-				ID:       "(none)",
-				Status:   "(none)",
-				Type:     "",
-				Priority: -1,
-			},
-			Description: "Select a result in the search rail to preview issue content.",
-		}
-
-		lines := renderContentPaneLines(placeholderDetail, 80, 20, false, 0)
-		joined := strings.Join(lines, "\n")
-
-		// Must NOT contain the junk meta row tokens.
-		for _, unwanted := range []string{"P0", "(NO", "(none)"} {
-			if strings.Contains(joined, unwanted) {
-				t.Fatalf("placeholder content pane must not contain %q; got:\n%s", unwanted, joined)
-			}
-		}
-		// Must NOT contain the thin rule character.
-		if strings.Contains(joined, "─") {
-			t.Fatalf("placeholder content pane must not contain thin rule; got:\n%s", joined)
-		}
-		// Must contain the placeholder title.
-		if !strings.Contains(joined, "No selected result.") {
-			t.Fatalf("placeholder content pane must contain the title; got:\n%s", joined)
-		}
-	})
 
 	t.Run("real issue retains meta row and rule", func(t *testing.T) {
 		t.Parallel()

@@ -50,6 +50,9 @@ type Column struct {
 	// "+" suffix to avoid misrepresenting an exact count.
 	Total        int
 	TotalIsExact bool
+	// Loaded is the number of rows in memory that the query chose Rows from.
+	// The header reads it only while State.Query filters them.
+	Loaded int
 	// AgeMarkers draws a divider row before the first issue whose last change
 	// is older than each age threshold (see agemarker.go). Only meaningful for
 	// a column ordered by UpdatedAt descending; the Done column, ordered by
@@ -59,9 +62,17 @@ type Column struct {
 
 // State is the full board renderer input.
 type State struct {
-	DashboardTitle string
-	Columns        []Column
-	FocusedColumn  int
+	// Query is the filter text the query line above the columns shows, and
+	// Placeholder what that line says while Query is empty. The rows in
+	// Columns are already the ones Query chose; the renderer marks its words in
+	// them and counts them in the headers.
+	Query       string
+	Placeholder string
+	// Search says the rows are the store's answer to Query, not a choice among
+	// loaded rows: the headers then count as they do without a query.
+	Search        bool
+	Columns       []Column
+	FocusedColumn int
 	// ColumnStart is the first column drawn when the width holds fewer than
 	// all of them; see ColumnStart. Render clamps it to the columns there are.
 	ColumnStart   int
@@ -110,8 +121,13 @@ func Render(state State) string {
 		//     is the honesty path for Ready / NotReady / InProgress.
 		//
 		// (3) TotalIsExact=true and everything fits: just col.Total.
+		//
+		// A query replaces all three: the header then counts the rows it chose
+		// against the rows it chose from.
 		var topRight string
 		switch {
+		case state.Query != "" && !state.Search:
+			topRight = fmt.Sprintf("%d of %d", len(col.Rows), col.Loaded)
 		case isLoadMore:
 			// Load-more in flight: show loaded count against the known total
 			// so the header reflects real progress rather than the window slice.
@@ -139,15 +155,30 @@ func Render(state State) string {
 	}
 
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, joinWithGap(renderedCols, strings.Repeat(" ", columnGap))...)
-	if f.head == "" {
-		return columns
-	}
-
-	return f.head + "\n" + columns
+	return renderHead(state, f) + "\n" + columns
 }
 
-// frame is the geometry of one board frame: which columns are drawn, how wide
-// each is, and how many lines sit above them. Render draws from it and HitTest
+// renderHead is the line above the columns: the query line, and which columns
+// are drawn when the width does not hold all of them.
+func renderHead(state State, f frame) string {
+	width := state.Width
+	if width <= 0 {
+		width = defaultBoardWidth
+	}
+	if f.end-f.start == len(state.Columns) {
+		return renderQueryLine(state.Query, state.Placeholder, width)
+	}
+	window := fmt.Sprintf(" · cols %d-%d/%d", f.start+1, f.end, len(state.Columns))
+	return renderQueryLine(state.Query, state.Placeholder, width-lipgloss.Width(window)) +
+		lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(window)
+}
+
+// headLines is the number of lines Render draws above the columns: the query
+// line.
+const headLines = 1
+
+// frame is the geometry of one board frame: which columns are drawn and how
+// wide each is. Render draws from it and HitTest
 // reads a cell back through it, so the two cannot place a column differently.
 type frame struct {
 	start, end   int
@@ -156,8 +187,6 @@ type frame struct {
 	// innerHeight is the number of content rows that fit inside the section
 	// borders. FormSection reserves 2 lines for top and bottom borders.
 	innerHeight int
-	// head is the title line above the columns; empty draws no line.
-	head string
 }
 
 func layoutFrame(state State) frame {
@@ -181,11 +210,6 @@ func layoutFrame(state State) frame {
 	f.widths = distributeWidths(available, count)
 	f.columnHeight = max(3, height-1)
 	f.innerHeight = max(1, f.columnHeight-2)
-
-	f.head = strings.TrimSpace(state.DashboardTitle)
-	if count < len(state.Columns) {
-		f.head = fmt.Sprintf("%s · cols %d-%d/%d", f.head, f.start+1, f.end, len(state.Columns))
-	}
 	return f
 }
 
@@ -213,7 +237,7 @@ func (f frame) viewColumn(state State, idx int) columnView {
 		hover = state.Hover.Row
 	}
 
-	rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, f.start+idx, state.Now, hover)
+	rendered := renderColumnRows(col, innerWidth, state.SkeletonPhase, f.start+idx, state.Now, hover, state.Query, state.Search)
 	view := columnView{rows: rendered.rows, visibleIssues: len(col.Rows)}
 	if !windowed(col) {
 		return view
@@ -276,10 +300,7 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 		return Hit{}, false
 	}
 	f := layoutFrame(state)
-	line := y
-	if f.head != "" {
-		line--
-	}
+	line := y - headLines
 	if x < 0 || line < 0 || line >= f.columnHeight {
 		return Hit{}, false
 	}
@@ -420,9 +441,11 @@ func errorRows(col Column) int {
 }
 
 // renderColumnRows renders col. hover is the index of the issue under the
-// pointer, or -1.
-func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now time.Time, hover int) columnRows {
+// pointer, or -1, and query the filter text whose words the rows mark. search
+// says the query chose the rows in the store, so an empty column is a miss.
+func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now time.Time, hover int, query string, search bool) columnRows {
 	var out columnRows
+	match := strings.Fields(query)
 
 	// Inline error row at the top (if any).
 	if errorRows(col) > 0 {
@@ -441,7 +464,7 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 			// Load-more in flight: the user has scrolled deep and a background page
 			// fetch is in progress. Render rows normally (not dimmed) and append a
 			// single skeleton row at the end as a load-in-flight affordance.
-			out.appendIssueRows(col, maxWidth, false, skeletonPhase, now, hover)
+			out.appendIssueRows(col, maxWidth, false, skeletonPhase, now, hover, match)
 			out.rows = append(out.rows, issuerow.RenderCompactSkeleton(issuerow.SkeletonOpts{
 				Width:  maxWidth,
 				Seed:   0,
@@ -452,23 +475,27 @@ func renderColumnRows(col Column, maxWidth, skeletonPhase, colIndex int, now tim
 		}
 		// Refresh: stale rows on screen while new data is in flight.
 		// Dim the foreground with the current skeleton phase to signal motion.
-		out.appendIssueRows(col, maxWidth, true, skeletonPhase, now, hover)
+		out.appendIssueRows(col, maxWidth, true, skeletonPhase, now, hover, match)
 		return out
 	}
 
 	// Not loading — render normally.
 	if out.prefix == 0 && len(col.Rows) == 0 {
+		if query != "" && (search || col.Loaded > 0) {
+			out.rows = append(out.rows, "(no matches)")
+			return out
+		}
 		out.rows = append(out.rows, "(no issues)")
 		return out
 	}
 
-	out.appendIssueRows(col, maxWidth, false, skeletonPhase, now, hover)
+	out.appendIssueRows(col, maxWidth, false, skeletonPhase, now, hover, match)
 	return out
 }
 
 // appendIssueRows renders every issue of col in the order layoutRows placed
 // them, drawing each age-marker divider ahead of the issue it precedes.
-func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase int, now time.Time, hover int) {
+func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase int, now time.Time, hover int, match []string) {
 	out.layout = layoutRows(col, now)
 	markers := out.layout.markers
 	for idx, issue := range col.Rows {
@@ -482,6 +509,7 @@ func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase
 			Hovered:  idx == hover,
 			Width:    maxWidth,
 			Styled:   true,
+			Match:    match,
 			Dim:      dim,
 			Phase:    phase,
 		})...)

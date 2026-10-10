@@ -1,4 +1,4 @@
-Default · cols 1-3/5
+❯ filter issues · cols 1-3/5
 ╭─ Ready ──────────────────────── 4 ─╮  ╭─ In Progress ─────────────────── 1 ─╮  ╭─ Blocked ─────────────────────── 2 ─╮
 │  T Implement create update close a…│  │  F Implement launcher framework wit…│  │▌ B Add editor and launcher integrat…│
 │    P1 OPN task-manager-ui-yze.4.2  │  │    P1 IP task-manager-ui-yze.4.3    │  │▌   P1 BLK task-manager-ui-yze.4.5   │

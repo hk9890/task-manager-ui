@@ -1,7 +1,7 @@
- stores s · reload r · help ? · quit ctrl+q                                                                          dev
+ search alt+f · stores alt+s · reload alt+r · help alt+h · quit ctrl+c                                               dev
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Board   Docs   Search                                                        Board · Selected: bwf-2 (blocked) · Idle
-Default · cols 1-3/4
+   Board   Docs                                                                 Board · Selected: bwf-2 (blocked) · Idle
+❯ filter issues · cols 1-3/4
 ╭─ Not Ready ──────────────────── 1 ─╮  ╭─ Ready ───────────────────────── 1 ─╮  ╭─ In Progress ─────────────────── 0 ─╮
 │▌ B Blocked bug for fixture         │  │  T Seed fixture root task           │  │(no issues)                          │
 │▌   P0 BLK bwf-2                    │  │    P1 OPN bwf-1                     │  │                                     │
@@ -31,4 +31,4 @@ Default · cols 1-3/4
 │                                    │  │                                     │  │                                     │
 │                                    │  │                                     │  │                                     │
 ╰────────────────────────────────────╯  ╰─────────────────────────────────────╯  ╰─────────────────────────────────────╯
-h/l columns · j/k issues · enter detail · c new · ctrl+space search · ? help · ctrl+q quit
+left/right columns · down/up issues · enter detail · type filter · esc clear · alt+n new · alt+h help · ctrl+c quit

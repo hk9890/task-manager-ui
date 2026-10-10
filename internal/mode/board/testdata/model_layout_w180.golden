@@ -1,4 +1,4 @@
-Default
+❯ filter issues
 ╭─ Not Ready ───────────────────────── 2 ─╮  ╭─ Ready ───────────────────────────── 3 ─╮  ╭─ In Progress ──────────────────────── 3 ─╮  ╭─ Done ─────────────────────────────── 3 ─╮
 │▌ T Blocked: migration sequencing        │  │  T Ready fix login prompt               │  │  F Implement board keyboard shortcuts    │  │  F Implement board keyboard shortcuts    │
 │▌   P1 BLK tm-9                          │  │    P1 OPN tm-1                          │  │    P1 IP tm-2                            │  │    P1 IP tm-2                            │
