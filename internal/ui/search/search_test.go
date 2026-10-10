@@ -104,7 +104,7 @@ func TestRenderResultsRowsCompactTheIDToTheRowWidth(t *testing.T) {
 		{width: 60, want: "P1 OPN task-manager-ui-ultra-wide-width-id"},
 		{width: 24, want: "P1 OPN …ide-width-id"},
 	} {
-		lines := renderResultsContent(state, tc.width, resultsPaneHeight(defaultSearchHeight))
+		lines := renderResultsContent(state, tc.width)
 		if len(lines) != issuerow.Height {
 			t.Fatalf("width %d: got %d lines, want %d", tc.width, len(lines), issuerow.Height)
 		}
@@ -122,7 +122,7 @@ func TestRenderResultsContentUsesSharedIssueRowRenderer(t *testing.T) {
 	t.Parallel()
 
 	issue := domain.IssueSummary{ID: "task-manager-ui-u5s", Title: "Shared renderer", Status: "open", Type: "task", Priority: 1}
-	lines := renderResultsContent(State{Results: []domain.IssueSummary{issue}, SelectedID: issue.ID}, 60, resultsPaneHeight(defaultSearchHeight))
+	lines := renderResultsContent(State{Results: []domain.IssueSummary{issue}, SelectedID: issue.ID}, 60)
 	want := issuerow.RenderCompact(issuerow.RenderConfig{Issue: issue, Selected: true, Width: 60, Styled: true})
 	if len(want) != issuerow.Height {
 		t.Fatalf("expected the shared renderer to draw %d lines, got %d", issuerow.Height, len(want))

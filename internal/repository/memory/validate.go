@@ -33,13 +33,13 @@ const (
 var labelRe = regexp.MustCompile(`^[a-z0-9][a-z0-9:._/\-]*$`)
 
 // validationError builds the same shape the taskmgr backend produces for a
-// tasks.ValidationError: the code plus the SDK's message text, with no field
-// prefix (mapWriteErr surfaces ValidationError.Message alone).
-func validationError(operation, format string, args ...any) domain.RepositoryError {
+// tasks.ValidationError: the code plus the SDK error's own text, the field and
+// then the message (mapWriteErr surfaces ValidationError.Error()).
+func validationError(operation, field, format string, args ...any) domain.RepositoryError {
 	return domain.RepositoryError{
 		Code:      domain.ErrorCodeValidationFailed,
 		Operation: operation,
-		Message:   fmt.Sprintf(format, args...),
+		Message:   field + ": " + fmt.Sprintf(format, args...),
 	}
 }
 
@@ -131,7 +131,7 @@ type fieldViolation struct {
 func fieldViolations(operation string, catalogs repository.Catalogs, si *storedIssue) []fieldViolation {
 	var out []fieldViolation
 	add := func(field string, format string, args ...any) {
-		out = append(out, fieldViolation{field: field, err: validationError(operation, format, args...)})
+		out = append(out, fieldViolation{field: field, err: validationError(operation, field, format, args...)})
 	}
 
 	trimmedTitle := strings.TrimSpace(si.title)

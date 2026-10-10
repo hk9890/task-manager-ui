@@ -131,6 +131,14 @@ func (m *Model) Init() tea.Cmd {
 
 // Update processes search-specific messages and keybindings.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	cmd := m.update(msg)
+	// A typed draft or a failed search puts the banner up, and the pane then
+	// draws one result fewer.
+	m.keepSelectionVisible()
+	return cmd
+}
+
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -470,10 +478,11 @@ func (m *Model) SetSize(width, height int) {
 }
 
 // searchItemCapacity returns the number of result rows the scroll window
-// holds. The renderer answers, also for the height it draws with before the
-// first tea.WindowSizeMsg, so the window and the rows drawn cannot disagree.
+// holds. The renderer answers for the state it draws, also at the height it
+// draws with before the first size is set, so the window and the rows drawn
+// cannot disagree.
 func (m *Model) searchItemCapacity() int {
-	return uisearch.RowCapacity(m.height)
+	return uisearch.RowCapacity(m.viewState(0))
 }
 
 // keepSelectionVisible slides the scroll window to the selected result, and

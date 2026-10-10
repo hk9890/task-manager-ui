@@ -692,8 +692,7 @@ func browserItemsFromDependencies(d domain.IssueDetail) []domain.IssueReference 
 		d.Children,
 	}
 	// The Parent group surfaces only the parent itself (the last navigable
-	// row drills up to the parent). Siblings are intentionally not listed,
-	// which also avoids a second `taskmgr show` per detail load.
+	// row drills up to the parent). Siblings are intentionally not listed.
 	if strings.TrimSpace(d.ParentGroupBrowser.Parent.ID) != "" {
 		groups = append(groups, []domain.IssueReference{d.ParentGroupBrowser.Parent})
 	}

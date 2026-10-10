@@ -49,7 +49,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.pendingDialog = pendingDialogGuard{}
 	}
 
-	if m.showHelp || m.showActionModal {
+	if m.overlayOpen() {
 		m.clearHeaderHover()
 		cmd := m.mouseToSurface(leave)
 		switch {

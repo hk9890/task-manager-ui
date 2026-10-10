@@ -38,17 +38,27 @@ func (m Model) waitForStoreChangeCmd() tea.Cmd {
 	return m.scoped(m.awaitStoreChange(changes))
 }
 
+// storeWatched reports whether a watch signals the changes of the active store,
+// the writes of this process included. The watch then owns every reload that
+// follows a write: a handler that reloaded for its own write would read the
+// store a second time when the signal for that write arrives.
+func (m Model) storeWatched() bool {
+	return m.storeChanges != nil
+}
+
 // refreshAfterStoreChangeCmd reloads the active surface when the store changed
-// after that surface's latest load started. Update runs it after every message,
-// so a change that arrives during a load, under an overlay or while another
-// surface is active is applied as soon as the surface can take it. The terminal
-// focus does not gate it: a board in view while an agent writes in another pane
-// is the case the watch exists for.
+// after that surface's latest load started, or when a write of this process
+// left it dirty. Update runs it after every message, so a change that arrives
+// during a load, under an overlay or while another surface is active is applied
+// as soon as the surface can take it. The terminal focus does not gate it: a
+// board in view while an agent writes in another pane is the case the watch
+// exists for.
 func (m *Model) refreshAfterStoreChangeCmd() tea.Cmd {
-	if m.showHelp || m.showActionModal {
+	if m.overlayOpen() {
 		return nil
 	}
-	if !m.behindStore(m.active) || m.surfaceLoading(m.active) {
+	owed := m.behindStore(m.active) || m.refreshStateBySurface[m.active].dirty
+	if !owed || m.surfaceLoading(m.active) {
 		return nil
 	}
 	cmd := m.refreshActiveSurfaceCmd()
@@ -73,13 +83,15 @@ func (m *Model) behindStore(surface mode.ID) bool {
 }
 
 // trackSurfaceLoads records, for each surface whose load started in this
-// update, the store change it started after. Every path that starts a load is
-// covered, the reload keys the modes handle themselves included.
+// update, the store change it started after, and that the load reads what a
+// write of this process left the surface dirty for. Every path that starts a
+// load is covered, the reload keys the modes handle themselves included.
 func (m *Model) trackSurfaceLoads() {
 	for surface, state := range m.refreshStateBySurface {
 		loading := m.surfaceLoading(surface)
 		if loading && !state.loading {
 			state.loadedAtChange = m.storeChangeSeq
+			state.dirty = false
 		}
 		state.loading = loading
 		m.refreshStateBySurface[surface] = state

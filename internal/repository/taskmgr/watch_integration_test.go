@@ -64,6 +64,30 @@ func TestWatchChangesSignalsAWriteFromAnotherHandle(t *testing.T) {
 	}
 }
 
+// On a watched store the app reloads after its own write on this signal alone.
+func TestWatchChangesSignalsAWriteOfTheSameRepository(t *testing.T) {
+	repo, _ := newTestRepo(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changes, err := repo.WatchChanges(ctx)
+	if err != nil {
+		t.Fatalf("WatchChanges: %v", err)
+	}
+	if _, err := repo.CreateIssue(ctx, domain.CreateIssueInput{Title: "written by the app"}); err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+
+	select {
+	case _, open := <-changes:
+		if !open {
+			t.Fatal("the channel closed instead of signalling the write")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no signal within 5s of a write of the same repository")
+	}
+}
+
 func TestWatchChangesOnAStoreThatIsGoneReturnsARepositoryError(t *testing.T) {
 	repo, store := newTestRepo(t)
 	if err := os.RemoveAll(store.Dir()); err != nil {

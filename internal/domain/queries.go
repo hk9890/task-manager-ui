@@ -34,15 +34,13 @@ type SearchIssuesQuery struct {
 	Labels   []string
 	Assignee string
 
-	// PriorityMin/PriorityMax align to the official `taskmgr search` filter surface.
+	// PriorityMin/PriorityMax are the inclusive priority bounds.
 	// Use both set to the same value to request an exact priority.
 	PriorityMin *int
 	PriorityMax *int
 
-	// WorkState maps to readiness/blocking narrowing used by browse/search flows.
-	// Note: `taskmgr search` does not currently expose ready/blocked flags directly.
-	// Repository implementations may route through `taskmgr ready`/`taskmgr blocked` and apply
-	// additional filters in-memory to preserve a stable UI-facing API.
+	// WorkState narrows the result to ready or blocked issues, in addition to
+	// every other filter.
 	WorkState WorkStateFilter
 
 	Limit  int

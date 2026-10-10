@@ -4,6 +4,16 @@ set -eu
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
+# An absolute core.hooksPath makes git run the main checkout's copy for every
+# worktree. Hand over to the copy in the tree of this commit.
+tree_hooks_dir="$repo_root/scripts/git-hooks"
+if [ -x "$tree_hooks_dir/pre-commit" ]; then
+    running_hooks_dir=$(cd "$(dirname "$0")" && pwd -P)
+    if [ "$running_hooks_dir" != "$(cd "$tree_hooks_dir" && pwd -P)" ]; then
+        exec "$tree_hooks_dir/pre-commit" "$@"
+    fi
+fi
+
 if ! command -v gofmt >/dev/null 2>&1; then
     printf 'pre-commit: gofmt not found in PATH\n' >&2
     exit 1

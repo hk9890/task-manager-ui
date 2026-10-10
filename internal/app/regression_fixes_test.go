@@ -374,6 +374,35 @@ func TestEditPreparedBuildEditorCmdErrorRemovesTempFile(t *testing.T) {
 	}
 }
 
+// A dialog that opened while the edit document was prepared holds the issue as
+// it was, so the editor does not start under it.
+func TestEditPreparedUnderADialogStartsNoEditorAndRemovesTempFile(t *testing.T) {
+	gw := fakes.NewTracked()
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+	m := mustNewModel(t, services)
+	m.showActionModal = true
+
+	tmpPath := filepath.Join(t.TempDir(), "edit-doc.md")
+	if err := os.WriteFile(tmpPath, []byte("# title\n\nbody\n"), 0o600); err != nil {
+		t.Fatalf("write temp edit doc: %v", err)
+	}
+
+	_, cmd := m.Update(editIssuePreparedMsg{
+		issueID:  "tm-1",
+		prepared: launchereditor.Prepared{IssueID: "tm-1", TempPath: tmpPath},
+	})
+
+	if cmd != nil {
+		t.Errorf("a command was returned under a dialog; the editor must not start")
+	}
+	if _, statErr := os.Stat(tmpPath); !os.IsNotExist(statErr) {
+		t.Errorf("temp file %q was not removed, stat err=%v", tmpPath, statErr)
+	}
+}
+
 // TestToastStaleDismissDoesNotHideNewerToast is the regression guard for the
 // toaster.DismissMsg handler: it must hide the toast only when msg.Seq matches
 // the currently shown toast. A stale timer from a superseded toast must be
