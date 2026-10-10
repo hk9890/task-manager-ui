@@ -89,7 +89,7 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 // open a child from an epic and then jump back via the child's own Parent row.
 // Seeding an optimistic placeholder from the row's known ref renders the header
 // + core metadata immediately, while the description and Dependencies pane show
-// their skeleton until the single taskmgr show returns. ApplyLoadedDetail
+// their skeleton until the detail load returns. ApplyLoadedDetail
 // resets scroll offsets when the issue changes.
 //
 // Focus retention: BeginLoad sets Loading and the drill-focus counter before

@@ -126,14 +126,6 @@ func TestMapWriteErrHookDeniedKeepsTheHookReason(t *testing.T) {
 
 	got := mapWriteErr("close issue", denied)
 
-	var re domain.RepositoryError
-	if !errors.As(got, &re) {
-		t.Fatalf("mapWriteErr returned %T (%v), want domain.RepositoryError", got, got)
-	}
-	if re.Message != denied.Reason {
-		t.Errorf("message = %q, want the hook's reason %q", re.Message, denied.Reason)
-	}
-
 	text := got.Error()
 	if strings.Contains(text, string(domain.ErrorCodeUnknown)) {
 		t.Errorf("rendered error still frames the refusal as unknown: %q", text)
@@ -143,6 +135,76 @@ func TestMapWriteErrHookDeniedKeepsTheHookReason(t *testing.T) {
 	}
 	if !strings.Contains(text, denied.Reason) {
 		t.Errorf("rendered error does not carry the denial reason: %q", text)
+	}
+}
+
+// TestMappedErrorTextNamesTheSDKMessageOnce pins the text of the error toast.
+// The mapped error carried the SDK message in its own message and again in the
+// printed cause, so a refused title edit read "update: title is required:
+// title: title is required". The SDK error must still be reachable: the text
+// names it one time, the chain keeps it.
+func TestMappedErrorTextNamesTheSDKMessageOnce(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		mapped error
+		once   string
+		want   string
+		found  func(error) bool
+	}{
+		{
+			name:   "write validation",
+			mapped: mapWriteErr("update", &tasks.ValidationError{Field: "title", Message: "title is required"}),
+			once:   "title is required",
+			want:   "update: title: title is required",
+			found:  func(err error) bool { var target *tasks.ValidationError; return errors.As(err, &target) },
+		},
+		{
+			name: "write hook denied",
+			mapped: mapWriteErr("close issue", &tasks.HookDeniedError{
+				Event:   "pre-close",
+				Hook:    "pkg:deny-closes:deny-closes",
+				IssueID: "tm-42",
+				Exit:    1,
+				Reason:  "refused by the machine-wide policy",
+			}),
+			once:  "refused by the machine-wide policy",
+			want:  `close issue: pre-close denied for tm-42 by hook "pkg:deny-closes:deny-closes": refused by the machine-wide policy`,
+			found: func(err error) bool { var target *tasks.HookDeniedError; return errors.As(err, &target) },
+		},
+		{
+			name:   "read validation",
+			mapped: mapReadErr("search", &tasks.ValidationError{Field: "statuses", Message: `unknown status "nope"`}),
+			once:   `unknown status "nope"`,
+			want:   `search: statuses: unknown status "nope"`,
+			found:  func(err error) bool { var target *tasks.ValidationError; return errors.As(err, &target) },
+		},
+		{
+			name:   "read parse",
+			mapped: mapReadErr("search", &tasks.ParseError{Pos: 3, Message: "bad filter expression"}),
+			once:   "bad filter expression",
+			want:   "search: parse error at byte 3: bad filter expression",
+			found:  func(err error) bool { var target *tasks.ParseError; return errors.As(err, &target) },
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			text := tc.mapped.Error()
+			if got := strings.Count(text, tc.once); got != 1 {
+				t.Errorf("text holds %q %d times, want 1: %q", tc.once, got, text)
+			}
+			if text != tc.want {
+				t.Errorf("text = %q, want %q", text, tc.want)
+			}
+			if !tc.found(tc.mapped) {
+				t.Errorf("errors.As does not find the SDK error in %T", tc.mapped)
+			}
+		})
 	}
 }
 

@@ -26,25 +26,24 @@ type RepositoryError struct {
 	Cause     error
 }
 
+// Error names the failure one time. Message is what the operator reads, so it
+// stands alone; the cause's text is appended only when there is no message to
+// say why. Unwrap returns the cause either way.
 func (e RepositoryError) Error() string {
-	var base string
-
-	if e.Message == "" {
+	if e.Message != "" {
 		if e.Operation == "" {
-			base = string(e.Code)
-		} else {
-			base = fmt.Sprintf("%s: %s", e.Operation, e.Code)
+			return e.Message
 		}
-	} else if e.Operation == "" {
-		base = e.Message
-	} else {
-		base = fmt.Sprintf("%s: %s", e.Operation, e.Message)
+		return fmt.Sprintf("%s: %s", e.Operation, e.Message)
 	}
 
+	base := string(e.Code)
+	if e.Operation != "" {
+		base = fmt.Sprintf("%s: %s", e.Operation, e.Code)
+	}
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %s", base, e.Cause.Error())
 	}
-
 	return base
 }
 
