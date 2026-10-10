@@ -397,6 +397,9 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`,
   `TruncateStringFront`, `WrapLines`, `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
   `styles` owns colour and chrome, not text math.
+- Pass a string the app did not write and draws on one line — a directory name, a path — through
+  `textutil.OneLine` first. A newline in it adds a line to the frame and puts every click below a
+  row off; a bidirectional override reorders the cells beside it.
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.
 

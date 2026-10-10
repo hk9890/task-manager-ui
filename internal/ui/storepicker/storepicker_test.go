@@ -288,6 +288,28 @@ func TestRowDrawsTheStatusOnTheNameLineAndThePathUnderIt(t *testing.T) {
 	}
 }
 
+// TestADirectoryWithALineBreakInItsNameKeepsTheFrame: a directory name is what
+// its owner typed. A newline or a tab in one must not add a line to the box or
+// push its right border out.
+func TestADirectoryWithALineBreakInItsNameKeepsTheFrame(t *testing.T) {
+	t.Parallel()
+
+	state := func(name, path, action string) State {
+		return State{
+			Rows: []Row{
+				{Action: action},
+				{Name: name, ProjectPath: path, Health: "ok", Usable: true},
+			},
+			SelectedRow: 1, Width: 60, Height: 12, Help: "help",
+		}
+	}
+	plain := testui.AnsiEscapePattern.ReplaceAllString(Render(state("a b", "/home/x/dev/a b", "Create a local store in /x/a b")), "")
+	broken := testui.AnsiEscapePattern.ReplaceAllString(Render(state("a\nb", "/home/x/dev/a\nb", "Create a local store in /x/a\tb")), "")
+	if broken != plain {
+		t.Errorf("control characters in a row change the frame:\n%s\nwant\n%s", broken, plain)
+	}
+}
+
 // TestEveryStateFillsTheFrame holds each body to exactly the content lines:
 // rows, the empty state, a cold listing and a failed read with nothing cached,
 // at content heights that leave no line spare and at ones that leave one.

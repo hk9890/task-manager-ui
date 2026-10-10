@@ -139,8 +139,15 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 
 ## Behaviours that need a real terminal
 
-These three cannot be driven under the PTY harness: two need a live resize, and all three need a
-store large enough to page.
+The first three cannot be driven under the PTY harness: two need a live resize, and all three need
+a store large enough to page. The fourth the harness cannot see.
+
+### Colour and weight
+
+The capture is plain text: it holds no colour, no bold and no underline. A change to a colour role
+or a weight — a hover, a selection, a theme — is proved by a test that renders under
+`testui.ForceTrueColor` and by a look at the built binary in a real terminal. State in the PR which
+of the two was done.
 
 ### Closed-limit scales with terminal height
 
