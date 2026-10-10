@@ -84,6 +84,64 @@ func TestStoresReportsADanglingEntry(t *testing.T) {
 	if after[0].Health.Usable() {
 		t.Errorf("Health: got %q, want an unusable health", after[0].Health)
 	}
+	if after[0].Detail != "" {
+		t.Errorf("Detail: got %q, want none for a directory that is absent", after[0].Detail)
+	}
+}
+
+// A store directory the process may not read is reported as broken, with the
+// reason, and costs no other store its place in the listing.
+func TestStoresReportsAnUnreadableStoreAsBrokenAndKeepsTheRest(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the directory mode")
+	}
+	isolateCentralHome(t)
+
+	for _, name := range []string{"readable-fixture", "refused-fixture"} {
+		if _, err := tasks.InitCentral(t.TempDir(), name, "fix"); err != nil {
+			t.Fatalf("tasks.InitCentral(%s): %v", name, err)
+		}
+	}
+
+	before, err := New("tester").Stores(context.Background())
+	if err != nil {
+		t.Fatalf("Stores: %v", err)
+	}
+	for _, entry := range before {
+		if entry.Name != "refused-fixture" {
+			continue
+		}
+		storePath := entry.StorePath
+		if err := os.Chmod(storePath, 0); err != nil {
+			t.Fatalf("Chmod: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(storePath, 0o755) })
+	}
+
+	after, err := New("tester").Stores(context.Background())
+	if err != nil {
+		t.Fatalf("Stores with one unreadable store directory: %v", err)
+	}
+	if len(after) != 2 {
+		t.Fatalf("listed %d entries, want both: %+v", len(after), after)
+	}
+	for _, entry := range after {
+		switch entry.Name {
+		case "readable-fixture":
+			if entry.Health != storecatalog.HealthOK || entry.Detail != "" {
+				t.Errorf("readable entry: got health %q and detail %q, want %q and no detail", entry.Health, entry.Detail, storecatalog.HealthOK)
+			}
+		case "refused-fixture":
+			if entry.Health != storecatalog.HealthBroken {
+				t.Errorf("unreadable entry: got health %q, want %q", entry.Health, storecatalog.HealthBroken)
+			}
+			if !strings.Contains(entry.Detail, "permission denied") {
+				t.Errorf("unreadable entry: got detail %q, want the cause", entry.Detail)
+			}
+		default:
+			t.Errorf("unexpected entry %q", entry.Name)
+		}
+	}
 }
 
 func TestStoresOnAnEmptyRegistryIsEmptyNotAnError(t *testing.T) {

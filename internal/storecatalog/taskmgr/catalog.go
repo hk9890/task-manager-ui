@@ -49,6 +49,7 @@ func (c Catalog) Stores(ctx context.Context) ([]storecatalog.Entry, error) {
 			ProjectPath: entry.Path,
 			StorePath:   entry.StorePath,
 			Health:      convertHealth(entry.Health),
+			Detail:      entry.Detail,
 		})
 	}
 	return out, nil

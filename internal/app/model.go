@@ -623,8 +623,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case storepickermode.OpenMsg:
 		entry := msg.Entry
 		if !entry.Health.Usable() {
-			return m, batchCmds(modeCmd, m.showToast(
-				fmt.Sprintf("Store %s is %s and cannot be opened", entry.Name, entry.Health), toaster.StyleWarn))
+			refusal := fmt.Sprintf("Store %s is %s and cannot be opened", entry.Name, entry.Health)
+			// The reason takes a line of its own: the toast cuts each line at
+			// the terminal width, and the cause is at the end of the reason.
+			if entry.Detail != "" {
+				refusal += "\n" + entry.Detail
+			}
+			return m, batchCmds(modeCmd, m.showToast(refusal, toaster.StyleWarn))
 		}
 		// Already the active store: leave the picker and touch nothing, rather
 		// than rebuilding every surface to show what is already there.
