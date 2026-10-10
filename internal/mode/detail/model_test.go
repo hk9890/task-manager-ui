@@ -114,19 +114,19 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		},
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
 		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ContentScrollOffset)
 	}
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}, 80, 10); !consumed {
 		t.Fatal("expected configured scroll-up key to be consumed")
 	}
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
 		t.Fatal("expected configured page-down key to be consumed")
 	}
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")}, 80, 10); !consumed {
 		t.Fatal("expected configured end key to be consumed")
 	}
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
 		t.Fatalf("expected configured home key to reset offset, got %d", m.ContentScrollOffset)
 	}
 }
@@ -166,7 +166,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected top-of-detail content (meta row) in initial viewport, got:\n%s", initial)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
 		t.Fatalf("expected page down to be consumed")
 	}
 	after := m.View(80, 10, false, 0)
@@ -174,7 +174,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected viewport output to change after page down")
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
 		t.Fatalf("expected end key to be consumed")
 	}
 	endView := m.View(80, 10, false, 0)
@@ -182,7 +182,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
 		t.Fatalf("expected home key to be consumed")
 	}
 	homeView := m.View(80, 10, false, 0)
@@ -206,12 +206,12 @@ func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
 	}
 
 	_ = m.View(120, 10, false, 0)
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
 		t.Fatal("expected end key at wide width to be consumed")
 	}
 	wideOffset := m.ContentScrollOffset
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
 		t.Fatal("expected end key at narrow width to be consumed")
 	}
 
@@ -229,7 +229,7 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 		t.Fatalf("expected default focus pane content, got %v", got)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed in detail mode")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneDependencies {
@@ -237,35 +237,35 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	}
 
 	m.BrowserItems = []domain.IssueReference{{ID: "tm-1"}, {ID: "tm-2"}}
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from content to focus browser when present, got %v", got)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from browser to stay on browser, got %v", got)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneContent {
 		t.Fatalf("expected right from browser to focus content, got %v", got)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneMetadata {
 		t.Fatalf("expected right from content to focus metadata, got %v", got)
 	}
 
-	if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneMetadata {
@@ -275,8 +275,8 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 
 // TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused verifies
 // that ↑/↓ in the Dependencies pane moves BrowserSelectedIndex and returns a
-// nil intent (no detail reload). Cursor movement is now decoupled from reload
-// (Q6a, Q5 decoupling). Enter is the only key that triggers OpenRelatedIssueIntent.
+// nil command (no detail reload). Cursor movement is now decoupled from reload
+// (Q6a, Q5 decoupling). Enter is the only key that triggers OpenRelatedIssueMsg.
 func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *testing.T) {
 	t.Parallel()
 
@@ -294,13 +294,13 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 		},
 	}
 
-	// (Q6a) Arrow moves BrowserSelectedIndex; intent must be nil (no reload).
-	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	// (Q6a) Arrow moves BrowserSelectedIndex; the command must be nil (no reload).
+	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed {
 		t.Fatal("expected down to be consumed in Dependencies pane")
 	}
-	if intent != nil {
-		t.Fatalf("expected down in Dependencies pane to return nil intent (no reload), got %+v", intent)
+	if cmd != nil {
+		t.Fatal("expected down in Dependencies pane to return no command (no reload)")
 	}
 	if m.BrowserSelectedIndex != 1 {
 		t.Fatalf("expected related index to move to 1, got %d", m.BrowserSelectedIndex)
@@ -309,23 +309,23 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 		t.Fatalf("expected selected related issue tm-2 after down, got %q", selected.ID)
 	}
 
-	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	consumed, cmd = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
 	if !consumed {
 		t.Fatal("expected up to be consumed in Dependencies pane")
 	}
-	if intent != nil {
-		t.Fatalf("expected up in Dependencies pane to return nil intent (no reload), got %+v", intent)
+	if cmd != nil {
+		t.Fatal("expected up in Dependencies pane to return no command (no reload)")
 	}
 	if m.BrowserSelectedIndex != 0 {
 		t.Fatalf("expected related index to move back to 0, got %d", m.BrowserSelectedIndex)
 	}
 }
 
-// TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent verifies that
-// pressing Enter while the Dependencies pane is focused emits
-// OpenRelatedIssueIntent for the highlighted row (Q5, Q6b). This is hardcoded
+// TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueMsg verifies that
+// pressing Enter while the Dependencies pane is focused returns a command that
+// produces OpenRelatedIssueMsg for the highlighted row (Q5, Q6b). This is hardcoded
 // (NOT keymap-driven), consistent with how Enter in the Metadata pane works.
-func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent(t *testing.T) {
+func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueMsg(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -342,15 +342,19 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueIntent(t *testing.T) 
 		},
 	}
 
-	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 80, 10)
+	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 80, 10)
 	if !consumed {
 		t.Fatal("expected enter on Dependencies pane to be consumed")
 	}
-	if intent == nil {
-		t.Fatal("expected enter on Dependencies pane to emit OpenRelatedIssueIntent, got nil")
+	if cmd == nil {
+		t.Fatal("expected enter on Dependencies pane to return a command, got nil")
 	}
-	if intent.IssueID != "tm-3" {
-		t.Fatalf("expected OpenRelatedIssueIntent.IssueID=tm-3 (BrowserSelectedIndex=1), got %q", intent.IssueID)
+	msg, ok := cmd().(OpenRelatedIssueMsg)
+	if !ok {
+		t.Fatalf("expected an OpenRelatedIssueMsg, got %T", cmd())
+	}
+	if msg.Ref.ID != "tm-3" {
+		t.Fatalf("expected OpenRelatedIssueMsg.Ref.ID=tm-3 (BrowserSelectedIndex=1), got %q", msg.Ref.ID)
 	}
 }
 
@@ -456,31 +460,31 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 		},
 	}
 
-	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed {
 		t.Fatal("expected metadata pane to consume scroll bindings")
 	}
-	if intent != nil {
-		t.Fatalf("expected no intent in metadata pane, got %+v", intent)
+	if cmd != nil {
+		t.Fatal("expected no command in metadata pane")
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected metadata down to select priority after status, got %q", m.MetadataSelectedField)
-	}
-
-	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
-	if !consumed || intent != nil {
-		t.Fatalf("expected metadata down to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
-	}
-	if m.MetadataSelectedField != detail.MetadataFieldPriority {
-		t.Fatalf("expected metadata selection clamped to priority, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldPriority {
+		t.Fatalf("expected metadata down to select priority after status, got %q", m.metadataField)
 	}
 
-	consumed, intent, _ = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
-	if !consumed || intent != nil {
-		t.Fatalf("expected metadata up to remain consumed with no intent, consumed=%v intent=%v", consumed, intent)
+	consumed, cmd = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	if !consumed || cmd != nil {
+		t.Fatalf("expected metadata down to remain consumed with no command, consumed=%v command=%v", consumed, cmd != nil)
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldStatus {
-		t.Fatalf("expected metadata up to select status, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldPriority {
+		t.Fatalf("expected metadata selection clamped to priority, got %q", m.metadataField)
+	}
+
+	consumed, cmd = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	if !consumed || cmd != nil {
+		t.Fatalf("expected metadata up to remain consumed with no command, consumed=%v command=%v", consumed, cmd != nil)
+	}
+	if m.metadataField != detail.MetadataFieldStatus {
+		t.Fatalf("expected metadata up to select status, got %q", m.metadataField)
 	}
 }
 
@@ -496,12 +500,9 @@ func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T
 		},
 	}
 
-	consumed, intent, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
+	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
 	if !consumed {
 		t.Fatal("expected enter in metadata pane to be consumed")
-	}
-	if intent != nil {
-		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
 	}
 	if cmd == nil {
 		t.Fatal("expected metadata enter to emit an action request")
@@ -519,21 +520,18 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 	t.Parallel()
 
 	m := Model{
-		selectionID:           "tm-1",
-		targetID:              "tm-1",
-		FocusPane:             detail.FocusPaneMetadata,
-		MetadataSelectedField: detail.MetadataFieldPriority,
+		selectionID:   "tm-1",
+		targetID:      "tm-1",
+		FocusPane:     detail.FocusPaneMetadata,
+		metadataField: detail.MetadataFieldPriority,
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Priority: 1},
 		},
 	}
 
-	consumed, intent, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
+	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
 	if !consumed {
 		t.Fatal("expected enter in metadata pane to be consumed")
-	}
-	if intent != nil {
-		t.Fatalf("expected no related-open intent from metadata enter, got %+v", intent)
 	}
 	if cmd == nil {
 		t.Fatal("expected metadata enter on priority to emit an action request")
@@ -568,8 +566,8 @@ func TestModelApplyLoadedDetailBuildsBrowserFromDependenciesAndParentGroup(t *te
 	}
 	m.ApplyLoadedDetail("tm-42", first)
 
-	if m.BrowserGroupParentID != "tm-1" {
-		t.Fatalf("expected parent id tm-1, got %q", m.BrowserGroupParentID)
+	if m.browserGroupParentID != "tm-1" {
+		t.Fatalf("expected parent id tm-1, got %q", m.browserGroupParentID)
 	}
 	// Only the parent (tm-1) is appended after the dependency groups; the
 	// currently-viewed issue (tm-42) is excluded entirely.
@@ -679,7 +677,7 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 	t.Parallel()
 
 	m := Model{
-		BrowserGroupParentID: "tm-parent",
+		browserGroupParentID: "tm-parent",
 		BrowserItems:         []domain.IssueReference{{ID: "tm-parent"}, {ID: "tm-child"}},
 		BrowserSelectedIndex: 1,
 		FocusPane:            detail.FocusPaneBrowser,
@@ -687,8 +685,8 @@ func TestModelApplyLoadedDetailClearsBrowserWhenNoParentGroupContext(t *testing.
 
 	m.ApplyLoadedDetail("tm-child", domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-child"}})
 
-	if m.BrowserGroupParentID != "" {
-		t.Fatalf("expected browser parent id to clear, got %q", m.BrowserGroupParentID)
+	if m.browserGroupParentID != "" {
+		t.Fatalf("expected browser parent id to clear, got %q", m.browserGroupParentID)
 	}
 	if len(m.BrowserItems) != 0 {
 		t.Fatalf("expected browser items to clear, got %#v", m.BrowserItems)
@@ -720,8 +718,8 @@ func TestModelApplyLoadedDetailWithoutParentGroupBuildsBrowserFromDependencies(t
 		},
 	})
 
-	if m.BrowserGroupParentID != "" {
-		t.Fatalf("expected no parent-group id for dependency-only issue, got %q", m.BrowserGroupParentID)
+	if m.browserGroupParentID != "" {
+		t.Fatalf("expected no parent-group id for dependency-only issue, got %q", m.browserGroupParentID)
 	}
 	// tm-1 is the currently-viewed issue and must be excluded even though it appears
 	// in its own BlockedBy group; the duplicate tm-3 is de-duplicated.
@@ -1285,7 +1283,7 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 
 	// Press j 15 times on the Dependencies pane.
 	for i := 0; i < 15; i++ {
-		consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height)
+		consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height)
 		if !consumed {
 			t.Fatalf("expected j key to be consumed on step %d", i+1)
 		}
@@ -1313,11 +1311,11 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
-		selectionID:           "tm-1",
-		targetID:              "tm-1",
-		FocusPane:             detail.FocusPaneMetadata,
-		MetadataSelectedField: detail.MetadataFieldStatus,
-		Keys:                  mustResolveDetailKeys(t, nil),
+		selectionID:   "tm-1",
+		targetID:      "tm-1",
+		FocusPane:     detail.FocusPaneMetadata,
+		metadataField: detail.MetadataFieldStatus,
+		Keys:          mustResolveDetailKeys(t, nil),
 		Detail: domain.IssueDetail{
 			Summary: domain.IssueSummary{ID: "tm-1", Title: "One", Status: "open", Priority: 1},
 		},
@@ -1326,15 +1324,15 @@ func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
 	// Only two editable metadata fields (Status, Priority). Moving down from
 	// Status to Priority doesn't scroll when the pane is tall enough. This test
 	// verifies the model doesn't panic and the field advances correctly.
-	consumed, intent, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 160, 10)
+	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 160, 10)
 	if !consumed {
 		t.Fatal("expected j to be consumed in metadata pane")
 	}
-	if intent != nil {
-		t.Fatalf("expected no intent from metadata nav, got %+v", intent)
+	if cmd != nil {
+		t.Fatal("expected no command from metadata nav")
 	}
-	if m.MetadataSelectedField != detail.MetadataFieldPriority {
-		t.Errorf("expected field to advance to Priority, got %q", m.MetadataSelectedField)
+	if m.metadataField != detail.MetadataFieldPriority {
+		t.Errorf("expected field to advance to Priority, got %q", m.metadataField)
 	}
 }
 
@@ -1632,7 +1630,7 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 				step, selected.Title, selected.ID, m.BrowserSelectedIndex, view)
 		}
 
-		if consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height); !consumed {
+		if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height); !consumed {
 			t.Fatalf("step %d: expected down to be consumed in the Dependencies pane", step)
 		}
 	}

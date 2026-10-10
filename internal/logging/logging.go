@@ -58,7 +58,7 @@ func New(opts Options) *Manager {
 
 	sessionID := strings.TrimSpace(opts.SessionID)
 	if sessionID == "" {
-		sessionID = generateSessionID()
+		sessionID = generateSessionID(rand.Read)
 	}
 
 	sh := newStderrHandler(stderr, opts.Debug)
@@ -316,16 +316,13 @@ func newJSONFileHandler(writer io.Writer, debug bool) slog.Handler {
 	})
 }
 
-// randReader is the source of entropy for session ID generation. Replaced in
-// tests to simulate rand.Read failures.
-var randReader = func(b []byte) (int, error) { return rand.Read(b) }
-
-// generateSessionID returns an 8-character hex session identifier. On rand.Read
-// failure it appends the current nanosecond timestamp in hex to ensure uniqueness
-// across concurrent processes or degraded-entropy restarts.
-func generateSessionID() string {
+// generateSessionID returns an 8-character hex session identifier read from
+// the entropy source read. On a read failure it returns the current nanosecond
+// timestamp in hex to ensure uniqueness across concurrent processes or
+// degraded-entropy restarts.
+func generateSessionID(read func([]byte) (int, error)) string {
 	raw := make([]byte, 4)
-	if _, err := randReader(raw); err != nil {
+	if _, err := read(raw); err != nil {
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(raw)

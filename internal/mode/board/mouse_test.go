@@ -1,6 +1,8 @@
 package board
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,22 +184,20 @@ func TestClickOffTheRowsSelectsNothing(t *testing.T) {
 	}
 }
 
-// TestWheelMovesTheSelectionOfTheFocusedColumn moves one row a notch and stops
-// at the ends. The focus stays where a click or a key put it, whichever column
-// the pointer is over.
-func TestWheelMovesTheSelectionOfTheFocusedColumn(t *testing.T) {
+// TestWheelMovesTheSelectionOfTheColumnUnderThePointer moves one row a notch,
+// takes the focus to the column the pointer is over, and stops at the ends.
+func TestWheelMovesTheSelectionOfTheColumnUnderThePointer(t *testing.T) {
 	t.Parallel()
 
 	m := mouseBoard(t)
-	_ = m.Update(mouseAt(t, m, mode.MouseClick, "progress-one", 0))
 
 	cmd := m.Update(mouseAt(t, m, mode.MouseWheelDown, "progress-one", 1000))
-	if got := selectionFrom(t, cmd); got != "tm-8" {
-		t.Fatalf("a notch down selected %q, want tm-8", got)
+	if got := selectionFrom(t, cmd); got != "tm-8" || m.focusedColumn != 1 {
+		t.Fatalf("a notch over In Progress selected %q in column %d, want tm-8 in column 1", got, m.focusedColumn)
 	}
-	cmd = m.Update(mouseAt(t, m, mode.MouseWheelDown, "ready-one", 1010))
-	if got := selectionFrom(t, cmd); got != "tm-9" || m.focusedColumn != 1 {
-		t.Fatalf("a notch with the pointer over Ready selected %q in column %d, want tm-9 in the focused column 1", got, m.focusedColumn)
+	cmd = m.Update(mouseAt(t, m, mode.MouseWheelDown, "progress-one", 1010))
+	if got := selectionFrom(t, cmd); got != "tm-9" {
+		t.Fatalf("a second notch selected %q, want tm-9", got)
 	}
 	if cmd = m.Update(mouseAt(t, m, mode.MouseWheelDown, "progress-one", 1020)); cmd != nil {
 		t.Fatal("a notch past the last row reported a selection change")
@@ -205,6 +205,159 @@ func TestWheelMovesTheSelectionOfTheFocusedColumn(t *testing.T) {
 	cmd = m.Update(mouseAt(t, m, mode.MouseWheelUp, "progress-one", 1030))
 	if got := selectionFrom(t, cmd); got != "tm-8" {
 		t.Fatalf("a notch up selected %q, want tm-8", got)
+	}
+	cmd = m.Update(mouseAt(t, m, mode.MouseWheelDown, "ready-one", 1040))
+	if got := selectionFrom(t, cmd); got != "tm-2" || m.focusedColumn != 0 {
+		t.Fatalf("a notch over Ready selected %q in column %d, want tm-2 in column 0", got, m.focusedColumn)
+	}
+}
+
+// clippedBoard is a board of four columns at 120 cells, which draws three.
+func clippedBoard(t *testing.T) *Model {
+	t.Helper()
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
+	m.columns = []columnData{
+		{title: sectionTitleNotReady, issues: []domain.IssueSummary{
+			{ID: "tm-1", Title: "blocked-one", Status: "blocked", Type: "task"},
+		}, total: 1, exact: true},
+		{title: sectionTitleReady, issues: []domain.IssueSummary{
+			{ID: "tm-2", Title: "ready-one", Status: "open", Type: "task"},
+			{ID: "tm-3", Title: "ready-two", Status: "open", Type: "task"},
+			{ID: "tm-4", Title: "ready-three", Status: "open", Type: "task"},
+		}, total: 3, exact: true},
+		{title: sectionTitleInProgress, issues: []domain.IssueSummary{
+			{ID: "tm-7", Title: "progress-one", Status: "in_progress", Type: "task"},
+			{ID: "tm-8", Title: "progress-two", Status: "in_progress", Type: "bug"},
+		}, total: 2, exact: true},
+		{title: sectionTitleDone, issues: []domain.IssueSummary{
+			{ID: "tm-9", Title: "done-one", Status: "closed", Type: "task"},
+		}, total: 1, exact: true},
+	}
+	m.SetSize(120, 24)
+	return m
+}
+
+func assertColumnsDrawn(t *testing.T, m *Model, want string) {
+	t.Helper()
+	if view := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), ""); !strings.Contains(view, want) {
+		t.Fatalf("the board does not draw %q:\n%s", want, view)
+	}
+}
+
+// TestAClickLeavesTheColumnsUnderThePointer: a click on a row of the last
+// drawn column takes the focus there and the columns stay where they are, so
+// the second click of a double click finds the same row and opens it.
+func TestAClickLeavesTheColumnsUnderThePointer(t *testing.T) {
+	t.Parallel()
+
+	m := clippedBoard(t)
+	assertColumnsDrawn(t, m, "cols 1-3/4")
+
+	click := mouseAt(t, m, mode.MouseClick, "progress-two", 0)
+	cmd := m.Update(click)
+	if got := selectionFrom(t, cmd); got != "tm-8" || m.focusedColumn != 2 {
+		t.Fatalf("the click selected %q in column %d, want tm-8 in column 2", got, m.focusedColumn)
+	}
+	assertColumnsDrawn(t, m, "cols 1-3/4")
+	if x, y := testui.FindCell(t, m.View(0), "progress-two"); x != click.X || y != click.Y {
+		t.Fatalf("the clicked row moved from cell (%d,%d) to (%d,%d)", click.X, click.Y, x, y)
+	}
+
+	click.At = click.At.Add(200 * time.Millisecond)
+	if !opensDetail(m.Update(click)) {
+		t.Fatal("a second click on the row of a column that was not focused did not open Detail")
+	}
+}
+
+// TestADoubleClickOnAHalfDrawnRowOpensIt: at 24 lines a column draws ten issues
+// and the first line of the next. A click on that line selects the issue and
+// scrolls it into the window, so the second click of the pair finds another
+// issue under the same cell. It opens the one the first click selected.
+func TestADoubleClickOnAHalfDrawnRowOpensIt(t *testing.T) {
+	t.Parallel()
+
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
+	issues := make([]domain.IssueSummary, 12)
+	for i := range issues {
+		issues[i] = domain.IssueSummary{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("row-%02d", i), Status: "open", Type: "task"}
+	}
+	m.columns = []columnData{{title: sectionTitleReady, issues: issues, total: len(issues), exact: true}}
+	m.SetSize(100, 24)
+
+	click := mouseAt(t, m, mode.MouseClick, "row-10", 0)
+	cmd := m.Update(click)
+	if got := selectionFrom(t, cmd); got != "tm-10" || m.scrollOffset[0] == 0 {
+		t.Fatalf("setup: the click selected %q at offset %d, want tm-10 scrolled into the window", got, m.scrollOffset[0])
+	}
+
+	click.At = click.At.Add(200 * time.Millisecond)
+	if cmd = m.Update(click); !opensDetail(cmd) || m.selectedIssueID() != "tm-10" {
+		t.Fatalf("the second click at the same cell did not open tm-10; the selection is %q", m.selectedIssueID())
+	}
+}
+
+// TestTheColumnsMoveOnlyWhenTheFocusLeavesThem walks the focus with the keys
+// across a board that draws three of its four columns.
+func TestTheColumnsMoveOnlyWhenTheFocusLeavesThem(t *testing.T) {
+	t.Parallel()
+
+	m := clippedBoard(t)
+	right, left := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")}
+
+	_ = m.Update(right)
+	_ = m.Update(right)
+	if m.focusedColumn != 2 {
+		t.Fatalf("setup: focus on column %d, want 2", m.focusedColumn)
+	}
+	assertColumnsDrawn(t, m, "cols 1-3/4")
+
+	_ = m.Update(right)
+	assertColumnsDrawn(t, m, "cols 2-4/4")
+	_ = m.Update(left)
+	assertColumnsDrawn(t, m, "cols 2-4/4")
+	_ = m.Update(left)
+	assertColumnsDrawn(t, m, "cols 2-4/4")
+	_ = m.Update(left)
+	assertColumnsDrawn(t, m, "cols 1-3/4")
+}
+
+// TestAResizeKeepsTheFocusedColumnDrawn widens the board until every column
+// fits and narrows it again with the focus on the last column.
+func TestAResizeKeepsTheFocusedColumnDrawn(t *testing.T) {
+	t.Parallel()
+
+	m := clippedBoard(t)
+	m.focusedColumn = doneColumnIndex
+
+	m.SetSize(200, 24)
+	for _, title := range []string{sectionTitleNotReady, sectionTitleReady, sectionTitleInProgress, sectionTitleDone} {
+		assertColumnsDrawn(t, m, "─ "+title+" ─")
+	}
+
+	m.SetSize(120, 24)
+	assertColumnsDrawn(t, m, "cols 2-4/4")
+	assertSelectionDrawn(t, m)
+}
+
+// TestTheWheelOverAnUnfocusedColumnStaysOnThatColumn: the notch takes the
+// focus to the column under the pointer without moving the columns, so the
+// next notch at the same cell moves the same column.
+func TestTheWheelOverAnUnfocusedColumnStaysOnThatColumn(t *testing.T) {
+	t.Parallel()
+
+	m := clippedBoard(t)
+	notch := mouseAt(t, m, mode.MouseWheelDown, "progress-one", 0)
+
+	cmd := m.Update(notch)
+	if got := selectionFrom(t, cmd); got != "tm-8" || m.focusedColumn != 2 {
+		t.Fatalf("the notch selected %q in column %d, want tm-8 in column 2", got, m.focusedColumn)
+	}
+	assertColumnsDrawn(t, m, "cols 1-3/4")
+
+	notch.Kind = mode.MouseWheelUp
+	cmd = m.Update(notch)
+	if got := selectionFrom(t, cmd); got != "tm-7" || m.focusedColumn != 2 {
+		t.Fatalf("the second notch selected %q in column %d, want tm-7 in column 2", got, m.focusedColumn)
 	}
 }
 

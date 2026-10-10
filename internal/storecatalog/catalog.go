@@ -24,7 +24,8 @@ const (
 	HealthOK Health = "ok"
 	// HealthDangling marks a registry entry whose store directory is absent.
 	HealthDangling Health = "dangling"
-	// HealthBroken marks a store directory holding no config.
+	// HealthBroken marks a store directory holding no config, or one that
+	// cannot be read. Entry.Detail has the reason in the second case.
 	HealthBroken Health = "broken"
 	// HealthUnknown marks a health value this build does not recognise, which
 	// is what a newer SDK adding a fourth case looks like from here.
@@ -43,6 +44,9 @@ type Entry struct {
 	// StorePath is the store directory itself, under the central root.
 	StorePath string
 	Health    Health
+	// Detail is why the store directory could not be read. It is empty for
+	// every other entry.
+	Detail string
 }
 
 // Opened is a store ready to browse: the repository that reads it, and the
@@ -84,9 +88,8 @@ type Catalog interface {
 	// Stores returns every central-registry entry, in the order the registry
 	// reports them. An absent registry is an empty slice, not an error.
 	//
-	// The listing is all-or-nothing: the SDK abandons it when a single entry's
-	// store directory cannot be stat'd, so one unreadable directory costs every
-	// other store on the machine. That is the SDK's behaviour and this port
-	// reports it rather than working around it (docs/OVERVIEW.md).
+	// A registry that loads yields every entry: a store directory that cannot
+	// be read is a HealthBroken entry with the reason in Detail, not an error.
+	// The error is for a registry that cannot be read at all.
 	Stores(ctx context.Context) ([]Entry, error)
 }

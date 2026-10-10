@@ -1,6 +1,8 @@
 package detail
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
@@ -13,8 +15,8 @@ const wheelLines = 3
 // the text pane it is over and moves the cursor of the Dependencies pane, as
 // the scroll keys do in each. A click focuses the pane it lands on; on a
 // reference row it also puts the cursor there, and a second click opens that
-// issue, which is the intent returned.
-func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) *OpenRelatedIssueIntent {
+// issue: the command returned carries the OpenRelatedIssueMsg.
+func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) tea.Cmd {
 	// Nothing is drawn without a viewport, so there is no cell to be over.
 	if viewportHeight <= 0 {
 		m.pointer = nil
@@ -55,10 +57,10 @@ func (m *Model) wheel(pane detail.FocusPane, direction, maxWidth, viewportHeight
 	m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, "", direction*wheelLines)
 }
 
-func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) *OpenRelatedIssueIntent {
+func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
 	if m.clicks.Double(hit.RefID, m.browserSelectedIssueID(), msg) {
 		if ref, ok := m.selectedRelatedIssue(); ok {
-			return &OpenRelatedIssueIntent{IssueID: ref.ID, Ref: ref}
+			return openRelatedIssueCmd(ref)
 		}
 		return nil
 	}

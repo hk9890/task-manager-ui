@@ -12,8 +12,10 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 // twoStores is an app open on store alpha, with store bravo registered and
@@ -224,6 +226,36 @@ func TestAnUnusableStoreIsNotOpened(t *testing.T) {
 	}
 	if m.active != mode.StorePicker {
 		t.Errorf("active mode: got %q, want the picker to stay up", m.active)
+	}
+}
+
+// The reason a store directory could not be read reaches the operator with the
+// refusal, on a line of its own.
+func TestAnUnusableStoreWithADetailShowsItInTheToast(t *testing.T) {
+	s := newTwoStores(t)
+	m := applyMessages(t, s.m, []tea.Msg{tea.WindowSizeMsg{Width: 140, Height: 40}})
+
+	m = applyMessages(t, m, []tea.Msg{storepickermode.OpenMsg{Entry: storecatalog.Entry{
+		Name:   "refused",
+		Health: storecatalog.HealthBroken,
+		Detail: "stat /stores/refused/config.yaml: permission denied",
+	}}})
+
+	if got := s.catalog.Opened(); len(got) != 0 {
+		t.Errorf("catalog opened %v for an unusable entry, want nothing", got)
+	}
+	lines := strings.Split(textutil.StripANSI(m.toast.View()), "\n")
+	refusal, detail := -1, -1
+	for i, line := range lines {
+		if strings.Contains(line, "Store refused is broken and cannot be opened") {
+			refusal = i
+		}
+		if strings.Contains(line, "stat /stores/refused/config.yaml: permission denied") {
+			detail = i
+		}
+	}
+	if refusal < 0 || detail != refusal+1 {
+		t.Errorf("expected the refusal with the reason on the line below it, got %q", m.toast.View())
 	}
 }
 

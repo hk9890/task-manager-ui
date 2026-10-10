@@ -8,9 +8,9 @@ import (
 )
 
 // handleMouse is the wheel, the pointer and the left button. The wheel moves
-// the selection of the focused column, as the arrow keys do. One click selects
-// an issue, taking the focus to its column, and a second opens it, as Enter
-// does.
+// the selection of the column under the pointer, taking the focus there. One
+// click selects an issue, taking the focus to its column, and a second opens
+// it, as Enter does.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 	m.pointer = msg.Pointer()
 	if m.pointer == nil {
@@ -24,21 +24,21 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 
 	switch msg.Kind {
 	case mode.MouseWheelUp:
-		return m.wheel(-1)
+		return m.wheel(hit.Column, -1)
 	case mode.MouseWheelDown:
-		return m.wheel(1)
+		return m.wheel(hit.Column, 1)
 	case mode.MouseClick:
 		return m.click(hit, msg)
 	}
 	return nil
 }
 
-// wheel moves the selection of the focused column, whichever column the
-// pointer is over. Taking the focus to the column under the pointer would
-// re-centre a board too narrow for all its columns, and the next notch would
-// land on a different column than the first.
-func (m *Model) wheel(delta int) tea.Cmd {
+// wheel focuses column and moves its selection one row. The column is drawn
+// under the pointer, so the focus change leaves the columns where they are and
+// the next notch lands on the same one.
+func (m *Model) wheel(column, delta int) tea.Cmd {
 	previous := m.selectedIssueID()
+	m.focusedColumn = column
 	m.moveRow(delta)
 	if m.selectedIssueID() == previous {
 		return nil
@@ -91,6 +91,7 @@ func (m *Model) viewState(skeletonPhase int) uiboard.State {
 		DashboardTitle: dashboardTitle,
 		Columns:        uiColumns,
 		FocusedColumn:  m.focusedColumn,
+		ColumnStart:    m.columnStart,
 		Width:          m.width,
 		Height:         m.height,
 		SkeletonPhase:  skeletonPhase,

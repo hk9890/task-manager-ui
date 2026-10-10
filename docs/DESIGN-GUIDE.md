@@ -231,10 +231,14 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Test a `HitTest` against the renderer, not against arithmetic: `testui.FindCell` finds where
   `Render` drew a text, and the test asserts `HitTest` reports that row there.
 - One click selects a row and a second opens it. Take the decision from `mode.ClickTracker`: a
-  second click on the same cell opens the row the first one selected, because selecting a board row
-  can re-centre the columns and slide another row under the pointer.
-- The wheel moves a list's selection one row a notch — on the board the focused column's, for the
-  same re-centring reason — and scrolls a pane of text.
+  second click on the same cell opens the row the first one selected, because selecting a row drawn
+  with only its first line scrolls the list and slides another row under the pointer.
+- The wheel moves a list's selection one row a notch — on the board the selection of the column
+  under the pointer, which takes the focus — and scrolls a pane of text.
+- A focus change must not move what is under the pointer. A board too narrow for all its columns
+  keeps the drawn ones in place until the focus leaves them, and then moves only as far as it takes
+  to draw the focused column (`board.ColumnStart`). The mode model owns the window start and
+  passes it in `State.ColumnStart`.
 - Hover is derived on every draw from the stored pointer cell, never stored as a row, so a row that
   scrolls or reloads under a still pointer is the one marked. It draws as the quieter row band
   (Selection and scrolling); a hovered tab or menu-bar button takes `ShellTabHoverColor`.

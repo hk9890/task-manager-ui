@@ -27,10 +27,11 @@ func TestClickTrackerTellsADoubleClickFromTwoSingleOnes(t *testing.T) {
 		{name: "two slow clicks", clicks: []click{{"a", "", 5, 5, 0, false}, {"a", "a", 5, 5, 400, false}}},
 		{name: "two rows", clicks: []click{{"a", "", 5, 5, 0, false}, {"b", "a", 5, 6, 100, false}}},
 		{name: "a double click is consumed", clicks: []click{{"a", "", 5, 5, 0, false}, {"a", "a", 5, 5, 100, true}, {"a", "a", 5, 5, 200, false}, {"a", "a", 5, 5, 300, true}}},
-		// The first click moved the row away: the same cell now holds another
+		// The first click scrolled the row away: the same cell now holds another
 		// row, or none, and the operator still means the row they selected.
 		{name: "same cell, another row under it", clicks: []click{{"a", "", 5, 5, 0, false}, {"b", "a", 5, 5, 100, true}}},
 		{name: "same cell, no row under it", clicks: []click{{"a", "", 5, 5, 0, false}, {"", "a", 5, 5, 100, true}}},
+		{name: "another cell, no row under it", clicks: []click{{"a", "", 5, 5, 0, false}, {"", "a", 5, 9, 100, false}}},
 		{name: "the first click selected nothing", clicks: []click{{"", "", 5, 5, 0, false}, {"", "", 5, 5, 100, false}, {"a", "", 5, 5, 200, false}}},
 		// A wheel notch or a key moved the selection off the clicked row:
 		// opening the selection would open a row nobody clicked.

@@ -110,11 +110,7 @@ func (m *Model) mouseToSurface(event mode.MouseMsg) tea.Cmd {
 		// One measure for both: each viewport getter renders the header and
 		// the footer to take theirs, and the pointer asks on every cell.
 		width, height := m.workspaceSize()
-		intent := m.detail.HandleMouse(event, width, height)
-		if intent == nil {
-			return nil
-		}
-		return m.drillInto(*intent)
+		return m.detail.HandleMouse(event, width, height)
 	}
 	// Board is the shell's home tab, so an unknown active mode draws it
 	// (renderBody) and the mouse follows what is drawn.

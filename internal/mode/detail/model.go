@@ -26,13 +26,13 @@ type Model struct {
 	loading     bool
 	errText     string
 
-	Detail                domain.IssueDetail
-	PreviewDetail         domain.IssueDetail
-	Keys                  config.ResolvedKeyBindings
-	FocusPane             detail.FocusPane
-	MetadataSelectedField detail.MetadataFieldKey
+	Detail        domain.IssueDetail
+	previewDetail domain.IssueDetail
+	Keys          config.ResolvedKeyBindings
+	FocusPane     detail.FocusPane
+	metadataField detail.MetadataFieldKey
 
-	BrowserGroupParentID string
+	browserGroupParentID string
 	BrowserItems         []domain.IssueReference
 	BrowserSelectedIndex int
 
@@ -52,13 +52,18 @@ type Model struct {
 	clicks  mode.ClickTracker
 }
 
-// OpenRelatedIssueIntent requests shell-level navigation to another issue from
-// dedicated detail mode. Ref carries the already-known row data (title, type,
-// status, priority) so the shell can paint an optimistic header immediately
-// while the full detail loads.
-type OpenRelatedIssueIntent struct {
-	IssueID string
-	Ref     domain.IssueReference
+// OpenRelatedIssueMsg asks the shell to navigate detail mode to another issue.
+// Ref.ID is the target; the rest of Ref is the already-known row data (title,
+// type, status, priority) so the shell can paint an optimistic header
+// immediately while the full detail loads.
+type OpenRelatedIssueMsg struct {
+	Ref domain.IssueReference
+}
+
+func openRelatedIssueCmd(ref domain.IssueReference) tea.Cmd {
+	return func() tea.Msg {
+		return OpenRelatedIssueMsg{Ref: ref}
+	}
 }
 
 // BeginLoadOptions tunes one BeginLoad call.
@@ -187,7 +192,7 @@ func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 		m.DependenciesScrollOffset = 0
 	}
 	m.Detail = d
-	m.PreviewDetail = domain.IssueDetail{}
+	m.previewDetail = domain.IssueDetail{}
 	m.syncBrowserPanel(issueID)
 	if m.drillDepsFocusCalls > 0 {
 		m.drillDepsFocusCalls--
@@ -204,7 +209,7 @@ func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 
 // ApplyPreviewDetail stores loaded preview detail without mutating browser-panel state.
 func (m *Model) ApplyPreviewDetail(d domain.IssueDetail) {
-	m.PreviewDetail = d
+	m.previewDetail = d
 }
 
 // SelectBrowserIssue updates the highlighted browser item for a target issue.
@@ -261,7 +266,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 //     the user sees "(no description)" / "(none)" fallbacks during the in-flight
 //     window, which misrepresents loading state as empty content.
 func (m *Model) skeletonContent() bool {
-	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.PreviewDetail.Summary.ID) == ""
+	previewSkeleton := m.isPreviewingTarget() && strings.TrimSpace(m.previewDetail.Summary.ID) == ""
 	directNavSkeleton := m.loading && !m.isPreviewingTarget() &&
 		strings.TrimSpace(m.Detail.Description) == "" &&
 		len(m.Detail.Comments) == 0 &&
@@ -318,15 +323,13 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	m.MetadataScrollOffset = textutil.Clamp(m.MetadataScrollOffset, 0, bounds.Metadata)
 }
 
-// HandleKey updates detail-mode scroll state and reports whether it consumed the key.
 // HandleKey processes one key for detail mode. It reports whether the key was
-// consumed, an optional drill-in intent, and an optional Cmd carrying a
-// mode.ActionRequestMsg for a shell-owned action (the metadata quick-edit
-// dialogs). The Cmd replaces a pair of flags the shell used to poll after every
-// key press; see internal/mode/contracts.go.
-func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *OpenRelatedIssueIntent, tea.Cmd) {
+// consumed, and an optional Cmd for the shell: an OpenRelatedIssueMsg for a
+// drill-in, or a mode.ActionRequestMsg for a shell-owned action (the metadata
+// quick-edit dialogs); see internal/mode/contracts.go.
+func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, tea.Cmd) {
 	if viewportHeight <= 0 {
-		return false, nil, nil
+		return false, nil
 	}
 	m.normalizeRelatedSelection()
 	m.ensureMetadataSelection()
@@ -340,10 +343,10 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	switch msg.Type {
 	case tea.KeyLeft:
 		m.moveFocusLeft()
-		return true, nil, nil
+		return true, nil
 	case tea.KeyRight:
 		m.moveFocusRight()
-		return true, nil, nil
+		return true, nil
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneDependencies {
@@ -351,19 +354,19 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
 		// special case, consistent with how Enter in the Metadata pane works.
 		if ref, ok := m.selectedRelatedIssue(); ok {
-			return true, &OpenRelatedIssueIntent{IssueID: ref.ID, Ref: ref}, nil
+			return true, openRelatedIssueCmd(ref)
 		}
-		return true, nil, nil
+		return true, nil
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneMetadata {
 		switch m.metadataSelectedField() {
 		case detail.MetadataFieldStatus:
-			return true, nil, mode.RequestActionCmd(mode.Detail, mode.ActionOpenStatusDialog)
+			return true, mode.RequestActionCmd(mode.Detail, mode.ActionOpenStatusDialog)
 		case detail.MetadataFieldPriority:
-			return true, nil, mode.RequestActionCmd(mode.Detail, mode.ActionOpenPriorityDialog)
+			return true, mode.RequestActionCmd(mode.Detail, mode.ActionOpenPriorityDialog)
 		}
-		return true, nil, nil
+		return true, nil
 	}
 
 	bounds := m.paneGeometry(maxWidth, viewportHeight)
@@ -388,39 +391,39 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	case m.Keys.Match(config.DetailContext, config.DetailActionEnd, msg):
 		action = config.DetailActionEnd
 	default:
-		return false, nil, nil
+		return false, nil
 	}
 
 	switch m.focusPane() {
 	case detail.FocusPaneDependencies:
 		if action == config.DetailActionScrollUp {
-			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
+			// Only move the cursor highlight; do NOT emit OpenRelatedIssueMsg.
 			// The full detail reloads only when the user presses Enter (Q5).
 			m.moveRelatedSelection(-1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
-			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
+			// Only move the cursor highlight; do NOT emit OpenRelatedIssueMsg.
 			// The full detail reloads only when the user presses Enter (Q5).
 			m.moveRelatedSelection(1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
-		return true, nil, nil
+		return true, nil
 	case detail.FocusPaneMetadata:
 		if action == config.DetailActionScrollUp {
 			m.moveMetadataSelection(-1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
 			m.moveMetadataSelection(1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, action, move)
-		return true, nil, nil
+		return true, nil
 	default:
 		m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, action, move)
-		return true, nil, nil
+		return true, nil
 	}
 }
 
@@ -453,29 +456,29 @@ func (m *Model) moveFocusRight() {
 }
 
 func (m *Model) metadataSelectedField() detail.MetadataFieldKey {
-	if !isEditableMetadataField(m.MetadataSelectedField) {
+	if !isEditableMetadataField(m.metadataField) {
 		return detail.MetadataFieldStatus
 	}
-	return m.MetadataSelectedField
+	return m.metadataField
 }
 
 func (m *Model) ensureMetadataSelection() {
-	if !isEditableMetadataField(m.MetadataSelectedField) {
-		m.MetadataSelectedField = detail.MetadataFieldStatus
+	if !isEditableMetadataField(m.metadataField) {
+		m.metadataField = detail.MetadataFieldStatus
 	}
 }
 
 func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	fields := editableMetadataFields()
 	if len(fields) == 0 {
-		m.MetadataSelectedField = detail.MetadataFieldNone
+		m.metadataField = detail.MetadataFieldNone
 		return
 	}
 
 	m.ensureMetadataSelection()
 	index := 0
 	for i, key := range fields {
-		if key == m.MetadataSelectedField {
+		if key == m.metadataField {
 			index = i
 			break
 		}
@@ -488,10 +491,10 @@ func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
 	if next >= len(fields) {
 		next = len(fields) - 1
 	}
-	m.MetadataSelectedField = fields[next]
+	m.metadataField = fields[next]
 
 	// Keep the selected field inside the visible window.
-	lineIdx := detail.MetadataFieldLineIndex(m.MetadataSelectedField, m.Detail)
+	lineIdx := detail.MetadataFieldLineIndex(m.metadataField, m.Detail)
 	if lineIdx >= 0 && viewportHeight > 0 {
 		geometry := m.paneGeometry(maxWidth, viewportHeight)
 		total := geometry.Metadata + geometry.MetadataInnerHeight
@@ -549,8 +552,8 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 func (m *Model) RenderDetail() domain.IssueDetail {
 	content := m.Detail
 	if targetID := strings.TrimSpace(m.targetID); targetID != "" && targetID != strings.TrimSpace(m.selectionID) {
-		if strings.TrimSpace(m.PreviewDetail.Summary.ID) == targetID {
-			content = m.PreviewDetail
+		if strings.TrimSpace(m.previewDetail.Summary.ID) == targetID {
+			content = m.previewDetail
 		} else {
 			ref, ok := m.browserReferenceByID(targetID)
 			content = PlaceholderDetail(targetID, ref, ok)
@@ -648,7 +651,7 @@ func (m *Model) browserSelectedIssueID() string {
 
 func (m *Model) syncBrowserPanel(issueID string) {
 	parentID := strings.TrimSpace(m.Detail.ParentGroupBrowser.Parent.ID)
-	m.BrowserGroupParentID = parentID
+	m.browserGroupParentID = parentID
 	m.BrowserItems = browserItemsFromDependencies(m.Detail)
 	if len(m.BrowserItems) == 0 {
 		m.clearBrowserPanel()
@@ -659,7 +662,7 @@ func (m *Model) syncBrowserPanel(issueID string) {
 }
 
 func (m *Model) clearBrowserPanel() {
-	m.BrowserGroupParentID = ""
+	m.browserGroupParentID = ""
 	m.BrowserItems = nil
 	m.BrowserSelectedIndex = -1
 	// Do not flip focus during an in-flight drill sequence: the placeholder has no

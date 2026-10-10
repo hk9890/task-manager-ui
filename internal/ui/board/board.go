@@ -62,9 +62,12 @@ type State struct {
 	DashboardTitle string
 	Columns        []Column
 	FocusedColumn  int
-	Width          int
-	Height         int
-	SkeletonPhase  int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
+	// ColumnStart is the first column drawn when the width holds fewer than
+	// all of them; see ColumnStart. Render clamps it to the columns there are.
+	ColumnStart   int
+	Width         int
+	Height        int
+	SkeletonPhase int // color-cycle index for skeleton row pulse; see loading.SkeletonPhase
 	// Now is the instant the age markers measure against.
 	Now time.Time
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
@@ -168,7 +171,7 @@ func layoutFrame(state State) frame {
 	}
 
 	var f frame
-	f.start, f.end = visibleColumnRange(width, len(state.Columns), state.FocusedColumn)
+	f.start, f.end = visibleColumnRange(width, len(state.Columns), state.ColumnStart)
 	count := f.end - f.start
 
 	available := width - (columnGap * (count - 1))
@@ -301,34 +304,33 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	return Hit{}, false
 }
 
-func visibleColumnRange(width, total, focused int) (start, end int) {
+// ColumnStart is where the window of drawn columns starts once the focus is on
+// column focused: at start when that still draws the column, and otherwise
+// moved only as far as it takes. The window stays under the pointer through a
+// focus change, so a click or a wheel notch never slides another column there.
+func ColumnStart(start, width, total, focused int) int {
+	if total <= 0 {
+		return 0
+	}
+	focused = textutil.Clamp(focused, 0, total-1)
+	start, end := visibleColumnRange(width, total, start)
+	switch {
+	case focused < start:
+		return focused
+	case focused >= end:
+		return start + focused - end + 1
+	}
+	return start
+}
+
+func visibleColumnRange(width, total, start int) (int, int) {
 	if total <= 0 {
 		return 0, 0
 	}
 
-	if focused < 0 {
-		focused = 0
-	}
-	if focused >= total {
-		focused = total - 1
-	}
-
-	maxVisible := maxVisibleColumns(width)
-	if maxVisible >= total {
-		return 0, total
-	}
-
-	start = focused - (maxVisible / 2)
-	if start < 0 {
-		start = 0
-	}
-	end = start + maxVisible
-	if end > total {
-		end = total
-		start = end - maxVisible
-	}
-
-	return start, end
+	visible := min(maxVisibleColumns(width), total)
+	start = textutil.Clamp(start, 0, total-visible)
+	return start, start + visible
 }
 
 func maxVisibleColumns(width int) int {

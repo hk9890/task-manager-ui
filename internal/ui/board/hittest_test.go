@@ -62,7 +62,7 @@ func TestHitTestFindsEveryIssueWhereRenderDrewIt(t *testing.T) {
 		drawn [][2]int
 	}{
 		{name: "all columns", width: 200, height: 30, drawn: [][2]int{{0, 0}, {0, 2}, {1, 0}, {1, 1}, {1, 2}, {1, 11}, {2, 1}, {3, 3}}},
-		{name: "columns clipped around the focus", width: 110, height: 24, drawn: [][2]int{{0, 0}, {1, 5}, {2, 1}}},
+		{name: "columns clipped to the width", width: 110, height: 24, drawn: [][2]int{{0, 0}, {1, 5}, {2, 1}}},
 		{
 			name:  "scrolled window",
 			width: 200, height: 10,

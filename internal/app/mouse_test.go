@@ -643,7 +643,12 @@ func TestDoubleClickOnADependencyRowDrillsIntoIt(t *testing.T) {
 	if m.drillSelection != nil || m.detail.Detail.Summary.ID != "tm-4" {
 		t.Fatal("a single click on a dependency row navigated")
 	}
-	m = send(t, m, leftClick(x, y))
+	next, cmd := m.Update(leftClick(x, y))
+	m, cmd = deliverDrill(t, next.(Model), cmd)
+	if m.detail.TargetID() != "tm-2" || !m.detail.IsLoading() {
+		t.Fatalf("second click: target %q loading %v, want an in-flight load of tm-2", m.detail.TargetID(), m.detail.IsLoading())
+	}
+	m = applyMessages(t, m, runBatch(cmd))
 	if m.drillSelection == nil || m.drillSelection.Issue.ID != "tm-2" || m.detail.Detail.Summary.ID != "tm-2" {
 		t.Fatalf("second click: drill %v, showing %q; want a drill-in to tm-2", m.drillSelection, m.detail.Detail.Summary.ID)
 	}
