@@ -37,7 +37,7 @@ func unsizedModel(t *testing.T) *Model {
 // keys back to the shell until detail mode knows its own height.
 //
 // Without it, detail mode swallows shell keys during the window between mode
-// entry and the first WindowSizeMsg, and can emit a drill-in intent computed
+// entry and the first WindowSizeMsg, and can emit a drill-in message computed
 // against a viewport of zero rows.
 func TestHandleKeyDeclinesEveryKeyBeforeThePaneIsSized(t *testing.T) {
 	t.Parallel()
@@ -56,13 +56,10 @@ func TestHandleKeyDeclinesEveryKeyBeforeThePaneIsSized(t *testing.T) {
 			m := unsizedModel(t)
 			before := *m
 
-			consumed, intent, cmd := m.HandleKey(key, 80, height)
+			consumed, cmd := m.HandleKey(key, 80, height)
 
 			if consumed {
 				t.Errorf("height %d: key %v was consumed, want it handed back to the shell", height, key)
-			}
-			if intent != nil {
-				t.Errorf("height %d: key %v produced a drill-in intent %+v", height, key, intent)
 			}
 			if cmd != nil {
 				t.Errorf("height %d: key %v produced a command", height, key)
@@ -105,7 +102,7 @@ func TestHandleKeyConsumesTheSameKeyOnceThePaneIsSized(t *testing.T) {
 
 	m := unsizedModel(t)
 
-	consumed, _, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
 	if !consumed {
 		t.Fatal("a sized pane declined a scroll key")
 	}

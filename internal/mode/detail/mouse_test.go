@@ -36,20 +36,22 @@ func TestClickPutsTheCursorOnAReferenceAndASecondClickOpensIt(t *testing.T) {
 
 	m := mouseDetail(t)
 
-	intent := m.HandleMouse(mouseAt(t, m, mode.MouseClick, "Dependency 4", 0), mouseWidth, mouseHeight)
-	if intent != nil {
-		t.Fatalf("a single click opened %s", intent.IssueID)
+	if cmd := m.HandleMouse(mouseAt(t, m, mode.MouseClick, "Dependency 4", 0), mouseWidth, mouseHeight); cmd != nil {
+		t.Fatalf("a single click produced %#v, want no command", cmd())
 	}
 	if m.FocusPane != uidetail.FocusPaneDependencies || m.browserSelectedIssueID() != "tm-dep-04" {
 		t.Fatalf("first click: focus %d cursor %q; want the Dependencies pane with the cursor on tm-dep-04", m.FocusPane, m.browserSelectedIssueID())
 	}
 
-	intent = m.HandleMouse(mouseAt(t, m, mode.MouseClick, "Dependency 4", 200), mouseWidth, mouseHeight)
-	if intent == nil || intent.IssueID != "tm-dep-04" || intent.Ref.Title != "Dependency 4" {
-		t.Fatalf("second click produced %#v, want an intent to open tm-dep-04", intent)
+	cmd := m.HandleMouse(mouseAt(t, m, mode.MouseClick, "Dependency 4", 200), mouseWidth, mouseHeight)
+	if cmd == nil {
+		t.Fatal("second click produced no command, want one that opens tm-dep-04")
+	}
+	if msg, ok := cmd().(OpenRelatedIssueMsg); !ok || msg.Ref.ID != "tm-dep-04" || msg.Ref.Title != "Dependency 4" {
+		t.Fatalf("second click produced %#v, want an OpenRelatedIssueMsg for tm-dep-04", cmd())
 	}
 
-	if intent = m.HandleMouse(mouseAt(t, m, mode.MouseClick, "Dependency 4", 900), mouseWidth, mouseHeight); intent != nil {
+	if cmd = m.HandleMouse(mouseAt(t, m, mode.MouseClick, "Dependency 4", 900), mouseWidth, mouseHeight); cmd != nil {
 		t.Fatal("a click outside the double-click window opened the reference")
 	}
 }
@@ -63,8 +65,8 @@ func TestClickFocusesThePaneUnderThePointer(t *testing.T) {
 		"Dependencies ─": uidetail.FocusPaneDependencies,
 		"Content ─":      uidetail.FocusPaneContent,
 	} {
-		if intent := m.HandleMouse(mouseAt(t, m, mode.MouseClick, text, 0), mouseWidth, mouseHeight); intent != nil || m.FocusPane != want {
-			t.Errorf("click on %q: focus %d, intent %v; want focus %d and no intent", text, m.FocusPane, intent != nil, want)
+		if cmd := m.HandleMouse(mouseAt(t, m, mode.MouseClick, text, 0), mouseWidth, mouseHeight); cmd != nil || m.FocusPane != want {
+			t.Errorf("click on %q: focus %d, command %v; want focus %d and no command", text, m.FocusPane, cmd != nil, want)
 		}
 	}
 }

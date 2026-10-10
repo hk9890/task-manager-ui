@@ -52,13 +52,18 @@ type Model struct {
 	clicks  mode.ClickTracker
 }
 
-// OpenRelatedIssueIntent requests shell-level navigation to another issue from
-// dedicated detail mode. Ref carries the already-known row data (title, type,
-// status, priority) so the shell can paint an optimistic header immediately
-// while the full detail loads.
-type OpenRelatedIssueIntent struct {
-	IssueID string
-	Ref     domain.IssueReference
+// OpenRelatedIssueMsg asks the shell to navigate detail mode to another issue.
+// Ref.ID is the target; the rest of Ref is the already-known row data (title,
+// type, status, priority) so the shell can paint an optimistic header
+// immediately while the full detail loads.
+type OpenRelatedIssueMsg struct {
+	Ref domain.IssueReference
+}
+
+func openRelatedIssueCmd(ref domain.IssueReference) tea.Cmd {
+	return func() tea.Msg {
+		return OpenRelatedIssueMsg{Ref: ref}
+	}
 }
 
 // BeginLoadOptions tunes one BeginLoad call.
@@ -318,15 +323,13 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	m.MetadataScrollOffset = textutil.Clamp(m.MetadataScrollOffset, 0, bounds.Metadata)
 }
 
-// HandleKey updates detail-mode scroll state and reports whether it consumed the key.
 // HandleKey processes one key for detail mode. It reports whether the key was
-// consumed, an optional drill-in intent, and an optional Cmd carrying a
-// mode.ActionRequestMsg for a shell-owned action (the metadata quick-edit
-// dialogs). The Cmd replaces a pair of flags the shell used to poll after every
-// key press; see internal/mode/contracts.go.
-func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *OpenRelatedIssueIntent, tea.Cmd) {
+// consumed, and an optional Cmd for the shell: an OpenRelatedIssueMsg for a
+// drill-in, or a mode.ActionRequestMsg for a shell-owned action (the metadata
+// quick-edit dialogs); see internal/mode/contracts.go.
+func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, tea.Cmd) {
 	if viewportHeight <= 0 {
-		return false, nil, nil
+		return false, nil
 	}
 	m.normalizeRelatedSelection()
 	m.ensureMetadataSelection()
@@ -340,10 +343,10 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	switch msg.Type {
 	case tea.KeyLeft:
 		m.moveFocusLeft()
-		return true, nil, nil
+		return true, nil
 	case tea.KeyRight:
 		m.moveFocusRight()
-		return true, nil, nil
+		return true, nil
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneDependencies {
@@ -351,19 +354,19 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
 		// special case, consistent with how Enter in the Metadata pane works.
 		if ref, ok := m.selectedRelatedIssue(); ok {
-			return true, &OpenRelatedIssueIntent{IssueID: ref.ID, Ref: ref}, nil
+			return true, openRelatedIssueCmd(ref)
 		}
-		return true, nil, nil
+		return true, nil
 	}
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneMetadata {
 		switch m.metadataSelectedField() {
 		case detail.MetadataFieldStatus:
-			return true, nil, mode.RequestActionCmd(mode.Detail, mode.ActionOpenStatusDialog)
+			return true, mode.RequestActionCmd(mode.Detail, mode.ActionOpenStatusDialog)
 		case detail.MetadataFieldPriority:
-			return true, nil, mode.RequestActionCmd(mode.Detail, mode.ActionOpenPriorityDialog)
+			return true, mode.RequestActionCmd(mode.Detail, mode.ActionOpenPriorityDialog)
 		}
-		return true, nil, nil
+		return true, nil
 	}
 
 	bounds := m.paneGeometry(maxWidth, viewportHeight)
@@ -388,39 +391,39 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, *
 	case m.Keys.Match(config.DetailContext, config.DetailActionEnd, msg):
 		action = config.DetailActionEnd
 	default:
-		return false, nil, nil
+		return false, nil
 	}
 
 	switch m.focusPane() {
 	case detail.FocusPaneDependencies:
 		if action == config.DetailActionScrollUp {
-			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
+			// Only move the cursor highlight; do NOT emit OpenRelatedIssueMsg.
 			// The full detail reloads only when the user presses Enter (Q5).
 			m.moveRelatedSelection(-1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
-			// Only move the cursor highlight; do NOT emit OpenRelatedIssueIntent.
+			// Only move the cursor highlight; do NOT emit OpenRelatedIssueMsg.
 			// The full detail reloads only when the user presses Enter (Q5).
 			m.moveRelatedSelection(1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
-		return true, nil, nil
+		return true, nil
 	case detail.FocusPaneMetadata:
 		if action == config.DetailActionScrollUp {
 			m.moveMetadataSelection(-1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		if action == config.DetailActionScrollDown {
 			m.moveMetadataSelection(1, maxWidth, viewportHeight)
-			return true, nil, nil
+			return true, nil
 		}
 		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, action, move)
-		return true, nil, nil
+		return true, nil
 	default:
 		m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, action, move)
-		return true, nil, nil
+		return true, nil
 	}
 }
 

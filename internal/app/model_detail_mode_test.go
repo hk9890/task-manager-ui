@@ -121,7 +121,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 // the decoupled navigation flow for an issue with a parent group (the parent
 // shows as the last row of the dependency browser).
 // After decoupling (Q5): ↑/↓ only moves the cursor highlight (no load cmd);
-// Enter triggers OpenRelatedIssueIntent → loadDetailCmd (non-nil cmd).
+// Enter emits OpenRelatedIssueMsg → loadDetailCmd (non-nil cmd).
 func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testing.T) {
 	t.Parallel()
 
@@ -187,7 +187,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 		t.Errorf("expected board selection to stay anchored on tm-1, got %q", got)
 	}
 
-	// (Q6b) Enter triggers OpenRelatedIssueIntent → loadDetailCmd (non-nil cmd).
+	// (Q6b) Enter emits OpenRelatedIssueMsg → loadDetailCmd (non-nil cmd).
 	mark = gw.CallCount()
 	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
@@ -730,13 +730,27 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 	}
 }
 
-// TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset
-// verifies that when the Details mode emits OpenRelatedIssueIntent (via Enter on
+// deliverDrill hands the shell the OpenRelatedIssueMsg that cmd produces and
+// stops there: the returned command is the detail load, not yet run.
+func deliverDrill(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+	t.Helper()
+
+	for _, msg := range runBatch(cmd) {
+		if drill, ok := msg.(detail.OpenRelatedIssueMsg); ok {
+			next, loadCmd := m.Update(drill)
+			return next.(Model), loadCmd
+		}
+	}
+	t.Fatal("the command produced no detail.OpenRelatedIssueMsg")
+	return m, nil
+}
+
+// TestAppHandlerOpenRelatedIssueMsgPerformsReloadFocusMoveAndScrollReset
+// verifies that when the Details mode emits OpenRelatedIssueMsg (via Enter on
 // a Dependencies pane row), the app shell handler performs the reload + focus
-// move + scroll reset it already does (Q6c). This test directly sends
-// OpenRelatedIssueIntent via a synthetic KeyMsg that drives the model through
-// the production code path.
-func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t *testing.T) {
+// move + scroll reset it already does (Q6c). A synthetic KeyMsg drives the
+// model through the production code path.
+func TestAppHandlerOpenRelatedIssueMsgPerformsReloadFocusMoveAndScrollReset(t *testing.T) {
 	gw := fakes.NewTracked()
 	seedReady(gw, "tm-1", "Main issue", "epic", 1)
 	seedIssueSummary(gw, domain.IssueSummary{ID: "tm-child", Title: "Child issue", Status: "open", Type: "task", Priority: 2})
@@ -776,9 +790,9 @@ func TestAppHandlerOpenRelatedIssueIntentPerformsReloadFocusMoveAndScrollReset(t
 
 	mark := gw.CallCount()
 
-	// Send Enter: drives HandleKey which should emit OpenRelatedIssueIntent{tm-child}.
+	// Send Enter: drives HandleKey which should emit OpenRelatedIssueMsg for tm-child.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
+	m, cmd = deliverDrill(t, next.(Model), cmd)
 
 	// (Q6c) App handler must: set TargetID, Loading=true, reset all scroll offsets.
 	if m.detail.TargetID() != "tm-child" {
@@ -845,7 +859,10 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 
 	// Send Enter to drill into tm-child (has deps → non-leaf).
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
+	m, _ = deliverDrill(t, next.(Model), cmd)
+	if m.detail.TargetID() != "tm-child" || !m.detail.IsLoading() {
+		t.Fatalf("placeholder phase: target %q loading %v, want an in-flight load of tm-child", m.detail.TargetID(), m.detail.IsLoading())
+	}
 
 	// Placeholder phase: focus must NOT have been flipped to Content.
 	if m.detail.FocusPane != uidetail.FocusPaneDependencies {
@@ -864,9 +881,6 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 	if m.detail.FocusPane != uidetail.FocusPaneDependencies {
 		t.Errorf("after real load with deps: expected FocusPane=Dependencies, got %v", m.detail.FocusPane)
 	}
-
-	// Suppress the unused-variable warning for cmd.
-	_ = cmd
 }
 
 // TestAppHandlerDrillIntoLeafDepMovesFocusToContent verifies that when the user
@@ -901,7 +915,10 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 
 	// Send Enter to drill into tm-leaf (no deps → leaf).
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
+	m, _ = deliverDrill(t, next.(Model), cmd)
+	if m.detail.TargetID() != "tm-leaf" || !m.detail.IsLoading() {
+		t.Fatalf("placeholder phase: target %q loading %v, want an in-flight load of tm-leaf", m.detail.TargetID(), m.detail.IsLoading())
+	}
 
 	// Placeholder phase: focus must NOT have been flipped to Content yet
 	// (the focus decision is deferred to real load, not triggered by the empty placeholder).
@@ -920,8 +937,31 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 	if m.detail.FocusPane != uidetail.FocusPaneContent {
 		t.Errorf("after real load with no deps: expected FocusPane=Content, got %v", m.detail.FocusPane)
 	}
+}
 
-	_ = cmd
+// TestAppHandlerOpenRelatedIssueMsgIsDroppedOutsideDetail: the drill travels
+// as a command, so the operator can be on another surface when it arrives.
+func TestAppHandlerOpenRelatedIssueMsgIsDroppedOutsideDetail(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedReady(gw, "tm-1", "Main issue", "epic", 1)
+
+	services, err := NewServices(gw, config.Default(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewServices: %v", err)
+	}
+
+	m := mustNewModel(t, services)
+	m.active = mode.Board
+
+	next, cmd := m.Update(detail.OpenRelatedIssueMsg{Ref: domain.IssueReference{ID: "tm-child", Title: "Child issue"}})
+	m = next.(Model)
+
+	if cmd != nil {
+		t.Error("a drill that arrived on the board started a command")
+	}
+	if m.active != mode.Board || m.drillSelection != nil || m.detail.IsLoading() {
+		t.Errorf("a drill that arrived on the board navigated: surface %q, drill %v, loading %v", m.active, m.drillSelection, m.detail.IsLoading())
+	}
 }
 
 // drilledIntoChild opens the epic's detail, drills into its child, and returns

@@ -97,20 +97,20 @@ func (m *Model) ensureDetailForCurrentSelectionCmd() tea.Cmd {
 // focus away from the Dependencies pane during the in-flight window. The real
 // detailLoadedMsg will apply the correct focus decision from actual rail content
 // via the counter mechanism in ApplyLoadedDetail.
-func (m *Model) drillInto(intent detail.OpenRelatedIssueIntent) tea.Cmd {
-	issueID := strings.TrimSpace(intent.IssueID)
+func (m *Model) drillInto(ref domain.IssueReference) tea.Cmd {
+	issueID := strings.TrimSpace(ref.ID)
 	if issueID == "" {
 		return nil
 	}
 	m.active = mode.Detail
 	m.drillSelection = &mode.Selection{Issue: domain.IssueSummary{
 		ID:       issueID,
-		Title:    intent.Ref.Title,
-		Status:   intent.Ref.Status,
-		Type:     intent.Ref.Type,
-		Priority: intent.Ref.Priority,
+		Title:    ref.Title,
+		Status:   ref.Status,
+		Type:     ref.Type,
+		Priority: ref.Priority,
 	}}
-	m.detail.BeginLoad(issueID, detail.BeginLoadOptions{Ref: &intent.Ref, Drill: true})
+	m.detail.BeginLoad(issueID, detail.BeginLoadOptions{Ref: &ref, Drill: true})
 	return m.loadDetail(issueID)
 }
 

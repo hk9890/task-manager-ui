@@ -777,6 +777,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.active = mode.Detail
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+	case detail.OpenRelatedIssueMsg:
+		// The drill travels as a Cmd, as the request above does, so the
+		// operator can leave Detail before it arrives.
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.drillInto(msg.Ref))
 	case toaster.DismissMsg:
 		// Only dismiss when the timer belongs to the toast currently shown; a
 		// stale timer from a superseded toast (two toasts within the dismiss
@@ -913,15 +920,8 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 
 	if m.active == mode.Detail {
 		m.detail.Keys = m.keys
-		consumed, intent, actionCmd := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight())
-		if actionCmd != nil {
-			return m, batchCmds(modeCmd, actionCmd)
-		}
-		if intent != nil {
-			return m, batchCmds(modeCmd, m.drillInto(*intent))
-		}
-		if consumed {
-			return m, modeCmd
+		if consumed, detailCmd := m.detail.HandleKey(msg, m.detailViewportWidth(), m.detailViewportHeight()); consumed {
+			return m, batchCmds(modeCmd, detailCmd)
 		}
 	}
 
