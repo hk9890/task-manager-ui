@@ -91,9 +91,28 @@ type Model struct {
 	selectedRow  int
 	scrollOffset int
 
+	// heldOpen is an Enter that arrived while a search the operator asked for
+	// was in flight. The rows on screen then answer an older query, so the
+	// detail opens on the result of the newest one. Any later key, click or
+	// wheel notch drops it.
+	heldOpen heldOpen
+
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
 }
+
+// heldOpen is how far a held Enter has come.
+type heldOpen int
+
+const (
+	noHeldOpen heldOpen = iota
+	// openOnResult waits for the result of the search in flight.
+	openOnResult
+	// openOnSelection waits for the shell to hold the selection of that
+	// result: the open request resolves its target there, so it follows the
+	// SelectionChangedMsg and never races it.
+	openOnSelection
+)
 
 // IsScopeKey reports whether msg is the key that toggles the scope between
 // open issues and all of them. It is built in, as the query keys are, and the
@@ -166,7 +185,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case mode.MouseMsg:
 		return m.handleMouse(msg)
 
+	case mode.SelectionChangedMsg:
+		return m.openHeld(msg)
+
 	case tea.KeyMsg:
+		m.heldOpen = noHeldOpen
 		if consumed, changed := m.query.HandleKey(msg); consumed {
 			if !changed {
 				return nil
@@ -191,16 +214,50 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		case m.keys.Match(config.BoardContext, config.BoardActionMoveEnd, msg):
 			return m.moveRow(len(m.issues))
 		case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
-			if m.currentSelection() == nil {
-				return nil
-			}
-			return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+			return m.openDetail()
 		case m.keys.Match(config.BoardContext, config.BoardActionReload, msg):
 			return m.Reload()
 		}
 	}
 
 	return nil
+}
+
+// openDetail is Enter and the second click on a row. While a search is in
+// flight it holds the open for that result: an edit answers another query, and
+// an auto refresh moves the selection when its issue left the store's answer.
+// The opening search has no rows the operator pressed Enter on, so it holds
+// nothing.
+func (m *Model) openDetail() tea.Cmd {
+	if m.loading && m.settled {
+		m.heldOpen = openOnResult
+		return nil
+	}
+	if m.currentSelection() == nil {
+		return nil
+	}
+	return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
+}
+
+// openHeld opens the detail for a held Enter once the shell holds the selected
+// row of the result. Only the change that announces that row counts: one from
+// a move on the older rows can still be on its way when the result arrives.
+func (m *Model) openHeld(msg mode.SelectionChangedMsg) tea.Cmd {
+	if msg.Mode != mode.Search || m.heldOpen != openOnSelection {
+		return nil
+	}
+	announced := ""
+	if msg.Selection != nil {
+		announced = msg.Selection.Issue.ID
+	}
+	if announced != m.selectedIssueID() {
+		return nil
+	}
+	m.heldOpen = noHeldOpen
+	if announced == "" {
+		return nil
+	}
+	return mode.RequestActionCmd(mode.Search, mode.ActionOpenDetail)
 }
 
 // View renders the results column under the query line.
@@ -283,8 +340,12 @@ func (m *Model) apply(msg loadedMsg) tea.Cmd {
 
 	if msg.err != nil {
 		// Keep the stale rows on screen; the inline error row explains why they
-		// may be out of date.
+		// may be out of date. A held Enter opens nothing on them.
+		m.heldOpen = noHeldOpen
 		return m.selectionChangedCmd()
+	}
+	if m.heldOpen == openOnResult {
+		m.heldOpen = openOnSelection
 	}
 
 	// The selection is read now, not when the search started: the rows stay on

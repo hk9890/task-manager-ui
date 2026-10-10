@@ -17,7 +17,9 @@ carries its `vX.Y.Z` section of this file as its notes.
   `enter`: `h`, `j`, `k`, `l` and `o` no longer move or open. `ctrl+q`, `?`,
   `1`–`4`, `ctrl+space`, `/` and `>` are gone. The `y` / `n` keys of a dialog
   are unchanged. The `alt+` keys need a terminal that sends `alt` as an escape
-  prefix; on macOS turn on the Option-as-Meta setting of the terminal.
+  prefix; on macOS turn on the Option-as-Meta setting of the terminal. `esc`
+  and a letter that reach the app together read as that `alt+` key: under tmux
+  keep `escape-time` at 10 ms or lower, the default since tmux 3.5.
   [`docs/user-guide/key-bindings.md`](docs/user-guide/key-bindings.md) has the
   whole list.
 - **Action required if your config binds keys.** A `keybindings` entry in the

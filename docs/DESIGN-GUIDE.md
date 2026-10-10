@@ -213,6 +213,13 @@ it.
 - Its query is not matched in memory. Every edit runs `Repository.Search`; each search carries a
   generation and a result of an older one is dropped. `State.Search` tells the renderer so: the
   header then counts as a column without a query does.
+- Enter, or the second click on a row, while a search is in flight is held (`Model.openDetail`,
+  `heldOpen`): the rows on screen answer an older query, or an auto refresh is about to move the
+  selection off an issue that left the result. The detail opens on the selected row of the newest
+  result, after the shell holds that selection — the open request follows the
+  `SelectionChangedMsg` that announces that row, never races it. Any later key, click or wheel
+  notch drops the held Enter, and so does the pointer leaving the surface. An empty or failed
+  result opens nothing, and the opening search, which has no rows yet, holds nothing.
 - `ctrl+t` toggles the scope between open issues and all of them (`search.IsScopeKey`). It is
   built in, as the query keys are, and the column title names the scope.
 - Escape clears a non-empty query, and with an empty one returns to `searchFrom`
