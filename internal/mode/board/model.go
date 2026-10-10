@@ -34,6 +34,10 @@ const (
 	// the model dispatches a background load-more when the cursor approaches
 	// the end of the Done column.
 	loadMoreThreshold = 5
+
+	// anchorSearchPageLimit is the number of further Done pages an auto refresh
+	// reads to find the selected issue again before it gives up.
+	anchorSearchPageLimit = 3
 )
 
 // dashboardLoadedMsg carries the result of a Dashboard repository call.
@@ -75,6 +79,16 @@ type refreshAnchor struct {
 	focusedColumn   int
 	focusedRow      int
 	selectedIssueID string
+}
+
+// anchorSearch is an auto refresh still looking for the selected Done issue in
+// the pages below the depth it read.
+type anchorSearch struct {
+	issueID string
+	// fallbackRow is where the refresh left the cursor meanwhile. A cursor that
+	// is no longer there was moved by the operator, and the search leaves it.
+	fallbackRow int
+	pagesLeft   int
 }
 
 // Model is the standalone board mode controller backed by repository calls.
@@ -134,6 +148,11 @@ type Model struct {
 	// doneClosedTotal is the authoritative DB total from the last Dashboard
 	// response. Used to decide whether there are more pages to fetch.
 	doneClosedTotal int
+
+	// anchorSearch is set while an auto refresh pages Done to find the issue
+	// the cursor was on. Closes by another process push a loaded row down, so
+	// the issue can be below the depth the refresh read.
+	anchorSearch *anchorSearch
 }
 
 // NewModel creates a board mode controller.
@@ -401,6 +420,7 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	// the reload fails, because the old rows stay on screen.
 	m.doneLoadedCount = 0
 	m.doneLoadInFlight = false
+	m.anchorSearch = nil
 	m.reloadSeq++
 
 	if rm == mode.RefreshReload {
@@ -482,7 +502,11 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	// Composition complete — clear the in-flight flag so future reload requests
 	// (keyboard or auto-refresh) are permitted.
 	m.inflight = false
-	return m.selectionChangedCmd()
+	selectionChanged := m.selectionChangedCmd()
+	if search := m.startAnchorSearch(anchor); search != nil {
+		return tea.Batch(selectionChanged, search)
+	}
+	return selectionChanged
 }
 
 // composeFailed keeps the rows, counts and selection the last successful load
@@ -638,6 +662,58 @@ func (m *Model) restoreFromAnchor(anchor *refreshAnchor) {
 
 	m.selectEarliestNonEmptyColumn()
 	m.normalizeSelectionForFocusedColumn()
+}
+
+// startAnchorSearch reads the next Done page when an auto refresh did not read
+// the selected Done issue back and closed issues remain below the loaded rows.
+// The cursor is on the fallback row of restoreFromAnchor until a page has the
+// issue.
+func (m *Model) startAnchorSearch(anchor *refreshAnchor) tea.Cmd {
+	if anchor == nil || anchor.focusedColumn != doneColumnIndex || anchor.selectedIssueID == "" {
+		return nil
+	}
+	if _, _, found := m.findIssue(anchor.selectedIssueID); found {
+		return nil
+	}
+	page := m.dispatchLoadMoreClosed()
+	if page == nil {
+		return nil
+	}
+	m.anchorSearch = &anchorSearch{
+		issueID:     anchor.selectedIssueID,
+		fallbackRow: m.selectedRow[doneColumnIndex],
+		pagesLeft:   anchorSearchPageLimit - 1,
+	}
+	return page
+}
+
+// continueAnchorSearch runs after a Done page is merged. It moves the cursor to
+// the issue the search is for, or reads one more page, or ends the search and
+// leaves the cursor on the fallback row.
+func (m *Model) continueAnchorSearch() tea.Cmd {
+	search := m.anchorSearch
+	if search == nil {
+		return nil
+	}
+	m.anchorSearch = nil
+
+	if m.focusedColumn != doneColumnIndex || m.selectedRow[doneColumnIndex] != search.fallbackRow {
+		return nil
+	}
+	if col, row, found := m.findIssue(search.issueID); found {
+		m.focusedColumn = col
+		m.selectedRow[col] = row
+		return nil
+	}
+	if search.pagesLeft == 0 {
+		return nil
+	}
+	page := m.dispatchLoadMoreClosed()
+	if page != nil {
+		search.pagesLeft--
+		m.anchorSearch = search
+	}
+	return page
 }
 
 func (m *Model) findIssue(issueID string) (int, int, bool) {
@@ -802,6 +878,7 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 
 	if msg.err != nil {
 		m.logger.Warn("load-more for Done column failed", "err", msg.err)
+		m.anchorSearch = nil
 		// Surface the error on the Done column so the user gets feedback.
 		if len(m.columns) > doneColumnIndex {
 			m.columns[doneColumnIndex].err = msg.err
@@ -845,11 +922,15 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 	// header, and any open detail pane stay in sync with the highlighted row
 	// rather than referencing a stale issue.
 	m.normalizeSelectionForFocusedColumn()
+	nextPage := m.continueAnchorSearch()
 	m.clampScrollOffsets()
-	if m.focusedColumn == doneColumnIndex {
-		return m.selectionChangedCmd()
+	if m.focusedColumn != doneColumnIndex {
+		return nextPage
 	}
-	return nil
+	if nextPage != nil {
+		return tea.Batch(m.selectionChangedCmd(), nextPage)
+	}
+	return m.selectionChangedCmd()
 }
 
 // closedPageSize returns the number of closed issues to request per load-more

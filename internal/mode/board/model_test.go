@@ -2232,3 +2232,106 @@ func TestAutoRefreshKeepsASelectionMadeWhileItWasInFlight(t *testing.T) {
 		t.Errorf("the cursor is on %s after the refresh, want %s where the operator moved it", got, moved)
 	}
 }
+
+// newThreePageDoneModel returns a settled board over a store of 400 closed
+// issues with Done focused and three pages loaded: the first screen and two
+// load-more pages.
+func newThreePageDoneModel(t *testing.T) (*Model, *fakes.TrackedRepository) {
+	t.Helper()
+
+	repo := fakes.NewTracked()
+	for i := range 400 {
+		seedClosed(repo.Memory, fmt.Sprintf("closed-%03d", i), pagedDoneClosedAt.Add(-time.Duration(i)*time.Hour))
+	}
+
+	m := newSettledBoardModel(t, repo)
+	m.focusedColumn = doneColumnIndex
+	firstPage := m.doneLoadedCount
+	for range 2 {
+		boardApplyMessages(t, m, testui.DrainCmd(m.dispatchLoadMoreClosed()))
+	}
+	if want := firstPage + 2*m.closedPageSize(); m.doneLoadedCount != want {
+		t.Fatalf("setup: Done holds %d issues, want %d after three pages", m.doneLoadedCount, want)
+	}
+	return m, repo
+}
+
+// TestAutoRefreshFindsTheSelectedDoneIssuePastTheLoadedDepth pins the cursor
+// when closes by another process push the selected Done row below the depth an
+// auto refresh reads. The refresh read the same number of rows, did not find
+// the issue, and left the cursor on the row index, which then held another
+// issue.
+func TestAutoRefreshFindsTheSelectedDoneIssuePastTheLoadedDepth(t *testing.T) {
+	t.Parallel()
+
+	m, repo := newThreePageDoneModel(t)
+	m.selectedRow[doneColumnIndex] = m.doneLoadedCount - 3
+	selected := m.currentSelection().Issue.ID
+
+	for i := range 3 {
+		seedClosed(repo.Memory, fmt.Sprintf("closed-new-%d", i), pagedDoneClosedAt.Add(time.Duration(i+1)*time.Hour))
+	}
+	boardApplyMessages(t, m, testui.DrainCmd(m.AutoRefresh()))
+
+	if got := m.currentSelection().Issue.ID; got != selected {
+		t.Errorf("the cursor is on %s after the refresh, want %s where it was", got, selected)
+	}
+	if m.anchorSearch != nil || m.doneLoadInFlight {
+		t.Error("the search for the selected issue did not end")
+	}
+	assertSelectionDrawn(t, m)
+}
+
+// TestAutoRefreshStopsTheSearchForARemovedDoneIssue pins that an auto refresh
+// does not read all of Done for an issue that is gone: it reads a fixed number
+// of further pages and then leaves the cursor on the row index.
+func TestAutoRefreshStopsTheSearchForARemovedDoneIssue(t *testing.T) {
+	t.Parallel()
+
+	m, repo := newThreePageDoneModel(t)
+	row := m.doneLoadedCount - 3
+	m.selectedRow[doneColumnIndex] = row
+	selected := m.currentSelection().Issue.ID
+
+	// A doc reaches no board column, so the issue is gone from the board.
+	repo.Memory.Seed(memoryrepo.Issue{ID: selected, Title: "Removed", Type: "doc"})
+	readsBefore := len(repo.CallsFor(fakes.MethodDashboard))
+	boardApplyMessages(t, m, testui.DrainCmd(m.AutoRefresh()))
+
+	pageReads := len(repo.CallsFor(fakes.MethodDashboard)) - readsBefore - 1
+	if pageReads < 1 || pageReads > anchorSearchPageLimit {
+		t.Errorf("the refresh read %d further pages, want 1 to %d", pageReads, anchorSearchPageLimit)
+	}
+	if _, _, found := m.findIssue(selected); found {
+		t.Fatalf("setup: %s is still on the board", selected)
+	}
+	if m.focusedColumn != doneColumnIndex || m.selectedRow[doneColumnIndex] != row {
+		t.Errorf("the cursor is on column %d row %d, want column %d row %d",
+			m.focusedColumn, m.selectedRow[doneColumnIndex], doneColumnIndex, row)
+	}
+	if m.anchorSearch != nil || m.doneLoadInFlight {
+		t.Error("the search for the removed issue did not end")
+	}
+}
+
+// TestAutoRefreshSearchLeavesACursorTheOperatorMoved pins that a page of the
+// search does not take the cursor back from a row the operator went to while
+// the page was read.
+func TestAutoRefreshSearchLeavesACursorTheOperatorMoved(t *testing.T) {
+	t.Parallel()
+
+	m, repo := newThreePageDoneModel(t)
+	m.selectedRow[doneColumnIndex] = m.doneLoadedCount - 3
+	for i := range 3 {
+		seedClosed(repo.Memory, fmt.Sprintf("closed-new-%d", i), pagedDoneClosedAt.Add(time.Duration(i+1)*time.Hour))
+	}
+
+	refreshed := m.Update(m.AutoRefresh()())
+	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	moved := m.currentSelection().Issue.ID
+	boardApplyMessages(t, m, testui.DrainCmd(refreshed))
+
+	if got := m.currentSelection().Issue.ID; got != moved {
+		t.Errorf("the cursor is on %s after the search, want %s where the operator moved it", got, moved)
+	}
+}

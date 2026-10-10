@@ -6,6 +6,14 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
+## Unreleased
+
+- Fixed: a refresh you did not ask for moved the cursor to another issue in the
+  Done column when other closes had pushed the selected issue below the rows
+  already loaded. The refresh now loads up to 3 more pages of Done to find the
+  issue again, and the cursor returns to it. When the issue is not in those
+  pages, the cursor stays on its row as before.
+
 ## v0.18.0
 
 - **Action required on a light terminal.** The app now draws in a theme of its

@@ -174,6 +174,13 @@ records are DEBUG level and reach the persistent log only under that flag
 threshold crossing — any `load-more suppressed` beside it is the double-load guard doing its job.
 Press `r`: the header returns to the opening `N` and the selection returns to the top.
 
+An auto refresh reads Done to the depth already loaded. When the selected issue is not in those rows
+— closes by another process pushed it down — the refresh reads up to `anchorSearchPageLimit` further
+pages and puts the cursor back on it. To drive it: page Done down, stop on a row within a few rows
+of the loaded end without moving, and close that many issues or more with the `taskmgr` CLI. The
+header `N` grows by one page and the selected ID stays the same. An issue that is in none of those
+pages leaves the cursor on its row index.
+
 Walking to the end does **not** produce a plain count on a store this size. Once every closed issue
 is loaded the header switches from "loaded of total" to "visible of total"
 (`internal/ui/board/board.go`), so it reads `N of M` with `N` the rows the window shows. The plain
@@ -181,5 +188,6 @@ is loaded the header switches from "loaded of total" to "visible of total"
 in a 30-row terminal never do.
 
 `N` stuck means the `loadMoreClosedCmd` threshold or its offset wiring; `r` not resetting means the
-`doneLoadedCount` reset path, and repeated loads per crossing mean the `doneLoadInFlight` guard — all
-in `internal/mode/board/model.go`.
+`doneLoadedCount` reset path, repeated loads per crossing mean the `doneLoadInFlight` guard, and a
+cursor on another issue after a refresh means `startAnchorSearch` or `continueAnchorSearch` — all in
+`internal/mode/board/model.go`.
