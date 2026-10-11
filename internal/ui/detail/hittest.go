@@ -112,13 +112,13 @@ func hitContent(state State, pane rect, x, y int) Hit {
 	}
 
 	innerHeight := max(1, pane.height-2)
-	contentPane := state.contentPane(pane.width, pane.height)
-	content := renderContentPaneLines(contentPane, pane.width-2, innerHeight)
 	column := x - pane.x
 	line := y - pane.y - 1
 	if column == 0 || column == pane.width-1 || line < 0 || line >= innerHeight {
 		return hit
 	}
+	contentPane := state.contentPane(pane.width, pane.height)
+	content := renderContentPaneLines(contentPane, pane.width-2, innerHeight)
 	// The window sliceWithOffset draws; its two indicator rows are no line.
 	total := len(content.lines)
 	offset := max(0, min(state.ContentScrollOffset, total-innerHeight))

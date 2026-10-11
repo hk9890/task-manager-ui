@@ -461,10 +461,11 @@ the surface it was opened from (`Model.closeEditor`).
   move between the rows; in the text `enter` is a newline and the arrows move the cursor.
 - `up` on the first drawn line of the text moves the focus to the field above, and `down` on the
   last drawn line moves it to Save (`textCursorOnFirstLine`, `textDown`,
-  `internal/mode/issueedit/model.go`). A wrapped line is several drawn lines. `down` asks the
-  widget and leaves when the cursor did not move: `LineInfo` counts an empty row under a line
-  that fills the width. A comment has no field above its text, so `up` on its first line does
-  nothing. The page keys and the wheel stay in the text.
+  `internal/mode/issueedit/model.go`). A wrapped line is several drawn lines. `LineInfo` counts
+  an empty row under a line that fills the width, and the widget does not move the cursor down
+  past that row: `textDown` leaves from the last line of the text only, and reaches the line
+  under a full one from the end of that line. A comment has no field above its text, so `up` on
+  its first line does nothing. The page keys and the wheel stay in the text.
 - Save and Cancel stand under the text, each with the key that does the same (`save_edit`,
   Escape), and the focused one takes its `Focus` role. The focused row has the selection bar and
   no band.

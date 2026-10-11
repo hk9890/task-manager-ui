@@ -363,13 +363,33 @@ func (m *Model) textCursorOnFirstLine() bool {
 	return m.text.Line() == 0 && m.text.LineInfo().RowOffset == 0
 }
 
-// textDown moves the text cursor one drawn line down and reports whether it
-// moved. The widget is asked, not its line count: it counts an empty row under
-// a line that fills the width, and the cursor cannot enter that row.
+// textDown moves the text cursor one drawn line down. On the last drawn line
+// it moves nothing and reports false.
+//
+// The widget counts an empty row under a line that fills the width. The cursor
+// is in that row only at the end of the line. From anywhere else in the line
+// the widget does not move the cursor past the row, so the line below is
+// reached from the end of the line.
 func (m *Model) textDown(msg tea.KeyMsg) bool {
-	line, row := m.text.Line(), m.text.LineInfo().RowOffset
+	line := m.text.Line()
+	lastLine := line == m.text.LineCount()-1
+	before := m.text.LineInfo()
+	if lastLine && before.RowOffset+1 >= before.Height {
+		return false
+	}
+
 	m.moveText(msg, 1)
-	return m.text.Line() != line || m.text.LineInfo().RowOffset != row
+	if m.text.Line() != line || m.text.LineInfo().RowOffset != before.RowOffset {
+		return true
+	}
+	if lastLine {
+		return false
+	}
+
+	m.text.CursorEnd()
+	m.moveText(msg, 1)
+	m.text.SetCursor(min(before.ColumnOffset, m.text.LineInfo().Width-1))
+	return true
 }
 
 // HandleKey processes one key press and reports whether the screen consumed

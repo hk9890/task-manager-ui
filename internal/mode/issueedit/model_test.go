@@ -345,18 +345,62 @@ func TestAWrappedLineOfTheTextIsLeftFromItsFirstAndLastRowOnly(t *testing.T) {
 func TestDownLeavesALastLineThatFillsTheWidthOfTheText(t *testing.T) {
 	t.Parallel()
 
+	// At the end of the line the cursor is in the empty row the widget counts
+	// under it.
+	keyEnd := tea.KeyMsg{Type: tea.KeyEnd}
 	for _, before := range []string{"", "short\n"} {
-		values := issueValues()
-		m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
-		values.Text = before + strings.Repeat("x", m.text.Width())
-		m = openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
+		for _, inLine := range [][]tea.KeyMsg{nil, {keyEnd}} {
+			values := issueValues()
+			m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
+			values.Text = before + strings.Repeat("x", m.text.Width())
+			m = openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
 
-		press(t, m, slices.Repeat([]tea.KeyMsg{keyDown}, strings.Count(before, "\n")+1)...)
+			press(t, m, slices.Repeat([]tea.KeyMsg{keyDown}, strings.Count(before, "\n"))...)
+			press(t, m, inLine...)
+			press(t, m, keyDown)
+			if m.focus != uiissueedit.FieldSave {
+				t.Errorf("after %q and %d keys in the line, down on the full last line lands on %d, want Save", before, len(inLine), m.focus)
+			}
+			if got := m.values().Text; got != values.Text {
+				t.Errorf("after %q, down changed the text to %q", before, got)
+			}
+		}
+	}
+}
+
+// The widget does not move the cursor down out of a line that fills the
+// width, unless from its end. Down reaches the line below all the same, and
+// leaves the text from the last line only.
+func TestDownOnALineThatFillsTheWidthReachesTheLineBelow(t *testing.T) {
+	t.Parallel()
+
+	values := issueValues()
+	width := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText).text.Width()
+	tests := []struct {
+		name string
+		full string
+		rows int
+	}{
+		{"one word", strings.Repeat("x", width), 1},
+		{"a space in the last cell", strings.Repeat("x", width-1) + " ", 1},
+		{"two rows", strings.Repeat("x", 2*width), 2},
+	}
+	for _, tt := range tests {
+		values.Text = tt.full + "\nbelow"
+		m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
+
+		press(t, m, keyRight, keyRight)
+		press(t, m, slices.Repeat([]tea.KeyMsg{keyDown}, tt.rows)...)
+		if m.focus != uiissueedit.FieldText || m.text.Line() != 1 || m.text.LineInfo().ColumnOffset != 2 {
+			t.Errorf("%s: %d times down from the full line: focus %d, line %d, column %d; want the text, line 1 and column 2",
+				tt.name, tt.rows, m.focus, m.text.Line(), m.text.LineInfo().ColumnOffset)
+		}
+		press(t, m, keyDown)
 		if m.focus != uiissueedit.FieldSave {
-			t.Errorf("after %q, down on the full last line lands on %d, want Save", before, m.focus)
+			t.Errorf("%s: down on the last line lands on %d, want Save", tt.name, m.focus)
 		}
 		if got := m.values().Text; got != values.Text {
-			t.Errorf("after %q, down changed the text to %q", before, got)
+			t.Errorf("%s: down changed the text to %q", tt.name, got)
 		}
 	}
 }
