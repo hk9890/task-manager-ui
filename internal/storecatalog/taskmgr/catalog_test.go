@@ -258,6 +258,24 @@ func TestStoreNameReplacesControlCharacters(t *testing.T) {
 	}
 }
 
+// A bidirectional override in a directory name would reorder the menu bar
+// beside it, and a zero-width space would draw a name nobody can see. The
+// joiner of an emoji sequence stays.
+func TestStoreNameDropsFormatCharacters(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]string{
+		"/dev/a\u202eb":                   "ab",
+		"/dev/\u200b\ufeff":               "",
+		"/dev/\U0001F468\u200d\U0001F4BB": "\U0001F468\u200d\U0001F4BB",
+	} {
+		info := tasks.ResolveInfo{Kind: tasks.ResolvedLocal, ProjectPath: path}
+		if got := StoreName(info); got != want {
+			t.Errorf("store name of %q: got %q, want %q", path, got, want)
+		}
+	}
+}
+
 // A local store created from the picker is the store a later start in that
 // directory finds — what `taskmgr where` would report there.
 func TestCreateLocalMakesTheStoreADirectoryResolvesTo(t *testing.T) {

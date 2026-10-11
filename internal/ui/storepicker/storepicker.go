@@ -238,8 +238,13 @@ func renderRows(state State, innerWidth, capacity, lines int) []string {
 
 // renderRow draws one row as rowLines lines: the name with its status token
 // flush right, then the project path. An action row has no second line to
-// fill; it keeps the height so every row is one size.
+// fill; it keeps the height so every row is one size. Each text names a
+// directory, so each goes through textutil.OneLine.
 func renderRow(row Row, selected bool, innerWidth int) []string {
+	row.Name = textutil.OneLine(row.Name)
+	row.ProjectPath = textutil.OneLine(row.ProjectPath)
+	row.Action = textutil.OneLine(row.Action)
+
 	plainPrefix, renderedPrefix := styles.SelectionPrefix(selected, true)
 	textWidth := max(innerWidth-lipgloss.Width(plainPrefix), 0)
 
@@ -341,7 +346,9 @@ func emptyState(innerWidth, capacity int) []string {
 	return out
 }
 
+// renderError draws the failure on one line. The message is the SDK's own:
+// yaml.v3 reports a type error in the registry file on a line for each value.
 func renderError(message string, innerWidth int) string {
-	text := textutil.TruncateString("Store listing failed: "+message, innerWidth)
+	text := textutil.TruncateString("Store listing failed: "+textutil.OneLine(message), innerWidth)
 	return lipgloss.NewStyle().Foreground(styles.ToastBorderErrorColor).Render(text)
 }
