@@ -10,7 +10,7 @@ func TestAConfigPathWithALineBreakKeepsTheFrame(t *testing.T) {
 	view := func(path string) string {
 		m := newModel(t, "catppuccin-mocha", "unicode")
 		m.Open(path, "catppuccin-mocha", "unicode")
-		return m.View("")
+		return m.View("dev", "")
 	}
 	plain, broken := view("/tmp/a b/config.yaml"), view("/tmp/a\nb/config.yaml")
 	if broken != plain {

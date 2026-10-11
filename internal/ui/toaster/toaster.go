@@ -77,6 +77,11 @@ const (
 	glyphCells       = 3
 )
 
+// maxMessageLines is the most lines a toast draws, the cut mark included. A message
+// carries text from outside — an error, a path — and each line feed in it is a
+// line of the box, so without a bound one message can cover the screen.
+const maxMessageLines = 6
+
 // View renders the toast box at its natural width. Overlay is what the shell
 // draws with, and it bounds the box to the terminal.
 func (m Model) View() string {
@@ -96,7 +101,7 @@ func (m Model) view(maxWidth int) string {
 		return ""
 	}
 
-	message := m.message
+	message := capLines(m.message)
 	if maxWidth > toastChromeWidth {
 		message = clipLines(message, maxWidth-toastChromeWidth-glyphCells)
 	}
@@ -135,6 +140,19 @@ func (m Model) Overlay(bg string, width, height int) string {
 		Position: overlay.Bottom,
 		PadY:     1,
 	}, m.view(width), bg)
+}
+
+// capLines bounds message to maxMessageLines lines. A longer message keeps one
+// line fewer and ends with a mark on a line of its own, so a whole last line
+// is not read as the end and the mark costs no row.
+func capLines(message string) string {
+	lines := strings.SplitN(message, "\n", maxMessageLines+1)
+	if len(lines) <= maxMessageLines {
+		return message
+	}
+	lines = lines[:maxMessageLines]
+	lines[maxMessageLines-1] = "…"
+	return strings.Join(lines, "\n")
 }
 
 // clipLines truncates every line of message to width cells. A message is

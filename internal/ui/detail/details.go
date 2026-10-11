@@ -122,8 +122,15 @@ func Render(state State) string {
 	// normal detail layout so stale content stays visible while the spinner
 	// in the header signals the in-flight request.
 
+	width := state.Width
+	if width <= 0 {
+		width = defaultDetailWidth
+	}
+
 	if strings.TrimSpace(state.Error) != "" {
-		return fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, displaytext.OneLine(state.Error))
+		// The error is the store's own text and can be longer than the view.
+		message := fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, displaytext.OneLine(state.Error))
+		return strings.Join(textutil.WrapAtSpaces(message, width), "\n")
 	}
 
 	detail := state.Detail
@@ -131,10 +138,6 @@ func Render(state State) string {
 		return fmt.Sprintf("No detail loaded for %s yet.", selected)
 	}
 
-	width := state.Width
-	if width <= 0 {
-		width = defaultDetailWidth
-	}
 	height := state.Height
 	if height <= 0 {
 		height = defaultDetailHeight

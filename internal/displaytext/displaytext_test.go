@@ -33,6 +33,10 @@ func TestOneLine(t *testing.T) {
 		{"control characters become spaces", "a\nb\tc\x1b[2Jd", "a b c [2Jd"},
 		{"separators become spaces", "a" + lineSeparator + "b" + paragraphSeparator + "c", "a b c"},
 		{"reordering characters are dropped", "a" + rightToLeftOverride + "b" + leftToRightIsolate + "c" + byteOrderMark, "abc"},
+		// lipgloss measures each of these as no cell; many terminals draw one.
+		{"a soft hyphen is dropped", "Donau" + string(rune(0x00ad)) + "dampf", "Donaudampf"},
+		{"a number mark is dropped", string(rune(0x0600)) + "12", "12"},
+		{"a zero-width space is dropped", "a" + zeroWidthSpace + "b", "ab"},
 		{"a joiner in an emoji sequence stays", technologist, technologist},
 		{"a tag sequence stays", taggedFlag, taggedFlag},
 		{"a non-joiner stays", "a" + zeroWidthNonJoiner + "b", "a" + zeroWidthNonJoiner + "b"},
