@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uiissueedit "github.com/hk9890/task-manager-ui/internal/ui/issueedit"
@@ -52,6 +53,15 @@ func open(t *testing.T, opts Options) *Model {
 	return m
 }
 
+// openOn opens the editor and moves the focus to field.
+func openOn(t *testing.T, opts Options, field uiissueedit.Field) *Model {
+	t.Helper()
+
+	m := open(t, opts)
+	m.setFocus(field)
+	return m
+}
+
 func openEdit(t *testing.T) *Model {
 	t.Helper()
 	return open(t, Options{Kind: KindEdit, Values: issueValues()})
@@ -88,7 +98,7 @@ func TestFocusWalksEveryFieldOfEachKindAndWraps(t *testing.T) {
 		uiissueedit.FieldAssignee, uiissueedit.FieldLabels, uiissueedit.FieldText, uiissueedit.FieldSave, uiissueedit.FieldCancel,
 	}
 	closedBefore := issueValues()
-	closedBefore.Status = closed
+	closedBefore.Status = domain.StatusClosed
 
 	tests := []struct {
 		name string
@@ -126,14 +136,6 @@ func TestFocusWalksEveryFieldOfEachKindAndWraps(t *testing.T) {
 	}
 }
 
-func TestFocusOpensOnTheFieldAsked(t *testing.T) {
-	t.Parallel()
-
-	if m := open(t, Options{Kind: KindEdit, Values: issueValues(), Focus: uiissueedit.FieldPriority}); m.focus != uiissueedit.FieldPriority {
-		t.Errorf("the editor opened on field %d, want the priority", m.focus)
-	}
-}
-
 func TestReasonRowFollowsTheStatus(t *testing.T) {
 	t.Parallel()
 
@@ -144,7 +146,7 @@ func TestReasonRowFollowsTheStatus(t *testing.T) {
 	rowsOpen := m.text.Height()
 
 	press(t, m, keyTab, keyLeft)
-	if got := m.values().Status; got != closed {
+	if got := m.values().Status; got != domain.StatusClosed {
 		t.Fatalf("left from the first status gives %q, want it to wrap to closed", got)
 	}
 	if !strings.Contains(plainView(m), "Reason") {
@@ -180,7 +182,7 @@ func TestCloseOpensOnTheReasonAndKeepsTheOldStatusAsBaseline(t *testing.T) {
 		t.Errorf("the focus is on %d, want the reason", m.focus)
 	}
 	submit := press(t, m, typed("done"), keySave).(SubmitMsg)
-	if submit.Before.Status != "open" || submit.After.Status != closed || submit.After.Reason != "done" {
+	if submit.Before.Status != "open" || submit.After.Status != domain.StatusClosed || submit.After.Reason != "done" {
 		t.Errorf("submit carries status %q -> %q with reason %q", submit.Before.Status, submit.After.Status, submit.After.Reason)
 	}
 }
@@ -191,7 +193,7 @@ func TestReasonOfAnIssueClosedBeforeIsReadOnly(t *testing.T) {
 	t.Parallel()
 
 	values := issueValues()
-	values.Status, values.Reason = closed, "shipped"
+	values.Status, values.Reason = domain.StatusClosed, "shipped"
 	m := open(t, Options{Kind: KindEdit, Values: values})
 
 	view := m.View("v1", "legend")
@@ -210,7 +212,7 @@ func TestStepsWrapAndAValueOutsideTheCatalogComesFirst(t *testing.T) {
 
 	values := issueValues()
 	values.Type = "legacy"
-	m := open(t, Options{Kind: KindEdit, Values: values, Focus: uiissueedit.FieldType})
+	m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldType)
 
 	if got := m.values().Type; got != "legacy" {
 		t.Fatalf("the type opens on %q, want the value of the issue", got)
@@ -264,10 +266,10 @@ func TestUpAndDownMoveFieldsOnARowAndTheCursorInTheText(t *testing.T) {
 		t.Fatalf("up from the priority lands on %d, want the type", m.focus)
 	}
 
-	m = open(t, Options{Kind: KindEdit, Values: issueValues(), Focus: uiissueedit.FieldText})
-	press(t, m, keyDown, typed("X"), keyUp, keyUp, keyUp, tea.KeyMsg{Type: tea.KeyHome}, typed("Y"))
+	m = openOn(t, Options{Kind: KindEdit, Values: issueValues()}, uiissueedit.FieldText)
+	press(t, m, keyDown, typed("X"), keyUp, tea.KeyMsg{Type: tea.KeyHome}, typed("Y"))
 	if m.focus != uiissueedit.FieldText {
-		t.Fatalf("an arrow left the text for %d", m.focus)
+		t.Fatalf("an arrow inside the text left it for %d", m.focus)
 	}
 	if got := m.values().Text; got != "Yfirst line\nXsecond line" {
 		t.Errorf("the text is %q; the arrows did not move its cursor", got)
@@ -276,6 +278,100 @@ func TestUpAndDownMoveFieldsOnARowAndTheCursorInTheText(t *testing.T) {
 	press(t, m, keyEnter)
 	if got := m.values().Text; got != "Y\nfirst line\nXsecond line" {
 		t.Errorf("enter in the text gives %q, want a new line", got)
+	}
+}
+
+func TestUpOnTheFirstLineAndDownOnTheLastLineLeaveTheText(t *testing.T) {
+	t.Parallel()
+
+	m := openEdit(t)
+	for range len(m.order()) {
+		if m.focus == uiissueedit.FieldText {
+			break
+		}
+		press(t, m, keyDown)
+	}
+	if m.focus != uiissueedit.FieldText {
+		t.Fatalf("down from the title never reached the text; the focus is on %d", m.focus)
+	}
+
+	press(t, m, keyDown)
+	if m.focus != uiissueedit.FieldText || m.text.Line() != 1 {
+		t.Fatalf("down on the first of two lines: focus %d, line %d, want the text and line 1", m.focus, m.text.Line())
+	}
+	press(t, m, keyDown)
+	if m.focus != uiissueedit.FieldSave {
+		t.Fatalf("down on the last line lands on %d, want Save", m.focus)
+	}
+
+	press(t, m, keyUp, keyUp)
+	if m.focus != uiissueedit.FieldText || m.text.Line() != 0 {
+		t.Fatalf("up from Save and up again: focus %d, line %d, want the text and line 0", m.focus, m.text.Line())
+	}
+	press(t, m, keyUp)
+	if m.focus != uiissueedit.FieldLabels {
+		t.Fatalf("up on the first line lands on %d, want the labels", m.focus)
+	}
+	press(t, m, keyUp, keyUp, keyUp, keyUp, keyUp)
+	if m.focus != uiissueedit.FieldTitle {
+		t.Fatalf("up from the labels five times lands on %d, want the title", m.focus)
+	}
+	if got := m.values().Text; got != m.baseline.Text {
+		t.Errorf("the arrows changed the text to %q", got)
+	}
+}
+
+func TestAWrappedLineOfTheTextIsLeftFromItsFirstAndLastRowOnly(t *testing.T) {
+	t.Parallel()
+
+	values := issueValues()
+	values.Text = strings.Repeat("word ", 40)
+	m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
+
+	press(t, m, keyDown)
+	if m.focus != uiissueedit.FieldText {
+		t.Fatalf("down on the first row of a wrapped line left the text for %d", m.focus)
+	}
+	press(t, m, keyUp)
+	if m.focus != uiissueedit.FieldText {
+		t.Fatalf("up on the second row of a wrapped line left the text for %d", m.focus)
+	}
+	press(t, m, keyUp)
+	if m.focus != uiissueedit.FieldLabels {
+		t.Fatalf("up on the first row lands on %d, want the labels", m.focus)
+	}
+}
+
+func TestDownLeavesALastLineThatFillsTheWidthOfTheText(t *testing.T) {
+	t.Parallel()
+
+	for _, before := range []string{"", "short\n"} {
+		values := issueValues()
+		m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
+		values.Text = before + strings.Repeat("x", m.text.Width())
+		m = openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
+
+		press(t, m, slices.Repeat([]tea.KeyMsg{keyDown}, strings.Count(before, "\n")+1)...)
+		if m.focus != uiissueedit.FieldSave {
+			t.Errorf("after %q, down on the full last line lands on %d, want Save", before, m.focus)
+		}
+		if got := m.values().Text; got != values.Text {
+			t.Errorf("after %q, down changed the text to %q", before, got)
+		}
+	}
+}
+
+func TestUpOnTheFirstLineOfACommentStaysInTheText(t *testing.T) {
+	t.Parallel()
+
+	m := open(t, Options{Kind: KindCommentAdd})
+	press(t, m, keyUp)
+	if m.focus != uiissueedit.FieldText {
+		t.Fatalf("up in an empty comment lands on %d, want the text", m.focus)
+	}
+	press(t, m, keyDown)
+	if m.focus != uiissueedit.FieldSave {
+		t.Fatalf("down on the last line of a comment lands on %d, want Save", m.focus)
 	}
 }
 
@@ -302,7 +398,7 @@ func TestPageKeysAndTheWheelMoveTheTextCursor(t *testing.T) {
 
 	values := issueValues()
 	values.Text = strings.Repeat("a line\n", 60)
-	m := open(t, Options{Kind: KindEdit, Values: values, Focus: uiissueedit.FieldText})
+	m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
 	page := m.text.Height()
 
 	press(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
@@ -331,7 +427,7 @@ func TestAltChordsTypeNothing(t *testing.T) {
 	t.Parallel()
 
 	for _, focus := range []uiissueedit.Field{uiissueedit.FieldTitle, uiissueedit.FieldText} {
-		m := open(t, Options{Kind: KindEdit, Values: issueValues(), Focus: focus})
+		m := openOn(t, Options{Kind: KindEdit, Values: issueValues()}, focus)
 		before := m.values()
 		for _, letter := range "audclbf" {
 			press(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{letter}, Alt: true})
@@ -487,7 +583,7 @@ func TestRunesThatArriveTogetherAreTextAlsoWhenTheySpellAKey(t *testing.T) {
 	words := []string{"esc", "tab", "up", "down", "left", "right", "enter", "pgup", "delete", "backspace", "home"}
 	for _, focus := range []uiissueedit.Field{uiissueedit.FieldAssignee, uiissueedit.FieldText} {
 		for _, word := range words {
-			m := open(t, Options{Kind: KindEdit, Values: Values{Status: "open", Type: "task"}, Focus: focus})
+			m := openOn(t, Options{Kind: KindEdit, Values: Values{Status: "open", Type: "task"}}, focus)
 			press(t, m, typed(word))
 
 			got := m.values().Assignee

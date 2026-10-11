@@ -2,6 +2,9 @@ package domain
 
 import "time"
 
+// StatusClosed is the status of a closed issue.
+const StatusClosed = "closed"
+
 // IssueSummary is the compact issue projection used in list and queue views.
 type IssueSummary struct {
 	ID        string

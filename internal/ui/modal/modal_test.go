@@ -1,6 +1,8 @@
 package modal
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -357,5 +359,39 @@ func TestSubmitCmdDoesNotRaceWithFurtherTyping(t *testing.T) {
 	}
 	if submit.Values["body"] != "ship it" {
 		t.Fatalf("submitted values changed after Enter: got %q, want %q", submit.Values["body"], "ship it")
+	}
+}
+
+// TestAModalTooTallForTheViewportIsClippedAboveItsBottomBorder: the box keeps
+// both borders, and the row above the bottom one counts the lines it hides.
+func TestAModalTooTallForTheViewportIsClippedAboveItsBottomBorder(t *testing.T) {
+	t.Parallel()
+
+	message := make([]string, 30)
+	for idx := range message {
+		message[idx] = fmt.Sprintf("line-%02d", idx)
+	}
+	m := New(Config{Title: "Tall", Message: strings.Join(message, "\n")})
+	whole := strings.Split(m.View(), "\n")
+	m.SetSize(80, 14)
+
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != 12 {
+		t.Fatalf("the clipped modal is %d lines tall, want the viewport less its margin, 12:\n%s", len(lines), m.View())
+	}
+	if lines[0] != whole[0] || lines[11] != whole[len(whole)-1] {
+		t.Fatalf("the clipped modal lost a border:\n%s", m.View())
+	}
+	if !strings.Contains(lines[1], "Tall") || !strings.Contains(m.View(), "line-00") {
+		t.Fatalf("the clipped modal does not open on its first line:\n%s", m.View())
+	}
+	// 9 content rows are drawn above the indicator.
+	if want := fmt.Sprintf("… %d more lines", len(whole)-2-9); !strings.Contains(lines[10], want) {
+		t.Fatalf("the row above the bottom border reads %q, want %q", lines[10], want)
+	}
+
+	m.SetSize(80, len(whole)+2)
+	if m.View() != strings.Join(whole, "\n") {
+		t.Fatalf("a modal that fits is clipped:\n%s", m.View())
 	}
 }

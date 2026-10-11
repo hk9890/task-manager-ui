@@ -179,7 +179,7 @@ func TestActionRequestIsIgnoredWhenItsModeIsNoLongerActive(t *testing.T) {
 	}}
 
 	// A request from Docs arrives after the operator has moved to the Board.
-	next, cmd := m.Update(mode.ActionRequestMsg{Mode: mode.Docs, Action: mode.ActionEditStatus})
+	next, cmd := m.Update(mode.ActionRequestMsg{Mode: mode.Docs, Action: mode.ActionEditIssue})
 	m = next.(Model)
 
 	if m.pendingEditor != 0 || cmd != nil {
@@ -188,7 +188,7 @@ func TestActionRequestIsIgnoredWhenItsModeIsNoLongerActive(t *testing.T) {
 
 	// The same request from the active surface is answered: the open is
 	// pending and the load is dispatched.
-	next, cmd = m.Update(mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionEditStatus})
+	next, cmd = m.Update(mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionEditIssue})
 	m = next.(Model)
 	if m.pendingEditor == 0 || cmd == nil {
 		t.Error("the active surface's own request was ignored")

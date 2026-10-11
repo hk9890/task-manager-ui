@@ -253,7 +253,6 @@ func TestClicksOnTheDetailButtonsDoWhatTheirKeysDo(t *testing.T) {
 		if m.active != mode.IssueEdit || m.editorTarget != (editorTarget{kind: issueeditmode.KindCommentAdd, issueID: "tm-1"}) {
 			t.Fatalf("the shell is on %q with the editor on %+v", m.active, m.editorTarget)
 		}
-		m = pressKey(t, pressKey(t, m, "down"), "down")
 		m = pressKey(t, typeInto(t, m, "a third comment"), "ctrl+s")
 
 		// The new comment is the newest, and the cursor is on it.

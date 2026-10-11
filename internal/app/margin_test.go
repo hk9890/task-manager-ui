@@ -137,15 +137,7 @@ func TestToastAndModalSitInsideTheMargin(t *testing.T) {
 		over := terminalRows(t, name, m.View(), width, height)
 		under := terminalRows(t, name, base.View(), width, height)
 
-		// The cells the overlay changed are the box it drew.
-		left, right, top, bottom := width, -1, height, -1
-		for y := range over {
-			for x := 0; x < width; x++ {
-				if ansi.Cut(over[y], x, x+1) != ansi.Cut(under[y], x, x+1) {
-					left, right, top, bottom = min(left, x), max(right, x), min(top, y), max(bottom, y)
-				}
-			}
-		}
+		left, right, top, bottom := changedBox(over, under, width)
 		if left < 2 || right > width-3 || top < 1 || bottom > height-2 {
 			t.Errorf("%s: the box covers columns %d-%d and rows %d-%d, outside the screen", name, left, right, top, bottom)
 		}
@@ -154,6 +146,49 @@ func TestToastAndModalSitInsideTheMargin(t *testing.T) {
 		if spare := (left - 2) - (width - 3 - right); spare < -1 || spare > 1 {
 			t.Errorf("%s: the box covers columns %d-%d, not centred between the margins", name, left, right)
 		}
+	}
+}
+
+// changedBox is the box an overlay drew: the cells of over that differ from
+// under.
+func changedBox(over, under []string, width int) (left, right, top, bottom int) {
+	left, right, top, bottom = width, -1, len(over), -1
+	for y := range over {
+		for x := 0; x < width; x++ {
+			if ansi.Cut(over[y], x, x+1) != ansi.Cut(under[y], x, x+1) {
+				left, right, top, bottom = min(left, x), max(right, x), min(top, y), max(bottom, y)
+			}
+		}
+	}
+	return left, right, top, bottom
+}
+
+// TestAResizeKeepsAnOpenDialogCentredInsideTheMargin: the shell sizes the
+// dialog to the screen, and the dialog reads no terminal size by itself.
+func TestAResizeKeepsAnOpenDialogCentredInsideTheMargin(t *testing.T) {
+	const width, height = 140, 40
+	opened := marginSurfaces["modal"](t, send(t, newMouseShell(t), tea.WindowSizeMsg{Width: 120, Height: 30}))
+	if !opened.showActionModal {
+		t.Fatal("fixture: the dialog did not open")
+	}
+
+	resized := send(t, opened, tea.WindowSizeMsg{Width: width, Height: height})
+	under := resized
+	under.showActionModal = false
+
+	left, right, top, bottom := changedBox(
+		terminalRows(t, "dialog", resized.View(), width, height),
+		terminalRows(t, "board", under.View(), width, height),
+		width,
+	)
+	if left < 2 || right > width-3 || top < 1 || bottom > height-2 {
+		t.Fatalf("the box covers columns %d-%d and rows %d-%d, outside the screen", left, right, top, bottom)
+	}
+	if spare := (left - 2) - (width - 3 - right); spare < -1 || spare > 1 {
+		t.Errorf("the box covers columns %d-%d, not centred between the margins", left, right)
+	}
+	if spare := (top - 1) - (height - 2 - bottom); spare < -1 || spare > 1 {
+		t.Errorf("the box covers rows %d-%d, not centred between the margins", top, bottom)
 	}
 }
 

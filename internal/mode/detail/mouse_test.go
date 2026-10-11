@@ -61,7 +61,6 @@ func TestClickFocusesThePaneUnderThePointer(t *testing.T) {
 
 	m := mouseDetail(t)
 	for text, want := range map[string]uidetail.FocusPane{
-		"Metadata ─":     uidetail.FocusPaneMetadata,
 		"Dependencies ─": uidetail.FocusPaneDependencies,
 		"Content ─":      uidetail.FocusPaneContent,
 	} {

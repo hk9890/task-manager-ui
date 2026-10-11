@@ -9,24 +9,12 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
-	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 type metadataField struct {
-	key      MetadataFieldKey
-	label    string
-	value    string
-	editable bool
+	label string
+	value string
 }
-
-// MetadataFieldKey identifies actionable fields in the metadata rail.
-type MetadataFieldKey string
-
-const (
-	MetadataFieldNone     MetadataFieldKey = ""
-	MetadataFieldPriority MetadataFieldKey = "priority"
-	MetadataFieldStatus   MetadataFieldKey = "status"
-)
 
 type metadataGroup struct {
 	title  string
@@ -34,9 +22,13 @@ type metadataGroup struct {
 	labels []string
 }
 
-const metadataDividerRune = "-"
+const (
+	metadataDividerRune = "-"
+	// metadataIndent is the blank cells in front of every line of the rail.
+	metadataIndent = 2
+)
 
-func renderMetadataRail(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, skeleton bool) []string {
+func renderMetadataRail(detail domain.IssueDetail, width int, skeleton bool) []string {
 	groups := metadataGroups(detail, skeleton)
 	if len(groups) == 0 || width < 1 {
 		return nil
@@ -45,11 +37,11 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 	out := make([]string, 0, 24)
 	for i, group := range groups {
 		if i > 0 {
-			out = append(out, renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-2)), width, false))
+			out = append(out, renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-metadataIndent)), width))
 		}
 
 		if group.title != "" {
-			out = append(out, renderMetadataPrefixedLine(group.title, width, false))
+			out = append(out, renderMetadataPrefixedLine(group.title, width))
 		}
 
 		labelWidth := 0
@@ -60,47 +52,22 @@ func renderMetadataRail(detail domain.IssueDetail, width int, selectedField Meta
 		}
 
 		for _, field := range group.fields {
-			line := fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value)
-			selected := field.key != MetadataFieldNone && field.key == selectedField
-			selected = selected && selectedField != MetadataFieldNone
-			out = append(out, renderMetadataFieldLine(line, width, selected))
+			out = append(out, renderMetadataPrefixedLine(fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value), width))
 		}
 
-		if len(group.labels) > 0 {
-			for _, label := range group.labels {
-				out = append(out, renderMetadataPrefixedLine("• "+label, width, false))
-			}
+		for _, label := range group.labels {
+			out = append(out, renderMetadataPrefixedLine("• "+label, width))
 		}
 	}
 
 	return out
 }
 
-func renderMetadataFieldLine(line string, width int, selected bool) string {
-	return renderMetadataPrefixedLine(line, width, selected)
-}
-
-func renderMetadataPrefixedLine(content string, width int, selected bool) string {
-	if width < 1 {
-		return ""
+func renderMetadataPrefixedLine(content string, width int) string {
+	if width <= metadataIndent {
+		return strings.Repeat(" ", max(0, width))
 	}
-
-	prefixPlain, prefixStyled := styles.SelectionPrefix(selected, true)
-	gutterWidth := len([]rune(prefixPlain))
-	if width <= gutterWidth {
-		if !selected {
-			return strings.Repeat(" ", width)
-		}
-		if width == 1 {
-			// One cell leaves no room for the gutter's trailing space. Trim it
-			// off the styled prefix rather than respelling the glyph here.
-			return strings.TrimSuffix(prefixStyled, " ")
-		}
-		return prefixStyled
-	}
-
-	contentWidth := width - gutterWidth
-	return prefixStyled + textutil.TruncateString(displaytext.OneLine(content), contentWidth)
+	return strings.Repeat(" ", metadataIndent) + textutil.TruncateString(displaytext.OneLine(content), width-metadataIndent)
 }
 
 func metadataFields(detail domain.IssueDetail) []metadataField {
@@ -123,8 +90,8 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 	core := metadataGroup{title: "Core"}
 	core.fields = append(core.fields,
 		metadataField{label: "Type", value: emptyFallback(summary.Type, "(unknown)")},
-		metadataField{key: MetadataFieldStatus, label: "Status", value: emptyFallback(summary.Status, "(unknown)"), editable: true},
-		metadataField{key: MetadataFieldPriority, label: "Priority", value: formatPriority(summary.Priority), editable: true},
+		metadataField{label: "Status", value: emptyFallback(summary.Status, "(unknown)")},
+		metadataField{label: "Priority", value: formatPriority(summary.Priority)},
 	)
 	groups = append(groups, core)
 

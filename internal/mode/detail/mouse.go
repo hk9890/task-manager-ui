@@ -12,8 +12,8 @@ import (
 const wheelLines = 3
 
 // HandleMouse is the wheel, the pointer and the left button. The wheel scrolls
-// the text pane it is over and moves the cursor of the Dependencies pane, as
-// the scroll keys do in each. A click focuses the pane it lands on; on a
+// the Content pane and moves the cursor of the Dependencies pane, as the
+// scroll keys do in each. A click focuses the pane it lands on; on a
 // reference row it also puts the cursor there, and a second click opens that
 // issue: the command returned carries the OpenRelatedIssueMsg. A click on a
 // comment puts the comment cursor there, and one on a button sends the request
@@ -53,10 +53,6 @@ func (m *Model) wheel(pane detail.FocusPane, direction, maxWidth, viewportHeight
 	}
 
 	bounds := m.paneGeometry(maxWidth, viewportHeight)
-	if pane == detail.FocusPaneMetadata {
-		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, "", direction*wheelLines)
-		return
-	}
 	m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, "", direction*wheelLines)
 }
 
@@ -95,9 +91,6 @@ func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
 	}
 
 	m.FocusPane = hit.Pane
-	if hit.Pane == detail.FocusPaneMetadata {
-		m.ensureMetadataSelection()
-	}
 	if hit.RefID != "" {
 		m.selectBrowserIssue(hit.RefID)
 	}

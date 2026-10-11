@@ -110,7 +110,7 @@ The rest is the same in every set, and each has one definition:
 
 | Glyph | Means | Defined in |
 |---|---|---|
-| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString`, `textutil.TruncateStringFront`; `legendCut` (`internal/ui/styles/legend.go`) where the legend drops hints; `capLines` (`internal/ui/toaster/toaster.go`) where a toast drops lines |
+| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString`, `textutil.TruncateStringFront`; `legendCut` (`internal/ui/styles/legend.go`) where the legend drops hints; `capLines` (`internal/ui/toaster/toaster.go`) where a toast drops lines; `errorLines` (`internal/ui/issueedit/issueedit.go`) where the refusal of a save drops lines |
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
@@ -132,8 +132,6 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 
 - Frame every column, pane and shell with `styles.FormSection`. It owns the rounded corners, the
   title inlays (`TopLeft` / `TopRight`), focus colouring, and padding each line to the inner width.
-  It also owns `TopAction`, a button in the top border after `TopLeft`, which it leaves out when
-  the border has no room; `styles.FormSectionActionCells` is that button's hit test.
 - `FormSection` returns the literal string `too narrow` below width 6. A caller that needs a
   different degraded rendering handles the narrow case before calling.
 - Draw a full screen that is text and not a list — help, the configuration screen, the issue
@@ -172,8 +170,8 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 ### A button in a pane
 
 A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
-has four: `edit` in the Content pane's top border, `add` on the Comments heading, and `edit` and
-`delete` on the header line of the selected comment.
+has four, all in the Content pane: `edit` on the ID line, the first line of the pane, `add` on the
+Comments heading, and `edit` and `delete` on the header line of the selected comment.
 
 - Draw it with `paneButton` (`internal/ui/detail/buttons.go`): the two runs and the roles of a
   menu-bar button, `" label "` in `ShellActionColor` and `"key "` in `ShellFooterHelpColor`.
@@ -181,12 +179,14 @@ has four: `edit` in the Content pane's top border, `add` on the Comments heading
   and spelled out. The button is a second way to reach the action, never the only one.
 - Under the pointer both runs take `ShellHoverBgColor` and the label turns bold, as on the bar
   (`State.Hover`).
-- Put buttons at the right end of a line with `placeButtons`, joined by `buttonSeparator`. It
-  draws none when fewer than `buttonTextFloor` cells would stay for the text; `FormSection` drops
-  a `TopAction` when no dash of the border would stay.
-- `HitTest` reads the cells from the helper that placed the button — `placeButtons` through
-  `renderContentPaneLines`, `styles.FormSectionActionCells` for the border — so a click lands on
-  the button that is drawn.
+- Put buttons at the right end of a line with `placeButtons`, joined by `buttonSeparator`, so
+  the last cell of every button line is the same column: `edit` on the ID line ends where `add`
+  ends (`TestTheEditButtonEndsInTheColumnOfTheAddButton`, `internal/ui/detail/comments_test.go`).
+  It draws none when fewer than `buttonTextFloor` cells would stay for the text. The ID is never
+  cut for a button: an ID line without room for both draws no `edit` (`renderContentPaneLines`).
+- `HitTest` reads the cells `placeButtons` returned, through `renderContentPaneLines`, so a click
+  lands on the button that is drawn.
+- A pane border holds no button.
 - A pane in skeleton state draws no button and reports none.
 
 ## The screen margin
@@ -211,11 +211,15 @@ taller:
 - The rows do not wait for a side column: a terminal of 80 columns and 30 rows has a blank row
   above and below and none at the sides. Rows that came with the first side column made the
   screen 2 rows shorter at 101 columns than at 100.
-- `Model.setTerminalSize` (`internal/app/render.go`) is the only reader of `tea.WindowSizeMsg`. It
-  splits each direction with `splitMargin` into `Model.marginLeft`, `marginTop`, `marginBottom` and
-  the screen, `Model.width` and `Model.height`. The model does not hold the terminal size.
-  `TestTheScreenNeverShrinksWhenTheTerminalGrows` (`internal/app/margin_test.go`) holds both
-  sizes against a terminal a column narrower and a row shorter.
+- `Model.setTerminalSize` (`internal/app/render.go`) is the only place the terminal's size is
+  acted on. It splits each direction with `splitMargin` into `Model.marginLeft`, `marginTop`,
+  `marginBottom` and the screen, `Model.width` and `Model.height`. The model does not hold the
+  terminal size. `TestTheScreenNeverShrinksWhenTheTerminalGrows` (`internal/app/margin_test.go`)
+  holds both sizes against a terminal a column narrower and a row shorter.
+- No `tea.WindowSizeMsg` goes past the shell: `shouldForwardTo` (`internal/app/routing.go`) keeps
+  it from the tabs, and the shell sizes the modal, the picker, the configuration screen and the
+  issue editor with `SetSize`. The board, docs, search and store picker models still have an arm
+  for the message; the shell never feeds it.
 - Size every surface, overlay and toast from `Model.width` and `Model.height`. `Model.screen` draws
   them all for that size, and `Model.View` is the only place the margin is drawn.
 - `Model.update` moves a `tea.MouseMsg` into screen coordinates once, before `mouseHeld` and
@@ -454,6 +458,12 @@ the surface it was opened from (`Model.closeEditor`).
   it is muted and takes no focus: the store takes a reason only when it closes.
 - `tab` and `shift+tab` walk every field and the two buttons, and wrap. `up`, `down` and `enter`
   move between the rows; in the text `enter` is a newline and the arrows move the cursor.
+- `up` on the first drawn line of the text moves the focus to the field above, and `down` on the
+  last drawn line moves it to Save (`textCursorOnFirstLine`, `textDown`,
+  `internal/mode/issueedit/model.go`). A wrapped line is several drawn lines. `down` asks the
+  widget and leaves when the cursor did not move: `LineInfo` counts an empty row under a line
+  that fills the width. A comment has no field above its text, so `up` on its first line does
+  nothing. The page keys and the wheel stay in the text.
 - Save and Cancel stand under the text, each with the key that does the same (`save_edit`,
   Escape), and the focused one takes its `Focus` role. The focused row has the selection bar and
   no band.
@@ -533,6 +543,11 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   comment line starts with the 2-cell gutter whatever the selection, so the line count does not
   follow the cursor (`renderComments`, `internal/ui/detail/comments.go`). The bar is drawn only
   while the comments have the focus (`FocusPaneComments`).
+- The Metadata pane of Detail only shows. It is no focus stop (`focusStops`,
+  `internal/mode/detail/model.go`), so its border never takes the focus colour; `HitTest` reports
+  nothing on it; it has no cursor and no scroll offset. A pane too short for its lines ends on
+  `… (N more)` (`RenderMetadataPane`). Every action on the issue is a key and a button of the
+  Content pane ([A button in a pane](#a-button-in-a-pane)).
 - A move of the comment cursor scrolls the Content pane with two calls, the last line of the
   comment and then its first: a comment that fits is drawn whole and a taller one starts at its
   header line (`scrollToComment`, `internal/mode/detail/model.go`).

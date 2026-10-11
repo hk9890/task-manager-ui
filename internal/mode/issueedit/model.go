@@ -20,14 +20,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	uiissueedit "github.com/hk9890/task-manager-ui/internal/ui/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
-
-// closed is the status that shows the reason row.
-const closed = "closed"
 
 // wheelLines is how far one wheel notch moves the cursor of the text.
 const wheelLines = 3
@@ -68,9 +66,6 @@ type Options struct {
 	Types    []string
 	// Close steps the status to closed and puts the focus on the reason.
 	Close bool
-	// Focus is the field that starts with the focus. Close and the comment
-	// kinds ignore it.
-	Focus uiissueedit.Field
 }
 
 // SubmitMsg asks the shell to write. Before is what the screen opened with, as
@@ -142,12 +137,12 @@ func (m *Model) Open(opts Options) {
 	// baseline is read back from them, so that is no change.
 	m.baseline = m.values()
 
-	focus := opts.Focus
+	focus := uiissueedit.FieldTitle
 	switch {
 	case m.comment():
 		focus = uiissueedit.FieldText
 	case opts.Close:
-		m.statuses, m.status = options(m.statuses, closed)
+		m.statuses, m.status = options(m.statuses, domain.StatusClosed)
 		focus = uiissueedit.FieldReason
 	}
 	m.setFocus(focus)
@@ -279,8 +274,8 @@ func (m *Model) rows() []uiissueedit.Row {
 	if m.kind == KindEdit {
 		rows = append(rows, uiissueedit.Row{Field: uiissueedit.FieldStatus, Label: "Status", Value: m.statusValue(), Stepped: true})
 		switch {
-		case m.statusValue() != closed:
-		case m.baseline.Status == closed:
+		case m.statusValue() != domain.StatusClosed:
+		case m.baseline.Status == domain.StatusClosed:
 			rows = append(rows, uiissueedit.Row{Field: uiissueedit.FieldReason, Label: "Reason", Value: m.reason.Value(), ReadOnly: true})
 		default:
 			rows = append(rows, uiissueedit.Row{Field: uiissueedit.FieldReason, Label: "Reason", Value: m.reason.View()})
@@ -362,6 +357,21 @@ func (m *Model) moveText(msg tea.Msg, times int) {
 	}
 }
 
+// textCursorOnFirstLine counts the lines as drawn: a wrapped line of the text
+// is several.
+func (m *Model) textCursorOnFirstLine() bool {
+	return m.text.Line() == 0 && m.text.LineInfo().RowOffset == 0
+}
+
+// textDown moves the text cursor one drawn line down and reports whether it
+// moved. The widget is asked, not its line count: it counts an empty row under
+// a line that fills the width, and the cursor cannot enter that row.
+func (m *Model) textDown(msg tea.KeyMsg) bool {
+	line, row := m.text.Line(), m.text.LineInfo().RowOffset
+	m.moveText(msg, 1)
+	return m.text.Line() != line || m.text.LineInfo().RowOffset != row
+}
+
 // HandleKey processes one key press and reports whether the screen consumed
 // it. An unconsumed key falls through to the shell: quit, help and Escape.
 //
@@ -407,6 +417,15 @@ func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			m.moveText(tea.KeyMsg{Type: tea.KeyUp}, m.text.Height())
 		case msg.String() == "pgdown":
 			m.moveText(tea.KeyMsg{Type: tea.KeyDown}, m.text.Height())
+		case msg.String() == "up" && m.textCursorOnFirstLine():
+			// A comment has no field above its text.
+			if !m.comment() {
+				m.moveFocus(-1)
+			}
+		case msg.String() == "down":
+			if !m.textDown(msg) {
+				m.setFocus(uiissueedit.FieldSave)
+			}
 		case typed:
 			m.moveText(msg, 1)
 		}

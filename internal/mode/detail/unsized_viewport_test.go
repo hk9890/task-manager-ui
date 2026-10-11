@@ -84,13 +84,12 @@ func TestClampScrollLeavesOffsetsAloneBeforeThePaneIsSized(t *testing.T) {
 	for _, height := range []int{0, -1} {
 		m := unsizedModel(t)
 		m.DependenciesScrollOffset = 3
-		m.MetadataScrollOffset = 2
 
 		m.ClampScroll(80, height)
 
-		if m.ContentScrollOffset != 7 || m.DependenciesScrollOffset != 3 || m.MetadataScrollOffset != 2 {
-			t.Errorf("height %d: offsets moved to content=%d deps=%d meta=%d, want 7/3/2",
-				height, m.ContentScrollOffset, m.DependenciesScrollOffset, m.MetadataScrollOffset)
+		if m.ContentScrollOffset != 7 || m.DependenciesScrollOffset != 3 {
+			t.Errorf("height %d: offsets moved to content=%d deps=%d, want 7/3",
+				height, m.ContentScrollOffset, m.DependenciesScrollOffset)
 		}
 	}
 }

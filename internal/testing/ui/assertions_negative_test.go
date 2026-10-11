@@ -41,13 +41,13 @@ func TestAssertActionRequestRejectsAHalfMatch(t *testing.T) {
 		},
 		{
 			name:     "right mode, wrong action",
-			msg:      mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionEditStatus},
+			msg:      mode.ActionRequestMsg{Mode: mode.Search, Action: mode.ActionEditIssue},
 			wantMode: mode.Search, wantAction: mode.ActionOpenDetail,
 			wantFail: true,
 		},
 		{
 			name:     "neither matches",
-			msg:      mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionEditStatus},
+			msg:      mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionEditIssue},
 			wantMode: mode.Search, wantAction: mode.ActionOpenDetail,
 			wantFail: true,
 		},

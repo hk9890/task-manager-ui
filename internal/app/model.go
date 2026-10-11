@@ -24,7 +24,6 @@ import (
 	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
 	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
-	uiissueedit "github.com/hk9890/task-manager-ui/internal/ui/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -722,10 +721,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commentDeletedMsg:
 		return m, batchCmds(modeCmd, m.handleCommentDeleted(msg))
 	case issueeditmode.SubmitMsg:
+		// The request travels as a Cmd, so the editor can be gone when it
+		// arrives.
+		if m.active != mode.IssueEdit {
+			return m, modeCmd
+		}
 		return m, batchCmds(modeCmd, m.submitEditor(msg))
 	case issueeditmode.CancelMsg:
-		// The request travels as a Cmd, so an Escape can close the editor
-		// before it arrives.
 		if m.active != mode.IssueEdit {
 			return m, modeCmd
 		}
@@ -760,12 +762,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, modeCmd
 		}
 		switch msg.Action {
-		case mode.ActionEditStatus:
-			return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldStatus))
-		case mode.ActionEditPriority:
-			return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldPriority))
 		case mode.ActionEditIssue:
-			return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldTitle))
+			return m, batchCmds(modeCmd, m.openIssueEditor())
 		case mode.ActionAddComment:
 			return m, batchCmds(modeCmd, m.openCommentAdd())
 		case mode.ActionEditComment:
@@ -1070,7 +1068,7 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 	case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
 		return m, batchCmds(modeCmd, m.openNewIssue())
 	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
-		return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldTitle))
+		return m, batchCmds(modeCmd, m.openIssueEditor())
 	case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
 		return m, batchCmds(modeCmd, m.openIssueClose())
 	case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
