@@ -474,8 +474,30 @@ func TestStoredTextTheWidgetsNormaliseIsNoChange(t *testing.T) {
 	if submit.Before != submit.After {
 		t.Errorf("an untouched issue submits a change:\nbefore %+v\nafter  %+v", submit.Before, submit.After)
 	}
-	if strings.ContainsAny(submit.After.Text, "\t\r") {
-		t.Errorf("the text still holds a TAB or a CR: %q", submit.After.Text)
+	if want := "one    tab\nnext line"; submit.After.Text != want {
+		t.Errorf("the text is %q, want %q: a TAB is 4 spaces and a CRLF one line break", submit.After.Text, want)
+	}
+}
+
+// Runes that reach the app in one message are typed, also when they spell the
+// name of a key the screen or the shell acts on.
+func TestRunesThatArriveTogetherAreTextAlsoWhenTheySpellAKey(t *testing.T) {
+	t.Parallel()
+
+	words := []string{"esc", "tab", "up", "down", "left", "right", "enter", "pgup", "delete", "backspace", "home"}
+	for _, focus := range []uiissueedit.Field{uiissueedit.FieldAssignee, uiissueedit.FieldText} {
+		for _, word := range words {
+			m := open(t, Options{Kind: KindEdit, Values: Values{Status: "open", Type: "task"}, Focus: focus})
+			press(t, m, typed(word))
+
+			got := m.values().Assignee
+			if focus == uiissueedit.FieldText {
+				got = m.values().Text
+			}
+			if got != word || m.focus != focus {
+				t.Errorf("focus %d: the runes %q gave the value %q and the focus %d", focus, word, got, m.focus)
+			}
+		}
 	}
 }
 

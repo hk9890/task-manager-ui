@@ -155,6 +155,25 @@ func TestNoAndEscapeOnTheDeleteQuestionWriteNothing(t *testing.T) {
 	}
 }
 
+// The delete question is asked with a Cmd. A key that asks for the editor can
+// be handled before the question is up, and the editor then does not open
+// under it.
+func TestEditorAskedForBeforeTheDeleteQuestionIsUpDoesNotOpenUnderIt(t *testing.T) {
+	m, _ := commentShell(t)
+
+	next, ask := m.Update(testKey("alt+d"))
+	next, load := next.(Model).Update(testKey("alt+u"))
+	m = applyMessages(t, next.(Model), runBatch(ask))
+	if !m.showActionModal || m.pendingEditor == 0 {
+		t.Fatalf("setup: question up %v, pending open %d; want the question over a pending open", m.showActionModal, m.pendingEditor)
+	}
+	m = applyMessages(t, m, runBatch(load))
+
+	if m.active != mode.Detail || !m.showActionModal || m.pendingEditor != 0 {
+		t.Errorf("the shell is on %q, question up %v, pending open %d; want Detail under the question and no open pending", m.active, m.showActionModal, m.pendingEditor)
+	}
+}
+
 func TestARefusedCommentDeleteSaysWhy(t *testing.T) {
 	m, gw := commentShell(t)
 	gw.SetError(fakes.MethodDeleteComment, domain.RepositoryError{Code: domain.ErrorCodeHookDenied, Operation: "delete comment", Message: "comments are kept"})

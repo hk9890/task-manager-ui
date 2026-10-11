@@ -1,9 +1,8 @@
 package app
 
 // Detail-mode behaviour driven through the shell: content scrolling, the
-// dependency browser, drill-in/return navigation, and the metadata quick-edit
-// dialogs. Detail *rendering* lives in internal/ui/detail; this file asserts
-// what the shell does with it.
+// dependency browser and drill-in/return navigation. Detail *rendering* lives
+// in internal/ui/detail; this file asserts what the shell does with it.
 
 import (
 	"strconv"

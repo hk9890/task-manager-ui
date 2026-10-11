@@ -25,7 +25,8 @@ func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) tea
 		return nil
 	}
 	m.pointer = msg.Pointer()
-	if m.pointer == nil {
+	// A move only places the pointer: every draw reads the hover from it.
+	if m.pointer == nil || msg.Kind == mode.MouseMove {
 		return nil
 	}
 
@@ -67,13 +68,21 @@ var buttonActions = map[detail.Button]mode.Action{
 	detail.ButtonDeleteComment: mode.ActionDeleteComment,
 }
 
+// commentClick is what the click tracker holds after a click on a comment.
+const commentClick = "comment"
+
 func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
 	if action, ok := buttonActions[hit.Button]; ok {
-		m.clicks = mode.ClickTracker{}
+		// A click that selects a comment draws its buttons, and one of them
+		// can stand under that click. The second click of a double click in
+		// place means the comment, as it means the row in a list.
+		if m.clicks.Double("", commentClick, msg) {
+			return nil
+		}
 		return mode.RequestActionCmd(mode.Detail, action)
 	}
 	if hit.Pane == detail.FocusPaneComments {
-		m.clicks = mode.ClickTracker{}
+		m.clicks.Double(commentClick, "", msg)
 		m.FocusPane = hit.Pane
 		m.commentIndex = hit.Comment
 		return nil

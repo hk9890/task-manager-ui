@@ -230,6 +230,12 @@ func (m *Model) handleEditorLoaded(msg editorLoadedMsg) tea.Cmd {
 	if msg.err != nil {
 		return m.showToast(fmt.Sprintf("Failed to open the editor: %v", msg.err), toaster.StyleError)
 	}
+	// The delete question of a comment is asked with a Cmd, so it can open
+	// after the key that asked for the editor. The editor does not open under
+	// an overlay.
+	if m.overlayOpen() {
+		return nil
+	}
 
 	issue := msg.issue.Summary
 	if msg.closing && issue.Status == statusClosed {
@@ -313,11 +319,11 @@ func (m *Model) handleEditorSaved(msg editorSavedMsg) tea.Cmd {
 	switch {
 	case msg.noChange:
 		done, style = fmt.Sprintf("No changes saved for issue %s", issueID), toaster.StyleInfo
-	case m.editorTarget.kind == issueeditmode.KindCreate:
+	case kind == issueeditmode.KindCreate:
 		done = fmt.Sprintf("Created issue %s", msg.createdID)
-	case m.editorTarget.kind == issueeditmode.KindCommentAdd:
+	case kind == issueeditmode.KindCommentAdd:
 		done = fmt.Sprintf("Added comment to %s", issueID)
-	case m.editorTarget.kind == issueeditmode.KindCommentEdit:
+	case kind == issueeditmode.KindCommentEdit:
 		done = fmt.Sprintf("Edited comment on %s", issueID)
 	case msg.closed:
 		done = fmt.Sprintf("Closed issue %s", issueID)

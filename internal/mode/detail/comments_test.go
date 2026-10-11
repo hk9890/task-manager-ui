@@ -233,6 +233,31 @@ func TestClicksOnTheButtonsAndOnAComment(t *testing.T) {
 	}
 }
 
+// A click that selects a comment draws its buttons, one of them under the
+// pointer. The second click of a double click there presses nothing.
+func TestASecondClickInPlaceOnACommentPressesNoButtonDrawnUnderIt(t *testing.T) {
+	t.Parallel()
+
+	m := commentsDetail(t, 3)
+	m.FocusPane = uidetail.FocusPaneComments
+	m.SelectComment(1)
+	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "delete alt+d")
+	m.SelectComment(0)
+
+	clickAt := func(ms int) tea.Cmd {
+		at := mouseStart.Add(time.Duration(ms) * time.Millisecond)
+		return m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: at}, commentsWidth, commentsHeight)
+	}
+
+	if cmd := clickAt(0); cmd != nil || selectedCommentID(m) != "c-2" {
+		t.Fatalf("the first click: command %v, cursor %q; want comment 2 selected", cmd != nil, selectedCommentID(m))
+	}
+	if cmd := clickAt(100); cmd != nil {
+		t.Fatalf("the second click of a double click produced %#v", cmd())
+	}
+	testui.AssertActionRequest(t, clickAt(1000)(), mode.Detail, mode.ActionDeleteComment)
+}
+
 func TestThePointerLightsAPaneButton(t *testing.T) {
 	testui.ForceTrueColor(t)
 
@@ -278,6 +303,40 @@ func TestALoadedDetailClampsTheCommentCursor(t *testing.T) {
 	m.ApplyLoadedDetail("tm-9", domain.IssueDetail{Summary: other.Summary})
 	if _, ok := m.SelectedComment(); ok || m.FocusPane != uidetail.FocusPaneContent {
 		t.Fatalf("with no comment left: selected %v, focus %d; want none and Content", ok, m.FocusPane)
+	}
+}
+
+// A comment another process wrote moves the others to another index. The
+// cursor stays on its comment, and after SelectComment on the index the shell
+// gave it.
+func TestAReloadKeepsTheCursorOnItsComment(t *testing.T) {
+	t.Parallel()
+
+	withANewerComment := func() domain.IssueDetail {
+		issue := issueWithComments(3)
+		issue.Comments = append(issue.Comments, domain.IssueComment{
+			ID: "c-0", Author: "agent", Body: "written meanwhile", CreatedAt: time.Date(2026, 5, 1, 13, 0, 0, 0, time.UTC),
+		})
+		return issue
+	}
+
+	m := commentsDetail(t, 3)
+	m.FocusPane = uidetail.FocusPaneComments
+	key(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m.ApplyLoadedDetail("tm-1", withANewerComment())
+	m.ClampScroll(commentsWidth, commentsHeight)
+	if got := selectedCommentID(m); got != "c-2" {
+		t.Fatalf("a reload with a newer comment moved the cursor to %q, want c-2", got)
+	}
+	if lines := barLines(m); len(lines) != 4 || !strings.Contains(lines[0], "author-2") {
+		t.Fatalf("the comment under the cursor is not drawn whole after the reload:\n%s", m.View(commentsWidth, commentsHeight, false, 0))
+	}
+
+	m = commentsDetail(t, 3)
+	m.SelectComment(0)
+	m.ApplyLoadedDetail("tm-1", withANewerComment())
+	if got := selectedCommentID(m); got != "c-0" {
+		t.Fatalf("after SelectComment(0) a reload put the cursor on %q, want the newest comment", got)
 	}
 }
 

@@ -201,7 +201,9 @@ func newText(value string) textarea.Model {
 	text.KeyMap.LowercaseWordForward = key.NewBinding()
 	text.KeyMap.CapitalizeWordForward = key.NewBinding()
 	text.KeyMap.TransposeCharacterBackward = key.NewBinding()
-	text.SetValue(value)
+	// The widget makes a line break of a CR and of an LF each, so a CRLF is
+	// one LF before the widget gets it.
+	text.SetValue(strings.ReplaceAll(value, "\r\n", "\n"))
 	return text
 }
 
@@ -367,6 +369,13 @@ func (m *Model) moveText(msg tea.Msg, times int) {
 // configuration screen: the screen takes typed text, so a binding on a key
 // that prints would leave no way out of a field.
 func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+	// Runes that arrive in one message are text, as a paste is, also when they
+	// spell the name of a key: a key is matched by its name, and "esc" typed
+	// over a slow link would leave the screen.
+	if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
+		msg.Paste = true
+	}
+
 	shell := func(action string) bool { return m.keys.Match(config.ShellContext, action, msg) }
 	switch {
 	case shell(config.ShellActionQuit), shell(config.ShellActionHelp):
@@ -481,9 +490,10 @@ func (m *Model) submit() tea.Cmd {
 
 // HandleMouse does what a key does: a click on a field gives it the focus, a
 // click on a button presses it, and the wheel over the text moves its cursor.
-// During a save it does nothing, as a key does nothing then.
+// During a save it does nothing, as a key does nothing then, and a move of the
+// pointer does nothing at any time: the screen lights nothing under it.
 func (m *Model) HandleMouse(msg mode.MouseMsg) tea.Cmd {
-	if m.saving {
+	if m.saving || msg.Kind == mode.MouseMove {
 		return nil
 	}
 	hit, ok := uiissueedit.HitTest(m.viewState("", ""), msg.X, msg.Y)

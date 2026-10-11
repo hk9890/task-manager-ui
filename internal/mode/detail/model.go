@@ -34,7 +34,8 @@ type Model struct {
 	metadataField detail.MetadataFieldKey
 	// commentIndex is the selected comment, counted in detail.OrderedComments.
 	// revealComment asks the next ClampScroll to scroll to it: the shell sets
-	// the cursor before the reload that moves the comment arrives.
+	// the cursor before the reload that moves the comment arrives, and a
+	// reload moves the cursor with the comment it is on.
 	commentIndex  int
 	revealComment bool
 
@@ -192,13 +193,25 @@ func (m *Model) ClearDrillFocus() {
 // flip focus.
 func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 	previousID := strings.TrimSpace(m.Detail.Summary.ID)
-	if previousID == "" || previousID != strings.TrimSpace(issueID) {
+	sameIssue := previousID != "" && previousID == strings.TrimSpace(issueID)
+	selected, _ := m.SelectedComment()
+	if !sameIssue {
 		m.ContentScrollOffset = 0
 		m.MetadataScrollOffset = 0
 		m.DependenciesScrollOffset = 0
 		m.commentIndex = 0
 	}
 	m.Detail = d
+	// A reload keeps the cursor on the comment it was on: a comment another
+	// process wrote meanwhile moves that comment to another index. After
+	// SelectComment the index is the shell's and stays.
+	if sameIssue && selected.ID != "" && !m.revealComment {
+		index := slices.IndexFunc(detail.OrderedComments(d.Comments), func(c domain.IssueComment) bool { return c.ID == selected.ID })
+		if index >= 0 && index != m.commentIndex {
+			m.commentIndex = index
+			m.revealComment = true
+		}
+	}
 	m.commentIndex = textutil.Clamp(m.commentIndex, 0, max(0, len(d.Comments)-1))
 	if len(d.Comments) == 0 && m.FocusPane == detail.FocusPaneComments {
 		m.FocusPane = detail.FocusPaneContent

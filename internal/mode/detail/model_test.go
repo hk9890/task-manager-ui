@@ -512,7 +512,7 @@ func TestModelDetailEnterOnMetadataStatusAsksForTheEditorOnTheStatus(t *testing.
 		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
 	}
 	if req.Mode != mode.Detail || req.Action != mode.ActionEditStatus {
-		t.Fatalf("expected detail/open_status_dialog, got %s/%s", req.Mode, req.Action)
+		t.Fatalf("expected %s/%s, got %s/%s", mode.Detail, mode.ActionEditStatus, req.Mode, req.Action)
 	}
 }
 
@@ -541,7 +541,7 @@ func TestModelDetailEnterOnMetadataPriorityAsksForTheEditorOnThePriority(t *test
 		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
 	}
 	if req.Mode != mode.Detail || req.Action != mode.ActionEditPriority {
-		t.Fatalf("expected detail/open_priority_dialog, got %s/%s", req.Mode, req.Action)
+		t.Fatalf("expected %s/%s, got %s/%s", mode.Detail, mode.ActionEditPriority, req.Mode, req.Action)
 	}
 }
 
