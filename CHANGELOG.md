@@ -13,19 +13,23 @@ carries its `vX.Y.Z` section of this file as its notes.
   of an issue to the terminal as it was. Whoever can write an issue in a store
   you open could send an escape sequence to your terminal, for example one
   that sets the window title. No setting was needed. `taskmgr` accepts a
-  control character in a description, and the sequence went out when you
-  opened that issue. It refuses one in a title, an assignee and a label, so
-  those need a store file that another tool wrote; such a title went out as
-  soon as the Board listed the issue. A control character other than a line
-  break or a TAB now draws as a space, and a format character that shapes
-  nothing, such as a right-to-left override, is dropped.
+  control character in a description and in a close reason, and the sequence
+  went out when the detail page of that issue drew that text. It refuses one
+  in a title, an assignee and a label, so those need a store file that
+  another tool wrote; such a title went out as soon as the Board listed the
+  issue. A control character other than a line break or a TAB now draws as a
+  space, and a format character that shapes nothing, such as a right-to-left
+  override, is dropped.
 - **Fixed: a TAB in a description or in the notes broke the issue detail
   page.** When the app drew the body as markdown, because it has a heading, a
   list, a quote, a code block or a link, the line with the TAB ran past the
-  border of its pane and past the edge of the terminal. Each such line moved
-  the rows above it up by one. With two of them, or with one on a terminal of
-  24 rows, the menu bar left the screen. A TAB now draws as spaces up to the
-  next 4-column stop, and the line stays in its pane.
+  border of its pane. Most such lines also ran past the edge of the terminal,
+  and each of those moved the rows above it up by one. With two of them, or
+  with one on a terminal of 24 rows, the menu bar left the screen. A line
+  stayed on the screen only when its TABs moved the text by no more than the
+  blank columns at the right of a wide terminal: 1 column from 102 columns, 2
+  from 104. A TAB now draws as spaces up to the next 4-column stop, and the
+  line stays in its pane.
 - **Fixed: the detail page cut text of a description, the notes or a comment
   that did not fit its pane.** In a body drawn as markdown, a word wider than
   the pane, such as a long URL or a run of Chinese or Japanese text, ended in
@@ -34,7 +38,8 @@ carries its `vX.Y.Z` section of this file as its notes.
   frames as command output. A table with more columns than the pane has room
   for lost the text of its headings, and one with still more columns lost
   most of its cells. This text now goes on in the next line. A table that
-  cannot fit draws as wrapped text, without its columns.
+  cannot fit draws as wrapped text: each row keeps the bars between its
+  cells, but the cells no longer stand in columns.
 - **Fixed: a description, the notes or a comment wrapped in the wrong place.**
   A line broke at a hyphen inside a word, and one word then stood alone on the
   next line. A long line of a code block went on at the left margin, without
@@ -54,22 +59,25 @@ carries its `vX.Y.Z` section of this file as its notes.
   notes or a comment with no markdown, a line that wraps loses its runs of
   spaces: each run inside the line becomes one space, so text aligned in
   columns loses its alignment on that line. The indent at the start of the
-  line stays, and a line that fits keeps its spaces.
+  line stays, unless it is wider than half the pane: such a line wraps with
+  no indent. A line that fits keeps its spaces.
 - Changed: a block quote that its author wrapped by hand keeps those line
   ends. Before, the quote flowed to the width of the pane. A line break that
   the author forced in a paragraph, with two spaces or a backslash at the line
   end, now stays too. A paragraph wrapped by hand still flows when the body
   has markdown in it.
 - Fixed: a line break or a TAB in a field of an issue broke the frame.
-  `taskmgr` refuses such a value in most fields, so it comes from a store file
-  that another tool or a hand edit wrote. A line break in the title or the ID
-  made the row of the issue one line higher on the Board, on the Docs tab and
-  in the store search, so each row below it moved down. On the detail page, a
-  line break in the title, the ID, the status, the type, the assignee, the
-  owner, the close reason, a label or the author of a comment added a row and
-  moved the borders. A TAB in one of them but the ID pushed the rest of its
-  line past the border of the pane. Each of these fields now draws on one
-  line.
+  `taskmgr` accepts one in a close reason, so a reason of two lines given to
+  `taskmgr close --reason` was enough to break the detail page of that issue.
+  It stores none in the other fields, so there it comes from a store file
+  that another tool or a hand edit wrote. A line break in the title, in the
+  ID or in the first three characters of the status made the row of the issue
+  one line higher on the Board, on the Docs tab and in the store search, so
+  each row below it moved down. On the detail page, a line break in the
+  title, the ID, the status, the type, the assignee, the owner, the close
+  reason, a label or the author of a comment added a row and moved the
+  borders. A TAB in one of them but the ID pushed the rest of its line past
+  the border of the pane. Each of these fields now draws on one line.
 
 ## v0.19.0
 
