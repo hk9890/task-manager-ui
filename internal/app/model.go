@@ -20,9 +20,11 @@ import (
 	configscreenmode "github.com/hk9890/task-manager-ui/internal/mode/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	docsmode "github.com/hk9890/task-manager-ui/internal/mode/docs"
+	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	searchmode "github.com/hk9890/task-manager-ui/internal/mode/search"
 	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
+	uiissueedit "github.com/hk9890/task-manager-ui/internal/ui/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -129,6 +131,21 @@ type Model struct {
 	configScreen *configscreenmode.Model
 	configReturn mode.ID
 
+	// editor is the full-screen issue editor, editorReturn the surface the
+	// operator opened it from, where it closes to, and editorTarget what a
+	// save writes to.
+	editor       *issueeditmode.Model
+	editorReturn mode.ID
+	editorTarget editorTarget
+
+	// pendingEditor is the request to open the editor that is still reading
+	// what the editor opens with, and 0 for none; editorSeq numbers the
+	// requests. Any key, click or wheel notch sets it to 0 at one choke point,
+	// so the result that arrives later is dropped: the operator has moved on,
+	// and Escape in particular cancels the open.
+	editorSeq     int
+	pendingEditor int
+
 	detail detail.Model
 	// detailLoadFailedID is the issue whose detail load failure the operator
 	// was already told about.
@@ -141,10 +158,13 @@ type Model struct {
 	showHelp   bool
 	helpOffset int
 
+	// The action modal carries the store form or the comment delete question.
+	// commentDelete is the comment the question is about, and empty while the
+	// store form is open.
 	actionModal     modal.Model
 	showActionModal bool
-	actionState     mutationDialogState
 	storeForm       storeForm
+	commentDelete   commentDelete
 
 	focusKnown      bool
 	terminalFocused bool
@@ -192,15 +212,6 @@ type Model struct {
 	// overwrite.
 	sizeKnown bool
 
-	// pendingDialog guards an in-flight async dialog-open. It is set when the
-	// app dispatches an async catalog-load Cmd (status or create/update) and
-	// cleared at a single choke point at the top of the tea.KeyMsg branch so
-	// that any key — particularly ESC — arriving during the load window can
-	// cancel the pending open before the catalog response arrives. The
-	// catalog-loaded handlers check the guard before opening the modal; if the
-	// guard is not active they drop the result silently.
-	pendingDialog pendingDialogGuard
-
 	runtime RuntimeOptions
 
 	// scheduleRefreshTick, scheduleToastDismiss, scheduleSpinnerTick and
@@ -211,13 +222,6 @@ type Model struct {
 	scheduleToastDismiss func(time.Duration, int) tea.Cmd
 	scheduleSpinnerTick  func() tea.Cmd
 	awaitStoreChange     func(<-chan struct{}) tea.Cmd
-
-	// onEditIssueResult is a test-only hook called after editIssueResultMsg is
-	// fully processed and the toast has been set. It is nil in production.
-	// Tests can use it to replace a time.Sleep settle budget with a precise
-	// synchronisation point. Set via the model field directly in test code
-	// (the field is unexported; it is accessible from within package app).
-	onEditIssueResult func()
 }
 
 // NewModel builds the root shell model.
@@ -248,6 +252,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		storePicker: storepickermode.NewModel(ctx, services.StoreCatalog,
 			logging.WithComponent(services.Logger, "storepicker"), keys),
 		configScreen:         configscreenmode.NewModel(keys),
+		editor:               issueeditmode.NewModel(keys),
 		toast:                toaster.New(),
 		width:                defaultViewportWidth,
 		height:               defaultViewportHeight,
@@ -300,10 +305,11 @@ func (m *Model) bindStore(services Services) {
 	m.pickerReturn = mode.Board
 	m.selectedByMode = make(map[mode.ID]*mode.Selection)
 	m.drillSelection = nil
-	m.pendingDialog = pendingDialogGuard{}
+	m.pendingEditor = 0
 	m.detailLoadFailedID = ""
 	m.showActionModal = false
 	m.storeForm = storeForm{}
+	m.commentDelete = commentDelete{}
 	m.fatalErrTitle, m.fatalErrBody = "", ""
 	// Board is initialised eagerly — by Init at startup, by switchStore after a
 	// switch — so it starts marked done and a later switch back to it does not
@@ -435,7 +441,6 @@ func (m Model) Init() tea.Cmd {
 		cmds := []tea.Cmd{
 			m.storePicker.Init(),
 			func() tea.Msg { return unresolvedStoreMsg{reason: reason} },
-			m.services.SweepStaleTempFiles(),
 		}
 		if !m.runtime.DisableAutoRefresh {
 			cmds = append(cmds, m.scheduleRefreshTick())
@@ -448,14 +453,13 @@ func (m Model) Init() tea.Cmd {
 		err := m.services.Repo.HealthCheck(m.ctx)
 		return startupHealthCheckMsg{err: err}
 	})
-	sweepCmd := m.services.SweepStaleTempFiles()
 	// The spinner tick is not armed here. Update arms it whenever something
 	// starts loading and stops re-arming when nothing is, so an idle app draws
 	// no frames; Init cannot set the armed flag anyway (value receiver).
 	if m.runtime.DisableAutoRefresh {
-		return tea.Batch(healthCheckCmd, sweepCmd)
+		return healthCheckCmd
 	}
-	return batchCmds(healthCheckCmd, sweepCmd, m.scheduleRefreshTick(), m.waitForStoreChangeCmd())
+	return batchCmds(healthCheckCmd, m.scheduleRefreshTick(), m.waitForStoreChangeCmd())
 }
 
 // lazyInitActiveTabCmd fires the active browse surface's Init() exactly once —
@@ -639,6 +643,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// screen rather than the workspace the browse tabs share.
 		m.storePicker.SetSize(m.width, m.height)
 		m.configScreen.SetSize(m.width, m.height)
+		m.editor.SetSize(m.width, m.height)
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
 	case configscreenmode.ChangeMsg:
@@ -666,7 +671,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, openStoreCmd(m.appCtx, m.services.StoreCatalog, entry.Name))
 	case storepickermode.CreateMsg:
-		// A store form rides the action-modal slot. Like the two dialog
+		// A store form rides the action-modal slot. Like the editor
 		// requests below, it does not open over an overlay.
 		if m.overlayOpen() {
 			return m, modeCmd
@@ -705,41 +710,26 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.detail.ClampScroll(m.detailViewportWidth(), m.detailViewportHeight())
 		return m, modeCmd
-	case editIssuePreparedMsg:
-		return m.handleEditIssuePrepared(modeCmd, msg)
-	case editorExitedMsg:
-		return m.handleEditorExited(modeCmd, msg)
-	case editIssueResultMsg:
-		return m.handleEditIssueResult(modeCmd, msg)
 	case launchActionResultMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launcher action %q failed: %v", msg.action, msg.err), toaster.StyleError))
 		}
-		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow). Use %s for edit/save round-trip.", msg.action, m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEditIssue)), toaster.StyleInfo))
-	case mutationCatalogsLoadedMsg:
-		if msg.err != nil {
-			m.pendingDialog = pendingDialogGuard{}
-			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Failed to load mutation catalogs: %v", msg.err), toaster.StyleError))
-		}
-
-		// Only open the modal if the pending-dialog guard is still active for
-		// this kind. If the guard was cleared by a key press (ESC or any other
-		// key arriving during the load window), drop the result silently.
-		if !m.pendingDialog.active || m.pendingDialog.kind != msg.kind {
+		return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Launched %q in background (no return flow).", msg.action), toaster.StyleInfo))
+	case editorLoadedMsg:
+		return m, batchCmds(modeCmd, m.handleEditorLoaded(msg))
+	case editorSavedMsg:
+		return m, batchCmds(modeCmd, m.handleEditorSaved(msg))
+	case commentDeletedMsg:
+		return m, batchCmds(modeCmd, m.handleCommentDeleted(msg))
+	case issueeditmode.SubmitMsg:
+		return m, batchCmds(modeCmd, m.submitEditor(msg))
+	case issueeditmode.CancelMsg:
+		// The request travels as a Cmd, so an Escape can close the editor
+		// before it arrives.
+		if m.active != mode.IssueEdit {
 			return m, modeCmd
 		}
-		m.pendingDialog = pendingDialogGuard{}
-		// An overlay opened while the catalogs loaded. Opening the dialog now
-		// would replace the modal on screen, and a store form in it would then
-		// submit the values of the wrong dialog.
-		if m.overlayOpen() {
-			return m, modeCmd
-		}
-
-		dialog := buildMutationDialog(msg.kind, msg.issue, msg.statuses, msg.types, msg.labels)
-		return m, batchCmds(modeCmd, m.openMutationModal(dialog))
-	case mutationResultMsg:
-		return m.handleMutationResult(modeCmd, msg)
+		return m, batchCmds(modeCmd, m.closeEditor())
 	case mode.SelectionChangedMsg:
 		if m.browseController(msg.Mode) == nil {
 			return m, modeCmd
@@ -749,9 +739,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// landing under it must not start a detail load: currentSelection() would
 		// answer from lastBrowse, retargeting the Detail surface the operator
 		// returns to and raising its failure toast over the store list. The
-		// configuration screen is the same case, and a Detail it was opened
-		// from may show a drilled-in issue that is not that row.
-		if m.active == mode.StorePicker || m.active == mode.Config {
+		// configuration screen and the issue editor are the same case, and a
+		// Detail one was opened from may show a drilled-in issue that is not
+		// that row.
+		if m.active == mode.StorePicker || m.active == mode.Config || m.active == mode.IssueEdit {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
@@ -763,25 +754,24 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Mode != m.active {
 			return m, modeCmd
 		}
-		// A dialog request does not open a dialog over an overlay, for the
-		// reason the catalog result above does not.
+		// Only the detail opens under an overlay: the editor would take the
+		// screen the overlay stands over.
 		if m.overlayOpen() && msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
 		}
 		switch msg.Action {
-		case mode.ActionOpenStatusDialog:
-			issue, ok := m.dialogTargetIssue(msg.Mode)
-			if !ok {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update status", toaster.StyleWarn))
-			}
-			m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-			return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationStatus, issue)))
-		case mode.ActionOpenPriorityDialog:
-			issue, ok := m.dialogTargetIssue(msg.Mode)
-			if !ok {
-				return m, batchCmds(modeCmd, m.showToast("No selected issue to update priority", toaster.StyleWarn))
-			}
-			return m, batchCmds(modeCmd, m.openMutationModal(buildMutationDialog(mutationPriority, issue, nil, nil, nil)))
+		case mode.ActionEditStatus:
+			return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldStatus))
+		case mode.ActionEditPriority:
+			return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldPriority))
+		case mode.ActionEditIssue:
+			return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldTitle))
+		case mode.ActionAddComment:
+			return m, batchCmds(modeCmd, m.openCommentAdd())
+		case mode.ActionEditComment:
+			return m, batchCmds(modeCmd, m.openCommentEdit())
+		case mode.ActionDeleteComment:
+			return m, batchCmds(modeCmd, m.confirmCommentDelete())
 		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
@@ -831,7 +821,6 @@ func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 // selected issue. A surface that has no issue selection swallows them rather
 // than letting currentSelection() answer from a tab that is not on screen.
 var issueScopedShellActions = []string{
-	config.ShellActionEditIssue,
 	config.ShellActionCreateIssue,
 	config.ShellActionUpdateIssue,
 	config.ShellActionCloseIssue,
@@ -922,7 +911,7 @@ func (m *Model) reloadActiveSurface() tea.Cmd {
 	return m.scoped(m.board.Reload())
 }
 
-// handleShellKey handles one key press for the shell: the pending-dialog
+// handleShellKey handles one key press for the shell: the pending-editor
 // choke point, the mode-local capture and intent checks, and the shell
 // keybinding switch. It is split out of update() so that message routing and
 // key handling are readable separately; update() was 483 lines with a
@@ -931,14 +920,11 @@ func (m *Model) reloadActiveSurface() tea.Cmd {
 // It takes the same modeCmd update() would have batched and returns the same
 // (tea.Model, tea.Cmd) pair, so the branch is a move, not a rewrite.
 func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.Cmd) {
-	// Single choke point: any key press clears the pending-dialog guard.
-	// The guard is set when an async catalog-load Cmd is dispatched and must
-	// be cleared before the key is processed so that the catalog-loaded
-	// handler (arriving later) sees the guard is gone and drops its result.
-	// We capture the guard state before clearing so ESC can use it to
-	// decide whether to cancel the pending open instead of popping the mode.
-	hadPendingDialog := m.pendingDialog.active
-	m.pendingDialog = pendingDialogGuard{}
+	// Single choke point: any key press drops a pending request to open the
+	// editor, so the result that arrives later opens nothing. The state is
+	// read first: Escape then cancels the open instead of leaving the mode.
+	hadPendingEditor := m.pendingEditor != 0
+	m.pendingEditor = 0
 
 	// The picker gets first refusal on a key while it is up, then the shell
 	// switch below still sees Escape, quit, help and the tab keys.
@@ -985,6 +971,14 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		}
 	}
 
+	// The issue editor takes typed text, so it takes every key but quit, help
+	// and Escape: nothing below it is drawn, and a rune is text there.
+	if m.active == mode.IssueEdit {
+		if consumed, editorCmd := m.editor.HandleKey(msg); consumed {
+			return m, batchCmds(modeCmd, editorCmd)
+		}
+	}
+
 	// A key the active tab takes for itself is that tab's alone. The tab
 	// already has it from forwardModeMessages, so no shell action runs on it.
 	if tab := m.browseController(m.active); tab != nil && tab.TakesKey(msg) {
@@ -1016,11 +1010,10 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 		m.applyModeCycle(prevMode(m.active, m.lastBrowse))
 		return m, batchCmds(modeCmd, m.lazyInitActiveTabCmd(), m.ensureDetailForCurrentSelectionCmd(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
-		// If a dialog-open was in flight when ESC arrived, the guard has
-		// already been cleared at the top of this branch. Consume ESC as
-		// "cancel the pending open" and keep the current mode — do NOT pop
-		// Detail → Board while the load is in progress.
-		if hadPendingDialog {
+		// An Escape that arrives while the editor is still opening cancels
+		// that open and keeps the current mode: it does not pop Detail to the
+		// Board while the load is in progress.
+		if hadPendingEditor {
 			return m, modeCmd
 		}
 		// The picker is a surface above the shell, so leaving it restores the
@@ -1036,6 +1029,10 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 			// load, so the surface below catches up here.
 			m.active = m.configReturn
 			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
+		}
+		if m.active == mode.IssueEdit {
+			// The typed text is discarded without a question.
+			return m, batchCmds(modeCmd, m.closeEditor())
 		}
 		if m.active == mode.Detail {
 			// Opened from the store search, Detail returns there: the query,
@@ -1070,34 +1067,14 @@ func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.C
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.reloadActiveSurface())
-	case m.keys.Match(config.ShellContext, config.ShellActionEditIssue, msg):
-		issueID, ok := m.selectedIssueID()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue to edit", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, m.scoped(prepareEditCmd(m.ctx, m.services, issueID)))
 	case m.keys.Match(config.ShellContext, config.ShellActionCreateIssue, msg):
-		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationCreate}
-		return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationCreate, domain.IssueSummary{})))
+		return m, batchCmds(modeCmd, m.openNewIssue())
 	case m.keys.Match(config.ShellContext, config.ShellActionUpdateIssue, msg):
-		issue, ok := m.mutationTargetIssue()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue to update", toaster.StyleWarn))
-		}
-		m.pendingDialog = pendingDialogGuard{active: true, kind: mutationUpdate}
-		return m, batchCmds(modeCmd, m.scoped(loadMutationCatalogsCmd(m.ctx, m.services, mutationUpdate, issue)))
+		return m, batchCmds(modeCmd, m.openIssueEditor(uiissueedit.FieldTitle))
 	case m.keys.Match(config.ShellContext, config.ShellActionCloseIssue, msg):
-		issue, ok := m.mutationTargetIssue()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue to close", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationClose, issue: issue}))
+		return m, batchCmds(modeCmd, m.openIssueClose())
 	case m.keys.Match(config.ShellContext, config.ShellActionCommentIssue, msg):
-		issue, ok := m.mutationTargetIssue()
-		if !ok {
-			return m, batchCmds(modeCmd, m.showToast("No selected issue to comment on", toaster.StyleWarn))
-		}
-		return m, batchCmds(modeCmd, m.openMutationModal(mutationDialogState{kind: mutationComment, issue: issue}))
+		return m, batchCmds(modeCmd, m.openCommentAdd())
 	case m.keys.Match(config.ShellContext, config.ShellActionLaunchNvim, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd
@@ -1150,15 +1127,16 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 		if _, ok := msg.(modal.CancelMsg); ok {
 			m.showActionModal = false
 			m.storeForm = storeForm{}
+			m.commentDelete = commentDelete{}
 			return m, modeCmd
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
-			if m.storeForm.kind != 0 {
-				return m, batchCmds(modeCmd, m.submitStoreForm(submit.Values))
+			// No store form is open: the modal is the comment delete question.
+			if m.storeForm.kind == 0 {
+				return m, batchCmds(modeCmd, m.deleteComment())
 			}
-			m.showActionModal = false
-			return m, batchCmds(modeCmd, m.scoped(submitMutationCmd(m.services, m.actionState, submit.Values)))
+			return m, batchCmds(modeCmd, m.submitStoreForm(submit.Values))
 		}
 
 		nextModal, cmd := m.actionModal.Update(msg)

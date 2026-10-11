@@ -1,0 +1,24 @@
+ Edit issue tm-1                                                          v1.2.3
+ ───────────────────────────────────────────────────────────────────────────────
+ Fix the header
+────────────────────────────────────────────────────────────────────────────────
+ the store refused the write because the body has no Context section. the store
+ refused the write because the body has no Context section. the store refused
+ the write because the body has no Context section. the store refused the write
+ because the body has no Context section. the store refused the write because…
+
+  Title     Fix the header
+  Status    ‹ closed ›
+▌ Reason    done
+  Type      ‹ task ›
+  Priority  ‹ P2 ›
+  Assignee  hans
+  Labels    ui, docs
+
+  Description ──────────────────────────────────────────────────────────────────
+  text line 1
+  text line 2
+  text line 3
+
+    Save ctrl+s      Cancel esc
+ tab/shift+tab field • ctrl+s save • esc cancel • left/right change

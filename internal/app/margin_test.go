@@ -10,6 +10,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
@@ -23,6 +24,7 @@ var marginSurfaces = map[string]func(*testing.T, Model) Model{
 	"detail":       func(t *testing.T, m Model) Model { return pressKey(t, m, "enter") },
 	"store picker": func(t *testing.T, m Model) Model { return pressKey(t, m, "alt+s") },
 	"config":       func(t *testing.T, m Model) Model { return pressKey(t, m, "alt+c") },
+	"issue editor": func(t *testing.T, m Model) Model { return pressKey(t, m, "alt+u") },
 	"help":         func(t *testing.T, m Model) Model { return pressKey(t, m, "alt+h") },
 	"startup error": func(_ *testing.T, m Model) Model {
 		m.fatalErrTitle = "no task-manager store here"
@@ -33,16 +35,17 @@ var marginSurfaces = map[string]func(*testing.T, Model) Model{
 		m.showToast(strings.Repeat("a toast wider than the terminal ", 8), toaster.StyleInfo)
 		return m
 	},
-	// Stepped by hand: an open dialog schedules a repeating cursor tick.
+	// Opened without its Init: a drain would follow the cursor blink of the
+	// input for good.
 	"modal": func(_ *testing.T, m Model) Model {
-		next, _ := m.Update(testKey("delete"))
-		return next.(Model)
+		m.openStoreForm(storepickermode.LocalStore, "/work/project")
+		return m
 	},
 }
 
 // fullScreenSurfaces are the ones that draw on the first and the last row of
 // the screen: the rest centre a box or stand over one of these.
-var fullScreenSurfaces = []string{"board", "docs", "store search", "detail", "store picker", "config"}
+var fullScreenSurfaces = []string{"board", "docs", "store search", "detail", "store picker", "config", "issue editor"}
 
 // terminalRows is a frame as the terminal shows it, without colour: one string
 // a row, each padded to the terminal's width.
@@ -127,7 +130,7 @@ func TestToastAndModalSitInsideTheMargin(t *testing.T) {
 	}
 	modal := marginSurfaces["modal"](t, base)
 	if !modal.showActionModal {
-		t.Fatal("fixture: the close dialog did not open")
+		t.Fatal("fixture: the dialog did not open")
 	}
 
 	for name, m := range map[string]Model{"toast": toast, "modal": modal} {

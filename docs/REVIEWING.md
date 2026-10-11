@@ -75,7 +75,7 @@ How finished code must look. Each rule is a condition to check on the diff, with
 
 - The test drives the real component. [TESTING.md](TESTING.md) fixes which tier owns it, and a test
   asserting only against its own fakes proves nothing.
-- What may be faked at all is [TESTING.md](TESTING.md)'s Shared Fake Seams list — an editor, a
+- What may be faked at all is [TESTING.md](TESTING.md)'s Shared Fake Seams list — a
   launcher, a process runner. A fake that stands in for a component this repository owns is a
   finding.
 - A user-visible change needs the built binary driven, not only a green suite

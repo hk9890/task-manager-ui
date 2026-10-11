@@ -111,9 +111,9 @@ func TestALogLikeCommentWrapsItsLongLines(t *testing.T) {
 	words := strings.TrimSpace(strings.Repeat("word ", 24))
 	body := strings.Join([]string{words + " first-end", words + " second-end", words + " third-end"}, "\n")
 
-	lines := renderComments([]domain.IssueComment{
+	lines, _, _ := renderComments([]domain.IssueComment{
 		{ID: "c-1", Author: "alice", Body: body, CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
-	}, width)
+	}, width, -1)
 
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "├─ output") {

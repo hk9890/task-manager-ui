@@ -150,7 +150,7 @@ func TestResizeWhileAnOverlayIsOpenSizesTheBrowseTabs(t *testing.T) {
 }
 
 // TestActionRequestIsIgnoredWhenItsModeIsNoLongerActive pins the guard on the
-// dialog request. The request travels as a Cmd, so the operator can leave the
+// editor request. The request travels as a Cmd, so the operator can leave the
 // requesting surface before it arrives; answering it then resolved the target
 // from a surface no longer on screen, and a submit mutated that issue.
 //
@@ -172,31 +172,25 @@ func TestActionRequestIsIgnoredWhenItsModeIsNoLongerActive(t *testing.T) {
 	if m.active != mode.Board {
 		t.Fatalf("setup: expected the board active, got %s", m.active)
 	}
-	// Search holds a row of its own: without it the request would resolve no
+	// Docs holds a row of its own: without it the request would resolve no
 	// target and be dropped for the wrong reason.
 	m.selectedByMode[mode.Docs] = &mode.Selection{Issue: domain.IssueSummary{
 		ID: "tm-2", Title: "Second row", Status: "open", Type: "task", Priority: 2,
 	}}
 
-	// A request from Search arrives after the operator has moved to the Board.
-	// The flow is stepped by hand rather than drained: an open modal schedules a
-	// repeating cursor blink, which a drain would follow forever.
-	next, cmd := m.Update(mode.ActionRequestMsg{Mode: mode.Docs, Action: mode.ActionOpenStatusDialog})
+	// A request from Docs arrives after the operator has moved to the Board.
+	next, cmd := m.Update(mode.ActionRequestMsg{Mode: mode.Docs, Action: mode.ActionEditStatus})
 	m = next.(Model)
-	_ = cmd
 
-	if m.showActionModal {
-		t.Error("a status dialog opened over the Board for a request Search made before the switch")
-	}
-	if m.pendingDialog.active {
-		t.Error("a catalog load was dispatched for a surface that is no longer active")
+	if m.pendingEditor != 0 || cmd != nil {
+		t.Error("the editor was asked to open for a surface that is no longer active")
 	}
 
-	// The same request from the active surface is answered: the guard is armed
-	// and a catalog load is dispatched.
-	next, cmd = m.Update(mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionOpenStatusDialog})
+	// The same request from the active surface is answered: the open is
+	// pending and the load is dispatched.
+	next, cmd = m.Update(mode.ActionRequestMsg{Mode: mode.Board, Action: mode.ActionEditStatus})
 	m = next.(Model)
-	if !m.pendingDialog.active || cmd == nil {
+	if m.pendingEditor == 0 || cmd == nil {
 		t.Error("the active surface's own request was ignored")
 	}
 }

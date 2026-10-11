@@ -31,12 +31,13 @@ mise run ci          # the merge gate; see What the tools enforce
 
 4. **Dashboard composition is centralized.** `internal/dashboard.Compose` is pure: `dashboard.Inputs` in, `dashboard.Columns` out. The board model maps one `repository.DashboardData` result into `Inputs` (`internal/mode/board/model.go`) and owns query routing; the renderer stays independent of where the data came from.
 
-5. **Editor handoff is a first-class flow.** Rich issue editing opens `$EDITOR` rather than building complex inline forms. The launch goes through `tea.Exec`, which suspends the TUI and restores it when the editor exits, so the editor and Bubble Tea never contend for the terminal.
+5. **Issue editing is one in-app screen.** The issue editor is a full screen in two packages: `internal/mode/issueedit` holds the widgets and the keys, `internal/ui/issueedit` draws it.
 
-   **Issue edit document contract:**
-   - Editable fields map directly to repository update capabilities: `title`, `description`, `status`, `type`, `priority`, `assignee`, and `labels`.
-   - Round-trip behavior is marker-based (`TASKMGRUI:EDITABLE` / `TASKMGRUI:FIELD:*`) so parser changes are deterministic and testable.
-   - The external editor launch is behind a replaceable seam (`internal/launcher/editor.Service`) so tests never spawn a real interactive editor.
+   - It edits `title`, `status`, `type`, `priority`, `assignee`, `labels`, the `description` as multi-line text, and the close reason while the status is `closed`. A comment is the same screen with the text field alone.
+   - The screen writes nothing. It emits `issueedit.SubmitMsg` with the values it opened with and the values it holds.
+   - The shell builds the write from the difference (`saveEditor` and `issueUpdate` in `internal/app/issue_editor.go`), so a field nobody changed is not written.
+   - A refused write leaves the screen open with the typed values and shows the error on it (`Model.handleEditorSaved`).
+   - No flow hands the terminal to an external editor.
 
 6. **Launchers are thin.** Launchers receive issue context and produce a subprocess. They must not become an orchestration engine.
 
@@ -47,18 +48,16 @@ mise run ci          # the merge gate; see What the tools enforce
    [CONFIGURATION.md](CONFIGURATION.md#writing-a-launcher-template-safely) has the
    forbidden shapes and the safe form a config author writes.
 
-7. **Create vs edit ownership boundary is explicit.** Two shell bindings edit the current selection, from any browse tab, the store search or detail, and the overlap is deliberate:
+7. **One editor, several ways in.** Each opener is a method in `internal/app/issue_editor.go`:
 
-   | Binding | Default key | Path | Fields |
-   |---|---|---|---|
-   | `edit_issue` | `alt+e` | the marker-based document flow of rule 5 (`IssueEditDocument` in `internal/domain/issue_edit_document.go`) | `title`, `description`, `status`, `type`, `priority`, `assignee`, `labels` |
-   | `update_issue` | `alt+u` | the in-TUI modal (`mutationModal`, case `mutationUpdate`, in `internal/app/mutation_dialog.go`) | `title`, `status`, `type`, `priority`, `assignee`, `labels` |
-
-   - `edit_issue` is the full path and the only path for `description`.
-   - `update_issue` is the fast path for metadata.
-   - Add a new editable field to the `edit_issue` document always. Add it to the `update_issue` modal too when it is single-line metadata; a multi-line field stays on `edit_issue` alone.
-
-   Issue creation (`create_issue`, default `alt+n`) stays on its own modal and is not coupled to the editor document contract.
+   - `create_issue` opens it empty (`openNewIssue`).
+   - `update_issue`, the `edit` button of the Detail Content pane and Enter on the Status or Priority row of the Metadata pane open it on the selected issue (`openIssueEditor`).
+   - `close_issue` opens it with the status on `closed` and the focus on the reason (`openIssueClose`). It writes nothing by itself.
+   - `comment_issue` and the `add` button of the Comments heading open the text field alone (`openCommentAdd`); Enter on the selected comment opens it on that comment (`openCommentEdit`).
+   - A comment delete is not a way in: `delete_comment` asks yes or no in the action modal (`confirmCommentDelete`).
+   - Reload the detail after every comment write: the SDK gives an edited comment a new ID, author and time. `handleEditorSaved` and `handleCommentDeleted` do it on a store that is not watched; the watch does it on one that is.
+   - Add a new editable field as a row of that screen, and to `issueUpdate`.
+   - Write a close as `UpdateIssue` for the other changed fields, then `CloseIssue`: the SDK takes a reason on `Close` only, and refuses every other change to a closed issue.
 
 8. **App shell owns mode lifecycle and cross-mode coordination.** `internal/app` owns active-mode switching, selection ownership by mode, and detail loading/reloading decisions. `internal/mode/*` packages own feature-local state and emit shell contracts (`SelectionChangedMsg`, `ActionRequestMsg`) instead of reaching across package boundaries.
 
@@ -152,7 +151,7 @@ Two naming styles coexist by design:
 
 | Style | When to use | Examples |
 |---|---|---|
-| `Fake<Thing>` + public struct literal | Simple, non-repository seams — typically a one-method interface or command type | `FakeEditor`, `FakeLauncher`, `FakeProcessRunner`, `FakeExecCommand` |
+| `Fake<Thing>` + public struct literal | Simple, non-repository seams — typically a one-method interface or command type | `FakeLauncher`, `FakeProcessRunner` |
 | `<Adjective>Repository` + `New*` constructor | Repository wrappers that carry non-trivial state or construction logic | `ErrorInjectingRepository` / `NewErrorInjecting`, `DelayingRepository` / `NewDelayingRepository` |
 
 New fakes follow the style that matches the complexity: struct literal + `Fake` prefix for thin

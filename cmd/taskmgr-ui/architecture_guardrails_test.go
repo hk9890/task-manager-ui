@@ -298,8 +298,8 @@ func TestRun_PrintConfigWritesResolvedYAMLAndSource(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(yamlBody), &decoded); err != nil {
 		t.Fatalf("expected valid YAML body, got error: %v", err)
 	}
-	if decoded.Editor.Command != resolved.Editor.Command {
-		t.Fatalf("expected resolved config in yaml body, got editor=%q", decoded.Editor.Command)
+	if decoded.UI.Theme != resolved.UI.Theme {
+		t.Fatalf("expected resolved config in yaml body, got theme=%q", decoded.UI.Theme)
 	}
 }
 

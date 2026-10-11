@@ -1,4 +1,4 @@
-╭─ Dependencies ──────── 3 ─╮  ╭─ Content ──────────────────────────── 1 comments ─╮  ╭─ Metadata ─────────────────────╮
+╭─ Dependencies ──────── 3 ─╮  ╭─ Content ─ edit e ─────────────────── 1 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Blocked by (1)             │  │F P2 IP tm-22                                      │  │  Core                          │
 │  ? P0 - tm-10 Data model …│  │Full detail sample                                 │  │  Type    : feature             │
 │                           │  │───────────────────────────────────────────────────│  │  Status  : in_progress         │
@@ -18,7 +18,7 @@
 │                           │  │                                                   │  │  Reason: completed             │
 │                           │  │                                                   │  │  ------------------------------│
 │                           │  │                                                   │  │  Labels                        │
-│                           │  │Comments (1 · newest first)                        │  │  • backend                     │
-│                           │  │[1/1] reviewer · 2026-04-05 11:00                  │  │  • ui                          │
-│                           │  │  Looks good to me                                 │  │… (13 more)                     │
+│                           │  │Comments (1 · newest first)                  add a │  │  • backend                     │
+│                           │  │  [1/1] reviewer · 2026-04-05 11:00                │  │  • ui                          │
+│                           │  │  Looks good to me                                 │  │… (14 more)                     │
 ╰───────────────────────────╯  ╰───────────────────────────────────────────────────╯  ╰────────────────────────────────╯

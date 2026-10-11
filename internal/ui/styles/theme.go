@@ -118,6 +118,7 @@ func applyFlavor(f catppuccin.Flavor) {
 	ScreenSubtitleColor = c(f.Blue())
 	SectionHeadingColor = c(f.Blue())
 	SettingLabelColor = c(f.Blue())
+	ErrorTextColor = c(f.Red())
 
 	RowSelectedBgColor = c(f.Surface1())
 	RowHoverBgColor = hover

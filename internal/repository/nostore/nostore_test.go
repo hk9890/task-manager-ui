@@ -26,11 +26,13 @@ func TestEveryOperationReportsNoStore(t *testing.T) {
 			_, err := r.CreateIssue(ctx, domain.CreateIssueInput{Title: "t"})
 			return err
 		},
-		"UpdateIssue": func() error { return r.UpdateIssue(ctx, "x", domain.UpdateIssueInput{}) },
-		"CloseIssue":  func() error { return r.CloseIssue(ctx, "x", domain.CloseIssueInput{}) },
-		"AddComment":  func() error { return r.AddComment(ctx, "x", domain.AddCommentInput{}) },
-		"HealthCheck": func() error { return r.HealthCheck(ctx) },
-		"Catalogs":    func() error { _, err := r.Catalogs(ctx); return err },
+		"UpdateIssue":   func() error { return r.UpdateIssue(ctx, "x", domain.UpdateIssueInput{}) },
+		"CloseIssue":    func() error { return r.CloseIssue(ctx, "x", domain.CloseIssueInput{}) },
+		"AddComment":    func() error { return r.AddComment(ctx, "x", domain.AddCommentInput{}) },
+		"EditComment":   func() error { return r.EditComment(ctx, "x", "c", domain.EditCommentInput{}) },
+		"DeleteComment": func() error { return r.DeleteComment(ctx, "x", "c") },
+		"HealthCheck":   func() error { return r.HealthCheck(ctx) },
+		"Catalogs":      func() error { _, err := r.Catalogs(ctx); return err },
 	}
 
 	for name, call := range calls {

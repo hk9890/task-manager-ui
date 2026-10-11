@@ -8,6 +8,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 )
 
@@ -44,22 +45,24 @@ func detailModelOnIssue(t *testing.T, gw *fakes.TrackedRepository) Model {
 // requires: "BeginLoad must be what precedes every loadDetailCmd"
 // (internal/mode/detail/model.go).
 //
-// handleMutationResult was the one site that issued a bare loadDetailCmd, so
-// after update / close / comment / status / priority the header showed neither
+// The handler of a write result was the one site that issued a bare
+// loadDetailCmd, so after an update, a close or a comment the header showed neither
 // the spinner nor "Loading: detail" while the read ran, and a browse selection
 // that moved in that window made the response fail the target-id guard and be
 // thrown away.
 func TestPostMutationDetailReloadReportsItsLoad(t *testing.T) {
 	t.Parallel()
 
-	for _, kind := range []mutationKind{mutationUpdate, mutationClose, mutationComment, mutationStatus, mutationPriority} {
-		t.Run(string(kind), func(t *testing.T) {
+	for name, kind := range map[string]issueeditmode.Kind{
+		"an issue": issueeditmode.KindEdit, "a new comment": issueeditmode.KindCommentAdd, "a comment": issueeditmode.KindCommentEdit,
+	} {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			gw := fakes.NewTracked()
-			m := detailModelOnIssue(t, gw)
+			m := withEditorOn(detailModelOnIssue(t, gw), kind, "tm-1")
 
-			next, _ := m.Update(mutationResultMsg{kind: kind, issueID: "tm-1"})
+			next, _ := m.Update(editorSavedMsg{wrote: true})
 			m = next.(Model)
 
 			if !m.detail.IsLoading() {

@@ -58,6 +58,14 @@ func (Repository) AddComment(context.Context, string, domain.AddCommentInput) er
 	return noStore("add comment")
 }
 
+func (Repository) EditComment(context.Context, string, string, domain.EditCommentInput) error {
+	return noStore("edit comment")
+}
+
+func (Repository) DeleteComment(context.Context, string, string) error {
+	return noStore("delete comment")
+}
+
 func (Repository) HealthCheck(context.Context) error {
 	return noStore("health check")
 }

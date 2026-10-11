@@ -1,4 +1,4 @@
-╭─ Dependencies ──────────── 3 ─╮  ╭─ Content ─────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+╭─ Dependencies ──────────── 3 ─╮  ╭─ Content ─ edit e ────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Blocked by (1)                 │  │T P2 OPN tm-fallback                                              │  │  Core                          │
 │  ? P0 - tm-11 Dependency A    │  │Fallback inline related work                                      │  │  Type    : task                │
 │                               │  │──────────────────────────────────────────────────────────────────│  │  Status  : open                │
@@ -13,12 +13,12 @@
 │                               │  │                                                                  │  │                                │
 │                               │  │                                                                  │  │Quick actions                   │
 │                               │  │                                                                  │  │e Edit issue                    │
-│                               │  │                                                                  │  │u Update issue                  │
 │                               │  │                                                                  │  │a Add comment                   │
+│                               │  │                                                                  │  │enter Edit comment              │
+│                               │  │                                                                  │  │d Delete comment                │
 │                               │  │                                                                  │  │x Close issue                   │
 │                               │  │                                                                  │  │r Reload detail                 │
 │                               │  │                                                                  │  │                                │
 │                               │  │                                                                  │  │                                │
-│                               │  │                                                                  │  │                                │
-│                               │  │                                                                  │  │                                │
+│                               │  │Comments (0)                                                add a │  │                                │
 ╰───────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯

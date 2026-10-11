@@ -24,7 +24,8 @@ const helpWheelLines = 3
 // context has an entry (TestHelpNamesEveryBoundAction). The keys spelled out
 // here are the ones no binding names: the query's own, the scope key of the
 // store search, the pane keys and enter in Detail, y and n in a dialog, the
-// keys that step a value on the configuration screen, and the mouse.
+// keys that step a value on the configuration screen, the keys that move in
+// the issue editor, and the mouse.
 func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 	shell := func(action string) string { return keys.DisplayLabel(config.ShellContext, action) }
 	board := func(action string) string { return keys.DisplayLabel(config.BoardContext, action) }
@@ -55,19 +56,30 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionModeCyclePrev), Desc: "previous tab"},
 		}},
 		{Title: "Issue", Entries: []helpscreen.Entry{
-			{Key: shell(config.ShellActionCreateIssue), Desc: "create an issue"},
-			{Key: shell(config.ShellActionUpdateIssue), Desc: "change the metadata of the selected issue"},
-			{Key: shell(config.ShellActionEditIssue), Desc: "edit the selected issue in the external editor, its description included"},
-			{Key: shell(config.ShellActionCommentIssue), Desc: "comment on the selected issue"},
-			{Key: shell(config.ShellActionCloseIssue), Desc: "close the selected issue"},
+			{Key: shell(config.ShellActionCreateIssue), Desc: "create an issue, in the issue editor"},
+			{Key: shell(config.ShellActionUpdateIssue), Desc: "edit the selected issue, its description included"},
+			{Key: shell(config.ShellActionCommentIssue), Desc: "comment on the selected issue, in the issue editor"},
+			{Key: shell(config.ShellActionCloseIssue), Desc: "close the selected issue: opens the editor on the close reason"},
+		}},
+		{Title: "Issue editor", Entries: []helpscreen.Entry{
+			{Key: pair("tab", "shift+tab"), Desc: "the next / previous field or button"},
+			{Key: pair("up", "down"), Desc: "the previous / next field; in the text, move the cursor"},
+			{Key: pair("left", "right"), Desc: "the value before / after the one shown, on Status, Type and Priority; the other button"},
+			{Key: "enter", Desc: "the next field, or press the focused button; in the text, a new line"},
+			{Key: pair("pgup", "pgdown"), Desc: "in the text, a page up / down"},
+			{Key: shell(config.ShellActionSaveEdit), Desc: "save"},
+			{Key: shell(config.ShellActionEscape), Desc: "leave without a save"},
 		}},
 		{Title: "Detail and launchers", Entries: []helpscreen.Entry{
 			{Key: pair(detail(config.DetailActionScrollUp), detail(config.DetailActionScrollDown)), Desc: "scroll a line up / down, on this screen too"},
 			{Key: pair(detail(config.DetailActionPageUp), detail(config.DetailActionPageDown)), Desc: "scroll a page up / down"},
 			{Key: pair(detail(config.DetailActionHome), detail(config.DetailActionEnd)), Desc: "to the top / the bottom"},
-			{Key: pair("left", "right"), Desc: "the pane to the left / right"},
+			{Key: pair("left", "right"), Desc: "the pane to the left / right; the comments are a stop after Content"},
+			{Key: pair(detail(config.DetailActionScrollUp), detail(config.DetailActionScrollDown)), Desc: "on the comments, the comment above / below"},
 			{Key: "enter", Desc: "in the Dependencies pane, open the selected issue"},
-			{Key: "enter", Desc: "in the Metadata pane, change the selected Status or Priority"},
+			{Key: "enter", Desc: "in the Metadata pane, edit the issue on the selected Status or Priority"},
+			{Key: "enter", Desc: "on a comment, edit it"},
+			{Key: detail(config.DetailActionDeleteComment), Desc: "on a comment, delete it after a yes"},
 			{Key: shell(config.ShellActionReloadDetail), Desc: "read the issue from the store again"},
 			{Key: shell(config.ShellActionLaunchNvim), Desc: "launch nvim on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchOpencode), Desc: "launch opencode on the issue, in the background"},
@@ -84,9 +96,9 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: dialog(config.ModalActionNext), Desc: "the next field or button"},
 			{Key: dialog(config.ModalActionPrev), Desc: "the previous field or button"},
 			{Key: pair(dialog(config.ModalActionLeft), dialog(config.ModalActionRight)), Desc: "the button to the left / right"},
-			{Key: dialog(config.ModalActionEnter), Desc: "press the focused button; in a field, go to the next field, or submit the Status and the Priority dialog"},
+			{Key: dialog(config.ModalActionEnter), Desc: "press the focused button; in a field, go to the next field"},
 			{Key: "y", Desc: "confirm, while a button has the focus"},
-			{Key: "n", Desc: "cancel, while a button has the focus; not in the Status and the Priority dialog"},
+			{Key: "n", Desc: "cancel, while a button has the focus"},
 			{Key: dialog(config.ModalActionEscape), Desc: "cancel the dialog"},
 		}},
 		{Title: "Configuration screen", Entries: []helpscreen.Entry{
@@ -96,9 +108,10 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionEscape), Desc: "back to where the screen was opened from"},
 		}},
 		{Title: "Mouse", Entries: []helpscreen.Entry{
-			{Key: "click", Desc: "select a row, switch to a tab, press a menu-bar button or focus a pane"},
+			{Key: "click", Desc: "select a row or a comment, switch to a tab, focus a pane or a field of the issue editor"},
+			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
 			{Key: "second click", Desc: "open the row"},
-			{Key: "wheel", Desc: "move the selection, or scroll Detail text and this screen"},
+			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the text of the issue editor and this screen"},
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
 		}},

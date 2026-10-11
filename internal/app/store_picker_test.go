@@ -234,14 +234,14 @@ func TestActionModalRendersOverThePicker(t *testing.T) {
 
 	// A title no other overlay renders, so the help modal cannot satisfy this.
 	m.showActionModal = true
-	m.actionModal = modal.New(modal.Config{Title: "Close Issue", Message: "Close tm-1?", MinWidth: 40})
+	m.actionModal = modal.New(modal.Config{Title: "A dialog of the shell", Message: "Drawn over the picker?", MinWidth: 40})
 	m.actionModal.SetSize(m.width, m.height)
 
 	view := pickerView(m)
 	if m.showHelp {
 		t.Fatal("the help overlay is open; this test would pass on its output instead")
 	}
-	if !strings.Contains(view, "Close Issue") {
+	if !strings.Contains(view, "A dialog of the shell") {
 		t.Errorf("an open action modal is not drawn over the picker:\n%s", view)
 	}
 }
@@ -281,7 +281,7 @@ func TestOpenOverlayDoesNotSwallowTheStoreListing(t *testing.T) {
 // commenting on an issue the operator cannot see is the worst outcome
 // available, so the picker swallows them.
 func TestIssueActionsAreInertOnThePicker(t *testing.T) {
-	for _, key := range []string{"alt+e", "alt+n", "alt+u", "delete", "alt+a"} {
+	for _, key := range []string{"alt+n", "alt+u", "delete", "alt+a"} {
 		t.Run(key, func(t *testing.T) {
 			gw := fakes.NewTracked()
 			seedReady(gw, "tm-1", "Ready first", "task", 1)
@@ -298,11 +298,8 @@ func TestIssueActionsAreInertOnThePicker(t *testing.T) {
 			next, cmd := m.Update(testKey(key))
 			m = applyMessages(t, next.(Model), runBatch(cmd))
 
-			if m.showActionModal {
-				t.Errorf("%q armed a mutation dialog from the picker", key)
-			}
-			if m.pendingDialog.active {
-				t.Errorf("%q armed a pending dialog from the picker", key)
+			if m.pendingEditor != 0 {
+				t.Errorf("%q asked for the editor from the picker", key)
 			}
 			if m.active != mode.StorePicker {
 				t.Errorf("%q moved the operator off the picker, to %q", key, m.active)

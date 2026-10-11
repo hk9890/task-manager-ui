@@ -86,6 +86,21 @@ func searchTitles(t *testing.T, r repository.Repository, query string) []string 
 	return titles
 }
 
+func issueIDByTitle(t *testing.T, r repository.Repository, title string) string {
+	t.Helper()
+	page, err := r.Search(context.Background(), domain.SearchIssuesQuery{Text: title})
+	if err != nil {
+		t.Fatalf("Search(%q): %v", title, err)
+	}
+	for _, res := range page.Results {
+		if res.Issue.Title == title {
+			return res.Issue.ID
+		}
+	}
+	t.Fatalf("no issue titled %q", title)
+	return ""
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -214,13 +229,76 @@ func TestRepositoryContractConformance(t *testing.T) {
 			ctx := context.Background()
 			status := "closed"
 			for op, err := range map[string]error{
-				"UpdateIssue": b.repo.UpdateIssue(ctx, "no-such-issue", domain.UpdateIssueInput{Status: &status}),
-				"CloseIssue":  b.repo.CloseIssue(ctx, "no-such-issue", domain.CloseIssueInput{Reason: "done"}),
-				"AddComment":  b.repo.AddComment(ctx, "no-such-issue", domain.AddCommentInput{Body: "hi"}),
+				"UpdateIssue":   b.repo.UpdateIssue(ctx, "no-such-issue", domain.UpdateIssueInput{Status: &status}),
+				"CloseIssue":    b.repo.CloseIssue(ctx, "no-such-issue", domain.CloseIssueInput{Reason: "done"}),
+				"AddComment":    b.repo.AddComment(ctx, "no-such-issue", domain.AddCommentInput{Body: "hi"}),
+				"EditComment":   b.repo.EditComment(ctx, "no-such-issue", "c", domain.EditCommentInput{Body: "hi"}),
+				"DeleteComment": b.repo.DeleteComment(ctx, "no-such-issue", "c"),
 			} {
 				var re domain.RepositoryError
 				if !errors.As(err, &re) || re.Code != domain.ErrorCodeCommandFailed {
 					t.Errorf("%s: %s(unknown) = %v, want domain.RepositoryError with ErrorCodeCommandFailed", b.name, op, err)
+				}
+			}
+		}
+	})
+
+	t.Run("an edited comment has the new text and a new ID, a deleted one is gone", func(t *testing.T) {
+		for _, b := range backends(t) {
+			ctx := context.Background()
+			id := issueIDByTitle(t, b.repo, "Gadget audit")
+			comments := func() []domain.IssueComment {
+				detail, err := b.repo.Issue(ctx, id)
+				if err != nil {
+					t.Fatalf("%s: Issue: %v", b.name, err)
+				}
+				return detail.Comments
+			}
+
+			if err := b.repo.AddComment(ctx, id, domain.AddCommentInput{Body: "first"}); err != nil {
+				t.Fatalf("%s: AddComment: %v", b.name, err)
+			}
+			added := comments()[0]
+
+			if err := b.repo.EditComment(ctx, id, added.ID, domain.EditCommentInput{Body: "second"}); err != nil {
+				t.Fatalf("%s: EditComment: %v", b.name, err)
+			}
+			edited := comments()
+			if len(edited) != 1 || edited[0].Body != "second" || edited[0].ID == added.ID {
+				t.Fatalf("%s: comments after edit = %+v, want one comment \"second\" with a new ID (was %q)", b.name, edited, added.ID)
+			}
+
+			if err := b.repo.DeleteComment(ctx, id, edited[0].ID); err != nil {
+				t.Fatalf("%s: DeleteComment: %v", b.name, err)
+			}
+			if left := comments(); len(left) != 0 {
+				t.Errorf("%s: comments after delete = %+v, want none", b.name, left)
+			}
+		}
+	})
+
+	t.Run("an empty comment and an unknown comment ID return ErrorCodeValidationFailed", func(t *testing.T) {
+		for _, b := range backends(t) {
+			ctx := context.Background()
+			id := issueIDByTitle(t, b.repo, "Gadget audit")
+			if err := b.repo.AddComment(ctx, id, domain.AddCommentInput{Body: "first"}); err != nil {
+				t.Fatalf("%s: AddComment: %v", b.name, err)
+			}
+			detail, err := b.repo.Issue(ctx, id)
+			if err != nil {
+				t.Fatalf("%s: Issue: %v", b.name, err)
+			}
+			commentID := detail.Comments[0].ID
+
+			for op, err := range map[string]error{
+				"AddComment(empty)":      b.repo.AddComment(ctx, id, domain.AddCommentInput{Body: " "}),
+				"EditComment(empty)":     b.repo.EditComment(ctx, id, commentID, domain.EditCommentInput{Body: " "}),
+				"EditComment(unknown)":   b.repo.EditComment(ctx, id, "nosuchid", domain.EditCommentInput{Body: "hi"}),
+				"DeleteComment(unknown)": b.repo.DeleteComment(ctx, id, "nosuchid"),
+			} {
+				var re domain.RepositoryError
+				if !errors.As(err, &re) || re.Code != domain.ErrorCodeValidationFailed {
+					t.Errorf("%s: %s = %v, want domain.RepositoryError with ErrorCodeValidationFailed", b.name, op, err)
 				}
 			}
 		}
@@ -613,6 +691,41 @@ func TestReopenClearsCloseFieldsConformance(t *testing.T) {
 		}
 		if strings.TrimSpace(detail.CloseReason) != "" {
 			t.Errorf("%s: reopened issue still carries CloseReason = %q", b.name, detail.CloseReason)
+		}
+	}
+}
+
+// TestUpdateOfAClosedIssueIsAConflictConformance pins that a closed issue takes
+// no update but a reopen. The issue editor shows this refusal when a field of
+// a closed issue is changed with the status left on closed, so a memory
+// backend that took the write certified a flow the real store refuses.
+func TestUpdateOfAClosedIssueIsAConflictConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "lifecycle"})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.CloseIssue(context.Background(), created.IssueID, domain.CloseIssueInput{Reason: "done"}); err != nil {
+			t.Fatalf("%s: CloseIssue: %v", b.name, err)
+		}
+
+		for name, input := range map[string]domain.UpdateIssueInput{
+			"a field":                {Title: strPtr("renamed")},
+			"a field and the status": {Title: strPtr("renamed"), Status: strPtr("closed")},
+		} {
+			err := b.repo.UpdateIssue(context.Background(), created.IssueID, input)
+			var repoErr domain.RepositoryError
+			if !errors.As(err, &repoErr) || repoErr.Code != domain.ErrorCodeConflict {
+				t.Errorf("%s: UpdateIssue(%s) on a closed issue = %v, want ErrorCodeConflict", b.name, name, err)
+			}
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if detail.Summary.Title != "lifecycle" || detail.Summary.Status != "closed" {
+			t.Errorf("%s: the refused update changed the issue: title %q, status %q", b.name, detail.Summary.Title, detail.Summary.Status)
 		}
 	}
 }

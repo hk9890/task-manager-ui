@@ -18,7 +18,8 @@ import (
 
 // storeForm is the create-a-store form while it is open. It rides the shell's
 // action-modal slot, so it inherits that overlay's rendering, key capture and
-// refresh suppression; kind is what tells a submit apart from a mutation's.
+// refresh suppression; kind is what tells a submit apart from the comment
+// delete question's.
 type storeForm struct {
 	kind storepickermode.StoreKind // zero when no store form is open
 	dir  string

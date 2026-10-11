@@ -33,13 +33,15 @@ shell. Every other package is pure.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
   `TextSecondaryColor`), shell chrome (`ShellTab*`, `ShellAction*`, `ShellHoverBgColor`,
   `ShellRuleColor`, `ShellFooterHelpColor`), the query line and its matches (`QueryAccentColor`,
-  `MatchTextColor`), the full screens (`ScreenSubtitleColor`, `SectionHeadingColor`, and
-  `SettingLabelColor` on the configuration screen),
+  `MatchTextColor`), the full screens (`ScreenSubtitleColor`, `SectionHeadingColor`,
+  `SettingLabelColor` on the configuration screen and the issue editor, and `ErrorTextColor` for
+  the refusal of a save on the issue editor),
   borders and overlays (`BorderDefaultColor`, `OverlayBorderColor`, `BorderHighlightFocusColor`),
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
   (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
-- Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tabs and
-  the modal buttons carry focus on a background instead, each with its own `Focus` role. A row's
+- Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tabs, the
+  modal buttons and the Save and Cancel buttons of the issue editor carry focus on a background
+  instead, each with its own `Focus` role. A row's
   background is not focus: it is the selection or the pointer (`RowSelectedBgColor`,
   `RowHoverBgColor`).
 - The pointer lights what is under it one surface below the selection: on a true-colour terminal
@@ -95,7 +97,7 @@ column below shows the `unicode` set:
 | `▌ ` / two spaces | the selection gutter, always 2 cells wide; take it from `styles.SelectionPrefix` | `Cursor` |
 | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | work in flight; draw it with `loading.Glyph` | `Spinner` |
 | `❯` | the prompt in front of a query line | `Prompt` |
-| `‹ ›` | either side of a value the operator steps through, on the configuration screen | `StepPrev`, `StepNext` |
+| `‹ ›` | either side of a value the operator steps through, on the configuration screen and the issue editor | `StepPrev`, `StepNext` |
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
@@ -112,9 +114,10 @@ The rest is the same in every set, and each has one definition:
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
+| `─` in `BorderDefaultColor` | the rule under the Content header and between two comments | `contentHeaderRule` in `internal/ui/detail/details.go` |
 | `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
 | ` • ` | separator between legend hints | `legendSeparator` in `internal/ui/styles/legend.go` |
-| `·` | separator between fields and between menu-bar buttons | inline at the call site |
+| `·` | separator between fields, between menu-bar buttons and between the buttons in a pane | inline at the call site; `buttonSeparator` in `internal/ui/detail/buttons.go` |
 
 Spend a new glyph only when an existing one cannot carry the meaning, and define it next to its
 siblings rather than inline at the call site.
@@ -129,9 +132,12 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 
 - Frame every column, pane and shell with `styles.FormSection`. It owns the rounded corners, the
   title inlays (`TopLeft` / `TopRight`), focus colouring, and padding each line to the inner width.
+  It also owns `TopAction`, a button in the top border after `TopLeft`, which it leaves out when
+  the border has no room; `styles.FormSectionActionCells` is that button's hit test.
 - `FormSection` returns the literal string `too narrow` below width 6. A caller that needs a
   different degraded rendering handles the narrow case before calling.
-- Draw a full screen that is text and not a list — help, the configuration screen — with
+- Draw a full screen that is text and not a list — help, the configuration screen, the issue
+  editor — with
   `styles.Screen` (`internal/ui/styles/screen.go`), not with a box. It owns six things:
   - the title line in the menu bar's place: one space, the title bold in `TextPrimaryColor`, and
     the build version in `ShellFooterHelpColor` flush right, left off when fewer than two cells
@@ -162,6 +168,26 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   `rowlist.List` (`internal/mode/rowlist`) for the selection, the scroll offset, the move keys and
   the mouse.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
+
+### A button in a pane
+
+A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
+has four: `edit` in the Content pane's top border, `add` on the Comments heading, and `edit` and
+`delete` on the header line of the selected comment.
+
+- Draw it with `paneButton` (`internal/ui/detail/buttons.go`): the two runs and the roles of a
+  menu-bar button, `" label "` in `ShellActionColor` and `"key "` in `ShellFooterHelpColor`.
+- It shows the key that does the same, read from the binding; `enter` on a comment is built in
+  and spelled out. The button is a second way to reach the action, never the only one.
+- Under the pointer both runs take `ShellHoverBgColor` and the label turns bold, as on the bar
+  (`State.Hover`).
+- Put buttons at the right end of a line with `placeButtons`, joined by `buttonSeparator`. It
+  draws none when fewer than `buttonTextFloor` cells would stay for the text; `FormSection` drops
+  a `TopAction` when no dash of the border would stay.
+- `HitTest` reads the cells from the helper that placed the button — `placeButtons` through
+  `renderContentPaneLines`, `styles.FormSectionActionCells` for the border — so a click lands on
+  the button that is drawn.
+- A pane in skeleton state draws no button and reports none.
 
 ## The screen margin
 
@@ -201,9 +227,9 @@ taller:
 
 ## The shell chrome
 
-The shell frames the workspace with four lines, all drawn in `internal/app/render.go`: the menu
-bar, the rule under it and the tab line (`Model.renderHeader`), and the key legend below
-(`Model.renderFooter`).
+The shell frames the workspace with four lines, three while Detail is open, all drawn in
+`internal/app/render.go`: the menu bar, the rule under it and the tab line (`Model.renderHeader`),
+and the key legend below (`Model.renderFooter`).
 
 - The menu bar holds the buttons from the left edge and the build version flush right. A button is
   a shell action that is not about the selected row, and it shows the key bound to that action: the
@@ -230,7 +256,15 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   alone, is cut to the room that is left (`Model.barCells`).
 - The tab line holds the spinner cell and the view tabs, and nothing else. Do not repeat there
   what the screen already says: on Board and Docs the active tab is the surface, and the
-  highlighted row is the selection. The store search and Detail light no tab.
+  highlighted row is the selection. The store search lights no tab.
+- Detail does not draw the tab line: it is a drill-in and would light no tab, so the body has the
+  row. The spinner stands there in the menu bar's first cell, the gutter in front of the store
+  button's label, which is the column it has on the tab line (`Model.renderMenuBar`). The glyph
+  is one cell, so no button moves and `barCell.covers` still holds.
+- Size a surface from its own header height, `browseHeaderRows` or `detailHeaderRows`, never from
+  the header on screen: a resize in Detail must not give the board the row Detail has more
+  (`applyWorkspaceSizeToBrowseModes`, `detailViewportHeight`). `Model.workspaceSize` stays the
+  measure of the surface on screen.
 - The legend is one line of `styles.KeyHint` values through `styles.KeyLegend`, one cell in
   (`Model.renderFooter`). A key is `ShellFooterHelpColor`, what it does `TextPrimaryColor`, and
   the separator `ShellRuleColor`: the key is the dim run. `KeyLegend` drops the hints that do not
@@ -255,9 +289,10 @@ bar, the rule under it and the tab line (`Model.renderHeader`), and the key lege
   one label in `tabLabels` (`internal/app/render.go`). The controller must satisfy `mode.Browse`;
   registering it there is what wires forwarding, sizing, loading state and auto-refresh at once.
   Adding it anywhere else puts the strip and the cycle order out of step.
-- `tab` / `shift+tab` belong to the tabs everywhere except inside a modal, which consumes keys
-  before the shell sees them. From the store search they leave it for a tab. A browse surface
-  must not claim either key.
+- `tab` / `shift+tab` belong to the tabs everywhere except inside a modal and the issue editor,
+  each of which takes keys before the shell switch and moves between its fields with them. From
+  the store search and from Detail they leave it for a tab, although Detail does not draw the
+  strip. A browse surface must not claim either key.
 
 ## Keys and the query line
 
@@ -277,12 +312,24 @@ focuses it.
   (`internal/mode/search/model_test.go`) fails while that list and the surfaces disagree.
 - The startup-error screen (`internal/ui/fatalerror`) is the one exception: it quits on `q` as well
   as on the quit key. It has no query line and no other action, so the key can type into nothing.
+- **A full screen that takes typed text** — the issue editor is the one — takes every key before
+  the shell switch and gives back only quit, help and Escape (`HandleKey`,
+  `internal/mode/issueedit/model.go`):
+  - a rune key without Alt is text. The bubbles widgets insert the runes of an `alt+` chord too,
+    so pass a rune key to a widget only when `msg.Alt` is false;
+  - the keys that move between the fields are matched as the keys themselves, as on the
+    configuration screen. They do not read the `modal` context: that context allows a printable
+    key, and a printable key here is text;
+  - an action of the screen is a key that prints nothing, bound in the `shell` context.
+    `save_edit` is the one, and it has no case in the shell switch, so it does nothing elsewhere;
+  - bind no widget key to the system clipboard (`KeyMap.Paste` is unbound). The terminal's own
+    paste arrives as one key message and is typed.
 - The query has no cursor and is edited at its end only, so the arrow keys stay with the list.
   `mode.QueryLimit` caps it.
 - On a tab or the store search, Escape clears a non-empty query before it leaves the surface or
   hides a toast: the shell calls `Browse.ClearQuery` and acts on Escape itself only when that
-  reports nothing cleared. One thing comes first: an Escape that arrives while a dialog is still
-  loading cancels that dialog and leaves the query as it is (`pendingDialog`, `handleShellKey`).
+  reports nothing cleared. One thing comes first: an Escape that arrives while the issue editor is
+  still opening cancels that open and leaves the query as it is (`pendingEditor`, `handleShellKey`).
 - A tab's query is a filter over the rows in memory: `Query.Filter` keeps the rows where every word
   is in the title or the ID, in their order. The model keeps the loaded rows and the matching rows
   apart (`issues` and `shown` in `internal/mode/board/model.go`); selection, scroll, hit test and
@@ -342,17 +389,18 @@ it.
 ## Surfaces above the shell
 
 The store picker (`internal/mode/storepicker`, `internal/ui/storepicker`), the configuration
-screen (`internal/mode/configscreen`, `internal/ui/configscreen`) and help
+screen (`internal/mode/configscreen`, `internal/ui/configscreen`), the issue editor
+(`internal/mode/issueedit`, `internal/ui/issueedit`) and help
 (`internal/app/help.go`, `internal/ui/helpscreen`) are neither tabs nor drill-ins: each renders
 **instead of** the shell, as `fatalerror` does, so the shell chrome is absent while it is up and
 it draws its own key legend in the footer's place (`Model.renderSurface`). None is in
-`mode.BrowseModes`, so none appears in the tab cycle. The configuration screen and help are drawn
-in the chrome of `styles.Screen` ([Build from the shared chrome](#build-from-the-shared-chrome));
-the picker keeps its list frame.
+`mode.BrowseModes`, so none appears in the tab cycle. The configuration screen, the issue editor
+and help are drawn in the chrome of `styles.Screen`
+([Build from the shared chrome](#build-from-the-shared-chrome)); the picker keeps its list frame.
 
-The picker and the configuration screen are modes. Each takes keys before the shell key switch and
-reports whether it consumed each one — `Model.HandleKey` returns `(consumed, cmd)` — so Escape,
-quit and help keep working without it re-implementing them. Escape returns to the mode it was opened from, including Detail.
+The picker, the configuration screen and the issue editor are modes. Each takes keys before the
+shell key switch and reports whether it consumed each one — `Model.HandleKey` returns
+`(consumed, cmd)` — so Escape, quit and help keep working without it re-implementing them. Escape returns to the mode it was opened from, including Detail.
 The shell actions that act on the selected issue are inert there: the picker has no issue
 selection, and the answer `currentSelection()` would give is a row that is not on screen.
 
@@ -389,15 +437,58 @@ not from the picker: with no store open the picker has nothing below it.
   (`ensureDetailForCurrentSelectionCmd`), so the Detail below shows the issue its keys act on.
 - It takes no mouse event. The bar button opens it and the keys work it.
 
+The issue editor opens from a tab, the store search and Detail, through the openers of
+`internal/app/issue_editor.go` ([CODING.md](CODING.md)'s rule 7 lists them), and Escape returns to
+the surface it was opened from (`Model.closeEditor`).
+
+- Its title names what it writes — `New issue`, `Edit issue <id>`, `New comment on <id>`,
+  `Edit comment on <id>` — over the issue's title as the subtitle. An issue has a row for each
+  one-line field and the description under a `styles.SectionHeading`; a comment has the text
+  alone.
+- A row is the selection gutter, the label in `SettingLabelColor` padded to `labelWidth`, and the
+  value. Status, type and priority are stepped between `Glyphs.StepPrev` and `Glyphs.StepNext`
+  through the store's catalog, so a save can send only a value the store has; `left` and `right`
+  step and wrap. The other rows are text inputs. A stepped value and a read-only one are cut
+  with `…` at the cells an input has (`renderRow`).
+- The Reason row is drawn only while the status is `closed`. On an issue that was closed before
+  it is muted and takes no focus: the store takes a reason only when it closes.
+- `tab` and `shift+tab` walk every field and the two buttons, and wrap. `up`, `down` and `enter`
+  move between the rows; in the text `enter` is a newline and the arrows move the cursor.
+- Save and Cancel stand under the text, each with the key that does the same (`save_edit`,
+  Escape), and the focused one takes its `Focus` role. The focused row has the selection bar and
+  no band.
+- The text takes the rows the form leaves, and never fewer than `minTextRows`
+  (`TextRows`, `internal/ui/issueedit/issueedit.go`). At 80x24 every field and both buttons are
+  drawn at all times. A screen too short for the form shows a window of it that ends on the
+  focused field (`window`), with no earlier or more mark, as on the configuration screen.
+- A refused save stays on the screen: the editor keeps the typed values and draws the refusal in
+  `ErrorTextColor` above the form, wrapped, `maxErrorLines` lines at most with `…` on the last.
+  It does not scroll with the form. A short screen gives it fewer lines, as many as leave the
+  text its heading and `minTextRows`, or one, so the focused field is still drawn (`errorLines`).
+- Escape discards the typed text without a question. A save is in flight from the key or the
+  click that asks for it (`submit`, `internal/mode/issueedit/model.go`), not from the moment the
+  shell hears of it, so a second save key starts no second write. Until the result is back the
+  button line reads `Saving…` and the screen takes no key but quit and help, Escape included,
+  so the result always finds the typed values on screen.
+- The screen writes nothing itself: Save emits `issueedit.SubmitMsg`, and the shell builds the
+  write ([CODING.md](CODING.md)'s rule 5).
+- A request to edit or close an issue reads the issue and the catalogs first, and one to create
+  an issue reads the catalogs. Any key, click or wheel notch before the answer drops the request
+  (`pendingEditor`), because each can move the selection the editor was asked for. A comment
+  opens at once, with no read.
+- The legend names `tab/shift+tab`, the save key, Escape, `left/right` on an issue, and quit
+  (`editorHints`).
+
 Help is not a mode: `Model.showHelp` puts it in the place of whatever surface is active, the
-picker and the configuration screen included, and `Model.active` stays as it was.
+picker, the configuration screen and the issue editor included, and `Model.active` stays as it was.
 
 - Its title is `Keyboard Help`, over the subtitle `every key taskmgr-ui answers to`.
   `helpSections` (`internal/app/help.go`) is the content: sections named by what their keys act
-  on, each an entry per key, the dialogs and the configuration screen included. Add a key there as
+  on, each an entry per key, the dialogs, the configuration screen and the issue editor included. Add a key there as
   a `helpscreen.Entry`, with the key read from `config.ResolvedKeyBindings`; spell a key out only
   when no binding names it — the query's keys, the scope key of the store search, the pane keys
-  and `enter` in Detail, `y` and `n` in a dialog, the keys that step a value on the configuration screen, the mouse. An entry names a key
+  and `enter` in Detail, `y` and `n` in a dialog, the keys that step a value on the configuration
+  screen, the keys that move in the issue editor, the mouse. An entry names a key
   and what it does, nothing else.
 - A new action in `internal/config/keybindings.go` takes an entry in `helpSections`:
   `TestHelpNamesEveryBoundAction` (`internal/app/help_screen_test.go`) fails without one. No test
@@ -438,6 +529,13 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   pointer is on, and the selection's on a row that is both. `issuerow` applies it; a list that
   renders its own rows calls it on each line of the finished row, as `ui/storepicker` does. The
   selection bar stays with it, on every line of the row: a terminal without colour draws no band.
+- A selected comment is text, not a row: it takes the bar on each of its lines and no band. Every
+  comment line starts with the 2-cell gutter whatever the selection, so the line count does not
+  follow the cursor (`renderComments`, `internal/ui/detail/comments.go`). The bar is drawn only
+  while the comments have the focus (`FocusPaneComments`).
+- A move of the comment cursor scrolls the Content pane with two calls, the last line of the
+  comment and then its first: a comment that fits is drawn whole and a taller one starts at its
+  header line (`scrollToComment`, `internal/mode/detail/model.go`).
 - A move that changes the selection calls `scroll.EnsureVisible(offset, sel, window)` — or
   `scroll.EnsureVisibleClipped(offset, sel, window, total)` when the pane spends its first and last
   rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The selection bar staying
@@ -495,8 +593,17 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   (Selection and scrolling); a hovered tab or menu-bar button takes `ShellHoverBgColor` over its
   whole padded cell ([The shell chrome](#the-shell-chrome)).
 - A click on a menu-bar button runs the method its key runs (`Model.mouseOnHeader`).
+- A click on a button in a pane sends the request its key sends (`buttonActions`,
+  `internal/mode/detail/mouse.go`). A click on a comment gives the comments the focus and puts
+  the cursor on it; a second click does nothing more, and the click does not scroll the pane.
 - The configuration screen takes no mouse event: `handleMouse` returns before the header and the
   surface are measured. Text selection still works there, because it runs before the routing.
+- The issue editor takes the event at the same place, before the header is measured
+  (`Model.HandleMouse`, `internal/mode/issueedit/model.go`): a click on a row or on the text
+  gives it the focus, as `tab` does; a click on Save or Cancel does what `enter` does there; the
+  wheel over the text moves its cursor three lines a notch. A read-only row takes no click, and
+  nothing does during a save. It lights nothing under the pointer: a lit button there would show
+  a focus that Enter does not act on.
 - The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release sends the box
@@ -513,6 +620,10 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   (`overlay.Bottom`). Both are placed on the screen, so the margin stays blank around them.
 - The action modal and the toast are the only overlays. Help is a full screen
   ([Surfaces above the shell](#surfaces-above-the-shell)).
+- The action modal carries two things: the store form of the picker (`Model.openStoreForm`) and
+  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), which has no input,
+  a `modal.ButtonDanger` confirm, and takes `y` and `n`. `handleOverlayMessage` tells them apart
+  by `storeForm.kind`. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.
@@ -539,14 +650,17 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
     A caller that wraps the text first cleans it before the wrap, as `Model.applyConfigChange`
     does: a control character has no width until it is drawn as a space;
   - `Model.openStoreForm`, the configuration screen's `Model.Open` and the store picker's
-    `renderRow`, each of which draws a value that is also a key;
+    `renderRow`, each of which draws a value that is also a key; the author in the comment
+    delete question (`Model.confirmCommentDelete`);
   - the error row of a board column, the error text of the detail view and the store picker's
     `renderError`;
   - every field of an issue, where it is drawn: `issuerow`, `renderhelpers.CompactIssueID` and
     the default branch of `renderhelpers.CompactIssueState` for a title, an ID and a status in a
     row; `Render`, `contentHeaderMetaRow`, `renderContentPaneLines`, `renderCompact`,
     `renderMetadataPrefixedLine` and `renderComments` in `internal/ui/detail`; the title, the
-    message and the input placeholders of a dialog (`internal/app/mutation_dialog.go`);
+    subtitle, a stepped value and the error of the issue editor (`Render`,
+    `internal/ui/issueedit/issueedit.go`). The text inside an editor widget is not cleaned: it
+    is the value that is written;
   - the source of a body, in `markdown.Renderer.RenderReadOnly` and `markdown.RenderPlain`
     (`drawable`), which also expands a TAB to its 4-cell stop: a TAB measures as no cell and the
     terminal draws it to the next stop, so a line with one runs past its pane.
@@ -562,6 +676,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
 - The shell says work is in flight with the spinner cell in front of the tabs
   (`Model.headerSpinnerCell`), drawn while `Model.workInFlight` reports a surface loading; idle draws nothing.
+  In Detail, which has no tab line, the glyph stands in the menu bar's first cell
+  ([The shell chrome](#the-shell-chrome)).
 - A cold start draws skeleton rows (`issuerow.RenderCompactSkeleton`) rather than an empty frame.
   Their shade cycles through `styles.SkeletonShades` on the phase from `loading.SkeletonPhase`, which
   advances every 4 spinner frames for a ~1.2 s pulse.
@@ -569,8 +685,15 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 
 ## Text and markdown
 
-- Comments render newest-first, against the backend's oldest-first default, and the header says so:
-  `Comments (N · newest first)`.
+- Comments render newest-first, against the backend's oldest-first default, and the heading says so:
+  `Comments (N · newest first)`. `detail.OrderedComments` is that order, for the renderer and for
+  the model's cursor. An issue with no comment still draws the heading, as `Comments (0)`, because
+  the `add` button stands on it.
+- A comment starts with its author line, bold: `[i/N] author · time`. Two comments are separated
+  by a blank line, `contentHeaderRule` and a blank line; the three lines belong to no comment.
+- The issue editor's widgets hold a TAB as 4 spaces and CRLF as LF. `Model.Open` reads its
+  baseline back from the widgets, so an untouched description is no change; a changed one is
+  written as the widget holds it.
 - Markdown on a read-only surface goes through `markdown.Renderer.RenderReadOnly`, which degrades
   deterministically: empty input to `(no content)`, plain text and any renderer failure to plain
   wrapped text.

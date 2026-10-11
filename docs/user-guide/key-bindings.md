@@ -10,7 +10,8 @@ overridden through runtime config.
 
 Outside a dialog no action is on a bare letter, digit or symbol key: on the
 Board and Docs tabs and in the store search those keys type into the filter or
-the query. The actions sit on `alt+` chords and on keys that print nothing.
+the query, and in the issue editor into the field. The actions sit on `alt+`
+chords and on keys that print nothing.
 
 - `ctrl+c` — quit
 - `alt+h` — toggle help
@@ -19,11 +20,10 @@ the query. The actions sit on `alt+` chords and on keys that print nothing.
 - `alt+f` — open the store search, from a tab or from detail
 - `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs to Board, or dismiss toast state
 - `alt+r` — manually reload detail mode from the repository immediately (detail mode only)
-- `alt+e` — edit selected issue in external editor
-- `alt+n` — create issue
-- `alt+u` — update selected issue metadata
-- `delete` — close selected issue
-- `alt+a` — add comment to selected issue
+- `alt+n` — create an issue, in the [issue editor](#issue-editor)
+- `alt+u` — edit the selected issue, its description included
+- `delete` — close the selected issue: opens the editor with the status on `closed` and the cursor on the close reason; nothing is written until you save
+- `alt+a` — comment on the selected issue, in the editor
 - `alt+s` — open the store picker: every central task store on this machine
 - `alt+c` — open the configuration screen: the theme and the glyph set
 - `alt+v` — launch `nvim` action in detail mode
@@ -111,7 +111,7 @@ the filter of a tab reads only the titles and IDs of the rows already loaded.
 With an empty query the search lists the open issues. A search returns at most
 100 issues; the header reads `100 of M` when the store holds `M` matches. The
 matched words are marked in the title and the ID, so a result found through its
-description carries no mark. Edit, update, comment and close act on the selected
+description carries no mark. Edit, comment and close act on the selected
 result.
 
 The movement, `enter` and reload keys are the board's and follow a rebind of
@@ -119,7 +119,11 @@ them. `ctrl+t` is built in and cannot be rebound.
 
 ## Detail Mode
 
-- `left`, `right` — move focus between the Dependencies, Content and Metadata panes
+The line of view tabs is not drawn in detail mode: the issue has that row.
+`tab` and `shift+tab` still leave detail for a tab. While the issue loads, the
+spinner stands in the first cell of the menu bar.
+
+- `left`, `right` — move focus between Dependencies, Content, the comments and Metadata; an issue without a comment has no comments stop
 - `up` — scroll up one line in the focused pane; in Dependencies and Metadata, move the cursor
 - `down` — scroll down one line in the focused pane; in Dependencies and Metadata, move the cursor
 - `pgup` — page up
@@ -127,7 +131,66 @@ them. `ctrl+t` is built in and cannot be rebound.
 - `home` — jump to top
 - `end` — jump to bottom
 - `enter` (Dependencies focused) — open the highlighted related issue
-- `enter` (Metadata focused) — edit the selected Status or Priority field
+- `enter` (Metadata focused) — open the issue editor on the selected Status or Priority field
+
+The comments stand at the end of the Content pane, newest first, each under a
+bold line with its author and time, with a rule between two of them. With the
+comments focused, the selected comment carries the selection bar:
+
+- `up`, `down` — the comment above or below
+- `home`, `end` — the first or the last comment
+- `pgup`, `pgdown` — scroll the pane
+- `enter` — edit the selected comment, in the issue editor
+- `alt+d` — delete the selected comment, after a yes in a dialog
+
+An edited comment gets a new time and your name, so it moves to the top.
+
+Four buttons stand in the Content pane, each with the key that does the same,
+and a click presses it: `edit` in the top border (`alt+u`), `add` beside the
+`Comments` heading (`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the
+first line of the selected comment. A pane too narrow for a button leaves it
+out; the key still works.
+
+`left`, `right` and `enter` are built in and cannot be rebound.
+
+## Issue Editor
+
+One full screen writes an issue: `alt+n` opens it empty, `alt+u` on the selected
+issue, `delete` on the selected issue with the status on `closed`. It has a row
+for the title, the status (not on a new issue), the type, the priority, the
+assignee and the labels, and the description as text of many lines below them.
+For a comment (`alt+a`, or `enter` on a comment in detail) it has the text
+alone.
+
+| Key | Does |
+|---|---|
+| `tab` / `shift+tab` | next / previous field or button |
+| `down` / `up` | next / previous field; in the text they move the cursor |
+| `left` / `right` | step Status, Type or Priority through the store's values; on a button, the other button |
+| `enter` | in the text: a new line; elsewhere: the next field, or press the button |
+| `pgup` / `pgdown` | in the text: a page |
+| `ctrl+s` | save |
+| `esc` | leave without a save; the typed text is dropped without a question |
+
+- Status, Type and Priority show their value between `‹` and `›`: you step them,
+  you do not type them. Labels are typed with commas between them.
+- A `Reason` row appears under the status while it is `closed`. Saving then
+  closes the issue with that reason. On an issue that is already closed the
+  reason is shown and cannot be changed; step the status to another value and
+  save to reopen it.
+- Only the fields you changed are written. With no change the toast reads
+  `No changes saved`.
+- When the store refuses the save — an empty title, a description a store hook
+  rejects — the editor stays open with what you typed, and the refusal stands
+  in red above the form. Correct it and save again.
+- While a save runs the buttons read `Saving…` and only `ctrl+c` and help do
+  anything.
+- Pasting with the terminal's own paste types the text. `alt+h` and `ctrl+c`
+  work as everywhere; every other `alt+` key does nothing here.
+- A tab character in a description you change is saved as 4 spaces.
+
+`ctrl+s` can be rebound (`save_edit`); the other keys of the table are built in
+and cannot. `esc` follows the shell's `escape`.
 
 ## Store Picker
 
@@ -181,7 +244,8 @@ loads.
 `alt+h`, or the `help` button on the menu bar, opens help from any screen, the
 store picker and the configuration screen included. It is a full screen: every
 key in sections, by what the keys act on, with the keys as your config binds
-them. The keys of a dialog and of the configuration screen each have a section.
+them. The keys of a dialog, of the issue editor and of the configuration screen
+each have a section.
 A description too long for the screen goes on in its column on the next line.
 When help is taller than the screen, its first row reads `… (N earlier)` and
 its last `… (N more)`: the lines above and below the screen, counted as the
@@ -198,14 +262,17 @@ first.
 
 ## Modal Dialogs
 
+Two dialogs are left: the form that creates a store, from the store picker, and
+the question before a comment is deleted.
+
 - `tab`, `down` — move to next field
 - `shift+tab`, `up` — move to previous field
 - `left` — move button focus left
 - `right` — move button focus right
-- `enter` — submit in the Status and Priority dialogs; otherwise advance from input focus, or confirm on button focus
+- `enter` — advance from input focus, or confirm on button focus
 - `esc` — cancel any modal
 - `y` — submit when button row is focused
-- `n` — cancel when the button row is focused, except in the Status and Priority dialogs, which require a value
+- `n` — cancel when the button row is focused
 
 ## Mouse
 
@@ -232,7 +299,11 @@ instead.
   `reload`, `config`, `help`, `quit` — to do what the key shown beside it does. The store's name
   opens the store picker. `reload` reloads the view on screen. `config` opens the configuration
   screen, which takes keys only.
-- **Click a pane** in detail mode to focus it.
+- **Click a pane** in detail mode to focus it. **Click a comment** to select it.
+- **Click a button** in the detail Content pane — `edit`, `add`, and `edit` and `delete` on the
+  selected comment — to do what the key shown beside it does.
+- In the issue editor, **click a field** to put the cursor in it and **click `Save` or `Cancel`**
+  to press it. The wheel over the text moves its cursor three lines a notch.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.
 - **Wheel** over the detail Content or Metadata pane, or on the help screen,
@@ -261,15 +332,16 @@ instead.
   of 24 rows or fewer no blank rows. A click in the margin does nothing.
 - Keybindings are context-specific. The same key may do different things in
   shell, board, detail, and modal contexts.
-- `tab`/`shift+tab` belong to the view tabs everywhere except in a modal,
-  where they still move between fields — a modal consumes keys before the shell
-  sees them. From the store search they leave it for a tab.
+- `tab`/`shift+tab` belong to the view tabs everywhere except in a modal and
+  in the issue editor, where they move between fields — each takes keys before
+  the shell sees them. From the store search and from detail they leave it for
+  a tab.
 - Modal `y`/`n` behavior exists in addition to the configurable modal keymap.
 - The startup-error screen also quits on `q`.
-- An `esc` pressed while a dialog is still opening cancels the dialog and leaves
-  the filter as it is.
-- A terminal sends `alt+e` as `esc` followed by `e`, so `esc` and a letter that
-  reach the app together are read as the `alt+` key: `esc` then a quick `e`
+- An `esc` pressed while the issue editor is still opening cancels it and leaves
+  the filter as it is. So does any other key, a click or the wheel.
+- A terminal sends `alt+u` as `esc` followed by `u`, so `esc` and a letter that
+  reach the app together are read as the `alt+` key: `esc` then a quick `u`
   opens the editor where you meant to clear the filter and type. A local
   terminal keeps them apart. Under tmux set `set -sg escape-time 10` or lower
   (the default since tmux 3.5); over a slow link, clear the filter with `ctrl+u`.

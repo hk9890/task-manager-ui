@@ -15,7 +15,9 @@ const wheelLines = 3
 // the text pane it is over and moves the cursor of the Dependencies pane, as
 // the scroll keys do in each. A click focuses the pane it lands on; on a
 // reference row it also puts the cursor there, and a second click opens that
-// issue: the command returned carries the OpenRelatedIssueMsg.
+// issue: the command returned carries the OpenRelatedIssueMsg. A click on a
+// comment puts the comment cursor there, and one on a button sends the request
+// the button's key sends.
 func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) tea.Cmd {
 	// Nothing is drawn without a viewport, so there is no cell to be over.
 	if viewportHeight <= 0 {
@@ -57,7 +59,25 @@ func (m *Model) wheel(pane detail.FocusPane, direction, maxWidth, viewportHeight
 	m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, "", direction*wheelLines)
 }
 
+// buttonActions is the request each pane button sends: the one its key sends.
+var buttonActions = map[detail.Button]mode.Action{
+	detail.ButtonEdit:          mode.ActionEditIssue,
+	detail.ButtonAddComment:    mode.ActionAddComment,
+	detail.ButtonEditComment:   mode.ActionEditComment,
+	detail.ButtonDeleteComment: mode.ActionDeleteComment,
+}
+
 func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
+	if action, ok := buttonActions[hit.Button]; ok {
+		m.clicks = mode.ClickTracker{}
+		return mode.RequestActionCmd(mode.Detail, action)
+	}
+	if hit.Pane == detail.FocusPaneComments {
+		m.clicks = mode.ClickTracker{}
+		m.FocusPane = hit.Pane
+		m.commentIndex = hit.Comment
+		return nil
+	}
 	if m.clicks.Double(hit.RefID, m.browserSelectedIssueID(), msg) {
 		if ref, ok := m.selectedRelatedIssue(); ok {
 			return openRelatedIssueCmd(ref)
@@ -75,13 +95,13 @@ func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// hover is the reference row under the pointer, or nil.
+// hover is the reference row or the button under the pointer, or nil.
 func (m *Model) hover(state detail.State) *detail.Hit {
 	if m.pointer == nil {
 		return nil
 	}
 	hit, ok := detail.HitTest(state, m.pointer.X, m.pointer.Y)
-	if !ok || hit.RefID == "" {
+	if !ok || (hit.RefID == "" && hit.Button == detail.ButtonNone) {
 		return nil
 	}
 	return &hit

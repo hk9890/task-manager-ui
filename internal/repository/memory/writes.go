@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -99,6 +100,14 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 	si, ok := r.issues[id]
 	if !ok {
 		return notFoundError("update issue", id)
+	}
+	// The SDK refuses every update of a closed issue but a reopen.
+	if si.status == "closed" && (input.Status == nil || *input.Status == "closed") {
+		return domain.RepositoryError{
+			Code:      domain.ErrorCodeConflict,
+			Operation: "update issue",
+			Message:   "issue is closed; reopen it before editing",
+		}
 	}
 
 	now := r.clock()
@@ -221,6 +230,9 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 	if !ok {
 		return notFoundError("add comment", id)
 	}
+	if err := validateCommentBody("add comment", input.Body); err != nil {
+		return err
+	}
 
 	now := r.clock()
 
@@ -231,5 +243,73 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 		createdAt: now,
 	})
 	si.updated = now
+	return nil
+}
+
+// EditComment implements repository.Repository.
+//
+// The comment keeps its place and gets a new ID, the author and the edit time,
+// as a revision does in the SDK. The issue's updated time does not change: the
+// SDK does not rewrite the issue file for a comment.
+func (r *Repository) EditComment(ctx context.Context, id, commentID string, input domain.EditCommentInput) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	si, ok := r.issues[id]
+	if !ok {
+		return notFoundError("edit comment", id)
+	}
+	index := commentIndex(si, commentID)
+	if index < 0 {
+		return validationError("edit comment", "comment_id", "not found")
+	}
+	if err := validateCommentBody("edit comment", input.Body); err != nil {
+		return err
+	}
+
+	si.comments[index] = storedComment{
+		id:        r.idgen(),
+		author:    "memory-user",
+		body:      input.Body,
+		createdAt: r.clock(),
+	}
+	return nil
+}
+
+// DeleteComment implements repository.Repository.
+func (r *Repository) DeleteComment(ctx context.Context, id, commentID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	si, ok := r.issues[id]
+	if !ok {
+		return notFoundError("delete comment", id)
+	}
+	index := commentIndex(si, commentID)
+	if index < 0 {
+		return validationError("delete comment", "comment_id", "not found")
+	}
+
+	si.comments = slices.Delete(si.comments, index, index+1)
+	return nil
+}
+
+func commentIndex(si *storedIssue, commentID string) int {
+	return slices.IndexFunc(si.comments, func(c storedComment) bool { return c.id == commentID })
+}
+
+// validateCommentBody refuses an empty comment, as the SDK does.
+func validateCommentBody(operation, body string) error {
+	if strings.TrimSpace(body) == "" {
+		return validationError(operation, "body", "comment must have a non-empty body")
+	}
 	return nil
 }

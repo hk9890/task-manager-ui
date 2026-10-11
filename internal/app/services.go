@@ -2,48 +2,14 @@ package app
 
 import (
 	"errors"
-	"io"
 	"log/slog"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
-	"time"
-
-	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/launcher"
-	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
-
-// execCmdWrapper wraps an *exec.Cmd so it satisfies the tea.ExecCommand interface.
-type execCmdWrapper struct{ cmd *exec.Cmd }
-
-func (w *execCmdWrapper) Run() error { return w.cmd.Run() }
-func (w *execCmdWrapper) SetStdin(r io.Reader) {
-	if w.cmd.Stdin == nil {
-		w.cmd.Stdin = r
-	}
-}
-func (w *execCmdWrapper) SetStdout(wr io.Writer) {
-	if w.cmd.Stdout == nil {
-		w.cmd.Stdout = wr
-	}
-}
-func (w *execCmdWrapper) SetStderr(wr io.Writer) {
-	if w.cmd.Stderr == nil {
-		w.cmd.Stderr = wr
-	}
-}
-
-// defaultExecCommandFactory wraps an *exec.Cmd as a tea.ExecCommand using the
-// same "set if unset" semantics as Bubble Tea's own wrapExecCommand helper.
-func defaultExecCommandFactory(cmd *exec.Cmd) tea.ExecCommand {
-	return &execCmdWrapper{cmd: cmd}
-}
 
 // Services is the intentionally small root app container.
 //
@@ -59,17 +25,11 @@ func defaultExecCommandFactory(cmd *exec.Cmd) tea.ExecCommand {
 type Services struct {
 	Repo     repository.Repository
 	Launcher launcher.Service
-	Editor   launchereditor.Service
 	Config   config.Model
 	// ConfigPath is the config file Config was loaded from, or would be loaded
 	// from when it exists: the configuration screen writes a change there.
 	// Empty when the caller resolved none, and a change is then refused.
 	ConfigPath string
-	// ExecCommandFactory wraps a *exec.Cmd as a tea.ExecCommand for the editor
-	// launch flow. It defaults to a thin wrapper with Bubble Tea's "set if unset"
-	// stdin/stdout/stderr semantics. Tests can inject a no-op implementation to
-	// avoid launching real editor processes.
-	ExecCommandFactory func(*exec.Cmd) tea.ExecCommand
 	// StoreCatalog lists the central task-manager stores on this machine for
 	// the store picker. Like Logger it is injected after construction, because
 	// which catalog implementation to use is a backend choice and cmd/ owns
@@ -96,12 +56,11 @@ type Services struct {
 	Logger *slog.Logger
 }
 
-// The launcher action names the shell can actually start: "editor" through the
-// edit keybinding, and one per launch keybinding. The key handlers in model.go
+// The launcher action names the shell can actually start, one per launch
+// keybinding. The key handlers in model.go
 // name these constants rather than their own string literals, so the list below
 // and the keys that reach it cannot drift apart.
 const (
-	LaunchActionEditor       = "editor"
 	LaunchActionNvim         = "nvim"
 	LaunchActionOpencode     = "opencode"
 	LaunchActionShellCommand = "shell-command"
@@ -111,7 +70,6 @@ const (
 // (see internal/config), so a definition with any other action name is
 // configured but unreachable.
 var LaunchableActions = []string{
-	LaunchActionEditor,
 	LaunchActionNvim,
 	LaunchActionOpencode,
 	LaunchActionShellCommand,
@@ -174,26 +132,19 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 		return Services{}, err
 	}
 
-	editorService, err := launchereditor.NewIssueEditor(repo, cfg.Editor.Command)
-	if err != nil {
-		return Services{}, err
-	}
-
 	return Services{
-		Repo:               repo,
-		Launcher:           launcherService,
-		Editor:             editorService,
-		Config:             cfg,
-		ExecCommandFactory: defaultExecCommandFactory,
-		ProjectRoot:        projectRoot,
-		ProcessRunner:      runner,
+		Repo:          repo,
+		Launcher:      launcherService,
+		Config:        cfg,
+		ProjectRoot:   projectRoot,
+		ProcessRunner: runner,
 	}, nil
 }
 
-// ForStore returns a copy of s bound to another store. The repository, the
-// editor that writes through it, and the launcher that interpolates the
-// store's project root are rebuilt; everything that is not a property of the
-// store — config, logger, catalog, exec factory — carries over.
+// ForStore returns a copy of s bound to another store. The repository and the
+// launcher that interpolates the store's project root are rebuilt; everything
+// that is not a property of the store — config, logger, catalog — carries
+// over.
 func (s Services) ForStore(opened storecatalog.Opened) (Services, error) {
 	if opened.Repo == nil {
 		return Services{}, errors.New("repo is required")
@@ -204,64 +155,13 @@ func (s Services) ForStore(opened storecatalog.Opened) (Services, error) {
 		return Services{}, err
 	}
 
-	editorService, err := launchereditor.NewIssueEditor(opened.Repo, s.Config.Editor.Command)
-	if err != nil {
-		return Services{}, err
-	}
-
 	next := s
 	next.Repo = opened.Repo
 	next.Launcher = launcherService
-	next.Editor = editorService
 	next.ProjectRoot = opened.ProjectPath
 	next.ActiveStorePath = opened.StorePath
 	next.StoreName = opened.Name
 	return next, nil
-}
-
-// SweepStaleTempFiles removes taskmgr-ui-issue-*.md files in os.TempDir() older
-// than 24 hours — leftover editor documents from sessions killed by SIGKILL or a
-// panic, where the normal defer os.Remove never ran.
-//
-// This is scheduled by Model.Init rather than fired from a constructor: deleting
-// files is not something a caller can expect from constructing a value, and
-// doing it in one of the two constructors made them non-substitutable.
-func (s Services) SweepStaleTempFiles() tea.Cmd {
-	return func() tea.Msg {
-		cleanStaleTempFilesInDir(s.Logger, os.TempDir())
-		return nil
-	}
-}
-
-// cleanStaleTempFilesInDir is the testable core of cleanStaleTempFiles.
-// It scans dir for taskmgr-ui-issue-*.md files older than 24h and removes them.
-func cleanStaleTempFilesInDir(logger *slog.Logger, dir string) {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	matches, err := filepath.Glob(filepath.Join(dir, "taskmgr-ui-issue-*.md"))
-	if err != nil {
-		logger.Warn("temp cleanup: glob failed", "dir", dir, "error", err.Error())
-		return
-	}
-
-	cutoff := time.Now().Add(-24 * time.Hour)
-	for _, path := range matches {
-		info, err := os.Stat(path)
-		if err != nil {
-			// File may have been removed concurrently; skip silently.
-			continue
-		}
-		if info.ModTime().After(cutoff) {
-			continue
-		}
-		if err := os.Remove(path); err != nil {
-			logger.Warn("temp cleanup: remove failed", "path", path, "error", err.Error())
-		} else {
-			logger.Info("temp cleanup: removed stale temp file", "path", path, "age_hours", time.Since(info.ModTime()).Hours())
-		}
-	}
 }
 
 // NewServicesWithLauncher constructs services with an injected launcher seam.
@@ -273,17 +173,10 @@ func NewServicesWithLauncher(repo repository.Repository, cfg config.Model, launc
 		return Services{}, errors.New("launcher service is required")
 	}
 
-	editorService, err := launchereditor.NewIssueEditor(repo, cfg.Editor.Command)
-	if err != nil {
-		return Services{}, err
-	}
-
 	return Services{
-		Repo:               repo,
-		Launcher:           launcherService,
-		Editor:             editorService,
-		Config:             cfg,
-		ExecCommandFactory: defaultExecCommandFactory,
-		ProcessRunner:      launcher.NewExecProcessRunner(),
+		Repo:          repo,
+		Launcher:      launcherService,
+		Config:        cfg,
+		ProcessRunner: launcher.NewExecProcessRunner(),
 	}, nil
 }

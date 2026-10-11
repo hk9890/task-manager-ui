@@ -1,4 +1,4 @@
-╭─ Dependencies ──────── 0 ─╮  ╭─ Content ──────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+╭─ Dependencies ──────── 0 ─╮  ╭─ Content ─ edit e ─────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Blocked by (0)             │  │T P1 OPN tm-1                                      │  │  Core                          │
 │(none)                     │  │Minimal detail                                     │  │  Type    : task                │
 │                           │  │───────────────────────────────────────────────────│  │  Status  : open                │
@@ -13,12 +13,12 @@
 │                           │  │                                                   │  │                                │
 │                           │  │                                                   │  │Quick actions                   │
 │                           │  │                                                   │  │e Edit issue                    │
-│                           │  │                                                   │  │u Update issue                  │
 │                           │  │                                                   │  │a Add comment                   │
+│                           │  │                                                   │  │enter Edit comment              │
+│                           │  │                                                   │  │d Delete comment                │
 │                           │  │                                                   │  │x Close issue                   │
 │                           │  │                                                   │  │r Reload detail                 │
 │                           │  │                                                   │  │                                │
 │                           │  │                                                   │  │                                │
-│                           │  │                                                   │  │                                │
-│                           │  │                                                   │  │                                │
+│                           │  │Comments (0)                                 add a │  │                                │
 ╰───────────────────────────╯  ╰───────────────────────────────────────────────────╯  ╰────────────────────────────────╯

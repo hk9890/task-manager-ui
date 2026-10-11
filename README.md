@@ -14,8 +14,8 @@ What it does:
 - **Search** — `alt+f` searches the whole store as you type, widens to closed work, and drills
   into any result.
 - **Detail** — the full issue with its dependencies, content and metadata panes.
-- **Edit in place** — create, update, close and comment on issues; `alt+e` opens the full issue in
-  `$EDITOR` and applies what you save.
+- **Edit in place** — one full-screen editor creates, edits and closes an issue, its description
+  included; comments are added, edited and deleted from Detail.
 - **Launch external tools** — run `nvim`, `opencode` or your own command against the selected issue.
 - **Stores** — `alt+s` lists every central task store on the machine and switches to one in place;
   started somewhere with no store, it opens there instead of exiting and offers to create one.

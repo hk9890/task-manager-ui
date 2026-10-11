@@ -26,12 +26,15 @@ const (
 	// Config is the configuration screen. Like StorePicker it sits above
 	// every browse surface and renders instead of the shell.
 	Config ID = "config"
+	// IssueEdit is the issue editor: the full screen where an issue or a
+	// comment is written. It sits above every browse surface too.
+	IssueEdit ID = "issue_edit"
 )
 
-// BrowseModes lists the browse tabs in header order. Detail, StorePicker and
-// Config are not tabs: Detail is a drill-in reached from a browse mode and
-// left with Escape, and the other two are full-screen surfaces above all of
-// them.
+// BrowseModes lists the browse tabs in header order. Detail, StorePicker,
+// Config and IssueEdit are not tabs: Detail is a drill-in reached from a
+// browse mode and left with Escape, and the other three are full-screen
+// surfaces above all of them.
 var BrowseModes = []ID{Board, Docs}
 
 // IsBrowse reports whether id is one of the browse tabs. The shell keeps
@@ -124,7 +127,7 @@ type ActionRequestMsg struct {
 	// Selection is the row an ActionOpenDetail opens: the selection the mode
 	// held when it asked. The shell adopts it before it opens the detail, so
 	// the request does not depend on a SelectionChangedMsg arriving first. The
-	// dialog actions leave it nil.
+	// editor actions leave it nil.
 	Selection *Selection
 }
 
@@ -153,12 +156,23 @@ type Action string
 const (
 	ActionOpenDetail Action = "open_detail"
 
-	// ActionOpenStatusDialog and ActionOpenPriorityDialog are the metadata
-	// quick-edit entry points. The shell owns the dialogs, so a mode asks for
-	// one through this contract rather than parking a flag for the shell to
-	// poll after every key press.
-	ActionOpenStatusDialog   Action = "open_status_dialog"
-	ActionOpenPriorityDialog Action = "open_priority_dialog"
+	// ActionEditStatus and ActionEditPriority open the issue editor with the
+	// focus on that field. The shell owns the editor, so a mode asks for it
+	// through this contract rather than parking a flag for the shell to poll
+	// after every key press.
+	ActionEditStatus   Action = "edit_status"
+	ActionEditPriority Action = "edit_priority"
+
+	// ActionEditIssue and ActionAddComment are the edit button of the Content
+	// pane and the add button of its Comments heading in Detail: each opens
+	// what the shell key shown on it opens.
+	ActionEditIssue  Action = "open_issue_editor"
+	ActionAddComment Action = "add_comment"
+
+	// ActionEditComment opens the editor on the comment Detail has selected,
+	// and ActionDeleteComment asks whether to delete it.
+	ActionEditComment   Action = "edit_comment"
+	ActionDeleteComment Action = "delete_comment"
 )
 
 // MouseKind is what the pointer did.

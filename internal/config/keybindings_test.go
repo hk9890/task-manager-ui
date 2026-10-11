@@ -30,6 +30,12 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 	if !resolved.Match(ShellContext, ShellActionOpenConfig, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}, Alt: true}) {
 		t.Fatal("expected shell open-config to match alt+c")
 	}
+	if !resolved.Match(ShellContext, ShellActionSaveEdit, tea.KeyMsg{Type: tea.KeyCtrlS}) {
+		t.Fatal("expected shell save-edit to match ctrl+s")
+	}
+	if !resolved.Match(DetailContext, DetailActionDeleteComment, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}, Alt: true}) {
+		t.Fatal("expected detail delete-comment to match alt+d")
+	}
 	if !resolved.Match(ShellContext, ShellActionCloseIssue, tea.KeyMsg{Type: tea.KeyDelete}) {
 		t.Fatal("expected shell close-issue to match delete")
 	}

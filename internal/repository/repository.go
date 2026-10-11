@@ -122,6 +122,19 @@ type Repository interface {
 	// Code == domain.ErrorCodeCommandFailed to match taskmgr's behavior.
 	AddComment(ctx context.Context, id string, input domain.AddCommentInput) error
 
+	// EditComment replaces the text of comment commentID of issue id. The comment
+	// then has a new ID, the editing author and the edit time.
+	//
+	// An unknown id is domain.ErrorCodeCommandFailed. An unknown commentID or an
+	// empty body is domain.ErrorCodeValidationFailed.
+	EditComment(ctx context.Context, id, commentID string, input domain.EditCommentInput) error
+
+	// DeleteComment removes comment commentID of issue id.
+	//
+	// An unknown id is domain.ErrorCodeCommandFailed. An unknown commentID is
+	// domain.ErrorCodeValidationFailed.
+	DeleteComment(ctx context.Context, id, commentID string) error
+
 	// HealthCheck verifies that the backing store is reachable and usable.
 	// A nil return means the store is healthy. A non-nil return wraps a
 	// domain.RepositoryError; Code == domain.ErrorCodeNoDatabaseFound indicates

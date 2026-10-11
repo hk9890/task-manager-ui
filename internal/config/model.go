@@ -1,22 +1,10 @@
 package config
 
-import "os"
-
-const (
-	defaultEditorCommand = "vi"
-)
-
 // Model contains runtime configuration consumed by the app shell.
 type Model struct {
-	Editor      Editor      `yaml:"editor"`
 	Launcher    Launcher    `yaml:"launcher"`
 	KeyBindings KeyBindings `yaml:"keybindings"`
 	UI          UI          `yaml:"ui"`
-}
-
-// Editor contains editor-launch configuration.
-type Editor struct {
-	Command string `yaml:"command"`
 }
 
 // Launcher contains launcher action definitions used by the shell.
@@ -42,21 +30,8 @@ type UI struct {
 	Glyphs string `yaml:"glyphs"`
 }
 
-func resolvedDefaultEditorCommand() string {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = defaultEditorCommand
-	}
-	return editor
-}
-
-func defaultLauncherDefinitions(editor string) []LauncherDefinition {
+func defaultLauncherDefinitions() []LauncherDefinition {
 	return []LauncherDefinition{
-		{
-			Action:  "editor",
-			Command: editor,
-			Args:    nil,
-		},
 		{
 			// The issue fields travel through Env, never through an argument.
 			// nvim re-parses a +cmd argument as an Ex command line, so an
@@ -128,11 +103,8 @@ func cloneStringSlice(values []string) []string {
 
 // Default returns the baseline runtime configuration.
 func Default() Model {
-	editor := resolvedDefaultEditorCommand()
-
 	return Model{
-		Editor:      Editor{Command: editor},
-		Launcher:    Launcher{Definitions: defaultLauncherDefinitions(editor)},
+		Launcher:    Launcher{Definitions: defaultLauncherDefinitions()},
 		KeyBindings: DefaultKeyBindings(),
 		UI:          UI{ShowModeSwitcherHelp: true, Theme: "catppuccin-mocha", Glyphs: "unicode"},
 	}

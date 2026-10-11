@@ -180,7 +180,7 @@ func TestConfigScreenIsNotInTheTabCycle(t *testing.T) {
 // would put a surface over one that is itself above the shell.
 func TestShellActionsAreInertOnTheConfigScreen(t *testing.T) {
 	for _, key := range []string{
-		"alt+e", "alt+n", "alt+u", "delete", "alt+a",
+		"alt+n", "alt+u", "delete", "alt+a", "ctrl+s",
 		"alt+s", "alt+f", "alt+r", "alt+c", "alt+v", "alt+p", "alt+l",
 	} {
 		t.Run(key, func(t *testing.T) {
@@ -194,8 +194,8 @@ func TestShellActionsAreInertOnTheConfigScreen(t *testing.T) {
 			}
 			m = next.(Model)
 
-			if m.showActionModal || m.pendingDialog.active {
-				t.Errorf("%q armed a dialog (modal %v, pending %v)", key, m.showActionModal, m.pendingDialog.active)
+			if m.showActionModal || m.pendingEditor != 0 {
+				t.Errorf("%q armed a dialog or the editor (modal %v, pending %d)", key, m.showActionModal, m.pendingEditor)
 			}
 			if m.active != mode.Config || m.configReturn != mode.Board || m.searchFrom != "" {
 				t.Errorf("%q moved the operator: on %q returning to %q, search from %q", key, m.active, m.configReturn, m.searchFrom)

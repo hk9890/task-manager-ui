@@ -178,8 +178,8 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected end key to be consumed")
 	}
 	endView := m.View(80, 10, false, 0)
-	if !strings.Contains(endView, "Line 40") {
-		t.Fatalf("expected end to reach bottom section, got:\n%s", endView)
+	if !strings.Contains(endView, "Comments (0)") {
+		t.Fatalf("expected end to reach the Comments heading at the bottom, got:\n%s", endView)
 	}
 
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
@@ -488,7 +488,7 @@ func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testi
 	}
 }
 
-func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T) {
+func TestModelDetailEnterOnMetadataStatusAsksForTheEditorOnTheStatus(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -511,12 +511,12 @@ func TestModelDetailEnterOnMetadataStatusSetsOpenStatusDialogIntent(t *testing.T
 	if !ok {
 		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
 	}
-	if req.Mode != mode.Detail || req.Action != mode.ActionOpenStatusDialog {
+	if req.Mode != mode.Detail || req.Action != mode.ActionEditStatus {
 		t.Fatalf("expected detail/open_status_dialog, got %s/%s", req.Mode, req.Action)
 	}
 }
 
-func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testing.T) {
+func TestModelDetailEnterOnMetadataPriorityAsksForTheEditorOnThePriority(t *testing.T) {
 	t.Parallel()
 
 	m := Model{
@@ -540,7 +540,7 @@ func TestModelDetailEnterOnMetadataPrioritySetsOpenPriorityDialogIntent(t *testi
 	if !ok {
 		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
 	}
-	if req.Mode != mode.Detail || req.Action != mode.ActionOpenPriorityDialog {
+	if req.Mode != mode.Detail || req.Action != mode.ActionEditPriority {
 		t.Fatalf("expected detail/open_priority_dialog, got %s/%s", req.Mode, req.Action)
 	}
 }

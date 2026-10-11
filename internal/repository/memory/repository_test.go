@@ -558,7 +558,7 @@ func TestUpdateGrandfathersAPreexistingViolation(t *testing.T) {
 
 // TestUpdateAcceptsASeededCatalogStatus pins that the write path accepts what
 // Catalogs() offers. knownStatus read the package-level DefaultCatalogs() only,
-// so the status dialog listed a seeded status that the same repository then
+// so the issue editor offered a seeded status that the same repository then
 // refused to store.
 func TestUpdateAcceptsASeededCatalogStatus(t *testing.T) {
 	r := memory.New()
@@ -648,6 +648,113 @@ func TestAddComment_NonExistent(t *testing.T) {
 	var ge domain.RepositoryError
 	if !errors.As(err, &ge) || ge.Code != domain.ErrorCodeCommandFailed {
 		t.Errorf("AddComment: expected ErrorCodeCommandFailed, got %v", err)
+	}
+}
+
+func TestAddComment_EmptyBody(t *testing.T) {
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "x", Title: "t"})
+
+	err := r.AddComment(context.Background(), "x", domain.AddCommentInput{Body: " \n"})
+
+	var ge domain.RepositoryError
+	if !errors.As(err, &ge) || ge.Code != domain.ErrorCodeValidationFailed {
+		t.Errorf("AddComment: expected ErrorCodeValidationFailed, got %v", err)
+	}
+}
+
+// ---- EditComment, DeleteComment ----
+
+// steppingClock gives base, then one hour more on each call.
+func steppingClock(base time.Time) func() time.Time {
+	calls := 0
+	return func() time.Time {
+		calls++
+		return base.Add(time.Duration(calls-1) * time.Hour)
+	}
+}
+
+func TestEditComment_ReplacesInPlaceWithNewIdentity(t *testing.T) {
+	base := time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC)
+	r := memory.New(memory.WithClock(steppingClock(base)), memory.WithIDGenerator(seqIDs()))
+	r.Seed(memory.Issue{ID: "x", Title: "t", Created: base, Updated: base})
+	r.SeedComments("x",
+		memory.Comment{ID: "c1", Author: "alice", Body: "hello", CreatedAt: base},
+		memory.Comment{ID: "c2", Author: "bob", Body: "world", CreatedAt: base},
+	)
+
+	if err := r.EditComment(context.Background(), "x", "c1", domain.EditCommentInput{Body: "hello again"}); err != nil {
+		t.Fatalf("EditComment: %v", err)
+	}
+
+	detail, _ := r.Issue(context.Background(), "x")
+	if len(detail.Comments) != 2 || detail.Comments[1].ID != "c2" {
+		t.Fatalf("Comments: want the edited one then c2, got %+v", detail.Comments)
+	}
+	edited := detail.Comments[0]
+	if edited.Body != "hello again" || edited.Author != "memory-user" {
+		t.Errorf("edited comment: got body=%q author=%q", edited.Body, edited.Author)
+	}
+	if edited.ID == "c1" || edited.ID == "" {
+		t.Errorf("edited comment ID: want a new one, got %q", edited.ID)
+	}
+	if !edited.CreatedAt.After(base) {
+		t.Errorf("edited comment time: want after %v, got %v", base, edited.CreatedAt)
+	}
+	if !detail.Summary.UpdatedAt.Equal(base) {
+		t.Errorf("UpdatedAt: want %v unchanged, got %v", base, detail.Summary.UpdatedAt)
+	}
+}
+
+func TestDeleteComment_RemovesOnlyThatComment(t *testing.T) {
+	base := time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC)
+	r := memory.New(memory.WithClock(steppingClock(base)))
+	r.Seed(memory.Issue{ID: "x", Title: "t", Created: base, Updated: base})
+	r.SeedComments("x",
+		memory.Comment{ID: "c1", Author: "alice", Body: "hello", CreatedAt: base},
+		memory.Comment{ID: "c2", Author: "bob", Body: "world", CreatedAt: base},
+	)
+
+	if err := r.DeleteComment(context.Background(), "x", "c1"); err != nil {
+		t.Fatalf("DeleteComment: %v", err)
+	}
+
+	detail, _ := r.Issue(context.Background(), "x")
+	if len(detail.Comments) != 1 || detail.Comments[0].ID != "c2" {
+		t.Errorf("Comments: want c2 alone, got %+v", detail.Comments)
+	}
+	if !detail.Summary.UpdatedAt.Equal(base) {
+		t.Errorf("UpdatedAt: want %v unchanged, got %v", base, detail.Summary.UpdatedAt)
+	}
+}
+
+func TestCommentWrites_Refusals(t *testing.T) {
+	ctx := context.Background()
+	r := memory.New()
+	r.Seed(memory.Issue{ID: "x", Title: "t"})
+	r.SeedComments("x", memory.Comment{ID: "c1", Author: "alice", Body: "hello"})
+
+	cases := []struct {
+		name string
+		err  error
+		want domain.ErrorCode
+	}{
+		{"EditComment unknown issue", r.EditComment(ctx, "nope", "c1", domain.EditCommentInput{Body: "b"}), domain.ErrorCodeCommandFailed},
+		{"DeleteComment unknown issue", r.DeleteComment(ctx, "nope", "c1"), domain.ErrorCodeCommandFailed},
+		{"EditComment unknown comment", r.EditComment(ctx, "x", "nope", domain.EditCommentInput{Body: "b"}), domain.ErrorCodeValidationFailed},
+		{"DeleteComment unknown comment", r.DeleteComment(ctx, "x", "nope"), domain.ErrorCodeValidationFailed},
+		{"EditComment empty body", r.EditComment(ctx, "x", "c1", domain.EditCommentInput{Body: " "}), domain.ErrorCodeValidationFailed},
+	}
+	for _, tc := range cases {
+		var ge domain.RepositoryError
+		if !errors.As(tc.err, &ge) || ge.Code != tc.want {
+			t.Errorf("%s: got %v, want code %q", tc.name, tc.err, tc.want)
+		}
+	}
+
+	detail, _ := r.Issue(ctx, "x")
+	if len(detail.Comments) != 1 || detail.Comments[0].Body != "hello" {
+		t.Errorf("Comments after refused writes: got %+v, want the seeded one", detail.Comments)
 	}
 }
 

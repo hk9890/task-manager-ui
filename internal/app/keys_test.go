@@ -24,6 +24,7 @@ var namedKeys = map[string]tea.KeyType{
 	"delete":    tea.KeyDelete,
 	"ctrl+c":    tea.KeyCtrlC,
 	"ctrl+t":    tea.KeyCtrlT,
+	"ctrl+s":    tea.KeyCtrlS,
 }
 
 // testKey is the key press a binding named name matches: a named key, alt+

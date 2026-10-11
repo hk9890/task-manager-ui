@@ -1,12 +1,20 @@
 package detail
 
-import "strings"
+import (
+	"strings"
 
-// Hit is the detail cell under a point: the pane, and the reference row drawn
-// there. RefID is "" anywhere but on a row of the Dependencies pane.
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
+)
+
+// Hit is the detail cell under a point: the pane, and what is drawn there.
+// RefID is "" anywhere but on a row of the Dependencies pane, and Button is
+// ButtonNone anywhere but on a button. On a comment, Pane is FocusPaneComments
+// and Comment the index of that comment; read Comment only then.
 type Hit struct {
-	Pane  FocusPane
-	RefID string
+	Pane    FocusPane
+	RefID   string
+	Button  Button
+	Comment int
 }
 
 // rect is a pane's box, borders included.
@@ -71,7 +79,7 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	p := layoutPanes(state.Width, state.Height)
 	switch {
 	case p.content.contains(x, y):
-		return Hit{Pane: FocusPaneContent}, true
+		return hitContent(state, p.content, x, y), true
 	case p.metadata.contains(x, y):
 		return Hit{Pane: FocusPaneMetadata}, true
 	case !p.dependencies.contains(x, y):
@@ -100,4 +108,62 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	}
 	hit.RefID = refs[offset+line]
 	return hit, true
+}
+
+// hitContent is what the Content pane draws at (x, y): the edit button in its
+// top border, the add button on the Comments heading, a comment, or the
+// buttons of the selected comment.
+func hitContent(state State, pane rect, x, y int) Hit {
+	hit := Hit{Pane: FocusPaneContent}
+	if state.Skeleton {
+		return hit
+	}
+
+	contentPane := state.contentPane(pane.width, pane.height)
+	section, content := contentPaneSection(contentPane)
+	column := x - pane.x
+	if y == pane.y {
+		if x0, x1, ok := styles.FormSectionActionCells(section); ok && column >= x0 && column < x1 {
+			hit.Button = ButtonEdit
+		}
+		return hit
+	}
+
+	innerHeight := max(1, pane.height-2)
+	line := y - pane.y - 1
+	if column == 0 || column == pane.width-1 || line >= innerHeight {
+		return hit
+	}
+	// The window sliceWithOffset draws; its two indicator rows are no line.
+	total := len(content.lines)
+	offset := max(0, min(state.ContentScrollOffset, total-innerHeight))
+	end := min(total, offset+innerHeight)
+	index := offset + line
+	if index >= end || (offset > 0 && line == 0) || (end < total && index == end-1) {
+		return hit
+	}
+
+	column-- // the border
+	if index == content.heading {
+		if content.add.covers(column) {
+			hit.Button = ButtonAddComment
+		}
+		return hit
+	}
+	comment := content.comment[index]
+	if comment < 0 {
+		return hit
+	}
+	hit.Pane = FocusPaneComments
+	hit.Comment = comment
+	firstLine := content.comment[index-1] != comment
+	if !contentPane.CommentsFocused || comment != contentPane.CommentIndex || !firstLine {
+		return hit
+	}
+	for idx, button := range []Button{ButtonEditComment, ButtonDeleteComment} {
+		if idx < len(content.commentButtons) && content.commentButtons[idx].covers(column) {
+			hit.Button = button
+		}
+	}
+	return hit
 }

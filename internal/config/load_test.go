@@ -12,7 +12,6 @@ func TestLoad_MissingConfigUsesDefaults(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	t.Setenv("EDITOR", "nvim")
 
 	result, err := Load()
 	if err != nil {
@@ -23,13 +22,13 @@ func TestLoad_MissingConfigUsesDefaults(t *testing.T) {
 	if result.Path != expectedPath {
 		t.Fatalf("expected config path %q, got %q", expectedPath, result.Path)
 	}
-	if result.Config.Editor.Command != "nvim" {
-		t.Fatalf("expected default editor from env, got %q", result.Config.Editor.Command)
+	if result.Config.UI.Theme != Default().UI.Theme {
+		t.Fatalf("expected the default theme, got %q", result.Config.UI.Theme)
 	}
 	if len(result.Warnings) != 0 {
 		t.Fatalf("expected no warnings, got %#v", result.Warnings)
 	}
-	if len(result.Config.Launcher.Definitions) != 4 {
+	if len(result.Config.Launcher.Definitions) != 3 {
 		t.Fatalf("expected default launchers, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
@@ -83,14 +82,11 @@ ui:
 	}
 }
 
-func TestLoad_ConfigOverridesEditorAndLaunchers(t *testing.T) {
+func TestLoad_ConfigOverridesLaunchers(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	t.Setenv("EDITOR", "vim")
 	writeConfig(t, configHome, strings.TrimSpace(`
-editor:
-  command: nano
 launcher:
   definitions:
     - action: opencode
@@ -108,9 +104,6 @@ ui:
 		t.Fatalf("Load returned error: %v", err)
 	}
 
-	if result.Config.Editor.Command != "nano" {
-		t.Fatalf("expected config editor override, got %q", result.Config.Editor.Command)
-	}
 	if result.Config.UI.ShowModeSwitcherHelp {
 		t.Fatal("expected UI override to disable mode switcher help")
 	}
@@ -120,9 +113,6 @@ ui:
 		launchers[definition.Action] = definition
 	}
 
-	if launchers["editor"].Command != "nano" {
-		t.Fatalf("expected editor launcher to follow resolved editor command, got %q", launchers["editor"].Command)
-	}
 	if launchers["opencode"].Command != "op" {
 		t.Fatalf("expected opencode launcher command override, got %q", launchers["opencode"].Command)
 	}
@@ -132,8 +122,8 @@ ui:
 	if launchers["custom"].Command != "custom-tool" {
 		t.Fatalf("expected custom launcher to be appended, got %#v", launchers["custom"])
 	}
-	if len(result.Config.Launcher.Definitions) != 5 {
-		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	if len(result.Config.Launcher.Definitions) != 4 {
+		t.Fatalf("expected 4 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
 
@@ -142,8 +132,8 @@ func TestLoad_UnknownKeysWarnButDoNotFail(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
 	writeConfig(t, configHome, strings.TrimSpace(`
-editor:
-  command: nano
+ui:
+  theme: catppuccin-latte
   typo_field: ignored
 launcher:
   unexpected: true
@@ -165,7 +155,7 @@ unknown_root: true
 
 	joined := strings.Join(result.Warnings, "\n")
 	for _, expected := range []string{
-		`unknown config key "editor.typo_field" ignored`,
+		`unknown config key "ui.typo_field" ignored`,
 		`unknown config key "launcher.unexpected" ignored`,
 		`unknown config key "launcher.definitions[0].typo_nested" ignored`,
 		`unknown config key "keybindings.shell.typo_binding" ignored`,
@@ -288,7 +278,7 @@ func TestLoad_InvalidYAMLReturnsError(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	writeConfig(t, configHome, "editor: [unterminated")
+	writeConfig(t, configHome, "ui: [unterminated")
 
 	_, err := Load()
 	if err == nil {
@@ -351,7 +341,7 @@ func TestLoad_UnreadableConfigReturnsError(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	path := writeConfig(t, configHome, "editor:\n  command: nano\n")
+	path := writeConfig(t, configHome, "ui:\n  theme: catppuccin-latte\n")
 	if err := os.Chmod(path, 0o000); err != nil {
 		t.Fatalf("Chmod returned error: %v", err)
 	}
@@ -373,7 +363,7 @@ func TestLoadWithOptions_ExplicitPathOverridesDefaultLookup(t *testing.T) {
 
 	explicitDir := t.TempDir()
 	explicitPath := filepath.Join(explicitDir, "custom.yaml")
-	if err := os.WriteFile(explicitPath, []byte("editor:\n  command: nano\n"), 0o644); err != nil {
+	if err := os.WriteFile(explicitPath, []byte("ui:\n  theme: catppuccin-latte\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}
 
@@ -385,8 +375,8 @@ func TestLoadWithOptions_ExplicitPathOverridesDefaultLookup(t *testing.T) {
 	if result.Path != explicitPath {
 		t.Fatalf("expected explicit config path %q, got %q", explicitPath, result.Path)
 	}
-	if result.Config.Editor.Command != "nano" {
-		t.Fatalf("expected explicit config override, got %q", result.Config.Editor.Command)
+	if result.Config.UI.Theme != "catppuccin-latte" {
+		t.Fatalf("expected explicit config override, got %q", result.Config.UI.Theme)
 	}
 }
 
@@ -432,11 +422,9 @@ func TestLoadWithOptions_RelativePathResolvesAgainstProcessCWD(t *testing.T) {
 	// that the loader accepts and reads it — confirming the resolution contract:
 	// callers (main.go) normalise relative paths to absolute before calling
 	// LoadWithOptions, and LoadWithOptions must not re-interpret them.
-	t.Setenv("EDITOR", "vi")
-
 	explicitDir := t.TempDir()
 	absPath := filepath.Join(explicitDir, "relative-test.yaml")
-	if err := os.WriteFile(absPath, []byte("editor:\n  command: emacs\n"), 0o644); err != nil {
+	if err := os.WriteFile(absPath, []byte("ui:\n  theme: catppuccin-latte\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -449,8 +437,8 @@ func TestLoadWithOptions_RelativePathResolvesAgainstProcessCWD(t *testing.T) {
 	if result.Path != absPath {
 		t.Fatalf("expected resolved path %q, got %q", absPath, result.Path)
 	}
-	if result.Config.Editor.Command != "emacs" {
-		t.Fatalf("expected editor command from config file, got %q", result.Config.Editor.Command)
+	if result.Config.UI.Theme != "catppuccin-latte" {
+		t.Fatalf("expected the theme of the config file, got %q", result.Config.UI.Theme)
 	}
 
 	// Also verify that a path with a leading "./" (relative form that
@@ -474,7 +462,6 @@ func TestLauncherOverride_EmptyArgsClearsBuiltinArgs(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	t.Setenv("EDITOR", "vim")
 	writeConfig(t, configHome, strings.TrimSpace(`
 launcher:
   definitions:
@@ -509,7 +496,6 @@ func TestLauncherOverride_AbsentArgsPreservesBuiltinArgs(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	t.Setenv("EDITOR", "vim")
 	writeConfig(t, configHome, strings.TrimSpace(`
 launcher:
   definitions:
@@ -543,7 +529,6 @@ func TestLauncherOverride_AbsentCommandPreservesBuiltinCommand(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	t.Setenv("EDITOR", "vim")
 	writeConfig(t, configHome, strings.TrimSpace(`
 launcher:
   definitions:
@@ -582,7 +567,6 @@ func TestLauncherOverride_NewActionNameAppends(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("HOME", configHome)
-	t.Setenv("EDITOR", "vim")
 	writeConfig(t, configHome, strings.TrimSpace(`
 launcher:
   definitions:
@@ -602,7 +586,7 @@ launcher:
 	}
 
 	// All built-ins must still be present.
-	for _, builtIn := range []string{"editor", "nvim", "opencode", "shell-command"} {
+	for _, builtIn := range []string{"nvim", "opencode", "shell-command"} {
 		if _, ok := launchers[builtIn]; !ok {
 			t.Fatalf("expected built-in launcher %q to still be present after appending new action", builtIn)
 		}
@@ -616,9 +600,9 @@ launcher:
 	if custom.Command != "my-tool" {
 		t.Fatalf("expected my-custom-tool command to be my-tool, got %q", custom.Command)
 	}
-	// Total count: 4 built-ins + 1 new.
-	if len(result.Config.Launcher.Definitions) != 5 {
-		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	// Total count: 3 built-ins + 1 new.
+	if len(result.Config.Launcher.Definitions) != 4 {
+		t.Fatalf("expected 4 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
 

@@ -11,8 +11,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
-	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 // watchedRepository gives a tracked repository the optional change watch. The
@@ -292,9 +292,9 @@ func TestALoadAStoreChangeStartedLandsUnderAnOverlay(t *testing.T) {
 	}
 }
 
-// An overlay consumes keys and the messages of its own modal. A mutation result
-// is neither, and its handler is the only thing that reports the write.
-func TestMutationResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayCloses(t *testing.T) {
+// An overlay consumes keys and the messages of its own modal. The result of a
+// save is neither, and its handler is the only thing that reports the write.
+func TestSaveResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayCloses(t *testing.T) {
 	t.Parallel()
 
 	for name, runtime := range map[string]RuntimeOptions{
@@ -307,15 +307,16 @@ func TestMutationResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayC
 			repo := newWatchedRepository()
 			m, _ := watchedModel(t, repo, runtime)
 
+			m = withEditorOn(m, issueeditmode.KindCommentAdd, "tm-1")
 			m.showHelp = true
 			mark := repo.CallCount()
-			m = applyMessages(t, m, []tea.Msg{mutationResultMsg{kind: mutationComment, issueID: "tm-1"}})
+			m = applyMessages(t, m, []tea.Msg{editorSavedMsg{wrote: true}})
 			if m.storeWatched() {
 				m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
 			}
 
 			if !m.toast.Visible() || !strings.Contains(m.toast.View(), "Added comment to tm-1") {
-				t.Errorf("the overlay swallowed the mutation result: toast = %q", m.toast.View())
+				t.Errorf("the overlay swallowed the result of the save: toast = %q", m.toast.View())
 			}
 			if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 0 {
 				t.Errorf("board reads under the overlay = %d, want 0", got)
@@ -329,23 +330,6 @@ func TestMutationResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayC
 				t.Errorf("board reads once the overlay closed = %d, want 1", got)
 			}
 		})
-	}
-}
-
-// A dialog that opened over an overlay would replace the modal on screen.
-func TestCatalogResultUnderAnOverlayOpensNoDialog(t *testing.T) {
-	t.Parallel()
-
-	repo := newWatchedRepository()
-	m, _ := watchedModel(t, repo, RuntimeOptions{})
-
-	m.pendingDialog = pendingDialogGuard{active: true, kind: mutationStatus}
-	m.showHelp = true
-	m = applyMessages(t, m, []tea.Msg{mutationCatalogsLoadedMsg{kind: mutationStatus}})
-
-	if m.showActionModal || m.pendingDialog.active {
-		t.Errorf("a status dialog opened or stayed pending under the help overlay (open = %v, pending = %v)",
-			m.showActionModal, m.pendingDialog.active)
 	}
 }
 
@@ -363,13 +347,10 @@ func TestOneCommentSubmitIsOneBoardRead(t *testing.T) {
 
 			repo := newWatchedRepository()
 			m, _ := watchedModel(t, repo, runtime)
-			// The modal is opened without its Init: a drain would follow the
-			// cursor blink of the input for good.
-			m.actionState = buildMutationDialog(mutationComment, domain.IssueSummary{ID: "tm-1"}, nil, nil, nil)
-			m.showActionModal = true
+			m = withEditorOn(m, issueeditmode.KindCommentAdd, "tm-1")
 
 			mark := repo.CallCount()
-			m = applyMessages(t, m, []tea.Msg{modal.SubmitMsg{Values: map[string]string{"body": "seen"}}})
+			m = applyMessages(t, m, []tea.Msg{issueeditmode.SubmitMsg{After: issueeditmode.Values{Text: "seen"}}})
 			if m.storeWatched() {
 				m = applyMessages(t, m, []tea.Msg{storeChangedMsg{}})
 			}
@@ -474,8 +455,9 @@ func TestAWriteWhoseSignalTheEndingWatchDroppedIsRead(t *testing.T) {
 	m, _ := watchedModel(t, repo, RuntimeOptions{})
 
 	mark := repo.CallCount()
+	m = withEditorOn(m, issueeditmode.KindCommentAdd, "tm-1")
 	m = applyMessages(t, m, []tea.Msg{
-		mutationResultMsg{kind: mutationComment, issueID: "tm-1"},
+		editorSavedMsg{wrote: true},
 		storeWatchEndedMsg{},
 	})
 

@@ -43,8 +43,6 @@ type Config struct {
 	CancelText     string
 	MinWidth       int
 	HideButtons    bool
-	Required       bool
-	SubmitOnEnter  bool
 }
 
 // SubmitMsg is emitted when confirm is triggered.
@@ -193,48 +191,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case key.Matches(msg, m.keys.Enter...):
 			if m.focusedInput >= 0 {
-				if m.config.SubmitOnEnter {
-					if m.hasInputs && m.config.Required {
-						for _, input := range m.inputs {
-							if input.Value() == "" {
-								return m, nil
-							}
-						}
-					}
-					return m, submitCmd(m.values())
-				}
 				m = m.nextField()
 				return m, nil
 			}
 			if m.focusedField == FieldCancel {
 				return m, func() tea.Msg { return CancelMsg{} }
 			}
-			if m.hasInputs && m.config.Required {
-				for _, input := range m.inputs {
-					if input.Value() == "" {
-						return m, nil
-					}
-				}
-			}
 			return m, submitCmd(m.values())
 		case key.Matches(msg, m.keys.Escape...):
 			return m, func() tea.Msg { return CancelMsg{} }
 		case msg.String() == "y":
 			if m.focusedInput == -1 || !m.hasInputs {
-				if m.hasInputs && m.config.Required {
-					for _, input := range m.inputs {
-						if input.Value() == "" {
-							return m, nil
-						}
-					}
-				}
 				return m, submitCmd(m.values())
 			}
 		case msg.String() == "n":
 			if m.focusedInput == -1 || !m.hasInputs {
-				if !m.config.Required {
-					return m, func() tea.Msg { return CancelMsg{} }
-				}
+				return m, func() tea.Msg { return CancelMsg{} }
 			}
 		}
 	case tea.WindowSizeMsg:

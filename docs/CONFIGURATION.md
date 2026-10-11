@@ -29,16 +29,8 @@ Load semantics:
 
 The model is intentionally small and only covers app-shell concerns:
 
-- `Editor.Command`
-  - Defaults to `$EDITOR` when set.
-  - Falls back to `vi` when `$EDITOR` is unset/empty.
-  - `editor.command` in `config.yaml` overrides both.
-  - The value is split on whitespace with single/double-quote grouping and no backslash
-    escaping, so `code --wait` works; the edit document path is appended as the last
-    argument. An unclosed quote is an error.
 - `Launcher.Definitions`
-  - Defaults to four built-in launcher actions:
-    - `editor` → mirrors `editor.command`.
+  - Defaults to three built-in launcher actions:
     - `nvim` → launches `nvim` with a read-only issue context buffer. The issue fields
       reach it through `env` as `TASKMGR_UI_ISSUE_*` and the Ex commands read them back
       as `$VAR`; a `+cmd` argument is an Ex command line, so a placeholder there would be
@@ -46,11 +38,6 @@ The model is intentionally small and only covers app-shell concerns:
     - `opencode` → launches `opencode run` with issue metadata args/env.
     - `shell-command` → launches `sh -lc` with a simple formatted issue-context
       print command.
-  - **`editor` is not launched as a definition.** It exists so `--check-config` does not
-    warn that it is unlaunchable, and `syncEditorLauncher` keeps it in step with
-    `editor.command`. The edit key runs `editor.command` directly through
-    `internal/launcher/editor`. Change the editor with `editor.command`, never with a
-    `launcher.definitions` override.
   - Each definition supports these YAML keys:
     - `action` (required unique action key)
     - `command` (required executable/template string)
@@ -65,7 +52,7 @@ The model is intentionally small and only covers app-shell concerns:
       leaves the field nil in the override struct, so the built-in value is
       preserved; writing `args: []` produces a non-nil empty slice that
       **replaces** the built-in args (use this to explicitly clear defaults)
-  - Only the four built-in action names can be launched — there is no keybinding
+  - Only the three built-in action names can be launched — there is no keybinding
     action for any other. Startup warns by name for a definition nothing can
     start; override a built-in instead of appending a new action.
 - `UI.ShowModeSwitcherHelp`
@@ -88,9 +75,6 @@ The model is intentionally small and only covers app-shell concerns:
 Example config:
 
 ```yaml
-editor:
-  command: nvim
-
 launcher:
   definitions:
     - action: opencode
@@ -178,14 +162,15 @@ under `use:` the packages it takes them from.
 A file still carrying a `hooks:` block is recorded as a config **defect**, and a
 defect fails every mutation while leaving reads intact. The board, detail and
 search render normally and every write is refused — the app looks healthy and is
-read-only. Closing an issue reports:
+read-only. A close leaves the issue editor open with the refusal above the form:
 
 ```
-close issue failed: close issue: unknown: <store>/.tasks/config.yaml: the `hooks:` key was withdrawn: …
+close issue: unknown: <store>/.tasks/config.yaml: the `hooks:` key was withdrawn: …
 ```
 
-Run `taskmgr package list` for the untruncated text: a defect prints as a broken
-row naming the key and the file it is in. The toast clips at terminal width.
+Run `taskmgr package list` for the full text: a defect prints as a broken
+row naming the key and the file it is in. The editor cuts the refusal after 4 lines
+(`maxErrorLines`, `internal/ui/issueedit/issueedit.go`).
 
 Migrate by moving each hook entry into a package directory, adding it with
 `taskmgr package add`, then deleting the `hooks:` block from the file.
@@ -216,9 +201,12 @@ Supported actions by context:
 
 - `shell`
   - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `open_config`,
-    `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `edit_issue`,
-    `create_issue`, `update_issue`, `close_issue`, `comment_issue`, `launch_nvim`,
+    `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `create_issue`,
+    `update_issue`, `close_issue`, `comment_issue`, `save_edit`, `launch_nvim`,
     `launch_opencode`, `launch_shell_command`
+  - `save_edit` acts in the issue editor only. The keys that move between the fields there —
+    `tab`, `shift+tab`, the arrows, `enter`, `pgup`, `pgdown` — are built in and follow no
+    binding. Of the other `shell` actions only `quit`, `toggle_help` and `escape` act there.
 - `board`
   - `move_left`, `move_right`, `move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
     `page_down`, `open_detail`, `reload`
@@ -231,7 +219,9 @@ Supported actions by context:
   - The configuration screen reads `move_up` and `move_down` from this context. The keys that
     step a value there, `left`, `right` and `enter`, are built in and follow no binding.
 - `detail`
-  - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`
+  - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`, `delete_comment`
+  - `delete_comment` acts while the comments have the focus. `left`, `right` and `enter` in
+    Detail are built in and follow no binding.
 - `modal`
   - `next`, `prev`, `left`, `right`, `enter`, `escape`
 
@@ -257,8 +247,7 @@ Notes:
 - When the active store's project path does not exist, a launcher whose `workdir` is
   blank or uses `{{project.root}}` is refused with a toast rather than exec'd in a
   directory that is gone, and the Detail footer says the launchers are off. A launcher
-  with a `workdir` of its own still runs. The edit key is unaffected: it writes a temp
-  document and runs the editor there.
+  with a `workdir` of its own still runs.
 - In `command` and `workdir` an issue field may only *extend* what the operator wrote: the value
   must not start with one, and at launch a field carrying `/`, `\` or a `..` segment refuses the
   launch. `command: "/opt/tools/run-{{issue.id}}"` is fine; `command: "{{issue.assignee}}"` is
