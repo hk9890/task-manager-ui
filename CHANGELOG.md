@@ -6,6 +6,62 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
+## v0.20.0
+
+- **Action required if you edit an issue with `alt+e`.** The key, the handoff
+  to your `$EDITOR` and the `editor.command` config key are gone. Edit the
+  issue with `alt+u`: the new issue editor also holds the description. A
+  config that sets `editor.command`, or that binds the `edit_issue` action,
+  still starts, with a startup warning for each: delete the entry.
+- **Action required if your config binds `ctrl+s` in the shell context or
+  `alt+d` in the detail context.** `ctrl+s` now saves in the issue editor and
+  `alt+d` deletes a comment. A config that already binds one of them to
+  another action of that context fails startup and `--check-config`, for
+  example with `key "ctrl+s" conflicts between actions ... in shell context`.
+  Rebind one of the two; the new actions are `save_edit` in `shell` and
+  `delete_comment` in `detail`.
+- **Changed: one issue editor replaces the dialogs.** `alt+n`, `alt+u`,
+  `delete` and `alt+a` now open a full screen and no longer a box over the
+  screen. It has a row for the title, the status, the type, the priority, the
+  assignee and the labels, and the description below them as text of many
+  lines. `tab`, `shift+tab`, `up` and `down` move between the fields, and in
+  the description `up` and `down` move the cursor until its first or its last
+  line. `left` and `right` step the status, the type and the priority through
+  the values of the store. `ctrl+s` or the `Save` button saves, and `esc` or
+  `Cancel` leaves without a question. Only the fields you changed are written.
+  `delete` opens the editor with the status on `closed` and the cursor on the
+  close reason, and writes nothing until you save. For a comment the editor
+  has the text alone. The dialogs for the status and for the priority alone
+  are gone.
+  [`docs/user-guide/key-bindings.md`](https://github.com/hk9890/task-manager-ui/blob/v0.20.0/docs/user-guide/key-bindings.md#issue-editor)
+  has all the keys.
+- **Fixed: the dialogs to create and to update an issue did not fit a terminal
+  of fewer than about 39 rows.** On a terminal of 30 rows the labels, the
+  description and the buttons were not drawn. The issue editor fits a terminal
+  of 80 columns and 24 rows.
+- **Changed: a refused save keeps the editor open.** When the store refuses a
+  save, for example for an empty title or a description that a store hook
+  rejects, the editor stays open with what you typed, and the refusal stands
+  in red above the form. Correct it and save again.
+- **Added: edit and delete a comment.** On the detail page `right` from the
+  content moves to the comments, and `up` and `down` select one. `enter` edits
+  the selected comment in the issue editor, and `alt+d` deletes it after a yes
+  in a dialog. An edited comment gets a new time and your name, so it moves to
+  the top. A rule now stands between two comments.
+- **Added: buttons on the detail page.** `edit` stands at the right end of the
+  line with the ID of the issue, `add` on the `Comments` heading, and `edit`
+  and `delete` on the selected comment. Each shows the key that does the same,
+  and a click presses it.
+- **Changed: the Metadata pane of the detail page only shows the fields.** It
+  takes no focus, no key and no click: `left` and `right` move between the
+  dependencies, the content and the comments, and `enter` on the status or the
+  priority no longer opens a dialog. The pane does not scroll. When the screen
+  is too short for all its rows, as on a terminal of 80 columns and 24 rows,
+  it ends on `… (N more)`. It is 2 columns narrower, and the content has those
+  columns.
+- Changed: the detail page does not draw the line of the view tabs. `tab` and
+  `shift+tab` still leave it for a tab.
+
 ## v0.19.1
 
 - **Security — an escape sequence in an issue reached your terminal.** The app
