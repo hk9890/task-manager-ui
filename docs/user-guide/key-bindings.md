@@ -186,7 +186,8 @@ alone.
 - While a save runs the buttons read `Saving…` and only `ctrl+c` and help do
   anything.
 - Pasting with the terminal's own paste types the text. `alt+h` and `ctrl+c`
-  work as everywhere; every other `alt+` key does nothing here.
+  work as everywhere; every other `alt+` letter does nothing here. `alt+left`
+  and `alt+right` move by a word, `alt+backspace` and `alt+delete` delete one.
 - A tab character in a description you change is saved as 4 spaces.
 
 `ctrl+s` can be rebound (`save_edit`); the other keys of the table are built in

@@ -58,8 +58,8 @@ Structured records include at least:
 - `component`, on records emitted through a component logger: `startup`
   (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search`, `storepicker`
   (`internal/app/model.go`).
-  Shell-level records — the issue-edit failures and the health check below — go through
-  the root logger and carry no `component` key.
+  Shell-level records — the health check below among them — go through the root logger
+  and carry no `component` key.
 
 To attribute a session safely in a collected set of log files, use `session_id`
 together with `project_root` and `build_version`. Startup records inherit those
