@@ -55,8 +55,10 @@ carries its `vX.Y.Z` section of this file as its notes.
   lines. The same holds for the create-store form, every toast, the config
   path on the configuration screen and the error of a board column or of the
   detail view: a directory name with an escape sequence in it reached the
-  terminal from the create-store form. Only the characters that reorder text
-  are dropped; a joiner in an emoji or a script stays.
+  terminal from the create-store form. A format character that shapes nothing,
+  such as a right-to-left override or a soft hyphen, is dropped; a joiner in
+  an emoji or a script stays. A long error on the detail view wraps, and a
+  toast draws at most 6 lines.
 - **Changed: the store search waits until you stop typing.** A search runs 150 ms
   after the last key, so a typed word is one search and not one for each
   letter. `enter` pressed inside that time opens the result of what you typed.

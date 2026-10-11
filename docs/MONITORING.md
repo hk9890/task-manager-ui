@@ -104,7 +104,9 @@ These, all expected:
 - `temp cleanup: removed stale temp file` (INFO, `internal/app/services.go`) — the
   post-startup sweep armed by `Model.Init` found an old edit temp file and removed it.
 - `switched task-manager store` (INFO) — a store opened or created from the picker became
-  active, with `store`, `store_path` and `project_path`. From this record on, the startup
+  active, with `store`, `store_path` and `project_path`. `store` is the name as the menu bar
+  draws it: cleaned, and empty for a directory name that draws no cell. The two paths are raw,
+  as every path in a record is. From this record on, the startup
   resolution record no longer names the store in use; read the latest of the two.
 - the Done-column load-more trace (DEBUG, `internal/mode/board/model.go`) — only when the
   column actually pages, and only under `--debug`.

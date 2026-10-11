@@ -123,7 +123,13 @@ func Render(state State) string {
 	// in the header signals the in-flight request.
 
 	if strings.TrimSpace(state.Error) != "" {
-		return fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, displaytext.OneLine(state.Error))
+		width := state.Width
+		if width <= 0 {
+			width = defaultDetailWidth
+		}
+		// The error is the store's own text and can be longer than the view.
+		reason := textutil.WrapAtSpaces("Error: "+displaytext.OneLine(state.Error), width)
+		return fmt.Sprintf("Failed to load details for %s.\n%s", selected, strings.Join(reason, "\n"))
 	}
 
 	detail := state.Detail

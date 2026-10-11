@@ -35,10 +35,9 @@ func (m *Model) openStoreForm(kind storepickermode.StoreKind, dir string) tea.Cm
 		prefix = m.services.StoreCatalog.DerivePrefix(dir)
 	}
 
-	// The form draws the directory and prefills from it; storeForm.dir keeps
-	// the raw path the store is created in.
+	// The form draws the directory and prefills the name from it; storeForm.dir
+	// keeps the raw path the store is created in.
 	shown := displaytext.OneLine(dir)
-	prefix = displaytext.OneLine(prefix)
 
 	cfg := modal.Config{ConfirmText: "Create", MinWidth: 72}
 	switch kind {

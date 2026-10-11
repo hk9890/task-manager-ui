@@ -9,20 +9,31 @@ import (
 	"unicode"
 )
 
-const byteOrderMark rune = 0xfeff
+// The format characters OneLine keeps. A joiner shapes an emoji sequence or a
+// script, and the tag characters spell the region of a flag.
+const (
+	zeroWidthNonJoiner rune = 0x200c
+	zeroWidthJoiner    rune = 0x200d
+	firstTag           rune = 0xe0020
+	lastTag            rune = 0xe007f
+)
+
+func shapes(r rune) bool {
+	return r == zeroWidthNonJoiner || r == zeroWidthJoiner || (r >= firstTag && r <= lastTag)
+}
 
 // OneLine returns s as one drawable line: each control character and each
 // line or paragraph separator becomes a space, because a newline adds a line
-// to the frame and an escape sequence runs in the terminal. Each bidirectional
-// control is dropped, because it changes the order in which a terminal draws
-// the cells beside it, and so is the byte order mark. Every other format
-// character stays: a joiner shapes an emoji sequence or a script.
+// to the frame and an escape sequence runs in the terminal. Each format
+// character that shapes nothing is dropped: a bidirectional control changes
+// the order in which a terminal draws the cells beside it, and a soft hyphen
+// or a number mark is measured as no cell and drawn by many terminals as one.
 func OneLine(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
 		case unicode.IsControl(r), unicode.In(r, unicode.Zl, unicode.Zp):
 			return ' '
-		case unicode.Is(unicode.Bidi_Control, r), r == byteOrderMark:
+		case unicode.Is(unicode.Cf, r) && !shapes(r):
 			return -1
 		}
 		return r

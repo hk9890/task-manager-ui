@@ -540,8 +540,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
     `renderError`.
 
   A new place that draws such a string calls `displaytext.OneLine` itself. A log record is not
-  cleaned: it holds what the app holds, so a path there is raw, and a store's name is the cleaned
-  one `StoreName` returned.
+  cleaned ([MONITORING.md](MONITORING.md#what-a-healthy-run-logs-after-startup)).
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.
 
