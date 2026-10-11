@@ -230,12 +230,85 @@ func TestNoControlCharacterOfTheSourceReachesTheTerminal(t *testing.T) {
 		"plain\x1b[2Jtext\rmore\vend\r\nsecond line",
 		"# Heading\r\n\r\npara\x1b[2Jgraph\rmore\vend",
 	} {
-		got := textutil.StripANSI(NewRenderer().RenderReadOnly(body, 40))
+		rendered := NewRenderer().RenderReadOnly(body, 40)
+		// StripANSI takes the sequence of the source away with the styles, so
+		// the rendered text is searched for it first.
+		if strings.Contains(rendered, "\x1b[2J") {
+			t.Errorf("the escape sequence of the source reaches the terminal: %q", rendered)
+		}
+		got := textutil.StripANSI(rendered)
 		for _, r := range got {
 			if r != '\n' && r < ' ' {
 				t.Errorf("control character %q reaches the terminal: %q", r, got)
 			}
 		}
+	}
+}
+
+// TestAWrappedLineKeepsItsCombiningMarks: a mark or a variation selector
+// behind an ASCII character has no width of its own, and a line that wrapped
+// lost it: an accent written as two code points, the frame of a keycap. The
+// characters are built from their code points, so the file shows them.
+func TestAWrappedLineKeepsItsCombiningMarks(t *testing.T) {
+	t.Parallel()
+
+	acute, keycap := string(rune(0x0301)), string([]rune{0xfe0f, 0x20e3})
+	body := "## T\n\ncafe" + acute + " re" + acute + "sume" + acute + " de" + acute + "ja vu and then some more words, " +
+		"press 1" + keycap + " or #" + keycap + " to go on with the rest of it"
+
+	want := ink(renderedLines(t, body, 2000))
+	if !strings.Contains(want, acute) || !strings.Contains(want, keycap) {
+		t.Fatalf("fixture: the marks are not in the text: %q", want)
+	}
+	for width := 20; width <= 80; width++ {
+		if got := ink(renderedLines(t, body, width)); got != want {
+			t.Fatalf("width %d: the text changed:\n%q\nwant\n%q", width, got, want)
+		}
+	}
+}
+
+// TestAWordThatStartsWithPunctuationIsNotCut: only the space that ends inline
+// code holds the punctuation behind it. "./a" and ".gitignore" are words, and
+// a line of them was cut inside one.
+func TestAWordThatStartsWithPunctuationIsNotCut(t *testing.T) {
+	t.Parallel()
+
+	const words = "See .gitignore .golangci.yml .mise.toml .goreleaser.yaml and ./internal/app/... ./cmd/taskmgr-ui/... " +
+		"for the rest, then :warning: !important ?query and (the) end."
+	const code = "Run `go test`, then `go vet`, then `mise run ci`, and read what each of the three prints (`stdout`)."
+	for width := 30; width <= 100; width++ {
+		lines := renderedLines(t, "## T\n\n"+words, width)
+		if got, want := strings.Fields(strings.Join(lines[3:], " ")), strings.Fields(words); !slices.Equal(got, want) {
+			t.Fatalf("width %d: a word is cut: %q", width, lines[3:])
+		}
+		for _, line := range renderedLines(t, "## T\n\n"+code, width)[3:] {
+			if text := strings.TrimSpace(line); strings.HasPrefix(text, ",") || strings.HasPrefix(text, ")") {
+				t.Fatalf("width %d: a line starts with the punctuation behind inline code: %q", width, line)
+			}
+		}
+	}
+}
+
+// TestALineOfSpacesWiderThanThePaneStaysALine: pasted terminal output pads
+// its blank lines, and such a line was dropped from its block.
+func TestALineOfSpacesWiderThanThePaneStaysALine(t *testing.T) {
+	t.Parallel()
+
+	lines := renderedLines(t, "```\nfirst\n"+strings.Repeat(" ", 120)+"\nlast\n```", 40)
+	first := slices.IndexFunc(lines, func(line string) bool { return strings.Contains(line, "first") })
+	if first < 0 || first+2 >= len(lines) || strings.TrimSpace(lines[first+1]) != "" || !strings.Contains(lines[first+2], "last") {
+		t.Fatalf("expected one blank line between the two code lines, got %q", lines)
+	}
+}
+
+// TestInlineCodeAcrossALineEndFlowsWithItsParagraph: the line end inside
+// inline code is no soft break of a text node, and it stayed a line end.
+func TestInlineCodeAcrossALineEndFlowsWithItsParagraph(t *testing.T) {
+	t.Parallel()
+
+	text := strings.Join(renderedLines(t, "# H\n\nRun the command `go test\n./...` to check that it works.", 78), "\n")
+	if !strings.Contains(text, "go test ./...") {
+		t.Errorf("the inline code kept its line end:\n%s", text)
 	}
 }
 

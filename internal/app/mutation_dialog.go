@@ -51,9 +51,12 @@ type mutationDialogState struct {
 	statusNames map[string]struct{}
 	typeNames   map[string]struct{}
 	labelNames  map[string]struct{}
-	statusList  string
-	typeList    string
-	labelList   string
+	// The lists are the names as the dialog draws them, in its message and as
+	// the placeholder of an input: one cleaned line each. The maps hold the
+	// names as the store has them.
+	statusList string
+	typeList   string
+	labelList  string
 }
 
 // pendingDialogGuard tracks an in-flight async dialog-open so that a key
@@ -119,9 +122,9 @@ func buildMutationDialog(kind mutationKind, issue domain.IssueSummary, statuses 
 		statusNames: statusNames,
 		typeNames:   typeNames,
 		labelNames:  labelNames,
-		statusList:  strings.Join(statusList, ", "),
-		typeList:    strings.Join(typeList, ", "),
-		labelList:   strings.Join(labelList, ", "),
+		statusList:  displaytext.OneLine(strings.Join(statusList, ", ")),
+		typeList:    displaytext.OneLine(strings.Join(typeList, ", ")),
+		labelList:   displaytext.OneLine(strings.Join(labelList, ", ")),
 	}
 }
 
@@ -206,7 +209,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 	case mutationCreate:
 		return modal.NewWithKeys(modal.Config{
 			Title:       "Create Issue",
-			Message:     displaytext.Lines(fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)"))),
+			Message:     fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
 			ConfirmText: "Create",
 			MinWidth:    92,
 			Required:    false,
@@ -222,14 +225,14 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 	case mutationUpdate:
 		return modal.NewWithKeys(modal.Config{
 			Title:       displaytext.OneLine(fmt.Sprintf("Update Issue %s", state.issue.ID)),
-			Message:     displaytext.Lines(fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)"))),
+			Message:     fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
 			ConfirmText: "Update",
 			MinWidth:    92,
 			Required:    false,
 			Inputs: []modal.InputConfig{
 				{Key: "title", Label: "Title", Value: state.issue.Title, Placeholder: "Leave unchanged"},
-				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
-				{Key: "type", Label: "Type", Value: state.issue.Type, Placeholder: emptyFallback(state.typeList, state.issue.Type)},
+				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, displaytext.OneLine(state.issue.Status))},
+				{Key: "type", Label: "Type", Value: state.issue.Type, Placeholder: emptyFallback(state.typeList, displaytext.OneLine(state.issue.Type))},
 				{Key: "priority", Label: "Priority", Value: strconv.Itoa(state.issue.Priority), Placeholder: "0-4"},
 				{Key: "assignee", Label: "Assignee", Value: state.issue.Assignee, Placeholder: "username"},
 				{Key: "labels", Label: "Labels", Value: strings.Join(state.issue.Labels, ","), Placeholder: "comma,separated"},
@@ -261,13 +264,13 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 	case mutationStatus:
 		return modal.NewWithKeys(modal.Config{
 			Title:         displaytext.OneLine(fmt.Sprintf("Update Status %s", state.issue.ID)),
-			Message:       displaytext.Lines(fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)"))),
+			Message:       fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)")),
 			ConfirmText:   "Update",
 			MinWidth:      72,
 			Required:      true,
 			SubmitOnEnter: true,
 			Inputs: []modal.InputConfig{
-				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, state.issue.Status)},
+				{Key: "status", Label: "Status", Value: state.issue.Status, Placeholder: emptyFallback(state.statusList, displaytext.OneLine(state.issue.Status))},
 			},
 		}, modal.BindingsFromConfig(keys))
 	case mutationPriority:

@@ -60,13 +60,17 @@ func TestATabInABodyKeepsTheFrameWhole(t *testing.T) {
 	}
 }
 
+// rightToLeftOverride is built from its code point: written into a string
+// literal it is invisible, and it reorders the line it stands in.
+var rightToLeftOverride = string(rune(0x202e))
+
 // TestAControlCharacterInAnIssueFieldKeepsTheFrameWhole: every field of an
 // issue is text from outside. A line feed in one added a row to the frame, and
 // an escape sequence would run in the terminal.
 func TestAControlCharacterInAnIssueFieldKeepsTheFrameWhole(t *testing.T) {
 	t.Parallel()
 
-	for _, dirt := range []string{"\t", "\n", "\r", "\x1b[2J", "‮"} {
+	for _, dirt := range []string{"\t", "\n", "\r", "\x1b[2J", rightToLeftOverride} {
 		dirty := "a" + dirt + "b"
 		reference := []domain.IssueReference{{ID: "tm-" + dirty, Title: dirty, Type: "task", Priority: 2, Status: "open"}}
 		detail := domain.IssueDetail{

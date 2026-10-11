@@ -545,8 +545,8 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   - every field of an issue, where it is drawn: `issuerow`, `renderhelpers.CompactIssueID` and
     the default branch of `renderhelpers.CompactIssueState` for a title, an ID and a status in a
     row; `Render`, `contentHeaderMetaRow`, `renderContentPaneLines`, `renderCompact`,
-    `renderMetadataPrefixedLine` and `renderComments` in `internal/ui/detail`; the title and the
-    message of a dialog (`internal/app/mutation_dialog.go`);
+    `renderMetadataPrefixedLine` and `renderComments` in `internal/ui/detail`; the title, the
+    message and the input placeholders of a dialog (`internal/app/mutation_dialog.go`);
   - the source of a body, in `markdown.Renderer.RenderReadOnly` and `markdown.RenderPlain`
     (`drawable`), which also expands a TAB to its 4-cell stop: a TAB measures as no cell and the
     terminal draws it to the next stop, so a line with one runs past its pane.

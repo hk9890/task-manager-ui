@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/x/ansi"
@@ -120,9 +121,9 @@ var (
 // two documents, or a panic in the walk. Building a renderer per call was what
 // used to keep them apart; memoizing it removed that isolation.
 //
-// The mutex is per (width, background), so renders at different widths still
-// run in parallel, and the memo above means a repeated body does not reach here
-// at all.
+// The mutex is per (wrap width, background). Every body is rendered by the
+// renderer that wraps nothing, so two first renders of a theme wait for each
+// other; the memo above means a repeated body does not reach here at all.
 type lockedRenderer struct {
 	mu       sync.Mutex
 	renderer *glamour.TermRenderer
@@ -402,6 +403,9 @@ var markdownParser = goldmark.New(goldmark.WithExtensions(extension.GFM, extensi
 // joinSoftBreaks replaces the line end inside each top-level paragraph with a
 // space, so a paragraph its author wrapped by hand flows to the pane width.
 // glamour joins those lines only while it wraps, and it wraps nothing here.
+//
+// A line end inside inline code is no soft break of a text node: it is the
+// last byte of a raw segment of the code, and it is joined the same way.
 func joinSoftBreaks(content string) string {
 	source := []byte(content)
 	document := markdownParser.Parse(text.NewReader(source))
@@ -410,10 +414,18 @@ func joinSoftBreaks(content string) string {
 			continue
 		}
 		_ = ast.Walk(block, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-			if inline, ok := node.(*ast.Text); ok && entering && inline.SoftLineBreak() {
-				if at := bytes.IndexByte(source[inline.Segment.Stop:], '\n'); at >= 0 {
-					source[inline.Segment.Stop+at] = ' '
+			inline, ok := node.(*ast.Text)
+			if !ok || !entering {
+				return ast.WalkContinue, nil
+			}
+			start, stop := inline.Segment.Start, inline.Segment.Stop
+			switch {
+			case inline.SoftLineBreak():
+				if at := bytes.IndexByte(source[stop:], '\n'); at >= 0 {
+					source[stop+at] = ' '
 				}
+			case inline.IsRaw() && stop > start && source[stop-1] == '\n':
+				source[stop-1] = ' '
 			}
 			return ast.WalkContinue, nil
 		})
@@ -495,6 +507,11 @@ func (c cell) hasBackground() bool { return strings.Contains(c.style, ";48;") }
 
 // styledCells splits a rendered line into its cells. A sequence that is not a
 // style and draws nothing is dropped; glamour writes none.
+//
+// ansi.DecodeSequence returns an ASCII character alone, so the combining mark
+// or the variation selector behind one comes back as text with no width. It
+// stays with the cell before it: dropped, "e" + U+0301 lost its accent and a
+// keycap its frame on every line that wrapped.
 func styledCells(line string) []cell {
 	parser := ansi.GetParser()
 	defer ansi.PutParser(parser)
@@ -510,6 +527,8 @@ func styledCells(line string) []cell {
 			style = ""
 		case ansi.HasCsiPrefix(seq) && parser.Command() == 'm':
 			style += seq
+		case seq[0] >= utf8.RuneSelf && utf8.RuneStart(seq[0]) && len(cells) > 0:
+			cells[len(cells)-1].text += seq
 		}
 		line, state = line[n:], next
 	}
@@ -575,8 +594,14 @@ func wrapRenderedLine(line string, width int) []string {
 		}
 	}
 
-	var lines []string
-	for _, chunk := range wrapCells(cells[indent:], width-indent) {
+	chunks := wrapCells(cells[indent:], width-indent)
+	if len(chunks) == 0 {
+		// Nothing but spaces behind the prefix: the line stays a line.
+		return []string{renderCells(prefix)}
+	}
+
+	lines := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
 		lines = append(lines, renderCells(append(prefix, chunk...)))
 		prefix = hanging[:indent:indent]
 	}
@@ -626,14 +651,21 @@ func lineEnd(cells []cell, limit int) int {
 	return len(cells)
 }
 
-// breakable reports whether a line may end at cell i: at a space, unless the
-// next line would then start with closing punctuation. glamour pads inline
-// code with a space, so "`code`, and" reaches here as "code , and".
+// breakable reports whether a line may end at cell i: at a space, unless it is
+// the space glamour pads the end of inline code with and closing punctuation
+// follows it. "`code`, and" reaches here as "code , and", and the next line
+// would start with the comma. Any other space before such a character is a
+// break: "./a ./b" and ".gitignore .mise.toml" are words, not punctuation.
 func breakable(cells []cell, i int) bool {
 	if !cells[i].isSpace() {
 		return false
 	}
-	return i+1 == len(cells) || !strings.Contains(",.;:!?)", cells[i+1].text)
+	if i+1 == len(cells) {
+		return true
+	}
+	next := cells[i+1]
+	endsCode := cells[i].hasBackground() && !next.hasBackground()
+	return !endsCode || !strings.Contains(",.;:!?)", next.text)
 }
 
 // wordWidth is the width of the cells from start up to the next break.
