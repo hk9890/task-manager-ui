@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -48,7 +49,7 @@ func CompactIssueState(status string) string {
 		// and a status that carries a colour must carry one.
 		return "DFR"
 	default:
-		tok := NormalizeToken(status)
+		tok := NormalizeToken(displaytext.OneLine(status))
 		if tok == "" {
 			return "---"
 		}
@@ -80,7 +81,7 @@ func CompactIssueStateNarrow(status string) string {
 	case "deferred":
 		return "D"
 	default:
-		tok := NormalizeToken(status)
+		tok := NormalizeToken(displaytext.OneLine(status))
 		if tok == "" {
 			return "-"
 		}
@@ -120,7 +121,7 @@ func CompactIssueIDMuted(id string, maxWidth int) string {
 
 // CompactIssueID returns a compact display ID constrained by maxWidth.
 func CompactIssueID(id string, maxWidth int) string {
-	trimmed := strings.TrimSpace(id)
+	trimmed := strings.TrimSpace(displaytext.OneLine(id))
 	if lipgloss.Width(trimmed) <= maxWidth {
 		return trimmed
 	}

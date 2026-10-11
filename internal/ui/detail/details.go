@@ -100,7 +100,7 @@ type QuickActionLabels struct {
 
 // Render renders standalone issue detail metadata and content.
 func Render(state State) string {
-	selected := strings.TrimSpace(state.SelectionID)
+	selected := displaytext.OneLine(strings.TrimSpace(state.SelectionID))
 	if selected == "" {
 		return "No selected issue.\nSelect an issue on a browse tab first."
 	}
@@ -593,18 +593,19 @@ func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) i
 // the compact issue rows used on the board so the detail header reads consistently.
 // When the styled row would exceed width, it falls back to a width-bounded plain row.
 func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
+	id := displaytext.OneLine(emptyFallback(summary.ID, "(unknown)"))
 	meta := strings.Join([]string{
 		renderhelpers.CompactIssueTypeStyled(summary.Type),
 		renderhelpers.CompactPriorityStyled(summary.Priority),
 		renderhelpers.CompactIssueStateStyled(summary.Status),
-		styles.IssueIDMutedStyle.Render(emptyFallback(summary.ID, "(unknown)")),
+		styles.IssueIDMutedStyle.Render(id),
 	}, " ")
 	if width > 0 && lipgloss.Width(meta) > width {
 		plain := strings.Join([]string{
 			renderhelpers.CompactIssueType(summary.Type),
 			renderhelpers.CompactPriority(summary.Priority),
 			renderhelpers.CompactIssueState(summary.Status),
-			emptyFallback(summary.ID, "(unknown)"),
+			id,
 		}, " ")
 		return textutil.TruncateString(plain, width)
 	}
@@ -628,7 +629,7 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
 	// title, then a thin rule that visually separates the header from the body below.
 	upper = append(upper, contentHeaderMetaRow(detail.Summary, width))
-	upper = append(upper, textutil.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width))
+	upper = append(upper, textutil.TruncateString(displaytext.OneLine(emptyFallback(detail.Summary.Title, "(untitled)")), width))
 	upper = append(upper, contentHeaderRule(width))
 	upper = append(upper, "Description")
 
@@ -746,8 +747,8 @@ func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) 
 func renderCompact(detail domain.IssueDetail, width int) string {
 	out := make([]string, 0, 28)
 	out = append(out,
-		textutil.TruncateString(emptyFallback(detail.Summary.Title, "(untitled)"), width),
-		textutil.TruncateString(fmt.Sprintf("%s · %s", detail.Summary.ID, emptyFallback(detail.Summary.Status, "(unknown)")), width),
+		textutil.TruncateString(displaytext.OneLine(emptyFallback(detail.Summary.Title, "(untitled)")), width),
+		textutil.TruncateString(displaytext.OneLine(fmt.Sprintf("%s · %s", detail.Summary.ID, emptyFallback(detail.Summary.Status, "(unknown)"))), width),
 	)
 	metadata := renderMetadataRail(detail, width, MetadataFieldNone, false)
 	if len(metadata) > 0 {
@@ -781,27 +782,6 @@ func renderMarkdownPreviewLines(text, fallback string, width, maxLines int) []st
 func summarizeReferences(detail domain.IssueDetail, width int) []string {
 	line := fmt.Sprintf("Blocked by: %d  Blocks: %d  Related: %d  Children: %d", len(detail.BlockedBy), len(detail.Blocks), len(detail.Related), len(detail.Children))
 	return []string{textutil.TruncateString(line, width)}
-}
-
-func renderMultiline(text, fallback string, width int) []string {
-	trimmed := strings.Trim(text, "\n")
-	if strings.TrimSpace(trimmed) == "" {
-		return []string{fallback}
-	}
-	lines := strings.Split(trimmed, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			out = append(out, "")
-			continue
-		}
-		cleaned := strings.TrimRight(line, " \t")
-		out = append(out, textutil.TruncateString(cleaned, width))
-	}
-	if len(out) == 0 {
-		return []string{fallback}
-	}
-	return out
 }
 
 func renderMarkdownMultiline(text, fallback string, width int) []string {

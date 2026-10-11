@@ -3,12 +3,19 @@
 package markdown
 
 import (
+	"bytes"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/text"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -24,6 +31,13 @@ const (
 //
 // Nothing above this function is memoized on purpose: a test that sets
 // Renderer.renderANSI must see its own function, never a cached frame.
+//
+// glamour styles the text and wraps none of it: it wraps a block twice, with
+// two measures, so a line with a hyphen came out a cell too long from the
+// first pass and lost its last word to the second, which also cut a code line
+// as prose and put a quote line back without its bar. Neither pass breaks a
+// word wider than the pane. wrapRenderedLine wraps each line instead. Only a
+// table is taken from a render at the width, because glamour sizes its columns.
 func renderMarkdownANSIMemoized(content string, width int) (string, error) {
 	dark := styles.Dark()
 
@@ -31,18 +45,46 @@ func renderMarkdownANSIMemoized(content string, width int) (string, error) {
 		return cached, nil
 	}
 
-	renderer, err := termRendererFor(width, dark)
+	source := joinSoftBreaks(content)
+	lines, err := renderLines(source, 0, dark)
 	if err != nil {
 		return "", err
+	}
+	if len(tableBlocks(lines)) > 0 {
+		fitted, err := renderLines(source, width, dark)
+		if err != nil {
+			return "", err
+		}
+		lines = spliceTables(lines, fitted)
 	}
 
-	rendered, err := renderer.Render(content)
-	if err != nil {
-		return "", err
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, wrapRenderedLine(line, max(1, width-rightMargin))...)
 	}
+	rendered := strings.Join(wrapped, "\n")
 
 	storeRenderedMarkdown(content, width, dark, rendered)
 	return rendered, nil
+}
+
+// rightMargin is the blank cells a rendered line keeps before the pane edge:
+// the margin glamour's document style has on the left.
+const rightMargin = 2
+
+// renderLines returns the lines glamour renders source as, wrapped at wrap
+// cells, or not wrapped when wrap is 0.
+func renderLines(source string, wrap int, dark bool) ([]string, error) {
+	renderer, err := termRendererFor(wrap, dark)
+	if err != nil {
+		return nil, err
+	}
+
+	rendered, err := renderer.Render(source)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimRight(rendered, "\n"), "\n"), nil
 }
 
 // markdownCacheKey identifies one rendered result. dark is part of the key
@@ -105,8 +147,8 @@ func storeRenderedMarkdown(content string, width int, dark bool, rendered string
 	markdownCache[markdownCacheKey{content: content, width: width, dark: dark}] = rendered
 }
 
-// termRendererFor returns the glamour renderer for one width and background,
-// building it once. A fresh renderer was constructed on every call: 7.7ms and
+// termRendererFor returns the glamour renderer for one wrap width and
+// background, building it once. A fresh renderer was constructed on every call: 7.7ms and
 // 2.9MB for a ~20-section document, 77.5ms and 30MB for a 21KB description.
 //
 // The style follows the applied theme the way every colour role in this app
@@ -169,7 +211,7 @@ func NewRenderer() Renderer {
 // RenderReadOnly renders markdown as ANSI output when markdown structure is
 // present, otherwise returns deterministic plain text fallback output.
 func (r Renderer) RenderReadOnly(input string, width int) string {
-	content := strings.Trim(input, "\n")
+	content := strings.Trim(drawable(input), "\n")
 	if strings.TrimSpace(content) == "" {
 		return emptyFallback(r.EmptyFallback)
 	}
@@ -240,12 +282,18 @@ func isEffectivelyPlainText(value string) bool {
 	return true
 }
 
+// RenderPlain wraps text to width with no markdown rendering. The line breaks
+// of the source stay.
+func RenderPlain(value string, width int) string {
+	return renderPlain(drawable(value), normalizeWidth(width))
+}
+
 func renderPlain(value string, width int) string {
 	lines := strings.Split(strings.Trim(value, "\n"), "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		trimmedRight := expandTabs(strings.TrimRight(line, " \t"))
-		if strings.TrimSpace(trimmedRight) == "" {
+		trimmedRight := strings.TrimRight(line, " ")
+		if trimmedRight == "" {
 			out = append(out, "")
 			continue
 		}
@@ -259,18 +307,29 @@ func renderPlain(value string, width int) string {
 	return strings.Join(out, "\n")
 }
 
+// drawable returns source with every character one a terminal draws as text: a
+// TAB becomes the spaces that reach its tab stop, and every other control or
+// format character what displaytext.OneLine makes of it. The line feeds stay.
+//
+// It runs on the source, before any wrap. ansi.StringWidth measures a TAB and
+// a control character as no cell, so a line that held one measured as narrow,
+// was not wrapped, and then ran past the pane border — and past the edge of
+// the terminal, which moved every row below it down a line.
+func drawable(source string) string {
+	lines := strings.Split(strings.ReplaceAll(source, "\r\n", "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = displaytext.OneLine(expandTabs(line))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // tabWidth is the column stop expandTabs lays a TAB out on. Four rather than
 // eight because the panes these lines render into are narrow, and an eight-cell
-// indent spends most of a column on a nested code block.
+// indent spends most of a column on a nested code block. Four is also the stop
+// markdown gives a TAB, so expanding the source changes no block structure.
 const tabWidth = 4
 
 // expandTabs replaces every TAB with the spaces that reach the next tab stop.
-//
-// ansi.StringWidth measures a TAB as zero cells, so a tab-bearing line measured
-// as narrow, was never wrapped, and then bled past the pane border while
-// lipgloss.Width agreed it fitted — pasted Go source, a Makefile and a TSV table
-// all hit it. Expanding first makes the measurement and what the terminal draws
-// the same thing, because what is drawn is now spaces.
 func expandTabs(line string) string {
 	if !strings.ContainsRune(line, '\t') {
 		return line
@@ -292,28 +351,275 @@ func expandTabs(line string) string {
 	return b.String()
 }
 
-// wrapLine hard-wraps one line to width terminal cells.
+// wrapLine wraps one line of plain text to width terminal cells at its spaces.
+// A word wider than the room is cut on a cell boundary.
 //
 // Cells, not runes: a CJK ideograph or an emoji covers two cells, so counting
 // runes produced lines up to twice the requested width, which the width-correct
 // renderer downstream then truncated — losing text instead of wrapping it
 // (docs/DESIGN-GUIDE.md, Width and height).
 //
-// Leading space is preserved on every wrapped chunk. Dropping it re-indented
-// only the lines that happened to wrap, which reads as corrupted output rather
-// than as wrapping.
+// Each chunk takes the indent of the source line, so a continuation line
+// starts with a space only when the source line did. A run of spaces inside a
+// line that wraps becomes one space; a line that fits is returned as it is.
 func wrapLine(line string, width int) []string {
-	if width <= 0 {
+	if width <= 0 || ansi.StringWidth(line) <= width {
 		return []string{line}
 	}
+
+	text := strings.TrimLeft(line, " ")
+	indent := line[:len(line)-len(text)]
+	if len(indent) > width/2 {
+		indent = ""
+	}
+	room := width - len(indent)
+
+	var out []string
+	current := ""
+	for _, word := range strings.Fields(text) {
+		if current != "" && ansi.StringWidth(current)+1+ansi.StringWidth(word) <= room {
+			current += " " + word
+			continue
+		}
+		if current != "" {
+			out = append(out, indent+current)
+		}
+		pieces := strings.Split(ansi.Hardwrap(word, room, true), "\n")
+		for _, piece := range pieces[:len(pieces)-1] {
+			out = append(out, indent+piece)
+		}
+		current = pieces[len(pieces)-1]
+	}
+	return append(out, indent+current)
+}
+
+// markdownParser parses a source the way glamour.NewTermRenderer does.
+var markdownParser = goldmark.New(goldmark.WithExtensions(extension.GFM, extension.DefinitionList)).Parser()
+
+// joinSoftBreaks replaces the line end inside each top-level paragraph with a
+// space, so a paragraph its author wrapped by hand flows to the pane width.
+// glamour joins those lines only while it wraps, and it wraps nothing here.
+func joinSoftBreaks(content string) string {
+	source := []byte(content)
+	document := markdownParser.Parse(text.NewReader(source))
+	for block := document.FirstChild(); block != nil; block = block.NextSibling() {
+		if block.Kind() != ast.KindParagraph {
+			continue
+		}
+		_ = ast.Walk(block, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+			if inline, ok := node.(*ast.Text); ok && entering && inline.SoftLineBreak() {
+				if at := bytes.IndexByte(source[inline.Segment.Stop:], '\n'); at >= 0 {
+					source[inline.Segment.Stop+at] = ' '
+				}
+			}
+			return ast.WalkContinue, nil
+		})
+	}
+	return string(source)
+}
+
+// lineRange is the lines [start, end) of a rendered document.
+type lineRange struct{ start, end int }
+
+// tableBlocks finds the tables glamour drew: a header line, a rule of ─ and ┼,
+// then rows down to the next blank line.
+func tableBlocks(lines []string) []lineRange {
+	var blocks []lineRange
+	for i := 1; i < len(lines); i++ {
+		rule := strings.TrimSpace(ansi.Strip(lines[i]))
+		if rule == "" || strings.Trim(rule, "─┼") != "" {
+			continue
+		}
+		end := i + 1
+		for end < len(lines) && strings.TrimSpace(ansi.Strip(lines[end])) != "" {
+			end++
+		}
+		blocks = append(blocks, lineRange{start: i - 1, end: end})
+		i = end
+	}
+	return blocks
+}
+
+// spliceTables returns flow with each of its tables replaced by the same table
+// of fitted, the render glamour sized to the pane. Two renders that disagree
+// on the tables leave flow as it is, and its table rows wrap as text.
+func spliceTables(flow, fitted []string) []string {
+	from, to := tableBlocks(fitted), tableBlocks(flow)
+	if len(from) != len(to) {
+		return flow
+	}
+
+	var out []string
+	next := 0
+	for i, table := range to {
+		out = append(out, flow[next:table.start]...)
+		out = append(out, fitted[from[i].start:from[i].end]...)
+		next = table.end
+	}
+	return append(out, flow[next:]...)
+}
+
+// cell is one grapheme of a rendered line with the SGR style it is drawn in.
+type cell struct {
+	text  string
+	width int
+	style string
+}
+
+func (c cell) isSpace() bool { return c.text == " " }
+
+// hasBackground reports whether the cell is drawn on a colour of its own, as
+// the space glamour pads inline code with is: such a space is text, not indent.
+func (c cell) hasBackground() bool { return strings.Contains(c.style, ";48;") }
+
+// styledCells splits a rendered line into its cells. A sequence that is not a
+// style and draws nothing is dropped; glamour writes none.
+func styledCells(line string) []cell {
+	parser := ansi.GetParser()
+	defer ansi.PutParser(parser)
+
+	var cells []cell
+	style, state := "", byte(0)
+	for line != "" {
+		seq, width, n, next := ansi.DecodeSequence(line, state, parser)
+		switch {
+		case width > 0:
+			cells = append(cells, cell{text: seq, width: width, style: style})
+		case seq == "\x1b[0m" || seq == ansi.ResetStyle:
+			style = ""
+		case ansi.HasCsiPrefix(seq) && parser.Command() == 'm':
+			style += seq
+		}
+		line, state = line[n:], next
+	}
+	return cells
+}
+
+// renderCells draws cells as one line that carries its own styles and ends
+// with none open, so the line can be drawn alone.
+func renderCells(cells []cell) string {
+	var b strings.Builder
+	style := ""
+	for _, c := range cells {
+		if c.style != style {
+			if style != "" {
+				b.WriteString(ansi.ResetStyle)
+			}
+			b.WriteString(c.style)
+			style = c.style
+		}
+		b.WriteString(c.text)
+	}
+	if style != "" {
+		b.WriteString(ansi.ResetStyle)
+	}
+	return b.String()
+}
+
+func cellsText(cells []cell) string {
+	var b strings.Builder
+	for _, c := range cells {
+		b.WriteString(c.text)
+	}
+	return b.String()
+}
+
+// hangingPrefix is what glamour puts in front of the text of a line: the
+// margin, the quote bars, and one list marker. Each of its characters is one
+// cell wide.
+var hangingPrefix = regexp.MustCompile(`^[ │]*(?:(?:•|\d+\.|\[[ ✓]\]) )?`)
+
+// wrapRenderedLine wraps one line glamour rendered to width cells. A
+// continuation line starts under the text of the first line and keeps the
+// quote bars, so a list item, a quote and a code line each keep their indent.
+func wrapRenderedLine(line string, width int) []string {
 	if ansi.StringWidth(line) <= width {
 		return []string{line}
 	}
 
-	wrapped := strings.Split(ansi.Hardwrap(line, width, true), "\n")
-	for i, chunk := range wrapped {
-		wrapped[i] = strings.TrimRight(chunk, " \t")
+	cells := styledCells(line)
+	indent := min(len([]rune(hangingPrefix.FindString(cellsText(cells)))), width/2)
+	for i, c := range cells[:indent] {
+		if c.hasBackground() {
+			indent = i
+			break
+		}
+	}
+	prefix := cells[:indent:indent]
+	hanging := make([]cell, indent)
+	for i, c := range prefix {
+		hanging[i] = cell{text: " ", width: 1}
+		if c.text == "│" {
+			hanging[i] = c
+		}
 	}
 
-	return wrapped
+	var lines []string
+	for _, chunk := range wrapCells(cells[indent:], width-indent) {
+		lines = append(lines, renderCells(append(prefix, chunk...)))
+		prefix = hanging[:indent:indent]
+	}
+	return lines
+}
+
+// wrapCells breaks cells into lines of at most limit cells. It breaks at a
+// space, and inside a word only when the word is wider than limit.
+func wrapCells(cells []cell, limit int) [][]cell {
+	var lines [][]cell
+	for len(cells) > 0 {
+		end := lineEnd(cells, limit)
+		line := cells[:end]
+		for len(line) > 0 && line[len(line)-1].isSpace() {
+			line = line[:len(line)-1]
+		}
+		if len(line) > 0 {
+			lines = append(lines, line)
+		}
+		cells = cells[end:]
+		for len(cells) > 0 && cells[0].isSpace() {
+			cells = cells[1:]
+		}
+	}
+	return lines
+}
+
+// lineEnd returns how many of cells go on a line of limit cells.
+func lineEnd(cells []cell, limit int) int {
+	width, lastBreak := 0, -1
+	for i, c := range cells {
+		if width+c.width > limit {
+			switch {
+			case breakable(cells, i):
+				return i
+			case lastBreak >= 0 && wordWidth(cells, lastBreak+1) <= limit:
+				return lastBreak
+			default:
+				return max(i, 1)
+			}
+		}
+		if breakable(cells, i) {
+			lastBreak = i
+		}
+		width += c.width
+	}
+	return len(cells)
+}
+
+// breakable reports whether a line may end at cell i: at a space, unless the
+// next line would then start with closing punctuation. glamour pads inline
+// code with a space, so "`code`, and" reaches here as "code , and".
+func breakable(cells []cell, i int) bool {
+	if !cells[i].isSpace() {
+		return false
+	}
+	return i+1 == len(cells) || !strings.Contains(",.;:!?)", cells[i+1].text)
+}
+
+// wordWidth is the width of the cells from start up to the next break.
+func wordWidth(cells []cell, start int) int {
+	width := 0
+	for i := start; i < len(cells) && !breakable(cells, i); i++ {
+		width += cells[i].width
+	}
+	return width
 }
