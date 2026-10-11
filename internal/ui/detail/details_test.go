@@ -369,8 +369,8 @@ func TestRenderTwoColumnUsesFixedMetadataRailWidth(t *testing.T) {
 	t.Parallel()
 
 	_, metadata := splitInspectorWidths(InspectorTwoColumnMinWidth)
-	if metadata != 34 {
-		t.Fatalf("expected fixed metadata rail width 34, got %d", metadata)
+	if metadata != 32 {
+		t.Fatalf("expected fixed metadata rail width 32, got %d", metadata)
 	}
 }
 
@@ -381,8 +381,8 @@ func TestRenderThreeColumnRailWidthsStayInApprovedRange(t *testing.T) {
 	if left < leftRailMinWidth || left > leftRailMaxWidth {
 		t.Fatalf("expected left rail in [%d,%d], got %d", leftRailMinWidth, leftRailMaxWidth, left)
 	}
-	if metadata != 34 {
-		t.Fatalf("expected metadata rail width 34, got %d", metadata)
+	if metadata != 32 {
+		t.Fatalf("expected metadata rail width 32, got %d", metadata)
 	}
 }
 
@@ -718,27 +718,22 @@ func TestRenderCommentHeavyMarkdownStaysPaneBounded(t *testing.T) {
 	}
 }
 
-func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
+func TestRenderShowsTheConfiguredKeysOnTheContentButtons(t *testing.T) {
 	t.Parallel()
 
 	view := Render(State{
-		SelectionID: "tm-qa",
+		SelectionID: "tm-keys",
 		Detail: domain.IssueDetail{
-			Summary: domain.IssueSummary{ID: "tm-qa", Title: "Quick actions", Status: "open", Type: "task", Priority: 1},
+			Summary: domain.IssueSummary{ID: "tm-keys", Title: "Configured keys", Status: "open", Type: "task", Priority: 1},
 		},
-		QuickActions: QuickActionLabels{
-			EditIssue:    "ctrl+e",
-			AddComment:   "ctrl+a",
-			CloseIssue:   "ctrl+x",
-			ReloadDetail: "ctrl+r",
-		},
-		Width: 120,
+		ButtonKeys: ButtonKeys{EditIssue: "ctrl+e", AddComment: "ctrl+a"},
+		Width:      120,
 	})
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	for _, want := range []string{"ctrl+e Edit issue", "ctrl+a Add comment", "ctrl+x Close issue", "ctrl+r Reload detail"} {
+	for _, want := range []string{"edit ctrl+e", "add ctrl+a"} {
 		if !strings.Contains(plain, want) {
-			t.Fatalf("expected configured quick action label %q in view:\n%s", want, plain)
+			t.Fatalf("expected the button %q in view:\n%s", want, plain)
 		}
 	}
 }
@@ -992,9 +987,9 @@ func TestSplitThreePaneWidths(t *testing.T) {
 		{name: "total=4 (barely above gap)", total: 4, wantLeft: 8, wantContent: 1, wantMeta: 8},
 		{name: "total=40 (narrow, reduction fires)", total: 40, wantLeft: 8, wantContent: 20, wantMeta: 8},
 		{name: "total=60 (content tight)", total: 60, wantLeft: 14, wantContent: 20, wantMeta: 22},
-		{name: "two-column min width", total: InspectorTwoColumnMinWidth, wantLeft: 26, wantContent: 46, wantMeta: 34},
-		{name: "three-column min width", total: InspectorThreeColumnMinWidth, wantLeft: 34, wantContent: 68, wantMeta: 34},
-		{name: "total=220", total: 220, wantLeft: 44, wantContent: 138, wantMeta: 34},
+		{name: "two-column min width", total: InspectorTwoColumnMinWidth, wantLeft: 26, wantContent: 48, wantMeta: 32},
+		{name: "three-column min width", total: InspectorThreeColumnMinWidth, wantLeft: 34, wantContent: 70, wantMeta: 32},
+		{name: "total=220", total: 220, wantLeft: 44, wantContent: 140, wantMeta: 32},
 	}
 
 	for _, tc := range tests {
@@ -1018,9 +1013,7 @@ func TestSplitThreePaneWidths(t *testing.T) {
 func TestMaxScrollOffsets(t *testing.T) {
 	t.Parallel()
 
-	// A minimal IssueDetail with a short description.  The metadata pane always
-	// renders some fixed fields (type, priority, status, …) so on small heights
-	// metadata may scroll; we only assert per-test constraints.
+	// A minimal IssueDetail with a short description.
 	emptyDetail := domain.IssueDetail{
 		Summary: domain.IssueSummary{
 			ID:     "tm-scroll",
@@ -1635,17 +1628,12 @@ func TestMaxScrollOffsetsReportsPaneInnerHeights(t *testing.T) {
 		if got.ContentInnerHeight != wantContent-2 {
 			t.Errorf("ContentInnerHeight = %d, want %d (content height minus 2 borders)", got.ContentInnerHeight, wantContent-2)
 		}
-		// Dependencies and Metadata share the bottom section in this layout.
 		if got.DependenciesInnerHeight != bottom-2 {
 			t.Errorf("DependenciesInnerHeight = %d, want %d (bottom height minus 2 borders)", got.DependenciesInnerHeight, bottom-2)
 		}
-		if got.MetadataInnerHeight != got.DependenciesInnerHeight {
-			t.Errorf("Metadata (%d) and Dependencies (%d) share the bottom section and must report the same inner height",
-				got.MetadataInnerHeight, got.DependenciesInnerHeight)
-		}
 	})
 
-	t.Run("three-pane layout gives every pane the full height", func(t *testing.T) {
+	t.Run("three-pane layout gives both panes the full height", func(t *testing.T) {
 		t.Parallel()
 
 		const width, height = InspectorThreeColumnMinWidth, 40
@@ -1657,7 +1645,6 @@ func TestMaxScrollOffsetsReportsPaneInnerHeights(t *testing.T) {
 		for name, inner := range map[string]int{
 			"Dependencies": got.DependenciesInnerHeight,
 			"Content":      got.ContentInnerHeight,
-			"Metadata":     got.MetadataInnerHeight,
 		} {
 			if inner != height-2 {
 				t.Errorf("%sInnerHeight = %d, want %d (viewport height minus 2 borders)", name, inner, height-2)
@@ -1670,7 +1657,7 @@ func TestMaxScrollOffsetsReportsPaneInnerHeights(t *testing.T) {
 
 		for _, height := range []int{1, 2, 3} {
 			got := MaxScrollOffsets(stateAt(InspectorTwoColumnMinWidth-1, height))
-			if got.ContentInnerHeight < 1 || got.DependenciesInnerHeight < 1 || got.MetadataInnerHeight < 1 {
+			if got.ContentInnerHeight < 1 || got.DependenciesInnerHeight < 1 {
 				t.Errorf("height=%d produced a non-positive inner height: %+v", height, got)
 			}
 		}

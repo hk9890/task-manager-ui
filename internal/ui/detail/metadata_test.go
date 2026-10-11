@@ -50,33 +50,6 @@ func TestMetadataFieldsOrderAndCoverage(t *testing.T) {
 	}
 }
 
-func TestMetadataCoreFieldsKeepStatusAsFirstEditableField(t *testing.T) {
-	t.Parallel()
-
-	groups := metadataGroups(domain.IssueDetail{
-		Summary: domain.IssueSummary{Type: "task", Priority: 2, Status: "open"},
-	}, false)
-	if len(groups) == 0 {
-		t.Fatal("expected metadata groups")
-	}
-
-	core := groups[0]
-	if core.title != "Core" {
-		t.Fatalf("expected first metadata group Core, got %q", core.title)
-	}
-	if len(core.fields) < 3 {
-		t.Fatalf("expected core fields, got %#v", core.fields)
-	}
-
-	if core.fields[1].key != MetadataFieldStatus {
-		t.Fatalf("expected status to be first actionable metadata field, got key=%q", core.fields[1].key)
-	}
-
-	if core.fields[2].key != MetadataFieldPriority {
-		t.Fatalf("expected priority to be second actionable metadata field, got key=%q", core.fields[2].key)
-	}
-}
-
 func TestMetadataFieldsOmitEmptyOptionalValues(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +82,7 @@ func TestRenderMetadataRailRespectsWidth(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"this-is-an-extremely-long-label-that-must-be-truncated"},
 		},
-	}, 20, MetadataFieldNone, false)
+	}, 20, false)
 
 	if len(lines) == 0 {
 		t.Fatal("expected metadata lines")
@@ -122,7 +95,7 @@ func TestRenderMetadataRailRespectsWidth(t *testing.T) {
 	}
 }
 
-func TestRenderMetadataRailReservesIdleGutterWhenUnfocused(t *testing.T) {
+func TestRenderMetadataRailIndentsEveryLineAndMarksNone(t *testing.T) {
 	t.Parallel()
 
 	lines := renderMetadataRail(domain.IssueDetail{
@@ -132,7 +105,7 @@ func TestRenderMetadataRailReservesIdleGutterWhenUnfocused(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"ui"},
 		},
-	}, 44, MetadataFieldNone, false)
+	}, 44, false)
 
 	if len(lines) == 0 {
 		t.Fatal("expected metadata lines")
@@ -141,69 +114,11 @@ func TestRenderMetadataRailReservesIdleGutterWhenUnfocused(t *testing.T) {
 	for _, line := range lines {
 		plain := metadataANSIPattern.ReplaceAllString(line, "")
 		if !strings.HasPrefix(plain, "  ") {
-			t.Fatalf("expected permanent idle gutter on all metadata lines, got %q", plain)
+			t.Fatalf("expected the indent on all metadata lines, got %q", plain)
 		}
 		if strings.HasPrefix(plain, selectionGutter()) {
-			t.Fatalf("did not expect selected marker while unfocused, got %q", plain)
+			t.Fatalf("the view-only rail drew a selection marker: %q", plain)
 		}
-	}
-}
-
-func TestRenderMetadataRailHighlightsSelectedStatusField(t *testing.T) {
-	t.Parallel()
-
-	lines := renderMetadataRail(domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			Type:     "task",
-			Priority: 1,
-			Status:   "open",
-		},
-	}, 40, MetadataFieldStatus, false)
-
-	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
-	if !strings.Contains(joined, selectionGutter()+"Status") {
-		t.Fatalf("expected selected status indicator in metadata rail, got:\n%s", joined)
-	}
-}
-
-func TestRenderMetadataRailHighlightsSelectedPriorityField(t *testing.T) {
-	t.Parallel()
-
-	lines := renderMetadataRail(domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			Type:     "task",
-			Priority: 1,
-			Status:   "open",
-		},
-	}, 40, MetadataFieldPriority, false)
-
-	joined := metadataANSIPattern.ReplaceAllString(strings.Join(lines, "\n"), "")
-	if !strings.Contains(joined, selectionGutter()+"Priority") {
-		t.Fatalf("expected selected priority indicator in metadata rail, got:\n%s", joined)
-	}
-}
-
-func TestRenderMetadataRailShowsSelectedMarkerOnlyOnSelectedRow(t *testing.T) {
-	t.Parallel()
-
-	lines := renderMetadataRail(domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			Type:     "task",
-			Priority: 1,
-			Status:   "open",
-		},
-	}, 40, MetadataFieldStatus, false)
-
-	selectedCount := 0
-	for _, line := range lines {
-		plain := metadataANSIPattern.ReplaceAllString(line, "")
-		if strings.HasPrefix(plain, selectionGutter()) {
-			selectedCount++
-		}
-	}
-
-	if selectedCount != 1 {
-		t.Fatalf("expected exactly one selected marker, got %d lines:\n%s", selectedCount, strings.Join(lines, "\n"))
 	}
 }
 
@@ -217,7 +132,7 @@ func TestRenderMetadataRailLabelLinesAlignWithFieldColumn(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"backend"},
 		},
-	}, 48, MetadataFieldNone, false)
+	}, 48, false)
 
 	typeLine := findLineContaining(t, lines, "Type")
 	labelLine := findLineContaining(t, lines, "• backend")
@@ -233,7 +148,7 @@ func TestRenderMetadataRailLabelLinesAlignWithFieldColumn(t *testing.T) {
 	}
 }
 
-func TestRenderMetadataRailDividerUsesReservedGutterAlignment(t *testing.T) {
+func TestRenderMetadataRailDividerIsIndented(t *testing.T) {
 	t.Parallel()
 
 	lines := renderMetadataRail(domain.IssueDetail{
@@ -243,12 +158,12 @@ func TestRenderMetadataRailDividerUsesReservedGutterAlignment(t *testing.T) {
 			Status:   "open",
 			Labels:   []string{"ui"},
 		},
-	}, 32, MetadataFieldNone, false)
+	}, 32, false)
 
 	divider := findLineContaining(t, lines, "----")
 	plain := metadataANSIPattern.ReplaceAllString(divider, "")
 	if !strings.HasPrefix(plain, "  -") {
-		t.Fatalf("expected divider to include idle gutter, got %q", plain)
+		t.Fatalf("expected the divider to be indented, got %q", plain)
 	}
 }
 
@@ -262,7 +177,7 @@ func TestRenderMetadataRailVeryNarrowWidthsDegradeSafely(t *testing.T) {
 				Priority: 1,
 				Status:   "open",
 			},
-		}, width, MetadataFieldStatus, false)
+		}, width, false)
 
 		if len(lines) == 0 {
 			t.Fatalf("expected metadata lines for width=%d", width)
@@ -276,7 +191,7 @@ func TestRenderMetadataRailVeryNarrowWidthsDegradeSafely(t *testing.T) {
 	}
 }
 
-func TestRenderMetadataRailSelectedFieldKeepsLabelAlignmentStable(t *testing.T) {
+func TestRenderMetadataRailAlignsTheLabels(t *testing.T) {
 	t.Parallel()
 
 	lines := renderMetadataRail(domain.IssueDetail{
@@ -285,7 +200,7 @@ func TestRenderMetadataRailSelectedFieldKeepsLabelAlignmentStable(t *testing.T) 
 			Priority: 1,
 			Status:   "open",
 		},
-	}, 40, MetadataFieldStatus, false)
+	}, 40, false)
 
 	plainLines := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -313,41 +228,6 @@ func TestRenderMetadataRailSelectedFieldKeepsLabelAlignmentStable(t *testing.T) 
 	}
 }
 
-func TestRenderMetadataRailSelectionMovementKeepsValueColumnStable(t *testing.T) {
-	t.Parallel()
-
-	detail := domain.IssueDetail{
-		Summary: domain.IssueSummary{
-			Type:     "task",
-			Priority: 1,
-			Status:   "closed",
-		},
-	}
-
-	prioritySelected := renderMetadataRail(detail, 48, MetadataFieldPriority, false)
-	statusSelected := renderMetadataRail(detail, 48, MetadataFieldStatus, false)
-
-	priorityLineSelected := findLineContaining(t, prioritySelected, "Priority")
-	priorityLineIdle := findLineContaining(t, statusSelected, "Priority")
-	statusLineIdle := findLineContaining(t, prioritySelected, "Status")
-	statusLineSelected := findLineContaining(t, statusSelected, "Status")
-
-	priorityValueOffsetSelected := valueOffset(t, priorityLineSelected)
-	priorityValueOffsetIdle := valueOffset(t, priorityLineIdle)
-	statusValueOffsetIdle := valueOffset(t, statusLineIdle)
-	statusValueOffsetSelected := valueOffset(t, statusLineSelected)
-
-	if priorityValueOffsetSelected != priorityValueOffsetIdle {
-		t.Fatalf("expected Priority value column to stay stable when selection moves\nselected: %q\nidle:     %q", priorityLineSelected, priorityLineIdle)
-	}
-	if statusValueOffsetSelected != statusValueOffsetIdle {
-		t.Fatalf("expected Status value column to stay stable when selection moves\nselected: %q\nidle:     %q", statusLineSelected, statusLineIdle)
-	}
-	if priorityValueOffsetIdle != statusValueOffsetIdle {
-		t.Fatalf("expected Priority and Status value columns to align\npriority: %q\nstatus:   %q", priorityLineIdle, statusLineIdle)
-	}
-}
-
 func findLineContaining(t *testing.T, lines []string, token string) string {
 	t.Helper()
 	for _, line := range lines {
@@ -357,15 +237,6 @@ func findLineContaining(t *testing.T, lines []string, token string) string {
 	}
 	t.Fatalf("expected line containing %q in metadata output", token)
 	return ""
-}
-
-func valueOffset(t *testing.T, line string) int {
-	t.Helper()
-	idx := strings.Index(line, ": ")
-	if idx < 0 {
-		t.Fatalf("expected metadata line to contain ': ': %q", line)
-	}
-	return lipgloss.Width(line[:idx])
 }
 
 func TestMetadataGroupsIncludeLabelsAsDedicatedSection(t *testing.T) {
@@ -445,7 +316,7 @@ func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
 			{ID: "tm-c2", Title: "Child two"},
 			{ID: "tm-c3", Title: "Child three"},
 		},
-	}, 44, MetadataFieldNone, false)
+	}, 44, false)
 
 	testui.AssertMatchesGolden(t, []byte(strings.Join(lines, "\n")), "metadata_with_children_w44.golden")
 }

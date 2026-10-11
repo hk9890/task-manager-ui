@@ -10,7 +10,6 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
@@ -261,15 +260,8 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
-	if got := m.focusPane(); got != detail.FocusPaneMetadata {
-		t.Fatalf("expected right from content to focus metadata, got %v", got)
-	}
-
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
-		t.Fatal("expected right key to be consumed")
-	}
-	if got := m.focusPane(); got != detail.FocusPaneMetadata {
-		t.Fatalf("expected right from metadata to stay on metadata, got %v", got)
+	if got := m.focusPane(); got != detail.FocusPaneContent {
+		t.Fatalf("expected right from content to stay on content, got %v", got)
 	}
 }
 
@@ -324,7 +316,7 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 // TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueMsg verifies that
 // pressing Enter while the Dependencies pane is focused returns a command that
 // produces OpenRelatedIssueMsg for the highlighted row (Q5, Q6b). This is hardcoded
-// (NOT keymap-driven), consistent with how Enter in the Metadata pane works.
+// (NOT keymap-driven).
 func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueMsg(t *testing.T) {
 	t.Parallel()
 
@@ -444,104 +436,6 @@ func TestRenderDetailOptimisticallyShowsTargetHeaderWhileLoading(t *testing.T) {
 	// The body and Dependencies pane still show the loading skeleton.
 	if !strings.Contains(view, issuerow.SkeletonGlyph) {
 		t.Fatalf("expected skeleton glyph for in-flight body/deps, got:\n%s", view)
-	}
-}
-
-func TestModelDetailMetadataPaneUpDownMovesBetweenStatusAndPriorityOnly(t *testing.T) {
-	t.Parallel()
-
-	m := Model{
-		selectionID: "tm-1",
-		targetID:    "tm-1",
-		FocusPane:   detail.FocusPaneMetadata,
-		Detail: domain.IssueDetail{
-			Summary:     domain.IssueSummary{ID: "tm-1", Title: "One"},
-			Description: strings.Repeat("line\n", 50),
-		},
-	}
-
-	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
-	if !consumed {
-		t.Fatal("expected metadata pane to consume scroll bindings")
-	}
-	if cmd != nil {
-		t.Fatal("expected no command in metadata pane")
-	}
-	if m.metadataField != detail.MetadataFieldPriority {
-		t.Fatalf("expected metadata down to select priority after status, got %q", m.metadataField)
-	}
-
-	consumed, cmd = m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
-	if !consumed || cmd != nil {
-		t.Fatalf("expected metadata down to remain consumed with no command, consumed=%v command=%v", consumed, cmd != nil)
-	}
-	if m.metadataField != detail.MetadataFieldPriority {
-		t.Fatalf("expected metadata selection clamped to priority, got %q", m.metadataField)
-	}
-
-	consumed, cmd = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
-	if !consumed || cmd != nil {
-		t.Fatalf("expected metadata up to remain consumed with no command, consumed=%v command=%v", consumed, cmd != nil)
-	}
-	if m.metadataField != detail.MetadataFieldStatus {
-		t.Fatalf("expected metadata up to select status, got %q", m.metadataField)
-	}
-}
-
-func TestModelDetailEnterOnMetadataStatusAsksForTheEditorOnTheStatus(t *testing.T) {
-	t.Parallel()
-
-	m := Model{
-		selectionID: "tm-1",
-		targetID:    "tm-1",
-		FocusPane:   detail.FocusPaneMetadata,
-		Detail: domain.IssueDetail{
-			Summary: domain.IssueSummary{ID: "tm-1", Status: "open"},
-		},
-	}
-
-	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
-	if !consumed {
-		t.Fatal("expected enter in metadata pane to be consumed")
-	}
-	if cmd == nil {
-		t.Fatal("expected metadata enter to emit an action request")
-	}
-	req, ok := cmd().(mode.ActionRequestMsg)
-	if !ok {
-		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
-	}
-	if req.Mode != mode.Detail || req.Action != mode.ActionEditStatus {
-		t.Fatalf("expected %s/%s, got %s/%s", mode.Detail, mode.ActionEditStatus, req.Mode, req.Action)
-	}
-}
-
-func TestModelDetailEnterOnMetadataPriorityAsksForTheEditorOnThePriority(t *testing.T) {
-	t.Parallel()
-
-	m := Model{
-		selectionID:   "tm-1",
-		targetID:      "tm-1",
-		FocusPane:     detail.FocusPaneMetadata,
-		metadataField: detail.MetadataFieldPriority,
-		Detail: domain.IssueDetail{
-			Summary: domain.IssueSummary{ID: "tm-1", Priority: 1},
-		},
-	}
-
-	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 160, 20)
-	if !consumed {
-		t.Fatal("expected enter in metadata pane to be consumed")
-	}
-	if cmd == nil {
-		t.Fatal("expected metadata enter on priority to emit an action request")
-	}
-	req, ok := cmd().(mode.ActionRequestMsg)
-	if !ok {
-		t.Fatalf("expected a mode.ActionRequestMsg, got %T", cmd())
-	}
-	if req.Mode != mode.Detail || req.Action != mode.ActionEditPriority {
-		t.Fatalf("expected %s/%s, got %s/%s", mode.Detail, mode.ActionEditPriority, req.Mode, req.Action)
 	}
 }
 
@@ -898,7 +792,7 @@ func TestRefreshDifferentPreviouslyLoadedIssueKeepsStaleContent(t *testing.T) {
 // TestScrollResetOnIssueSwitchViaApplyLoadedDetail is the regression test for
 // the scroll-reset-on-issue-switch fix. It verifies that when the caller applies a placeholder
 // detail synchronously on selection-change (mimicking what app/model.go does),
-// all three scroll offsets are immediately zeroed before the repository response
+// both scroll offsets are immediately zeroed before the repository response
 // arrives.
 func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	t.Parallel()
@@ -914,9 +808,8 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	}
 	m.ApplyLoadedDetail("tm-1", issueA)
 
-	// Simulate the user scrolling all three panes to non-zero offsets.
+	// Simulate the user scrolling both panes to non-zero offsets.
 	m.ContentScrollOffset = 15
-	m.MetadataScrollOffset = 7
 	m.DependenciesScrollOffset = 3
 
 	// Simulate app-level selection change to tm-2: synchronously apply placeholder
@@ -930,9 +823,6 @@ func TestScrollResetOnIssueSwitchViaApplyLoadedDetail(t *testing.T) {
 	// All scroll offsets must be zero immediately (before repository responds).
 	if m.ContentScrollOffset != 0 {
 		t.Errorf("ContentScrollOffset must be 0 immediately after issue switch, got %d", m.ContentScrollOffset)
-	}
-	if m.MetadataScrollOffset != 0 {
-		t.Errorf("MetadataScrollOffset must be 0 immediately after issue switch, got %d", m.MetadataScrollOffset)
 	}
 	if m.DependenciesScrollOffset != 0 {
 		t.Errorf("DependenciesScrollOffset must be 0 immediately after issue switch, got %d", m.DependenciesScrollOffset)
@@ -1002,9 +892,8 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 		m := Model{}
 		m.ApplyLoadedDetail("tm-1", issueA)
 
-		// Simulate user scrolling all three panes.
+		// Simulate user scrolling both panes.
 		m.ContentScrollOffset = 10
-		m.MetadataScrollOffset = 5
 		m.DependenciesScrollOffset = 3
 
 		// Switch to a different issue.
@@ -1012,9 +901,6 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 
 		if m.ContentScrollOffset != 0 {
 			t.Errorf("expected ContentScrollOffset=0 after issue switch, got %d", m.ContentScrollOffset)
-		}
-		if m.MetadataScrollOffset != 0 {
-			t.Errorf("expected MetadataScrollOffset=0 after issue switch, got %d", m.MetadataScrollOffset)
 		}
 		if m.DependenciesScrollOffset != 0 {
 			t.Errorf("expected DependenciesScrollOffset=0 after issue switch, got %d", m.DependenciesScrollOffset)
@@ -1029,7 +915,6 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 
 		// Simulate user scrolling.
 		m.ContentScrollOffset = 7
-		m.MetadataScrollOffset = 2
 		m.DependenciesScrollOffset = 4
 
 		// Re-load the same issue (e.g. refresh).
@@ -1037,9 +922,6 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 
 		if m.ContentScrollOffset != 7 {
 			t.Errorf("expected ContentScrollOffset=7 preserved on same-issue refresh, got %d", m.ContentScrollOffset)
-		}
-		if m.MetadataScrollOffset != 2 {
-			t.Errorf("expected MetadataScrollOffset=2 preserved on same-issue refresh, got %d", m.MetadataScrollOffset)
 		}
 		if m.DependenciesScrollOffset != 4 {
 			t.Errorf("expected DependenciesScrollOffset=4 preserved on same-issue refresh, got %d", m.DependenciesScrollOffset)
@@ -1053,7 +935,6 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 		// happen in practice but ensures the empty-previous guard works).
 		m := Model{
 			ContentScrollOffset:      8,
-			MetadataScrollOffset:     3,
 			DependenciesScrollOffset: 1,
 		}
 
@@ -1061,9 +942,6 @@ func TestApplyLoadedDetailResetsScrollOffsetOnIssueChange(t *testing.T) {
 
 		if m.ContentScrollOffset != 0 {
 			t.Errorf("expected ContentScrollOffset=0 on first issue load, got %d", m.ContentScrollOffset)
-		}
-		if m.MetadataScrollOffset != 0 {
-			t.Errorf("expected MetadataScrollOffset=0 on first issue load, got %d", m.MetadataScrollOffset)
 		}
 		if m.DependenciesScrollOffset != 0 {
 			t.Errorf("expected DependenciesScrollOffset=0 on first issue load, got %d", m.DependenciesScrollOffset)
@@ -1158,7 +1036,6 @@ func TestClampScroll(t *testing.T) {
 			targetID:                 "tm-1",
 			ContentScrollOffset:      -5,
 			DependenciesScrollOffset: -3,
-			MetadataScrollOffset:     -1,
 			Detail: domain.IssueDetail{
 				Summary:     domain.IssueSummary{ID: "tm-1", Title: "issue"},
 				Description: longDesc,
@@ -1170,9 +1047,6 @@ func TestClampScroll(t *testing.T) {
 		}
 		if m.DependenciesScrollOffset != 0 {
 			t.Errorf("expected DependenciesScrollOffset clamped to 0, got %d", m.DependenciesScrollOffset)
-		}
-		if m.MetadataScrollOffset != 0 {
-			t.Errorf("expected MetadataScrollOffset clamped to 0, got %d", m.MetadataScrollOffset)
 		}
 	})
 
@@ -1301,38 +1175,6 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 		if lineIdx >= 0 && (lineIdx < offset || lineIdx >= offset+paneInner) {
 			t.Errorf("selection line %d not in window [%d, %d)", lineIdx, offset, offset+paneInner)
 		}
-	}
-}
-
-// TestDetailsMetadataScrollOffsetAdvancesWithSelection verifies that pressing
-// j past the first field in the metadata pane updates MetadataScrollOffset
-// when the pane is small enough that the selected field would scroll off-screen.
-func TestDetailsMetadataScrollOffsetAdvancesWithSelection(t *testing.T) {
-	t.Parallel()
-
-	m := Model{
-		selectionID:   "tm-1",
-		targetID:      "tm-1",
-		FocusPane:     detail.FocusPaneMetadata,
-		metadataField: detail.MetadataFieldStatus,
-		Keys:          mustResolveDetailKeys(t, nil),
-		Detail: domain.IssueDetail{
-			Summary: domain.IssueSummary{ID: "tm-1", Title: "One", Status: "open", Priority: 1},
-		},
-	}
-
-	// Only two editable metadata fields (Status, Priority). Moving down from
-	// Status to Priority doesn't scroll when the pane is tall enough. This test
-	// verifies the model doesn't panic and the field advances correctly.
-	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 160, 10)
-	if !consumed {
-		t.Fatal("expected j to be consumed in metadata pane")
-	}
-	if cmd != nil {
-		t.Fatal("expected no command from metadata nav")
-	}
-	if m.metadataField != detail.MetadataFieldPriority {
-		t.Errorf("expected field to advance to Priority, got %q", m.metadataField)
 	}
 }
 

@@ -1,24 +1,24 @@
-╭─ Dependencies ──────────── 3 ─╮  ╭─ Content ─ edit e ────────────────────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
-│Blocked by (1)                 │  │T P2 OPN tm-fallback                                              │  │  Core                          │
-│  ? P0 - tm-11 Dependency A    │  │Fallback inline related work                                      │  │  Type    : task                │
-│                               │  │──────────────────────────────────────────────────────────────────│  │  Status  : open                │
-│Blocks (1)                     │  │Description                                                       │  │  Priority: P2                  │
-│  ? P0 - tm-12 Dependency B    │  │Below wide breakpoint should keep inline related work section.    │  │  ------------------------------│
-│                               │  │                                                                  │  │  Counts                        │
-│Related (1)                    │  │                                                                  │  │  Comments  : 0                 │
-│  ? P0 - tm-13 Dependency C    │  │                                                                  │  │  Blocked by: 1                 │
-│                               │  │                                                                  │  │  Blocks    : 1                 │
-│Children (0)                   │  │                                                                  │  │  Related   : 1                 │
-│(none)                         │  │                                                                  │  │  Children  : 0                 │
-│                               │  │                                                                  │  │                                │
-│                               │  │                                                                  │  │Quick actions                   │
-│                               │  │                                                                  │  │e Edit issue                    │
-│                               │  │                                                                  │  │a Add comment                   │
-│                               │  │                                                                  │  │enter Edit comment              │
-│                               │  │                                                                  │  │d Delete comment                │
-│                               │  │                                                                  │  │x Close issue                   │
-│                               │  │                                                                  │  │r Reload detail                 │
-│                               │  │                                                                  │  │                                │
-│                               │  │                                                                  │  │                                │
-│                               │  │Comments (0)                                                add a │  │                                │
-╰───────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯  ╰────────────────────────────────╯
+╭─ Dependencies ──────────── 3 ─╮  ╭─ Content ───────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ───────────────────╮
+│Blocked by (1)                 │  │T P2 OPN tm-fallback                                         edit e │  │  Core                        │
+│  ? P0 - tm-11 Dependency A    │  │Fallback inline related work                                        │  │  Type    : task              │
+│                               │  │────────────────────────────────────────────────────────────────────│  │  Status  : open              │
+│Blocks (1)                     │  │Description                                                         │  │  Priority: P2                │
+│  ? P0 - tm-12 Dependency B    │  │Below wide breakpoint should keep inline related work section.      │  │  ----------------------------│
+│                               │  │                                                                    │  │  Counts                      │
+│Related (1)                    │  │                                                                    │  │  Comments  : 0               │
+│  ? P0 - tm-13 Dependency C    │  │                                                                    │  │  Blocked by: 1               │
+│                               │  │                                                                    │  │  Blocks    : 1               │
+│Children (0)                   │  │                                                                    │  │  Related   : 1               │
+│(none)                         │  │                                                                    │  │  Children  : 0               │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │                                                                    │  │                              │
+│                               │  │Comments (0)                                                  add a │  │                              │
+╰───────────────────────────────╯  ╰────────────────────────────────────────────────────────────────────╯  ╰──────────────────────────────╯

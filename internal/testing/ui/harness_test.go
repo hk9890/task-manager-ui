@@ -36,7 +36,6 @@ func TestHarnessSupportsTeaTestGoldenVerification(t *testing.T) {
 		_ = tm.Quit()
 	})
 
-	tm.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return strings.Contains(string(bts), "Ship it?")
 	})

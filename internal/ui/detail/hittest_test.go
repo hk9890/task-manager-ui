@@ -118,12 +118,19 @@ func TestHitTestNamesThePaneUnderThePointer(t *testing.T) {
 			"body-text":      FocusPaneContent,
 			"Dependencies ─": FocusPaneDependencies,
 			"Blocked by (2)": FocusPaneDependencies,
-			"Metadata ─":     FocusPaneMetadata,
 		} {
 			x, y := testui.FindCell(t, view, text)
 			hit, ok := HitTest(state, x, y)
 			if !ok || hit.Pane != want || hit.RefID != "" {
 				t.Errorf("width %d: HitTest on %q (%d,%d) = %+v, %v; want pane %d with no reference", width, text, x, y, hit, ok, want)
+			}
+		}
+
+		// The Metadata pane only shows: the mouse finds nothing on it.
+		for _, text := range []string{"Metadata ─", "Priority"} {
+			x, y := testui.FindCell(t, view, text)
+			if hit, ok := HitTest(state, x, y); ok {
+				t.Errorf("width %d: HitTest on %q of the Metadata pane = %+v, want no hit", width, text, hit)
 			}
 		}
 	}

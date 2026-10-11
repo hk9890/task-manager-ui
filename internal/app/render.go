@@ -39,7 +39,9 @@ func splitMargin(size, floor, each int) (before, after, screen int) {
 }
 
 // setTerminalSize takes the terminal's size apart into the margin and the
-// screen inside it. Nothing else reads the terminal's size.
+// screen inside it. Nothing else acts on the terminal's size: shouldForwardTo
+// keeps a resize from the tabs, and the shell sizes every other surface from
+// the screen.
 func (m *Model) setTerminalSize(msg tea.WindowSizeMsg) {
 	m.sizeKnown = true
 	m.marginLeft, _, m.width = splitMargin(msg.Width, marginMinWidth, screenMarginCols)

@@ -80,19 +80,19 @@ func barLines(m *Model) []string {
 	return lines
 }
 
-func TestLeftAndRightWalkThePanesWithTheCommentsBetweenContentAndMetadata(t *testing.T) {
+func TestLeftAndRightWalkThePanesWithTheCommentsAfterContent(t *testing.T) {
 	t.Parallel()
 
 	m := commentsDetail(t, 2)
 	m.FocusPane = uidetail.FocusPaneDependencies
-	walk := []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneComments, uidetail.FocusPaneMetadata, uidetail.FocusPaneMetadata}
+	walk := []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneComments, uidetail.FocusPaneComments}
 	for step, want := range walk {
 		key(t, m, tea.KeyMsg{Type: tea.KeyRight})
 		if m.FocusPane != want {
 			t.Fatalf("right, step %d: focus %d, want %d", step, m.FocusPane, want)
 		}
 	}
-	back := []uidetail.FocusPane{uidetail.FocusPaneComments, uidetail.FocusPaneContent, uidetail.FocusPaneDependencies, uidetail.FocusPaneDependencies}
+	back := []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneDependencies, uidetail.FocusPaneDependencies}
 	for step, want := range back {
 		key(t, m, tea.KeyMsg{Type: tea.KeyLeft})
 		if m.FocusPane != want {
@@ -100,15 +100,11 @@ func TestLeftAndRightWalkThePanesWithTheCommentsBetweenContentAndMetadata(t *tes
 		}
 	}
 
-	// An issue without a comment has no such stop.
+	// An issue without a comment has no such stop: Content is the last one.
 	m = commentsDetail(t, 0)
 	key(t, m, tea.KeyMsg{Type: tea.KeyRight})
-	if m.FocusPane != uidetail.FocusPaneMetadata {
-		t.Fatalf("right from Content without a comment: focus %d, want Metadata", m.FocusPane)
-	}
-	key(t, m, tea.KeyMsg{Type: tea.KeyLeft})
 	if m.FocusPane != uidetail.FocusPaneContent {
-		t.Fatalf("left from Metadata without a comment: focus %d, want Content", m.FocusPane)
+		t.Fatalf("right from Content without a comment: focus %d, want Content", m.FocusPane)
 	}
 }
 
@@ -185,7 +181,7 @@ func TestEnterAndTheDeleteKeyAskTheShellOnlyWithTheCommentsFocused(t *testing.T)
 	testui.AssertActionRequest(t, key(t, m, tea.KeyMsg{Type: tea.KeyEnter})(), mode.Detail, mode.ActionEditComment)
 	testui.AssertActionRequest(t, key(t, m, deleteKey)(), mode.Detail, mode.ActionDeleteComment)
 
-	for _, focus := range []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneDependencies, uidetail.FocusPaneMetadata} {
+	for _, focus := range []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneDependencies} {
 		m.FocusPane = focus
 		if consumed, cmd := m.HandleKey(deleteKey, commentsWidth, commentsHeight); consumed || cmd != nil {
 			t.Errorf("focus %d: the delete key was consumed: %v", focus, consumed)
@@ -360,5 +356,52 @@ func TestSelectCommentIsScrolledToByTheNextClampScroll(t *testing.T) {
 	m.ClampScroll(commentsWidth, commentsHeight)
 	if m.ContentScrollOffset != scrolled {
 		t.Fatalf("a later ClampScroll moved the pane from %d to %d", scrolled, m.ContentScrollOffset)
+	}
+}
+
+// The Metadata pane only shows: no key and no click gives it the focus, and
+// the wheel does not scroll it.
+func TestTheMetadataPaneNeverTakesTheFocus(t *testing.T) {
+	t.Parallel()
+
+	// The screen of a 120x30 terminal, inside the margin.
+	const width, height = 116, 28
+	bar, _ := styles.SelectionPrefix(true, false)
+	metadataHasNoCursor := func(m *Model) {
+		t.Helper()
+		view := testui.AnsiEscapePattern.ReplaceAllString(m.View(width, height, false, 0), "")
+		for _, field := range []string{"Status", "Priority"} {
+			if strings.Contains(view, bar+field) {
+				t.Fatalf("the Metadata pane draws a cursor on %s:\n%s", field, view)
+			}
+		}
+	}
+
+	m := commentsDetail(t, 2)
+	for step, want := range []uidetail.FocusPane{uidetail.FocusPaneComments, uidetail.FocusPaneComments} {
+		if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, width, height); !consumed || m.FocusPane != want {
+			t.Fatalf("right, step %d: focus %d, want %d", step, m.FocusPane, want)
+		}
+		metadataHasNoCursor(m)
+	}
+	_, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, width, height)
+	testui.AssertActionRequest(t, cmd(), mode.Detail, mode.ActionEditComment)
+
+	m = commentsDetail(t, 0)
+	m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, width, height)
+	metadataHasNoCursor(m)
+	if consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, width, height); consumed || cmd != nil {
+		t.Fatalf("enter after right from Content was consumed: %v", consumed)
+	}
+
+	m.FocusPane = uidetail.FocusPaneDependencies
+	for _, kind := range []mode.MouseKind{mode.MouseClick, mode.MouseWheelDown} {
+		x, y := testui.FindCell(t, m.View(width, height, false, 0), "Priority")
+		if cmd := m.HandleMouse(mode.MouseMsg{Kind: kind, X: x, Y: y, At: mouseStart}, width, height); cmd != nil {
+			t.Fatalf("mouse event %d on the Metadata pane produced %#v", kind, cmd())
+		}
+		if m.FocusPane != uidetail.FocusPaneDependencies || m.ContentScrollOffset != 0 {
+			t.Fatalf("mouse event %d on the Metadata pane: focus %d, content offset %d", kind, m.FocusPane, m.ContentScrollOffset)
+		}
 	}
 }

@@ -3,7 +3,6 @@ package modal
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -42,7 +41,6 @@ type Config struct {
 	ConfirmText    string
 	CancelText     string
 	MinWidth       int
-	HideButtons    bool
 }
 
 // SubmitMsg is emitted when confirm is triggered.
@@ -98,9 +96,6 @@ type Model struct {
 	focusedField Field
 	width        int
 	height       int
-	// scrollOffset is the first content line drawn when the modal is too tall
-	// for the viewport. Move it with Scroll.
-	scrollOffset int
 }
 
 // New creates a modal with default key bindings.
@@ -168,10 +163,10 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles keyboard and size messages.
+// Update handles the keyboard and hands every other message to the focused
+// input. SetSize is what sizes the modal.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Next...):
 			m = m.nextField()
@@ -209,9 +204,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return m, func() tea.Msg { return CancelMsg{} }
 			}
 		}
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
 	}
 
 	if m.hasInputs && m.focusedInput >= 0 && m.focusedInput < len(m.inputs) {
@@ -309,7 +301,7 @@ func (m Model) View() string {
 	rendered, contentWidth := m.render()
 	// Clip with border preserved when the modal overflows the viewport.
 	if m.height > 0 {
-		rendered = clipModalToViewport(rendered, m.height, contentWidth, m.scrollOffset)
+		rendered = clipModalToViewport(rendered, m.height, contentWidth)
 	}
 	return rendered
 }
@@ -344,9 +336,7 @@ func (m Model) render() (string, int) {
 		content.WriteString("\n\n")
 	}
 
-	if !m.config.HideButtons {
-		content.WriteString(m.renderButtons())
-	}
+	content.WriteString(m.renderButtons())
 
 	body := titleStyle.Render(m.config.Title) + "\n" + divider + "\n" + lipgloss.NewStyle().Padding(1, 1).Render(content.String())
 	rendered := lipgloss.NewStyle().
@@ -362,7 +352,7 @@ func (m Model) render() (string, int) {
 // preserving the top and bottom border lines. When lines are clipped, an
 // overflow indicator is inserted on the row immediately above the bottom border.
 // A margin of 2 rows is reserved so the modal does not touch the viewport edges.
-func clipModalToViewport(rendered string, viewportHeight, contentWidth, offset int) string {
+func clipModalToViewport(rendered string, viewportHeight, contentWidth int) string {
 	const verticalMargin = 2
 	maxHeight := viewportHeight - verticalMargin
 	if maxHeight < 4 {
@@ -386,71 +376,21 @@ func clipModalToViewport(rendered string, viewportHeight, contentWidth, offset i
 		return rendered
 	}
 
-	// An indicator takes the place of a content row, so it counts that row
+	// The indicator takes the place of a content row, so it counts that row
 	// among the hidden ones.
-	indicator := func(text string) string {
-		styled := lipgloss.NewStyle().
-			Foreground(styles.TextSecondaryColor).
-			Width(contentWidth).
-			Render(text)
-		// Wrap in side-border characters matching the modal frame.
-		borderColor := lipgloss.NewStyle().Foreground(styles.OverlayBorderColor)
-		return borderColor.Render("│") + " " + styled + " " + borderColor.Render("│")
-	}
-
-	offset = max(0, min(offset, len(content)-contentSlots))
-	window := append([]string(nil), content[offset:offset+contentSlots]...)
-	if offset > 0 {
-		window[0] = indicator(fmt.Sprintf("… %d earlier lines", offset+1))
-	}
-	if below := len(content) - offset - contentSlots; below > 0 {
-		window[contentSlots-1] = indicator(fmt.Sprintf("… %d more lines", below+1))
-	}
+	styled := lipgloss.NewStyle().
+		Foreground(styles.TextSecondaryColor).
+		Width(contentWidth).
+		Render(fmt.Sprintf("… %d more lines", len(content)-contentSlots+1))
+	// Wrap in side-border characters matching the modal frame.
+	borderColor := lipgloss.NewStyle().Foreground(styles.OverlayBorderColor)
+	indicator := borderColor.Render("│") + " " + styled + " " + borderColor.Render("│")
 
 	clipped := make([]string, 0, maxHeight)
 	clipped = append(clipped, topBorder)
-	clipped = append(clipped, window...)
-	clipped = append(clipped, bottomBorder)
+	clipped = append(clipped, content[:contentSlots-1]...)
+	clipped = append(clipped, indicator, bottomBorder)
 	return strings.Join(clipped, "\n")
-}
-
-// ScrollToTop returns the modal to its first line, for an overlay that is
-// reopened rather than rebuilt.
-func (m Model) ScrollToTop() Model {
-	m.scrollOffset = 0
-	return m
-}
-
-// Scroll moves the view of a modal too tall for the viewport by delta lines,
-// and does nothing to one that fits.
-//
-// The move starts from the line that is drawn, not from the stored offset: a
-// taller viewport hides fewer lines, and View already draws an offset past the
-// new end at that end.
-func (m Model) Scroll(delta int) Model {
-	const verticalMargin = 2
-	maxHeight := m.height - verticalMargin
-	rendered, _ := m.render()
-	hidden := strings.Count(rendered, "\n") + 1 - maxHeight
-	if m.height <= 0 || maxHeight < 4 || hidden <= 0 {
-		m.scrollOffset = 0
-		return m
-	}
-	m.scrollOffset = max(0, min(min(m.scrollOffset, hidden)+delta, hidden))
-	return m
-}
-
-// ScrollToEnd moves the view to the last line.
-func (m Model) ScrollToEnd() Model {
-	m.scrollOffset = math.MaxInt
-	return m.Scroll(0)
-}
-
-// PageLines is how far a page moves the view: the content rows a clipped
-// modal draws between its two indicators.
-func (m Model) PageLines() int {
-	const verticalMargin, borders, indicators = 2, 2, 2
-	return max(1, m.height-verticalMargin-borders-indicators)
 }
 
 func (m Model) renderInputSection(index int, label string, width int) string {
@@ -509,7 +449,7 @@ func (m Model) Overlay(bg string) string {
 	}, m.View(), bg)
 }
 
-// SetSize updates viewport dimensions used for Overlay.
+// SetSize sets the viewport the modal is clipped to and centred in.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height

@@ -123,15 +123,18 @@ The line of view tabs is not drawn in detail mode: the issue has that row.
 `tab` and `shift+tab` still leave detail for a tab. While the issue loads, the
 spinner stands in the first cell of the menu bar.
 
-- `left`, `right` — move focus between Dependencies, Content, the comments and Metadata; an issue without a comment has no comments stop
-- `up` — scroll up one line in the focused pane; in Dependencies and Metadata, move the cursor
-- `down` — scroll down one line in the focused pane; in Dependencies and Metadata, move the cursor
+- `left`, `right` — move focus between Dependencies, Content and the comments; an issue without a comment has no comments stop
+- `up` — scroll up one line in the focused pane; in Dependencies, move the cursor
+- `down` — scroll down one line in the focused pane; in Dependencies, move the cursor
 - `pgup` — page up
 - `pgdown` — page down
 - `home` — jump to top
 - `end` — jump to bottom
 - `enter` (Dependencies focused) — open the highlighted related issue
-- `enter` (Metadata focused) — open the issue editor on the selected Status or Priority field
+
+The Metadata pane only shows the issue's fields. It takes no focus, no key and
+no click, and does not scroll: on a short screen it ends on `… (N more)`. Change
+a field in the issue editor (`alt+u`).
 
 The comments stand at the end of the Content pane, newest first, each under a
 bold line with its author and time, with a rule between two of them. With the
@@ -146,10 +149,11 @@ comments focused, the selected comment carries the selection bar:
 An edited comment gets a new time and your name, so it moves to the top.
 
 Four buttons stand in the Content pane, each with the key that does the same,
-and a click presses it: `edit` in the top border (`alt+u`), `add` beside the
-`Comments` heading (`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the
-first line of the selected comment. A pane too narrow for a button leaves it
-out; the key still works.
+and a click presses it: `edit` on the first line, the line of the issue's ID
+(`alt+u`), `add` on the `Comments` heading (`alt+a`), and `edit` (`enter`) and
+`delete` (`alt+d`) on the first line of the selected comment. Each stands at the
+right end of its line. A pane too narrow for a button leaves it out; the key
+still works.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
 
@@ -165,7 +169,7 @@ alone.
 | Key | Does |
 |---|---|
 | `tab` / `shift+tab` | next / previous field or button |
-| `down` / `up` | next / previous field; in the text they move the cursor |
+| `down` / `up` | next / previous field; in the text they move the cursor, `up` on its first line goes to the field above and `down` on its last line goes to `Save` |
 | `left` / `right` | step Status, Type or Priority through the store's values; on a button, the other button |
 | `enter` | in the text: a new line; elsewhere: the next field, or press the button |
 | `pgup` / `pgdown` | in the text: a page |
@@ -300,14 +304,14 @@ instead.
   `reload`, `config`, `help`, `quit` — to do what the key shown beside it does. The store's name
   opens the store picker. `reload` reloads the view on screen. `config` opens the configuration
   screen, which takes keys only.
-- **Click a pane** in detail mode to focus it. **Click a comment** to select it.
+- **Click the Dependencies or the Content pane** in detail mode to focus it. **Click a comment** to select it.
 - **Click a button** in the detail Content pane — `edit`, `add`, and `edit` and `delete` on the
   selected comment — to do what the key shown beside it does.
 - In the issue editor, **click a field** to put the cursor in it and **click `Save` or `Cancel`**
   to press it. The wheel over the text moves its cursor three lines a notch.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.
-- **Wheel** over the detail Content or Metadata pane, or on the help screen,
+- **Wheel** over the detail Content pane, or on the help screen,
   scrolls it three lines a notch. Help on a terminal under 10 rows scrolls
   fewer, so no line is skipped.
 - While a dialog is open, the mouse reaches nothing under it: a dialog takes

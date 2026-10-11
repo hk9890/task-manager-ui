@@ -486,7 +486,6 @@ func TestHelpNamesTheKeysDetailTakesItself(t *testing.T) {
 		want := []string{
 			"left / right: the pane to the left / right; the comments are a stop after Content",
 			"enter: in the Dependencies pane, open the selected issue",
-			"enter: in the Metadata pane, edit the issue on the selected Status or Priority",
 			"enter: on a comment, edit it",
 		}
 		if strings.Join(got, "\n") != strings.Join(want, "\n") {

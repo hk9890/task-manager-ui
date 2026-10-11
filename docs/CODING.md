@@ -51,7 +51,7 @@ mise run ci          # the merge gate; see What the tools enforce
 7. **One editor, several ways in.** Each opener is a method in `internal/app/issue_editor.go`:
 
    - `create_issue` opens it empty (`openNewIssue`).
-   - `update_issue`, the `edit` button of the Detail Content pane and Enter on the Status or Priority row of the Metadata pane open it on the selected issue (`openIssueEditor`).
+   - `update_issue` and the `edit` button of the Detail Content pane open it on the selected issue (`openIssueEditor`).
    - `close_issue` opens it with the status on `closed` and the focus on the reason (`openIssueClose`). It writes nothing by itself.
    - `comment_issue` and the `add` button of the Comments heading open the text field alone (`openCommentAdd`); Enter on the selected comment opens it on that comment (`openCommentEdit`).
    - A comment delete is not a way in: `delete_comment` asks yes or no in the action modal (`confirmCommentDelete`).

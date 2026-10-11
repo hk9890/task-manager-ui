@@ -31,7 +31,6 @@ type Model struct {
 	previewDetail domain.IssueDetail
 	Keys          config.ResolvedKeyBindings
 	FocusPane     detail.FocusPane
-	metadataField detail.MetadataFieldKey
 	// commentIndex is the selected comment, counted in detail.OrderedComments.
 	// revealComment asks the next ClampScroll to scroll to it: the shell sets
 	// the cursor before the reload that moves the comment arrives, and a
@@ -45,7 +44,6 @@ type Model struct {
 
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
-	MetadataScrollOffset     int
 
 	// drillDepsFocusCalls counts remaining ApplyLoadedDetail calls that belong to a
 	// drill-from-Dependencies sequence. Set to 2 (placeholder + real data) by
@@ -185,7 +183,7 @@ func (m *Model) ClearDrillFocus() {
 
 // ApplyLoadedDetail stores loaded detail and updates browser-panel state.
 // If issueID differs from the previously loaded issue (or no issue was loaded),
-// all three scroll offsets are zeroed before ClampScroll runs.
+// both scroll offsets are zeroed before ClampScroll runs.
 //
 // When a drill-from-Dependencies sequence is in progress (drillDepsFocusCalls > 0),
 // the final call (real data) drives the focus decision: Dependencies if the rail is
@@ -197,7 +195,6 @@ func (m *Model) ApplyLoadedDetail(issueID string, d domain.IssueDetail) {
 	selected, _ := m.SelectedComment()
 	if !sameIssue {
 		m.ContentScrollOffset = 0
-		m.MetadataScrollOffset = 0
 		m.DependenciesScrollOffset = 0
 		m.commentIndex = 0
 	}
@@ -284,7 +281,7 @@ func (m *Model) View(maxWidth, viewportHeight int, compact bool, skeletonPhase i
 			SelectionID:   state.SelectionID,
 			TargetID:      state.TargetID,
 			Detail:        state.Detail,
-			QuickActions:  state.QuickActions,
+			ButtonKeys:    state.ButtonKeys,
 			Loading:       state.Loading,
 			Skeleton:      state.Skeleton,
 			SkeletonPhase: skeletonPhase,
@@ -326,13 +323,11 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 		SelectionID: m.selectionID,
 		TargetID:    m.targetID,
 		Detail:      d,
-		QuickActions: detail.QuickActionLabels{
+		ButtonKeys: detail.ButtonKeys{
 			EditIssue:     m.Keys.DisplayLabel(config.ShellContext, config.ShellActionUpdateIssue),
 			AddComment:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
 			EditComment:   "enter",
 			DeleteComment: m.Keys.DisplayLabel(config.DetailContext, config.DetailActionDeleteComment),
-			CloseIssue:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCloseIssue),
-			ReloadDetail:  m.Keys.DisplayLabel(config.ShellContext, config.ShellActionReloadDetail),
 		},
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
@@ -346,15 +341,13 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 		Height:                   viewportHeight,
 		Compact:                  false,
 		FocusPane:                m.focusPane(),
-		MetadataSelectedField:    m.metadataSelectedField(),
 		CommentIndex:             m.commentIndex,
 		ContentScrollOffset:      m.ContentScrollOffset,
 		DependenciesScrollOffset: m.DependenciesScrollOffset,
-		MetadataScrollOffset:     m.MetadataScrollOffset,
 	}
 }
 
-// ClampScroll keeps all pane scroll offsets inside current content bounds.
+// ClampScroll keeps both pane scroll offsets inside current content bounds.
 func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	if viewportHeight <= 0 {
 		return
@@ -366,7 +359,6 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 	m.revealComment = false
 	m.ContentScrollOffset = textutil.Clamp(m.ContentScrollOffset, 0, bounds.Content)
 	m.DependenciesScrollOffset = textutil.Clamp(m.DependenciesScrollOffset, 0, bounds.Dependencies)
-	m.MetadataScrollOffset = textutil.Clamp(m.MetadataScrollOffset, 0, bounds.Metadata)
 }
 
 // HandleKey processes one key for detail mode. It reports whether the key was
@@ -378,7 +370,6 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 		return false, nil
 	}
 	m.normalizeRelatedSelection()
-	m.ensureMetadataSelection()
 	if m.Keys.IsZero() {
 		resolved, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
 		if err == nil {
@@ -395,7 +386,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 		return true, nil
 	}
 
-	// Enter on a comment is built in, as it is in the two panes below.
+	// Enter on a comment is built in, as it is in the Dependencies pane below.
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneComments {
 		return true, mode.RequestActionCmd(mode.Detail, mode.ActionEditComment)
 	}
@@ -408,20 +399,9 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 
 	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneDependencies {
 		// Wire Enter to open the highlighted related/child issue. This is
-		// hardcoded (NOT keymap-driven) — Enter in the Dependencies pane is a
-		// special case, consistent with how Enter in the Metadata pane works.
+		// hardcoded (NOT keymap-driven).
 		if ref, ok := m.selectedRelatedIssue(); ok {
 			return true, openRelatedIssueCmd(ref)
-		}
-		return true, nil
-	}
-
-	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneMetadata {
-		switch m.metadataSelectedField() {
-		case detail.MetadataFieldStatus:
-			return true, mode.RequestActionCmd(mode.Detail, mode.ActionEditStatus)
-		case detail.MetadataFieldPriority:
-			return true, mode.RequestActionCmd(mode.Detail, mode.ActionEditPriority)
 		}
 		return true, nil
 	}
@@ -484,17 +464,6 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 		}
 		m.DependenciesScrollOffset = applyScrollAction(m.DependenciesScrollOffset, bounds.Dependencies, action, move)
 		return true, nil
-	case detail.FocusPaneMetadata:
-		if action == config.DetailActionScrollUp {
-			m.moveMetadataSelection(-1, maxWidth, viewportHeight)
-			return true, nil
-		}
-		if action == config.DetailActionScrollDown {
-			m.moveMetadataSelection(1, maxWidth, viewportHeight)
-			return true, nil
-		}
-		m.MetadataScrollOffset = applyScrollAction(m.MetadataScrollOffset, bounds.Metadata, action, move)
-		return true, nil
 	default:
 		m.ContentScrollOffset = applyScrollAction(m.ContentScrollOffset, bounds.Content, action, move)
 		return true, nil
@@ -503,7 +472,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 
 func (m *Model) focusPane() detail.FocusPane {
 	switch m.FocusPane {
-	case detail.FocusPaneDependencies, detail.FocusPaneContent, detail.FocusPaneMetadata:
+	case detail.FocusPaneDependencies, detail.FocusPaneContent:
 		return m.FocusPane
 	case detail.FocusPaneComments:
 		if len(m.Detail.Comments) > 0 {
@@ -514,13 +483,14 @@ func (m *Model) focusPane() detail.FocusPane {
 }
 
 // focusStops is the panes left and right walk, in that order. The comments are
-// a stop of their own while the issue has one.
+// a stop of their own while the issue has one. The Metadata pane is no stop:
+// it only shows.
 func (m *Model) focusStops() []detail.FocusPane {
 	stops := []detail.FocusPane{detail.FocusPaneDependencies, detail.FocusPaneContent}
 	if len(m.Detail.Comments) > 0 {
 		stops = append(stops, detail.FocusPaneComments)
 	}
-	return append(stops, detail.FocusPaneMetadata)
+	return stops
 }
 
 // moveFocus moves the focus one stop to the left or the right and stays at
@@ -529,10 +499,7 @@ func (m *Model) moveFocus(direction, maxWidth, viewportHeight int) {
 	stops := m.focusStops()
 	next := textutil.Clamp(slices.Index(stops, m.focusPane())+direction, 0, len(stops)-1)
 	m.FocusPane = stops[next]
-	switch m.FocusPane {
-	case detail.FocusPaneMetadata:
-		m.ensureMetadataSelection()
-	case detail.FocusPaneComments:
+	if m.FocusPane == detail.FocusPaneComments {
 		m.scrollToComment(maxWidth, viewportHeight)
 	}
 }
@@ -549,66 +516,6 @@ func (m *Model) scrollToComment(maxWidth, viewportHeight int) {
 	total := geometry.Content + inner
 	offset := scroll.EnsureVisibleClipped(m.ContentScrollOffset, last, inner, total)
 	m.ContentScrollOffset = scroll.EnsureVisibleClipped(offset, first, inner, total)
-}
-
-func (m *Model) metadataSelectedField() detail.MetadataFieldKey {
-	if !isEditableMetadataField(m.metadataField) {
-		return detail.MetadataFieldStatus
-	}
-	return m.metadataField
-}
-
-func (m *Model) ensureMetadataSelection() {
-	if !isEditableMetadataField(m.metadataField) {
-		m.metadataField = detail.MetadataFieldStatus
-	}
-}
-
-func (m *Model) moveMetadataSelection(delta, maxWidth, viewportHeight int) {
-	fields := editableMetadataFields()
-	if len(fields) == 0 {
-		m.metadataField = detail.MetadataFieldNone
-		return
-	}
-
-	m.ensureMetadataSelection()
-	index := 0
-	for i, key := range fields {
-		if key == m.metadataField {
-			index = i
-			break
-		}
-	}
-
-	next := index + delta
-	if next < 0 {
-		next = 0
-	}
-	if next >= len(fields) {
-		next = len(fields) - 1
-	}
-	m.metadataField = fields[next]
-
-	// Keep the selected field inside the visible window.
-	lineIdx := detail.MetadataFieldLineIndex(m.metadataField, m.Detail)
-	if lineIdx >= 0 && viewportHeight > 0 {
-		geometry := m.paneGeometry(maxWidth, viewportHeight)
-		total := geometry.Metadata + geometry.MetadataInnerHeight
-		m.MetadataScrollOffset = scroll.EnsureVisibleClipped(m.MetadataScrollOffset, lineIdx, geometry.MetadataInnerHeight, total)
-	}
-}
-
-func editableMetadataFields() []detail.MetadataFieldKey {
-	return []detail.MetadataFieldKey{detail.MetadataFieldStatus, detail.MetadataFieldPriority}
-}
-
-func isEditableMetadataField(key detail.MetadataFieldKey) bool {
-	for _, field := range editableMetadataFields() {
-		if key == field {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {

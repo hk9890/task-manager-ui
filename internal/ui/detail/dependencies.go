@@ -166,7 +166,7 @@ func DependencyRefLineIndex(refIndex int, browserItems []domain.IssueReference, 
 //
 // isCursor marks the movable selection row (↑/↓ moves it; Enter commits the load).
 // It is rendered with the app-wide selection gutter via issuerow Selected=true —
-// byte-identical to the cursor in the board, search, and metadata panes, so the one
+// byte-identical to the cursor on the board and in the search, so the one
 // marker the user moves looks the same everywhere. The currently-viewed issue is never
 // in this list (it is excluded when the browser panel is assembled), so it needs no
 // marker here — it lives in the Content/Metadata panes.

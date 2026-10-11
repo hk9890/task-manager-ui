@@ -26,9 +26,9 @@ func commentsState(t *testing.T) State {
 				{ID: "c-3", Author: "carol", Body: "Third chronologically", CreatedAt: mustTime(t, "2026-04-05T14:00:00Z")},
 			},
 		},
-		QuickActions: QuickActionLabels{EditIssue: "alt+u", AddComment: "alt+a", EditComment: "enter", DeleteComment: "alt+d"},
-		Width:        100,
-		Height:       30,
+		ButtonKeys: ButtonKeys{EditIssue: "alt+u", AddComment: "alt+a", EditComment: "enter", DeleteComment: "alt+d"},
+		Width:      100,
+		Height:     30,
 	}
 }
 
@@ -55,7 +55,7 @@ func TestCommentsWithoutTheFocusDrawNoBarAndNoCommentButtons(t *testing.T) {
 	t.Parallel()
 
 	bar, _ := styles.SelectionPrefix(true, false)
-	for _, focus := range []FocusPane{FocusPaneContent, FocusPaneDependencies, FocusPaneMetadata} {
+	for _, focus := range []FocusPane{FocusPaneContent, FocusPaneDependencies} {
 		state := commentsState(t)
 		state.FocusPane = focus
 		view := Render(state)
@@ -211,9 +211,47 @@ func TestHitTestFollowsTheScrolledContentWindow(t *testing.T) {
 		t.Errorf("a skeleton pane draws a button:\n%s", Render(state))
 	}
 	for column := 0; column < state.Width; column++ {
-		if hit, _ := HitTest(state, column, 0); hit.Button != ButtonNone {
+		if hit, _ := HitTest(state, column, 1); hit.Button != ButtonNone {
 			t.Fatalf("a skeleton pane reports the button %d at column %d", hit.Button, column)
 		}
+	}
+}
+
+// The edit button stands on the ID line and ends in the column the add button
+// ends in. The border line holds no button.
+func TestTheEditButtonEndsInTheColumnOfTheAddButton(t *testing.T) {
+	t.Parallel()
+
+	for _, width := range []int{160, 116, 100} {
+		state := commentsState(t)
+		state.Width = width
+		view := Render(state)
+
+		editX, editY := testui.FindCell(t, view, "edit alt+u")
+		idX, idY := testui.FindCell(t, view, "tm-77")
+		addX, _ := testui.FindCell(t, view, "add alt+a")
+		if editY != idY || editX < idX {
+			t.Errorf("width %d: edit at (%d,%d) is not at the right of the ID at (%d,%d)", width, editX, editY, idX, idY)
+		}
+		if editX+len("edit alt+u") != addX+len("add alt+a") {
+			t.Errorf("width %d: edit ends in column %d, add in column %d", width, editX+len("edit alt+u"), addX+len("add alt+a"))
+		}
+		_, borderY := testui.FindCell(t, view, "Content ─")
+		if border := strings.Split(view, "\n")[borderY]; strings.Contains(border, "edit") {
+			t.Errorf("width %d: the border line holds a button: %s", width, border)
+		}
+	}
+}
+
+// An ID line too long for the button keeps the ID whole and draws no button.
+func TestAnIDLineWithoutRoomDrawsNoEditButton(t *testing.T) {
+	t.Parallel()
+
+	pane := ContentPaneState{Detail: commentsState(t).Detail}
+	pane.Detail.Summary.ID = "tm-a-long-issue-id"
+	content := renderContentPaneLines(pane, 30, 20)
+	if !strings.Contains(content.lines[0], "tm-a-long-issue-id") || strings.Contains(content.lines[0], "edit") || content.edit != (cells{}) {
+		t.Errorf("the ID line is %q with the button at %+v, want the whole ID and no button", content.lines[0], content.edit)
 	}
 }
 

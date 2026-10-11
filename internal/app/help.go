@@ -63,7 +63,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		}},
 		{Title: "Issue editor", Entries: []helpscreen.Entry{
 			{Key: pair("tab", "shift+tab"), Desc: "the next / previous field or button"},
-			{Key: pair("up", "down"), Desc: "the previous / next field; in the text, move the cursor"},
+			{Key: pair("up", "down"), Desc: "the previous / next field; in the text, move the cursor, and leave the text from its first / last line"},
 			{Key: pair("left", "right"), Desc: "the value before / after the one shown, on Status, Type and Priority; the other button"},
 			{Key: "enter", Desc: "the next field, or press the focused button; in the text, a new line"},
 			{Key: pair("pgup", "pgdown"), Desc: "in the text, a page up / down"},
@@ -77,7 +77,6 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: pair("left", "right"), Desc: "the pane to the left / right; the comments are a stop after Content"},
 			{Key: pair(detail(config.DetailActionScrollUp), detail(config.DetailActionScrollDown)), Desc: "on the comments, the comment above / below"},
 			{Key: "enter", Desc: "in the Dependencies pane, open the selected issue"},
-			{Key: "enter", Desc: "in the Metadata pane, edit the issue on the selected Status or Priority"},
 			{Key: "enter", Desc: "on a comment, edit it"},
 			{Key: detail(config.DetailActionDeleteComment), Desc: "on a comment, delete it after a yes"},
 			{Key: shell(config.ShellActionReloadDetail), Desc: "read the issue from the store again"},

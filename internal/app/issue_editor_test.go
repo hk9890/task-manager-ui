@@ -466,6 +466,21 @@ func TestEscapeDiscardsTheTypedTextAndWritesNothing(t *testing.T) {
 	}
 }
 
+// A click on Save sends the request as a Cmd, so it can arrive after the
+// editor is gone.
+func TestSubmitThatArrivesWithNoEditorOpenWritesNothing(t *testing.T) {
+	m, gw := editorShell(t)
+
+	m = applyMessages(t, m, []tea.Msg{issueeditmode.SubmitMsg{After: issueeditmode.Values{Title: "late"}}})
+
+	if m.active != mode.Board {
+		t.Errorf("the submit left the shell on %q, want the Board", m.active)
+	}
+	if writes := writeCalls(gw); len(writes) != 0 {
+		t.Errorf("the submit wrote %v", writes)
+	}
+}
+
 func TestCancelButtonClosesTheEditorAndAClickOnSaveWrites(t *testing.T) {
 	m, gw := editorShell(t)
 
@@ -661,45 +676,6 @@ func TestEditorOpenedFromDetailReturnsThereAndReloadsIt(t *testing.T) {
 	}
 	if !gw.HasCallSince(mark, fakes.MethodIssue) || m.detail.Detail.Summary.Title != "Ready first edited" {
 		t.Errorf("Detail shows %q after the save; issue read again: %v", m.detail.Detail.Summary.Title, gw.HasCallSince(mark, fakes.MethodIssue))
-	}
-}
-
-// Enter on the Status or the Priority row of the Metadata pane opens the
-// editor with the focus on that field.
-func TestEnterOnAMetadataFieldOpensTheEditorOnThatField(t *testing.T) {
-	tests := []struct {
-		name  string
-		keys  []string
-		wrote func(domain.UpdateIssueInput) bool
-	}{
-		{"status", []string{"right"}, func(in domain.UpdateIssueInput) bool {
-			return in.Status != nil && *in.Status == "in_progress" && in.Priority == nil
-		}},
-		{"priority", []string{"right", "down"}, func(in domain.UpdateIssueInput) bool {
-			return in.Priority != nil && *in.Priority == 2 && in.Status == nil
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m, gw := editorShell(t)
-			m = send(t, m, tea.WindowSizeMsg{Width: 140, Height: 34})
-			m = pressKey(t, m, "enter")
-			for _, key := range tt.keys {
-				m = pressKey(t, m, key)
-			}
-
-			m = openEditor(t, m, "enter")
-			m = pressKey(t, m, "right")
-			m = pressKey(t, m, "ctrl+s")
-
-			inputs := updateInputs(t, gw)
-			if len(inputs) != 1 || !tt.wrote(inputs[0]) {
-				t.Errorf("enter on the %s row and one step right wrote %+v", tt.name, inputs)
-			}
-			if m.active != mode.Detail {
-				t.Errorf("the shell is on %q, want Detail", m.active)
-			}
-		})
 	}
 }
 

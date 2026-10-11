@@ -30,7 +30,7 @@ const (
 	minDetailWidth = 30
 
 	detailColumnGap   = 2
-	metadataRailWidth = 34
+	metadataRailWidth = 32
 	leftRailMinWidth  = 24
 	leftRailMaxWidth  = 44
 )
@@ -44,7 +44,7 @@ type State struct {
 	Detail                 domain.IssueDetail
 	BrowserItems           []domain.IssueReference
 	BrowserSelectedIssueID string // cursor row (movable by ↑/↓); marked with the app-wide selection gutter
-	QuickActions           QuickActionLabels
+	ButtonKeys             ButtonKeys
 	Loading                bool
 	Skeleton               bool // when true, Content pane renders skeleton rows instead of description body
 	SkeletonPhase          int  // color-cycle index for skeleton pulse; see loading.SkeletonPhase
@@ -53,13 +53,11 @@ type State struct {
 	Height                 int
 	Compact                bool
 	FocusPane              FocusPane
-	MetadataSelectedField  MetadataFieldKey
 	// CommentIndex is the selected comment, counted in OrderedComments. It is
 	// drawn, with its buttons, only while FocusPane is FocusPaneComments.
 	CommentIndex             int
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
-	MetadataScrollOffset     int
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
 	// pointer is elsewhere. Its reference row draws the hover band, and its
 	// button is lit.
@@ -72,20 +70,19 @@ type FocusPane int
 const (
 	FocusPaneContent FocusPane = iota
 	FocusPaneDependencies
-	FocusPaneMetadata
 	// FocusPaneComments is the comments of the Content pane: a stop of its own
-	// between Content and Metadata, with a cursor on one comment.
+	// after Content, with a cursor on one comment.
 	FocusPaneComments
 
 	// Backward-compatible alias.
 	FocusPaneBrowser = FocusPaneDependencies
 )
 
-// ScrollOffsets describes max scroll bounds for each independent pane.
+// ScrollOffsets describes max scroll bounds for each pane that scrolls. The
+// Metadata pane does not.
 type ScrollOffsets struct {
 	Dependencies int
 	Content      int
-	Metadata     int
 
 	// Inner heights are the visible content rows of each pane — total pane
 	// height minus its two border rows — at the width and height the bounds
@@ -94,17 +91,14 @@ type ScrollOffsets struct {
 	// arithmetic lives here, next to the code that draws the panes.
 	DependenciesInnerHeight int
 	ContentInnerHeight      int
-	MetadataInnerHeight     int
 }
 
-// QuickActionLabels controls the metadata-rail quick action hints.
-type QuickActionLabels struct {
+// ButtonKeys is the key each button of the Content pane shows.
+type ButtonKeys struct {
 	EditIssue     string
 	AddComment    string
 	EditComment   string
 	DeleteComment string
-	CloseIssue    string
-	ReloadDetail  string
 }
 
 // Render renders standalone issue detail metadata and content.
@@ -195,38 +189,32 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 
 	if usesResponsiveDetailLayout(width) {
 		contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
-		dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
+		dependenciesWidth, _ := splitResponsiveBottomWidths(width)
 
 		contentInnerHeight := max(1, contentHeight-2)
 		bottomInnerHeight := max(1, bottomHeight-2)
 		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2, state.Skeleton, state.SkeletonPhase)
 		content := renderContentPaneLines(state.contentPane(width, contentHeight), width-2, contentInnerHeight).lines
-		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 		return ScrollOffsets{
 			Dependencies:            max(0, len(deps)-bottomInnerHeight),
 			Content:                 max(0, len(content)-contentInnerHeight),
-			Metadata:                max(0, len(metadata)-bottomInnerHeight),
 			DependenciesInnerHeight: bottomInnerHeight,
 			ContentInnerHeight:      contentInnerHeight,
-			MetadataInnerHeight:     bottomInnerHeight,
 		}
 	}
 
-	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
+	leftWidth, contentWidth, _ := splitThreePaneWidths(width)
 	innerHeight := max(1, height-2)
 
 	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2, state.Skeleton, state.SkeletonPhase)
 	content := renderContentPaneLines(state.contentPane(contentWidth, height), contentWidth-2, innerHeight).lines
-	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 	return ScrollOffsets{
 		Dependencies:            max(0, len(deps)-innerHeight),
 		Content:                 max(0, len(content)-innerHeight),
-		Metadata:                max(0, len(metadata)-innerHeight),
 		DependenciesInnerHeight: innerHeight,
 		ContentInnerHeight:      innerHeight,
-		MetadataInnerHeight:     innerHeight,
 	}
 }
 
@@ -241,14 +229,10 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 	contentBox := RenderContentPane(state.contentPane(width, contentHeight))
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
 	metadataBox := RenderMetadataPane(MetadataPaneState{
-		Detail:        detail,
-		Width:         metadataWidth,
-		Height:        bottomHeight,
-		Focused:       state.FocusPane == FocusPaneMetadata,
-		ScrollOffset:  state.MetadataScrollOffset,
-		SelectedField: state.MetadataSelectedField,
-		QuickActions:  state.QuickActions,
-		Skeleton:      state.Skeleton,
+		Detail:   detail,
+		Width:    metadataWidth,
+		Height:   bottomHeight,
+		Skeleton: state.Skeleton,
 	})
 
 	contentLines := strings.Split(contentBox, "\n")
@@ -369,19 +353,11 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 
 	contentBox := RenderContentPane(state.contentPane(contentWidth, height))
 
-	selectedField := MetadataFieldNone
-	if state.FocusPane == FocusPaneMetadata {
-		selectedField = state.MetadataSelectedField
-	}
 	metaBox := RenderMetadataPane(MetadataPaneState{
-		Detail:        detail,
-		Width:         metadataWidth,
-		Height:        height,
-		Focused:       state.FocusPane == FocusPaneMetadata,
-		ScrollOffset:  state.MetadataScrollOffset,
-		SelectedField: selectedField,
-		QuickActions:  state.QuickActions,
-		Skeleton:      state.Skeleton,
+		Detail:   detail,
+		Width:    metadataWidth,
+		Height:   height,
+		Skeleton: state.Skeleton,
 	})
 
 	leftLines := strings.Split(leftBox, "\n")
@@ -425,8 +401,7 @@ type ContentPaneState struct {
 	// SkeletonPhase is the colour-cycle index for the skeleton pulse; see
 	// loading.SkeletonPhase.
 	SkeletonPhase int
-	// QuickActions holds the key each button of the pane shows.
-	QuickActions QuickActionLabels
+	ButtonKeys    ButtonKeys
 	// CommentsFocused draws the comment at CommentIndex as selected, with its
 	// buttons.
 	CommentsFocused bool
@@ -447,7 +422,7 @@ func (state State) contentPane(width, height int) ContentPaneState {
 		ScrollOffset:    state.ContentScrollOffset,
 		Skeleton:        state.Skeleton,
 		SkeletonPhase:   state.SkeletonPhase,
-		QuickActions:    state.QuickActions,
+		ButtonKeys:      state.ButtonKeys,
 		CommentsFocused: state.FocusPane == FocusPaneComments,
 		CommentIndex:    state.CommentIndex,
 	}
@@ -459,13 +434,6 @@ func (state State) contentPane(width, height int) ContentPaneState {
 
 // RenderContentPane renders the shared detail Content pane section.
 func RenderContentPane(state ContentPaneState) string {
-	section, _ := contentPaneSection(state)
-	return styles.FormSection(section)
-}
-
-// contentPaneSection is the Content pane as FormSection draws it, with what
-// each of its lines is. HitTest reads both.
-func contentPaneSection(state ContentPaneState) (styles.FormSectionConfig, contentLines) {
 	width, height := state.Width, state.Height
 	if width <= 0 {
 		width = defaultDetailWidth
@@ -477,43 +445,36 @@ func contentPaneSection(state ContentPaneState) (styles.FormSectionConfig, conte
 	innerHeight := max(1, height-2)
 	content := renderContentPaneLines(state, width-2, innerHeight)
 	contentView, _ := sliceWithOffset(content.lines, state.ScrollOffset, innerHeight, width-2)
-	section := styles.FormSectionConfig{
+	topRight := fmt.Sprintf("%d comments", len(state.Detail.Comments))
+	if state.Skeleton {
+		topRight = issuerow.SkeletonGlyph + issuerow.SkeletonGlyph + " comments"
+	}
+	return styles.FormSection(styles.FormSectionConfig{
 		Width:              width,
 		Height:             height,
 		TopLeft:            "Content",
-		TopRight:           fmt.Sprintf("%d comments", len(state.Detail.Comments)),
-		TopAction:          paneButton("edit", state.QuickActions.withDefaults().EditIssue, state.Hover == ButtonEdit),
+		TopRight:           topRight,
 		Content:            contentView,
 		Focused:            state.Focused,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
-	}
-	if state.Skeleton {
-		section.TopRight = issuerow.SkeletonGlyph + issuerow.SkeletonGlyph + " comments"
-		section.TopAction = ""
-	}
-	return section, content
+	})
 }
 
 // MetadataPaneState is the state RenderMetadataPane draws from.
 type MetadataPaneState struct {
-	Detail        domain.IssueDetail
-	Width         int
-	Height        int
-	Focused       bool
-	ScrollOffset  int
-	SelectedField MetadataFieldKey
-	QuickActions  QuickActionLabels
+	Detail domain.IssueDetail
+	Width  int
+	Height int
 	// Skeleton renders the Counts group as placeholder glyphs instead of real
 	// numeric values, matching the Content pane's loading-state treatment.
 	Skeleton bool
 }
 
-// RenderMetadataPane renders the shared detail Metadata pane section.
+// RenderMetadataPane renders the shared detail Metadata pane section. The pane
+// only shows: it takes no focus and does not scroll, so a pane too short for
+// its lines ends on the "more" indicator.
 func RenderMetadataPane(state MetadataPaneState) string {
-	detail := state.Detail
 	width, height := state.Width, state.Height
-	skeleton := state.Skeleton
-	quickActions := state.QuickActions
 	if width <= 0 {
 		width = defaultDetailWidth
 	}
@@ -521,21 +482,13 @@ func RenderMetadataPane(state MetadataPaneState) string {
 		height = defaultDetailHeight
 	}
 
-	selectedField := state.SelectedField
-	if !state.Focused {
-		selectedField = MetadataFieldNone
-	}
-
-	innerHeight := max(1, height-2)
-	metadata := renderMetadataPaneLines(detail, width-2, selectedField, quickActions, skeleton)
-	metaView, _ := sliceWithOffset(metadata, state.ScrollOffset, innerHeight, width-2)
+	metadata := renderMetadataRail(state.Detail, width-2, state.Skeleton)
+	metaView, _ := sliceWithOffset(metadata, 0, max(1, height-2), width-2)
 	return styles.FormSection(styles.FormSectionConfig{
-		Width:              width,
-		Height:             height,
-		TopLeft:            "Metadata",
-		Content:            metaView,
-		Focused:            state.Focused,
-		FocusedBorderColor: styles.BorderHighlightFocusColor,
+		Width:   width,
+		Height:  height,
+		TopLeft: "Metadata",
+		Content: metaView,
 	})
 }
 
@@ -592,32 +545,6 @@ func splitThreeColumnWidths(total int) (left, content, metadata int) {
 	return splitThreePaneWidths(total)
 }
 
-// MetadataFieldLineIndex returns the zero-based line index of the given
-// MetadataFieldKey within the rendered metadata pane line list (as produced
-// by renderMetadataPaneLines). Returns -1 if the field is not found or is
-// MetadataFieldNone.
-func MetadataFieldLineIndex(field MetadataFieldKey, detail domain.IssueDetail) int {
-	if field == MetadataFieldNone {
-		return -1
-	}
-	// renderMetadataRail produces the lines that renderMetadataPaneLines
-	// starts with (before the Quick actions block). We scan renderMetadataRail
-	// output with an arbitrary width of 80 (width does not affect line count).
-	lines := renderMetadataRail(detail, 80, field, false)
-	// Take the gutter from styles.SelectionPrefix rather than spelling the
-	// glyph here: DESIGN-GUIDE.md makes that function the one definition, and
-	// the plain variant is the one that survives ANSI stripping.
-	selectedPrefix, _ := styles.SelectionPrefix(true, false)
-	for i, line := range lines {
-		stripped := textutil.StripANSI(line)
-		if strings.HasPrefix(stripped, selectedPrefix) ||
-			strings.HasPrefix(stripped, strings.TrimRight(selectedPrefix, " ")) {
-			return i
-		}
-	}
-	return -1
-}
-
 // contentHeaderMetaRow renders the compact, dashboard-styled metadata row shown at the
 // top of the Content pane: type, priority, and status tokens (each in its board color,
 // reusing the shared renderhelpers) followed by the full issue ID (muted). It mirrors
@@ -662,21 +589,30 @@ type contentLines struct {
 	comment []int
 	// heading is the line of the Comments heading, -1 in skeleton state.
 	heading int
+	// edit is the cells of the edit button on the first line, the ID line.
 	// add is the cells of the add button on the heading line. commentButtons
 	// is the cells of edit and delete on the first line of the selected
-	// comment. Both are empty when the button is not drawn.
+	// comment. Each is empty when the button is not drawn.
+	edit           cells
 	add            cells
 	commentButtons []cells
 }
 
 func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) contentLines {
 	detail := pane.Detail
-	keys := pane.QuickActions.withDefaults()
+	keys := pane.ButtonKeys.withDefaults()
 	upper := make([]string, 0, 48)
 
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
 	// title, then a thin rule that visually separates the header from the body below.
-	upper = append(upper, contentHeaderMetaRow(detail.Summary, width))
+	// The ID is not cut to make room for the button: its key still edits.
+	idLine := contentHeaderMetaRow(detail.Summary, width)
+	edit := paneButton("edit", keys.EditIssue, pane.Hover == ButtonEdit)
+	var editCells []cells
+	if !pane.Skeleton && lipgloss.Width(idLine)+1+lipgloss.Width(edit) <= width {
+		idLine, editCells = placeButtons(idLine, width, edit)
+	}
+	upper = append(upper, idLine)
 	upper = append(upper, textutil.TruncateString(displaytext.OneLine(emptyFallback(detail.Summary.Title, "(untitled)")), width))
 	upper = append(upper, contentHeaderRule(width))
 	upper = append(upper, "Description")
@@ -719,6 +655,9 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 	// pane is followed by blank lines.
 	spacer := max(0, availableHeight-len(upper)-2-len(comments))
 	out := contentLines{heading: len(upper) + spacer + 1, commentButtons: commentButtons}
+	if len(editCells) > 0 {
+		out.edit = editCells[0]
+	}
 	if len(addCells) > 0 {
 		out.add = addCells[0]
 	}
@@ -750,7 +689,7 @@ func CommentLineRange(state State, index int) (first, last int) {
 		state.Height = defaultDetailHeight
 	}
 	pane := layoutPanes(state.Width, state.Height).content
-	_, content := contentPaneSection(state.contentPane(pane.width, pane.height))
+	content := renderContentPaneLines(state.contentPane(pane.width, pane.height), pane.width-2, max(1, pane.height-2))
 	first = slices.Index(content.comment, index)
 	last = first
 	for last+1 < len(content.comment) && content.comment[last+1] == index {
@@ -759,43 +698,20 @@ func CommentLineRange(state State, index int) (first, last int) {
 	return first, last
 }
 
-func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) []string {
-	quickActions = quickActions.withDefaults()
-	out := make([]string, 0, 48)
-	out = append(out, renderMetadataRail(detail, width, selectedField, skeleton)...)
-	out = append(out, "")
-	out = append(out,
-		"Quick actions",
-		fmt.Sprintf("%s Edit issue", quickActions.EditIssue),
-		fmt.Sprintf("%s Add comment", quickActions.AddComment),
-		fmt.Sprintf("%s Edit comment", quickActions.EditComment),
-		fmt.Sprintf("%s Delete comment", quickActions.DeleteComment),
-		fmt.Sprintf("%s Close issue", quickActions.CloseIssue),
-		fmt.Sprintf("%s Reload detail", quickActions.ReloadDetail),
-	)
-	return out
-}
-
-func (q QuickActionLabels) withDefaults() QuickActionLabels {
-	if strings.TrimSpace(q.EditIssue) == "" {
-		q.EditIssue = "e"
+func (k ButtonKeys) withDefaults() ButtonKeys {
+	if strings.TrimSpace(k.EditIssue) == "" {
+		k.EditIssue = "e"
 	}
-	if strings.TrimSpace(q.AddComment) == "" {
-		q.AddComment = "a"
+	if strings.TrimSpace(k.AddComment) == "" {
+		k.AddComment = "a"
 	}
-	if strings.TrimSpace(q.EditComment) == "" {
-		q.EditComment = "enter"
+	if strings.TrimSpace(k.EditComment) == "" {
+		k.EditComment = "enter"
 	}
-	if strings.TrimSpace(q.DeleteComment) == "" {
-		q.DeleteComment = "d"
+	if strings.TrimSpace(k.DeleteComment) == "" {
+		k.DeleteComment = "d"
 	}
-	if strings.TrimSpace(q.CloseIssue) == "" {
-		q.CloseIssue = "x"
-	}
-	if strings.TrimSpace(q.ReloadDetail) == "" {
-		q.ReloadDetail = "r"
-	}
-	return q
+	return k
 }
 
 func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) {
@@ -838,7 +754,7 @@ func renderCompact(detail domain.IssueDetail, width int) string {
 		textutil.TruncateString(displaytext.OneLine(emptyFallback(detail.Summary.Title, "(untitled)")), width),
 		textutil.TruncateString(displaytext.OneLine(fmt.Sprintf("%s · %s", detail.Summary.ID, emptyFallback(detail.Summary.Status, "(unknown)"))), width),
 	)
-	metadata := renderMetadataRail(detail, width, MetadataFieldNone, false)
+	metadata := renderMetadataRail(detail, width, false)
 	if len(metadata) > 0 {
 		out = append(out, "")
 		out = append(out, "Metadata")

@@ -1,10 +1,6 @@
 package detail
 
-import (
-	"strings"
-
-	"github.com/hk9890/task-manager-ui/internal/ui/styles"
-)
+import "strings"
 
 // Hit is the detail cell under a point: the pane, and what is drawn there.
 // RefID is "" anywhere but on a row of the Dependencies pane, and Button is
@@ -26,28 +22,26 @@ func (r rect) contains(x, y int) bool {
 	return x >= r.x && x < r.x+r.width && y >= r.y && y < r.y+r.height
 }
 
-// panes is where Render puts each pane at the state's size.
+// panes is where Render puts each pane the mouse acts on, at the state's size.
+// The Metadata pane only shows, so it is not one of them.
 type panes struct {
-	dependencies, content, metadata rect
+	dependencies, content rect
 }
 
 func layoutPanes(width, height int) panes {
 	if usesResponsiveDetailLayout(width) {
 		contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
-		dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
+		dependenciesWidth, _ := splitResponsiveBottomWidths(width)
 		return panes{
 			content:      rect{0, 0, width, contentHeight},
 			dependencies: rect{0, contentHeight, dependenciesWidth, bottomHeight},
-			metadata:     rect{dependenciesWidth + detailColumnGap, contentHeight, metadataWidth, bottomHeight},
 		}
 	}
 
-	leftWidth, contentWidth, metadataWidth := splitThreePaneWidths(width)
-	contentX := leftWidth + detailColumnGap
+	leftWidth, contentWidth, _ := splitThreePaneWidths(width)
 	return panes{
 		dependencies: rect{0, 0, leftWidth, height},
-		content:      rect{contentX, 0, contentWidth, height},
-		metadata:     rect{contentX + contentWidth + detailColumnGap, 0, metadataWidth, height},
+		content:      rect{leftWidth + detailColumnGap, 0, contentWidth, height},
 	}
 }
 
@@ -63,8 +57,8 @@ func drawsPanes(state State) bool {
 }
 
 // HitTest reports what Render(state) draws at cell (x, y), with (0, 0) the
-// first cell of the frame. ok is false in the gaps between panes, and whenever
-// Render draws something other than the panes.
+// first cell of the frame. ok is false in the gaps between panes, on the
+// Metadata pane, and whenever Render draws something other than the panes.
 func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	if state.Width <= 0 {
 		state.Width = defaultDetailWidth
@@ -80,8 +74,6 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	switch {
 	case p.content.contains(x, y):
 		return hitContent(state, p.content, x, y), true
-	case p.metadata.contains(x, y):
-		return Hit{Pane: FocusPaneMetadata}, true
 	case !p.dependencies.contains(x, y):
 		return Hit{}, false
 	}
@@ -110,30 +102,23 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	return hit, true
 }
 
-// hitContent is what the Content pane draws at (x, y): the edit button in its
-// top border, the add button on the Comments heading, a comment, or the
-// buttons of the selected comment.
+// hitContent is what the Content pane draws at (x, y): the edit button on the
+// ID line, the add button on the Comments heading, a comment, or the buttons
+// of the selected comment.
 func hitContent(state State, pane rect, x, y int) Hit {
 	hit := Hit{Pane: FocusPaneContent}
 	if state.Skeleton {
 		return hit
 	}
 
-	contentPane := state.contentPane(pane.width, pane.height)
-	section, content := contentPaneSection(contentPane)
-	column := x - pane.x
-	if y == pane.y {
-		if x0, x1, ok := styles.FormSectionActionCells(section); ok && column >= x0 && column < x1 {
-			hit.Button = ButtonEdit
-		}
-		return hit
-	}
-
 	innerHeight := max(1, pane.height-2)
+	column := x - pane.x
 	line := y - pane.y - 1
-	if column == 0 || column == pane.width-1 || line >= innerHeight {
+	if column == 0 || column == pane.width-1 || line < 0 || line >= innerHeight {
 		return hit
 	}
+	contentPane := state.contentPane(pane.width, pane.height)
+	content := renderContentPaneLines(contentPane, pane.width-2, innerHeight)
 	// The window sliceWithOffset draws; its two indicator rows are no line.
 	total := len(content.lines)
 	offset := max(0, min(state.ContentScrollOffset, total-innerHeight))
@@ -144,6 +129,12 @@ func hitContent(state State, pane rect, x, y int) Hit {
 	}
 
 	column-- // the border
+	if index == 0 {
+		if content.edit.covers(column) {
+			hit.Button = ButtonEdit
+		}
+		return hit
+	}
 	if index == content.heading {
 		if content.add.covers(column) {
 			hit.Button = ButtonAddComment

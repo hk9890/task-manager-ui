@@ -38,8 +38,8 @@ func issueWithLongContent(id, title string) domain.IssueDetail {
 
 // TestDetailsTeatestFocusSwitchRetainsScrollOffsets drives a details.Model
 // through the real Bubble Tea runtime to assert that per-pane scroll offsets
-// are retained when the operator switches focus between content, dependencies,
-// and metadata panes (AC 1).
+// are retained when the operator switches focus between the content and the
+// dependencies pane (AC 1).
 func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 	t.Parallel()
 
@@ -73,15 +73,6 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 
 	// Switch focus back to content pane (right key from dependencies).
 	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
-
-	// Switch focus to metadata pane (right from content).
-	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
-
-	// Metadata pane: scroll down moves the field selector, not a raw offset.
-	tm.Send(tea.KeyMsg{Type: tea.KeyDown})
-
-	// Return focus to content pane (left from metadata).
-	tm.Send(tea.KeyMsg{Type: tea.KeyLeft})
 
 	// Wait for the metadata-pane content to appear, confirming all sends
 	// have been processed before we inspect final model state.
@@ -117,7 +108,7 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 
 // TestDetailsTeatestSelectionChangeResetsAllScrollOffsets drives a details.Model
 // through the real Bubble Tea runtime to assert that switching to a different
-// issue resets all three pane scroll offsets to zero (AC 2).
+// issue resets both pane scroll offsets to zero (AC 2).
 // This overlaps intentionally with the scroll-reset fix — defense in depth.
 func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 	t.Parallel()
@@ -148,8 +139,7 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 		tm.Send(tea.KeyMsg{Type: tea.KeyPgDown})
 	}
 
-	// Switch to metadata (two right presses: deps→content→metadata).
-	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
+	// Back to the content pane.
 	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
 
 	// Wait for the metadata pane to appear in the output, which confirms all
@@ -178,14 +168,11 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 	issueB := issueWithLongContent("tm-2", "Issue B")
 	mid.m.ApplyLoadedDetail("tm-2", issueB)
 
-	// All three offsets must be reset.
+	// Both offsets must be reset.
 	if mid.m.ContentScrollOffset != 0 {
 		t.Errorf("expected ContentScrollOffset=0 after issue switch, got %d", mid.m.ContentScrollOffset)
 	}
 	if mid.m.DependenciesScrollOffset != 0 {
 		t.Errorf("expected DependenciesScrollOffset=0 after issue switch, got %d", mid.m.DependenciesScrollOffset)
-	}
-	if mid.m.MetadataScrollOffset != 0 {
-		t.Errorf("expected MetadataScrollOffset=0 after issue switch, got %d", mid.m.MetadataScrollOffset)
 	}
 }

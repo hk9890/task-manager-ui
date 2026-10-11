@@ -156,16 +156,11 @@ type Action string
 const (
 	ActionOpenDetail Action = "open_detail"
 
-	// ActionEditStatus and ActionEditPriority open the issue editor with the
-	// focus on that field. The shell owns the editor, so a mode asks for it
-	// through this contract rather than parking a flag for the shell to poll
-	// after every key press.
-	ActionEditStatus   Action = "edit_status"
-	ActionEditPriority Action = "edit_priority"
-
 	// ActionEditIssue and ActionAddComment are the edit button of the Content
 	// pane and the add button of its Comments heading in Detail: each opens
-	// what the shell key shown on it opens.
+	// what the shell key shown on it opens. The shell owns the editor, so a
+	// mode asks for it through this contract rather than parking a flag for
+	// the shell to poll after every key press.
 	ActionEditIssue  Action = "open_issue_editor"
 	ActionAddComment Action = "add_comment"
 

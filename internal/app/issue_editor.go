@@ -16,7 +16,6 @@ import (
 	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
-	uiissueedit "github.com/hk9890/task-manager-ui/internal/ui/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -25,10 +24,6 @@ import (
 // The shell half of the issue editor: it opens the screen, reads what the
 // screen starts with, builds the write from what the screen holds, and closes
 // it. The screen itself writes nothing (internal/mode/issueedit).
-
-// statusClosed is the status an issue is closed with. The store takes a close
-// reason on CloseIssue only, so a save that steps the status to it is a close.
-const statusClosed = "closed"
 
 // newIssuePriority is the priority a new issue starts on.
 const newIssuePriority = 2
@@ -46,7 +41,6 @@ type editorLoadedMsg struct {
 	seq      int
 	kind     issueeditmode.Kind
 	closing  bool
-	focus    uiissueedit.Field
 	issue    domain.IssueDetail
 	catalogs repository.Catalogs
 	err      error
@@ -79,14 +73,13 @@ func (m *Model) openNewIssue() tea.Cmd {
 	})
 }
 
-// openIssueEditor opens the editor on the selected issue, with the focus on
-// focus.
-func (m *Model) openIssueEditor(focus uiissueedit.Field) tea.Cmd {
+// openIssueEditor opens the editor on the selected issue.
+func (m *Model) openIssueEditor() tea.Cmd {
 	issueID, ok := m.selectedIssueID()
 	if !ok {
 		return m.showToast("No selected issue to edit", toaster.StyleWarn)
 	}
-	return m.loadIssueEditor(editorLoadedMsg{focus: focus}, issueID)
+	return m.loadIssueEditor(editorLoadedMsg{}, issueID)
 }
 
 // openIssueClose opens the editor on the selected issue with the status on
@@ -238,7 +231,7 @@ func (m *Model) handleEditorLoaded(msg editorLoadedMsg) tea.Cmd {
 	}
 
 	issue := msg.issue.Summary
-	if msg.closing && issue.Status == statusClosed {
+	if msg.closing && issue.Status == domain.StatusClosed {
 		return m.showToast(fmt.Sprintf("Issue %s is closed", issue.ID), toaster.StyleWarn)
 	}
 
@@ -246,7 +239,6 @@ func (m *Model) handleEditorLoaded(msg editorLoadedMsg) tea.Cmd {
 		Subtitle: "a new issue",
 		Values:   issueeditmode.Values{Priority: newIssuePriority},
 		Close:    msg.closing,
-		Focus:    msg.focus,
 	}
 	for _, status := range msg.catalogs.Statuses {
 		opts.Statuses = append(opts.Statuses, status.Name)
@@ -386,7 +378,7 @@ func saveEditor(repo repository.Repository, target editorTarget, before, after i
 // it holds, as one update. closing says the status was stepped to closed: the
 // status is then left out, because the close is a write of its own.
 func issueUpdate(before, after issueeditmode.Values) (input domain.UpdateIssueInput, changed, closing bool) {
-	closing = after.Status == statusClosed && before.Status != statusClosed
+	closing = after.Status == domain.StatusClosed && before.Status != domain.StatusClosed
 
 	text := func(field **string, was, is string) {
 		if is != was {

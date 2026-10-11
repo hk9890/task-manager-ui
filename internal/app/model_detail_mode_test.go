@@ -16,10 +16,11 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
 
-func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
+func TestModelDetailViewShowsTheConfiguredCommentKeyOnTheAddButton(t *testing.T) {
 	t.Parallel()
 
 	gw := fakes.NewTracked()
@@ -48,12 +49,12 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	view := m.View()
-	if !strings.Contains(view, "ctrl+a Add comment") {
-		t.Fatalf("expected detail quick actions to reflect configured comment binding, got:\n%s", view)
+	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
+	if !strings.Contains(view, "add ctrl+a") {
+		t.Fatalf("expected the add button to show the configured comment binding, got:\n%s", view)
 	}
-	if strings.Contains(view, "c Add comment") {
-		t.Fatalf("expected stale default add-comment label to be absent, got:\n%s", view)
+	if strings.Contains(view, "add alt+a") {
+		t.Fatalf("expected the default comment key to be absent, got:\n%s", view)
 	}
 }
 
@@ -419,7 +420,6 @@ func TestAppHandlerOpenRelatedIssueMsgPerformsReloadFocusMoveAndScrollReset(t *t
 		},
 		BrowserSelectedIndex:     0, // cursor on tm-child
 		ContentScrollOffset:      5,
-		MetadataScrollOffset:     3,
 		DependenciesScrollOffset: 1,
 		Keys:                     m.keys,
 	}
@@ -446,9 +446,6 @@ func TestAppHandlerOpenRelatedIssueMsgPerformsReloadFocusMoveAndScrollReset(t *t
 	}
 	if m.detail.ContentScrollOffset != 0 {
 		t.Errorf("expected ContentScrollOffset=0 after Enter-reload, got %d", m.detail.ContentScrollOffset)
-	}
-	if m.detail.MetadataScrollOffset != 0 {
-		t.Errorf("expected MetadataScrollOffset=0 after Enter-reload, got %d", m.detail.MetadataScrollOffset)
 	}
 	if m.detail.DependenciesScrollOffset != 0 {
 		t.Errorf("expected DependenciesScrollOffset=0 after Enter-reload, got %d", m.detail.DependenciesScrollOffset)
