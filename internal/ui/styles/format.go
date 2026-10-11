@@ -16,6 +16,16 @@ func Rule(width int) string {
 	return lipgloss.NewStyle().Foreground(ShellRuleColor).Render(strings.Repeat(ruleGlyph, max(0, width)))
 }
 
+// InsetRule is the rule under the first line of the screen, the menu bar or a
+// full screen's title. It starts one cell in, in the column that line's text
+// starts in, and ends at width.
+func InsetRule(width int) string {
+	if width < 1 {
+		return ""
+	}
+	return " " + Rule(width-1)
+}
+
 // SelectionPrefix returns the shared 2-character selection gutter prefix.
 // The plain variant is unstyled and should be used for width math/truncation.
 // The rendered variant applies app-wide selection styling when requested.

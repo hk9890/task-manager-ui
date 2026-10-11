@@ -28,7 +28,8 @@ type textSelection struct {
 	screen   string
 }
 
-// screenCell is a terminal cell, counted from the top left of the screen.
+// screenCell is a cell of the screen, counted from its top left: the first
+// cell inside the margin, not the terminal's.
 type screenCell struct {
 	x, y int
 }
@@ -104,7 +105,10 @@ func (s textSelection) view() string {
 // button held says the release went to another window: the press is forgotten
 // and nothing is copied.
 func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled bool) {
-	at := screenCell{x: msg.X, y: msg.Y}
+	// A drag runs on into the margin, and the box stops at the screen's edge.
+	// On a screen with no column or no row the box stops at cell 0: it finds
+	// the lines it covers by its rows, and a row of -1 is no line.
+	at := screenCell{x: textutil.Clamp(msg.X, 0, max(m.width-1, 0)), y: textutil.Clamp(msg.Y, 0, max(m.height-1, 0))}
 	leftPress := msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft
 
 	switch {
@@ -118,7 +122,7 @@ func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled boo
 			if max(abs(at.x-m.press.x), abs(at.y-m.press.y)) < dragFrom {
 				return m, nil, true
 			}
-			m.sel = textSelection{active: true, from: *m.press, screen: m.View()}
+			m.sel = textSelection{active: true, from: *m.press, screen: m.screen()}
 		}
 		m.sel.to = at
 		return m, nil, true

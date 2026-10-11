@@ -3,7 +3,7 @@
 // changes.
 //
 // Like the store picker it renders instead of the shell rather than inside
-// it, so it draws its own help line where the shell footer would be.
+// it, in the chrome the help screen has (styles.Screen).
 package configscreen
 
 import (
@@ -14,12 +14,11 @@ import (
 )
 
 const (
-	// helpLines is the row the help hint occupies below the section box.
-	helpLines = 1
+	title = "Configuration"
 
 	// labelWidth is the column the values start at, after the selection
 	// gutter.
-	labelWidth = 10
+	labelWidth = 14
 
 	sectionTitle = "Appearance"
 )
@@ -38,8 +37,9 @@ type State struct {
 	// Rows are the settings of the Appearance section, in the order drawn.
 	Rows        []Row
 	SelectedRow int
-	// Help is the key legend drawn below the box, in place of the shell
-	// footer. It arrives styled (styles.KeyLegend).
+	Version     string
+	// Help is the key legend on the last line, in place of the shell footer.
+	// It arrives styled, from styles.KeyLegend at styles.ScreenTextWidth.
 	Help   string
 	Width  int
 	Height int
@@ -47,72 +47,48 @@ type State struct {
 
 // Render draws the configuration screen.
 func Render(state State) string {
-	innerWidth := max(state.Width-2, 1)
-	_, gutter := styles.SelectionPrefix(false, false)
-	textWidth := max(innerWidth-lipgloss.Width(gutter), 0)
-
-	// A path too long for the line loses its front: the file name says more
-	// than the directories above it.
+	// The subtitle names the file a change is written to. A path too long for
+	// the line loses its front: the file name says more than the directories
+	// above it.
 	const before, after = "written to ", " as it changes"
-	target := before + textutil.TruncateStringFront(state.Path, max(textWidth-lipgloss.Width(before+after), 1)) + after
+	target := before + textutil.TruncateStringFront(state.Path, max(styles.ScreenTextWidth(state.Width)-lipgloss.Width(before+after), 1)) + after
 	if state.Path == "" {
 		target = "no config file: a change is not kept"
 	}
 
-	content := []string{
-		gutter + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(textutil.TruncateString(target, textWidth)),
-		"",
-		gutter + renderHeading(sectionTitle, textWidth-lipgloss.Width(gutter)),
-	}
+	body := []string{"", styles.SectionHeading(sectionTitle, state.Width)}
 	for idx, row := range state.Rows {
-		content = append(content, renderRow(row, idx == state.SelectedRow, innerWidth))
+		body = append(body, renderRow(row, idx == state.SelectedRow, state.Width))
 	}
 
-	// A frame too short for all of it loses its first lines, as far as it
-	// takes to draw the selected row: FormSection cuts from the end.
-	selectedLine := len(content) - len(state.Rows) + state.SelectedRow
-	if inner := state.Height - helpLines - 2; inner > 0 && selectedLine >= inner {
-		content = content[selectedLine-inner+1:]
+	// A screen too short for all of it loses its first lines, as far as it
+	// takes to draw the selected row: styles.Screen cuts from the end.
+	selectedLine := len(body) - len(state.Rows) + state.SelectedRow
+	if rows := styles.ScreenBodyRows(state.Height); rows > 0 && selectedLine >= rows {
+		body = body[selectedLine-rows+1:]
 	}
 
-	// FormSection does not cut a title: a frame too narrow for it, the corners
-	// and the dashes around it goes without.
-	title := "Configuration"
-	if state.Width < lipgloss.Width(title)+6 {
-		title = ""
-	}
-
-	box := styles.FormSection(styles.FormSectionConfig{
-		Content:            content,
-		Width:              state.Width,
-		Height:             state.Height - helpLines,
-		TopLeft:            title,
-		Focused:            true,
-		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	return styles.Screen(styles.ScreenConfig{
+		Title:    title,
+		Version:  state.Version,
+		Subtitle: target,
+		Body:     body,
+		Legend:   state.Help,
+		Width:    state.Width,
+		Height:   state.Height,
 	})
-
-	return lipgloss.JoinVertical(lipgloss.Left, box, textutil.TruncateString(state.Help, state.Width))
-}
-
-// renderHeading draws a section title with a rule to the edge, so a section
-// reads as a block and not as one more line.
-func renderHeading(title string, width int) string {
-	title = textutil.TruncateString(title, width)
-	heading := lipgloss.NewStyle().Foreground(styles.SectionHeadingColor).Bold(true).Render(title)
-	return heading + " " + styles.Rule(width-lipgloss.Width(title)-1)
 }
 
 // renderRow draws one setting: the selection gutter, the label padded to the
 // value column, and the value between the two step markers, which say that
-// the row is stepped rather than typed.
-func renderRow(row Row, selected bool, innerWidth int) string {
+// the row is stepped rather than typed and are drawn as the value is.
+func renderRow(row Row, selected bool, width int) string {
 	_, prefix := styles.SelectionPrefix(selected, true)
 	label := lipgloss.NewStyle().Foreground(styles.SettingLabelColor)
 	value := lipgloss.NewStyle().Foreground(styles.TextPrimaryColor)
-	marker := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 
 	line := prefix +
 		label.Render(textutil.PadToWidth(row.Label, labelWidth)) +
-		marker.Render(styles.Glyphs.StepPrev) + " " + value.Render(row.Value) + " " + marker.Render(styles.Glyphs.StepNext)
-	return styles.RowHighlight(textutil.TruncateString(line, innerWidth), innerWidth, selected, false)
+		value.Render(styles.Glyphs.StepPrev+" "+row.Value+" "+styles.Glyphs.StepNext)
+	return styles.RowHighlight(textutil.TruncateString(line, width), width, selected, false)
 }

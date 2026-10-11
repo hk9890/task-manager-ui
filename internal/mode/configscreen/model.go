@@ -117,7 +117,7 @@ func cycle(values []string, current string, delta int) string {
 }
 
 // View renders the screen full size.
-func (m *Model) View(help string) string {
+func (m *Model) View(version, help string) string {
 	return uiconfigscreen.Render(uiconfigscreen.State{
 		Path: m.path,
 		Rows: []uiconfigscreen.Row{
@@ -125,6 +125,7 @@ func (m *Model) View(help string) string {
 			rowGlyphs: {Label: "glyphs", Value: m.glyphs},
 		},
 		SelectedRow: m.selectedRow,
+		Version:     version,
 		Help:        help,
 		Width:       m.width,
 		Height:      m.height,

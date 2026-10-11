@@ -172,11 +172,12 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 		t.Fatal("precondition: expected fatalErr to be set")
 	}
 
-	// Window resize should update dimensions.
+	// Window resize should update dimensions: the screen is what the margin
+	// leaves of the terminal.
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
-	if m.width != 120 || m.height != 40 {
-		t.Fatalf("expected width=120 height=40 after resize, got %d %d", m.width, m.height)
+	if m.width != 116 || m.height != 38 {
+		t.Fatalf("expected width=116 height=38 after resize, got %d %d", m.width, m.height)
 	}
 
 	// Quit key should return tea.Quit.

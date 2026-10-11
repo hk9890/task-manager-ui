@@ -182,8 +182,7 @@ func TestModelMutationModalsOpenWithoutCatalogDecodeToast(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	assertModalOpenWithoutCatalogToast := func(model Model, wantTitle string) {
@@ -291,8 +290,7 @@ func TestPendingDialogGuardStatusRaceEscCancelsOpen(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 140
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Navigate to Detail mode.
@@ -393,8 +391,7 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 		}
 
 		m := mustNewModel(t, services)
-		m.width = 140
-		m.height = 34
+		m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 		m = applyMessages(t, m, runBatch(m.Init()))
 
 		// Press "c" (ShellActionCreateIssue) — dispatches the async catalog load.
@@ -458,8 +455,7 @@ func TestPendingDialogGuardCreateUpdateRaceEscCancelsOpen(t *testing.T) {
 		}
 
 		m := mustNewModel(t, services)
-		m.width = 140
-		m.height = 34
+		m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 		m = applyMessages(t, m, runBatch(m.Init()))
 
 		// Press "u" (ShellActionUpdateIssue) — dispatches the async catalog load.

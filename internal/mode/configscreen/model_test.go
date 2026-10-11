@@ -126,7 +126,7 @@ func TestSetValuesIsWhatTheNextStepStartsFrom(t *testing.T) {
 	if change := press(t, m, keyRight); change == nil || change.Theme != themes[2] {
 		t.Fatalf("asked for %+v, want the theme %q", change, themes[2])
 	}
-	if view := m.View(""); !strings.Contains(view, themes[1]) {
+	if view := m.View("dev", ""); !strings.Contains(view, themes[1]) {
 		t.Errorf("the screen does not show the theme in use, %q:\n%s", themes[1], view)
 	}
 }
@@ -141,7 +141,7 @@ func TestOpenPutsTheCursorOnTheFirstRow(t *testing.T) {
 	if m.selectedRow != rowTheme {
 		t.Errorf("the cursor is on row %d after Open, want the first", m.selectedRow)
 	}
-	view := m.View("")
+	view := m.View("dev", "")
 	testui.AssertContainsAll(t, view, "/tmp/other.yaml", "catppuccin-latte", "ascii")
 }
 

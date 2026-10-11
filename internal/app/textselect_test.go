@@ -212,14 +212,32 @@ func TestSelectingWorksOverTheHelpOverlay(t *testing.T) {
 	m, copied := newSelectingShell(t)
 	m = pressKey(t, m, "alt+h")
 
-	x, y := testui.FindCell(t, m.View(), "Mode switching:")
+	x, y := testui.FindCell(t, m.View(), "Moving and opening")
 	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(x+len("Mode switching:")-1, y))
-	m = send(t, m, leftRelease(x+len("Mode switching:")-1, y))
-	if len(*copied) != 1 || (*copied)[0] != "Mode switching:" {
+	m = send(t, m, leftDrag(x+len("Moving and opening")-1, y))
+	m = send(t, m, leftRelease(x+len("Moving and opening")-1, y))
+	if len(*copied) != 1 || (*copied)[0] != "Moving and opening" {
 		t.Fatalf("copied %q, want the help line", *copied)
 	}
 	if !m.showHelp {
 		t.Fatal("selecting text closed the help overlay")
+	}
+}
+
+// TestADragOnAScreenWithoutRowsCopiesNothing: a terminal that reports no rows
+// has no last row to stop the box at. The box took row -1 there and indexed
+// the screen's lines with it.
+func TestADragOnAScreenWithoutRowsCopiesNothing(t *testing.T) {
+	m, copied := newSelectingShell(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 0})
+
+	m = send(t, m, leftClick(3, 0))
+	m = send(t, m, leftDrag(9, 4))
+	if !m.sel.active || m.sel.to.y != 0 {
+		t.Fatalf("the drag ends on row %d (selecting %v), want row 0", m.sel.to.y, m.sel.active)
+	}
+	_ = m.View()
+	if send(t, m, leftRelease(9, 4)); len(*copied) != 0 {
+		t.Fatalf("copied %q from a screen without rows", *copied)
 	}
 }

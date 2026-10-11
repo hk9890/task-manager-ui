@@ -5,10 +5,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/ui/helpscreen"
 )
-
-// helpWheelLines is how far one wheel notch scrolls the help overlay.
-const helpWheelLines = 3
 
 // mouseKind maps a Bubble Tea mouse event onto the few the surfaces act on:
 // the wheel, the pointer moving, and a press of the left button. A drag is a
@@ -32,7 +30,7 @@ func mouseKind(msg tea.MouseMsg) (mode.MouseKind, bool) {
 // shell, then the header and the active surface.
 //
 // An open overlay holds the screen as it holds the keyboard, so nothing below
-// it sees the event — the help overlay scrolls under the wheel and a dialog
+// it sees the event — the help screen scrolls under the wheel and a dialog
 // ignores the mouse. Each surface gets the event in its own coordinates.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	kind, ok := mouseKind(msg)
@@ -49,15 +47,26 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.pendingDialog = pendingDialogGuard{}
 	}
 
+	// Nothing is drawn on a cell of the margin, so the pointer there is on
+	// nothing. The picker and help take the wheel without a hit test, and
+	// would move under it.
+	if msg.X < 0 || msg.X >= m.width || msg.Y < 0 || msg.Y >= m.height {
+		m.clearHeaderHover()
+		return m, m.mouseToSurface(leave)
+	}
+
 	if m.overlayOpen() {
 		m.clearHeaderHover()
 		cmd := m.mouseToSurface(leave)
+		// A notch moves no further than a page, or a body of a few rows
+		// would skip lines.
+		notch := min(helpWheelLines, helpscreen.PageRows(m.height))
 		switch {
 		case !m.showHelp:
 		case kind == mode.MouseWheelUp:
-			m.help = m.help.Scroll(-helpWheelLines)
+			m.scrollHelpBy(-notch)
 		case kind == mode.MouseWheelDown:
-			m.help = m.help.Scroll(helpWheelLines)
+			m.scrollHelpBy(notch)
 		}
 		return m, cmd
 	}

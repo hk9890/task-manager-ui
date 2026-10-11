@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/markdown"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/renderhelpers"
@@ -725,10 +726,10 @@ func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) 
 	window := append([]string(nil), lines[start:end]...)
 
 	if offset > 0 && len(window) > 0 {
-		window[0] = textutil.TruncateString(fmt.Sprintf("… (%d earlier)", offset), width)
+		window[0] = textutil.TruncateString(scroll.Earlier(offset), width)
 	}
 	if end < len(lines) && len(window) > 0 {
-		window[len(window)-1] = textutil.TruncateString(fmt.Sprintf("… (%d more)", len(lines)-end), width)
+		window[len(window)-1] = textutil.TruncateString(scroll.More(len(lines)-end), width)
 	}
 
 	for len(window) < height {

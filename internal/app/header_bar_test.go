@@ -86,7 +86,8 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 			if len(lines) != 3 {
 				t.Fatalf("%s at width %d: the header is %d lines:\n%s", active, width, len(lines), strings.Join(lines, "\n"))
 			}
-			if got := lipgloss.Width(lines[1]); got != width || strings.Trim(lines[1], "─") != "" {
+			// The rule starts under the first button's label, one cell in.
+			if got := lipgloss.Width(lines[1]); got != width || strings.Trim(strings.TrimPrefix(lines[1], " "), "─") != "" {
 				t.Fatalf("%s at width %d: the rule is %q", active, width, lines[1])
 			}
 			if got := lipgloss.Width(lines[headerMenuRow]); got > width {
@@ -217,6 +218,7 @@ func TestReloadButtonShowsTheKeyOfTheActiveSurface(t *testing.T) {
 
 // TestStoreButtonNamesTheActiveStore: the first button is the store's name
 // with the key that opens the store list, and `stores` when no name is known.
+// Its own leading space is the line's gutter.
 func TestStoreButtonNamesTheActiveStore(t *testing.T) {
 	t.Parallel()
 
@@ -230,7 +232,7 @@ func TestStoreButtonNamesTheActiveStore(t *testing.T) {
 	} {
 		m.services.StoreName = name
 		bar := headerLines(m, 120)[headerMenuRow]
-		if !strings.HasPrefix(bar, strings.Repeat(" ", headerMenuStart)+want+" "+key+barSeparator) {
+		if !strings.HasPrefix(bar, " "+want+" "+key+" "+barSeparator) {
 			t.Errorf("with the store name %q the bar does not start with %q and its key:\n%s", name, want, bar)
 		}
 	}
@@ -249,7 +251,7 @@ func TestStoreButtonCutsALongName(t *testing.T) {
 		width, buttons, label int
 	}{
 		{width: 120, buttons: len(barActions), label: storeLabelMax},
-		{width: 90, buttons: len(barActions)},
+		{width: 100, buttons: len(barActions)},
 		{width: 20, buttons: 1},
 	} {
 		m.width = tc.width
@@ -329,29 +331,102 @@ func TestNarrowBarDropsAButtonBeforeTheNameGoesUnderItsFloor(t *testing.T) {
 	}
 }
 
-// TestHoveredStoreButtonTakesTheCommonHover: the store's name rests bold in the
-// buttons' colour, so the pointer changes its colour as it does on any button.
-func TestHoveredStoreButtonTakesTheCommonHover(t *testing.T) {
+// hoverBackground is the escape sequence that turns the hover background on.
+func hoverBackground() string {
+	on, _, _ := strings.Cut(lipgloss.NewStyle().Background(styles.ShellHoverBgColor).Render("x"), "x")
+	return on
+}
+
+// TestHoveredButtonTakesTheHoverBackgroundOverItsWholeCell: the pointer lights
+// a button from its leading space to its trailing one — the label bold on the
+// hover background, the key on the same background — and nothing else on the
+// bar. The label keeps its foreground. The store's name rests bold in the buttons' colour, so on it the
+// background is what the pointer adds.
+func TestHoveredButtonTakesTheHoverBackgroundOverItsWholeCell(t *testing.T) {
 	testui.ForceTrueColor(t)
 
 	m := newHeaderShell(t, config.Default())
 	m.width = 120
 	rest := m.renderMenuBar()
 
-	x := headerMenuStart
-	m.barPointer = &x
-	hovered := m.renderMenuBar()
-
-	bold := lipgloss.NewStyle().Bold(true)
-	if want := bold.Foreground(styles.ShellActionColor).Render(m.storeLabel()); !strings.HasPrefix(strings.TrimLeft(rest, " "), want) {
-		t.Errorf("the store button at rest is not bold in the buttons' colour:\n%q", rest)
+	// A label rests in the text colour, so the pointer adds the background and
+	// the weight and changes no foreground.
+	if styles.ShellActionColor != styles.TextPrimaryColor {
+		t.Fatalf("a button's label rests in %q, want the text colour %q", styles.ShellActionColor, styles.TextPrimaryColor)
 	}
-	want := bold.Foreground(styles.ShellTabHoverColor).Render(m.storeLabel())
-	if hovered == rest || !strings.HasPrefix(strings.TrimLeft(hovered, " "), want) {
-		t.Errorf("the hovered store button is not drawn in the hover style:\nrest    %q\nhovered %q", rest, hovered)
+	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
+	lit := label.Background(styles.ShellHoverBgColor).Bold(true)
+	key := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
+
+	for idx, cell := range m.barCells() {
+		text, hint := cell.runs()
+		if text != " "+cell.label+" " || hint != cell.key+" " {
+			t.Fatalf("%s: the button's runs are %q and %q, want a space on each side", cell.label, text, hint)
+		}
+		if atRest := label.Bold(cell.action.name).Render(text) + key.Render(hint); !strings.Contains(rest, atRest) {
+			t.Errorf("%s: the bar at rest does not draw the button as %q:\n%q", cell.label, atRest, rest)
+		}
+
+		// One run holds the label and the space on each side of it, bold on
+		// the hover background; the next holds the key and the space after it.
+		background := strings.TrimPrefix(hoverBackground(), "\x1b[")
+		labelOn, _, _ := strings.Cut(lit.Render(text), text)
+		keyOn, _, _ := strings.Cut(key.Background(styles.ShellHoverBgColor).Render(hint), hint)
+		if !strings.HasPrefix(labelOn, "\x1b[1;") || !strings.HasSuffix(labelOn, background) || !strings.HasSuffix(keyOn, background) {
+			t.Fatalf("fixture: the hovered runs open with %q and %q, want bold and the hover background %q", labelOn, keyOn, background)
+		}
+
+		// The first and the last column of the cell are its two padding cells.
+		for _, x := range []int{cell.x0, cell.x0 + 1, cell.x1 - 1} {
+			m.barPointer = &x
+			hovered := m.renderMenuBar()
+
+			want := lit.Render(text) + key.Background(styles.ShellHoverBgColor).Render(hint)
+			if !strings.Contains(hovered, want) {
+				t.Errorf("%s, pointer at column %d: the button is not drawn as %q:\n%q", cell.label, x, want, hovered)
+			}
+			if got := strings.Replace(hovered, want, label.Bold(cell.action.name).Render(text)+key.Render(hint), 1); got != rest {
+				t.Errorf("%s, pointer at column %d: the hover changed more than button %d:\nrest    %q\nhovered %q", cell.label, x, idx, rest, hovered)
+			}
+			if lipgloss.Width(hovered) != lipgloss.Width(rest) || testui.AnsiEscapePattern.ReplaceAllString(hovered, "") != testui.AnsiEscapePattern.ReplaceAllString(rest, "") {
+				t.Errorf("%s, pointer at column %d: the hover moved text on the bar:\nrest    %q\nhovered %q", cell.label, x, rest, hovered)
+			}
+		}
+	}
+
+	// On a separator, and right of the last button, nothing is lit.
+	cells := m.barCells()
+	for _, x := range []int{cells[0].x1, cells[1].x0 - 1, cells[len(cells)-1].x1} {
+		m.barPointer = &x
+		if hovered := m.renderMenuBar(); hovered != rest {
+			t.Errorf("pointer at column %d, off every button: the bar is not as it is at rest:\n%q", x, hovered)
+		}
+	}
+}
+
+// TestHoveredTabTakesTheHoverBackgroundTheButtonsTake: tabs and buttons are
+// one pair, so the pointer lights both with the same background, over the
+// tab's padding too.
+func TestHoveredTabTakesTheHoverBackgroundTheButtonsTake(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	m := newHeaderShell(t, config.Default())
+	m.width = 120
+	rest := m.renderTabs()
+
+	m.hoverTab = mode.Docs
+	hovered := m.renderTabs()
+
+	want := lipgloss.NewStyle().Padding(0, headerTabPadding).Foreground(styles.ShellTabHoverColor).Background(styles.ShellHoverBgColor).Render("Docs")
+	pad := hoverBackground() + " \x1b[0m"
+	if !strings.HasPrefix(want, pad) || !strings.HasSuffix(want, pad) || !strings.Contains(want, strings.TrimPrefix(hoverBackground(), "\x1b[")+"Docs") {
+		t.Fatalf("fixture: the padding and the label of %q do not all carry the hover background", want)
+	}
+	if !strings.Contains(hovered, want) || strings.Contains(rest, want) {
+		t.Errorf("the hovered tab is not drawn as %q:\nrest    %q\nhovered %q", want, rest, hovered)
 	}
 	if lipgloss.Width(hovered) != lipgloss.Width(rest) {
-		t.Errorf("the hover changes the bar's width from %d to %d", lipgloss.Width(rest), lipgloss.Width(hovered))
+		t.Errorf("the hover changes the tab line's width from %d to %d", lipgloss.Width(rest), lipgloss.Width(hovered))
 	}
 }
 
@@ -377,7 +452,8 @@ func TestTabLineHoldsTheTabsAlone(t *testing.T) {
 // TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter holds the
 // frame to the terminal's height. The workspace is what the three header lines
 // and the footer leave, and a hidden footer still holds its line: the frame is
-// joined from three parts whether or not the last one draws anything.
+// joined from three parts whether or not the last one draws anything. A
+// terminal with a margin gives a blank row above the screen and one below it.
 func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testing.T) {
 	t.Parallel()
 
@@ -386,11 +462,11 @@ func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testi
 		cfg.UI.ShowModeSwitcherHelp = showFooter
 		m := newHeaderShell(t, cfg)
 
-		for _, size := range []struct{ width, height int }{{80, 24}, {120, 34}, {180, 50}, {30, 12}} {
+		for _, size := range []struct{ width, height, margin int }{{80, 24, 0}, {120, 34, 1}, {180, 50, 1}, {30, 12, 0}} {
 			m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: size.width, Height: size.height}})
 
 			_, workspace := m.workspaceSize()
-			if want := size.height - 4; workspace != want {
+			if want := size.height - 2*size.margin - 4; workspace != want {
 				t.Errorf("footer %v at %dx%d: the workspace is %d lines, want %d under a 3-line header and over the footer's line",
 					showFooter, size.width, size.height, workspace, want)
 			}
@@ -402,8 +478,8 @@ func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testi
 			if len(lines) != size.height {
 				t.Errorf("footer %v at %dx%d: the frame is %d lines", showFooter, size.width, size.height, len(lines))
 			}
-			if last := strings.TrimSpace(lines[len(lines)-1]); (last != "") != showFooter {
-				t.Errorf("footer %v at %dx%d: the last line of the frame is %q", showFooter, size.width, size.height, last)
+			if last := strings.TrimSpace(lines[len(lines)-1-size.margin]); (last != "") != showFooter {
+				t.Errorf("footer %v at %dx%d: the last line of the screen is %q", showFooter, size.width, size.height, last)
 			}
 		}
 	}

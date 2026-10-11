@@ -21,6 +21,7 @@ var (
 	ShellTabActiveBgColor       lipgloss.Color
 	ShellTabInactiveColor       lipgloss.Color
 	ShellTabHoverColor          lipgloss.Color
+	ShellHoverBgColor           lipgloss.Color
 	ShellFooterHelpColor        lipgloss.Color
 	RowSelectedBgColor          lipgloss.Color
 	RowHoverBgColor             lipgloss.Color
@@ -66,7 +67,9 @@ var (
 	QueryAccentColor lipgloss.Color
 	// MatchTextColor is the text of a row that a query word matched.
 	MatchTextColor lipgloss.Color
-	// SectionHeadingColor is the title of a section of the configuration screen.
+	// ScreenSubtitleColor is the line under the title of a full screen.
+	ScreenSubtitleColor lipgloss.Color
+	// SectionHeadingColor is the title of a section of a full screen.
 	SectionHeadingColor lipgloss.Color
 	// SettingLabelColor is the name of a setting, in front of its value.
 	SettingLabelColor lipgloss.Color

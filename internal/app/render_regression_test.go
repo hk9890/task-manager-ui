@@ -295,8 +295,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 160
-	m.height = 42
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 42})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	view := m.View()
@@ -328,8 +327,7 @@ func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *t
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	header := m.renderHeader()
@@ -338,8 +336,9 @@ func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *t
 		t.Fatalf("expected the menu bar, the rule and the tab line, got %d lines:\n%s", len(headerLines), header)
 	}
 	for _, line := range headerLines[:2] {
-		if got := lipgloss.Width(line); got != 120 {
-			t.Fatalf("expected the menu bar and the rule to span the 120 columns, got %d:\n%s", got, header)
+		// The screen is the terminal less two columns of margin on each side.
+		if got := lipgloss.Width(line); got != 116 {
+			t.Fatalf("expected the menu bar and the rule to span the 116 columns of the screen, got %d:\n%s", got, header)
 		}
 	}
 	if strings.Contains(headerLines[0], " Board ") || !strings.Contains(headerLines[0], "stores") {
@@ -384,8 +383,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
@@ -452,8 +450,7 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 
 	expectedWidth, expectedHeight := m.workspaceSize()
 
@@ -525,8 +522,7 @@ func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	view := m.View()
@@ -558,8 +554,7 @@ func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	view := m.View()

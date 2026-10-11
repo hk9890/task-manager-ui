@@ -75,7 +75,7 @@ func TestSearchOpensByKeyAndByButtonFromBoardDocsAndDetail(t *testing.T) {
 			x, text := barButton(t, base, "search", config.ShellActionOpenSearch)
 
 			byKey := press(t, base, "alt+f")
-			byClick := send(t, base, leftClick(x+len(text)-1, headerMenuRow))
+			byClick := send(t, base, onScreen(base, leftClick(x+len(text)-1, headerMenuRow)))
 			for name, m := range map[string]Model{"key": byKey, "click": byClick} {
 				if m.active != mode.Search || m.searchFrom != surface.from {
 					t.Fatalf("%s: on %q opened from %q, want search opened from %q", name, m.active, m.searchFrom, surface.from)
@@ -370,7 +370,7 @@ func TestSearchIsLeftForATabByTheTabKeysAndAClick(t *testing.T) {
 	}
 
 	x, _ := testui.FindCell(t, tabLine(base), " Board ")
-	byClick := send(t, base, leftClick(x+1, headerTabsRow))
+	byClick := send(t, base, onScreen(base, leftClick(x+1, headerTabsRow)))
 	if byClick.active != mode.Board || byClick.searchFrom != "" {
 		t.Fatalf("a click on the board tab went to %q (search from %q)", byClick.active, byClick.searchFrom)
 	}

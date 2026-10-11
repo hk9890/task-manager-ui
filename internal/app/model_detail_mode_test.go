@@ -43,8 +43,7 @@ func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 120
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -82,8 +81,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 90
-	m.height = 16
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 90, Height: 16})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -152,8 +150,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -248,8 +245,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -334,8 +330,7 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Open the epic's detail (the ready selection).
@@ -400,8 +395,7 @@ func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *test
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 140
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -477,8 +471,7 @@ func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T)
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 140
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -543,8 +536,7 @@ func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 140
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -613,8 +605,7 @@ func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 140
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -685,8 +676,7 @@ func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 140
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
@@ -785,8 +775,7 @@ func TestAppHandlerOpenRelatedIssueMsgPerformsReloadFocusMoveAndScrollReset(t *t
 	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
 	m.detail.FinishLoad(nil)
 	m.sizeKnown = true
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 
 	mark := gw.CallCount()
 
@@ -854,8 +843,7 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 		Keys:                 m.keys,
 	}
 	m.sizeKnown = true
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 
 	// Send Enter to drill into tm-child (has deps → non-leaf).
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -910,8 +898,7 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 		Keys:                 m.keys,
 	}
 	m.sizeKnown = true
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 
 	// Send Enter to drill into tm-leaf (no deps → leaf).
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -985,8 +972,7 @@ func drilledIntoChild(t *testing.T, gw *fakes.TrackedRepository) Model {
 	}
 
 	m := mustNewModel(t, services)
-	m.width = 160
-	m.height = 34
+	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	next, cmd := m.Update(testKey("enter"))
