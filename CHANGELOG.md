@@ -58,7 +58,7 @@ carries its `vX.Y.Z` section of this file as its notes.
   terminal from the create-store form. A format character that shapes nothing,
   such as a right-to-left override or a soft hyphen, is dropped; a joiner in
   an emoji or a script stays. A long error on the detail view wraps, and a
-  toast draws at most 6 lines.
+  toast draws at most 6 lines of its message and marks the cut.
 - **Changed: the store search waits until you stop typing.** A search runs 150 ms
   after the last key, so a typed word is one search and not one for each
   letter. `enter` pressed inside that time opens the result of what you typed.

@@ -41,4 +41,13 @@ func TestALongDetailErrorWrapsToTheView(t *testing.T) {
 	if got := strings.Join(strings.Fields(view), " "); !strings.HasSuffix(got, "Error: "+message) {
 		t.Errorf("the wrapped error lost text:\n%s", view)
 	}
+
+	// The line that names the issue is as long as the issue's ID.
+	const narrow = 30
+	view = Render(State{SelectionID: "a-long-prefix-of-an-id-x1y2z3", Error: "no such file", Width: narrow, Height: 20})
+	for _, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got > narrow {
+			t.Errorf("a line of the error is %d cells, want at most %d: %q", got, narrow, line)
+		}
+	}
 }

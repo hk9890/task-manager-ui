@@ -128,8 +128,8 @@ func Render(state State) string {
 			width = defaultDetailWidth
 		}
 		// The error is the store's own text and can be longer than the view.
-		reason := textutil.WrapAtSpaces("Error: "+displaytext.OneLine(state.Error), width)
-		return fmt.Sprintf("Failed to load details for %s.\n%s", selected, strings.Join(reason, "\n"))
+		message := fmt.Sprintf("Failed to load details for %s.\nError: %s", selected, displaytext.OneLine(state.Error))
+		return strings.Join(textutil.WrapAtSpaces(message, width), "\n")
 	}
 
 	detail := state.Detail
