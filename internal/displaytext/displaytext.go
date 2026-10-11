@@ -9,17 +9,16 @@ import (
 	"unicode"
 )
 
-// The format characters OneLine keeps. A joiner shapes an emoji sequence or a
-// script, and the tag characters spell the region of a flag.
+// The tag characters, which spell the region of a flag.
 const (
-	zeroWidthNonJoiner rune = 0x200c
-	zeroWidthJoiner    rune = 0x200d
-	firstTag           rune = 0xe0020
-	lastTag            rune = 0xe007f
+	firstTag rune = 0xe0020
+	lastTag  rune = 0xe007f
 )
 
+// shapes reports whether r is a format character OneLine keeps: a joiner,
+// which shapes an emoji sequence or a script, or a tag character.
 func shapes(r rune) bool {
-	return r == zeroWidthNonJoiner || r == zeroWidthJoiner || (r >= firstTag && r <= lastTag)
+	return unicode.Is(unicode.Join_Control, r) || (r >= firstTag && r <= lastTag)
 }
 
 // OneLine returns s as one drawable line: each control character and each

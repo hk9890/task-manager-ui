@@ -108,7 +108,7 @@ The rest is the same in every set, and each has one definition:
 
 | Glyph | Means | Defined in |
 |---|---|---|
-| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString`, `textutil.TruncateStringFront`; `legendCut` (`internal/ui/styles/legend.go`) where the legend drops hints |
+| `…` | truncated content — one cell, so it keeps more text than `...` | `textutil.TruncateString`, `textutil.TruncateStringFront`; `legendCut` (`internal/ui/styles/legend.go`) where the legend drops hints; `capLines` (`internal/ui/toaster/toaster.go`) where a toast drops lines |
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
@@ -516,6 +516,9 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.
+- A toast draws at most `maxMessageLines` lines (`internal/ui/toaster/toaster.go`): a line feed
+  in a path or an error text is a line of the box. `capLines` gives the last of them to the cut
+  mark, a line that holds only `…`.
 
 ## Width and height
 

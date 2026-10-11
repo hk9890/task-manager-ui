@@ -77,7 +77,7 @@ const (
 	glyphCells       = 3
 )
 
-// maxMessageLines is the most lines of a message a toast draws. A message
+// maxMessageLines is the most lines a toast draws, the cut mark included. A message
 // carries text from outside — an error, a path — and each line feed in it is a
 // line of the box, so without a bound one message can cover the screen.
 const maxMessageLines = 6
@@ -142,14 +142,17 @@ func (m Model) Overlay(bg string, width, height int) string {
 	}, m.view(width), bg)
 }
 
-// capLines keeps the first maxMessageLines lines of message. What it cuts it
-// marks with a line of its own, so a whole last line is not read as the end.
+// capLines bounds message to maxMessageLines lines. A longer message keeps one
+// line fewer and ends with a mark on a line of its own, so a whole last line
+// is not read as the end and the mark costs no row.
 func capLines(message string) string {
-	lines := strings.Split(message, "\n")
+	lines := strings.SplitN(message, "\n", maxMessageLines+1)
 	if len(lines) <= maxMessageLines {
 		return message
 	}
-	return strings.Join(append(lines[:maxMessageLines:maxMessageLines], "…"), "\n")
+	lines = lines[:maxMessageLines]
+	lines[maxMessageLines-1] = "…"
+	return strings.Join(lines, "\n")
 }
 
 // clipLines truncates every line of message to width cells. A message is
