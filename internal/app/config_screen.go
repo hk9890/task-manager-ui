@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	configscreenmode "github.com/hk9890/task-manager-ui/internal/mode/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -34,8 +35,10 @@ func (m *Model) applyConfigChange(change configscreenmode.ChangeMsg) tea.Cmd {
 	if err != nil {
 		m.logger().Error("failed to change the ui configuration", "path", m.services.ConfigPath, "error", err.Error())
 		// The toast cuts each line at the terminal width, and the error ends
-		// in what the operator is to do, after the path of the file.
-		reason := textutil.WrapLines(err.Error(), max(m.width-toastMargin, 1))
+		// in what the operator is to do, after the path of the file. That
+		// path is cleaned before the wrap measures it: a control character
+		// has no width until showToast draws it as a space.
+		reason := textutil.WrapLines(displaytext.OneLine(err.Error()), max(m.width-toastMargin, 1))
 		return m.showToast("Config not changed:\n"+strings.Join(reason, "\n"), toaster.StyleError)
 	}
 

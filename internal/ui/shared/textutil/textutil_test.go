@@ -58,20 +58,6 @@ func TestPadToWidth(t *testing.T) {
 	}
 }
 
-func TestOneLine(t *testing.T) {
-	for in, want := range map[string]string{
-		"plain  text":                "plain  text",
-		"a\nb\tc\x1b[0m":             "a b c [0m",
-		"a\u202eb\u200bc":            "abc",
-		"a\u2028b\u2029c":            "a b c",
-		"\U0001F468\u200d\U0001F4BB": "\U0001F468\u200d\U0001F4BB",
-	} {
-		if got := textutil.OneLine(in); got != want {
-			t.Errorf("OneLine(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestTruncateString(t *testing.T) {
 	if got := textutil.TruncateString("hello", 10); got != "hello" {
 		t.Fatalf("unexpected non-truncated value: %q", got)

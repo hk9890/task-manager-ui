@@ -144,6 +144,52 @@ func TestStoresReportsAnUnreadableStoreAsBrokenAndKeepsTheRest(t *testing.T) {
 	}
 }
 
+// The project path and the detail of a listed store are drawn and never
+// opened, so a control character in either is a space when it leaves the
+// catalog. The store path stays raw: the picker matches it against the active
+// store.
+func TestStoresCleansThePathAndTheDetailItLists(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the directory mode")
+	}
+	t.Setenv("TASKMGR_HOME", filepath.Join(t.TempDir(), "taskmgr\thome"))
+	t.Setenv("TASKMGR_DIR", "")
+
+	project := filepath.Join(t.TempDir(), "a\tb")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if _, err := tasks.InitCentral(project, "tab-fixture", "tab"); err != nil {
+		t.Fatalf("tasks.InitCentral: %v", err)
+	}
+
+	catalog := New("tester")
+	before, err := catalog.Stores(context.Background())
+	if err != nil || len(before) != 1 {
+		t.Fatalf("Stores: %+v, %v, want the one store", before, err)
+	}
+	storePath := before[0].StorePath
+	if err := os.Chmod(storePath, 0); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(storePath, 0o755) })
+
+	after, err := catalog.Stores(context.Background())
+	if err != nil || len(after) != 1 {
+		t.Fatalf("Stores with an unreadable store directory: %+v, %v, want the one store", after, err)
+	}
+	entry := after[0]
+	if strings.Contains(entry.ProjectPath, "\t") || !strings.HasSuffix(entry.ProjectPath, "a b") {
+		t.Errorf("ProjectPath: got %q, want the tab drawn as a space", entry.ProjectPath)
+	}
+	if strings.Contains(entry.Detail, "\t") || !strings.Contains(entry.Detail, "taskmgr home") {
+		t.Errorf("Detail: got %q, want the store path in it with the tab drawn as a space", entry.Detail)
+	}
+	if entry.StorePath != storePath || !strings.Contains(storePath, "\t") {
+		t.Errorf("StorePath: got %q, want the raw path %q", entry.StorePath, storePath)
+	}
+}
+
 func TestStoresOnAnEmptyRegistryIsEmptyNotAnError(t *testing.T) {
 	isolateCentralHome(t)
 
@@ -268,6 +314,10 @@ func TestStoreNameDropsFormatCharacters(t *testing.T) {
 		"/dev/a\u202eb":                   "ab",
 		"/dev/\u200b\ufeff":               "",
 		"/dev/\U0001F468\u200d\U0001F4BB": "\U0001F468\u200d\U0001F4BB",
+		// A name of joiners alone draws no cell, so it is no name.
+		"/dev/" + string(rune(0x200d)): "",
+		// Nor does a variation selector with no character before it.
+		"/dev/" + string(rune(0xfe0f)): "",
 	} {
 		info := tasks.ResolveInfo{Kind: tasks.ResolvedLocal, ProjectPath: path}
 		if got := StoreName(info); got != want {

@@ -113,6 +113,11 @@ binary. [RUNNING.md](RUNNING.md) owns launching it, the PTY capture harness,
 and what to check; run it and state pass or fail yourself rather than asking the operator to validate
 basics.
 
+**A style is the exception.** The capture cannot show a colour role or a weight, so a change to
+one — a hover, a selection, a theme — is proved by a test that renders under
+`testui.ForceTrueColor` and asserts the style. A look at the built binary in a real terminal is
+optional.
+
 ### Process-level capture policy
 
 Process-level capture stays manual — the in-process fixtures plus the built-binary run cover the

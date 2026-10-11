@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	uiconfigscreen "github.com/hk9890/task-manager-ui/internal/ui/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -57,7 +58,7 @@ func NewModel(keys config.ResolvedKeyBindings) *Model {
 // Open puts the cursor on the first row and takes what the screen shows: the
 // config file and the two values in use.
 func (m *Model) Open(path, theme, glyphs string) {
-	m.path = path
+	m.path = displaytext.OneLine(path)
 	m.selectedRow = rowTheme
 	m.SetValues(theme, glyphs)
 }

@@ -10,9 +10,9 @@ import (
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
-	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 // Catalog reads and opens stores through the SDK.
@@ -48,10 +48,10 @@ func (c Catalog) Stores(ctx context.Context) ([]storecatalog.Entry, error) {
 	for _, entry := range entries {
 		out = append(out, storecatalog.Entry{
 			Name:        entry.Store,
-			ProjectPath: entry.Path,
+			ProjectPath: displaytext.OneLine(entry.Path),
 			StorePath:   entry.StorePath,
 			Health:      convertHealth(entry.Health),
-			Detail:      entry.Detail,
+			Detail:      displaytext.OneLine(entry.Detail),
 		})
 	}
 	return out, nil
@@ -116,14 +116,19 @@ func (c Catalog) resolve(opts tasks.ResolveOptions) (storecatalog.Opened, error)
 // registry name, which is the name of its directory under the central root; a
 // local store's directory is always .tasks, so it is named after its project.
 // A directory name may hold a newline, a tab or a format character, and the
-// name is drawn on one line (textutil.OneLine). Each run of white space left
-// becomes one space, and none stays at either end.
+// name is drawn on one line (displaytext.OneLine). Each run of white space left
+// becomes one space, and none stays at either end. A name that draws no cell
+// is no name: the header then falls back to its own label.
 func StoreName(info tasks.ResolveInfo) string {
 	dir := info.StorePath
 	if info.Kind == tasks.ResolvedLocal {
 		dir = info.ProjectPath
 	}
-	return strings.Join(strings.Fields(textutil.OneLine(filepath.Base(dir))), " ")
+	name := strings.Join(strings.Fields(displaytext.OneLine(filepath.Base(dir))), " ")
+	if !displaytext.Visible(name) {
+		return ""
+	}
+	return name
 }
 
 func convertHealth(health tasks.StoreHealth) storecatalog.Health {
