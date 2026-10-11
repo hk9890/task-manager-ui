@@ -157,12 +157,17 @@ Size, cells and colour in an `internal/app` test:
   (`internal/app/mouse_test.go`), which adds the margin.
 - Assert a foreground, a background or bold on the escape codes, under `testui.ForceTrueColor`.
   A stripped golden passes with the wrong colour.
+- The hover roles are chosen by the colour profile when `styles.Apply` runs. A test of a 256- or a
+  16-colour terminal sets the profile and then calls `styles.Apply`, as `applyOnEveryTerminal`
+  does (`internal/ui/styles/row_highlight_test.go`). Register the cleanup that applies the start
+  theme before the one that restores the profile: cleanups run last first, and the roles must be
+  applied under the profile the test started on.
 
 Golden file convention:
 
 - Store golden files under the tested package's `testdata/` directory.
 - Keep one scenario per golden for readable diffs.
-- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `board_columns_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test. In `internal/app` the suffix is the terminal width, so from `_w100` the content is 4 columns narrower.
+- Name a golden that pins a specific terminal width with a `_w<width>` suffix (e.g. `board_columns_w120.golden`). Width decides which layout branch the snapshot exercises and is the one attribute a reader cannot recover without opening the test. In `internal/app` the suffix is the terminal width: the content is 100 columns from `_w100` to `_w104` and 4 columns narrower than the suffix above that ([DESIGN-GUIDE.md](DESIGN-GUIDE.md#the-screen-margin)).
 - When the width comes from a layout constant rather than a literal, use a symbolic suffix — `_w3col`, `_w2col`, `_w3col_less1` — so the filename cannot go stale if the constant moves.
 
 ### Regenerating goldens

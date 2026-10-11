@@ -42,38 +42,15 @@ func Render(state State) string {
 	}
 
 	// The body is wrapped to the screen: a line wider than it runs through
-	// the margin and off the terminal.
+	// the margin and off the terminal. It is wrapped at its spaces, so a flag
+	// the body tells the operator to type stays on one line.
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		titleStyle.Render(state.Title),
 		"",
-		bodyStyle.Render(wrapAtSpaces(state.Body, width)),
+		bodyStyle.Render(strings.Join(textutil.WrapAtSpaces(state.Body, width), "\n")),
 		"",
 		hintStyle.Render("Press q or ctrl+c to quit."),
 	)
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
-}
-
-// wrapAtSpaces wraps body to width at its spaces alone. textutil.WrapLines
-// breaks after a hyphen too, which puts the two halves of a flag the body
-// tells the operator to type on two lines. Only a word wider than width is
-// still broken there.
-func wrapAtSpaces(body string, width int) string {
-	var lines []string
-	for _, paragraph := range strings.Split(body, "\n") {
-		line := ""
-		for _, word := range strings.Fields(paragraph) {
-			switch {
-			case line == "":
-				line = word
-			case lipgloss.Width(line)+1+lipgloss.Width(word) <= width:
-				line += " " + word
-			default:
-				lines = append(lines, textutil.WrapLines(line, width)...)
-				line = word
-			}
-		}
-		lines = append(lines, textutil.WrapLines(line, width)...)
-	}
-	return strings.Join(lines, "\n")
 }

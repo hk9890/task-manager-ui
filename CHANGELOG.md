@@ -23,11 +23,17 @@ carries its `vX.Y.Z` section of this file as its notes.
   is cut to the room the bar has, before a button is dropped. The text at
   the right of the tab line — the store, the view, the selected issue and
   `Idle` — is gone: each part repeated what the screen already shows.
-- **Changed: the look of the screen.** On a terminal of 100 columns or more the
-  app leaves 2 blank columns on each side, and from 24 rows a blank row above
-  and below. Help is a full screen and no longer a box over the screen: the
-  keys stand in sections in one column, `alt+h` or `esc` closes it, and `enter`
-  no longer does. The configuration screen has the same chrome in place of its
+- **Changed: the look of the screen.** On a terminal wider than 100 columns the
+  app leaves blank columns at the sides, 2 on each side from 104 columns. On
+  one higher than 24 rows it leaves a blank row above and below from 26 rows,
+  whatever its width. The margin takes the first 4
+  columns over 100 and the first 2 rows over 24, so the app is not drawn
+  smaller when the window grows. Help is a full screen and no longer a box
+  over the screen: the keys stand in sections in one column, the keys of
+  Detail, of a dialog and of the configuration screen included, `alt+h` or `esc` closes it,
+  and `enter` no longer does. A description too long for the screen goes on in
+  its column on the next line, and a help taller than the screen reads
+  `… (N earlier)` on its first row and `… (N more)` on its last. The configuration screen has the same chrome in place of its
   box: a title line, a rule, one blue line that says what the screen holds, and
   a second rule. A menu-bar button has a space on each side, and the button
   or the tab under the pointer is lit over that whole cell; a click anywhere on
@@ -36,9 +42,11 @@ carries its `vX.Y.Z` section of this file as its notes.
   and what it does the bright part, the hints are joined by `•`, the line
   starts one column in, and it ends in `…` when hints are left off. The bar is 11 columns wider, so a narrow terminal drops the
   version and the last buttons sooner. The row under the pointer is now lighter
-  than the background, one step below the selected row. On a terminal without
-  true colour the two can be one shade, and the bar at the left of the selected
-  row tells them apart.
+  than the background, one step below the selected row. A 256-colour terminal
+  draws the two lighter shades as one, so the band under the pointer is a grey
+  there. A 16-colour terminal has no shade for it: the row under the pointer is
+  not marked there, a tab changes its text colour and a button's label turns
+  bold.
 - **Changed: the store search waits until you stop typing.** A search runs 150 ms
   after the last key, so a typed word is one search and not one for each
   letter. `enter` pressed inside that time opens the result of what you typed.

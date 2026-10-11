@@ -15,17 +15,21 @@ import (
 // terminal. The screen is drawn from the resolved bindings on every frame, so
 // it holds no text of an older theme and no key a config rebound.
 
-// helpWheelLines is how far one wheel notch scrolls the help screen.
+// helpWheelLines is how far one wheel notch scrolls the help screen, where a
+// page is that long.
 const helpWheelLines = 3
 
 // helpSections is the screen's content, in the order a new operator needs it.
-// A key is read from the binding that runs it. The keys spelled out here are
-// the ones no binding names: the query's own, the scope key of the store
-// search, and the mouse.
+// A key is read from the binding that runs it, and every action of every
+// context has an entry (TestHelpNamesEveryBoundAction). The keys spelled out
+// here are the ones no binding names: the query's own, the scope key of the
+// store search, the pane keys and enter in Detail, y and n in a dialog, the
+// keys that step a value on the configuration screen, and the mouse.
 func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 	shell := func(action string) string { return keys.DisplayLabel(config.ShellContext, action) }
 	board := func(action string) string { return keys.DisplayLabel(config.BoardContext, action) }
 	detail := func(action string) string { return keys.DisplayLabel(config.DetailContext, action) }
+	dialog := func(action string) string { return keys.DisplayLabel(config.ModalContext, action) }
 	pair := func(first, second string) string { return first + " / " + second }
 
 	return []helpscreen.Section{
@@ -61,6 +65,9 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: pair(detail(config.DetailActionScrollUp), detail(config.DetailActionScrollDown)), Desc: "scroll a line up / down, on this screen too"},
 			{Key: pair(detail(config.DetailActionPageUp), detail(config.DetailActionPageDown)), Desc: "scroll a page up / down"},
 			{Key: pair(detail(config.DetailActionHome), detail(config.DetailActionEnd)), Desc: "to the top / the bottom"},
+			{Key: pair("left", "right"), Desc: "the pane to the left / right"},
+			{Key: "enter", Desc: "in the Dependencies pane, open the selected issue"},
+			{Key: "enter", Desc: "in the Metadata pane, change the selected Status or Priority"},
 			{Key: shell(config.ShellActionReloadDetail), Desc: "read the issue from the store again"},
 			{Key: shell(config.ShellActionLaunchNvim), Desc: "launch nvim on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchOpencode), Desc: "launch opencode on the issue, in the background"},
@@ -72,6 +79,21 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionOpenConfig), Desc: "open the configuration screen: the theme and the glyph set"},
 			{Key: shell(config.ShellActionHelp), Desc: "show and hide this screen"},
 			{Key: shell(config.ShellActionQuit), Desc: "quit"},
+		}},
+		{Title: "Dialogs", Entries: []helpscreen.Entry{
+			{Key: dialog(config.ModalActionNext), Desc: "the next field or button"},
+			{Key: dialog(config.ModalActionPrev), Desc: "the previous field or button"},
+			{Key: pair(dialog(config.ModalActionLeft), dialog(config.ModalActionRight)), Desc: "the button to the left / right"},
+			{Key: dialog(config.ModalActionEnter), Desc: "press the focused button; in a field, go to the next field, or submit the Status and the Priority dialog"},
+			{Key: "y", Desc: "confirm, while a button has the focus"},
+			{Key: "n", Desc: "cancel, while a button has the focus; not in the Status and the Priority dialog"},
+			{Key: dialog(config.ModalActionEscape), Desc: "cancel the dialog"},
+		}},
+		{Title: "Configuration screen", Entries: []helpscreen.Entry{
+			{Key: pair(board(config.BoardActionMoveUp), board(config.BoardActionMoveDown)), Desc: "the setting above / below"},
+			{Key: pair("left", "right"), Desc: "the value before / after the one shown"},
+			{Key: "enter", Desc: "the value after the one shown"},
+			{Key: shell(config.ShellActionEscape), Desc: "back to where the screen was opened from"},
 		}},
 		{Title: "Mouse", Entries: []helpscreen.Entry{
 			{Key: "click", Desc: "select a row, switch to a tab, press a menu-bar button or focus a pane"},
@@ -127,7 +149,7 @@ func (m *Model) helpKey(k tea.KeyMsg) {
 // (docs/DESIGN-GUIDE.md).
 func (m *Model) scrollHelp(k tea.KeyMsg) {
 	detailKey := func(action string) bool { return m.keys.Match(config.DetailContext, action, k) }
-	page := styles.ScreenBodyRows(m.height)
+	page := helpscreen.PageRows(m.height)
 	switch {
 	case detailKey(config.DetailActionScrollUp):
 		m.scrollHelpBy(-1)
@@ -152,5 +174,5 @@ func (m *Model) scrollHelpBy(lines int) {
 }
 
 func (m Model) helpLastOffset() int {
-	return helpscreen.MaxOffset(helpSections(m.keys), m.height)
+	return helpscreen.MaxOffset(helpSections(m.keys), m.width, m.height)
 }

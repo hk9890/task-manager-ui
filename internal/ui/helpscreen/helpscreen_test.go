@@ -2,10 +2,13 @@ package helpscreen
 
 import (
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -59,14 +62,15 @@ func TestRenderGoldens(t *testing.T) {
 		testui.AssertMatchesGoldenNormalized(t, []byte(Render(sampleState(120, 16))), "help_screen_w120.golden")
 	})
 
-	// At this width the long descriptions and the legend are cut: a
-	// description at the last cell with no mark, the legend with one.
+	// At this width the long descriptions are wrapped and the legend is cut
+	// with a mark. The wrapped lines are more than the body holds, so its last
+	// row counts the ones below.
 	t.Run("narrow_w60", func(t *testing.T) {
 		testui.AssertMatchesGoldenNormalized(t, []byte(Render(sampleState(60, 16))), "help_screen_narrow_w60.golden")
 	})
 
 	// A screen too short for the sections draws them from the offset, between
-	// the chrome that stays.
+	// the chrome that stays, with an indicator on its first and its last row.
 	t.Run("scrolled_w120", func(t *testing.T) {
 		state := sampleState(120, 8)
 		state.Offset = 4
@@ -119,12 +123,61 @@ func TestRenderDrawsTheScreenChrome(t *testing.T) {
 	}
 }
 
-// An entry wider than the screen ends at the screen's last cell, with no mark
-// in it.
-func TestRenderCutsALongLineWithNoMark(t *testing.T) {
+// A description wider than its column goes on in that column on the next
+// lines. It is broken at spaces alone, so no word is cut and a compound word
+// stays whole, and no line reaches the screen's last cell.
+func TestRenderWrapsALongDescriptionInItsColumn(t *testing.T) {
 	t.Parallel()
 
-	const width = 60
+	const descColumn = 3 + len("shift+tab/ctrl+pgup") + 2
+	for width := descColumn + 1 + wrapMinWidth; width <= 100; width++ {
+		lines := plainLines(Render(sampleState(width, 60)))
+		body := lines[4 : len(lines)-1]
+
+		wrapped := 0
+		for _, section := range sampleSections() {
+			for _, entry := range section.Entries {
+				first := slices.IndexFunc(body, func(line string) bool {
+					return strings.HasPrefix(line, "   "+textutil.PadToWidth(entry.Key, len("shift+tab/ctrl+pgup"))+"  ")
+				})
+				if first < 0 {
+					t.Fatalf("width %d: no line opens with the key %q", width, entry.Key)
+				}
+				// The entry's lines end at the next key, heading or blank line.
+				parts := []string{body[first][descColumn:]}
+				for _, line := range body[first+1:] {
+					if !strings.HasPrefix(line, strings.Repeat(" ", descColumn)) {
+						break
+					}
+					parts = append(parts, line[descColumn:])
+				}
+				if got := strings.Join(parts, " "); got != entry.Desc {
+					t.Errorf("width %d: the lines of %q read %q, want %q", width, entry.Key, got, entry.Desc)
+				}
+				for _, part := range parts {
+					if part != strings.TrimSpace(part) || strings.HasSuffix(part, "-") {
+						t.Errorf("width %d: a line of %q is %q, not broken at a space", width, entry.Key, part)
+					}
+					if got := descColumn + lipgloss.Width(part); got > width-1 {
+						t.Errorf("width %d: a line of %q ends at column %d, on or past the last cell", width, entry.Key, got)
+					}
+				}
+				wrapped += len(parts) - 1
+			}
+		}
+		if width == descColumn+1+wrapMinWidth && wrapped == 0 {
+			t.Fatal("fixture: no description is wrapped at the narrowest width that wraps")
+		}
+	}
+}
+
+// A screen too narrow for the key column and a few words of description keeps
+// an entry on one line, which ends at the screen's last cell with no mark in
+// it.
+func TestRenderCutsALongLineWithNoMarkOnAScreenTooNarrowToWrap(t *testing.T) {
+	t.Parallel()
+
+	const width = 3 + len("shift+tab/ctrl+pgup") + 2 + wrapMinWidth
 	lines := plainLines(Render(sampleState(width, 20)))
 	full := plainLines(Render(sampleState(200, 20)))
 
@@ -141,6 +194,87 @@ func TestRenderCutsALongLineWithNoMark(t *testing.T) {
 	}
 	if cut == 0 {
 		t.Fatal("fixture: no entry is wider than the screen")
+	}
+}
+
+// A body that does not hold every line says so on its first and its last row,
+// in the words a clipped detail pane uses and with its count: the lines beyond
+// the window, without the one the indicator is drawn on. Every offset to MaxOffset
+// draws another line, and no line is out of reach, wrapped ones included.
+func TestRenderMarksAClippedBodyAndReachesEveryLine(t *testing.T) {
+	t.Parallel()
+
+	indicator := regexp.MustCompile(`^ … \((\d+) (earlier|more)\)$`)
+	for _, size := range [][2]int{{120, 8}, {120, 10}, {60, 8}, {60, 12}, {44, 9}, {30, 8}} {
+		width, height := size[0], size[1]
+		state := sampleState(width, height)
+		all := plainLines(strings.Join(sectionLines(state.Sections, width), "\n"))
+		rows := styles.ScreenBodyRows(height)
+		limit := MaxOffset(state.Sections, width, height)
+		if limit != len(all)-rows || limit < 2 {
+			t.Fatalf("%dx%d: MaxOffset is %d for %d lines on %d rows", width, height, limit, len(all), rows)
+		}
+
+		seen := 0
+		for state.Offset = 0; state.Offset <= limit; state.Offset++ {
+			lines := plainLines(Render(state))
+			body := lines[4 : len(lines)-1]
+
+			// earlier and more are the lines not drawn on each side: the ones
+			// an indicator counts and the one it stands on.
+			earlier, more := 0, 0
+			if match := indicator.FindStringSubmatch(body[0]); match != nil && match[2] == "earlier" {
+				earlier, _ = strconv.Atoi(match[1])
+				if earlier != state.Offset {
+					t.Errorf("%dx%d at %d: the first row counts %d earlier, want the lines above the window", width, height, state.Offset, earlier)
+				}
+				earlier++
+				body = body[1:]
+			}
+			if match := indicator.FindStringSubmatch(body[len(body)-1]); match != nil && match[2] == "more" {
+				more, _ = strconv.Atoi(match[1])
+				if more != len(all)-rows-state.Offset {
+					t.Errorf("%dx%d at %d: the last row counts %d more, want the lines below the window", width, height, state.Offset, more)
+				}
+				more++
+				body = body[:len(body)-1]
+			}
+			if (earlier > 0) != (state.Offset > 0) || (more > 0) != (state.Offset < limit) {
+				t.Fatalf("%dx%d at %d: %d earlier and %d more", width, height, state.Offset, earlier, more)
+			}
+			if earlier+len(body)+more != len(all) {
+				t.Errorf("%dx%d at %d: %d earlier, %d drawn and %d more are not the %d lines", width, height, state.Offset, earlier, len(body), more, len(all))
+			}
+			for idx, line := range body {
+				if want := ansi.Truncate(all[earlier+idx], width, ""); line != want {
+					t.Fatalf("%dx%d at %d: row %d is %q, want line %d, %q", width, height, state.Offset, idx, line, earlier+idx, want)
+				}
+			}
+			// A step skips no line and draws one more: the last step draws
+			// two, the line its indicator stood on too.
+			last := earlier + len(body)
+			if earlier > seen || state.Offset > 0 && last <= seen {
+				t.Errorf("%dx%d at %d: lines %d to %d are drawn, after the offset before drew to %d", width, height, state.Offset, earlier, last, seen)
+			}
+			seen = last
+		}
+		if seen != len(all) {
+			t.Errorf("%dx%d: scrolled to line %d of %d", width, height, seen, len(all))
+		}
+	}
+}
+
+// A body of fewer than three rows has no row to spare for an indicator: it
+// draws lines alone, so each can still be reached.
+func TestRenderDrawsNoIndicatorOnABodyOfTwoRows(t *testing.T) {
+	t.Parallel()
+
+	state := sampleState(120, 7)
+	state.Offset = 3
+	lines := plainLines(Render(state))
+	all := plainLines(strings.Join(sectionLines(state.Sections, 120), "\n"))
+	if lines[4] != all[3] || lines[5] != all[4] {
+		t.Errorf("the body is %q and %q, want lines 3 and 4 of the sections", lines[4], lines[5])
 	}
 }
 
@@ -189,7 +323,7 @@ func TestRenderClampsTheOffset(t *testing.T) {
 	t.Parallel()
 
 	state := sampleState(120, 8)
-	limit := MaxOffset(state.Sections, state.Height)
+	limit := MaxOffset(state.Sections, state.Width, state.Height)
 	if limit != 9 {
 		t.Fatalf("fixture: MaxOffset is %d, want 12 lines less 3 body rows", limit)
 	}
@@ -208,7 +342,7 @@ func TestRenderClampsTheOffset(t *testing.T) {
 	if Render(state) != Render(sampleState(120, 8)) {
 		t.Error("an offset below zero drew another screen than the top")
 	}
-	if got := MaxOffset(state.Sections, 40); got != 0 {
+	if got := MaxOffset(state.Sections, state.Width, 40); got != 0 {
 		t.Errorf("MaxOffset is %d on a screen that holds every line", got)
 	}
 }
@@ -284,6 +418,31 @@ func TestRenderColoursTheTitleTheHeadingsTheRulesAndTheKeys(t *testing.T) {
 			if got := sgrBefore(line, entry.Desc); got != text {
 				t.Errorf("the description %q is drawn with %q, want the text colour %q", entry.Desc, got, text)
 			}
+		}
+	}
+}
+
+// A wrapped line of a description is in the text colour as its first line is,
+// and an indicator carries no colour, as it does in a detail pane. Not
+// parallel: the colour profile is process-wide.
+func TestRenderColoursAWrappedLineAndLeavesTheIndicatorPlain(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	state := sampleState(60, 9)
+	state.Offset = 2
+	view := Render(state)
+	text := foreground(styles.TextPrimaryColor)
+
+	line := lineOf(t, view, "opened from; hide a toast")
+	if !strings.HasPrefix(textutil.StripANSI(line), strings.Repeat(" ", 3+len("shift+tab/ctrl+pgup")+2)+"opened") {
+		t.Fatalf("fixture: %q is not a wrapped line of a description", textutil.StripANSI(line))
+	}
+	if got := sgrBefore(line, "opened from; hide a toast"); got != text {
+		t.Errorf("the wrapped line is drawn with %q, want the text colour %q", got, text)
+	}
+	for _, mark := range []string{"… (2 earlier)", "more)"} {
+		if line := lineOf(t, view, mark); strings.Contains(line, "\x1b") {
+			t.Errorf("the indicator %q carries a colour: %q", mark, line)
 		}
 	}
 }

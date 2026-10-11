@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -129,7 +130,7 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 			entries[section.Title+": "+entry.Desc] = entry.Key
 		}
 	}
-	want := "Moving and opening, Filter and search, Tabs, Issue, Detail and launchers, Menu bar and stores, Mouse"
+	want := "Moving and opening, Filter and search, Tabs, Issue, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse"
 	if got := strings.Join(titles, ", "); got != want {
 		t.Errorf("sections:\n got %s\nwant %s", got, want)
 	}
@@ -146,9 +147,58 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 		"Mouse: select a box of text; letting go sends it to the terminal clipboard":        "drag",
 		"Filter and search: in the search, switch between open issues and all of them":      "ctrl+t",
 		"Filter and search: filter the rows of a tab by title or ID; every word must match": "type",
+		"Dialogs: the next field or button":                                                 "tab/down",
+		"Dialogs: confirm, while a button has the focus":                                    "y",
+		"Dialogs: cancel the dialog":                                                        "esc",
+		"Configuration screen: the setting above / below":                                   "up / down",
+		"Configuration screen: the value before / after the one shown":                      "left / right",
 	} {
 		if entries[entry] != key {
 			t.Errorf("%q has the key %q, want %q", entry, entries[entry], key)
+		}
+	}
+}
+
+// TestHelpNamesEveryBoundAction binds every action of every context to a key
+// of its own and looks for each key in the sections: an action added to
+// internal/config/keybindings.go without an entry here fails it, so the
+// subtitle's "every key" stays true.
+func TestHelpNamesEveryBoundAction(t *testing.T) {
+	t.Parallel()
+
+	bindings := config.DefaultKeyBindings()
+	contexts := map[string]map[string][]string{
+		config.ShellContext:  bindings.Shell,
+		config.BoardContext:  bindings.Board,
+		config.DetailContext: bindings.Detail,
+		config.ModalContext:  bindings.Modal,
+	}
+	for context, actions := range contexts {
+		for action := range actions {
+			actions[action] = []string{"key-of-" + context + "-" + action}
+		}
+	}
+	keys, err := config.ResolveKeyBindings(bindings)
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings: %v", err)
+	}
+
+	named := map[string]bool{}
+	for _, section := range helpSections(keys) {
+		for _, entry := range section.Entries {
+			for _, key := range strings.Split(entry.Key, " / ") {
+				named[key] = true
+			}
+		}
+	}
+	for context, actions := range contexts {
+		if len(actions) == 0 {
+			t.Errorf("fixture: the %s context has no action", context)
+		}
+		for action, bound := range actions {
+			if !named[bound[0]] {
+				t.Errorf("no help entry names the key of %s in the %s context", action, context)
+			}
 		}
 	}
 }
@@ -235,11 +285,16 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 		t.Fatalf("fixture: the help screen must open clipped, on its first line:\n%s", top)
 	}
 
-	down := pressKey(t, pressKey(t, pressKey(t, m, "down"), "down"), "down")
-	if !down.showHelp || helpBody(down)[0] != all[3] {
-		t.Fatalf("three presses of down drew %q first, want %q", helpBody(down)[0], all[3])
+	// The first and the last row count the lines beyond the window, as the
+	// indicators of a detail pane do.
+	if last := topBody[rows-1]; last != fmt.Sprintf(" … (%d more)", len(all)-rows) {
+		t.Fatalf("the last row of the clipped help is %q, want the count of the lines below", last)
 	}
-	if up := send(t, down, tea.KeyMsg{Type: tea.KeyUp}); helpBody(up)[0] != all[2] {
+	down := pressKey(t, pressKey(t, pressKey(t, m, "down"), "down"), "down")
+	if body := helpBody(down); !down.showHelp || body[0] != " … (3 earlier)" || body[1] != all[4] {
+		t.Fatalf("three presses of down drew %q and %q first, want the indicator of 3 lines and %q", body[0], body[1], all[4])
+	}
+	if up := send(t, down, tea.KeyMsg{Type: tea.KeyUp}); helpBody(up)[0] != " … (2 earlier)" || helpBody(up)[1] != all[3] {
 		t.Fatal("up did not scroll the help screen back one line")
 	}
 	// The chrome stays where it is.
@@ -250,8 +305,10 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 	}
 
 	page := send(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
-	if helpBody(page)[0] != all[rows] {
-		t.Fatalf("pgdown drew %q first, want the line a page down, %q", helpBody(page)[0], all[rows])
+	// A page starts on the line after the last one the page before drew:
+	// the indicators took the first and the last row.
+	if topBody[rows-2] != all[rows-2] || helpBody(page)[1] != all[rows-1] {
+		t.Fatalf("pgdown drew %q first, want the line after %q, %q", helpBody(page)[1], topBody[rows-2], all[rows-1])
 	}
 	if back := send(t, page, tea.KeyMsg{Type: tea.KeyPgUp}); back.View() != top {
 		t.Fatal("pgup did not move the help screen back one page")
@@ -293,20 +350,55 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 	}
 }
 
+// TestEveryHelpLineIsReachedOnANarrowScreen walks the help down a line at a
+// time on a terminal of 80 columns, where descriptions are wrapped: no line
+// ends past the screen, and every line of the sections is drawn at some
+// offset, the last one on the last row.
+func TestEveryHelpLineIsReachedOnANarrowScreen(t *testing.T) {
+	m := newHelpShell(t, config.Default(), 24)
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	all := helpAllLines(t, m)
+	wrapped := false
+	for _, line := range all {
+		wrapped = wrapped || strings.HasPrefix(line, strings.Repeat(" ", 20)) && strings.TrimSpace(line) != ""
+		if lipgloss.Width(line) > m.width-1 && !strings.Contains(line, "─") {
+			t.Errorf("a line of the help ends on or past the last cell: %q", line)
+		}
+	}
+	if !wrapped {
+		t.Fatal("fixture: no description is wrapped at 80 columns")
+	}
+
+	drawn := map[string]bool{}
+	for step := 0; step <= len(all); step++ {
+		for _, line := range helpBody(m) {
+			drawn[line] = true
+		}
+		m = pressKey(t, m, "down")
+	}
+	for _, line := range all {
+		if !drawn[line] {
+			t.Errorf("no offset draws the line %q", line)
+		}
+	}
+	if body := helpBody(m); body[len(body)-1] != all[len(all)-1] || !strings.HasSuffix(body[0], " earlier)") {
+		t.Errorf("the end of the help is %q under %q, want the last line under an indicator", body[len(body)-1], body[0])
+	}
+
+	// A wider terminal wraps fewer lines, and the offset follows.
+	wide := send(t, m, tea.WindowSizeMsg{Width: 140, Height: 24})
+	if body, lines := helpBody(wide), helpAllLines(t, wide); len(lines) >= len(all) || body[len(body)-1] != lines[len(lines)-1] {
+		t.Errorf("after the resize the last body row is %q, want the last line of the help", body[len(body)-1])
+	}
+}
+
 // helpAllLines is every line of the help sections at m's width, without
 // colour: what a screen tall enough for all of them draws.
 func helpAllLines(t *testing.T, m Model) []string {
 	t.Helper()
 
 	m.helpOffset = 0
-	size := tea.WindowSizeMsg{
-		Width:  m.width + 2*m.marginCols,
-		Height: helpscreen.MaxOffset(helpSections(m.keys), 0) + 5,
-	}
-	if size.Width >= marginMinWidth && size.Height+2*screenMarginRows >= marginMinHeight {
-		size.Height += 2 * screenMarginRows
-	}
-	m.setTerminalSize(size)
+	m.height = helpscreen.MaxOffset(helpSections(m.keys), m.width, 0) + 5
 	return helpBody(m)
 }
 
@@ -323,7 +415,7 @@ func TestTheHelpScreenScrollsOnReboundDetailKeys(t *testing.T) {
 	if still := pressKey(t, m, "down"); still.View() != top || !still.showHelp {
 		t.Fatal("a key no longer bound to detail scroll_down scrolled or closed the help screen")
 	}
-	if down := pressKey(t, m, "alt+z"); helpBody(down)[0] != helpBody(m)[1] {
+	if down := pressKey(t, m, "alt+z"); helpBody(down)[1] != helpBody(m)[2] {
 		t.Fatalf("the rebound scroll_down key did not scroll the help screen:\n%s", down.View())
 	}
 }
@@ -348,6 +440,58 @@ func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
 	}
 }
 
+// TestTheWheelSkipsNoHelpLineOnAShortScreen: a body of three or four rows
+// draws one or two lines between its indicators, fewer than a notch scrolled.
+func TestTheWheelSkipsNoHelpLineOnAShortScreen(t *testing.T) {
+	for _, height := range []int{8, 9, 10, 16} {
+		m := newHelpShell(t, config.Default(), height)
+		all := helpAllLines(t, m)
+
+		drawn := map[string]bool{}
+		for range all {
+			for _, line := range helpBody(m) {
+				drawn[line] = true
+			}
+			m = send(t, m, wheel(10, 5, tea.MouseButtonWheelDown))
+		}
+		for _, line := range all {
+			if !drawn[line] {
+				t.Errorf("height %d: the wheel draws the line %q at no notch", height, line)
+			}
+		}
+	}
+}
+
+// TestHelpNamesTheKeysDetailTakesItself: Detail answers to three keys no
+// binding names, which TestHelpNamesEveryBoundAction cannot see.
+func TestHelpNamesTheKeysDetailTakesItself(t *testing.T) {
+	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings: %v", err)
+	}
+	for _, section := range helpSections(keys) {
+		if section.Title != "Detail and launchers" {
+			continue
+		}
+		var got []string
+		for _, entry := range section.Entries {
+			if entry.Key == "left / right" || entry.Key == "enter" {
+				got = append(got, entry.Key+": "+entry.Desc)
+			}
+		}
+		want := []string{
+			"left / right: the pane to the left / right",
+			"enter: in the Dependencies pane, open the selected issue",
+			"enter: in the Metadata pane, change the selected Status or Priority",
+		}
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("the Detail section names\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+		return
+	}
+	t.Fatal("no Detail section in the help")
+}
+
 // A resize under a scrolled help screen leaves no empty rows below its last
 // line, and the next key moves from the line that is drawn, not from an offset
 // the larger screen left behind.
@@ -361,8 +505,10 @@ func TestTheHelpScrollHoldsAfterAResize(t *testing.T) {
 	if len(body) != styles.ScreenBodyRows(taller.height) || body[len(body)-1] != all[len(all)-1] {
 		t.Fatalf("after the resize the last body row is %q, want the last line of the help %q", body[len(body)-1], all[len(all)-1])
 	}
-	if up := pressKey(t, taller, "up"); helpBody(up)[0] != all[len(all)-len(body)-1] {
-		t.Errorf("up after the resize drew %q first, want the line above the one drawn, %q", helpBody(up)[0], all[len(all)-len(body)-1])
+	// One line up, the second row is the line the first row drew before: the
+	// first row is the indicator's.
+	if up := pressKey(t, taller, "up"); helpBody(up)[1] != all[len(all)-len(body)] {
+		t.Errorf("up after the resize drew %q on its second row, want %q", helpBody(up)[1], all[len(all)-len(body)])
 	}
 
 	shorter := send(t, taller, tea.WindowSizeMsg{Width: 120, Height: 12})
@@ -402,7 +548,7 @@ func TestTheHelpScreenFollowsAThemeChange(t *testing.T) {
 	if plainShell(m) != testui.AnsiEscapePattern.ReplaceAllString(mocha, "") {
 		t.Error("the theme change moved the text of the help screen")
 	}
-	if down := pressKey(t, m, "down"); helpBody(down)[0] != helpBody(m)[1] {
+	if down := pressKey(t, m, "down"); helpBody(down)[1] != helpBody(m)[2] {
 		t.Error("down after the theme change did not scroll the help screen one line")
 	}
 }

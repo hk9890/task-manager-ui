@@ -1,6 +1,7 @@
 package styles
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -61,59 +62,160 @@ func TestRowHighlightBandsTheWholeRow(t *testing.T) {
 	}
 }
 
-// TestHoverIsOneSurfaceBelowTheSelectionInEveryTheme: the row or the button
-// under the pointer is lit a step below the selected row, and both are lighter
-// than the terminal's background. In true colour the two bands are two colours
-// in every theme.
-func TestHoverIsOneSurfaceBelowTheSelectionInEveryTheme(t *testing.T) {
-	forceTrueColor(t)
-	restoreInitialStyles(t)
-
-	for _, theme := range Themes() {
-		if err := Apply(theme, initialGlyphs); err != nil {
-			t.Fatalf("Apply(%q): %v", theme, err)
-		}
-
-		flavor := flavors[theme]
-		surface0, surface1 := lipgloss.Color(flavor.Surface0().Hex), lipgloss.Color(flavor.Surface1().Hex)
-		if RowHoverBgColor != surface0 || ShellHoverBgColor != surface0 {
-			t.Errorf("%s: the hover is %q on a row and %q on the header, want surface0 %q", theme, RowHoverBgColor, ShellHoverBgColor, surface0)
-		}
-		if RowSelectedBgColor != surface1 {
-			t.Errorf("%s: the selection is %q, want surface1 %q", theme, RowSelectedBgColor, surface1)
-		}
-		if bandOf(RowSelectedBgColor) == bandOf(RowHoverBgColor) {
-			t.Errorf("%s: the hover band is the selection band %q", theme, bandOf(RowHoverBgColor))
-		}
-	}
+// terminalProfiles are the colour profiles a band can be drawn on.
+var terminalProfiles = map[string]termenv.Profile{
+	"true colour": termenv.TrueColor, "256 colours": termenv.ANSI256, "16 colours": termenv.ANSI,
 }
 
-// TestHoveredTabStaysDistinctOnEveryTerminal: a hover role says something only
-// while it differs from the role next to it. The hovered tab's light value was
-// the inactive tab's, so on a terminal without true colour the pointer marked
-// nothing.
-//
-// The two row bands are not held to this. The hover is the surface next to the
-// selection's, and a 256- or a 16-colour terminal can draw the two as one
-// palette entry: the selection's gutter bar tells the rows apart there.
-func TestHoveredTabStaysDistinctOnEveryTerminal(t *testing.T) {
+// applyOnEveryTerminal applies every theme on every colour profile in turn and
+// calls check after each. The hover roles are chosen by the profile, so the
+// profile is set before the theme is applied.
+func applyOnEveryTerminal(t *testing.T, check func(name, theme string, profile termenv.Profile)) {
+	t.Helper()
+	// Cleanups run last first: the profile is back before the roles are
+	// applied again, so they are the roles of the start profile.
+	restoreInitialStyles(t)
 	previousProfile := lipgloss.ColorProfile()
 	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
-	restoreInitialStyles(t)
 
-	for name, profile := range map[string]termenv.Profile{
-		"true colour": termenv.TrueColor, "256 colours": termenv.ANSI256, "16 colours": termenv.ANSI,
-	} {
+	for name, profile := range terminalProfiles {
 		for _, theme := range Themes() {
 			lipgloss.SetColorProfile(profile)
 			if err := Apply(theme, initialGlyphs); err != nil {
 				t.Fatalf("Apply(%q): %v", theme, err)
 			}
+			check(name, theme, profile)
+		}
+	}
+}
 
-			tabsAlike := sameStyle(lipgloss.NewStyle().Foreground(ShellTabHoverColor), lipgloss.NewStyle().Foreground(ShellTabInactiveColor))
-			if tabsAlike {
-				t.Errorf("%s, %s: a hovered tab is drawn as an inactive one", name, theme)
+// TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt: in true
+// colour the row or the button under the pointer is lit a step below the
+// selected row, and both are lighter than the terminal's background. A
+// 256-colour terminal draws those two surfaces as one entry, so the hover is a
+// grey of the ramp there, and the 16 colours have no entry for it.
+func TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt(t *testing.T) {
+	applyOnEveryTerminal(t, func(name, theme string, profile termenv.Profile) {
+		flavor := flavors[theme]
+		if RowHoverBgColor != ShellHoverBgColor {
+			t.Errorf("%s, %s: the hover is %q on a row and %q on the header", name, theme, RowHoverBgColor, ShellHoverBgColor)
+		}
+		switch profile {
+		case termenv.TrueColor:
+			if surface0 := lipgloss.Color(flavor.Surface0().Hex); RowHoverBgColor != surface0 {
+				t.Errorf("%s, %s: the hover is %q, want surface0 %q", name, theme, RowHoverBgColor, surface0)
 			}
+		case termenv.ANSI256:
+			if entry, err := strconv.Atoi(string(RowHoverBgColor)); err != nil || entry < 232 || entry > 255 {
+				t.Errorf("%s, %s: the hover is %q, want an entry of the grey ramp", name, theme, RowHoverBgColor)
+			}
+		case termenv.ANSI:
+			if RowHoverBgColor != "" {
+				t.Errorf("%s, %s: the hover is %q, want no band", name, theme, RowHoverBgColor)
+			}
+		}
+		if surface1 := lipgloss.Color(flavor.Surface1().Hex); RowSelectedBgColor != surface1 {
+			t.Errorf("%s, %s: the selection is %q, want surface1 %q", name, theme, RowSelectedBgColor, surface1)
+		}
+	})
+}
+
+// TestHoverRolesStayDistinctOnEveryTerminal: a hover role says something only
+// while it differs from the role next to it. Surface0 and Surface1 of the dark
+// themes are one 256-colour palette entry, the mantle is the entry of the
+// background, and the hovered tab's light value was the inactive tab's, so on
+// those terminals the pointer marked nothing.
+func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
+	applyOnEveryTerminal(t, func(name, theme string, profile termenv.Profile) {
+		hover := bandOf(RowHoverBgColor)
+		if bandOf(RowSelectedBgColor) == hover {
+			t.Errorf("%s, %s: the hover band is the selection band %q", name, theme, hover)
+		}
+		// The app paints no background, so a row at rest stands on the
+		// terminal's, which the user of a theme sets to its base. The 16
+		// colours draw no hover band to compare.
+		if profile != termenv.ANSI && (hover == "" || hover == bandOf(lipgloss.Color(flavors[theme].Base().Hex))) {
+			t.Errorf("%s, %s: the hover band %q is the background of a row at rest", name, theme, hover)
+		}
+
+		hoveredTab := lipgloss.NewStyle().Foreground(ShellTabHoverColor).Background(ShellHoverBgColor)
+		if sameStyle(hoveredTab, lipgloss.NewStyle().Foreground(ShellTabInactiveColor)) {
+			t.Errorf("%s, %s: a hovered tab is drawn as an inactive one", name, theme)
+		}
+		if sameStyle(hoveredTab, lipgloss.NewStyle().Foreground(ShellTabActiveTextColor).Background(ShellTabActiveBgColor)) {
+			t.Errorf("%s, %s: a hovered tab is drawn as the active one", name, theme)
+		}
+		if sameStyle(lipgloss.NewStyle().Foreground(ShellTabHoverColor), lipgloss.NewStyle().Foreground(ShellTabInactiveColor)) {
+			t.Errorf("%s, %s: a hovered tab has the text colour of an inactive one", name, theme)
+		}
+
+		// A hovered label is also bold, which is all the 16 colours show.
+		button := lipgloss.NewStyle().Foreground(ShellActionColor)
+		if sameStyle(button.Background(ShellHoverBgColor).Bold(true), button) {
+			t.Errorf("%s, %s: a hovered button is drawn as one at rest", name, theme)
+		}
+		if profile != termenv.ANSI && sameStyle(button.Background(ShellHoverBgColor), button) {
+			t.Errorf("%s, %s: a hovered button has the background of one at rest", name, theme)
+		}
+	})
+}
+
+// TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal: the key is the dim run
+// of a button. On Surface0 a 256-colour terminal drew it in the palette entry
+// next to its background.
+func TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal(t *testing.T) {
+	// entry is the palette entry or the colour of the one sequence a style
+	// opens with, without the digits that say foreground or background. A
+	// style that opens with no sequence has no entry.
+	entry := func(style lipgloss.Style) string {
+		on, _, _ := strings.Cut(style.Render("x"), "x")
+		on = strings.TrimSuffix(strings.TrimPrefix(on, "\x1b["), "m")
+		if rest, found := strings.CutPrefix(on, "38;"); found {
+			return rest
+		}
+		if rest, found := strings.CutPrefix(on, "48;"); found {
+			return rest
+		}
+		if on == "" {
+			return ""
+		}
+		// The 16 colours: 30-37 and 90-97 in front, 40-47 and 100-107 behind.
+		code, err := strconv.Atoi(on)
+		if err != nil {
+			t.Fatalf("no colour in %q", on)
+		}
+		if code >= 40 && code < 50 || code >= 100 {
+			code -= 10
+		}
+		return strconv.Itoa(code)
+	}
+
+	applyOnEveryTerminal(t, func(name, theme string, _ termenv.Profile) {
+		key := entry(lipgloss.NewStyle().Foreground(ShellFooterHelpColor))
+		under := entry(lipgloss.NewStyle().Background(ShellHoverBgColor))
+		if key == "" || key == under {
+			t.Errorf("%s, %s: the key of a hovered button is drawn in %q on %q", name, theme, key, under)
+		}
+	})
+}
+
+// TestApplyOnEveryTerminalLeavesTheRolesOfTheStartProfile: the helper ends on
+// a palette profile two times in three, and a later test reads the hover roles
+// without applying a theme.
+func TestApplyOnEveryTerminalLeavesTheRolesOfTheStartProfile(t *testing.T) {
+	forceTrueColor(t)
+	restoreInitialStyles(t)
+	if err := Apply(initialTheme, initialGlyphs); err != nil {
+		t.Fatal(err)
+	}
+	before := RowHoverBgColor
+
+	for range 6 {
+		t.Run("", func(t *testing.T) {
+			applyOnEveryTerminal(t, func(string, string, termenv.Profile) {})
+		})
+		if RowHoverBgColor != before || ShellHoverBgColor != before {
+			t.Fatalf("the hover is %q on a row and %q on the header after the helper, want %q as before it", RowHoverBgColor, ShellHoverBgColor, before)
 		}
 	}
 }

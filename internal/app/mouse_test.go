@@ -66,8 +66,8 @@ func wheel(x, y int, button tea.MouseButton) tea.MouseMsg {
 // screen's first cell, as tabAt and buttonAt do, and the terminal reports the
 // margin too.
 func onScreen(m Model, msg tea.MouseMsg) tea.MouseMsg {
-	msg.X += m.marginCols
-	msg.Y += m.marginRows
+	msg.X += m.marginLeft
+	msg.Y += m.marginTop
 	return msg
 }
 
@@ -149,7 +149,7 @@ func TestWheelOverTheBoardMovesTheSelection(t *testing.T) {
 	}
 
 	// The wheel over the header strip is not over the board.
-	if m = send(t, m, wheel(x, m.marginRows+headerMenuRow, tea.MouseButtonWheelDown)); firstSelectionID(m, mode.Board) != "tm-4" {
+	if m = send(t, m, wheel(x, m.marginTop+headerMenuRow, tea.MouseButtonWheelDown)); firstSelectionID(m, mode.Board) != "tm-4" {
 		t.Fatal("the wheel over the header moved the board selection")
 	}
 }
@@ -598,7 +598,7 @@ func TestHoverLightsTheTabAndTheRowUnderThePointer(t *testing.T) {
 	}
 
 	// The footer is neither a tab nor a row.
-	if m = send(t, m, pointerMove(rowX, m.marginRows+m.height-1)); m.View() != idle {
+	if m = send(t, m, pointerMove(rowX, m.marginTop+m.height-1)); m.View() != idle {
 		t.Fatal("the row stayed lit after the pointer moved to the footer")
 	}
 }
@@ -650,9 +650,9 @@ func TestAnOverlayKeepsTheMouseFromTheSurfaceBelow(t *testing.T) {
 		t.Fatalf("fixture: the help screen is not clipped at this height:\n%s", top)
 	}
 	m = send(t, m, wheel(x, y, tea.MouseButtonWheelDown))
-	// One notch is helpWheelLines lines: the first section's heading and its
-	// first two keys leave the screen.
-	if scrolled := plainShell(m); scrolled == plainShell(pressKey(t, newMouseShell(t), "alt+h")) || strings.Contains(scrolled, "Moving and opening") || !strings.Contains(scrolled, "a page up / down") {
+	// One notch is helpWheelLines lines: the first row counts them, and
+	// stands on the fourth line, so the fifth is the first one drawn.
+	if scrolled := plainShell(m); !strings.Contains(scrolled, "… (3 earlier)") || strings.Contains(scrolled, "a page up / down") || !strings.Contains(scrolled, "the first / last row") {
 		t.Fatalf("the wheel did not scroll the help screen three lines:\n%s", scrolled)
 	}
 	// Reopening starts at the top again.

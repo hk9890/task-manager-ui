@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/ui/helpscreen"
 )
 
 // mouseKind maps a Bubble Tea mouse event onto the few the surfaces act on:
@@ -57,12 +58,15 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.overlayOpen() {
 		m.clearHeaderHover()
 		cmd := m.mouseToSurface(leave)
+		// A notch moves no further than a page, or a body of a few rows
+		// would skip lines.
+		notch := min(helpWheelLines, helpscreen.PageRows(m.height))
 		switch {
 		case !m.showHelp:
 		case kind == mode.MouseWheelUp:
-			m.scrollHelpBy(-helpWheelLines)
+			m.scrollHelpBy(-notch)
 		case kind == mode.MouseWheelDown:
-			m.scrollHelpBy(helpWheelLines)
+			m.scrollHelpBy(notch)
 		}
 		return m, cmd
 	}

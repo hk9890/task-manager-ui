@@ -30,7 +30,7 @@ func newShortShell(t *testing.T, tab mode.ID, height int) Model {
 // on the screen.
 func terminalScreen(m Model) string {
 	lines := strings.Split(m.View(), "\n")
-	return strings.Join(lines[max(0, len(lines)-m.height-2*m.marginRows):], "\n")
+	return strings.Join(lines[max(0, len(lines)-m.marginTop-m.height-m.marginBottom):], "\n")
 }
 
 // TestTheFrameIsNeverTallerThanTheTerminal: a renderer keeps a floor of rows

@@ -92,3 +92,27 @@ func WrapLines(s string, maxWidth int) []string {
 	}
 	return strings.Split(ansi.Wrap(s, maxWidth, " -"), "\n")
 }
+
+// WrapAtSpaces wraps text to maxWidth at its spaces alone, a line of text at a
+// time. WrapLines breaks after a hyphen too, which puts the two halves of a
+// flag or of a compound word on two lines. Only a word wider than maxWidth is
+// still broken there.
+func WrapAtSpaces(text string, maxWidth int) []string {
+	var lines []string
+	for _, paragraph := range strings.Split(text, "\n") {
+		line := ""
+		for _, word := range strings.Fields(paragraph) {
+			switch {
+			case line == "":
+				line = word
+			case lipgloss.Width(line)+1+lipgloss.Width(word) <= maxWidth:
+				line += " " + word
+			default:
+				lines = append(lines, WrapLines(line, maxWidth)...)
+				line = word
+			}
+		}
+		lines = append(lines, WrapLines(line, maxWidth)...)
+	}
+	return lines
+}

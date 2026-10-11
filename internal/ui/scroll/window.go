@@ -1,6 +1,13 @@
 // Package scroll provides shared viewport-scroll helpers.
 package scroll
 
+import "fmt"
+
+// Earlier and More are the indicators a clipped pane draws on its first and
+// its last row: one wording for every pane that scrolls text.
+func Earlier(count int) string { return fmt.Sprintf("… (%d earlier)", count) }
+func More(count int) string    { return fmt.Sprintf("… (%d more)", count) }
+
 // EnsureVisible returns the scroll offset that keeps sel inside the visible
 // window of size window. It slides the window as little as possible:
 //

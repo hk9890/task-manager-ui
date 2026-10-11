@@ -181,10 +181,14 @@ loads.
 `alt+h`, or the `help` button on the menu bar, opens help from any screen, the
 store picker and the configuration screen included. It is a full screen: every
 key in sections, by what the keys act on, with the keys as your config binds
-them.
+them. The keys of a dialog and of the configuration screen each have a section.
+A description too long for the screen goes on in its column on the next line.
+When help is taller than the screen, its first row reads `… (N earlier)` and
+its last `… (N more)`: the lines above and below the screen, counted as the
+detail panes count them, without the line under the mark.
 
 - `up` / `down` — scroll one line
-- `pgup` / `pgdown` — scroll one page
+- `pgup` / `pgdown` — scroll one page; the next page starts on the line after the last one shown
 - `home` / `end` — jump to the top or the bottom
 - `alt+h`, `esc` — close it and return to the screen it opened over; it opens at the top again
 
@@ -211,9 +215,11 @@ cannot be turned off: the app takes every click, wheel notch and plain drag.
 instead.
 
 - The selected row carries a band of colour across its width. The row under the
-  pointer carries a quieter one, a step nearer the background. On a terminal
-  without true colour the two can be one shade; the bar at the left of the
-  selected row tells them apart.
+  pointer carries a quieter one, a step nearer the background. A 256-colour
+  terminal draws the band under the pointer in a grey, so the two stay two
+  shades. A 16-colour terminal has no shade for it: the row under the pointer
+  is not marked there, a tab changes its text colour and a button's label turns
+  bold.
 - A tab or a menu-bar button under the pointer is lit by a band that covers the
   space on each side of it: over the band a tab's text brightens and a button's
   label turns bold. A click anywhere on the band counts.
@@ -230,7 +236,8 @@ instead.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.
 - **Wheel** over the detail Content or Metadata pane, or on the help screen,
-  scrolls it three lines a notch.
+  scrolls it three lines a notch. Help on a terminal under 10 rows scrolls
+  fewer, so no line is skipped.
 - While a dialog is open, the mouse reaches nothing under it: a dialog takes
   keys only. On the help screen the wheel scrolls and a click does nothing.
 - **Drag** to select a box of text; `esc` during the drag drops it. The box can
@@ -245,9 +252,13 @@ instead.
 
 ## Notes
 
-- On a terminal of 100 columns or more the app leaves 2 blank columns on each
-  side, and from 24 rows also a blank row above and below. A narrower terminal
-  has no margin. A click in the margin does nothing.
+- On a terminal wider than 100 columns the app leaves blank columns at the
+  sides, and on one higher than 24 rows a blank row above and below, whatever
+  its width. The margin takes the first 4 columns over 100 and the first 2 rows
+  over 24, so the app is never drawn narrower or shorter in a larger window.
+  From 104 columns it is 2 columns on each side, and from 26 rows a row above
+  and below. A terminal of 100 columns or fewer has no blank columns, and one
+  of 24 rows or fewer no blank rows. A click in the margin does nothing.
 - Keybindings are context-specific. The same key may do different things in
   shell, board, detail, and modal contexts.
 - `tab`/`shift+tab` belong to the view tabs everywhere except in a modal,

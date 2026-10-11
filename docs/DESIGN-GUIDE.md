@@ -42,14 +42,23 @@ shell. Every other package is pure.
   the modal buttons carry focus on a background instead, each with its own `Focus` role. A row's
   background is not focus: it is the selection or the pointer (`RowSelectedBgColor`,
   `RowHoverBgColor`).
-- The pointer lights what is under it one surface below the selection: `RowHoverBgColor` under a
-  row and `ShellHoverBgColor` under a tab or a menu-bar button are Surface0, and
-  `RowSelectedBgColor` is Surface1, so both are lighter than the terminal background. The two row
-  bands are two colours on a true-colour terminal only. On 256 or 16 colours the surfaces of a
-  flavour can be one palette entry, and the selection's gutter bar tells the rows apart
-  (`TestHoverIsOneSurfaceBelowTheSelectionInEveryTheme`, `internal/ui/styles/row_highlight_test.go`).
-  A hovered tab stays distinct from an inactive one on every profile
-  (`TestHoveredTabStaysDistinctOnEveryTerminal`).
+- The pointer lights what is under it one surface below the selection: on a true-colour terminal
+  `RowHoverBgColor` under a row and `ShellHoverBgColor` under a tab or a menu-bar button are
+  Surface0, and `RowSelectedBgColor` is Surface1, so both are lighter than the terminal background.
+- On 256 colours Surface0 and Surface1 of a dark flavour are one palette entry, and Mantle is the
+  entry of Base. Both hover roles are there the grey of the ramp nearest to Surface0 (`greyRamp`,
+  `internal/ui/styles/theme.go`), an entry no other role is drawn in.
+- The 16 colours have no entry between the background and the selection, so both hover roles are
+  empty there and draw no band. What is left under the pointer is the bold label of a button and
+  the text colour of a tab; a row shows nothing.
+- `applyFlavor` reads `lipgloss.ColorProfile()` for the two cases: a test that sets a 256- or a
+  16-colour profile calls `styles.Apply` after it and restores both in `t.Cleanup`, the profile
+  before the roles (`applyOnEveryTerminal`, `internal/ui/styles/row_highlight_test.go`).
+- In true colour and on 256 colours the hover band is neither the selection band nor the entry of
+  Base, which a row at rest stands on. On every profile a hovered tab and a hovered button differ
+  from the ones at rest, and the key of a hovered button from its background
+  (`TestHoverRolesStayDistinctOnEveryTerminal`, `TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal`,
+  in the same file).
 
 ## The issue vocabulary
 
@@ -132,7 +141,7 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   - the subtitle, one cell in, in `ScreenSubtitleColor`: one line that says what the body is;
   - a `styles.Rule` under the subtitle, from the screen's first cell to its last;
   - the body, `styles.ScreenBodyRows(height)` rows of it. A line wider than the screen ends at the
-    last cell with no `…`: a renderer that wants the mark cuts the line itself;
+    last cell with no `…`: a renderer wraps the line or cuts it with the mark itself;
   - the key legend on the last line, one cell in. Build it with `styles.KeyLegend` at
     `styles.ScreenTextWidth(width)`.
 - Open a section of such a screen with `styles.SectionHeading`: the title bold in
@@ -157,24 +166,37 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 ## The screen margin
 
 Everything the app draws is the **screen**, and the screen stands inside a margin of blank cells:
-2 columns on each side and 1 row above and below.
+2 columns on each side and 1 row above and below. The margin fills a cell at a time and each
+direction by itself, so the screen is never narrower nor shorter on a terminal that is wider or
+taller:
 
-| Terminal | Margin |
-|---|---|
-| under 100 columns (`marginMinWidth`) | none |
-| 100 columns or more, under 24 rows (`marginMinHeight`) | the side columns only |
-| 100 columns or more, 24 rows or more | the side columns and the two rows |
+| Terminal columns | Margin, left + right | Screen columns |
+|---|---|---|
+| up to 100 (`marginMinWidth`) | none | the terminal's |
+| 101 to 104 | 1 + 0, 1 + 1, 2 + 1, 2 + 2 | 100 |
+| 105 or more | 2 + 2 | the terminal's less 4 |
 
+| Terminal rows | Margin, top + bottom | Screen rows |
+|---|---|---|
+| up to 24 (`marginMinHeight`) | none | the terminal's |
+| 25, 26 | 1 + 0, 1 + 1 | 24 |
+| 27 or more | 1 + 1 | the terminal's less 2 |
+
+- The rows do not wait for a side column: a terminal of 80 columns and 30 rows has a blank row
+  above and below and none at the sides. Rows that came with the first side column made the
+  screen 2 rows shorter at 101 columns than at 100.
 - `Model.setTerminalSize` (`internal/app/render.go`) is the only reader of `tea.WindowSizeMsg`. It
-  splits the terminal size into `marginRows` / `marginCols` and the screen, `Model.width` and
-  `Model.height`. The model does not hold the terminal size.
+  splits each direction with `splitMargin` into `Model.marginLeft`, `marginTop`, `marginBottom` and
+  the screen, `Model.width` and `Model.height`. The model does not hold the terminal size.
+  `TestTheScreenNeverShrinksWhenTheTerminalGrows` (`internal/app/margin_test.go`) holds both
+  sizes against a terminal a column narrower and a row shorter.
 - Size every surface, overlay and toast from `Model.width` and `Model.height`. `Model.screen` draws
   them all for that size, and `Model.View` is the only place the margin is drawn.
 - `Model.update` moves a `tea.MouseMsg` into screen coordinates once, before `mouseHeld` and
   `handleMouse`. Count every cell after that from the screen's first cell; a cell of the margin is
   outside every hit test.
 - A line wider than the screen runs through the margin and off the terminal, so a renderer cuts or
-  wraps to the width it is given — `fatalerror.Render` wraps its body for that reason.
+  wraps to the width it is given — `fatalerror.Render` and `helpscreen.Render` wrap for that reason.
   `TestEverySurfaceIsDrawnInsideTheMargin` (`internal/app/margin_test.go`) holds each surface to it.
 
 ## The shell chrome
@@ -370,22 +392,35 @@ not from the picker: with no store open the picker has nothing below it.
 Help is not a mode: `Model.showHelp` puts it in the place of whatever surface is active, the
 picker and the configuration screen included, and `Model.active` stays as it was.
 
-- Its title is `Keyboard Help`, over a fixed subtitle. `helpSections` (`internal/app/help.go`) is the content: sections
-  named by what their keys act on, each an entry per key. Add a key there as a
-  `helpscreen.Entry`, with the key read from `config.ResolvedKeyBindings`; spell a key out only
-  when no binding names it — the query's keys, the scope key of the store search, the mouse. An
-  entry names a key and what it does, nothing else.
+- Its title is `Keyboard Help`, over the subtitle `every key taskmgr-ui answers to`.
+  `helpSections` (`internal/app/help.go`) is the content: sections named by what their keys act
+  on, each an entry per key, the dialogs and the configuration screen included. Add a key there as
+  a `helpscreen.Entry`, with the key read from `config.ResolvedKeyBindings`; spell a key out only
+  when no binding names it — the query's keys, the scope key of the store search, the pane keys
+  and `enter` in Detail, `y` and `n` in a dialog, the keys that step a value on the configuration screen, the mouse. An entry names a key
+  and what it does, nothing else.
+- A new action in `internal/config/keybindings.go` takes an entry in `helpSections`:
+  `TestHelpNamesEveryBoundAction` (`internal/app/help_screen_test.go`) fails without one. No test
+  finds a key a surface matches as the key itself, so add its entry with the key.
 - `helpscreen.Render` draws each section under a `styles.SectionHeading` that starts one cell in
   and stops one cell short of the edge. An entry is three spaces, the key in
   `ShellFooterHelpColor`, two spaces, and the description in `TextPrimaryColor`. Every section
   pads its keys to one column, the widest key on the screen, so the screen reads as one table.
+- A description wider than its column goes on in that column on the next lines, broken at spaces
+  with `textutil.WrapAtSpaces`, and stops one cell short of the edge. A column under
+  `wrapMinWidth` cells keeps the entry on one line, cut at the edge.
+- A body that does not start at the first line draws `scroll.Earlier` on its first row, and one
+  that does not end at the last line `scroll.More` on its last row: the words of a clipped detail
+  pane, uncoloured as there. Each counts the lines beyond the window, as there: not the one it stands on. A
+  body under `clipMinRows` rows draws lines alone (`window`, `internal/ui/helpscreen/helpscreen.go`).
 - The screen is drawn from the resolved bindings and the applied theme on every frame
   (`Model.renderHelp`), and the model holds only `helpOffset`. It therefore shows a rebound key
   and follows a theme change with no rebuild.
 - `Model.helpKey` takes every key while help is up: `toggle_help` and the shell's Escape close it,
   the detail scroll keys scroll it, and every other key does nothing, quit included. It opens at
   the top (`Model.openHelp`); `scrollHelpBy` clamps the offset to `helpscreen.MaxOffset`, also
-  after a resize.
+  after a resize. `MaxOffset` counts the wrapped lines at the screen's width, and a page key moves
+  `helpscreen.PageRows`, the body less the two indicator rows.
 
 When nothing resolved for the working directory, the picker offers to create a store there as two
 action rows above the registry — `Row.Action` in `internal/ui/storepicker`. An action is a row, not
@@ -434,8 +469,9 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   order — help or a dialog, surface above the shell, header, active surface — and hands the
   surface a `mode.MouseMsg` in that surface's own coordinates. A mode never sees the raw event.
 - Help or an open dialog takes the event and the surface below gets a `mode.MouseLeave`. Help
-  scrolls three lines a wheel notch (`helpWheelLines`), as it scrolls on the detail scroll keys
-  (`Model.scrollHelp`); a dialog ignores the mouse.
+  scrolls three lines a wheel notch (`helpWheelLines`) and no more than `helpscreen.PageRows`, so a
+  body of a few rows skips no line, as it scrolls on the detail scroll keys (`Model.scrollHelp`);
+  a dialog ignores the mouse.
 - A surface answers "what is drawn at this cell" with a pure `HitTest(state, x, y)` beside its
   `Render`, built from the same layout helpers. A mode model builds one state value for both — its
   `viewState` — so a click cannot land on a row other than the one drawn under it.
@@ -486,7 +522,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Measure rendered width with `lipgloss.Width`, never `len` — a styled string carries escape bytes
   and a wide rune covers two cells.
 - Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`,
-  `TruncateStringFront`, `WrapLines`, `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
+  `TruncateStringFront`, `WrapLines`, `WrapAtSpaces`, `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
   `styles` owns colour and chrome, not text math.
 - `renderhelpers.CompactIssueID` shortens an ID from the front (`…` + tail) after first dropping the
   `task-manager-ui-` prefix, because the distinguishing part of an issue ID is its tail.

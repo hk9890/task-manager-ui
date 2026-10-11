@@ -16,9 +16,13 @@ import (
 )
 
 // The screen margin: the blank cells between the terminal's edge and
-// everything the app draws. A terminal under marginMinWidth columns has none,
-// and one under marginMinHeight rows keeps the side columns and gives up the
-// rows.
+// everything the app draws, screenMarginCols on each side and screenMarginRows
+// above and below. A terminal of marginMinWidth columns or fewer has none. A
+// wider one gives the margin its next columns one at a time, the left one
+// first, so the screen is never narrower than on a terminal a column smaller.
+// The rows fill the same way from marginMinHeight, the top one first, at every
+// width: rows that came with the first side column made the screen shorter on
+// a terminal a column wider.
 const (
 	screenMarginRows = 1
 	screenMarginCols = 2
@@ -26,19 +30,20 @@ const (
 	marginMinHeight  = 24
 )
 
+// splitMargin takes size cells apart into the margin before the screen, the
+// margin after it and the screen. The cells above floor go to the margin until
+// it holds each on both sides, the one before the screen first.
+func splitMargin(size, floor, each int) (before, after, screen int) {
+	margin := textutil.Clamp(size-floor, 0, 2*each)
+	return (margin + 1) / 2, margin / 2, size - margin
+}
+
 // setTerminalSize takes the terminal's size apart into the margin and the
 // screen inside it. Nothing else reads the terminal's size.
 func (m *Model) setTerminalSize(msg tea.WindowSizeMsg) {
 	m.sizeKnown = true
-	m.marginRows, m.marginCols = 0, 0
-	if msg.Width >= marginMinWidth {
-		m.marginCols = screenMarginCols
-		if msg.Height >= marginMinHeight {
-			m.marginRows = screenMarginRows
-		}
-	}
-	m.width = msg.Width - 2*m.marginCols
-	m.height = msg.Height - 2*m.marginRows
+	m.marginLeft, _, m.width = splitMargin(msg.Width, marginMinWidth, screenMarginCols)
+	m.marginTop, m.marginBottom, m.height = splitMargin(msg.Height, marginMinHeight, screenMarginRows)
 }
 
 // View renders the screen inside the margin. It is the only place the margin
@@ -56,12 +61,11 @@ func (m Model) View() string {
 	}
 
 	lines := strings.Split(m.screen(), "\n")
-	left := strings.Repeat(" ", m.marginCols)
+	left := strings.Repeat(" ", m.marginLeft)
 	for idx := range lines {
 		lines[idx] = left + lines[idx]
 	}
-	blank := strings.Repeat("\n", m.marginRows)
-	return blank + strings.Join(lines, "\n") + blank
+	return strings.Repeat("\n", m.marginTop) + strings.Join(lines, "\n") + strings.Repeat("\n", m.marginBottom)
 }
 
 // screen renders the root shell at the size the margin leaves.

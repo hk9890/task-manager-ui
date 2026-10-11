@@ -129,10 +129,10 @@ func TestResizeWhileAnOverlayIsOpenSizesTheBrowseTabs(t *testing.T) {
 	}
 
 	m.showHelp = true
-	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 100, Height: 24}})
+	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 104, Height: 26}})
 
-	// A terminal of 100x24 is the smallest that has the whole margin.
-	if m.height != 22 || m.width != 96 {
+	// A terminal of 104x26 is the smallest that has the whole margin.
+	if m.height != 24 || m.width != 100 {
 		t.Fatalf("the shell did not record the screen of the new terminal size: %dx%d", m.width, m.height)
 	}
 	// The browse tab is sized by the shell's resize case alone. Left with the

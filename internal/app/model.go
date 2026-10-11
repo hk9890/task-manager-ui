@@ -171,12 +171,15 @@ type Model struct {
 	spinnerTicking bool
 
 	// width and height are the size every surface is drawn for: the terminal
-	// less the screen margin, which marginRows and marginCols hold. The model
-	// does not keep the terminal's own size, so no surface can be sized to it.
-	width      int
-	height     int
-	marginRows int
-	marginCols int
+	// less the screen margin. marginLeft and marginTop are the blank cells in
+	// front of the screen's first cell and marginBottom the blank rows under
+	// its last. The model does not keep the terminal's own size, so no surface
+	// can be sized to it.
+	width        int
+	height       int
+	marginLeft   int
+	marginTop    int
+	marginBottom int
 
 	// sizeKnown is set to true once the first tea.WindowSizeMsg has been
 	// processed. View() returns an empty string until sizeKnown is true so that
@@ -558,8 +561,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The one place a mouse event leaves the terminal's coordinates for
 		// the screen's: everything after this counts from the cell the margin
 		// puts the screen's first cell on.
-		mouse.X -= m.marginCols
-		mouse.Y -= m.marginRows
+		mouse.X -= m.marginLeft
+		mouse.Y -= m.marginTop
 		next, cmd, handled := m.mouseHeld(mouse)
 		if handled {
 			return next, cmd

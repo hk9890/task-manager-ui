@@ -154,29 +154,29 @@ func TestToastAndModalSitInsideTheMargin(t *testing.T) {
 	}
 }
 
-func TestATerminalUnderAHundredColumnsHasNoMargin(t *testing.T) {
+func TestATerminalUnderAHundredColumnsKeepsTheRowMarginAlone(t *testing.T) {
 	const width, height = 99, 30
 
 	for _, name := range fullScreenSurfaces {
 		m := marginSurfaces[name](t, send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height}))
 		rows := terminalRows(t, name, m.View(), width, height)
-		if blank(rows[0]) || blank(rows[height-1]) {
-			t.Errorf("%s: the first row is %q and the last %q, want both drawn", name, rows[0], rows[height-1])
+		if !blank(rows[0]) || !blank(rows[height-1]) || blank(rows[1]) || blank(rows[height-2]) {
+			t.Errorf("%s: the screen is not drawn on rows 1 to %d alone", name, height-2)
 		}
 	}
 
 	m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height})
 	rows := terminalRows(t, "board", m.View(), width, height)
-	if !strings.HasPrefix(rows[headerMenuRow], " stores ") {
-		t.Errorf("the menu bar does not start on the terminal's first cell: %q", rows[headerMenuRow])
+	if !strings.HasPrefix(rows[1+headerMenuRow], " stores ") {
+		t.Errorf("the menu bar does not start on the terminal's first cell: %q", rows[1+headerMenuRow])
 	}
-	if rule := rows[1]; rule != " "+strings.Repeat("─", width-1) {
+	if rule := rows[2]; rule != " "+strings.Repeat("─", width-1) {
 		t.Errorf("the rule does not run from the bar's first label to the terminal's edge: %q", rule)
 	}
 
 	// A click lands where it is drawn there too.
 	x, y := testui.FindCell(t, m.View(), " Docs ")
-	if m = send(t, m, leftClick(x, y)); y != headerTabsRow || m.active != mode.Docs {
+	if m = send(t, m, leftClick(x, y)); y != 1+headerTabsRow || m.active != mode.Docs {
 		t.Errorf("a click on the Docs tab, drawn on row %d, left the shell on %q", y, m.active)
 	}
 }
@@ -324,14 +324,14 @@ func TestTheWheelInTheMarginMovesNothing(t *testing.T) {
 
 	for name, open := range surfaces {
 		m := open()
-		if m.marginCols == 0 || m.marginRows == 0 {
-			t.Fatalf("fixture: %s is drawn without a margin", name)
+		if m.marginLeft != screenMarginCols || m.marginTop != screenMarginRows {
+			t.Fatalf("fixture: %s is drawn without the whole margin", name)
 		}
 		// The picker is one model under every copy of the shell, so the frame
 		// at rest is kept as a string.
 		rest := m.View()
 
-		right, bottom := m.width+2*m.marginCols-1, m.height+2*m.marginRows-1
+		right, bottom := m.width+2*screenMarginCols-1, m.height+2*screenMarginRows-1
 		for where, cell := range map[string][2]int{
 			"left of the screen":  {1, 5},
 			"right of the screen": {right, 5},
@@ -425,5 +425,85 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 	send(t, m, leftRelease(storeX+len("stores alt+s")-1, barY))
 	if len(*copied) != 1 || (*copied)[0] != " stores alt+s" {
 		t.Fatalf("copied %q, want the bar from its first cell to the end of the store button", *copied)
+	}
+}
+
+// TestTheMarginFillsOneCellAtATime: above marginMinWidth the margin takes the
+// new columns, the left one first, and above marginMinHeight the new rows, the
+// top one first, until it is whole. The screen keeps its size meanwhile.
+func TestTheMarginFillsOneCellAtATime(t *testing.T) {
+	for _, tc := range []struct {
+		width, height             int
+		left, top, bottom         int
+		screenWidth, screenHeight int
+	}{
+		{99, 30, 0, 1, 1, 99, 28},
+		{100, 30, 0, 1, 1, 100, 28},
+		{99, 24, 0, 0, 0, 99, 24},
+		{101, 30, 1, 1, 1, 100, 28},
+		{102, 30, 1, 1, 1, 100, 28},
+		{103, 30, 2, 1, 1, 100, 28},
+		{104, 30, 2, 1, 1, 100, 28},
+		{105, 30, 2, 1, 1, 101, 28},
+		{120, 23, 2, 0, 0, 116, 23},
+		{120, 24, 2, 0, 0, 116, 24},
+		{120, 25, 2, 1, 0, 116, 24},
+		{120, 26, 2, 1, 1, 116, 24},
+		{120, 27, 2, 1, 1, 116, 25},
+	} {
+		m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: tc.width, Height: tc.height})
+		if m.marginLeft != tc.left || m.marginTop != tc.top || m.marginBottom != tc.bottom || m.width != tc.screenWidth || m.height != tc.screenHeight {
+			t.Errorf("%dx%d: margin left %d, top %d, bottom %d around a screen of %dx%d; want %d, %d, %d around %dx%d",
+				tc.width, tc.height, m.marginLeft, m.marginTop, m.marginBottom, m.width, m.height,
+				tc.left, tc.top, tc.bottom, tc.screenWidth, tc.screenHeight)
+		}
+
+		// The frame is the terminal's size, and the board starts and ends on
+		// the cells the margin leaves.
+		rows := terminalRows(t, "board", m.View(), tc.width, tc.height)
+		first, last := rows[tc.top], rows[tc.height-1-tc.bottom]
+		if blank(first) || blank(last) || !blank(strings.Join(rows[:tc.top], "")) || !blank(strings.Join(rows[tc.height-tc.bottom:], "")) {
+			t.Errorf("%dx%d: the screen is not drawn on rows %d to %d alone", tc.width, tc.height, tc.top, tc.height-1-tc.bottom)
+		}
+		if !strings.HasPrefix(first, strings.Repeat(" ", tc.left)+" stores ") {
+			t.Errorf("%dx%d: the menu bar does not start on column %d: %q", tc.width, tc.height, tc.left, first)
+		}
+		if end := lipgloss.Width(strings.TrimRight(rows[tc.top+1], " ")); end != tc.left+tc.screenWidth {
+			t.Errorf("%dx%d: the rule under the bar ends at column %d, want the screen's edge at %d", tc.width, tc.height, end, tc.left+tc.screenWidth)
+		}
+
+		// A click lands on what is drawn, whatever part of the margin is there.
+		x, y := testui.FindCell(t, m.View(), " Docs ")
+		if m = send(t, m, leftClick(x, y)); m.active != mode.Docs {
+			t.Errorf("%dx%d: a click on the Docs tab, drawn at column %d of row %d, left the shell on %q", tc.width, tc.height, x, y, m.active)
+		}
+	}
+}
+
+// TestTheScreenNeverShrinksWhenTheTerminalGrows: a wider terminal never draws
+// a narrower screen and a taller one never a shorter screen, so nothing drops
+// off the menu bar when the window grows. The frame fits the terminal at
+// every size.
+func TestTheScreenNeverShrinksWhenTheTerminalGrows(t *testing.T) {
+	m := newMouseShell(t)
+	screen := func(width, height int) (int, int) {
+		sized := m
+		sized.setTerminalSize(tea.WindowSizeMsg{Width: width, Height: height})
+		return sized.width, sized.height
+	}
+
+	for width := 60; width <= 140; width++ {
+		for height := 10; height <= 50; height++ {
+			m = send(t, m, tea.WindowSizeMsg{Width: width, Height: height})
+			// Each direction is held against both: a column more must not
+			// cost a row either.
+			if columns, rows := screen(width-1, height); m.width < columns || m.height < rows {
+				t.Errorf("%dx%d: the screen is %dx%d, and %dx%d on a terminal a column narrower", width, height, m.width, m.height, columns, rows)
+			}
+			if columns, rows := screen(width, height-1); m.width < columns || m.height < rows {
+				t.Errorf("%dx%d: the screen is %dx%d, and %dx%d on a terminal a row shorter", width, height, m.width, m.height, columns, rows)
+			}
+			terminalRows(t, "board", m.View(), width, height)
+		}
 	}
 }
