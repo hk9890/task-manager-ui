@@ -216,10 +216,11 @@ taller:
   `marginBottom` and the screen, `Model.width` and `Model.height`. The model does not hold the
   terminal size. `TestTheScreenNeverShrinksWhenTheTerminalGrows` (`internal/app/margin_test.go`)
   holds both sizes against a terminal a column narrower and a row shorter.
-- No `tea.WindowSizeMsg` goes past the shell: `shouldForwardTo` (`internal/app/routing.go`) keeps
-  it from the tabs, and the shell sizes the modal, the picker, the configuration screen and the
-  issue editor with `SetSize`. The board, docs, search and store picker models still have an arm
-  for the message; the shell never feeds it.
+- No surface acts on a `tea.WindowSizeMsg`: `shouldForwardTo` (`internal/app/routing.go`) keeps it
+  from the tabs, and the shell sizes the modal, the picker, the configuration screen and the issue
+  editor with `SetSize`. An open dialog is handed the message with every message the shell does
+  not consume, and has no arm for it. The board, docs, search and store picker models still have
+  an arm for the message; the shell never feeds it.
 - Size every surface, overlay and toast from `Model.width` and `Model.height`. `Model.screen` draws
   them all for that size, and `Model.View` is the only place the margin is drawn.
 - `Model.update` moves a `tea.MouseMsg` into screen coordinates once, before `mouseHeld` and

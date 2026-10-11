@@ -163,7 +163,8 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles the keyboard. SetSize is what sizes the modal.
+// Update handles the keyboard and hands every other message to the focused
+// input. SetSize is what sizes the modal.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch {
