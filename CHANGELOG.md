@@ -6,7 +6,7 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
-## Unreleased
+## v0.19.0
 
 - **Action required if your config binds `alt+c` in the shell context.** `alt+c`
   now opens the configuration screen, and a config that already binds it to
@@ -19,10 +19,11 @@ carries its `vX.Y.Z` section of this file as its notes.
   cannot be changed safely, nothing changes and a toast says why. `esc` returns
   to where you came from.
 - **Changed: the header.** The first button on the menu bar is the name of the
-  open store, in bold; it opens the store picker, as `stores` did. A long name
-  is cut to the room the bar has, before a button is dropped. The text at
-  the right of the tab line — the store, the view, the selected issue and
-  `Idle` — is gone: each part repeated what the screen already shows.
+  open store, in bold; it opens the store picker, as `stores` did. A name
+  longer than 24 columns is cut to 24. On a narrow bar it is cut further, down
+  to 8 columns, before a button is dropped. The text at the right of the tab
+  line — the store, the view, the selected issue and `Idle` — is gone: each
+  part repeated what the screen already shows.
 - **Changed: the look of the screen.** On a terminal wider than 100 columns the
   app leaves blank columns at the sides, 2 on each side from 104 columns. On
   one higher than 24 rows it leaves a blank row above and below from 26 rows,
@@ -33,18 +34,19 @@ carries its `vX.Y.Z` section of this file as its notes.
   Detail, of a dialog and of the configuration screen included, `alt+h` or `esc` closes it,
   and `enter` no longer does. A description too long for the screen goes on in
   its column on the next line, and a help taller than the screen reads
-  `… (N earlier)` on its first row and `… (N more)` on its last. The configuration screen has the same chrome in place of its
-  box: a title line, a rule, one blue line that says what the screen holds, and
-  a second rule. A menu-bar button has a space on each side, and the button
+  `… (N earlier)` on its first row and `… (N more)` on its last. The
+  configuration screen has the same chrome: a title line, a rule, one blue
+  line that says what the screen holds, and a second rule. A menu-bar button has a space on each side, and the button
   or the tab under the pointer is lit over that whole cell; a click anywhere on
   it counts. A button's label is the text colour, and the rule under the bar
   starts under the first label. In the key legend the key is now the dim part
   and what it does the bright part, the hints are joined by `•`, the line
-  starts one column in, and it ends in `…` when hints are left off. The bar is 11 columns wider, so a narrow terminal drops the
-  version and the last buttons sooner. The row under the pointer is now lighter
-  than the background, one step below the selected row. A 256-colour terminal
-  draws the two lighter shades as one, so the band under the pointer is a grey
-  there. A 16-colour terminal has no shade for it: the row under the pointer is
+  starts one column in, and it ends in `…` when hints are left off. The bar is
+  wider, so a narrow terminal drops the version and the last buttons sooner.
+  The band on the row under the pointer is now the shade between the
+  background and the selected row: lighter than the background on a dark
+  theme, darker on `catppuccin-latte`. A 256-colour terminal draws that band
+  in a grey. A 16-colour terminal has no shade for it: the row under the pointer is
   not marked there, a tab changes its text colour and a button's label turns
   bold.
 - **Fixed: a directory with a line break or a tab in its name broke the store
@@ -52,22 +54,19 @@ carries its `vX.Y.Z` section of this file as its notes.
   name and a path now draw on one line, without format characters such as a
   right-to-left override. The error of a failed store listing does too: a
   registry file with a value of the wrong type gave an error of two or more
-  lines. The same holds for the create-store form, every toast, the config
-  path on the configuration screen and the error of a board column or of the
-  detail view: a directory name with an escape sequence in it reached the
-  terminal from the create-store form. A format character that shapes nothing,
-  such as a right-to-left override or a soft hyphen, is dropped; a joiner in
-  an emoji or a script stays. A long error on the detail view wraps, and a
-  toast draws at most 6 lines, the last a `…` when it cut the message.
-- **Changed: the store search waits until you stop typing.** A search runs 150 ms
-  after the last key, so a typed word is one search and not one for each
-  letter. `enter` pressed inside that time opens the result of what you typed.
+  lines. The same holds for the create-store form, every toast and the error
+  of a board column or of the detail view: a directory name with an escape
+  sequence in it reached the terminal from the create-store form. A format
+  character that shapes nothing, such as a right-to-left override or a soft
+  hyphen, is dropped; a joiner in an emoji or a script stays. A long error on
+  the detail view wraps, and a toast draws at most 6 lines, the last a `…`
+  when it cut the message.
 - **Action required if your config binds `backspace`, `ctrl+w`, `ctrl+u` or
   `ctrl+t`.** An entry in the `shell` or `board` context on one of these keys
   now fails startup and `--check-config`, with an error that names the key, the
-  action and the context. The filter and the store search take these keys
-  first, so such a binding did not run on those screens. The `detail` and
-  `modal` contexts still take them.
+  action and the context. The filter and the store search now take these keys
+  first, so such a binding cannot run on those screens. Bind the action to
+  another key. The `detail` and `modal` contexts still take them.
 - **Action required: the keys changed.** No action is on a bare letter, digit or
   symbol key any more, because those keys now type into the filter. The new
   defaults: `alt+h` help, `alt+s` stores, `alt+f` search, `alt+r` reload,
@@ -80,8 +79,8 @@ carries its `vX.Y.Z` section of this file as its notes.
   prefix; on macOS turn on the Option-as-Meta setting of the terminal. `esc`
   and a letter that reach the app together read as that `alt+` key: under tmux
   keep `escape-time` at 10 ms or lower, the default since tmux 3.5.
-  [`docs/user-guide/key-bindings.md`](docs/user-guide/key-bindings.md) has the
-  whole list.
+  [`docs/user-guide/key-bindings.md`](https://github.com/hk9890/task-manager-ui/blob/v0.19.0/docs/user-guide/key-bindings.md)
+  has the whole list.
 - **Action required if your config binds keys.** A `keybindings` entry in the
   `shell`, `board` or `detail` context that binds a single printable character
   or `space` now fails startup and `--check-config`, with an error that names
@@ -100,12 +99,14 @@ carries its `vX.Y.Z` section of this file as its notes.
   filter stays through a tab switch, a detail round trip and a reload.
 - **Changed: search is no longer a tab.** `alt+f`, or the new `search` button
   on the menu bar, opens the store search from a tab or from the detail. It is
-  one list of results and searches as you type; there is no `enter` to run the
-  query, no preview pane and no pane focus. `ctrl+t` still switches between
-  open issues and all issues. A search shows at most 100 results and the
-  header reads `100 of M` when the store holds more. `esc` clears the query and
-  then returns to where you opened the search; from a result's detail `esc`
-  returns to the results. The view tabs are Board and Docs.
+  one list of results and searches as you type: a search runs 150 ms after the
+  last key, and `enter` pressed inside that time opens the result of what you
+  typed. There is no `enter` to run the query, no preview pane and no pane
+  focus. `ctrl+t` still switches between open issues and all issues. A search
+  shows at most 100 results and the header reads `100 of M` when the store
+  holds more. `esc` clears the query and then returns to where you opened the
+  search; from a result's detail `esc` returns to the results. The view tabs
+  are Board and Docs.
 - Changed: the Done column loads the next page of closed issues only by itself,
   when the selection comes near the end of the loaded rows. The `>` key that
   loaded a page on demand is removed.
@@ -118,6 +119,19 @@ carries its `vX.Y.Z` section of this file as its notes.
 - Fixed: one central store directory that cannot be read no longer empties the
   store picker. That store is listed as `broken`, and `enter` on it shows the
   reason on a second toast line.
+- Fixed: one central store directory that cannot be read no longer stops the
+  app from starting elsewhere. Before, `taskmgr-ui` exited with `failed to open
+  task-manager store for ...` in every directory that has no local `.tasks`
+  store. It now opens the store of that directory, or the store picker when the
+  directory has none. Only a start in the project of the unreadable store, or
+  with `--store-name` on it, still fails.
+- Fixed: the error toast of a refused write said the reason two times. A write
+  that a hook refuses, or that the store finds not valid, names it one time.
+- Fixed: the result of a write, an edit or a launcher that came back while help
+  or a dialog was open was lost, and no toast reported it. The toast now shows.
+- Fixed: when the detail of an issue failed to load, the toast `Failed to load
+  selected issue details` came back on each change of the store and each timed
+  refresh. It now shows one time for an issue, and again when you reload.
 - Fixed: a refresh you did not ask for moved the cursor to another issue in the
   Done column when other closes had pushed the selected issue below the rows
   already loaded. The refresh now loads up to 3 more pages of Done to find the
