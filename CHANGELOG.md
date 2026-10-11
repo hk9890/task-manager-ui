@@ -8,65 +8,6 @@ carries its `vX.Y.Z` section of this file as its notes.
 
 ## v0.19.0
 
-- **Action required if your config binds `alt+c` in the shell context.** `alt+c`
-  now opens the configuration screen, and a config that already binds it to
-  another shell action fails startup with `key "alt+c" conflicts between actions
-  ... in shell context`. Rebind one of the two; the new action is `open_config`.
-- **Added: a configuration screen.** `alt+c`, or the new `config` button on the
-  menu bar, opens a screen where `left` and `right` step the theme and the
-  glyph set. A change shows at once and is written to the config file, which
-  keeps its comments and its layout; a missing file is created. When the file
-  cannot be changed safely, nothing changes and a toast says why. `esc` returns
-  to where you came from.
-- **Changed: the header.** The first button on the menu bar is the name of the
-  open store, in bold; it opens the store picker, as `stores` did. A name
-  longer than 24 columns is cut to 24. On a narrow bar it is cut further, down
-  to 8 columns, before a button is dropped. The text at the right of the tab
-  line — the store, the view, the selected issue and `Idle` — is gone: each
-  part repeated what the screen already shows.
-- **Changed: the look of the screen.** On a terminal wider than 100 columns the
-  app leaves blank columns at the sides, 2 on each side from 104 columns. On
-  one higher than 24 rows it leaves a blank row above and below from 26 rows,
-  whatever its width. The margin takes the first 4
-  columns over 100 and the first 2 rows over 24, so the app is not drawn
-  smaller when the window grows. Help is a full screen and no longer a box
-  over the screen: the keys stand in sections in one column, the keys of
-  Detail, of a dialog and of the configuration screen included, `alt+h` or `esc` closes it,
-  and `enter` no longer does. A description too long for the screen goes on in
-  its column on the next line, and a help taller than the screen reads
-  `… (N earlier)` on its first row and `… (N more)` on its last. The
-  configuration screen has the same chrome: a title line, a rule, one blue
-  line that says what the screen holds, and a second rule. A menu-bar button has a space on each side, and the button
-  or the tab under the pointer is lit over that whole cell; a click anywhere on
-  it counts. A button's label is the text colour, and the rule under the bar
-  starts under the first label. In the key legend the key is now the dim part
-  and what it does the bright part, the hints are joined by `•`, the line
-  starts one column in, and it ends in `…` when hints are left off. The bar is
-  wider, so a narrow terminal drops the version and the last buttons sooner.
-  The band on the row under the pointer is now the shade between the
-  background and the selected row: lighter than the background on a dark
-  theme, darker on `catppuccin-latte`. A 256-colour terminal draws that band
-  in a grey. A 16-colour terminal has no shade for it: the row under the pointer is
-  not marked there, a tab changes its text colour and a button's label turns
-  bold.
-- **Fixed: a directory with a line break or a tab in its name broke the store
-  picker.** The path drew on two lines, so a click landed one row off. A store
-  name and a path now draw on one line, without format characters such as a
-  right-to-left override. The error of a failed store listing does too: a
-  registry file with a value of the wrong type gave an error of two or more
-  lines. The same holds for the create-store form, every toast and the error
-  of a board column or of the detail view: a directory name with an escape
-  sequence in it reached the terminal from the create-store form. A format
-  character that shapes nothing, such as a right-to-left override or a soft
-  hyphen, is dropped; a joiner in an emoji or a script stays. A long error on
-  the detail view wraps, and a toast draws at most 6 lines, the last a `…`
-  when it cut the message.
-- **Action required if your config binds `backspace`, `ctrl+w`, `ctrl+u` or
-  `ctrl+t`.** An entry in the `shell` or `board` context on one of these keys
-  now fails startup and `--check-config`, with an error that names the key, the
-  action and the context. The filter and the store search now take these keys
-  first, so such a binding cannot run on those screens. Bind the action to
-  another key. The `detail` and `modal` contexts still take them.
 - **Action required: the keys changed.** No action is on a bare letter, digit or
   symbol key any more, because those keys now type into the filter. The new
   defaults: `alt+h` help, `alt+s` stores, `alt+f` search, `alt+r` reload,
@@ -86,11 +27,73 @@ carries its `vX.Y.Z` section of this file as its notes.
   or `space` now fails startup and `--check-config`, with an error that names
   the key, the action and the context. Bind the action to an `alt+` or `ctrl+`
   key, for example `quit: [ctrl+q]`. The `modal` context still takes any key.
-  The shell actions `mode_board`, `mode_docs`, `mode_search`, `mode_detail` and
-  `toggle_search`, the board action `load_more` and the whole `search` context
-  no longer exist: an entry for one is ignored with a startup warning, so
-  delete it. New actions are `open_search` in `shell` and `move_home`,
-  `move_end`, `page_up` and `page_down` in `board`.
+  An entry on a key that a new default gives to another action in the same
+  context also fails, for example with `key "alt+n" conflicts between actions
+  ... in shell context`. Rebind one of the two. The shell actions `mode_board`,
+  `mode_docs`, `mode_search`, `mode_detail` and `toggle_search`, the board
+  action `load_more` and the whole `search` context no longer exist: an entry
+  for one is ignored with a startup warning, so delete it. New actions are
+  `open_search` in `shell` and `move_home`, `move_end`, `page_up` and
+  `page_down` in `board`.
+- **Action required if your config binds `backspace`, `ctrl+w`, `ctrl+u` or
+  `ctrl+t`.** An entry in the `shell` or `board` context on one of these keys
+  now fails startup and `--check-config`, with an error that names the key, the
+  action and the context. The filter and the store search now take these keys
+  first, so such a binding cannot run on those screens. Bind the action to
+  another key. The `detail` and `modal` contexts still take them.
+- **Action required if your config binds `alt+c` in the shell context.** `alt+c`
+  now opens the configuration screen, and a config that already binds it to
+  another shell action fails startup with `key "alt+c" conflicts between actions
+  ... in shell context`. Rebind one of the two; the new action is `open_config`.
+- **Added: a configuration screen.** `alt+c`, or the new `config` button on the
+  menu bar, opens a screen where `left` and `right` step the theme and the
+  glyph set. A change shows at once and is written to the config file, which
+  keeps its comments and its layout; a missing file is created. When the file
+  cannot be changed safely, nothing changes and a toast says why. `esc` returns
+  to where you came from.
+- **Changed: the header.** The first button on the menu bar is the name of the
+  open store, in bold; it opens the store picker, as `stores` did. A name
+  longer than 24 columns is cut to 24. On a narrow bar it is cut further, down
+  to 8 columns, before a button is dropped. The text at the right of the tab
+  line — the store, the view, the selected issue and `Idle` — is gone: each
+  part repeated what the screen already shows.
+- **Changed: the look of the screen.** On a terminal wider than 100 columns the
+  app leaves blank columns at the sides, 2 on each side from 104 columns. On
+  one higher than 24 rows it leaves a blank row above and below from 26 rows,
+  whatever its width. The margin takes the first 4 columns over 100 and the
+  first 2 rows over 24, so the app is not drawn smaller when the window grows.
+  Help is a full screen and no longer a box over the screen: the keys stand in
+  sections in one column, the keys of Detail, of a dialog and of the
+  configuration screen included, `alt+h` or `esc` closes it, and `enter` no
+  longer does. A description too long for the screen goes on in its column on
+  the next line, and a help taller than the screen reads `… (N earlier)` on its
+  first row and `… (N more)` on its last. The configuration screen has the same
+  chrome: a title line, a rule, one blue line and a second rule. On the
+  configuration screen the blue line names the config file a change is written
+  to. A menu-bar button has a space on each side, and the button or the tab
+  under the pointer is lit over that whole cell; a click anywhere on it counts.
+  A button's label is the text colour, and the rule under the bar starts under
+  the first label. In the key legend the key is now the dim part and what it
+  does the bright part, the hints are joined by `•`, the line starts one column
+  in, and it ends in `…` when hints are left off. The bar is wider, so a narrow
+  terminal drops the version and the last buttons sooner. The band on the row
+  under the pointer is now the shade between the background and the selected
+  row: lighter than the background on a dark theme, darker on
+  `catppuccin-latte`. A 256-colour terminal draws that band in a grey. A
+  16-colour terminal has no shade for it: the row under the pointer is not
+  marked there, a tab changes its text colour and a button's label turns bold.
+- **Fixed: a directory with a line break or a tab in its name broke the store
+  picker.** The path drew on two lines, so a click landed one row off. A store
+  name and a path now draw on one line, without format characters such as a
+  right-to-left override. The error of a failed store listing does too: a
+  registry file with a value of the wrong type gave an error of two or more
+  lines. The same holds for the create-store form, every toast and the error
+  of a board column or of the detail view: a directory name with an escape
+  sequence in it reached the terminal from the create-store form. A format
+  character that shapes nothing, such as a right-to-left override or a soft
+  hyphen, is dropped; a joiner in an emoji or a script stays. A long error on
+  the detail view wraps, and a toast draws at most 6 lines, the last a `…`
+  when it cut the message.
 - **Added: type to filter.** On the Board and Docs tabs every key you type goes
   into a filter on the line above the columns. A row stays when every word of
   the filter is in its title or its ID. The matched text is marked and each
