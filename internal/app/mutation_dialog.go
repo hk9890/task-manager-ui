@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
@@ -205,7 +206,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 	case mutationCreate:
 		return modal.NewWithKeys(modal.Config{
 			Title:       "Create Issue",
-			Message:     fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
+			Message:     displaytext.Lines(fmt.Sprintf("Inline quick-create flow (rich editing stays in external editor).\nTypes: %s\nLabels: %s", emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)"))),
 			ConfirmText: "Create",
 			MinWidth:    92,
 			Required:    false,
@@ -220,8 +221,8 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 		}, modal.BindingsFromConfig(keys))
 	case mutationUpdate:
 		return modal.NewWithKeys(modal.Config{
-			Title:       fmt.Sprintf("Update Issue %s", state.issue.ID),
-			Message:     fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)")),
+			Title:       displaytext.OneLine(fmt.Sprintf("Update Issue %s", state.issue.ID)),
+			Message:     displaytext.Lines(fmt.Sprintf("Quick metadata update.\nStatuses: %s\nTypes: %s\nLabels: %s", emptyFallback(state.statusList, "(none)"), emptyFallback(state.typeList, "(none)"), emptyFallback(state.labelList, "(none)"))),
 			ConfirmText: "Update",
 			MinWidth:    92,
 			Required:    false,
@@ -236,7 +237,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 		}, modal.BindingsFromConfig(keys))
 	case mutationClose:
 		return modal.NewWithKeys(modal.Config{
-			Title:          fmt.Sprintf("Close Issue %s", state.issue.ID),
+			Title:          displaytext.OneLine(fmt.Sprintf("Close Issue %s", state.issue.ID)),
 			Message:        "Provide an optional close reason.",
 			ConfirmText:    "Close",
 			ConfirmVariant: modal.ButtonDanger,
@@ -248,7 +249,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 		}, modal.BindingsFromConfig(keys))
 	case mutationComment:
 		return modal.NewWithKeys(modal.Config{
-			Title:       fmt.Sprintf("Comment on %s", state.issue.ID),
+			Title:       displaytext.OneLine(fmt.Sprintf("Comment on %s", state.issue.ID)),
 			Message:     "Add a comment for the selected issue.",
 			ConfirmText: "Add comment",
 			Required:    false,
@@ -259,8 +260,8 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 		}, modal.BindingsFromConfig(keys))
 	case mutationStatus:
 		return modal.NewWithKeys(modal.Config{
-			Title:         fmt.Sprintf("Update Status %s", state.issue.ID),
-			Message:       fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)")),
+			Title:         displaytext.OneLine(fmt.Sprintf("Update Status %s", state.issue.ID)),
+			Message:       displaytext.Lines(fmt.Sprintf("Set the issue status. Available: %s", emptyFallback(state.statusList, "(none)"))),
 			ConfirmText:   "Update",
 			MinWidth:      72,
 			Required:      true,
@@ -271,7 +272,7 @@ func mutationModal(state mutationDialogState, keys config.ResolvedKeyBindings) m
 		}, modal.BindingsFromConfig(keys))
 	case mutationPriority:
 		return modal.NewWithKeys(modal.Config{
-			Title:         fmt.Sprintf("Update Priority %s", state.issue.ID),
+			Title:         displaytext.OneLine(fmt.Sprintf("Update Priority %s", state.issue.ID)),
 			Message:       "Set the issue priority (0-4).",
 			ConfirmText:   "Update",
 			MinWidth:      72,

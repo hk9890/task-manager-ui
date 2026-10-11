@@ -169,6 +169,28 @@ func TestATableKeepsItsColumns(t *testing.T) {
 	}
 }
 
+// TestATableKeepsItsTextAtEveryWidth: glamour cuts a cell of a table it
+// cannot make narrow enough, and one character at the width its table just
+// misses. Such a table keeps its text and its rows wrap as text.
+func TestATableKeepsItsTextAtEveryWidth(t *testing.T) {
+	t.Parallel()
+
+	const body = "## T\n\n| Name | Value | Note |\n|---|---|---|\n| alpha | 1 | a short note |\n" +
+		"| beta | 2 | a much longer note that runs on and on to see what the table does when a cell is wider than the pane |\n"
+	want := tableText(renderedLines(t, body, 2000))
+	for width := 20; width <= 140; width++ {
+		lines := renderedLines(t, body, width)
+		if got := tableText(lines); got != want {
+			t.Fatalf("width %d: the table lost text:\n%s", width, strings.Join(lines, "\n"))
+		}
+		for _, line := range lines {
+			if got := lipgloss.Width(line); got > width {
+				t.Fatalf("width %d: a table row is %d cells wide: %q", width, got, line)
+			}
+		}
+	}
+}
+
 // TestAHandWrappedParagraphFlowsToTheWidth: glamour joined the lines of a
 // paragraph only while it wrapped. A hard break still ends its line.
 func TestAHandWrappedParagraphFlowsToTheWidth(t *testing.T) {

@@ -5,6 +5,7 @@ package markdown
 import (
 	"bytes"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -37,7 +38,8 @@ const (
 // first pass and lost its last word to the second, which also cut a code line
 // as prose and put a quote line back without its bar. Neither pass breaks a
 // word wider than the pane. wrapRenderedLine wraps each line instead. Only a
-// table is taken from a render at the width, because glamour sizes its columns.
+// table wider than the pane is taken from a render at the width, because
+// glamour sizes its columns.
 func renderMarkdownANSIMemoized(content string, width int) (string, error) {
 	dark := styles.Dark()
 
@@ -45,22 +47,23 @@ func renderMarkdownANSIMemoized(content string, width int) (string, error) {
 		return cached, nil
 	}
 
+	limit := max(1, width-rightMargin)
 	source := joinSoftBreaks(content)
 	lines, err := renderLines(source, 0, dark)
 	if err != nil {
 		return "", err
 	}
-	if len(tableBlocks(lines)) > 0 {
+	if slices.ContainsFunc(tableBlocks(lines), func(table lineRange) bool { return !fits(lines[table.start:table.end], limit) }) {
 		fitted, err := renderLines(source, width, dark)
 		if err != nil {
 			return "", err
 		}
-		lines = spliceTables(lines, fitted)
+		lines = spliceTables(lines, fitted, limit)
 	}
 
 	wrapped := make([]string, 0, len(lines))
 	for _, line := range lines {
-		wrapped = append(wrapped, wrapRenderedLine(line, max(1, width-rightMargin))...)
+		wrapped = append(wrapped, wrapRenderedLine(line, limit)...)
 	}
 	rendered := strings.Join(wrapped, "\n")
 
@@ -369,10 +372,10 @@ func wrapLine(line string, width int) []string {
 
 	text := strings.TrimLeft(line, " ")
 	indent := line[:len(line)-len(text)]
-	if len(indent) > width/2 {
+	if ansi.StringWidth(indent) > width/2 {
 		indent = ""
 	}
-	room := width - len(indent)
+	room := width - ansi.StringWidth(indent)
 
 	var out []string
 	current := ""
@@ -440,10 +443,16 @@ func tableBlocks(lines []string) []lineRange {
 	return blocks
 }
 
-// spliceTables returns flow with each of its tables replaced by the same table
-// of fitted, the render glamour sized to the pane. Two renders that disagree
-// on the tables leave flow as it is, and its table rows wrap as text.
-func spliceTables(flow, fitted []string) []string {
+// fits reports whether no line is wider than limit cells.
+func fits(lines []string, limit int) bool {
+	return !slices.ContainsFunc(lines, func(line string) bool { return ansi.StringWidth(line) > limit })
+}
+
+// spliceTables returns flow with each of its tables that is wider than limit
+// replaced by the same table of fitted, the render glamour sized to the pane.
+// A table stays as it is, and its rows wrap as text, when glamour cut a cell
+// to make it fit, or when the two renders disagree on the tables.
+func spliceTables(flow, fitted []string, limit int) []string {
 	from, to := tableBlocks(fitted), tableBlocks(flow)
 	if len(from) != len(to) {
 		return flow
@@ -452,11 +461,23 @@ func spliceTables(flow, fitted []string) []string {
 	var out []string
 	next := 0
 	for i, table := range to {
+		natural, sized := flow[table.start:table.end], fitted[from[i].start:from[i].end]
+		if fits(natural, limit) || tableText(natural) != tableText(sized) {
+			continue
+		}
 		out = append(out, flow[next:table.start]...)
-		out = append(out, fitted[from[i].start:from[i].end]...)
+		out = append(out, sized...)
 		next = table.end
 	}
 	return append(out, flow[next:]...)
+}
+
+// tableText is the characters of the cells of a table, sorted: glamour wraps
+// inside a cell, so two renders of one table hold them in another order.
+func tableText(lines []string) string {
+	text := []rune(strings.NewReplacer(" ", "", "│", "", "─", "", "┼", "").Replace(ansi.Strip(strings.Join(lines, ""))))
+	slices.Sort(text)
+	return string(text)
 }
 
 // cell is one grapheme of a rendered line with the SGR style it is drawn in.
