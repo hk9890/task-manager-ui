@@ -526,6 +526,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   and a wide rune covers two cells.
 - Measure and cut text with `internal/ui/shared/textutil` — `TruncateString`,
   `TruncateStringFront`, `WrapLines`, `WrapAtSpaces`, `PadToWidth`, `StripANSI`, `Clamp`. Each is ANSI-aware; the `strings` equivalents are not.
+  A body is the exception: it wraps in `internal/ui/shared/markdown` ([Text and markdown](#text-and-markdown)).
   `styles` owns colour and chrome, not text math.
 - A string the app did not write — a directory name, a path, an error text that embeds one — is
   cleaned with `internal/displaytext` before it is drawn. A newline in it adds a line to the frame
@@ -540,7 +541,15 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   - `Model.openStoreForm`, the configuration screen's `Model.Open` and the store picker's
     `renderRow`, each of which draws a value that is also a key;
   - the error row of a board column, the error text of the detail view and the store picker's
-    `renderError`.
+    `renderError`;
+  - every field of an issue, where it is drawn: `issuerow`, `renderhelpers.CompactIssueID` and
+    the default branch of `renderhelpers.CompactIssueState` for a title, an ID and a status in a
+    row; `Render`, `contentHeaderMetaRow`, `renderContentPaneLines`, `renderCompact`,
+    `renderMetadataPrefixedLine` and `renderComments` in `internal/ui/detail`; the title, the
+    message and the input placeholders of a dialog (`internal/app/mutation_dialog.go`);
+  - the source of a body, in `markdown.Renderer.RenderReadOnly` and `markdown.RenderPlain`
+    (`drawable`), which also expands a TAB to its 4-cell stop: a TAB measures as no cell and the
+    terminal draws it to the next stop, so a line with one runs past its pane.
 
   A new place that draws such a string calls `displaytext.OneLine` itself. A log record is not
   cleaned ([MONITORING.md](MONITORING.md#what-a-healthy-run-logs-after-startup)).
@@ -565,3 +574,16 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
 - Markdown on a read-only surface goes through `markdown.Renderer.RenderReadOnly`, which degrades
   deterministically: empty input to `(no content)`, plain text and any renderer failure to plain
   wrapped text.
+- A line of a body is wrapped, never cut: a pane scrolls down only, so a cut line loses its end.
+  Every line `RenderReadOnly` returns fits the width it was given, and the text is the same at
+  every width. A body is shortened in two places, each with a mark on its last line:
+  a comment (`applyCommentElision`) and the description of the compact view
+  (`renderMarkdownPreviewLines`).
+- glamour styles a body and wraps none of it (`renderMarkdownANSIMemoized`,
+  `internal/ui/shared/markdown/renderer.go`). `wrapRenderedLine` wraps each line at spaces, breaks
+  a word only when it is wider than the line, and starts a continuation line under the text of its
+  first line, with the quote bars. Only a table wider than the pane comes from a glamour render
+  at the width (`spliceTables`), because glamour sizes the columns. Where glamour cut a cell to
+  make the table fit, the rows wrap as text instead.
+- Text that is not markdown wraps through `markdown.RenderPlain`, which keeps the line breaks and
+  the indent of the source. A log-like comment body is drawn with it.

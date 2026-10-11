@@ -16,6 +16,7 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 func TestModelCreateIssueFlowUsesRepositoryCatalogsAndCreateIssue(t *testing.T) {
@@ -679,5 +680,36 @@ func TestMutationDialogEscapeWritesNothing(t *testing.T) {
 	}
 	if len(detail.Comments) != 0 {
 		t.Errorf("expected no comments after Escape, got %d", len(detail.Comments))
+	}
+}
+
+// TestADialogDrawsNoControlCharacterOfTheStore: the ID of an issue and the
+// status, type and label names of a store are text from outside. A dialog
+// draws them in its title, in its message and as the placeholder of an input,
+// and a line feed in one added a row to the box.
+func TestADialogDrawsNoControlCharacterOfTheStore(t *testing.T) {
+	t.Parallel()
+
+	keys, err := config.ResolveKeyBindings(config.DefaultKeyBindings())
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings: %v", err)
+	}
+	dialog := func(kind mutationKind, name string) string {
+		state := buildMutationDialog(kind, domain.IssueSummary{ID: "tm-" + name},
+			[]domain.StatusOption{{Name: name}}, []domain.TypeOption{{Name: name}}, []domain.LabelOption{{Name: name}})
+		return textutil.StripANSI(mutationModal(state, keys).View())
+	}
+
+	for _, kind := range []mutationKind{mutationCreate, mutationUpdate, mutationClose, mutationComment, mutationStatus, mutationPriority} {
+		dirty, clean := dialog(kind, "a\rb\nc\x07d"), dialog(kind, "a b c d")
+		for _, r := range dirty {
+			if r != '\n' && r < ' ' {
+				t.Errorf("%s dialog: control character %q reaches the terminal:\n%q", kind, r, dirty)
+				break
+			}
+		}
+		if got, want := strings.Count(dirty, "\n"), strings.Count(clean, "\n"); got != want {
+			t.Errorf("%s dialog: %d rows, want the %d of the same dialog with clean names", kind, got+1, want+1)
+		}
 	}
 }

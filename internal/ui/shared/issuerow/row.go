@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -158,7 +159,7 @@ func RenderCompact(config RenderConfig) []string {
 	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
 	textWidth := config.Width - lipgloss.Width(prefixPlain)
 
-	title := strings.TrimSpace(config.Issue.Title)
+	title := strings.TrimSpace(displaytext.OneLine(config.Issue.Title))
 	if title == "" {
 		title = "(untitled)"
 	}
@@ -264,7 +265,7 @@ func RenderReferenceCompact(config ReferenceRenderConfig) string {
 func renderReferenceCompact(config ReferenceRenderConfig) string {
 	prefixPlain, prefixStyled := styles.SelectionPrefix(config.Selected, config.Styled)
 
-	title := strings.TrimSpace(config.Issue.Title)
+	title := strings.TrimSpace(displaytext.OneLine(config.Issue.Title))
 	if title == "" {
 		title = "(untitled)"
 	}

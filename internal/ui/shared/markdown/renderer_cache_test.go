@@ -120,8 +120,8 @@ func TestWrapLineWrapsOnCellsNotRunes(t *testing.T) {
 		}
 	}
 
-	// ASCII wrapping is unchanged.
-	if got := wrapLine("alpha beta gamma delta", 6); strings.Join(got, "\n") != "alpha\nbeta g\namma d\nelta" {
-		t.Errorf("ASCII wrapping changed: %q", got)
+	// A line with spaces breaks at them, not inside a word.
+	if got := wrapLine("alpha beta gamma delta", 6); strings.Join(got, "\n") != "alpha\nbeta\ngamma\ndelta" {
+		t.Errorf("a line with spaces did not break at them: %q", got)
 	}
 }

@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,7 +14,7 @@ import (
 // ansi.StringWidth measures a TAB as zero cells, so a line of tabs measured as
 // narrow, was never wrapped, and bled past the Content pane border while
 // lipgloss.Width agreed it fitted — which is also why TruncateString downstream
-// could not rescue it. renderPlain expands tabs before measuring.
+// could not rescue it. drawable expands tabs in the source, before any measure.
 func TestPlainWrappingCountsATabAsCells(t *testing.T) {
 	t.Parallel()
 
@@ -31,22 +32,56 @@ func TestPlainWrappingCountsATabAsCells(t *testing.T) {
 	}
 }
 
-// TestPlainWrappingKeepsLeadingSpaceOnWrappedChunks pins indentation across a
-// wrap. ansi.Hardwrap with preserveSpace=false dropped the leading spaces of
-// every wrapped chunk, so an indented paragraph lost its indent on exactly the
-// lines that wrapped, which reads as corrupted output rather than as wrapping.
-func TestPlainWrappingKeepsLeadingSpaceOnWrappedChunks(t *testing.T) {
+// TestPlainWrappingKeepsTheIndentOfTheSourceLine pins indentation across a
+// wrap: an indented line that wraps keeps its indent on every chunk, and a
+// line with no indent gets none. A hard wrap at the cell started a chunk with
+// the space that stood between two words, which read as a stray indent.
+func TestPlainWrappingKeepsTheIndentOfTheSourceLine(t *testing.T) {
 	t.Parallel()
 
+	const width = 24
 	r := NewRenderer()
-	got := r.RenderReadOnly("aaaaaaaaaaaaaaaaaaaa    bbbb", 20)
 
-	lines := strings.Split(got, "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected the line to wrap into 2, got %d: %q", len(lines), got)
+	const indented = "    indented paragraph that is long enough to wrap twice at this width ok"
+	lines := strings.Split(r.RenderReadOnly(indented, width), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected the line to wrap twice, got %q", lines)
 	}
-	if !strings.HasPrefix(lines[1], "    ") {
-		t.Errorf("wrapped chunk lost its leading space: %q", lines[1])
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "     ") {
+			t.Errorf("chunk does not have the 4-cell indent of its source line: %q", line)
+		}
+		if w := lipgloss.Width(line); w > width {
+			t.Errorf("chunk %q is %d cells wide, want at most %d", line, w, width)
+		}
+	}
+	if got, want := strings.Fields(strings.Join(lines, " ")), strings.Fields(indented); !slices.Equal(got, want) {
+		t.Errorf("wrapping changed the words: got %q, want %q", got, want)
+	}
+
+	const flush = "This comment goes on and on and on and on and on and on and on and on and on"
+	for _, line := range strings.Split(r.RenderReadOnly(flush, width), "\n") {
+		if strings.HasPrefix(line, " ") {
+			t.Errorf("chunk of a line with no indent starts with a space: %q", line)
+		}
+	}
+}
+
+// TestPlainWrappingCutsOnlyAWordWiderThanTheLine: a word that fits moves to
+// the next line whole; one that cannot fit is cut at the cell, and the text
+// after it goes on behind its last piece.
+func TestPlainWrappingCutsOnlyAWordWiderThanTheLine(t *testing.T) {
+	t.Parallel()
+
+	whole := wrapLine("internationalization standardization characterization", 20)
+	if want := []string{"internationalization", "standardization", "characterization"}; !slices.Equal(whole, want) {
+		t.Errorf("words that fit were cut: got %q, want %q", whole, want)
+	}
+
+	long := strings.Repeat("y", 50)
+	cut := wrapLine("word "+long+" tail", 24)
+	if want := []string{"word", long[:24], long[:24], "yy tail"}; !slices.Equal(cut, want) {
+		t.Errorf("a word wider than the line: got %q, want %q", cut, want)
 	}
 }
 

@@ -40,7 +40,7 @@ func TestRenderReadOnlyUsesPlainFallbackForEffectivelyPlainText(t *testing.T) {
 	if strings.Contains(got, "\x1b[") {
 		t.Fatalf("expected plain fallback without ANSI, got %q", got)
 	}
-	if got != "alpha\nbeta g\namma d\nelta" {
+	if got != "alpha\nbeta\ngamma\ndelta" {
 		t.Fatalf("expected deterministic plain wrapping, got %q", got)
 	}
 }

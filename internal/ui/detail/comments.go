@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/markdown"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
@@ -38,7 +40,7 @@ func renderComments(comments []domain.IssueComment, width int) []string {
 
 	out := make([]string, 0, len(ordered)*6)
 	for i, comment := range ordered {
-		author := emptyFallback(comment.Author, "unknown")
+		author := displaytext.OneLine(emptyFallback(comment.Author, "unknown"))
 		timestamp := formatTime(comment.CreatedAt)
 		commentHeader := fmt.Sprintf("[%d/%d] %s · %s", i+1, len(ordered), author, timestamp)
 		out = append(out, textutil.TruncateString(commentHeader, width))
@@ -77,7 +79,7 @@ func renderCommentBody(body string, width int) ([]string, bool) {
 
 	logLike := isLogLikeComment(normalized)
 	if logLike {
-		lines := renderMultiline(normalized, "(empty comment)", max(1, width-4))
+		lines := strings.Split(markdown.RenderPlain(normalized, max(1, width-4)), "\n")
 		return applyCommentElision(lines, maxLogLikeCommentBodyLines, max(1, width-4)), true
 	}
 
