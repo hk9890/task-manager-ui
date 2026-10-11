@@ -261,8 +261,9 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 
 	// tm-2 stops being a doc, so it leaves this surface: the cursor must clamp
 	// into range rather than point past the end of the slice.
-	taskType := "task"
-	if err := gw.UpdateIssue(context.Background(), "tm-2", domain.UpdateIssueInput{Type: &taskType}); err != nil {
+	// tm-2 is closed, and a closed issue takes no update but a reopen.
+	taskType, open := "task", "open"
+	if err := gw.UpdateIssue(context.Background(), "tm-2", domain.UpdateIssueInput{Type: &taskType, Status: &open}); err != nil {
 		t.Fatalf("UpdateIssue returned error: %v", err)
 	}
 	resolve(t, m, m.AutoRefresh())

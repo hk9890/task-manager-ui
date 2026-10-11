@@ -63,8 +63,8 @@ func mapReadErr(op string, err error) error {
 // a domain.RepositoryError (returned by value, so errors.As matches) with
 // domain.ErrorCodeCommandFailed rather than the ErrIssueNotFound sentinel. An
 // in-place edit of a closed issue (tasks.ErrImmutable) becomes
-// domain.ErrorCodeConflict — a taskmgr-only outcome the memory backend lacks.
-// A write a lifecycle hook refuses becomes domain.ErrorCodeHookDenied, also
+// domain.ErrorCodeConflict, which the memory backend returns too.
+// A write a lifecycle hook refuses becomes domain.ErrorCodeHookDenied, which is
 // taskmgr-only: a policy said no, which is not a fault in the app and must not
 // reach the operator as "unknown".
 func mapWriteErr(op string, err error) error {

@@ -16,8 +16,10 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 	"github.com/hk9890/task-manager-ui/internal/version"
 )
@@ -79,7 +81,7 @@ func TestHeaderIsThreeLinesNoWiderThanTheTerminal(t *testing.T) {
 
 	m := newHeaderShell(t, config.Default())
 
-	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search, mode.Detail} {
+	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search} {
 		m.active = active
 		for width := 0; width <= 220; width++ {
 			lines := headerLines(m, width)
@@ -438,7 +440,7 @@ func TestTabLineHoldsTheTabsAlone(t *testing.T) {
 
 	m := newHeaderShell(t, config.Default())
 
-	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search, mode.Detail} {
+	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Search} {
 		m.active = active
 		for _, width := range []int{headerTabsEnd(), 80, 220} {
 			line := headerLines(m, width)[headerTabsRow]
@@ -482,5 +484,100 @@ func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testi
 				t.Errorf("footer %v at %dx%d: the last line of the screen is %q", showFooter, size.width, size.height, last)
 			}
 		}
+	}
+}
+
+// TestDetailDrawsNoTabLine: Detail is not a tab and lights none, so its header
+// is the menu bar and the rule, and the body has the row of the tab line.
+func TestDetailDrawsNoTabLine(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	_, browseRows := m.workspaceSize()
+	if m = pressKey(t, m, "enter"); m.active != mode.Detail {
+		t.Fatalf("fixture did not reach Detail, on %q", m.active)
+	}
+
+	header := headerLines(m, 80)
+	if len(header) != detailHeaderRows || strings.Trim(strings.TrimPrefix(header[1], " "), "─") != "" {
+		t.Fatalf("the Detail header is not the menu bar and the rule:\n%s", strings.Join(header, "\n"))
+	}
+	lines := strings.Split(plainShell(m), "\n")
+	if len(lines) != 24 || !strings.HasPrefix(lines[detailHeaderRows], "╭─ Content") {
+		t.Fatalf("the Detail body does not start under the rule, in a frame of %d lines:\n%s", len(lines), plainShell(m))
+	}
+	for _, tab := range []string{" Board ", " Docs "} {
+		if strings.Contains(plainShell(m), tab) {
+			t.Errorf("Detail draws the tab %q:\n%s", tab, plainShell(m))
+		}
+	}
+	if _, rows := m.workspaceSize(); rows != browseRows+1 || m.detailViewportHeight() != rows || lipgloss.Height(m.renderBody()) != rows {
+		t.Errorf("the Detail body is %d lines in a workspace of %d and a viewport of %d, want the %d of a tab and one more",
+			lipgloss.Height(m.renderBody()), rows, m.detailViewportHeight(), browseRows)
+	}
+
+	// The tab keys still leave Detail for a tab.
+	if m = pressKey(t, m, "tab"); m.active != mode.Docs {
+		t.Errorf("tab from Detail left the shell on %q, want docs", m.active)
+	}
+}
+
+// TestDetailSpinnerStandsInTheFirstCellOfTheMenuBar: with no tab line the
+// spinner takes the gutter in front of the store button's label, the column it
+// has on the tab line, and moves no button.
+func TestDetailSpinnerStandsInTheFirstCellOfTheMenuBar(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = pressKey(t, m, "enter")
+	atRest := topBar(m)
+	if !strings.HasPrefix(atRest, " task-manager-ui ") {
+		t.Fatalf("fixture: the bar at rest is %q", atRest)
+	}
+
+	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
+	m.spinnerFrame = 3
+	loadingBar := topBar(m)
+	glyph := loading.Glyph(3)
+	if loadingBar != glyph+strings.TrimPrefix(atRest, " ") {
+		t.Errorf("during a load the bar is\n%q\nwant the spinner in the first cell of\n%q", loadingBar, atRest)
+	}
+	if _, ok := m.buttonAt(0); !ok {
+		t.Error("the first cell is no longer the store button's")
+	}
+
+	// A browse surface keeps the spinner on its tab line and the bar as it is.
+	m = pressKey(t, m, "esc")
+	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
+	if bar := topBar(m); bar != atRest || !strings.HasPrefix(tabLine(m), glyph) {
+		t.Errorf("on the board during a load: bar %q, tab line %q", bar, tabLine(m))
+	}
+}
+
+// TestResizeInDetailLeavesTheBoardItsSize: the board is sized under its own
+// header of three lines also while Detail, with a header of two, is on screen.
+// Sized from the header on screen it had a row too many, and its bottom border
+// was cut on return.
+func TestResizeInDetailLeavesTheBoardItsSize(t *testing.T) {
+	t.Parallel()
+
+	m := newHeaderShell(t, config.Default())
+	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = pressKey(t, m, "enter")
+	m = send(t, m, tea.WindowSizeMsg{Width: 110, Height: 40})
+	if _, rows := m.workspaceSize(); lipgloss.Height(m.renderBody()) != rows {
+		t.Fatalf("after the resize Detail draws %d lines into a workspace of %d", lipgloss.Height(m.renderBody()), rows)
+	}
+
+	m = pressKey(t, m, "esc")
+	if m.active != mode.Board {
+		t.Fatalf("Escape left the shell on %q", m.active)
+	}
+	_, rows := m.workspaceSize()
+	body := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(m.renderBody(), ""), "\n")
+	if len(body) != rows || !strings.HasPrefix(body[len(body)-1], "╰") {
+		t.Errorf("back on the board it draws %d lines into a workspace of %d, ending in %q", len(body), rows, body[len(body)-1])
 	}
 }

@@ -601,10 +601,10 @@ func TestRenderUsesMarkdownRendererForCommentBodies(t *testing.T) {
 func TestRenderCommentsOrdersNewestFirst(t *testing.T) {
 	t.Parallel()
 
-	lines := renderComments([]domain.IssueComment{
+	lines, _, _ := renderComments([]domain.IssueComment{
 		{ID: "c-old", Author: "old", Body: "older", CreatedAt: mustTime(t, "2026-04-05T10:00:00Z")},
 		{ID: "c-new", Author: "new", Body: "newer", CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
-	}, 80)
+	}, 80, -1)
 
 	joined := strings.Join(lines, "\n")
 	newIndex := strings.Index(joined, "new · 2026-04-05 11:00")
@@ -626,10 +626,10 @@ func TestRenderCommentsTieBreakByIDDescending(t *testing.T) {
 	t.Parallel()
 
 	ts := mustTime(t, "2026-04-05T10:00:00Z")
-	lines := renderComments([]domain.IssueComment{
+	lines, _, _ := renderComments([]domain.IssueComment{
 		{ID: "c-a", Author: "alpha", Body: "first added", CreatedAt: ts},
 		{ID: "c-b", Author: "bravo", Body: "second added", CreatedAt: ts},
-	}, 80)
+	}, 80, -1)
 
 	joined := strings.Join(lines, "\n")
 	bIndex := strings.Index(joined, "bravo · 2026-04-05 10:00")
@@ -651,9 +651,9 @@ func TestRenderCommentsElidesVeryLongLogLikeBodiesWithMarker(t *testing.T) {
 	}
 	body := strings.Join(bodyLines, "\n")
 
-	lines := renderComments([]domain.IssueComment{
+	lines, _, _ := renderComments([]domain.IssueComment{
 		{ID: "c-1", Author: "alice", Body: body, CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
-	}, 96)
+	}, 96, -1)
 
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "… (+") || !strings.Contains(joined, "lines elided)") {
@@ -667,9 +667,9 @@ func TestRenderCommentsElidesVeryLongLogLikeBodiesWithMarker(t *testing.T) {
 func TestRenderCommentsExpandsTabsForReadableOutput(t *testing.T) {
 	t.Parallel()
 
-	lines := renderComments([]domain.IssueComment{
+	lines, _, _ := renderComments([]domain.IssueComment{
 		{ID: "c-1", Author: "alice", Body: "FAIL\tpackage/name\t0.01s", CreatedAt: mustTime(t, "2026-04-05T11:00:00Z")},
-	}, 96)
+	}, 96, -1)
 
 	joined := strings.Join(lines, "\n")
 	if strings.Contains(joined, "\t") {
@@ -728,7 +728,6 @@ func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
 		},
 		QuickActions: QuickActionLabels{
 			EditIssue:    "ctrl+e",
-			UpdateIssue:  "ctrl+u",
 			AddComment:   "ctrl+a",
 			CloseIssue:   "ctrl+x",
 			ReloadDetail: "ctrl+r",
@@ -737,7 +736,7 @@ func TestRenderMetadataUsesConfiguredQuickActionLabels(t *testing.T) {
 	})
 
 	plain := testui.AnsiEscapePattern.ReplaceAllString(view, "")
-	for _, want := range []string{"ctrl+e Edit issue", "ctrl+u Update issue", "ctrl+a Add comment", "ctrl+x Close issue", "ctrl+r Reload detail"} {
+	for _, want := range []string{"ctrl+e Edit issue", "ctrl+a Add comment", "ctrl+x Close issue", "ctrl+r Reload detail"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected configured quick action label %q in view:\n%s", want, plain)
 		}
@@ -911,7 +910,7 @@ func TestRenderContentPaneLinesDrawsMetaRowAndRule(t *testing.T) {
 			Description: "Real description.",
 		}
 
-		lines := renderContentPaneLines(realDetail, 80, 20, false, 0)
+		lines := renderContentPaneLines(ContentPaneState{Detail: realDetail}, 80, 20).lines
 		joined := strings.Join(lines, "\n")
 
 		// Must contain the thin rule (header separator).

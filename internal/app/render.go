@@ -103,8 +103,8 @@ func (m Model) screen() string {
 //
 // The picker is not a tab and not a drill-in: it renders instead of the shell,
 // so the header and the legend are absent while it is up and it draws its own
-// legend (docs/DESIGN-GUIDE.md). The configuration screen is the same, and so
-// is the help screen, which stands in the place of whatever surface is active.
+// legend (docs/DESIGN-GUIDE.md). The configuration screen and the issue editor
+// are the same, and so is the help screen, which stands in the place of whatever surface is active.
 func (m Model) renderSurface() string {
 	if m.showHelp {
 		return firstLines(m.renderHelp(), m.height)
@@ -115,6 +115,8 @@ func (m Model) renderSurface() string {
 		return firstLines(m.storePicker.View(m.spinnerFrame, styles.KeyLegend(storePickerHints(m.keys, m.storeOpen), m.width)), m.height)
 	case mode.Config:
 		return firstLines(m.configScreen.View(version.Version, styles.KeyLegend(configScreenHints(m.keys), styles.ScreenTextWidth(m.width))), m.height)
+	case mode.IssueEdit:
+		return firstLines(m.editor.View(version.Version, styles.KeyLegend(editorHints(m.keys, m.editorTarget.kind), styles.ScreenTextWidth(m.width))), m.height)
 	}
 
 	// A renderer keeps a floor of rows however short the workspace is. The body
@@ -139,9 +141,17 @@ func firstLines(s string, count int) string {
 // The header's geometry. renderHeader draws from it, and tabAt and barCells
 // read a column back through it, so a click lands on what is drawn there.
 const (
-	// The three header lines: the menu bar, the rule, the view tabs.
+	// The three header lines: the menu bar, the rule, the view tabs. Detail
+	// draws the first two only.
 	headerMenuRow = 0
 	headerTabsRow = 2
+
+	// browseHeaderRows and detailHeaderRows are the header's height over a
+	// browse surface and over Detail. A surface is sized from its own, never
+	// from the header on screen: a resize in Detail must not give the board
+	// the row Detail has more.
+	browseHeaderRows = 3
+	detailHeaderRows = 2
 
 	headerSpinnerCols = 2
 	headerTabPadding  = 1
@@ -319,16 +329,25 @@ func (m Model) headerSpinnerCell() string {
 	return style.Render("  ")
 }
 
-// renderHeader draws the three lines above the workspace: the menu bar, the
-// rule under it, and the view tabs.
+// renderHeader draws the lines above the workspace: the menu bar, the rule
+// under it, and the view tabs. Detail is not a tab and lights none, so the tab
+// line is not drawn there and the body has its row.
 func (m Model) renderHeader() string {
-	return m.renderMenuBar() + "\n" + m.renderRule() + "\n" + m.renderTabs()
+	header := m.renderMenuBar() + "\n" + m.renderRule()
+	if m.active == mode.Detail {
+		return header
+	}
+	return header + "\n" + m.renderTabs()
 }
 
 // renderMenuBar draws the buttons from the left and the version flush right.
 // The version is the first to go when the two do not fit. The button under the
 // pointer takes the hover background over its whole cell, a step below the
 // selected row's, and a bold label.
+//
+// In Detail the tab line is not drawn, so the spinner stands in the bar's
+// first cell, the gutter in front of the store button's label: the column it
+// has on the tab line.
 func (m Model) renderMenuBar() string {
 	label := lipgloss.NewStyle().Foreground(styles.ShellActionColor)
 	muted := lipgloss.NewStyle().Foreground(styles.ShellFooterHelpColor)
@@ -345,6 +364,11 @@ func (m Model) renderMenuBar() string {
 			keyStyle = muted.Background(styles.ShellHoverBgColor)
 		}
 		text, key := cell.runs()
+		if idx == 0 && m.active == mode.Detail && m.workInFlight() {
+			spinner := lipgloss.NewStyle().Foreground(styles.TextMutedColor).Background(labelStyle.GetBackground())
+			bar += spinner.Render(loading.Glyph(m.spinnerFrame))
+			text = strings.TrimPrefix(text, " ")
+		}
 		bar += labelStyle.Render(text)
 		if key != "" {
 			bar += keyStyle.Render(key)
@@ -407,17 +431,22 @@ func (m Model) renderBody() string {
 }
 
 func (m Model) detailViewportHeight() int {
-	_, workspaceHeight := m.workspaceSize()
-	return workspaceHeight
+	return m.workspaceRows(detailHeaderRows)
 }
 
 func (m Model) detailViewportWidth() int {
-	workspaceWidth, _ := m.workspaceSize()
-	return workspaceWidth
+	return max(1, m.width)
 }
 
+// workspaceSize is the size of the surface on screen, measured from the
+// rendered chrome.
 func (m Model) workspaceSize() (int, int) {
 	return max(1, m.width), m.workspaceHeight(m.renderHeader(), m.renderFooter())
+}
+
+// workspaceRows is the rows a surface has under a header of headerRows lines.
+func (m Model) workspaceRows(headerRows int) int {
+	return max(1, m.height-headerRows-lipgloss.Height(m.renderFooter()))
 }
 
 // workspaceHeight is the rows the screen has left between a rendered header
@@ -427,9 +456,9 @@ func (m Model) workspaceHeight(header, footer string) int {
 }
 
 func (m Model) applyWorkspaceSizeToBrowseModes() {
-	workspaceWidth, workspaceHeight := m.workspaceSize()
+	workspaceHeight := m.workspaceRows(browseHeaderRows)
 	for _, entry := range m.browseTabs() {
-		entry.Tab.SetSize(workspaceWidth, workspaceHeight)
+		entry.Tab.SetSize(max(1, m.width), workspaceHeight)
 	}
 }
 
@@ -543,7 +572,8 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 		return []styles.KeyHint{
 			{Key: pair(config.DetailContext, config.DetailActionScrollDown, config.DetailActionScrollUp), Desc: "scroll"},
 			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "back"},
-			{Key: primary(config.ShellContext, config.ShellActionEditIssue), Desc: "edit"},
+			{Key: primary(config.ShellContext, config.ShellActionUpdateIssue), Desc: "edit"},
+			{Key: primary(config.ShellContext, config.ShellActionCommentIssue), Desc: "comment"},
 			{Key: pair(config.DetailContext, config.DetailActionPageUp, config.DetailActionPageDown), Desc: "page"},
 			{Key: pair(config.DetailContext, config.DetailActionHome, config.DetailActionEnd), Desc: "bounds"},
 		}

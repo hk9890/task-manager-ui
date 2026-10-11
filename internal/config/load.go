@@ -85,14 +85,9 @@ func resolveConfigPath(override string) (string, error) {
 }
 
 type overrideModel struct {
-	Editor      *overrideEditor     `yaml:"editor"`
 	Launcher    *overrideLauncher   `yaml:"launcher"`
 	KeyBindings *KeyBindingOverride `yaml:"keybindings"`
 	UI          *overrideUI         `yaml:"ui"`
-}
-
-type overrideEditor struct {
-	Command *string `yaml:"command"`
 }
 
 type overrideLauncher struct {
@@ -215,10 +210,6 @@ func validateOverride(override overrideModel) error {
 }
 
 func validateResolved(cfg Model) (ResolvedKeyBindings, error) {
-	if strings.TrimSpace(cfg.Editor.Command) == "" {
-		return ResolvedKeyBindings{}, fmt.Errorf("editor.command must not be empty")
-	}
-
 	seen := make(map[string]struct{}, len(cfg.Launcher.Definitions))
 	for i, definition := range cfg.Launcher.Definitions {
 		action := strings.TrimSpace(definition.Action)
@@ -244,11 +235,6 @@ func validateResolved(cfg Model) (ResolvedKeyBindings, error) {
 
 func merge(base Model, override overrideModel) Model {
 	merged := base
-
-	if override.Editor != nil && override.Editor.Command != nil {
-		merged.Editor.Command = *override.Editor.Command
-	}
-	merged.Launcher.Definitions = syncEditorLauncher(merged.Launcher.Definitions, merged.Editor.Command)
 
 	if override.Launcher != nil && len(override.Launcher.Definitions) > 0 {
 		merged.Launcher.Definitions = mergeLauncherDefinitions(merged.Launcher.Definitions, override.Launcher.Definitions)
@@ -318,33 +304,11 @@ func mergeLauncherDefinitions(base []LauncherDefinition, overrides []overrideLau
 	return merged
 }
 
-func syncEditorLauncher(definitions []LauncherDefinition, editorCommand string) []LauncherDefinition {
-	merged := make([]LauncherDefinition, 0, len(definitions))
-	for _, definition := range definitions {
-		copied := LauncherDefinition{
-			Action:  definition.Action,
-			Command: definition.Command,
-			Args:    cloneStringSlice(definition.Args),
-			Env:     cloneStringSlice(definition.Env),
-			WorkDir: definition.WorkDir,
-		}
-		if copied.Action == "editor" {
-			copied.Command = editorCommand
-		}
-		merged = append(merged, copied)
-	}
-	return merged
-}
-
 var allowedMappingKeys = map[string]map[string]struct{}{
 	"": {
-		"editor":      {},
 		"launcher":    {},
 		"keybindings": {},
 		"ui":          {},
-	},
-	"editor": {
-		"command": {},
 	},
 	"launcher": {
 		"definitions": {},

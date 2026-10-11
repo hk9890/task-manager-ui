@@ -58,6 +58,7 @@ func TestHelpIsAFullScreenOverEverySurface(t *testing.T) {
 		"detail":       {"enter"},
 		"store picker": {"alt+s"},
 		"config":       {"alt+c"},
+		"issue editor": {"alt+u"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := newHelpShell(t, config.Default(), 60)
@@ -130,17 +131,20 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 			entries[section.Title+": "+entry.Desc] = entry.Key
 		}
 	}
-	want := "Moving and opening, Filter and search, Tabs, Issue, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse"
+	want := "Moving and opening, Filter and search, Tabs, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse"
 	if got := strings.Join(titles, ", "); got != want {
 		t.Errorf("sections:\n got %s\nwant %s", got, want)
 	}
 
 	for entry, key := range map[string]string{
-		"Moving and opening: the row above / below":                                         "up / down",
-		"Moving and opening: open the selected issue in Detail":                             "enter",
-		"Filter and search: search the store: titles, IDs and descriptions":                 "alt+f",
-		"Tabs: next tab: Board, Docs":                                                       "tab/ctrl+pgdown",
-		"Issue: close the selected issue":                                                   "delete",
+		"Moving and opening: the row above / below":                             "up / down",
+		"Moving and opening: open the selected issue in Detail":                 "enter",
+		"Filter and search: search the store: titles, IDs and descriptions":     "alt+f",
+		"Tabs: next tab: Board, Docs":                                           "tab/ctrl+pgdown",
+		"Issue: close the selected issue: opens the editor on the close reason": "delete",
+		"Issue editor: save": "ctrl+s",
+		"Issue editor: the next / previous field or button":                                 "tab / shift+tab",
+		"Issue editor: leave without a save":                                                "esc",
 		"Detail and launchers: launch nvim on the issue, in the background":                 "alt+v",
 		"Menu bar and stores: open the configuration screen: the theme and the glyph set":   "alt+c",
 		"Menu bar and stores: show and hide this screen":                                    "alt+h",
@@ -218,7 +222,7 @@ func TestHelpShowsAReboundKey(t *testing.T) {
 	}
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
-	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 60})
+	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 100})
 
 	// Close through the action that opens it, not through a literal key.
 	if m = send(t, m, tea.KeyMsg{Type: tea.KeyF1}); !m.showHelp {
@@ -267,7 +271,7 @@ func TestHelpHoldsEveryOtherKey(t *testing.T) {
 		if cmd != nil {
 			t.Errorf("%q under help returned a command", key)
 		}
-		if !m.showHelp || m.active != mode.Board || m.showActionModal || m.pendingDialog.active || m.View() != whole {
+		if !m.showHelp || m.active != mode.Board || m.showActionModal || m.pendingEditor != 0 || m.View() != whole {
 			t.Fatalf("%q under help: help %v, on %q, modal %v", key, m.showHelp, m.active, m.showActionModal)
 		}
 	}
@@ -423,7 +427,7 @@ func TestTheHelpScreenScrollsOnReboundDetailKeys(t *testing.T) {
 // TestTheScrollKeysChangeNothingWhenTheHelpFits: in a terminal tall enough for
 // the whole help there is nowhere to scroll to.
 func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
-	m := newHelpShell(t, config.Default(), 80)
+	m := newHelpShell(t, config.Default(), 100)
 	whole := m.View()
 	if !strings.Contains(whole, "shift+drag") || !strings.Contains(whole, "Moving and opening") {
 		t.Fatalf("fixture: the help screen is clipped at this height:\n%s", whole)
@@ -480,9 +484,10 @@ func TestHelpNamesTheKeysDetailTakesItself(t *testing.T) {
 			}
 		}
 		want := []string{
-			"left / right: the pane to the left / right",
+			"left / right: the pane to the left / right; the comments are a stop after Content",
 			"enter: in the Dependencies pane, open the selected issue",
-			"enter: in the Metadata pane, change the selected Status or Priority",
+			"enter: in the Metadata pane, edit the issue on the selected Status or Priority",
+			"enter: on a comment, edit it",
 		}
 		if strings.Join(got, "\n") != strings.Join(want, "\n") {
 			t.Errorf("the Detail section names\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

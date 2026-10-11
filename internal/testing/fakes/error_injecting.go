@@ -13,15 +13,17 @@ import (
 type Method string
 
 const (
-	MethodDashboard   Method = "Dashboard"
-	MethodIssue       Method = "Issue"
-	MethodSearch      Method = "Search"
-	MethodCreateIssue Method = "CreateIssue"
-	MethodUpdateIssue Method = "UpdateIssue"
-	MethodCloseIssue  Method = "CloseIssue"
-	MethodAddComment  Method = "AddComment"
-	MethodHealthCheck Method = "HealthCheck"
-	MethodCatalogs    Method = "Catalogs"
+	MethodDashboard     Method = "Dashboard"
+	MethodIssue         Method = "Issue"
+	MethodSearch        Method = "Search"
+	MethodCreateIssue   Method = "CreateIssue"
+	MethodUpdateIssue   Method = "UpdateIssue"
+	MethodCloseIssue    Method = "CloseIssue"
+	MethodAddComment    Method = "AddComment"
+	MethodEditComment   Method = "EditComment"
+	MethodDeleteComment Method = "DeleteComment"
+	MethodHealthCheck   Method = "HealthCheck"
+	MethodCatalogs      Method = "Catalogs"
 )
 
 // Call records a single invocation of a Repository method.
@@ -32,9 +34,13 @@ type Call struct {
 	// issue ID (Dashboard, Search, CreateIssue, HealthCheck, Catalogs).
 	IssueID string
 
+	// CommentID is the comment an EditComment or a DeleteComment targeted.
+	CommentID string
+
 	// Args is the operation's typed input - repository.DashboardOptions,
 	// domain.SearchIssuesQuery, domain.CreateIssueInput, domain.UpdateIssueInput,
-	// domain.CloseIssueInput, domain.AddCommentInput - or nil for the methods
+	// domain.CloseIssueInput, domain.AddCommentInput, domain.EditCommentInput -
+	// or nil for the methods
 	// that take none.
 	//
 	// Recording arguments is what stops each package writing its own capture
@@ -189,6 +195,30 @@ func (e *ErrorInjectingRepository) AddComment(ctx context.Context, id string, in
 		return err
 	}
 	return e.inner.AddComment(ctx, id, input)
+}
+
+// EditComment implements repository.Repository.
+func (e *ErrorInjectingRepository) EditComment(ctx context.Context, id, commentID string, input domain.EditCommentInput) error {
+	e.mu.Lock()
+	e.recordCall(Call{Method: MethodEditComment, IssueID: id, CommentID: commentID, Args: input})
+	err := e.injected(MethodEditComment)
+	e.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return e.inner.EditComment(ctx, id, commentID, input)
+}
+
+// DeleteComment implements repository.Repository.
+func (e *ErrorInjectingRepository) DeleteComment(ctx context.Context, id, commentID string) error {
+	e.mu.Lock()
+	e.recordCall(Call{Method: MethodDeleteComment, IssueID: id, CommentID: commentID})
+	err := e.injected(MethodDeleteComment)
+	e.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return e.inner.DeleteComment(ctx, id, commentID)
 }
 
 // HealthCheck implements repository.Repository.

@@ -23,11 +23,11 @@ const (
 	ShellActionModeCyclePrev  = "mode_cycle_prev"
 	ShellActionEscape         = "escape"
 	ShellActionReloadDetail   = "reload_detail"
-	ShellActionEditIssue      = "edit_issue"
 	ShellActionCreateIssue    = "create_issue"
 	ShellActionUpdateIssue    = "update_issue"
 	ShellActionCloseIssue     = "close_issue"
 	ShellActionCommentIssue   = "comment_issue"
+	ShellActionSaveEdit       = "save_edit"
 	ShellActionLaunchNvim     = "launch_nvim"
 	ShellActionLaunchOpencode = "launch_opencode"
 	ShellActionLaunchShell    = "launch_shell_command"
@@ -52,6 +52,9 @@ const (
 	DetailActionPageDown   = "page_down"
 	DetailActionHome       = "home"
 	DetailActionEnd        = "end"
+	// DetailActionDeleteComment deletes the selected comment. It acts only
+	// while the comments have the focus.
+	DetailActionDeleteComment = "delete_comment"
 
 	ModalActionNext   = "next"
 	ModalActionPrev   = "prev"
@@ -99,11 +102,11 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionModeCyclePrev:  {"shift+tab", "ctrl+pgup"},
 			ShellActionEscape:         {"esc"},
 			ShellActionReloadDetail:   {"alt+r"},
-			ShellActionEditIssue:      {"alt+e"},
 			ShellActionCreateIssue:    {"alt+n"},
 			ShellActionUpdateIssue:    {"alt+u"},
 			ShellActionCloseIssue:     {"delete"},
 			ShellActionCommentIssue:   {"alt+a"},
+			ShellActionSaveEdit:       {"ctrl+s"},
 			ShellActionLaunchNvim:     {"alt+v"},
 			ShellActionLaunchOpencode: {"alt+p"},
 			ShellActionLaunchShell:    {"alt+l"},
@@ -130,6 +133,8 @@ func DefaultKeyBindings() KeyBindings {
 			DetailActionPageDown:   {"pgdown"},
 			DetailActionHome:       {"home"},
 			DetailActionEnd:        {"end"},
+
+			DetailActionDeleteComment: {"alt+d"},
 		},
 		Modal: map[string][]string{
 			ModalActionNext:   {"tab", "down"},
@@ -396,11 +401,11 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionModeCyclePrev,
 			ShellActionEscape,
 			ShellActionReloadDetail,
-			ShellActionEditIssue,
 			ShellActionCreateIssue,
 			ShellActionUpdateIssue,
 			ShellActionCloseIssue,
 			ShellActionCommentIssue,
+			ShellActionSaveEdit,
 			ShellActionLaunchNvim,
 			ShellActionLaunchOpencode,
 			ShellActionLaunchShell,
@@ -433,6 +438,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			DetailActionPageDown,
 			DetailActionHome,
 			DetailActionEnd,
+			DetailActionDeleteComment,
 		} {
 			allowed[action] = struct{}{}
 		}

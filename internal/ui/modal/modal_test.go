@@ -44,10 +44,9 @@ func TestSubmitWithInput(t *testing.T) {
 	}
 }
 
-func TestSubmitAllowsPartialInputWhenNotRequired(t *testing.T) {
+func TestSubmitAllowsPartialInput(t *testing.T) {
 	m := New(Config{
-		Title:    "Input",
-		Required: false,
+		Title: "Input",
 		Inputs: []InputConfig{
 			{Key: "first", Label: "First", Value: "a"},
 			{Key: "second", Label: "Second", Value: ""},
@@ -123,25 +122,9 @@ func TestBindingsFromConfigUsesConfiguredModalKeys(t *testing.T) {
 	}
 }
 
-func TestNKeyDoesNotCancelWhenRequired(t *testing.T) {
+func TestEscapeCancelsFromAFocusedInput(t *testing.T) {
 	m := New(Config{
-		Title:    "Confirm",
-		Message:  "Required confirmation",
-		Required: true,
-	})
-
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
-	if cmd != nil {
-		if _, ok := cmd().(CancelMsg); ok {
-			t.Fatalf("expected no CancelMsg for required modal when pressing n")
-		}
-	}
-}
-
-func TestEscapeCancelsEvenWhenRequired(t *testing.T) {
-	m := New(Config{
-		Title:    "Required",
-		Required: true,
+		Title: "Input",
 		Inputs: []InputConfig{{
 			Key:   "status",
 			Label: "Status",
@@ -242,37 +225,8 @@ func TestPrevField(t *testing.T) {
 	})
 }
 
-func TestSubmitOnEnterSubmitsFromFocusedInput(t *testing.T) {
-	m := New(Config{
-		Title:         "Status",
-		SubmitOnEnter: true,
-		Required:      true,
-		Inputs: []InputConfig{{
-			Key:   "status",
-			Label: "Status",
-			Value: "open",
-		}},
-	})
-
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("expected enter to submit from focused input")
-	}
-
-	msg := cmd()
-	submit, ok := msg.(SubmitMsg)
-	if !ok {
-		t.Fatalf("expected SubmitMsg, got %T", msg)
-	}
-	if submit.Values["status"] != "open" {
-		t.Fatalf("expected submitted status open, got %#v", submit.Values)
-	}
-}
-
-// TestEnterOnFocusedInputAdvancesInsteadOfSubmitting is the counterpart to the
-// test above: with SubmitOnEnter off — the default, and what every mutation
-// dialog uses — Enter walks the fields and only submits once focus has left the
-// inputs.
+// TestEnterOnFocusedInputAdvancesInsteadOfSubmitting: Enter walks the fields
+// and only submits once focus has left the inputs.
 //
 // This is easy to "fix" in the helpful direction, and doing so would submit
 // half-filled multi-field dialogs on the first Enter.
@@ -369,19 +323,18 @@ func TestTypedRunesReachSubmitValues(t *testing.T) {
 func TestSubmitCmdDoesNotRaceWithFurtherTyping(t *testing.T) {
 	t.Parallel()
 
-	// SubmitOnEnter keeps the input focused across the submit, which is the
-	// shape that races: every later keystroke writes into the same inputs
-	// array the Cmd reads.
 	m := New(Config{
-		Title:         "Comment",
-		Inputs:        []InputConfig{{Key: "body", Label: "Comment"}},
-		SubmitOnEnter: true,
+		Title:  "Comment",
+		Inputs: []InputConfig{{Key: "body", Label: "Comment"}},
 	})
 
 	for _, r := range "ship it" {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 
+	// Enter on Save submits. Back on the input, every later keystroke writes
+	// into the same inputs array the Cmd reads: the shape that races.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected submit command")
@@ -393,6 +346,7 @@ func TestSubmitCmdDoesNotRaceWithFurtherTyping(t *testing.T) {
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
 
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	for _, r := range " now" {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}

@@ -1,9 +1,8 @@
 package app
 
 // Detail-mode behaviour driven through the shell: content scrolling, the
-// dependency browser, drill-in/return navigation, and the metadata quick-edit
-// dialogs. Detail *rendering* lives in internal/ui/detail; this file asserts
-// what the shell does with it.
+// dependency browser and drill-in/return navigation. Detail *rendering* lives
+// in internal/ui/detail; this file asserts what the shell does with it.
 
 import (
 	"strconv"
@@ -18,7 +17,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
-	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
 
 func TestModelDetailViewShowsConfiguredCommentQuickActionLabel(t *testing.T) {
@@ -376,350 +374,6 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	}
 }
 
-func TestModelDetailMetadataEnterOpensStatusDialogAndSubmitsStatusUpdate(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Root", "task", 1)
-	seedInProgress(gw, "tm-2", "Other", "task", 2)
-	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	seedCatalogs(gw,
-		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
-		[]domain.TypeOption{{Name: "task"}},
-		[]domain.LabelOption{},
-	)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(testKey("enter"))
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected status catalog load command after enter on metadata status")
-	}
-
-	// The dialog intent now travels as a mode.ActionRequestMsg command, so the
-	// open takes one extra hop: request -> catalog load -> modal. Step it by
-	// hand rather than draining, because the open modal schedules a repeating
-	// tick that a full drain would never finish.
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	_ = cmd
-
-	if !m.showActionModal {
-		t.Fatal("expected status action modal to open")
-	}
-
-	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{"status": "in_progress"}})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected status update submit command")
-	}
-
-	next, _ = m.Update(cmd())
-	m = next.(Model)
-
-	if !gw.HasCall(fakes.MethodCatalogs) {
-		t.Fatalf("expected status catalog query, calls=%#v", gw.Calls())
-	}
-	if !gw.HasCall(fakes.MethodUpdateIssue) {
-		t.Fatalf("expected status update issue call, calls=%#v", gw.Calls())
-	}
-
-	// Verify observable state: tm-1 should now have status "in_progress".
-	updated := issueState(gw, "tm-1")
-	if updated == nil {
-		t.Fatal("expected to find tm-1 in repository after update")
-	}
-	if updated.Summary.Status != "in_progress" {
-		t.Fatalf("expected status updated to in_progress, got %q", updated.Summary.Status)
-	}
-}
-
-func TestModelDetailMetadataStatusDialogEscapeCancelsWithoutSaving(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Root", "task", 1)
-	seedInProgress(gw, "tm-2", "Other", "task", 2)
-	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	seedCatalogs(gw,
-		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
-		[]domain.TypeOption{{Name: "task"}},
-		[]domain.LabelOption{},
-	)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(testKey("enter"))
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected status catalog load command after enter on metadata status")
-	}
-
-	// The dialog intent now travels as a mode.ActionRequestMsg command, so the
-	// open takes one extra hop: request -> catalog load -> modal. Step it by
-	// hand rather than draining, because the open modal schedules a repeating
-	// tick that a full drain would never finish.
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	_ = cmd
-
-	if !m.showActionModal {
-		t.Fatal("expected status action modal to open")
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m = next.(Model)
-	if cmd != nil {
-		m = applyMessages(t, m, runBatch(cmd))
-	}
-
-	if m.showActionModal {
-		t.Fatal("expected escape to close status action modal")
-	}
-
-	if gw.HasCall(fakes.MethodUpdateIssue) {
-		t.Fatalf("expected no UpdateIssue call on escape cancel, calls=%#v", gw.Calls())
-	}
-}
-
-func TestModelDetailMetadataStatusDialogEnterUnchangedIsNoOp(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Root", "task", 1)
-	seedInProgress(gw, "tm-2", "Other", "task", 2)
-	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 1}})
-	seedCatalogs(gw,
-		[]domain.StatusOption{{Name: "open"}, {Name: "in_progress"}, {Name: "blocked"}},
-		[]domain.TypeOption{{Name: "task"}},
-		[]domain.LabelOption{},
-	)
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(testKey("enter"))
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected an action request after enter on metadata status")
-	}
-
-	// request -> catalog load -> modal.
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	_ = cmd
-	if !m.showActionModal {
-		t.Fatal("expected status action modal to open")
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected enter on unchanged status to submit no-op mutation")
-	}
-
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected no-op mutation command after submit")
-	}
-
-	next, _ = m.Update(cmd())
-	m = next.(Model)
-
-	if m.showActionModal {
-		t.Fatal("expected status action modal to close after enter no-op")
-	}
-
-	if gw.HasCall(fakes.MethodUpdateIssue) {
-		t.Fatalf("expected no UpdateIssue call on unchanged enter no-op, calls=%#v", gw.Calls())
-	}
-
-	if !m.toast.Visible() {
-		t.Fatal("expected no-change toast to be visible after unchanged enter")
-	}
-}
-
-func TestModelDetailMetadataEnterOnPriorityOpensDialogAndSubmitsPriorityUpdate(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Root", "task", 4)
-	seedInProgress(gw, "tm-2", "Other", "task", 2)
-	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 4}})
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(testKey("enter"))
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected an action request after enter on metadata priority")
-	}
-	// The priority dialog needs no catalog load, so the request opens it
-	// directly: one hop from key to modal.
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	_ = cmd
-
-	if !m.showActionModal {
-		t.Fatal("expected priority action modal to open")
-	}
-
-	next, cmd = m.Update(modal.SubmitMsg{Values: map[string]string{"priority": "0"}})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected priority update submit command")
-	}
-
-	next, _ = m.Update(cmd())
-	m = next.(Model)
-
-	if !gw.HasCall(fakes.MethodUpdateIssue) {
-		t.Fatalf("expected priority cycle update issue call, calls=%#v", gw.Calls())
-	}
-
-	// Verify observable state: tm-1 priority should be 0 after update.
-	updated := issueState(gw, "tm-1")
-	if updated == nil {
-		t.Fatal("expected to find tm-1 in repository after priority update")
-	}
-	if updated.Summary.Priority != 0 {
-		t.Fatalf("expected priority updated to 0, got %d", updated.Summary.Priority)
-	}
-	// Status must be unchanged.
-	if updated.Summary.Status != "open" {
-		t.Fatalf("expected status unchanged after priority-only update, got %q", updated.Summary.Status)
-	}
-}
-
-func TestModelDetailMetadataPriorityDialogEscapeCancelsWithoutSaving(t *testing.T) {
-	t.Parallel()
-
-	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Root", "task", 1)
-	seedInProgress(gw, "tm-2", "Other", "task", 2)
-	seedIssueDetail(gw, domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Title: "Root", Status: "open", Type: "task", Priority: 3}})
-
-	services, err := NewServices(gw, config.Default(), t.TempDir())
-	if err != nil {
-		t.Fatalf("NewServices returned error: %v", err)
-	}
-
-	m := mustNewModel(t, services)
-	m.setTerminalSize(tea.WindowSizeMsg{Width: 140, Height: 34})
-	m = applyMessages(t, m, runBatch(m.Init()))
-
-	next, cmd := m.Update(testKey("enter"))
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = next.(Model)
-	if cmd == nil {
-		t.Fatal("expected an action request after enter on metadata priority")
-	}
-	// The priority dialog needs no catalog load: one hop from key to modal.
-	next, cmd = m.Update(cmd())
-	m = next.(Model)
-	_ = cmd
-
-	if !m.showActionModal {
-		t.Fatal("expected priority action modal to open")
-	}
-
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m = next.(Model)
-	if cmd != nil {
-		m = applyMessages(t, m, runBatch(cmd))
-	}
-
-	if m.showActionModal {
-		t.Fatal("expected escape to close priority action modal")
-	}
-
-	if gw.HasCall(fakes.MethodUpdateIssue) {
-		t.Fatalf("expected no UpdateIssue call on priority escape cancel, calls=%#v", gw.Calls())
-	}
-}
-
 // deliverDrill hands the shell the OpenRelatedIssueMsg that cmd produces and
 // stops there: the returned command is the detail load, not yet run.
 func deliverDrill(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
@@ -997,8 +651,8 @@ func drilledIntoChild(t *testing.T, gw *fakes.TrackedRepository) Model {
 //
 // The drill-in handler set detail.SelectionID and TargetID but never the
 // shell's own selection, which only the browse SelectionChangedMsg handler
-// wrote. currentSelection() therefore still returned the board's row, so `e`
-// opened the epic's document, `x` closed the epic, `u` and `a` acted on it, and
+// wrote. currentSelection() therefore still returned the board's row, so the
+// close key closed the epic, the update and comment keys acted on it, and
 // the launchers interpolated its ID — with nothing on screen to say so, because
 // the follow-up detail load was dropped by the TargetID guard.
 func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
@@ -1013,7 +667,7 @@ func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
 
 	id, ok := m.selectedIssueID()
 	if !ok || id != "tm-child" {
-		t.Errorf("selectedIssueID() = %q (ok=%v), want tm-child — this is the id e/x/u/a act on", id, ok)
+		t.Errorf("selectedIssueID() = %q (ok=%v), want tm-child — this is the id the issue keys act on", id, ok)
 	}
 
 	issueContext, ok := m.selectedIssueContext()
@@ -1021,14 +675,11 @@ func TestModelShellActionsTargetTheDrilledIssue(t *testing.T) {
 		t.Errorf("selectedIssueContext() = %q, want tm-child — this is what the launchers interpolate", issueContext.Summary.ID)
 	}
 
-	// The close dialog is built synchronously from the selection.
-	next, _ := m.Update(testKey("delete"))
-	closing := next.(Model)
-	if !closing.showActionModal {
-		t.Fatal("expected the close dialog to open")
-	}
-	if closing.actionState.issue.ID != "tm-child" {
-		t.Errorf("close dialog targets %q, want tm-child", closing.actionState.issue.ID)
+	for _, key := range []string{"delete", "alt+u", "alt+a"} {
+		editing := pressKey(t, m, key)
+		if editing.active != mode.IssueEdit || editing.editorTarget.issueID != "tm-child" {
+			t.Errorf("%q opened the editor on %q (surface %q), want tm-child", key, editing.editorTarget.issueID, editing.active)
+		}
 	}
 }
 

@@ -141,10 +141,10 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 
 	timeGroup := metadataGroup{title: "Time"}
 	if !summary.CreatedAt.IsZero() {
-		timeGroup.fields = append(timeGroup.fields, metadataField{label: "Created", value: formatTime(summary.CreatedAt)})
+		timeGroup.fields = append(timeGroup.fields, metadataField{label: "Created", value: FormatTime(summary.CreatedAt)})
 	}
 	if !summary.UpdatedAt.IsZero() {
-		timeGroup.fields = append(timeGroup.fields, metadataField{label: "Updated", value: formatTime(summary.UpdatedAt)})
+		timeGroup.fields = append(timeGroup.fields, metadataField{label: "Updated", value: FormatTime(summary.UpdatedAt)})
 	}
 	if !summary.CreatedAt.IsZero() && !detail.ClosedAt.IsZero() {
 		timeGroup.fields = append(timeGroup.fields, metadataField{label: "Duration", value: formatDuration(summary.CreatedAt, detail.ClosedAt)})
@@ -155,7 +155,7 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 
 	closeGroup := metadataGroup{title: "Close"}
 	if !detail.ClosedAt.IsZero() {
-		closeGroup.fields = append(closeGroup.fields, metadataField{label: "Closed", value: formatTime(detail.ClosedAt)})
+		closeGroup.fields = append(closeGroup.fields, metadataField{label: "Closed", value: FormatTime(detail.ClosedAt)})
 	}
 	if reason := strings.TrimSpace(detail.CloseReason); reason != "" {
 		closeGroup.fields = append(closeGroup.fields, metadataField{label: "Reason", value: reason})

@@ -480,6 +480,12 @@ func TestModelSharedWorkspaceContractUsesFullBodyHeightAcrossModes(t *testing.T)
 	m.detail.BeginLoad("tm-1", detail.BeginLoadOptions{})
 	m.detail.FinishLoad(nil)
 
+	// Detail draws no tab line, so its body has that row too.
+	expectedHeight++
+	if _, onScreen := m.workspaceSize(); onScreen != expectedHeight {
+		t.Fatalf("expected the workspace under the Detail header to be %d lines, got %d", expectedHeight, onScreen)
+	}
+
 	detailBody := m.renderBody()
 	if strings.Contains(detailBody, "Issue Detail") {
 		t.Fatalf("expected detail body to avoid extra boxed wrapper heading, got:\n%s", detailBody)

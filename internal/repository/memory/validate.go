@@ -14,7 +14,7 @@ import (
 // Field constraints mirror the task-manager SDK's validateFields
 // (TASK-STORAGE-SPEC §4), because this backend is what unit tests write
 // through. A fixture that accepts writes the production backend rejects
-// certifies flows that fail in the real app — the create dialog storing an
+// certifies flows that fail in the real app — the issue editor storing an
 // uppercase label being the concrete case.
 const (
 	maxTitleLen    = 200
@@ -69,10 +69,10 @@ func hasControlChar(s string) bool {
 // SeedCatalogs added.
 //
 // Reading DefaultCatalogs() alone made one object disagree with itself — the
-// status dialog is fed by Catalogs(), so a seeded status was offered to the
+// status row of the issue editor is fed by Catalogs(), so a seeded status was offered to the
 // operator and then refused by the write path of the same repository. Reading
 // the seeded set alone would refuse the SDK's own statuses whenever a fixture
-// narrowed the catalog for a dialog test.
+// narrowed the catalog for an editor test.
 func knownStatus(catalogs repository.Catalogs, status string) bool {
 	return slices.ContainsFunc(DefaultCatalogs().Statuses, func(o domain.StatusOption) bool { return o.Name == status }) ||
 		slices.ContainsFunc(catalogs.Statuses, func(o domain.StatusOption) bool { return o.Name == status })

@@ -139,6 +139,14 @@ func (d *DelayingRepository) AddComment(ctx context.Context, id string, input do
 	return d.inner.AddComment(ctx, id, input)
 }
 
+func (d *DelayingRepository) EditComment(ctx context.Context, id, commentID string, input domain.EditCommentInput) error {
+	return d.inner.EditComment(ctx, id, commentID, input)
+}
+
+func (d *DelayingRepository) DeleteComment(ctx context.Context, id, commentID string) error {
+	return d.inner.DeleteComment(ctx, id, commentID)
+}
+
 func (d *DelayingRepository) HealthCheck(ctx context.Context) error {
 	return d.inner.HealthCheck(ctx)
 }

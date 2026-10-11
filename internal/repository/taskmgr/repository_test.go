@@ -77,9 +77,11 @@ func TestWriteUnknownIDCommandFailed(t *testing.T) {
 	missing := "tm-9999"
 
 	cases := map[string]func() error{
-		"UpdateIssue": func() error { return r.UpdateIssue(ctx, missing, domain.UpdateIssueInput{Priority: ptr(1)}) },
-		"CloseIssue":  func() error { return r.CloseIssue(ctx, missing, domain.CloseIssueInput{Reason: "x"}) },
-		"AddComment":  func() error { return r.AddComment(ctx, missing, domain.AddCommentInput{Body: "hi"}) },
+		"UpdateIssue":   func() error { return r.UpdateIssue(ctx, missing, domain.UpdateIssueInput{Priority: ptr(1)}) },
+		"CloseIssue":    func() error { return r.CloseIssue(ctx, missing, domain.CloseIssueInput{Reason: "x"}) },
+		"AddComment":    func() error { return r.AddComment(ctx, missing, domain.AddCommentInput{Body: "hi"}) },
+		"EditComment":   func() error { return r.EditComment(ctx, missing, "c", domain.EditCommentInput{Body: "hi"}) },
+		"DeleteComment": func() error { return r.DeleteComment(ctx, missing, "c") },
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -351,6 +353,73 @@ func TestAddCommentAndCatalogs(t *testing.T) {
 	}
 }
 
+func TestEditAndDeleteComment(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	id := mustCreate(t, r, domain.CreateIssueInput{Title: "with comment"})
+	if err := r.AddComment(ctx, id, domain.AddCommentInput{Body: "a note"}); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	comments := func() []domain.IssueComment {
+		t.Helper()
+		d, err := r.Issue(ctx, id)
+		if err != nil {
+			t.Fatalf("Issue: %v", err)
+		}
+		return d.Comments
+	}
+	added := comments()[0]
+
+	if err := r.EditComment(ctx, id, added.ID, domain.EditCommentInput{Body: "a better note"}); err != nil {
+		t.Fatalf("EditComment: %v", err)
+	}
+	edited := comments()
+	if len(edited) != 1 || edited[0].Body != "a better note" || edited[0].Author != "tester" {
+		t.Fatalf("comments after edit = %+v", edited)
+	}
+	if edited[0].ID == added.ID {
+		t.Errorf("comment ID after edit = %q, want a new ID", edited[0].ID)
+	}
+
+	if err := r.DeleteComment(ctx, id, edited[0].ID); err != nil {
+		t.Fatalf("DeleteComment: %v", err)
+	}
+	if left := comments(); len(left) != 0 {
+		t.Errorf("comments after delete = %+v, want none", left)
+	}
+}
+
+func TestCommentWriteValidation(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	id := mustCreate(t, r, domain.CreateIssueInput{Title: "with comment"})
+	if err := r.AddComment(ctx, id, domain.AddCommentInput{Body: "a note"}); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	d, err := r.Issue(ctx, id)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	commentID := d.Comments[0].ID
+
+	cases := map[string]func() error{
+		"AddComment empty body":         func() error { return r.AddComment(ctx, id, domain.AddCommentInput{Body: " \n"}) },
+		"EditComment empty body":        func() error { return r.EditComment(ctx, id, commentID, domain.EditCommentInput{Body: " \n"}) },
+		"EditComment unknown comment":   func() error { return r.EditComment(ctx, id, "nosuchid", domain.EditCommentInput{Body: "x"}) },
+		"DeleteComment unknown comment": func() error { return r.DeleteComment(ctx, id, "nosuchid") },
+	}
+	for name, fn := range cases {
+		t.Run(name, func(t *testing.T) {
+			var re domain.RepositoryError
+			if err := fn(); !errors.As(err, &re) || re.Code != domain.ErrorCodeValidationFailed {
+				t.Errorf("got %v, want validation_failed", err)
+			}
+		})
+	}
+}
+
 // Every SDK enum value needs a description here, or the picker renders the value
 // with a blank explanation. This fails when task-manager adds a type or status
 // rather than letting the gap ship silently.
@@ -380,15 +449,17 @@ func TestContextCancellation(t *testing.T) {
 	cancel()
 
 	ops := map[string]func() error{
-		"Dashboard":   func() error { _, e := r.Dashboard(ctx, repository.DashboardOptions{}); return e },
-		"Issue":       func() error { _, e := r.Issue(ctx, id); return e },
-		"Search":      func() error { _, e := r.Search(ctx, domain.SearchIssuesQuery{}); return e },
-		"Catalogs":    func() error { _, e := r.Catalogs(ctx); return e },
-		"HealthCheck": func() error { return r.HealthCheck(ctx) },
-		"CreateIssue": func() error { _, e := r.CreateIssue(ctx, domain.CreateIssueInput{Title: "y"}); return e },
-		"UpdateIssue": func() error { return r.UpdateIssue(ctx, id, domain.UpdateIssueInput{Priority: ptr(1)}) },
-		"CloseIssue":  func() error { return r.CloseIssue(ctx, id, domain.CloseIssueInput{}) },
-		"AddComment":  func() error { return r.AddComment(ctx, id, domain.AddCommentInput{Body: "z"}) },
+		"Dashboard":     func() error { _, e := r.Dashboard(ctx, repository.DashboardOptions{}); return e },
+		"Issue":         func() error { _, e := r.Issue(ctx, id); return e },
+		"Search":        func() error { _, e := r.Search(ctx, domain.SearchIssuesQuery{}); return e },
+		"Catalogs":      func() error { _, e := r.Catalogs(ctx); return e },
+		"HealthCheck":   func() error { return r.HealthCheck(ctx) },
+		"CreateIssue":   func() error { _, e := r.CreateIssue(ctx, domain.CreateIssueInput{Title: "y"}); return e },
+		"UpdateIssue":   func() error { return r.UpdateIssue(ctx, id, domain.UpdateIssueInput{Priority: ptr(1)}) },
+		"CloseIssue":    func() error { return r.CloseIssue(ctx, id, domain.CloseIssueInput{}) },
+		"AddComment":    func() error { return r.AddComment(ctx, id, domain.AddCommentInput{Body: "z"}) },
+		"EditComment":   func() error { return r.EditComment(ctx, id, "c", domain.EditCommentInput{Body: "z"}) },
+		"DeleteComment": func() error { return r.DeleteComment(ctx, id, "c") },
 	}
 	for name, fn := range ops {
 		t.Run(name, func(t *testing.T) {

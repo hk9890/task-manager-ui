@@ -5,7 +5,6 @@ package app
 // surface does with an event is tested in its own mode package.
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -174,15 +174,16 @@ func TestClickOnATabSwitchesToIt(t *testing.T) {
 		}
 	}
 
-	// From Detail a tab click leaves the drill-in, as its mode key does.
+	// Detail draws no tab line: the row is the first of its body, and a click
+	// where a tab stands on the other surfaces leaves nothing.
+	docsX, _ := testui.FindCell(t, tabLine(m), " Docs ")
 	x, y := testui.FindCell(t, m.View(), "progress-first")
 	m = send(t, send(t, m, leftClick(x, y)), leftClick(x, y))
 	if m.active != mode.Detail {
 		t.Fatalf("fixture did not reach Detail, on %q", m.active)
 	}
-	x, _ = testui.FindCell(t, tabLine(m), " Docs ")
-	if m = send(t, m, onScreen(m, leftClick(x+1, headerTabsRow))); m.active != mode.Docs {
-		t.Fatalf("tab click from Detail left the shell on %q, want docs", m.active)
+	if m = send(t, m, onScreen(m, leftClick(docsX+1, headerTabsRow))); m.active != mode.Detail {
+		t.Fatalf("a click on the first body row of Detail left the shell on %q", m.active)
 	}
 }
 
@@ -243,9 +244,9 @@ func TestClickOffTheTabsAndTheButtonsOnTheHeaderDoesNothing(t *testing.T) {
 				t.Errorf("%s: click on column %d returned a command", name, cell[0])
 			}
 			got := next.(Model)
-			if got.active != mode.Board || got.showHelp || got.pendingDialog.active || litButton(got) != "" || got.hoverTab != "" {
+			if got.active != mode.Board || got.showHelp || got.pendingEditor != 0 || litButton(got) != "" || got.hoverTab != "" {
 				t.Errorf("%s: click on column %d: surface %q, help %v, pending dialog %v, hover %q/%q; want nothing",
-					name, cell[0], got.active, got.showHelp, got.pendingDialog.active, got.hoverTab, litButton(got))
+					name, cell[0], got.active, got.showHelp, got.pendingEditor != 0, got.hoverTab, litButton(got))
 			}
 			if firstSelectionID(got, mode.Board) != "tm-1" {
 				t.Errorf("%s: click on column %d reached the board", name, cell[0])
@@ -414,7 +415,7 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 			// left of the bar.
 			for _, column := range []int{x - 2, x + len(text) + 1} {
 				next, cmd := base.Update(onScreen(base, leftClick(column, 0)))
-				if got := next.(Model); cmd != nil || got.active != mode.Board || got.showHelp || got.pendingDialog.active {
+				if got := next.(Model); cmd != nil || got.active != mode.Board || got.showHelp || got.pendingEditor != 0 {
 					t.Errorf("click on column %d, beside %q, ran an action", column, text)
 				}
 			}
@@ -457,10 +458,15 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 		buttons[label], _ = barButton(t, base, label, action)
 	}
 
-	for name, key := range map[string]string{"help": "alt+h", "close dialog": "delete"} {
-		// Stepped by hand: an open dialog schedules a repeating cursor tick.
-		next, _ := newMouseShell(t).Update(testKey(key))
-		m := next.(Model)
+	overlays := map[string]func(*Model){
+		"help": func(m *Model) { m.openHelp() },
+		// Opened without its Init: a drain would follow the cursor blink of
+		// the input for good.
+		"dialog": func(m *Model) { m.openStoreForm(storepickermode.LocalStore, "/work/project") },
+	}
+	for name, open := range overlays {
+		m := newMouseShell(t)
+		open(&m)
 		if !m.showHelp && !m.showActionModal {
 			t.Fatalf("%s: the overlay did not open", name)
 		}
@@ -477,9 +483,9 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 					t.Errorf("%s: %q is lit under the overlay", name, label)
 				}
 			}
-			if m.active != mode.Board || m.showHelp != helpWas || m.showActionModal != modalWas || m.pendingDialog.active {
+			if m.active != mode.Board || m.showHelp != helpWas || m.showActionModal != modalWas || m.pendingEditor != 0 {
 				t.Errorf("%s: a click on %q under the overlay ran (surface %q, help %v, modal %v, pending dialog %v)",
-					name, label, m.active, m.showHelp, m.showActionModal, m.pendingDialog.active)
+					name, label, m.active, m.showHelp, m.showActionModal, m.pendingEditor != 0)
 			}
 		}
 	}
@@ -490,9 +496,9 @@ func TestABarButtonIsDeadUnderAnOverlayAndUnderThePicker(t *testing.T) {
 	}
 	for label, x := range buttons {
 		m = send(t, send(t, m, onScreen(m, pointerMove(x, 0))), onScreen(m, leftClick(x, 0)))
-		if m.active != mode.StorePicker || m.showHelp || m.showActionModal || m.pendingDialog.active || litButton(m) != "" {
+		if m.active != mode.StorePicker || m.showHelp || m.showActionModal || m.pendingEditor != 0 || litButton(m) != "" {
 			t.Errorf("a click where %q was drawn ran under the picker (surface %q, help %v, modal %v, pending dialog %v, hover %q)",
-				label, m.active, m.showHelp, m.showActionModal, m.pendingDialog.active, litButton(m))
+				label, m.active, m.showHelp, m.showActionModal, m.pendingEditor != 0, litButton(m))
 		}
 	}
 }
@@ -610,15 +616,15 @@ func TestAnOverlayKeepsTheMouseFromTheSurfaceBelow(t *testing.T) {
 	base := newMouseShell(t)
 	x, y := testui.FindCell(t, base.View(), "progress-second")
 
-	// An open dialog schedules a repeating cursor tick, so these flows are
-	// stepped by hand rather than drained (docs/TESTING.md).
-	step := func(m Model, msg tea.Msg) Model {
-		next, _ := m.Update(msg)
-		return next.(Model)
+	// The dialog is opened without its Init: a drain would follow the cursor
+	// blink of the input for good (docs/TESTING.md).
+	overlays := map[string]func(*Model){
+		"help":   func(m *Model) { m.openHelp() },
+		"dialog": func(m *Model) { m.openStoreForm(storepickermode.LocalStore, "/work/project") },
 	}
-
-	for name, key := range map[string]string{"help": "alt+h", "close dialog": "delete"} {
-		m := step(newMouseShell(t), testKey(key))
+	for name, open := range overlays {
+		m := newMouseShell(t)
+		open(&m)
 		if !m.showHelp && !m.showActionModal {
 			t.Fatalf("%s: the overlay did not open", name)
 		}
@@ -747,27 +753,6 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if m.active != mode.Board || m.hoverTab != "" {
 		t.Fatalf("back on %q the %q tab is lit under a cell the pointer left", m.active, m.hoverTab)
-	}
-}
-
-// TestEditorExitTurnsMouseReportingBackOn: tea.Exec hands the terminal to the
-// editor with mouse reporting off, and Bubble Tea does not restore it. Without
-// the command the mouse is dead from the first edit to the end of the session.
-func TestEditorExitTurnsMouseReportingBackOn(t *testing.T) {
-	for name, execErr := range map[string]error{"clean exit": nil, "editor failed": errors.New("exit status 1")} {
-		m := newMouseShell(t)
-		m.services.Editor = &fakes.FakeEditor{}
-
-		_, cmd := m.Update(editorExitedMsg{execErr: execErr})
-		enabled := false
-		for _, msg := range runBatch(cmd) {
-			if msg == tea.EnableMouseAllMotion() {
-				enabled = true
-			}
-		}
-		if !enabled {
-			t.Errorf("%s: the editor exit did not turn mouse reporting back on", name)
-		}
 	}
 }
 

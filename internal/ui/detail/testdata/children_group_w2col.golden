@@ -1,4 +1,4 @@
-╭─ Dependencies ───── 3 ─╮  ╭─ Content ───────────────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
+╭─ Dependencies ───── 3 ─╮  ╭─ Content ─ edit e ──────────── 0 comments ─╮  ╭─ Metadata ─────────────────────╮
 │Blocked by (1)          │  │E P1 IP tm-epic                             │  │  Core                          │
 │  ? P0 - …locker Upstre…│  │Epic with children                          │  │  Type    : epic                │
 │                        │  │────────────────────────────────────────────│  │  Status  : in_progress         │
@@ -13,12 +13,12 @@
 │  T P2 I …child2 Second…│  │                                            │  │                                │
 │                        │  │                                            │  │Quick actions                   │
 │                        │  │                                            │  │e Edit issue                    │
-│                        │  │                                            │  │u Update issue                  │
 │                        │  │                                            │  │a Add comment                   │
+│                        │  │                                            │  │enter Edit comment              │
+│                        │  │                                            │  │d Delete comment                │
 │                        │  │                                            │  │x Close issue                   │
 │                        │  │                                            │  │r Reload detail                 │
 │                        │  │                                            │  │                                │
 │                        │  │                                            │  │                                │
-│                        │  │                                            │  │                                │
-│                        │  │                                            │  │                                │
+│                        │  │Comments (0)                          add a │  │                                │
 ╰────────────────────────╯  ╰────────────────────────────────────────────╯  ╰────────────────────────────────╯

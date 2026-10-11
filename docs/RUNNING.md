@@ -125,8 +125,9 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   `raw` key of the JSON to check a foreground, a background or bold; set `COLORTERM=truecolor`.
   For the 256-colour hover, set `COLORTERM=` and `TERM=xterm-256color`; with `TERM=xterm` the 16
   colours draw no hover band.
-- **`ALT+E` hands the terminal to `$EDITOR` and swallows every key until that program exits.** A
-  script that follows it with `CTRL+C` sends the quit to the editor and hangs.
+- **The issue editor types every key but `CTRL+C`, the help key and `ESC`.** Save with `CTRL+S`,
+  then wait for the editor's title to be gone: a key sent before that is typed or, during the
+  write, dropped. `ESC` leaves without a save.
 - **A capture is plain text.** It holds no colour, no bold and no underline, so it cannot show a
   hover, a selection band or a theme ([TESTING.md](TESTING.md#runtime-ui-verification) has what
   proves a style).
@@ -150,8 +151,14 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   value and still has its comments.
 - **Filter** — typing on Board and on Docs narrows the rows, marks the matched text and turns the
   header counts into `N of M`; `esc` clears it.
+- **Issue editor** — `alt+n`, `alt+u` and `delete` each open it; at 80x24 `tab` reaches every
+  field and both buttons, `ctrl+s` saves and the detail shows the new values, and a write the
+  store refuses leaves the typed text on screen under the refusal.
+- **Comments** — in detail, `right` from Content reaches the comments; `enter` edits the selected
+  one, `alt+d` asks before it deletes, and the `add`, `edit` and `delete` buttons do the same on a
+  click.
 - **External tools** — `alt+v`, `alt+p` and `alt+l` from detail leave the app alive with the
-  expected toast, and `alt+e` round-trips through the editor and reloads the detail.
+  expected toast.
 
 ## Behaviours that need a real terminal
 

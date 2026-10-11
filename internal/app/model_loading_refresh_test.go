@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
+	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -615,7 +616,8 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	mark := gw.CallCount()
-	next, cmd := m.Update(mutationResultMsg{kind: mutationStatus, issueID: "tm-1"})
+	m = withEditorOn(m, issueeditmode.KindEdit, "tm-1")
+	next, cmd := m.Update(editorSavedMsg{wrote: true})
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 

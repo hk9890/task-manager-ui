@@ -166,7 +166,7 @@ func TestSetCreatesAMissingFileAndItsDirectory(t *testing.T) {
 
 func TestSetWritesWhatLoadReads(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	writeFile(t, path, "editor:\n  command: nvim\n")
+	writeFile(t, path, "ui:\n  show_mode_switcher_help: false\n")
 
 	if err := Set(path, "ui", "theme", "catppuccin-latte"); err != nil {
 		t.Fatalf("Set theme returned error: %v", err)
@@ -182,8 +182,8 @@ func TestSetWritesWhatLoadReads(t *testing.T) {
 	if result.Config.UI.Theme != "catppuccin-latte" || result.Config.UI.Glyphs != "ascii" {
 		t.Fatalf("loaded theme=%q glyphs=%q", result.Config.UI.Theme, result.Config.UI.Glyphs)
 	}
-	if result.Config.Editor.Command != "nvim" {
-		t.Fatalf("the editor command changed to %q", result.Config.Editor.Command)
+	if result.Config.UI.ShowModeSwitcherHelp {
+		t.Fatal("the key the file already held changed")
 	}
 }
 

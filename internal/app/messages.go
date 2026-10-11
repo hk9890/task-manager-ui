@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	launchereditor "github.com/hk9890/task-manager-ui/internal/launcher/editor"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
@@ -27,26 +26,6 @@ type detailLoadedMsg struct {
 	issueID string
 	detail  domain.IssueDetail
 	err     error
-}
-
-// editIssueResultMsg carries the result of the full edit round-trip.
-type editIssueResultMsg struct {
-	issueID string
-	updated bool
-	err     error
-}
-
-// editIssuePreparedMsg carries the result of the PrepareDocument phase.
-type editIssuePreparedMsg struct {
-	issueID  string
-	prepared launchereditor.Prepared
-	err      error
-}
-
-// editorExitedMsg is delivered by the tea.Exec callback when the editor process exits.
-type editorExitedMsg struct {
-	prepared launchereditor.Prepared
-	execErr  error
 }
 
 // unresolvedStoreMsg reports, once the program runs, why it started without a

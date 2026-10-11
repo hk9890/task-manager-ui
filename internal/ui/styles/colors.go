@@ -73,6 +73,8 @@ var (
 	SectionHeadingColor lipgloss.Color
 	// SettingLabelColor is the name of a setting, in front of its value.
 	SettingLabelColor lipgloss.Color
+	// ErrorTextColor is the text of a refused save on the issue editor.
+	ErrorTextColor lipgloss.Color
 )
 
 // The styles built from the roles. Apply rebuilds them with the roles.

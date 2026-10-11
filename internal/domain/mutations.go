@@ -37,3 +37,8 @@ type CloseIssueInput struct {
 type AddCommentInput struct {
 	Body string
 }
+
+// EditCommentInput defines the new text of a comment.
+type EditCommentInput struct {
+	Body string
+}

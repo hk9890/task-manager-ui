@@ -148,7 +148,7 @@ func TestNoStoreStartEscapeQuits(t *testing.T) {
 func TestNoStoreStartHoldsTheOperatorOnThePicker(t *testing.T) {
 	s := newNoStoreStart(t)
 
-	for _, key := range []string{"tab", "shift+tab", "alt+e", "alt+n"} {
+	for _, key := range []string{"tab", "shift+tab", "alt+u", "alt+n"} {
 		m := press(t, s.m, key)
 		if m.active != mode.StorePicker {
 			t.Errorf("%q left the picker for %q with no store open", key, m.active)

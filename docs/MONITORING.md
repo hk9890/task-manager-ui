@@ -58,8 +58,8 @@ Structured records include at least:
 - `component`, on records emitted through a component logger: `startup`
   (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search`, `storepicker`
   (`internal/app/model.go`).
-  Shell-level records — the issue-edit failures and the health check below — go through
-  the root logger and carry no `component` key.
+  Shell-level records — the health check below among them — go through the root logger
+  and carry no `component` key.
 
 To attribute a session safely in a collected set of log files, use `session_id`
 together with `project_root` and `build_version`. Startup records inherit those
@@ -101,8 +101,6 @@ no record. Re-point the entry by running
 
 These, all expected:
 
-- `temp cleanup: removed stale temp file` (INFO, `internal/app/services.go`) — the
-  post-startup sweep armed by `Model.Init` found an old edit temp file and removed it.
 - `switched task-manager store` (INFO) — a store opened or created from the picker became
   active, with `store`, `store_path` and `project_path`. `store` is the name `StoreName`
   returns (`internal/storecatalog/taskmgr/catalog.go`): cleaned, not cut to the menu bar, and
@@ -124,8 +122,6 @@ suppressed for the interactive session.
   `no_database_found` also draws the fatal-error screen; an unreadable or corrupt
   store shows nothing on screen and the board simply renders whatever the first
   `Dashboard` call returned.
-- `failed to prepare the issue edit document`, `failed to apply the issue edit` —
-  an edit (`alt+e`) round trip that did not save. The toast carries the same cause.
 - `dashboard refresh failed; keeping the last loaded columns` (WARN) — the rows on the
   board are the previous load's.
 - `cardinality threshold exceeded` (WARN) — an active group (Ready, Blocked or In Progress)
@@ -134,9 +130,6 @@ suppressed for the interactive session.
 - `load-more for Done column failed` (WARN) — a Done page did not arrive. The error is set
   on the Done column, so the operator sees it on screen too
   (`applyLoadMoreClosed`, `internal/mode/board/model.go`).
-- `temp cleanup: glob failed`, `temp cleanup: remove failed` (WARN,
-  `internal/app/services.go`) — the sweep could not read or delete a stale edit temp
-  file. Nothing on screen changes; the file stays behind.
 - `failed to list central task-manager stores` (`storepicker`) — the store picker could
   not read the central registry. The picker shows the cause inline and keeps whatever it
   listed before; on a first open it has nothing to keep and shows the error alone.
@@ -232,7 +225,6 @@ and `build_version`.
 
 - `cmd/taskmgr-ui/main.go` — CLI parsing, startup logger initialization, startup warnings/errors, non-interactive startup command handling, and repository construction (`buildRepository`: `tasks.Resolve` → `taskmgr.New`)
 - `internal/logging/logging.go` — central logger construction, persistent JSON Lines sink, session IDs, stderr mirroring, and fallback warning
-- `internal/app/services.go` — the temp-cleanup sweep records
 - `internal/mode/board/model.go` — the dashboard-refresh, cardinality and load-more records
 - `internal/mode/search/model.go`, `internal/mode/docs/model.go`, `internal/app/refresh.go` — the
   guard traces above

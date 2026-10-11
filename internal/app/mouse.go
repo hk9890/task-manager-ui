@@ -41,10 +41,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	leave := mode.MouseMsg{Kind: mode.MouseLeave, At: event.At}
 	m.leaveHiddenSurfaces(leave)
 
-	// A click or a wheel notch cancels a dialog still loading, as a key does:
-	// it can move the selection the dialog was asked for.
+	// A click or a wheel notch cancels an editor still opening, as a key does:
+	// it can move the selection the editor was asked for.
 	if kind != mode.MouseMove {
-		m.pendingDialog = pendingDialogGuard{}
+		m.pendingEditor = 0
 	}
 
 	// Nothing is drawn on a cell of the margin, so the pointer there is on
@@ -80,6 +80,13 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.active == mode.Config {
 		m.clearHeaderHover()
 		return m, nil
+	}
+
+	// The issue editor draws no header either. A click and the wheel do there
+	// what a key does.
+	if m.active == mode.IssueEdit {
+		m.clearHeaderHover()
+		return m, m.editor.HandleMouse(event)
 	}
 
 	headerHeight := lipgloss.Height(m.renderHeader())
@@ -121,7 +128,8 @@ func (m *Model) mouseToSurface(event mode.MouseMsg) tea.Cmd {
 	switch m.active {
 	case mode.StorePicker:
 		return m.storePicker.Update(event)
-	case mode.Config:
+	case mode.Config, mode.IssueEdit:
+		// Neither keeps a pointer cell, so a leave is nothing to them.
 		return nil
 	case mode.Detail:
 		// One measure for both: each viewport getter renders the header and

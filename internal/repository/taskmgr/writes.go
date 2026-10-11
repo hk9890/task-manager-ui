@@ -83,3 +83,26 @@ func (r *Repository) AddComment(ctx context.Context, id string, input domain.Add
 	}
 	return nil
 }
+
+// EditComment replaces the text of a comment. The SDK appends a revision, so
+// the comment gets a new ID, the configured identity as author and the edit time.
+func (r *Repository) EditComment(ctx context.Context, id, commentID string, input domain.EditCommentInput) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := r.store.EditComment(id, commentID, tasks.Actor{Name: r.author}, input.Body); err != nil {
+		return mapWriteErr("edit comment", err)
+	}
+	return nil
+}
+
+// DeleteComment removes a comment.
+func (r *Repository) DeleteComment(ctx context.Context, id, commentID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := r.store.DeleteComment(id, commentID, tasks.Actor{Name: r.author}); err != nil {
+		return mapWriteErr("delete comment", err)
+	}
+	return nil
+}

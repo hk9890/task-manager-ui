@@ -98,8 +98,8 @@ judge whether to follow up; do not hold a release for it.
 
 ## Runtime UI verification
 
-A change to user-visible behavior — layout, navigation, search, startup shell, editor and launcher
-flows — needs more than a green suite.
+A change to user-visible behavior — layout, navigation, search, startup shell, the issue editor and
+launcher flows — needs more than a green suite.
 
 **First, the fast deterministic loop.** These are unit tests, no build tag, and they are the default
 quick proof while implementing:
@@ -232,10 +232,9 @@ If a surface is not practical for teatest+golden (for example, highly volatile A
 
 ## Shared fake seams
 
-An editor, a launcher and a subprocess are the only external things you may fake:
-`FakeEditor`, `FakeLauncher`, `FakeProcessRunner` (`internal/testing/fakes`). Each returns what you
-configure and records its calls. A test that touches an editor, a launcher, or a subprocess is
-required to use them.
+A launcher and a subprocess are the only external things you may fake: `FakeLauncher`,
+`FakeProcessRunner` (`internal/testing/fakes`). Each returns what you configure and records its
+calls. A test that touches a launcher or a subprocess is required to use them.
 
 The central store registry is the one more: an app or picker test takes `FakeStoreCatalog`, because
 the real catalog reads and writes the registry of whoever runs the suite. The SDK implementation
@@ -250,5 +249,6 @@ writes an OSC 52 sequence to the terminal of whoever runs the suite.
 - A controller test that needs to seed fixtures *and* inspect calls takes
   `fakes.NewTracked()` (`internal/testing/fakes/tracked.go`): a `memory.Repository` to seed through
   `Memory`, wrapped by the recorder. Do not rebuild that pair per package.
-- `fakes.Call` carries the operation's typed `Args` and `IssueID`, so assert on what a call received
+- `fakes.Call` carries the operation's typed `Args`, its `IssueID` and, for a comment write, its
+  `CommentID`, so assert on what a call received
   through `CallsFor` rather than writing a stub to capture arguments.

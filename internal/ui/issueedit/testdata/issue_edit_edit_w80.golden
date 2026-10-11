@@ -1,0 +1,24 @@
+ Edit issue tm-1                                                          v1.2.3
+ ───────────────────────────────────────────────────────────────────────────────
+ Fix the header
+────────────────────────────────────────────────────────────────────────────────
+
+  Title     Fix the header
+▌ Status    ‹ open ›
+  Type      ‹ task ›
+  Priority  ‹ P2 ›
+  Assignee  hans
+  Labels    ui, docs
+
+  Description ──────────────────────────────────────────────────────────────────
+  text line 1
+  text line 2
+  text line 3
+  text line 4
+  text line 5
+  text line 6
+  text line 7
+  text line 8
+
+    Save ctrl+s      Cancel esc
+ tab/shift+tab field • ctrl+s save • esc cancel • left/right change

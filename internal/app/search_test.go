@@ -385,7 +385,7 @@ func TestSearchIsLeftForATabByTheTabKeysAndAClick(t *testing.T) {
 	}
 }
 
-// TestIssueActionsActOnTheSelectedSearchResult: edit, update, comment and close
+// TestIssueActionsActOnTheSelectedSearchResult: update, comment and close
 // take the search selection, on the search and under a Detail opened from it,
 // while the Board holds another row.
 func TestIssueActionsActOnTheSelectedSearchResult(t *testing.T) {
@@ -399,25 +399,10 @@ func TestIssueActionsActOnTheSelectedSearchResult(t *testing.T) {
 				t.Fatalf("setup: board on %q and search on %q, want tm-1 and tm-3", board, search)
 			}
 
-			_, cmd := m.Update(testKey("alt+e"))
-			var edited string
-			for _, msg := range runBatch(cmd) {
-				if prepared, ok := unscoped(msg).(editIssuePreparedMsg); ok {
-					edited = prepared.issueID
+			for _, key := range []string{"alt+u", "alt+a", "delete"} {
+				if got := pressKey(t, m, key); got.active != mode.IssueEdit || got.editorTarget.issueID != "tm-3" {
+					t.Errorf("%q opened the editor on %q (surface %q), want tm-3", key, got.editorTarget.issueID, got.active)
 				}
-			}
-			if edited != "tm-3" {
-				t.Errorf("edit prepared %q, want tm-3", edited)
-			}
-
-			if got := openDialog(t, m, "alt+u"); got.actionState.kind != mutationUpdate || got.actionState.issue.ID != "tm-3" {
-				t.Errorf("update opened on %q, want tm-3", got.actionState.issue.ID)
-			}
-			if got := openDialog(t, m, "alt+a"); got.actionState.kind != mutationComment || got.actionState.issue.ID != "tm-3" {
-				t.Errorf("comment opened on %q, want tm-3", got.actionState.issue.ID)
-			}
-			if got := openDialog(t, m, "delete"); got.actionState.kind != mutationClose || got.actionState.issue.ID != "tm-3" {
-				t.Errorf("close opened on %q, want tm-3", got.actionState.issue.ID)
 			}
 		})
 	}

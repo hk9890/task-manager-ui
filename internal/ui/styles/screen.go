@@ -13,11 +13,15 @@ import (
 // the rule under it, the subtitle, the rule under that and the legend.
 const screenChromeRows = 5
 
+// ScreenBodyTop is the row of the body's first line: the title line, the rule
+// under it, the subtitle and the rule under that stand above it.
+const ScreenBodyTop = 4
+
 // screenVersionGap is the least space between the title and the version.
 const screenVersionGap = 2
 
-// ScreenConfig is a full screen that stands in the shell's place: the help
-// and the configuration screen.
+// ScreenConfig is a full screen that stands in the shell's place: the help,
+// the configuration screen and the issue editor.
 type ScreenConfig struct {
 	// Title names the screen where the shell has its menu bar.
 	Title string

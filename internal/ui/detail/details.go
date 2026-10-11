@@ -2,6 +2,7 @@ package detail
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -38,26 +39,30 @@ var readOnlyMarkdown = markdown.NewRenderer()
 
 // State is the issue detail renderer input.
 type State struct {
-	SelectionID              string
-	TargetID                 string
-	Detail                   domain.IssueDetail
-	BrowserItems             []domain.IssueReference
-	BrowserSelectedIssueID   string // cursor row (movable by ↑/↓); marked with the app-wide selection gutter
-	QuickActions             QuickActionLabels
-	Loading                  bool
-	Skeleton                 bool // when true, Content pane renders skeleton rows instead of description body
-	SkeletonPhase            int  // color-cycle index for skeleton pulse; see loading.SkeletonPhase
-	Error                    string
-	Width                    int
-	Height                   int
-	Compact                  bool
-	FocusPane                FocusPane
-	MetadataSelectedField    MetadataFieldKey
+	SelectionID            string
+	TargetID               string
+	Detail                 domain.IssueDetail
+	BrowserItems           []domain.IssueReference
+	BrowserSelectedIssueID string // cursor row (movable by ↑/↓); marked with the app-wide selection gutter
+	QuickActions           QuickActionLabels
+	Loading                bool
+	Skeleton               bool // when true, Content pane renders skeleton rows instead of description body
+	SkeletonPhase          int  // color-cycle index for skeleton pulse; see loading.SkeletonPhase
+	Error                  string
+	Width                  int
+	Height                 int
+	Compact                bool
+	FocusPane              FocusPane
+	MetadataSelectedField  MetadataFieldKey
+	// CommentIndex is the selected comment, counted in OrderedComments. It is
+	// drawn, with its buttons, only while FocusPane is FocusPaneComments.
+	CommentIndex             int
 	ContentScrollOffset      int
 	DependenciesScrollOffset int
 	MetadataScrollOffset     int
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
-	// pointer is elsewhere. Its reference row draws the hover band.
+	// pointer is elsewhere. Its reference row draws the hover band, and its
+	// button is lit.
 	Hover *Hit
 }
 
@@ -68,6 +73,9 @@ const (
 	FocusPaneContent FocusPane = iota
 	FocusPaneDependencies
 	FocusPaneMetadata
+	// FocusPaneComments is the comments of the Content pane: a stop of its own
+	// between Content and Metadata, with a cursor on one comment.
+	FocusPaneComments
 
 	// Backward-compatible alias.
 	FocusPaneBrowser = FocusPaneDependencies
@@ -91,11 +99,12 @@ type ScrollOffsets struct {
 
 // QuickActionLabels controls the metadata-rail quick action hints.
 type QuickActionLabels struct {
-	EditIssue    string
-	UpdateIssue  string
-	AddComment   string
-	CloseIssue   string
-	ReloadDetail string
+	EditIssue     string
+	AddComment    string
+	EditComment   string
+	DeleteComment string
+	CloseIssue    string
+	ReloadDetail  string
 }
 
 // Render renders standalone issue detail metadata and content.
@@ -191,7 +200,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 		contentInnerHeight := max(1, contentHeight-2)
 		bottomInnerHeight := max(1, bottomHeight-2)
 		deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", dependenciesWidth-2, state.Skeleton, state.SkeletonPhase)
-		content := renderContentPaneLines(state.Detail, width-2, contentInnerHeight, state.Skeleton, state.SkeletonPhase)
+		content := renderContentPaneLines(state.contentPane(width, contentHeight), width-2, contentInnerHeight).lines
 		metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 		return ScrollOffsets{
@@ -208,7 +217,7 @@ func MaxScrollOffsets(state State) ScrollOffsets {
 	innerHeight := max(1, height-2)
 
 	deps := renderDependenciesPaneLines(state.Detail, state.BrowserItems, "", leftWidth-2, state.Skeleton, state.SkeletonPhase)
-	content := renderContentPaneLines(state.Detail, contentWidth-2, innerHeight, state.Skeleton, state.SkeletonPhase)
+	content := renderContentPaneLines(state.contentPane(contentWidth, height), contentWidth-2, innerHeight).lines
 	metadata := renderMetadataPaneLines(state.Detail, metadataWidth-2, MetadataFieldNone, state.QuickActions, state.Skeleton)
 
 	return ScrollOffsets{
@@ -229,15 +238,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 	contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
 	dependenciesWidth, metadataWidth := splitResponsiveBottomWidths(width)
 
-	contentBox := RenderContentPane(ContentPaneState{
-		Detail:        detail,
-		Width:         width,
-		Height:        contentHeight,
-		Focused:       state.FocusPane == FocusPaneContent,
-		ScrollOffset:  state.ContentScrollOffset,
-		Skeleton:      state.Skeleton,
-		SkeletonPhase: state.SkeletonPhase,
-	})
+	contentBox := RenderContentPane(state.contentPane(width, contentHeight))
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
 	metadataBox := RenderMetadataPane(MetadataPaneState{
 		Detail:        detail,
@@ -366,15 +367,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
 
-	contentBox := RenderContentPane(ContentPaneState{
-		Detail:        detail,
-		Width:         contentWidth,
-		Height:        height,
-		Focused:       state.FocusPane == FocusPaneContent,
-		ScrollOffset:  state.ContentScrollOffset,
-		Skeleton:      state.Skeleton,
-		SkeletonPhase: state.SkeletonPhase,
-	})
+	contentBox := RenderContentPane(state.contentPane(contentWidth, height))
 
 	selectedField := MetadataFieldNone
 	if state.FocusPane == FocusPaneMetadata {
@@ -432,11 +425,47 @@ type ContentPaneState struct {
 	// SkeletonPhase is the colour-cycle index for the skeleton pulse; see
 	// loading.SkeletonPhase.
 	SkeletonPhase int
+	// QuickActions holds the key each button of the pane shows.
+	QuickActions QuickActionLabels
+	// CommentsFocused draws the comment at CommentIndex as selected, with its
+	// buttons.
+	CommentsFocused bool
+	CommentIndex    int
+	// Hover is the button under the pointer.
+	Hover Button
+}
+
+// contentPane is the Content pane of state at the size the layout gives it.
+// Render, HitTest and the scroll bounds build the same value, so a click lands
+// on what is drawn under it.
+func (state State) contentPane(width, height int) ContentPaneState {
+	pane := ContentPaneState{
+		Detail:          state.Detail,
+		Width:           width,
+		Height:          height,
+		Focused:         state.FocusPane == FocusPaneContent || state.FocusPane == FocusPaneComments,
+		ScrollOffset:    state.ContentScrollOffset,
+		Skeleton:        state.Skeleton,
+		SkeletonPhase:   state.SkeletonPhase,
+		QuickActions:    state.QuickActions,
+		CommentsFocused: state.FocusPane == FocusPaneComments,
+		CommentIndex:    state.CommentIndex,
+	}
+	if state.Hover != nil {
+		pane.Hover = state.Hover.Button
+	}
+	return pane
 }
 
 // RenderContentPane renders the shared detail Content pane section.
 func RenderContentPane(state ContentPaneState) string {
-	detail := state.Detail
+	section, _ := contentPaneSection(state)
+	return styles.FormSection(section)
+}
+
+// contentPaneSection is the Content pane as FormSection draws it, with what
+// each of its lines is. HitTest reads both.
+func contentPaneSection(state ContentPaneState) (styles.FormSectionConfig, contentLines) {
 	width, height := state.Width, state.Height
 	if width <= 0 {
 		width = defaultDetailWidth
@@ -446,21 +475,23 @@ func RenderContentPane(state ContentPaneState) string {
 	}
 
 	innerHeight := max(1, height-2)
-	content := renderContentPaneLines(detail, width-2, innerHeight, state.Skeleton, state.SkeletonPhase)
-	contentView, _ := sliceWithOffset(content, state.ScrollOffset, innerHeight, width-2)
-	commentsTopRight := fmt.Sprintf("%d comments", len(detail.Comments))
-	if state.Skeleton {
-		commentsTopRight = issuerow.SkeletonGlyph + issuerow.SkeletonGlyph + " comments"
-	}
-	return styles.FormSection(styles.FormSectionConfig{
+	content := renderContentPaneLines(state, width-2, innerHeight)
+	contentView, _ := sliceWithOffset(content.lines, state.ScrollOffset, innerHeight, width-2)
+	section := styles.FormSectionConfig{
 		Width:              width,
 		Height:             height,
 		TopLeft:            "Content",
-		TopRight:           commentsTopRight,
+		TopRight:           fmt.Sprintf("%d comments", len(state.Detail.Comments)),
+		TopAction:          paneButton("edit", state.QuickActions.withDefaults().EditIssue, state.Hover == ButtonEdit),
 		Content:            contentView,
 		Focused:            state.Focused,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
-	})
+	}
+	if state.Skeleton {
+		section.TopRight = issuerow.SkeletonGlyph + issuerow.SkeletonGlyph + " comments"
+		section.TopAction = ""
+	}
+	return section, content
 }
 
 // MetadataPaneState is the state RenderMetadataPane draws from.
@@ -623,7 +654,24 @@ func contentHeaderRule(width int) string {
 	return lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width))
 }
 
-func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight int, skeleton bool, skeletonPhase int) []string {
+// contentLines is the lines of the Content pane before the scroll window, and
+// what the mouse can press on them.
+type contentLines struct {
+	lines []string
+	// comment is the index of the comment each line belongs to, -1 for none.
+	comment []int
+	// heading is the line of the Comments heading, -1 in skeleton state.
+	heading int
+	// add is the cells of the add button on the heading line. commentButtons
+	// is the cells of edit and delete on the first line of the selected
+	// comment. Both are empty when the button is not drawn.
+	add            cells
+	commentButtons []cells
+}
+
+func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) contentLines {
+	detail := pane.Detail
+	keys := pane.QuickActions.withDefaults()
 	upper := make([]string, 0, 48)
 
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
@@ -633,15 +681,15 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 	upper = append(upper, contentHeaderRule(width))
 	upper = append(upper, "Description")
 
-	if skeleton {
+	if pane.Skeleton {
 		// Skeleton mode: render prose-style placeholder lines instead of the
 		// description body, bypassing markdown rendering so ANSI sequences
 		// are not corrupted.  A short heading bar followed by paragraph blocks
 		// of varying-width ░ lines with blank-line gaps reads as a document
 		// body rather than a list of board rows.
 		n := max(1, availableHeight-len(upper))
-		upper = append(upper, renderProseContentSkeleton(width, n, skeletonPhase)...)
-		return upper
+		upper = append(upper, renderProseContentSkeleton(width, n, pane.SkeletonPhase)...)
+		return contentLines{lines: upper, comment: noComment(len(upper)), heading: -1}
 	}
 
 	upper = append(upper, renderMarkdownMultiline(detail.Description, "(no description)", width)...)
@@ -652,27 +700,63 @@ func renderContentPaneLines(detail domain.IssueDetail, width, availableHeight in
 		upper = append(upper, renderMarkdownMultiline(detail.Notes, "(no notes)", width)...)
 	}
 
-	commentsSection := make([]string, 0, 16)
+	heading := "Comments (0)"
 	if len(detail.Comments) > 0 {
-		commentsSection = append(commentsSection, "")
-		commentsSection = append(commentsSection, fmt.Sprintf("Comments (%d · newest first)", len(detail.Comments)))
-		commentsSection = append(commentsSection, renderComments(detail.Comments, width)...)
+		heading = fmt.Sprintf("Comments (%d · newest first)", len(detail.Comments))
 	}
+	heading, addCells := placeButtons(heading, width, paneButton("add", keys.AddComment, pane.Hover == ButtonAddComment))
 
-	spacer := 0
-	totalLines := len(upper) + len(commentsSection)
-	if availableHeight > totalLines {
-		spacer = availableHeight - totalLines
+	selected := -1
+	if pane.CommentsFocused {
+		selected = pane.CommentIndex
 	}
+	comments, owner, commentButtons := renderComments(detail.Comments, width, selected,
+		paneButton("edit", keys.EditComment, pane.Hover == ButtonEditComment),
+		paneButton("delete", keys.DeleteComment, pane.Hover == ButtonDeleteComment),
+	)
 
-	out := make([]string, 0, totalLines+spacer)
-	out = append(out, upper...)
-	for i := 0; i < spacer; i++ {
-		out = append(out, "")
+	// The comments stand at the bottom of the pane: a body shorter than the
+	// pane is followed by blank lines.
+	spacer := max(0, availableHeight-len(upper)-2-len(comments))
+	out := contentLines{heading: len(upper) + spacer + 1, commentButtons: commentButtons}
+	if len(addCells) > 0 {
+		out.add = addCells[0]
 	}
-	out = append(out, commentsSection...)
-
+	out.lines = append(out.lines, upper...)
+	out.lines = append(out.lines, make([]string, spacer+1)...)
+	out.lines = append(out.lines, heading)
+	out.comment = noComment(len(out.lines))
+	out.lines = append(out.lines, comments...)
+	out.comment = append(out.comment, owner...)
 	return out
+}
+
+// noComment marks count lines as lines of no comment.
+func noComment(count int) []int {
+	owner := make([]int, count)
+	for idx := range owner {
+		owner[idx] = -1
+	}
+	return owner
+}
+
+// CommentLineRange is the first and the last line the Content pane draws the
+// comment at index on, counted before the scroll window.
+func CommentLineRange(state State, index int) (first, last int) {
+	if state.Width <= 0 {
+		state.Width = defaultDetailWidth
+	}
+	if state.Height <= 0 {
+		state.Height = defaultDetailHeight
+	}
+	pane := layoutPanes(state.Width, state.Height).content
+	_, content := contentPaneSection(state.contentPane(pane.width, pane.height))
+	first = slices.Index(content.comment, index)
+	last = first
+	for last+1 < len(content.comment) && content.comment[last+1] == index {
+		last++
+	}
+	return first, last
 }
 
 func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField MetadataFieldKey, quickActions QuickActionLabels, skeleton bool) []string {
@@ -683,8 +767,9 @@ func renderMetadataPaneLines(detail domain.IssueDetail, width int, selectedField
 	out = append(out,
 		"Quick actions",
 		fmt.Sprintf("%s Edit issue", quickActions.EditIssue),
-		fmt.Sprintf("%s Update issue", quickActions.UpdateIssue),
 		fmt.Sprintf("%s Add comment", quickActions.AddComment),
+		fmt.Sprintf("%s Edit comment", quickActions.EditComment),
+		fmt.Sprintf("%s Delete comment", quickActions.DeleteComment),
 		fmt.Sprintf("%s Close issue", quickActions.CloseIssue),
 		fmt.Sprintf("%s Reload detail", quickActions.ReloadDetail),
 	)
@@ -695,11 +780,14 @@ func (q QuickActionLabels) withDefaults() QuickActionLabels {
 	if strings.TrimSpace(q.EditIssue) == "" {
 		q.EditIssue = "e"
 	}
-	if strings.TrimSpace(q.UpdateIssue) == "" {
-		q.UpdateIssue = "u"
-	}
 	if strings.TrimSpace(q.AddComment) == "" {
 		q.AddComment = "a"
+	}
+	if strings.TrimSpace(q.EditComment) == "" {
+		q.EditComment = "enter"
+	}
+	if strings.TrimSpace(q.DeleteComment) == "" {
+		q.DeleteComment = "d"
 	}
 	if strings.TrimSpace(q.CloseIssue) == "" {
 		q.CloseIssue = "x"

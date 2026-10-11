@@ -53,6 +53,16 @@ func (f *fakeInner) AddComment(_ context.Context, _ string, _ domain.AddCommentI
 	return nil
 }
 
+func (f *fakeInner) EditComment(_ context.Context, _, _ string, _ domain.EditCommentInput) error {
+	f.lastCall = "EditComment"
+	return nil
+}
+
+func (f *fakeInner) DeleteComment(_ context.Context, _, _ string) error {
+	f.lastCall = "DeleteComment"
+	return nil
+}
+
 func (f *fakeInner) HealthCheck(_ context.Context) error {
 	f.lastCall = "HealthCheck"
 	return nil
@@ -64,7 +74,7 @@ func (f *fakeInner) Catalogs(_ context.Context) (repository.Catalogs, error) {
 }
 
 // TestErrorInjecting_Delegation verifies that when no error is configured all
-// 9 methods delegate to the inner repository and call tracking records the
+// methods delegate to the inner repository and call tracking records the
 // invocation.
 func TestErrorInjecting_Delegation(t *testing.T) {
 	ctx := context.Background()
@@ -98,6 +108,12 @@ func TestErrorInjecting_Delegation(t *testing.T) {
 		{"AddComment", func(r repository.Repository) error {
 			return r.AddComment(ctx, "x", domain.AddCommentInput{Body: "hi"})
 		}},
+		{"EditComment", func(r repository.Repository) error {
+			return r.EditComment(ctx, "x", "c", domain.EditCommentInput{Body: "hi"})
+		}},
+		{"DeleteComment", func(r repository.Repository) error {
+			return r.DeleteComment(ctx, "x", "c")
+		}},
 		{"HealthCheck", func(r repository.Repository) error {
 			return r.HealthCheck(ctx)
 		}},
@@ -127,6 +143,25 @@ func TestErrorInjecting_Delegation(t *testing.T) {
 				t.Errorf("expected recorded method=%q, got %q", m.name, calls[0].Method)
 			}
 		})
+	}
+}
+
+// A comment write is recorded with the comment it targeted, so a test can assert
+// which comment the shell edited or deleted.
+func TestErrorInjecting_RecordsTheCommentID(t *testing.T) {
+	ctx := context.Background()
+	ei := fakes.NewErrorInjecting(&fakeInner{})
+
+	_ = ei.EditComment(ctx, "x", "c1", domain.EditCommentInput{Body: "hi"})
+	_ = ei.DeleteComment(ctx, "x", "c2")
+
+	edit := ei.CallsFor(fakes.MethodEditComment)[0]
+	if edit.IssueID != "x" || edit.CommentID != "c1" || edit.Args != (domain.EditCommentInput{Body: "hi"}) {
+		t.Errorf("EditComment call = %+v", edit)
+	}
+	del := ei.CallsFor(fakes.MethodDeleteComment)[0]
+	if del.IssueID != "x" || del.CommentID != "c2" {
+		t.Errorf("DeleteComment call = %+v", del)
 	}
 }
 
@@ -164,6 +199,12 @@ func TestErrorInjecting_InjectionPerMethod(t *testing.T) {
 		}},
 		{fakes.MethodAddComment, func(r repository.Repository) error {
 			return r.AddComment(ctx, "x", domain.AddCommentInput{Body: "hi"})
+		}},
+		{fakes.MethodEditComment, func(r repository.Repository) error {
+			return r.EditComment(ctx, "x", "c", domain.EditCommentInput{Body: "hi"})
+		}},
+		{fakes.MethodDeleteComment, func(r repository.Repository) error {
+			return r.DeleteComment(ctx, "x", "c")
 		}},
 		{fakes.MethodHealthCheck, func(r repository.Repository) error {
 			return r.HealthCheck(ctx)
