@@ -6,6 +6,71 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
+## v0.19.1
+
+- **Security — an escape sequence in an issue reached your terminal.** The app
+  sent a control character in a description, the notes, a comment or a field
+  of an issue to the terminal as it was. Whoever can write an issue in a store
+  you open could send an escape sequence to your terminal, for example one
+  that sets the window title. No setting was needed. `taskmgr` accepts a
+  control character in a description, and the sequence went out when you
+  opened that issue. It refuses one in a title, an assignee and a label, so
+  those need a store file that another tool wrote; such a title went out as
+  soon as the Board listed the issue. A control character other than a line
+  break or a TAB now draws as a space, and a format character that shapes
+  nothing, such as a right-to-left override, is dropped.
+- **Fixed: a TAB in a description or in the notes broke the issue detail
+  page.** When the app drew the body as markdown, because it has a heading, a
+  list, a quote, a code block or a link, the line with the TAB ran past the
+  border of its pane and past the edge of the terminal. Each such line moved
+  the rows above it up by one. With two of them, or with one on a terminal of
+  24 rows, the menu bar left the screen. A TAB now draws as spaces up to the
+  next 4-column stop, and the line stays in its pane.
+- **Fixed: the detail page cut text of a description, the notes or a comment
+  that did not fit its pane.** In a body drawn as markdown, a word wider than
+  the pane, such as a long URL or a run of Chinese or Japanese text, ended in
+  `…` and the rest of it was shown nowhere. A line of a code block with no
+  space in it did too, and so did every long line of a comment that the app
+  frames as command output. A table with more columns than the pane has room
+  for lost the text of its headings, and one with still more columns lost
+  most of its cells. This text now goes on in the next line. A table that
+  cannot fit draws as wrapped text, without its columns.
+- **Fixed: a description, the notes or a comment wrapped in the wrong place.**
+  A line broke at a hyphen inside a word, and one word then stood alone on the
+  next line. A long line of a code block went on at the left margin, without
+  the indent of the block. The second line of a long list item started under
+  the bullet or the number, not under the text. A quote line with a long word
+  went on without its bar, and so did a line of a list or of a second quote
+  inside a quote. Text with no markdown broke in the middle of a word. A line
+  that the app wraps now breaks at a space and goes on under the text of its
+  first line, and only a word wider than the line is broken. Two cases did not
+  change: a list item that its author wrapped by hand still goes on under its
+  bullet or its number, and a cell of a table still breaks at a hyphen.
+- Changed: a comment that the app frames as command output now wraps its long
+  lines, and its limit of 28 lines counts lines on the screen. A log with long
+  lines shows fewer of its lines before `… (+N lines elided)`. The limit of 18
+  lines of another comment did not change.
+- Changed: in a comment framed as command output and in a description, the
+  notes or a comment with no markdown, a line that wraps loses its runs of
+  spaces: each run inside the line becomes one space, so text aligned in
+  columns loses its alignment on that line. The indent at the start of the
+  line stays, and a line that fits keeps its spaces.
+- Changed: a block quote that its author wrapped by hand keeps those line
+  ends. Before, the quote flowed to the width of the pane. A line break that
+  the author forced in a paragraph, with two spaces or a backslash at the line
+  end, now stays too. A paragraph wrapped by hand still flows when the body
+  has markdown in it.
+- Fixed: a line break or a TAB in a field of an issue broke the frame.
+  `taskmgr` refuses such a value in most fields, so it comes from a store file
+  that another tool or a hand edit wrote. A line break in the title or the ID
+  made the row of the issue one line higher on the Board, on the Docs tab and
+  in the store search, so each row below it moved down. On the detail page, a
+  line break in the title, the ID, the status, the type, the assignee, the
+  owner, the close reason, a label or the author of a comment added a row and
+  moved the borders. A TAB in one of them but the ID pushed the rest of its
+  line past the border of the pane. Each of these fields now draws on one
+  line.
+
 ## v0.19.0
 
 - **Action required: the keys changed.** No action is on a bare letter, digit or
