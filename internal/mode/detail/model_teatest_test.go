@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
@@ -55,7 +53,6 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 
 	wrapper := newDetailsTestWrapper(m, testWidth, testHeight)
 	tm := testui.NewTestModelWithSize(t, wrapper, testWidth, testHeight)
-	tm.Send(tea.WindowSizeMsg{Width: testWidth, Height: testHeight})
 
 	// Scroll content pane down several times (content pane is default focus).
 	for i := 0; i < 5; i++ {
@@ -126,7 +123,6 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 
 	wrapper := newDetailsTestWrapper(m, testWidth, testHeight)
 	tm := testui.NewTestModelWithSize(t, wrapper, testWidth, testHeight)
-	tm.Send(tea.WindowSizeMsg{Width: testWidth, Height: testHeight})
 
 	// Scroll content pane.
 	for i := 0; i < 4; i++ {

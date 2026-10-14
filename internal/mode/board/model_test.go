@@ -164,7 +164,7 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 		t.Fatalf("expected initial selection tm-4 from Not Ready lane (earliest non-empty), got %#v", sel)
 	}
 
-	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View(0)), "model_loaded.golden")
+	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View(0)), "model_loaded_w120.golden")
 }
 
 // --- AC: load error path (single error on all columns) ---
