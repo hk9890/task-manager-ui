@@ -11,7 +11,7 @@ signed keyless with cosign (`.sig` + `.pem`), and SLSA build provenance from
 the right asset. Version injection: [CODING.md](CODING.md) → Version/build
 metadata.
 
-Two settings that look wrong and are not: cosign is pinned to **v2.6.3** because
+Two settings that look wrong and are not: cosign is pinned to a **v2** release because
 v3 defaults to `--new-bundle-format`, which the `--output-signature` and
 `--output-certificate` flags in `.goreleaser.yaml` do not accept; and the
 provenance step keeps `continue-on-error` for user-owned **private** forks, where
