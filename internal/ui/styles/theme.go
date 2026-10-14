@@ -173,7 +173,7 @@ func applyFlavor(f catppuccin.Flavor, profile colorprofile.Profile) {
 // greyRamp is the entry of the 256-colour grey ramp nearest to how light col
 // is. The ramp is the entries 232 to 255: 24 greys from 8, 10 apart.
 func greyRamp(col catppuccin.Color) color.Color {
-	light := int(col.RGB[0]+col.RGB[1]+col.RGB[2]) / 3
+	light := (int(col.RGB[0]) + int(col.RGB[1]) + int(col.RGB[2])) / 3
 	return ansi.IndexedColor(232 + (light-3)/10)
 }
 

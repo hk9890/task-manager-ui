@@ -107,8 +107,17 @@ func TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt(t *testing.
 				t.Errorf("%s, %s: the hover is %v, want surface0 %v", name, theme, RowHoverBgColor, surface0)
 			}
 		case colorprofile.ANSI256:
-			if entry, ok := RowHoverBgColor.(ansi.IndexedColor); !ok || entry < 232 {
+			entry, ok := RowHoverBgColor.(ansi.IndexedColor)
+			if !ok || entry < 232 {
 				t.Errorf("%s, %s: the hover is %v, want an entry of the grey ramp", name, theme, RowHoverBgColor)
+				break
+			}
+			// The ramp entry n is the grey 8+10*(n-232); the nearest one is
+			// at most 5 from Surface0's lightness.
+			rgb := flavor.Surface0().RGB
+			light := (int(rgb[0]) + int(rgb[1]) + int(rgb[2])) / 3
+			if grey := 8 + 10*(int(entry)-232); grey < light-5 || grey > light+5 {
+				t.Errorf("%s, %s: the hover is the grey %d (entry %d), want the one nearest to surface0's %d", name, theme, grey, entry, light)
 			}
 		case colorprofile.ANSI:
 			if RowHoverBgColor != (lipgloss.NoColor{}) {
