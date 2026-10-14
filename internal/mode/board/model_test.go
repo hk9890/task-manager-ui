@@ -136,8 +136,8 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 	repo.Seed(memoryrepo.Issue{ID: "tm-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"})
 	repo.Seed(memoryrepo.Issue{ID: "tm-4", Title: "Blocked now", Priority: 1, Status: "blocked", Type: "bug"})
 
-	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: newBoardModel(repo, resolvedBoardKeys(t))})
-	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
+	// Started at 120x30, never resized after: docs/TESTING.md, NewTestModelWithSize.
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: newBoardModel(repo, resolvedBoardKeys(t))}, 120, 30)
 
 	// At width=120, 3 of 4 columns are visible (Not Ready, Ready, In Progress).
 	// Done is offscreen; only check visible sections and known issue IDs.
@@ -163,7 +163,7 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 		t.Fatalf("expected initial selection tm-4 from Not Ready lane (earliest non-empty), got %#v", sel)
 	}
 
-	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View(0)), "model_loaded.golden")
+	testui.AssertMatchesGoldenNormalized(t, []byte(finalModel.View(0)), "model_loaded_w120.golden")
 }
 
 // --- AC: load error path (single error on all columns) ---
