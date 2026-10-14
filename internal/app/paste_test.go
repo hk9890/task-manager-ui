@@ -27,6 +27,15 @@ func TestAPasteFiltersTheActiveTabAlone(t *testing.T) {
 	}
 }
 
+func TestAPastedCRLFIsOneSpaceInTheQuery(t *testing.T) {
+	m, _ := filterShell(t)
+
+	m = send(t, m, testui.Paste("log\r\nin"))
+	if view := plainShell(m); !strings.Contains(view, "❯ log in ") {
+		t.Fatalf("the pasted CRLF is not one space in the query:\n%s", view)
+	}
+}
+
 // The form's modal schedules a repeating cursor tick, so its commands are left
 // unrun (openForm).
 func TestAPasteGoesToTheStoreFormsFocusedInput(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/tools/go/packages"
-	"gopkg.in/yaml.v3"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/logging"

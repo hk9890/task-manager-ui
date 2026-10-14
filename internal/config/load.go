@@ -1,13 +1,12 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 const configRelativePath = "taskmgr-ui/config.yaml"
@@ -47,15 +46,6 @@ func LoadWithOptions(opts LoadOptions) (Result, error) {
 		return Result{}, err
 	}
 	result.Warnings = append(result.Warnings, warnings...)
-	if data == nil {
-		// No config file — resolve defaults (always valid, but populate field for consistency).
-		resolved, err := ResolveKeyBindings(result.Config.KeyBindings)
-		if err != nil {
-			return Result{}, fmt.Errorf("resolve default keybindings: %w", err)
-		}
-		result.ResolvedKeyBindings = resolved
-		return result, nil
-	}
 
 	override, warnings, err := decodeOverride(data)
 	if err != nil {
@@ -134,22 +124,18 @@ func readConfigFile(path string, requireExists bool) ([]byte, []string, error) {
 }
 
 func decodeOverride(data []byte) (overrideModel, []string, error) {
-	var node yaml.Node
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&node); err != nil {
+	root, err := rootNode(string(data))
+	if err != nil {
 		return overrideModel{}, nil, fmt.Errorf("decode yaml: %w", err)
 	}
-	if len(node.Content) == 0 {
+	if root == nil {
 		return overrideModel{}, nil, nil
 	}
-	if len(node.Content) > 1 {
-		return overrideModel{}, nil, fmt.Errorf("expected a single YAML document")
-	}
 
-	warnings := collectUnknownWarnings(node.Content[0], nil)
+	warnings := collectUnknownWarnings(root, nil)
 
 	var override overrideModel
-	if err := node.Content[0].Decode(&override); err != nil {
+	if err := root.Decode(&override); err != nil {
 		return overrideModel{}, warnings, fmt.Errorf("decode config values: %w", err)
 	}
 	override = sanitizeOverride(override)

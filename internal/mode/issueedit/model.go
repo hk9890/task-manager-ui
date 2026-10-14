@@ -499,9 +499,12 @@ func (m *Model) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 }
 
 // HandlePaste types pasted text into the focused text or input, as the
-// widget types it. The screen consumes every paste: one into another field,
-// or during a save, does nothing.
+// widget types it, with each CRLF as one LF, as newText holds the opening
+// value: the widgets break a line at a CR and at an LF each. The screen
+// consumes every paste: one into another field, or during a save, does
+// nothing.
 func (m *Model) HandlePaste(msg tea.PasteMsg) (bool, tea.Cmd) {
+	msg.Content = strings.ReplaceAll(msg.Content, "\r\n", "\n")
 	switch {
 	case m.saving:
 	case m.focus == uiissueedit.FieldText:

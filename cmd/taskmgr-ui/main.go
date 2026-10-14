@@ -19,7 +19,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/hk9890/task-manager/sdk/tasks"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/hk9890/task-manager-ui/internal/app"
 	"github.com/hk9890/task-manager-ui/internal/config"

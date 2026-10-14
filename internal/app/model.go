@@ -525,6 +525,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg = scoped.msg
 	}
 
+	// The widgets and the query take a CR and an LF as one break or one space
+	// each, so a pasted CRLF reaches every destination as one LF.
+	if paste, ok := msg.(tea.PasteMsg); ok {
+		paste.Content = strings.ReplaceAll(paste.Content, "\r\n", "\n")
+		msg = paste
+	}
+
 	// Handle startup health check result before any other processing.
 	if check, ok := msg.(startupHealthCheckMsg); ok {
 		if check.err != nil {

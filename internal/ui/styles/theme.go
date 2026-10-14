@@ -85,8 +85,9 @@ func Dark() bool { return darkTheme }
 func applyFlavor(f catppuccin.Flavor, profile colorprofile.Profile) {
 	c := func(col catppuccin.Color) color.Color { return lipgloss.Color(col.Hex) }
 
-	// The hover is one surface below the selection, so it is lighter than the
-	// terminal's background as the selection is. A 256-colour terminal draws
+	// The hover is one surface below the selection, so it stands between the
+	// terminal's background and the selection: lighter than the background on
+	// a dark flavour, darker on latte. A 256-colour terminal draws
 	// the two surfaces of a dark flavour as one palette entry, and the mantle
 	// under them as the entry of the background. The hover is a grey of the
 	// ramp there, which no other role is drawn in. The 16 colours have no
@@ -173,7 +174,7 @@ func applyFlavor(f catppuccin.Flavor, profile colorprofile.Profile) {
 // greyRamp is the entry of the 256-colour grey ramp nearest to how light col
 // is. The ramp is the entries 232 to 255: 24 greys from 8, 10 apart.
 func greyRamp(col catppuccin.Color) color.Color {
-	light := int(col.RGB[0]+col.RGB[1]+col.RGB[2]) / 3
+	light := (int(col.RGB[0]) + int(col.RGB[1]) + int(col.RGB[2])) / 3
 	return ansi.IndexedColor(232 + (light-3)/10)
 }
 

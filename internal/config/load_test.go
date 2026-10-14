@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -271,6 +272,49 @@ keybindings:
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("expected warning %q in %q", expected, joined)
 		}
+	}
+}
+
+func TestLoad_EmptyOrCommentOnlyConfigUsesDefaults(t *testing.T) {
+	for name, body := range map[string]string{
+		"empty":        "",
+		"comment-only": "# ui:\n#   theme: catppuccin-latte\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			configHome := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", configHome)
+			t.Setenv("HOME", configHome)
+			writeConfig(t, configHome, body)
+
+			result, err := Load()
+			if err != nil {
+				t.Fatalf("Load returned error: %v", err)
+			}
+			if result.Config.UI.Theme != Default().UI.Theme {
+				t.Fatalf("expected the default theme, got %q", result.Config.UI.Theme)
+			}
+			if len(result.Warnings) != 0 {
+				t.Fatalf("expected no warnings, got %#v", result.Warnings)
+			}
+			if !reflect.DeepEqual(result.ResolvedKeyBindings, resolvedDefault(t)) {
+				t.Fatal("expected the default keybindings to be resolved")
+			}
+		})
+	}
+}
+
+// TestLoad_SecondYAMLDocumentReturnsError: the loader reads one document, so a
+// second one, which it would not read, fails the load rather than being
+// dropped unchecked.
+func TestLoad_SecondYAMLDocumentReturnsError(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, "ui:\n  theme: catppuccin-latte\n---\nui:\n  theme: no-such-theme\n")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "more than one YAML document") {
+		t.Fatalf("expected the second document to fail the load, got %v", err)
 	}
 }
 
