@@ -390,6 +390,36 @@ func TestEditAndDeleteComment(t *testing.T) {
 	}
 }
 
+// The editor sends the text field as typed, so a body that opens with a blank
+// line must come back with it, through the add and the edit path alike.
+func TestCommentBodyKeepsALeadingBlankLine(t *testing.T) {
+	r, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	id := mustCreate(t, r, domain.CreateIssueInput{Title: "with comment"})
+	if err := r.AddComment(ctx, id, domain.AddCommentInput{Body: "\nadded"}); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	d, err := r.Issue(ctx, id)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	if len(d.Comments) != 1 || d.Comments[0].Body != "\nadded" {
+		t.Fatalf("comments after add = %+v, want one with body %q", d.Comments, "\nadded")
+	}
+
+	if err := r.EditComment(ctx, id, d.Comments[0].ID, domain.EditCommentInput{Body: "\nedited"}); err != nil {
+		t.Fatalf("EditComment: %v", err)
+	}
+	d, err = r.Issue(ctx, id)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	if len(d.Comments) != 1 || d.Comments[0].Body != "\nedited" {
+		t.Errorf("comments after edit = %+v, want one with body %q", d.Comments, "\nedited")
+	}
+}
+
 func TestCommentWriteValidation(t *testing.T) {
 	r, _ := newTestRepo(t)
 	ctx := context.Background()
