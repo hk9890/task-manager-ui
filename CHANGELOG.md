@@ -22,31 +22,28 @@ carries its `vX.Y.Z` section of this file as its notes.
   or in a comment made each draw of that detail page slow (GO-2026-6218). Only
   someone who can write to a store you open could put it there, and no setting
   prevented it. The release binaries are now built with Go 1.27.2, which fixes
-  it. The same rebuild, with an updated markdown parser, clears two reported
-  vulnerabilities that did not reach you:
-  - In the markdown parser (GO-2026-5320), a link could carry script into
-    HTML output. taskmgr-ui writes no HTML.
-  - In Go's XML decoder (GO-2026-6088), deeply nested input could exhaust the
-    stack. taskmgr-ui decodes only XML built into the app.
+  it.
 - **Fixed: an empty config file, or one with only comments, stopped
   startup** with `decode yaml: EOF`. Such a file now starts the app with the
   defaults, at the default path and at a `--config` path alike.
 - **Fixed: on a 256-colour terminal, the latte theme drew a near-black band**
   under the row, the tab or the menu-bar button under the pointer. The band is
   now light grey.
-- **Fixed: a 16-colour terminal was sent 256-colour codes,** so some text took
-  colours the terminal does not have. Every colour is now drawn in the 16
-  colours.
+- **Fixed: descriptions and comments were drawn in colours the terminal does
+  not have.** A 16-colour terminal was sent 256-colour codes, and a 256-colour
+  terminal was sent true-colour codes in code blocks. Every colour is now drawn
+  in the colours of the terminal.
+- **Fixed: under `NO_COLOR`, descriptions and comments were drawn in
+  colour.** They now have no colour, as the rest of the screen.
 - **Fixed: a paste with Windows line ends added an empty line after every
   line** in the issue editor, and two spaces in place of one in a title, a
   filter or a dialog field.
 - **Fixed: a comment that started with a blank line lost that line** when the
   issue editor saved it.
 - **Changed: under `NO_COLOR`, bold and reverse text are drawn.** Before, no
-  text attribute was drawn at all. Colours stay off.
+  text attribute was drawn outside descriptions and comments.
 - **Changed: on a 256-colour terminal some colours use other palette entries,**
-  for example the grey of muted text and the selection band. On a true-colour
-  terminal some colours move by one step of a channel.
+  for example the grey of muted text and the selection band.
 - **Changed: the placeholder of a dialog field is drawn in the grey of muted
   text,** as every other placeholder is.
 
