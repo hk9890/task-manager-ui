@@ -136,8 +136,9 @@ func TestBoardModeAllGroupsPopulatedRendersGolden(t *testing.T) {
 	repo.Seed(memoryrepo.Issue{ID: "tm-3", Title: "In progress", Priority: 2, Status: "in_progress", Type: "feature"})
 	repo.Seed(memoryrepo.Issue{ID: "tm-4", Title: "Blocked now", Priority: 1, Status: "blocked", Type: "bug"})
 
-	tm := testui.NewTestModel(t, testui.ControllerAdapter{Controller: newBoardModel(repo, resolvedBoardKeys(t))})
-	tm.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
+	// The size is the program's own: a size sent after the start can arrive
+	// before the initial one, which then wins.
+	tm := testui.NewTestModelWithSize(t, testui.ControllerAdapter{Controller: newBoardModel(repo, resolvedBoardKeys(t))}, 120, 30)
 
 	// At width=120, 3 of 4 columns are visible (Not Ready, Ready, In Progress).
 	// Done is offscreen; only check visible sections and known issue IDs.
