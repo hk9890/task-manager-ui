@@ -136,9 +136,9 @@ Shared helpers live under `internal/testing/ui`:
 
 - `NewTestModel`: starts `teatest` with deterministic terminal size.
 - `NewTestModelWithSize`: starts `teatest` at explicit terminal width/height. A test that needs
-  another size than the default passes it here and never sends a `tea.WindowSizeMsg` after the
-  start: Bubble Tea sends the initial size from inside `Run`, so it can arrive after the sent one
-  and win.
+  another size than the default passes it here and never sends the running program a
+  `tea.WindowSizeMsg` (`tm.Send`): Bubble Tea sends the initial size from inside `Run`, so it can
+  arrive after the sent one and win.
 - `AssertMatchesGoldenNormalized`: **the default.** Compares with trailing-space normalization, colour codes kept.
 - `AssertMatchesGoldenStripANSI`: same, with colour escapes removed. Use only where the golden pins column geometry and colour would be noise.
 - `AssertMatchesGolden`: byte-for-byte comparison. Trailing spaces are invisible in a diff and this helper fails on them, so prefer the normalized variant for rendered layout.

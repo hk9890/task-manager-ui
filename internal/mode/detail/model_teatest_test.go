@@ -71,8 +71,9 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 	// Switch focus back to content pane (right key from dependencies).
 	tm.Send(testui.Press("right"))
 
-	// Wait for the metadata-pane content to appear, confirming all sends
-	// have been processed before we inspect final model state.
+	// The metadata pane is in the first frame, so this wait proves only that
+	// the view draws. Send hands each key to the event loop in order and the
+	// quit comes after the last one, so the final model has handled every key.
 	testui.WaitForOutputContainsAll(t, tm.Output(), "Metadata")
 
 	if err := tm.Quit(); err != nil {
@@ -138,8 +139,9 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 	// Back to the content pane.
 	tm.Send(testui.Press("right"))
 
-	// Wait for the metadata pane to appear in the output, which confirms all
-	// sends have been processed before inspecting final state.
+	// The metadata pane is in the first frame, so this wait proves only that
+	// the view draws. Send hands each key to the event loop in order and the
+	// quit comes after the last one, so the final model has handled every key.
 	testui.WaitForOutputContainsAll(t, tm.Output(), "Metadata")
 
 	if err := tm.Quit(); err != nil {

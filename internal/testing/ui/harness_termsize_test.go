@@ -12,8 +12,8 @@ import (
 
 // firstSizeModel renders the first WindowSizeMsg it receives and ignores every
 // later one. Recording only the first is the point: the size teatest sends at
-// startup is the harness default under test, and a test that sends its own size
-// afterwards — as the golden test does — would otherwise overwrite the evidence.
+// startup is the harness default under test, and a later size would otherwise
+// overwrite the evidence.
 type firstSizeModel struct {
 	mu    *sync.Mutex
 	first *tea.WindowSizeMsg
