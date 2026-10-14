@@ -92,7 +92,8 @@ func applyOnEveryTerminal(t *testing.T, check func(name, theme string, profile c
 
 // TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt: in true
 // colour the row or the button under the pointer is lit a step below the
-// selected row, and both are lighter than the terminal's background. A
+// selected row, and both stand apart from the terminal's background: lighter
+// on a dark flavour, darker on latte. A
 // 256-colour terminal draws those two surfaces as one entry, so the hover is a
 // grey of the ramp there, and the 16 colours have no entry for it.
 func TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt(t *testing.T) {

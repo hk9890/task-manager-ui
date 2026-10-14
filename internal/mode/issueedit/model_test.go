@@ -544,29 +544,23 @@ func TestPasteIsTypedAndCtrlVDoesNothing(t *testing.T) {
 }
 
 // A paste is typed as the widget types it: the text makes a TAB 4 spaces and
-// a CR and an LF a line break each, an input makes each of them a space.
+// a CRLF, a CR and an LF one line break each, an input makes each of them a
+// space. A terminal sends a CR for each line end of a paste.
 func TestPasteKeepsTheTextHandlingOfTheWidgets(t *testing.T) {
 	t.Parallel()
 
-	paste := testui.Paste("one\ttwo\r\nthree")
+	paste := testui.Paste("one\ttwo\r\nthree\rfour\nfive")
 
 	m := open(t, Options{Kind: KindCreate})
 	press(t, m, paste)
-	if got, want := m.values().Title, "one two three"; got != want {
+	if got, want := m.values().Title, "one two three four five"; got != want {
 		t.Errorf("a paste into the title gives %q, want %q", got, want)
 	}
 
 	m = open(t, Options{Kind: KindCommentAdd})
 	press(t, m, paste)
-	if got, want := m.values().Text, "one    two\nthree"; got != want {
+	if got, want := m.values().Text, "one    two\nthree\nfour\nfive"; got != want {
 		t.Errorf("a paste into the text gives %q, want %q", got, want)
-	}
-
-	m = open(t, Options{Kind: KindCreate})
-	m.setFocus(uiissueedit.FieldText)
-	press(t, m, testui.Paste("one\r\ntwo"))
-	if got, want := m.values().Text, "one\ntwo"; got != want {
-		t.Errorf("a paste into the description gives %q, want %q", got, want)
 	}
 }
 

@@ -47,7 +47,8 @@ shell. Every other package is pure.
   `RowHoverBgColor`).
 - The pointer lights what is under it one surface below the selection: on a true-colour terminal
   `RowHoverBgColor` under a row and `ShellHoverBgColor` under a tab or a menu-bar button are
-  Surface0, and `RowSelectedBgColor` is Surface1, so both are lighter than the terminal background.
+  Surface0, and `RowSelectedBgColor` is Surface1, so both stand apart from the terminal
+  background: lighter on a dark flavour, darker on latte.
 - On 256 colours both hover roles are the grey of the ramp nearest to Surface0 (`greyRamp`,
   `internal/ui/styles/theme.go`), so the band does not depend on the palette entry the colour
   conversion picks for Surface0. On a dark flavour no other role is drawn in that entry.
