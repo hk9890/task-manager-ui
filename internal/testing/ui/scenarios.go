@@ -24,17 +24,17 @@ func ApplyKeySequence(model tea.Model, keys ...tea.KeyMsg) tea.Model {
 
 // OpenDetailKeys returns the shell key sequence for opening detail mode.
 func OpenDetailKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyEnter}}
+	return []tea.KeyMsg{Press("enter")}
 }
 
 // DetailBackKeys returns the shell key sequence for leaving detail mode.
 func DetailBackKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyEsc}}
+	return []tea.KeyMsg{Press("esc")}
 }
 
 // DetailScrollKeys returns a representative deterministic detail scroll sequence.
 func DetailScrollKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{{Type: tea.KeyPgDown}, {Type: tea.KeyEnd}}
+	return []tea.KeyMsg{Press("pgdown"), Press("end")}
 }
 
 func applyCmd(model tea.Model, cmd tea.Cmd) tea.Model {

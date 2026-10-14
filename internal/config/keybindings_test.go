@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
@@ -15,31 +15,31 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 
-	if !resolved.Match(ShellContext, ShellActionQuit, tea.KeyMsg{Type: tea.KeyCtrlC}) {
+	if !resolved.Match(ShellContext, ShellActionQuit, testui.Press("ctrl+c")) {
 		t.Fatal("expected shell quit to match ctrl+c")
 	}
-	if !resolved.Match(ShellContext, ShellActionHelp, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}, Alt: true}) {
+	if !resolved.Match(ShellContext, ShellActionHelp, testui.Press("alt+h")) {
 		t.Fatal("expected shell help to match alt+h")
 	}
-	if resolved.Match(ShellContext, ShellActionHelp, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}) {
+	if resolved.Match(ShellContext, ShellActionHelp, testui.Press("h")) {
 		t.Fatal("expected shell help not to match a bare h")
 	}
-	if !resolved.Match(ShellContext, ShellActionOpenSearch, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true}) {
+	if !resolved.Match(ShellContext, ShellActionOpenSearch, testui.Press("alt+f")) {
 		t.Fatal("expected shell open-search to match alt+f")
 	}
-	if !resolved.Match(ShellContext, ShellActionOpenConfig, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}, Alt: true}) {
+	if !resolved.Match(ShellContext, ShellActionOpenConfig, testui.Press("alt+c")) {
 		t.Fatal("expected shell open-config to match alt+c")
 	}
-	if !resolved.Match(ShellContext, ShellActionSaveEdit, tea.KeyMsg{Type: tea.KeyCtrlS}) {
+	if !resolved.Match(ShellContext, ShellActionSaveEdit, testui.Press("ctrl+s")) {
 		t.Fatal("expected shell save-edit to match ctrl+s")
 	}
-	if !resolved.Match(DetailContext, DetailActionDeleteComment, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}, Alt: true}) {
+	if !resolved.Match(DetailContext, DetailActionDeleteComment, testui.Press("alt+d")) {
 		t.Fatal("expected detail delete-comment to match alt+d")
 	}
-	if !resolved.Match(ShellContext, ShellActionCloseIssue, tea.KeyMsg{Type: tea.KeyDelete}) {
+	if !resolved.Match(ShellContext, ShellActionCloseIssue, testui.Press("delete")) {
 		t.Fatal("expected shell close-issue to match delete")
 	}
-	if !resolved.Match(BoardContext, BoardActionMoveLeft, tea.KeyMsg{Type: tea.KeyLeft}) {
+	if !resolved.Match(BoardContext, BoardActionMoveLeft, testui.Press("left")) {
 		t.Fatal("expected board move-left to match left arrow")
 	}
 	if resolved.Primary(ShellContext, ShellActionModeCycleNext) != "tab" {

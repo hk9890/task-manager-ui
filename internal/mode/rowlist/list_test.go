@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 )
 
@@ -43,12 +42,12 @@ func TestPageKeyBeforeTheFirstSizeMovesByTheDefaultWindow(t *testing.T) {
 	}
 
 	var l List
-	moved, handled := l.MoveKey(keys, tea.KeyMsg{Type: tea.KeyPgDown}, stateOf(&l, 40, 0))
+	moved, handled := l.MoveKey(keys, testui.Press("pgdown"), stateOf(&l, 40, 0))
 	if !moved || !handled || l.SelectedRow != pageRows(0) || pageRows(0) != 10 {
 		t.Fatalf("page down with no height: moved %v, handled %v, row %d; want the ten rows of the default window", moved, handled, l.SelectedRow)
 	}
 
-	if moved, handled = l.MoveKey(keys, tea.KeyMsg{Type: tea.KeyEnter}, stateOf(&l, 40, 0)); moved || handled {
+	if moved, handled = l.MoveKey(keys, testui.Press("enter"), stateOf(&l, 40, 0)); moved || handled {
 		t.Fatalf("enter is no move key: moved %v, handled %v", moved, handled)
 	}
 }

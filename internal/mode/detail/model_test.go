@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -113,19 +111,19 @@ func TestModelDetailUsesConfiguredBindings(t *testing.T) {
 		},
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlN}, 80, 10); !consumed || m.ContentScrollOffset == 0 {
+	if consumed, _ := m.HandleKey(testui.Press("ctrl+n"), 80, 10); !consumed || m.ContentScrollOffset == 0 {
 		t.Fatalf("expected configured scroll-down key to move viewport, offset=%d", m.ContentScrollOffset)
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlP}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("ctrl+p"), 80, 10); !consumed {
 		t.Fatal("expected configured scroll-up key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlF}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("ctrl+f"), 80, 10); !consumed {
 		t.Fatal("expected configured page-down key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyF8}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("f8"), 80, 10); !consumed {
 		t.Fatal("expected configured end key to be consumed")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g"), Alt: true}, 80, 10); !consumed || m.ContentScrollOffset != 0 {
+	if consumed, _ := m.HandleKey(testui.Press("alt+g"), 80, 10); !consumed || m.ContentScrollOffset != 0 {
 		t.Fatalf("expected configured home key to reset offset, got %d", m.ContentScrollOffset)
 	}
 }
@@ -165,7 +163,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected top-of-detail content (meta row) in initial viewport, got:\n%s", initial)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("pgdown"), 80, 10); !consumed {
 		t.Fatalf("expected page down to be consumed")
 	}
 	after := m.View(80, 10, false, 0)
@@ -173,7 +171,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected viewport output to change after page down")
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("end"), 80, 10); !consumed {
 		t.Fatalf("expected end key to be consumed")
 	}
 	endView := m.View(80, 10, false, 0)
@@ -181,7 +179,7 @@ func TestModelDetailScrollMovesViewportForLongContent(t *testing.T) {
 		t.Fatalf("expected end to reach the Comments heading at the bottom, got:\n%s", endView)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("home"), 80, 10); !consumed {
 		t.Fatalf("expected home key to be consumed")
 	}
 	homeView := m.View(80, 10, false, 0)
@@ -205,12 +203,12 @@ func TestModelDetailScrollRecomputesLineCountWhenWidthChanges(t *testing.T) {
 	}
 
 	_ = m.View(120, 10, false, 0)
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 120, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("end"), 120, 10); !consumed {
 		t.Fatal("expected end key at wide width to be consumed")
 	}
 	wideOffset := m.ContentScrollOffset
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, 40, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("end"), 40, 10); !consumed {
 		t.Fatal("expected end key at narrow width to be consumed")
 	}
 
@@ -228,7 +226,7 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 		t.Fatalf("expected default focus pane content, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("left"), 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed in detail mode")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneDependencies {
@@ -236,28 +234,28 @@ func TestModelDetailPaneFocusMovesWithArrowKeys(t *testing.T) {
 	}
 
 	m.BrowserItems = []domain.IssueReference{{ID: "tm-1"}, {ID: "tm-2"}}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("left"), 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from content to focus browser when present, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyLeft}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("left"), 80, 10); !consumed {
 		t.Fatal("expected left key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneBrowser {
 		t.Fatalf("expected left from browser to stay on browser, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("right"), 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneContent {
 		t.Fatalf("expected right from browser to focus content, got %v", got)
 	}
 
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, 80, 10); !consumed {
+	if consumed, _ := m.HandleKey(testui.Press("right"), 80, 10); !consumed {
 		t.Fatal("expected right key to be consumed")
 	}
 	if got := m.focusPane(); got != detail.FocusPaneContent {
@@ -287,7 +285,7 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 	}
 
 	// (Q6a) Arrow moves BrowserSelectedIndex; the command must be nil (no reload).
-	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, cmd := m.HandleKey(testui.Press("down"), 80, 10)
 	if !consumed {
 		t.Fatal("expected down to be consumed in Dependencies pane")
 	}
@@ -301,7 +299,7 @@ func TestModelDetailScrollBindingsMoveRelatedSelectionWhenRelatedFocused(t *test
 		t.Fatalf("expected selected related issue tm-2 after down, got %q", selected.ID)
 	}
 
-	consumed, cmd = m.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, 80, 10)
+	consumed, cmd = m.HandleKey(testui.Press("up"), 80, 10)
 	if !consumed {
 		t.Fatal("expected up to be consumed in Dependencies pane")
 	}
@@ -334,7 +332,7 @@ func TestModelDetailEnterOnRelatedPaneEmitsOpenRelatedIssueMsg(t *testing.T) {
 		},
 	}
 
-	consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, 80, 10)
+	consumed, cmd := m.HandleKey(testui.Press("enter"), 80, 10)
 	if !consumed {
 		t.Fatal("expected enter on Dependencies pane to be consumed")
 	}
@@ -1157,7 +1155,7 @@ func TestDetailsDependencyScrollOffsetAdvancesWithSelection(t *testing.T) {
 
 	// Press j 15 times on the Dependencies pane.
 	for i := 0; i < 15; i++ {
-		consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height)
+		consumed, _ := m.HandleKey(testui.Press("down"), width, height)
 		if !consumed {
 			t.Fatalf("expected j key to be consumed on step %d", i+1)
 		}
@@ -1472,7 +1470,7 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 				step, selected.Title, selected.ID, m.BrowserSelectedIndex, view)
 		}
 
-		if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, width, height); !consumed {
+		if consumed, _ := m.HandleKey(testui.Press("down"), width, height); !consumed {
 			t.Fatalf("step %d: expected down to be consumed in the Dependencies pane", step)
 		}
 	}

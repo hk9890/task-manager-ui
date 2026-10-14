@@ -313,7 +313,7 @@ func TestTheColumnsMoveOnlyWhenTheFocusLeavesThem(t *testing.T) {
 	t.Parallel()
 
 	m := clippedBoard(t)
-	right, left := tea.KeyMsg{Type: tea.KeyRight}, tea.KeyMsg{Type: tea.KeyLeft}
+	right, left := testui.Press("right"), testui.Press("left")
 
 	_ = m.Update(right)
 	_ = m.Update(right)

@@ -71,11 +71,7 @@ func edit(m *Model, key tea.KeyMsg) tea.Cmd {
 }
 
 func typeText(m *Model, text string) tea.Cmd {
-	return edit(m, runes(text))
-}
-
-func runes(text string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}
+	return edit(m, testui.Runes(text))
 }
 
 func resultIDs(m *Model) string {
@@ -170,18 +166,18 @@ func TestEveryEditSearchesTheStoreForTheQuery(t *testing.T) {
 		t.Errorf("a complete result is counted against something:\n%s", view)
 	}
 
-	resolve(t, m, edit(m, tea.KeyMsg{Type: tea.KeyBackspace}))
+	resolve(t, m, edit(m, testui.Press("backspace")))
 	if got := lastSearch(t, gw); got.Text != "logi" {
 		t.Fatalf("backspace searched for %q, want logi", got.Text)
 	}
-	resolve(t, m, edit(m, tea.KeyMsg{Type: tea.KeyCtrlU}))
+	resolve(t, m, edit(m, testui.Press("ctrl+u")))
 	if got := lastSearch(t, gw); got.Text != "" {
 		t.Fatalf("ctrl+u searched for %q, want the empty query", got.Text)
 	}
 
 	// A key that leaves the text as it is searches nothing.
 	before = len(gw.CallsFor(fakes.MethodSearch))
-	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyBackspace}); cmd != nil {
+	if cmd := m.Update(testui.Press("backspace")); cmd != nil {
 		t.Fatal("backspace on an empty query returned a command")
 	}
 	if got := len(gw.CallsFor(fakes.MethodSearch)); got != before {
@@ -214,7 +210,7 @@ func TestScopeKeyTogglesBetweenOpenAndAllAndSearchesAgain(t *testing.T) {
 	m := openedModel(t, gw)
 	resolve(t, m, typeText(m, "login"))
 
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}))
+	resolve(t, m, m.Update(testui.Press("ctrl+t")))
 	if got := lastSearch(t, gw); got.Text != "login" || !got.IncludeClosed {
 		t.Fatalf("ctrl+t searched for %#v, want login in all issues", got)
 	}
@@ -225,7 +221,7 @@ func TestScopeKeyTogglesBetweenOpenAndAllAndSearchesAgain(t *testing.T) {
 		t.Fatalf("the column title does not name the scope:\n%s", view)
 	}
 
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}))
+	resolve(t, m, m.Update(testui.Press("ctrl+t")))
 	if got := lastSearch(t, gw); got.IncludeClosed {
 		t.Fatal("a second ctrl+t did not return to open issues")
 	}
@@ -241,12 +237,10 @@ func TestScopeKeyTogglesBetweenOpenAndAllAndSearchesAgain(t *testing.T) {
 func TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake(t *testing.T) {
 	reserved := config.ReservedKeys()
 	var taken []string
-	for keyType := tea.KeyType(-128); keyType <= 127; keyType++ {
-		// A rune key and space are printable, which config refuses by rule.
-		if keyType == tea.KeyRunes || keyType == tea.KeySpace {
-			continue
-		}
-		msg := tea.KeyMsg{Type: keyType}
+	// A rune key and space are printable, which config refuses by rule, so
+	// only the keys that print nothing are tried.
+	for _, name := range testui.KeyNames() {
+		msg := testui.Press(name)
 		if !mode.IsQueryKey(msg) && !isScopeKey(msg) {
 			if slices.Contains(reserved, msg.String()) {
 				t.Errorf("config reserves %q, which no surface takes", msg.String())
@@ -282,16 +276,16 @@ func TestMovementOpenDetailAndReloadReadTheBoardContext(t *testing.T) {
 	seedStore(gw)
 	m := openedModel(t, gw)
 
-	if got := selection(t, m.Update(tea.KeyMsg{Type: tea.KeyDown})); got.Issue.ID != "tm-2" {
+	if got := selection(t, m.Update(testui.Press("down"))); got.Issue.ID != "tm-2" {
 		t.Fatalf("down selected %q, want tm-2", got.Issue.ID)
 	}
-	if got := selection(t, m.Update(tea.KeyMsg{Type: tea.KeyEnd})); got.Issue.ID != "tm-3" {
+	if got := selection(t, m.Update(testui.Press("end"))); got.Issue.ID != "tm-3" {
 		t.Fatalf("end selected %q, want tm-3", got.Issue.ID)
 	}
-	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown}); cmd != nil {
+	if cmd := m.Update(testui.Press("down")); cmd != nil {
 		t.Fatal("down on the last result returned a command")
 	}
-	request := m.Update(tea.KeyMsg{Type: tea.KeyEnter})()
+	request := m.Update(testui.Press("enter"))()
 	testui.AssertActionRequest(t, request, mode.Search, mode.ActionOpenDetail)
 	if carried := request.(mode.ActionRequestMsg).Selection; carried == nil || carried.Issue.ID != "tm-3" {
 		t.Fatalf("enter asked for the detail of %#v, want the selected result tm-3", carried)
@@ -299,7 +293,7 @@ func TestMovementOpenDetailAndReloadReadTheBoardContext(t *testing.T) {
 
 	// The reload key runs the query again and returns to the first result.
 	before := len(gw.CallsFor(fakes.MethodSearch))
-	reload := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
+	reload := m.Update(testui.Press("alt+r"))
 	if cmd := m.Reload(); cmd != nil {
 		t.Fatal("a reload during a search in flight was not dropped")
 	}
@@ -313,7 +307,7 @@ func TestMovementOpenDetailAndReloadReadTheBoardContext(t *testing.T) {
 
 func TestEnterWithoutAResultOpensNothing(t *testing.T) {
 	m := openedModel(t, fakes.NewTracked())
-	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
+	if cmd := m.Update(testui.Press("enter")); cmd != nil {
 		t.Fatal("enter on an empty result list returned a command")
 	}
 }
@@ -323,7 +317,7 @@ func TestAutoRefreshRunsTheQueryAgainAndKeepsTheSelectedIssue(t *testing.T) {
 	seedStore(gw)
 	m := openedModel(t, gw)
 	resolve(t, m, typeText(m, "login"))
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m.Update(testui.Press("down"))
 	if got := m.selectedIssueID(); got != "tm-3" {
 		t.Fatalf("setup: selected %q, want tm-3", got)
 	}
@@ -359,9 +353,9 @@ func TestAutoRefreshKeepsThePlaceInTheList(t *testing.T) {
 	m := openedModel(t, gw)
 
 	// The selection stands above the last row of the window.
-	m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	m.Update(testui.Press("end"))
 	for i := 0; i < 5; i++ {
-		m.Update(tea.KeyMsg{Type: tea.KeyUp})
+		m.Update(testui.Press("up"))
 	}
 	row, offset := m.list.SelectedRow, m.list.ScrollOffset
 	if row == offset || offset == 0 {
@@ -374,7 +368,7 @@ func TestAutoRefreshKeepsThePlaceInTheList(t *testing.T) {
 	}
 
 	refresh := m.AutoRefresh()
-	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m.Update(testui.Press("up"))
 	moved := m.selectedIssueID()
 	resolve(t, m, refresh)
 	if got := m.selectedIssueID(); got != moved {
@@ -438,7 +432,7 @@ func TestSurfaceGolden(t *testing.T) {
 	seedStore(gw)
 	m := openedModel(t, gw)
 	resolve(t, m, typeText(m, "login"))
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}))
+	resolve(t, m, m.Update(testui.Press("ctrl+t")))
 
 	testui.AssertMatchesGoldenNormalized(t, []byte(m.View(0)), "model_results_all_w100.golden")
 }

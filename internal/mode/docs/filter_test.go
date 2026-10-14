@@ -23,7 +23,7 @@ func filterDocs(t *testing.T) (*Model, *fakes.TrackedRepository) {
 }
 
 func typeText(m *Model, text string) tea.Cmd {
-	return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
+	return m.Update(testui.Runes(text))
 }
 
 func shownIDs(m *Model) string {
@@ -67,7 +67,7 @@ func TestDocsFilterNarrowsTheColumnAndCountsMatchesOfLoaded(t *testing.T) {
 
 func TestDocsFilterKeepsTheSelectionOnItsDoc(t *testing.T) {
 	m, _ := filterDocs(t)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	_ = m.Update(testui.Press("end"))
 	if m.selectedIssueID() != "tm-3" {
 		t.Fatalf("setup: selection %q, want tm-3", m.selectedIssueID())
 	}
@@ -82,7 +82,7 @@ func TestDocsFilterKeepsTheSelectionOnItsDoc(t *testing.T) {
 
 	// tm-3 does not match: the first match takes the selection and the shell
 	// is told.
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	_ = m.Update(testui.Press("ctrl+u"))
 	cmd := typeText(m, "sign")
 	if m.selectedIssueID() != "tm-1" {
 		t.Fatalf("selection %q, want the first match tm-1", m.selectedIssueID())
@@ -109,7 +109,7 @@ func TestDocsClearQueryRestoresTheColumn(t *testing.T) {
 	}
 
 	typeText(m, "notes")
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 	cleared, cmd := m.ClearQuery()
 	if !cleared || cmd != nil {
 		t.Fatalf("ClearQuery() = %v with a selection report %v; want cleared and no report", cleared, cmd != nil)
@@ -125,7 +125,7 @@ func TestDocsClearQueryRestoresTheColumn(t *testing.T) {
 func TestDocsFilterSurvivesAutoRefreshAndReload(t *testing.T) {
 	m, gw := filterDocs(t)
 	typeText(m, "notes")
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 
 	// A new match sorts ahead of the selected doc.
 	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-0", Title: "Handover notes", Status: "open", Type: "doc", Priority: 2})

@@ -1,4 +1,4 @@
-package mode
+package mode_test
 
 import (
 	"strings"
@@ -7,11 +7,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
-
-func runes(text string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}
-}
 
 func TestQueryEditingKeys(t *testing.T) {
 	t.Parallel()
@@ -23,21 +21,21 @@ func TestQueryEditingKeys(t *testing.T) {
 		// changed is false for a key the query takes without a new text.
 		changed bool
 	}{
-		{name: "a space before any text is dropped", key: tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}, want: ""},
-		{name: "rune", key: runes("f"), want: "f", changed: true},
-		{name: "paste of several runes", key: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ix\tthe\nlogin"), Paste: true}, want: "fix the login", changed: true},
-		{name: "space", key: tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}, want: "fix the login ", changed: true},
-		{name: "backspace drops the last rune", key: tea.KeyMsg{Type: tea.KeyBackspace}, want: "fix the login", changed: true},
-		{name: "ctrl+w drops the last word", key: tea.KeyMsg{Type: tea.KeyCtrlW}, want: "fix the ", changed: true},
-		{name: "ctrl+w drops the word before trailing spaces", key: tea.KeyMsg{Type: tea.KeyCtrlW}, want: "fix ", changed: true},
-		{name: "a wide rune is one rune", key: runes("日本"), want: "fix 日本", changed: true},
-		{name: "backspace drops one wide rune", key: tea.KeyMsg{Type: tea.KeyBackspace}, want: "fix 日", changed: true},
-		{name: "ctrl+u clears", key: tea.KeyMsg{Type: tea.KeyCtrlU}, want: "", changed: true},
-		{name: "backspace on an empty query", key: tea.KeyMsg{Type: tea.KeyBackspace}, want: ""},
-		{name: "ctrl+w on an empty query", key: tea.KeyMsg{Type: tea.KeyCtrlW}, want: ""},
+		{name: "a space before any text is dropped", key: testui.Press("space"), want: ""},
+		{name: "rune", key: testui.Runes("f"), want: "f", changed: true},
+		{name: "paste of several runes", key: testui.Paste("ix\tthe\nlogin"), want: "fix the login", changed: true},
+		{name: "space", key: testui.Press("space"), want: "fix the login ", changed: true},
+		{name: "backspace drops the last rune", key: testui.Press("backspace"), want: "fix the login", changed: true},
+		{name: "ctrl+w drops the last word", key: testui.Press("ctrl+w"), want: "fix the ", changed: true},
+		{name: "ctrl+w drops the word before trailing spaces", key: testui.Press("ctrl+w"), want: "fix ", changed: true},
+		{name: "a wide rune is one rune", key: testui.Runes("日本"), want: "fix 日本", changed: true},
+		{name: "backspace drops one wide rune", key: testui.Press("backspace"), want: "fix 日", changed: true},
+		{name: "ctrl+u clears", key: testui.Press("ctrl+u"), want: "", changed: true},
+		{name: "backspace on an empty query", key: testui.Press("backspace"), want: ""},
+		{name: "ctrl+w on an empty query", key: testui.Press("ctrl+w"), want: ""},
 	}
 
-	var q Query
+	var q mode.Query
 	for _, step := range steps {
 		consumed, changed := q.HandleKey(step.key)
 		if !consumed || changed != step.changed || q.Text() != step.want {
@@ -55,20 +53,20 @@ func TestQueryEditingKeys(t *testing.T) {
 func TestQueryLeavesEveryOtherKeyToTheSurface(t *testing.T) {
 	t.Parallel()
 
-	var q Query
-	q.HandleKey(runes("abc"))
+	var q mode.Query
+	q.HandleKey(testui.Runes("abc"))
 
 	keys := []tea.KeyMsg{
-		{Type: tea.KeyLeft}, {Type: tea.KeyRight}, {Type: tea.KeyUp}, {Type: tea.KeyDown},
-		{Type: tea.KeyHome}, {Type: tea.KeyEnd}, {Type: tea.KeyPgUp}, {Type: tea.KeyPgDown},
-		{Type: tea.KeyEnter}, {Type: tea.KeyEsc}, {Type: tea.KeyTab}, {Type: tea.KeyShiftTab},
-		{Type: tea.KeyDelete}, {Type: tea.KeyCtrlC}, {Type: tea.KeyCtrlT},
-		{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true},
-		{Type: tea.KeySpace, Runes: []rune{' '}, Alt: true},
-		{Type: tea.KeyBackspace, Alt: true},
+		testui.Press("left"), testui.Press("right"), testui.Press("up"), testui.Press("down"),
+		testui.Press("home"), testui.Press("end"), testui.Press("pgup"), testui.Press("pgdown"),
+		testui.Press("enter"), testui.Press("esc"), testui.Press("tab"), testui.Press("shift+tab"),
+		testui.Press("delete"), testui.Press("ctrl+c"), testui.Press("ctrl+t"),
+		testui.Press("alt+r"),
+		testui.Press("alt+space"),
+		testui.Press("alt+backspace"),
 	}
 	for _, key := range keys {
-		if IsQueryKey(key) {
+		if mode.IsQueryKey(key) {
 			t.Errorf("IsQueryKey(%q) = true", key.String())
 		}
 		if consumed, changed := q.HandleKey(key); consumed || changed || q.Text() != "abc" {
@@ -80,13 +78,13 @@ func TestQueryLeavesEveryOtherKeyToTheSurface(t *testing.T) {
 func TestQueryHoldsAtMostQueryLimitRunes(t *testing.T) {
 	t.Parallel()
 
-	var q Query
-	q.HandleKey(runes(strings.Repeat("é", QueryLimit-1)))
-	q.HandleKey(runes("xyz"))
-	if got := []rune(q.Text()); len(got) != QueryLimit || got[QueryLimit-1] != 'x' {
-		t.Fatalf("text is %d runes ending in %q, want %d ending in x", len(got), string(got[len(got)-1]), QueryLimit)
+	var q mode.Query
+	q.HandleKey(testui.Runes(strings.Repeat("é", mode.QueryLimit-1)))
+	q.HandleKey(testui.Runes("xyz"))
+	if got := []rune(q.Text()); len(got) != mode.QueryLimit || got[mode.QueryLimit-1] != 'x' {
+		t.Fatalf("text is %d runes ending in %q, want %d ending in x", len(got), string(got[len(got)-1]), mode.QueryLimit)
 	}
-	if consumed, changed := q.HandleKey(runes("z")); !consumed || changed {
+	if consumed, changed := q.HandleKey(testui.Runes("z")); !consumed || changed {
 		t.Fatalf("a rune past the limit: consumed %v, changed %v; want consumed and unchanged", consumed, changed)
 	}
 }
@@ -94,11 +92,11 @@ func TestQueryHoldsAtMostQueryLimitRunes(t *testing.T) {
 func TestQueryClearReportsWhetherItHeldText(t *testing.T) {
 	t.Parallel()
 
-	var q Query
+	var q mode.Query
 	if q.Clear() {
 		t.Fatal("Clear() on an empty query reported text")
 	}
-	q.HandleKey(runes("abc"))
+	q.HandleKey(testui.Runes("abc"))
 	if !q.Clear() || !q.Empty() {
 		t.Fatalf("Clear() left %q", q.Text())
 	}
@@ -124,8 +122,8 @@ func TestQueryMatchesEveryWordInTitleOrID(t *testing.T) {
 		{"bug", false},          // the type is not searched
 	}
 	for _, tc := range cases {
-		var q Query
-		q.HandleKey(runes(tc.query))
+		var q mode.Query
+		q.HandleKey(testui.Runes(tc.query))
 		if got := q.Matches(issue); got != tc.want {
 			t.Errorf("query %q: Matches = %v, want %v", tc.query, got, tc.want)
 		}
@@ -141,12 +139,12 @@ func TestQueryFilterKeepsTheOrder(t *testing.T) {
 		{ID: "tm-2", Title: "Filter docs"},
 	}
 
-	var q Query
+	var q mode.Query
 	if got := q.Filter(issues); len(got) != len(issues) {
 		t.Fatalf("an empty query kept %d of %d issues", len(got), len(issues))
 	}
 
-	q.HandleKey(runes("filter"))
+	q.HandleKey(testui.Runes("filter"))
 	got := q.Filter(issues)
 	if len(got) != 2 || got[0].ID != "tm-3" || got[1].ID != "tm-2" {
 		t.Fatalf("Filter = %v, want tm-3 then tm-2", got)

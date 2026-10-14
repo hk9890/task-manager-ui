@@ -11,12 +11,12 @@ type scenarioCounterModel struct {
 }
 
 func (m scenarioCounterModel) Init() tea.Cmd {
-	return func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")} }
+	return func() tea.Msg { return Runes("i") }
 }
 
 func (m scenarioCounterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
-		m.count += len(key.Runes)
+		m.count += len(key.String())
 	}
 	return m, nil
 }
@@ -28,19 +28,19 @@ func (m scenarioCounterModel) View() string {
 func TestScenarioHelpersProvideDeterministicKeyFlows(t *testing.T) {
 	t.Parallel()
 
-	if got := len(OpenDetailKeys()); got != 1 || OpenDetailKeys()[0].Type != tea.KeyEnter {
+	if got := len(OpenDetailKeys()); got != 1 || OpenDetailKeys()[0].String() != "enter" {
 		t.Fatalf("expected open detail enter key, got %#v", OpenDetailKeys())
 	}
-	if got := len(DetailBackKeys()); got != 1 || DetailBackKeys()[0].Type != tea.KeyEsc {
+	if got := len(DetailBackKeys()); got != 1 || DetailBackKeys()[0].String() != "esc" {
 		t.Fatalf("expected detail back esc key, got %#v", DetailBackKeys())
 	}
-	if got := DetailScrollKeys(); len(got) != 2 || got[0].Type != tea.KeyPgDown || got[1].Type != tea.KeyEnd {
+	if got := DetailScrollKeys(); len(got) != 2 || got[0].String() != "pgdown" || got[1].String() != "end" {
 		t.Fatalf("expected detail scroll sequence [pgdown end], got %#v", got)
 	}
 	model := InitializeModel(scenarioCounterModel{})
 	model = ApplyKeySequence(model,
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")},
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")},
+		Runes("x"),
+		Runes("y"),
 	)
 	final, ok := model.(scenarioCounterModel)
 	if !ok {

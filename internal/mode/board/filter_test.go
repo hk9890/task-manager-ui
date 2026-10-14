@@ -49,7 +49,7 @@ func filterBoard(t *testing.T) (*Model, *cannedDashboard) {
 }
 
 func typeText(m *Model, text string) tea.Cmd {
-	return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
+	return m.Update(testui.Runes(text))
 }
 
 // shownIDs is the issue IDs each column draws.
@@ -105,7 +105,7 @@ func TestFilterNarrowsAllFourColumnsAndCountsMatchesOfLoaded(t *testing.T) {
 		t.Fatalf("after two words the board shows %q, want %q", got, want)
 	}
 
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	_ = m.Update(testui.Press("ctrl+u"))
 	if got, want := shownIDs(m), "tm-10,tm-11 | tm-20,tm-21,tm-22 | tm-30 | tm-40,tm-41"; got != want {
 		t.Fatalf("an empty query shows %q, want everything", got)
 	}
@@ -135,7 +135,7 @@ func TestFilterMovesTheFocusToTheFirstColumnWithAMatch(t *testing.T) {
 
 	// The column the focus left has a match again: the focus goes back, to the
 	// issue that was selected there.
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	_ = m.Update(testui.Press("ctrl+u"))
 	if m.focusedColumn != 0 || m.selectedIssueID() != "tm-10" {
 		t.Fatalf("after the clear: focus on column %d with %q selected, want column 0 with tm-10", m.focusedColumn, m.selectedIssueID())
 	}
@@ -143,9 +143,9 @@ func TestFilterMovesTheFocusToTheFirstColumnWithAMatch(t *testing.T) {
 	// A focus the operator moved is theirs: it stays while its column has a
 	// match, although an earlier column has one too, and a clear leaves it.
 	typeText(m, "audit")
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	_ = m.Update(testui.Press("left"))
+	_ = m.Update(testui.Press("right"))
+	_ = m.Update(testui.Press("ctrl+u"))
 	typeText(m, "login")
 	if m.focusedColumn != 1 {
 		t.Fatalf("focus moved to column %d although the operator put it on column 1", m.focusedColumn)
@@ -173,9 +173,9 @@ func TestFilterKeepsEachColumnsSelectionOnItsIssue(t *testing.T) {
 	t.Parallel()
 
 	m, _ := filterBoard(t)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown}) // Not Ready: tm-11
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyEnd}) // Ready: tm-22
+	_ = m.Update(testui.Press("down")) // Not Ready: tm-11
+	_ = m.Update(testui.Press("right"))
+	_ = m.Update(testui.Press("end")) // Ready: tm-22
 	if m.selectedIssueID() != "tm-22" {
 		t.Fatalf("setup: selection %q, want tm-22", m.selectedIssueID())
 	}
@@ -226,7 +226,7 @@ func TestFilterClampsTheScrollOfANarrowedColumn(t *testing.T) {
 	}
 	m.filterColumns()
 	m.focusedColumn = 1
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	_ = m.Update(testui.Press("end"))
 	if m.scrollOffset[1] == 0 {
 		t.Fatal("setup: expected the column to be scrolled")
 	}
@@ -253,9 +253,9 @@ func TestFilterSurvivesAutoRefreshAndManualReload(t *testing.T) {
 	t.Parallel()
 
 	m, repo := filterBoard(t)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	_ = m.Update(testui.Press("right"))
 	typeText(m, "login")
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 	if m.selectedIssueID() != "tm-22" {
 		t.Fatalf("setup: selection %q, want tm-22", m.selectedIssueID())
 	}
@@ -325,14 +325,14 @@ func TestDoneLoadMoreCountsInTheFilteredList(t *testing.T) {
 
 	// Five matches are left from the cursor's own down: outside the threshold.
 	for range matches - loadMoreThreshold {
-		testui.DrainCmd(m.Update(tea.KeyMsg{Type: tea.KeyDown}))
+		testui.DrainCmd(m.Update(testui.Press("down")))
 	}
 	if got := stub.capturedOpts(); len(got) != 0 {
 		t.Fatalf("row %d of %d matches loaded a page: %v", m.selectedRow[doneColumnIndex], matches, got)
 	}
 
 	// One more row is inside it. Unfiltered, row 9 of 35 would load nothing.
-	msgs := testui.DrainCmd(m.Update(tea.KeyMsg{Type: tea.KeyDown}))
+	msgs := testui.DrainCmd(m.Update(testui.Press("down")))
 	opts := stub.capturedOpts()
 	if len(opts) != 1 || opts[0].ClosedOffset != loaded {
 		t.Fatalf("Dashboard calls = %v, want one page at offset %d, the end of the loaded rows", opts, loaded)
@@ -398,7 +398,7 @@ func TestBoardModeActiveQueryGolden(t *testing.T) {
 
 	m, _ := filterBoard(t)
 	m.SetSize(120, 20)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	_ = m.Update(testui.Press("right"))
 	typeText(m, "login tm-2")
 
 	testui.AssertMatchesGoldenNormalized(t, []byte(m.View(0)), "model_query_active_w120.golden")

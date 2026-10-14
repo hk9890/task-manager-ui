@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
@@ -47,11 +45,11 @@ func TestBoardModeScrollKeepsTheChevronVisibleAcrossAgeMarkers(t *testing.T) {
 	m.SetSize(80, 22) // 18 content rows: nine two-line issues
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		_ = m.Update(testui.Press("right"))
 	}
 
 	for step := 1; step < rowCount; step++ {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		_ = m.Update(testui.Press("down"))
 		plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
 		for _, want := range selectedReadyLines(step) {
 			if !strings.Contains(plain, want) {
@@ -104,10 +102,10 @@ func TestBoardModeChevronSurvivesADividerAppearingWhileIdle(t *testing.T) {
 	m.SetSize(80, 22) // 18 content rows: nine two-line issues
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		_ = m.Update(testui.Press("right"))
 	}
 	for range 8 {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		_ = m.Update(testui.Press("down"))
 	}
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
 	testui.AssertContainsAll(t, plain, append(selectedReadyLines(8), "9 of 12")...)
@@ -140,13 +138,13 @@ func TestBoardModeTinySectionStillDrawsTheSelectedRow(t *testing.T) {
 	m.SetSize(80, 7)
 	feedDashboardData(m, repository.DashboardData{ReadyExplain: domain.ReadyExplainResult{Ready: ready}})
 	if m.focusedColumn != 1 {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+		_ = m.Update(testui.Press("right"))
 	}
 	plain := testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
 	testui.AssertContainsAll(t, plain, append(selectedReadyLines(0), "older than 1 week", "1 of 3")...)
 	testui.AssertNotContainsAny(t, plain, "older than 1 day")
 	for step := 1; step < 3; step++ {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		_ = m.Update(testui.Press("down"))
 		plain = testui.AnsiEscapePattern.ReplaceAllString(m.View(0), "")
 		testui.AssertContainsAll(t, plain, selectedReadyLines(step)...)
 	}

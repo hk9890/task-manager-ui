@@ -10,6 +10,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // detailModelOnIssue returns a model in Detail with tm-1 loaded and settled.
@@ -31,7 +32,7 @@ func detailModelOnIssue(t *testing.T, gw *fakes.TrackedRepository) Model {
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 40}})
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -89,7 +90,7 @@ func TestRepeatedDetailRefreshIsSuppressedWhileOneIsInFlight(t *testing.T) {
 	gw := fakes.NewTracked()
 	m := detailModelOnIssue(t, gw)
 
-	reload := testKey("alt+r")
+	reload := testui.Press("alt+r")
 
 	mark := gw.CallCount()
 	next, first := m.Update(reload)

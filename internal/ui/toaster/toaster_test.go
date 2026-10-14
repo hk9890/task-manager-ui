@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -130,7 +131,7 @@ func TestOverlayUsesProvidedTerminalWidth(t *testing.T) {
 func TestToastGlyphWidthsAgreeWithWcwidth(t *testing.T) {
 	// Apply writes package variables, so this test is not parallel.
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -139,7 +140,7 @@ func TestToastGlyphWidthsAgreeWithWcwidth(t *testing.T) {
 	// wcwidth. A glyph the two measure differently makes overlay.Place splice
 	// the line short, so the toast renders as a broken box with no message.
 	for _, set := range styles.GlyphSets() {
-		if err := styles.Apply("catppuccin-mocha", set); err != nil {
+		if err := styles.Apply("catppuccin-mocha", set, termenv.TrueColor); err != nil {
 			t.Fatalf("Apply(%q): %v", set, err)
 		}
 		g := styles.Glyphs

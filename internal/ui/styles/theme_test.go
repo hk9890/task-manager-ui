@@ -13,7 +13,7 @@ import (
 func restoreInitialStyles(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := Apply(initialTheme, initialGlyphs); err != nil {
+		if err := Apply(initialTheme, initialGlyphs, initialProfile); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -27,7 +27,7 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 	}
 
 	for _, theme := range Themes() {
-		if err := Apply(theme, initialGlyphs); err != nil {
+		if err := Apply(theme, initialGlyphs, initialProfile); err != nil {
 			t.Fatalf("Apply(%q): %v", theme, err)
 		}
 		if got, want := Dark(), theme != "catppuccin-latte"; got != want {
@@ -110,7 +110,7 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 func TestApplyRebuildsTheStylesWithTheRoles(t *testing.T) {
 	restoreInitialStyles(t)
 
-	if err := Apply("catppuccin-latte", initialGlyphs); err != nil {
+	if err := Apply("catppuccin-latte", initialGlyphs, initialProfile); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	if got := IssueTypeBugStyle.GetForeground(); got != IssueTypeBugColor {
@@ -153,7 +153,7 @@ func TestApplyLeavesTheStateAloneOnAnUnknownName(t *testing.T) {
 	restoreInitialStyles(t)
 
 	before, cursor := TextPrimaryColor, Glyphs.Cursor
-	if err := Apply("catppuccin-latte", "emoji"); err == nil {
+	if err := Apply("catppuccin-latte", "emoji", initialProfile); err == nil {
 		t.Fatal("Apply accepted an unknown glyph set")
 	}
 	if TextPrimaryColor != before || Glyphs.Cursor != cursor || !Dark() {

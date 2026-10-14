@@ -87,14 +87,14 @@ func TestLeftAndRightWalkThePanesWithTheCommentsAfterContent(t *testing.T) {
 	m.FocusPane = uidetail.FocusPaneDependencies
 	walk := []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneComments, uidetail.FocusPaneComments}
 	for step, want := range walk {
-		key(t, m, tea.KeyMsg{Type: tea.KeyRight})
+		key(t, m, testui.Press("right"))
 		if m.FocusPane != want {
 			t.Fatalf("right, step %d: focus %d, want %d", step, m.FocusPane, want)
 		}
 	}
 	back := []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneDependencies, uidetail.FocusPaneDependencies}
 	for step, want := range back {
-		key(t, m, tea.KeyMsg{Type: tea.KeyLeft})
+		key(t, m, testui.Press("left"))
 		if m.FocusPane != want {
 			t.Fatalf("left, step %d: focus %d, want %d", step, m.FocusPane, want)
 		}
@@ -102,7 +102,7 @@ func TestLeftAndRightWalkThePanesWithTheCommentsAfterContent(t *testing.T) {
 
 	// An issue without a comment has no such stop: Content is the last one.
 	m = commentsDetail(t, 0)
-	key(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	key(t, m, testui.Press("right"))
 	if m.FocusPane != uidetail.FocusPaneContent {
 		t.Fatalf("right from Content without a comment: focus %d, want Content", m.FocusPane)
 	}
@@ -117,14 +117,14 @@ func TestTheScrollKeysMoveTheCommentCursor(t *testing.T) {
 	m.FocusPane = uidetail.FocusPaneComments
 
 	steps := []struct {
-		key  tea.KeyType
+		key  string
 		want string
 	}{
-		{tea.KeyUp, "c-1"}, {tea.KeyDown, "c-2"}, {tea.KeyDown, "c-3"}, {tea.KeyDown, "c-3"},
-		{tea.KeyHome, "c-1"}, {tea.KeyEnd, "c-3"}, {tea.KeyUp, "c-2"},
+		{"up", "c-1"}, {"down", "c-2"}, {"down", "c-3"}, {"down", "c-3"},
+		{"home", "c-1"}, {"end", "c-3"}, {"up", "c-2"},
 	}
 	for step, tc := range steps {
-		key(t, m, tea.KeyMsg{Type: tc.key})
+		key(t, m, testui.Press(tc.key))
 		if got := selectedCommentID(m); got != tc.want {
 			t.Fatalf("step %d: the cursor is on %q, want %q", step, got, tc.want)
 		}
@@ -132,7 +132,7 @@ func TestTheScrollKeysMoveTheCommentCursor(t *testing.T) {
 
 	m = commentsDetail(t, 12)
 	m.FocusPane = uidetail.FocusPaneComments
-	key(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
+	key(t, m, testui.Press("pgdown"))
 	if selectedCommentID(m) != "c-1" || m.ContentScrollOffset == 0 {
 		t.Fatalf("page down: cursor %q, offset %d; want the pane scrolled and the cursor where it was", selectedCommentID(m), m.ContentScrollOffset)
 	}
@@ -144,7 +144,7 @@ func TestThePaneScrollsToTheSelectedComment(t *testing.T) {
 	t.Parallel()
 
 	m := commentsDetail(t, 12)
-	key(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	key(t, m, testui.Press("right"))
 	if m.FocusPane != uidetail.FocusPaneComments {
 		t.Fatalf("fixture did not reach the comments, focus %d", m.FocusPane)
 	}
@@ -158,14 +158,14 @@ func TestThePaneScrollsToTheSelectedComment(t *testing.T) {
 	}
 	drawnWhole("arriving on the comments", 1)
 	for n := 2; n <= 12; n++ {
-		key(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		key(t, m, testui.Press("down"))
 		drawnWhole("down", n)
 	}
 	for n := 11; n >= 1; n-- {
-		key(t, m, tea.KeyMsg{Type: tea.KeyUp})
+		key(t, m, testui.Press("up"))
 		drawnWhole("up", n)
 	}
-	key(t, m, tea.KeyMsg{Type: tea.KeyEnd})
+	key(t, m, testui.Press("end"))
 	drawnWhole("end", 12)
 }
 
@@ -174,11 +174,11 @@ func TestThePaneScrollsToTheSelectedComment(t *testing.T) {
 func TestEnterAndTheDeleteKeyAskTheShellOnlyWithTheCommentsFocused(t *testing.T) {
 	t.Parallel()
 
-	deleteKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}, Alt: true}
+	deleteKey := testui.Press("alt+d")
 
 	m := commentsDetail(t, 2)
 	m.FocusPane = uidetail.FocusPaneComments
-	testui.AssertActionRequest(t, key(t, m, tea.KeyMsg{Type: tea.KeyEnter})(), mode.Detail, mode.ActionEditComment)
+	testui.AssertActionRequest(t, key(t, m, testui.Press("enter"))(), mode.Detail, mode.ActionEditComment)
 	testui.AssertActionRequest(t, key(t, m, deleteKey)(), mode.Detail, mode.ActionDeleteComment)
 
 	for _, focus := range []uidetail.FocusPane{uidetail.FocusPaneContent, uidetail.FocusPaneDependencies} {
@@ -188,7 +188,7 @@ func TestEnterAndTheDeleteKeyAskTheShellOnlyWithTheCommentsFocused(t *testing.T)
 		}
 	}
 	m.FocusPane = uidetail.FocusPaneContent
-	if consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, commentsWidth, commentsHeight); consumed || cmd != nil {
+	if consumed, cmd := m.HandleKey(testui.Press("enter"), commentsWidth, commentsHeight); consumed || cmd != nil {
 		t.Errorf("enter on the Content pane was consumed: %v", consumed)
 	}
 }
@@ -318,7 +318,7 @@ func TestAReloadKeepsTheCursorOnItsComment(t *testing.T) {
 
 	m := commentsDetail(t, 3)
 	m.FocusPane = uidetail.FocusPaneComments
-	key(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	key(t, m, testui.Press("down"))
 	m.ApplyLoadedDetail("tm-1", withANewerComment())
 	m.ClampScroll(commentsWidth, commentsHeight)
 	if got := selectedCommentID(m); got != "c-2" {
@@ -343,7 +343,7 @@ func TestSelectCommentIsScrolledToByTheNextClampScroll(t *testing.T) {
 
 	m := commentsDetail(t, 12)
 	m.FocusPane = uidetail.FocusPaneComments
-	key(t, m, tea.KeyMsg{Type: tea.KeyEnd})
+	key(t, m, testui.Press("end"))
 	scrolled := m.ContentScrollOffset
 
 	m.SelectComment(0)
@@ -379,18 +379,18 @@ func TestTheMetadataPaneNeverTakesTheFocus(t *testing.T) {
 
 	m := commentsDetail(t, 2)
 	for step, want := range []uidetail.FocusPane{uidetail.FocusPaneComments, uidetail.FocusPaneComments} {
-		if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, width, height); !consumed || m.FocusPane != want {
+		if consumed, _ := m.HandleKey(testui.Press("right"), width, height); !consumed || m.FocusPane != want {
 			t.Fatalf("right, step %d: focus %d, want %d", step, m.FocusPane, want)
 		}
 		metadataHasNoCursor(m)
 	}
-	_, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, width, height)
+	_, cmd := m.HandleKey(testui.Press("enter"), width, height)
 	testui.AssertActionRequest(t, cmd(), mode.Detail, mode.ActionEditComment)
 
 	m = commentsDetail(t, 0)
-	m.HandleKey(tea.KeyMsg{Type: tea.KeyRight}, width, height)
+	m.HandleKey(testui.Press("right"), width, height)
 	metadataHasNoCursor(m)
-	if consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter}, width, height); consumed || cmd != nil {
+	if consumed, cmd := m.HandleKey(testui.Press("enter"), width, height); consumed || cmd != nil {
 		t.Fatalf("enter after right from Content was consumed: %v", consumed)
 	}
 

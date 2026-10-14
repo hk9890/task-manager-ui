@@ -240,7 +240,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 	m.selectedRow[1] = 0
 	m.SetSize(100, 24)
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	cmd := m.Update(testui.Press("right"))
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving right")
 	}
@@ -253,7 +253,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		t.Fatalf("expected selection tm-7 after moving right, got %#v", selChanged.Selection)
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd = m.Update(testui.Press("down"))
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving down")
 	}
@@ -266,7 +266,7 @@ func TestBoardModeNavigationEmitsSelectionChangedAndActionRequest(t *testing.T) 
 		t.Fatalf("expected selection tm-8 after moving down, got %#v", selChanged.Selection)
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd = m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatalf("expected action request command on enter")
 	}
@@ -313,12 +313,12 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 	m.selectedRow[1] = 0
 	m.SetSize(100, 24)
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d"), Alt: true})
+	cmd := m.Update(testui.Press("alt+d"))
 	if cmd == nil {
 		t.Fatal("expected selection change after configured move-right key")
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s"), Alt: true})
+	cmd = m.Update(testui.Press("alt+s"))
 	if cmd == nil {
 		t.Fatal("expected selection change after configured move-down key")
 	}
@@ -328,7 +328,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("expected configured move-down to select tm-8, got %#v", msg)
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyF2})
+	cmd = m.Update(testui.Press("f2"))
 	if cmd == nil {
 		t.Fatal("expected action request from configured open key")
 	}
@@ -336,7 +336,7 @@ func TestBoardModeUsesConfiguredBindings(t *testing.T) {
 		t.Fatalf("expected open detail action request, got %#v", cmd())
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyF5})
+	cmd = m.Update(testui.Press("f5"))
 	if cmd == nil || !m.IsLoading() {
 		t.Fatal("expected configured reload key to trigger board reload")
 	}
@@ -438,7 +438,7 @@ func TestBoardModeManualReloadRemainsFullResetBehavior(t *testing.T) {
 
 	m := populatedModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
+	cmd := m.Update(testui.Press("alt+r"))
 	if cmd == nil {
 		t.Fatalf("expected manual reload command")
 	}
@@ -573,11 +573,11 @@ func TestBoardModeKeyboardNavigationNoopWhenAllColumnsEmpty(t *testing.T) {
 	// All columns are in cold-start loading state with no issues.
 	// Navigation key presses must not panic.
 	keyTests := []tea.Msg{
-		tea.KeyMsg{Type: tea.KeyLeft},
-		tea.KeyMsg{Type: tea.KeyRight},
-		tea.KeyMsg{Type: tea.KeyUp},
-		tea.KeyMsg{Type: tea.KeyDown},
-		tea.KeyMsg{Type: tea.KeyEnter},
+		testui.Press("left"),
+		testui.Press("right"),
+		testui.Press("up"),
+		testui.Press("down"),
+		testui.Press("enter"),
 	}
 
 	for _, k := range keyTests {
@@ -1024,7 +1024,7 @@ func TestBoardModeScrollWindowAdvancesWithSelection(t *testing.T) {
 	// Press j 30 times.
 	const steps = 30
 	for i := 0; i < steps; i++ {
-		_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		_ = m.Update(testui.Press("down"))
 	}
 
 	sel := m.selectedRow[0]
@@ -1144,7 +1144,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 	const steps = 30
 	keys := make([]tea.KeyMsg, steps)
 	for i := range keys {
-		keys[i] = tea.KeyMsg{Type: tea.KeyDown}
+		keys[i] = testui.Press("down")
 	}
 	final := testui.ApplyControllerKeySequence(bm, keys...)
 	finalBoard, ok := final.(*Model)
@@ -1220,7 +1220,7 @@ func TestDoneLoadMore_DispatchesOnThreshold(t *testing.T) {
 
 	// Press j: cursor moves to row 32 (remaining = 35-32 = 3 < 5 → still triggers).
 	// The threshold check fires because remaining < loadMoreThreshold.
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd := m.Update(testui.Press("down"))
 	if cmd == nil {
 		t.Fatal("expected non-nil Cmd after j press near Done column end")
 	}
@@ -1357,7 +1357,7 @@ func TestDoneLoadMore_NoDispatchAtSliceEnd(t *testing.T) {
 	m.selectedRow[doneColumnIndex] = total - 2
 
 	// Press j: cursor advances to total-1. No load-more should fire.
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd := m.Update(testui.Press("down"))
 
 	// Execute any cmd to drain sub-commands.
 	if cmd != nil {
@@ -1488,7 +1488,7 @@ func TestDoneLoadMore_ManualReloadResetsToPage1(t *testing.T) {
 	m.selectedRow[doneColumnIndex] = 50
 
 	// AC: pressing r dispatches a reload command.
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
+	cmd := m.Update(testui.Press("alt+r"))
 	if cmd == nil {
 		t.Fatal("expected non-nil Cmd after r press (manual reload)")
 	}
@@ -2172,13 +2172,13 @@ func TestLoadMoreWaitsForAReloadInFlight(t *testing.T) {
 	m.selectedRow[doneColumnIndex] = m.doneLoadedCount - loadMoreThreshold
 
 	refresh := m.AutoRefresh()
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 	if m.doneLoadInFlight {
 		t.Fatal("a move near the end of Done dispatched a load-more while the refresh was in flight")
 	}
 
 	boardApplyMessages(t, m, testui.DrainCmd(refresh))
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 	if !m.doneLoadInFlight {
 		t.Error("a move near the end of Done dispatched no load-more after the refresh landed")
 	}
@@ -2195,7 +2195,7 @@ func TestAutoRefreshKeepsASelectionMadeWhileItWasInFlight(t *testing.T) {
 	m.selectedRow[doneColumnIndex] = 10
 
 	refresh := m.AutoRefresh()
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 	moved := m.currentSelection().Issue.ID
 
 	boardApplyMessages(t, m, testui.DrainCmd(refresh))
@@ -2299,7 +2299,7 @@ func TestAutoRefreshSearchLeavesACursorTheOperatorMoved(t *testing.T) {
 	}
 
 	refreshed := m.Update(m.AutoRefresh()())
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	_ = m.Update(testui.Press("up"))
 	moved := m.currentSelection().Issue.ID
 	boardApplyMessages(t, m, testui.DrainCmd(refreshed))
 
@@ -2357,7 +2357,7 @@ func TestAutoRefreshThatSupersedesTheSearchLeavesACursorTheOperatorMoved(t *test
 	t.Parallel()
 
 	m, _, searching, superseding := supersededSearchModel(t)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	_ = m.Update(testui.Press("up"))
 	moved := m.currentSelection().Issue.ID
 	boardApplyMessages(t, m, testui.DrainCmd(searching))
 	boardApplyMessages(t, m, testui.DrainCmd(superseding))
@@ -2393,13 +2393,13 @@ func TestBoardPageAndBoundKeysMoveTheSelection(t *testing.T) {
 		key  tea.KeyMsg
 		want int
 	}{
-		{tea.KeyMsg{Type: tea.KeyPgDown}, page},
-		{tea.KeyMsg{Type: tea.KeyPgDown}, 2 * page},
-		{tea.KeyMsg{Type: tea.KeyPgUp}, page},
-		{tea.KeyMsg{Type: tea.KeyEnd}, rows - 1},
-		{tea.KeyMsg{Type: tea.KeyPgDown}, rows - 1},
-		{tea.KeyMsg{Type: tea.KeyHome}, 0},
-		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
+		{testui.Press("pgdown"), page},
+		{testui.Press("pgdown"), 2 * page},
+		{testui.Press("pgup"), page},
+		{testui.Press("end"), rows - 1},
+		{testui.Press("pgdown"), rows - 1},
+		{testui.Press("home"), 0},
+		{testui.Press("pgup"), 0},
 	}
 	for _, step := range steps {
 		before := m.selectedRow[1]
@@ -2436,7 +2436,7 @@ func TestDoneLoadMore_EndKeyLoadsTheNextPage(t *testing.T) {
 	m.doneClosedTotal = 736
 	m.focusedColumn = doneColumnIndex
 
-	testui.DrainCmd(m.Update(tea.KeyMsg{Type: tea.KeyEnd}))
+	testui.DrainCmd(m.Update(testui.Press("end")))
 	if got := m.selectedRow[doneColumnIndex]; got != loaded-1 {
 		t.Fatalf("end selected row %d, want %d", got, loaded-1)
 	}

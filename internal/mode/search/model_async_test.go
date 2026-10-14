@@ -95,7 +95,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 	})
 
-	enter := tea.KeyMsg{Type: tea.KeyEnter}
+	enter := testui.Press("enter")
 
 	// openedSearch is a search with its opening list on screen, led by tm-1,
 	// over a store that holds every later search until it is released.
@@ -290,7 +290,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 		// The pause of the edit supersedes the opening search, so no result
 		// settles before the one for the text.
-		pause := m.Update(runes("tri"))()
+		pause := m.Update(testui.Runes("tri"))()
 		if cmd := m.Update(enter); cmd != nil {
 			t.Fatalf("enter with no rows on screen asked for %#v", cmd())
 		}
@@ -330,7 +330,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		// Each pause is over, and the model has not been told so yet.
 		var pauses []tea.Msg
 		for _, key := range []string{"t", "r", "i"} {
-			pauses = append(pauses, m.Update(runes(key))())
+			pauses = append(pauses, m.Update(testui.Runes(key))())
 		}
 		if !m.IsLoading() || m.Reload() != nil || m.AutoRefresh() != nil {
 			t.Fatalf("the pause does not count as a search in flight: loading %v", m.IsLoading())
@@ -361,7 +361,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 
 	t.Run("the scope key or escape during the pause searches at once, and the pause runs nothing", func(t *testing.T) {
 		supersede := map[string]func(*Model) tea.Cmd{
-			"scope key": func(m *Model) tea.Cmd { return m.Update(tea.KeyMsg{Type: tea.KeyCtrlT}) },
+			"scope key": func(m *Model) tea.Cmd { return m.Update(testui.Press("ctrl+t")) },
 			"escape": func(m *Model) tea.Cmd {
 				_, cmd := m.ClearQuery()
 				return cmd
@@ -377,7 +377,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 			m := openedModel(t, gw)
 			before := searchCalls(gw)
 
-			pause := m.Update(runes("tri"))()
+			pause := m.Update(testui.Runes("tri"))()
 			immediate := act(m)
 			if cmd := m.Update(pause); cmd != nil {
 				t.Fatalf("%s: the superseded pause ran a search of its own", name)
@@ -400,7 +400,7 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 	t.Run("enter during the pause opens the selected row of the result", func(t *testing.T) {
 		m, _, delayed := openedSearch(t)
 
-		pause := m.Update(runes("tri"))()
+		pause := m.Update(testui.Runes("tri"))()
 		if cmd := m.Update(enter); cmd != nil {
 			t.Fatalf("enter opened the detail on the rows of the older query: %#v", cmd())
 		}
@@ -415,9 +415,9 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 	t.Run("a key after an enter during the pause drops it", func(t *testing.T) {
 		m, _, delayed := openedSearch(t)
 
-		first := m.Update(runes("tr"))()
+		first := m.Update(testui.Runes("tr"))()
 		m.Update(enter)
-		second := m.Update(runes("i"))()
+		second := m.Update(testui.Runes("i"))()
 		if cmd := m.Update(first); cmd != nil {
 			t.Fatal("the pause of the earlier key ran a search")
 		}

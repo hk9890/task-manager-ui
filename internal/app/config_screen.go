@@ -30,7 +30,7 @@ func (m *Model) applyConfigChange(change configscreenmode.ChangeMsg) tea.Cmd {
 		err = m.writeUIConfig(change)
 	}
 	if err == nil {
-		err = styles.Apply(change.Theme, change.Glyphs)
+		err = styles.Apply(change.Theme, change.Glyphs, m.runtime.ColorProfile)
 	}
 	if err != nil {
 		m.logger().Error("failed to change the ui configuration", "path", m.services.ConfigPath, "error", err.Error())

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -61,21 +62,21 @@ func TestRenderGoldens(t *testing.T) {
 // parallel: it applies another set.
 func TestRenderDrawsTheAppliedGlyphSet(t *testing.T) {
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
 
 	unicode := Render(sampleState(100, 12))
 
-	if err := styles.Apply("catppuccin-mocha", "ascii"); err != nil {
+	if err := styles.Apply("catppuccin-mocha", "ascii", termenv.TrueColor); err != nil {
 		t.Fatalf("Apply(ascii): %v", err)
 	}
 	testui.AssertMatchesGoldenNormalized(t, []byte(Render(sampleState(100, 12))), "config_screen_ascii_w100.golden")
 
 	// The nerd set draws this screen with the markers of the unicode set, so
 	// it has no golden of its own.
-	if err := styles.Apply("catppuccin-mocha", "nerd"); err != nil {
+	if err := styles.Apply("catppuccin-mocha", "nerd", termenv.TrueColor); err != nil {
 		t.Fatalf("Apply(nerd): %v", err)
 	}
 	if nerd := Render(sampleState(100, 12)); nerd != unicode {

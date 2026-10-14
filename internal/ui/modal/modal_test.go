@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestNewConfirmMode(t *testing.T) {
@@ -30,8 +31,8 @@ func TestSubmitWithInput(t *testing.T) {
 		}},
 	})
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // move to Save
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(testui.Press("tab")) // move to Save
+	_, cmd := m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatalf("expected submit command")
 	}
@@ -55,9 +56,9 @@ func TestSubmitAllowsPartialInput(t *testing.T) {
 		},
 	})
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(testui.Press("tab"))
+	m, _ = m.Update(testui.Press("tab"))
+	_, cmd := m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatalf("expected submit command")
 	}
@@ -94,12 +95,12 @@ func TestBindingsFromConfigUsesConfiguredModalKeys(t *testing.T) {
 		t.Fatalf("expected button focus, got %d", m.FocusedInput())
 	}
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m, _ = m.Update(testui.Runes("d"))
 	if m.FocusedField() != FieldCancel {
 		t.Fatalf("expected configured right key to focus cancel, got %v", m.FocusedField())
 	}
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(testui.Runes("q"))
 	if cmd == nil {
 		t.Fatal("expected configured escape key to emit cancel")
 	}
@@ -111,11 +112,11 @@ func TestBindingsFromConfigUsesConfiguredModalKeys(t *testing.T) {
 		Title:  "Input",
 		Inputs: []InputConfig{{Key: "name", Label: "Name", Value: "alice"}},
 	}, BindingsFromConfig(resolved))
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	m, _ = m.Update(testui.Press("ctrl+n"))
+	m, _ = m.Update(testui.Runes("x"))
+	m, _ = m.Update(testui.Press("ctrl+n"))
+	m, _ = m.Update(testui.Runes("a"))
+	_, cmd = m.Update(testui.Runes(" "))
 	if cmd == nil {
 		t.Fatal("expected configured enter key to submit")
 	}
@@ -134,7 +135,7 @@ func TestEscapeCancelsFromAFocusedInput(t *testing.T) {
 		}},
 	})
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := m.Update(testui.Press("esc"))
 	if cmd == nil {
 		t.Fatal("expected escape to emit cancel command")
 	}
@@ -157,11 +158,11 @@ func TestPrevField(t *testing.T) {
 	t.Run("middle input: prev decrements focusedInput", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m, _ = m.Update(testui.Press("tab"))
 		if m.FocusedInput() != 1 {
 			t.Fatalf("setup: expected focusedInput=1, got %d", m.FocusedInput())
 		}
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		m, _ = m.Update(testui.Press("shift+tab"))
 		if m.FocusedInput() != 0 {
 			t.Fatalf("expected focusedInput=0 after prev, got %d", m.FocusedInput())
 		}
@@ -170,7 +171,7 @@ func TestPrevField(t *testing.T) {
 	t.Run("first input: prev wraps to buttons (FieldCancel)", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		m, _ = m.Update(testui.Press("shift+tab"))
 		if m.FocusedInput() != -1 {
 			t.Fatalf("expected focusedInput=-1 after prev from first input, got %d", m.FocusedInput())
 		}
@@ -182,13 +183,13 @@ func TestPrevField(t *testing.T) {
 	t.Run("FieldCancel button: prev moves to FieldSave", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 0→1
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 1→Save
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // Save→Cancel
+		m, _ = m.Update(testui.Press("tab")) // 0→1
+		m, _ = m.Update(testui.Press("tab")) // 1→Save
+		m, _ = m.Update(testui.Press("tab")) // Save→Cancel
 		if m.FocusedInput() != -1 || m.FocusedField() != FieldCancel {
 			t.Fatalf("setup: expected buttons/Cancel, got input=%d field=%v", m.FocusedInput(), m.FocusedField())
 		}
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		m, _ = m.Update(testui.Press("shift+tab"))
 		if m.FocusedInput() != -1 {
 			t.Fatalf("expected to remain on buttons, got focusedInput=%d", m.FocusedInput())
 		}
@@ -200,12 +201,12 @@ func TestPrevField(t *testing.T) {
 	t.Run("FieldSave button with inputs: prev wraps to last input", func(t *testing.T) {
 		t.Parallel()
 		m := New(twoInputCfg)
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 0→1
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // 1→Save
+		m, _ = m.Update(testui.Press("tab")) // 0→1
+		m, _ = m.Update(testui.Press("tab")) // 1→Save
 		if m.FocusedInput() != -1 || m.FocusedField() != FieldSave {
 			t.Fatalf("setup: expected buttons/Save, got input=%d field=%v", m.FocusedInput(), m.FocusedField())
 		}
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		m, _ = m.Update(testui.Press("shift+tab"))
 		if m.FocusedInput() != 1 {
 			t.Fatalf("expected focusedInput=1 (last input) after prev from Save, got %d", m.FocusedInput())
 		}
@@ -217,7 +218,7 @@ func TestPrevField(t *testing.T) {
 		if m.FocusedInput() != -1 || m.FocusedField() != FieldSave {
 			t.Fatalf("setup: expected buttons/Save, got input=%d field=%v", m.FocusedInput(), m.FocusedField())
 		}
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		m, _ = m.Update(testui.Press("shift+tab"))
 		if m.FocusedInput() != -1 {
 			t.Fatalf("expected to remain on buttons, got focusedInput=%d", m.FocusedInput())
 		}
@@ -257,13 +258,13 @@ func TestEnterOnFocusedInputAdvancesInsteadOfSubmitting(t *testing.T) {
 		}
 	}
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd := m.Update(testui.Press("enter"))
 	assertNotSubmit(cmd, "on the first input")
 	if got := m.FocusedInput(); got != 1 {
 		t.Fatalf("expected focus to advance to the second input, got %d", got)
 	}
 
-	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd = m.Update(testui.Press("enter"))
 	assertNotSubmit(cmd, "on the last input")
 	if got := m.FocusedInput(); got != -1 {
 		t.Fatalf("expected focus to leave the inputs, got %d", got)
@@ -272,7 +273,7 @@ func TestEnterOnFocusedInputAdvancesInsteadOfSubmitting(t *testing.T) {
 		t.Fatalf("expected focus to land on Save, got %v", got)
 	}
 
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd = m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatal("expected Enter on the Save button to submit")
 	}
@@ -295,11 +296,11 @@ func TestTypedRunesReachSubmitValues(t *testing.T) {
 	for _, r := range "looks good" {
 		// Discard the cmd on purpose: textinput returns a cursor-blink tick and
 		// invoking it here would block the test on a timer.
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m, _ = m.Update(testui.Runes(string(r)))
 	}
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(testui.Press("tab"))
+	_, cmd := m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatal("expected submit command")
 	}
@@ -331,13 +332,13 @@ func TestSubmitCmdDoesNotRaceWithFurtherTyping(t *testing.T) {
 	})
 
 	for _, r := range "ship it" {
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m, _ = m.Update(testui.Runes(string(r)))
 	}
 
 	// Enter on Save submits. Back on the input, every later keystroke writes
 	// into the same inputs array the Cmd reads: the shape that races.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(testui.Press("tab"))
+	next, cmd := m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatal("expected submit command")
 	}
@@ -348,9 +349,9 @@ func TestSubmitCmdDoesNotRaceWithFurtherTyping(t *testing.T) {
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
 
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m, _ = m.Update(testui.Press("shift+tab"))
 	for _, r := range " now" {
-		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m, _ = m.Update(testui.Runes(string(r)))
 	}
 
 	submit, ok := (<-done).(SubmitMsg)

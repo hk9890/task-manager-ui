@@ -46,7 +46,7 @@ func filterShell(t *testing.T, keys ...func(*config.Model)) (Model, *fakes.Track
 
 func typeInto(t *testing.T, m Model, text string) Model {
 	t.Helper()
-	return applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}})
+	return applyMessages(t, m, []tea.Msg{testui.Runes(text)})
 }
 
 func plainShell(m Model) string {
@@ -63,7 +63,7 @@ func TestEscapeClearsTheBoardQueryBeforeItDoesAnythingElse(t *testing.T) {
 	}
 
 	_ = m.showToast("still here", toaster.StyleInfo)
-	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	view := plainShell(m)
 	if !strings.Contains(view, "❯ filter issues") || !strings.Contains(view, "Triage inbox") {
 		t.Fatalf("esc did not clear the query:\n%s", view)
@@ -72,7 +72,7 @@ func TestEscapeClearsTheBoardQueryBeforeItDoesAnythingElse(t *testing.T) {
 		t.Fatal("the esc that cleared the query also dismissed the toast")
 	}
 
-	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	if m.toast.Visible() {
 		t.Fatal("with an empty query esc must dismiss the toast, as it did before")
 	}
@@ -82,7 +82,7 @@ func TestEscapeClearsTheBoardQueryBeforeItDoesAnythingElse(t *testing.T) {
 // on its query and the second on going home.
 func TestEscapeClearsTheDocsQueryThenReturnsToBoard(t *testing.T) {
 	m, _ := filterShell(t)
-	m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("tab")})
 	m = typeInto(t, m, "notes")
 	if view := plainShell(m); !strings.Contains(view, "❯ notes") || strings.Contains(view, "Auth redesign") {
 		t.Fatalf("setup: docs is not filtered:\n%s", view)
@@ -91,7 +91,7 @@ func TestEscapeClearsTheDocsQueryThenReturnsToBoard(t *testing.T) {
 		t.Fatalf("the shell holds docs selection %q, want the match tm-9", got)
 	}
 
-	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	if m.active != mode.Docs {
 		t.Fatalf("the esc that cleared the query left docs for %q", m.active)
 	}
@@ -99,7 +99,7 @@ func TestEscapeClearsTheDocsQueryThenReturnsToBoard(t *testing.T) {
 		t.Fatalf("esc did not clear the docs query:\n%s", view)
 	}
 
-	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	if m.active != mode.Board {
 		t.Fatalf("with an empty query esc left the shell on %q, want board", m.active)
 	}
@@ -115,23 +115,23 @@ func TestQueriesSurviveTabSwitchDetailRoundTripAndAutoRefresh(t *testing.T) {
 	}
 
 	// To Docs, a query there, and back.
-	m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("tab")})
 	if view := plainShell(m); !strings.Contains(view, "❯ filter docs") {
 		t.Fatalf("the board query leaked into docs:\n%s", view)
 	}
 	m = typeInto(t, m, "auth")
-	m = applyMessages(t, m, []tea.Msg{testKey("shift+tab")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("shift+tab")})
 	if view := plainShell(m); m.active != mode.Board || !strings.Contains(view, "❯ login") || strings.Contains(view, "Triage inbox") {
 		t.Fatalf("the board lost its query over a tab switch (active %q):\n%s", m.active, view)
 	}
 
 	// Into Detail and back with Escape, which is Detail's here and not the
 	// query's.
-	m = applyMessages(t, m, []tea.Msg{testKey("enter")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("enter")})
 	if m.active != mode.Detail || m.detail.SelectionID() != "tm-1" {
 		t.Fatalf("enter opened %q on %q, want detail on tm-1", m.active, m.detail.SelectionID())
 	}
-	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	if view := plainShell(m); m.active != mode.Board || !strings.Contains(view, "❯ login") || strings.Contains(view, "Triage inbox") {
 		t.Fatalf("the board lost its query over a detail round trip (active %q):\n%s", m.active, view)
 	}
@@ -142,7 +142,7 @@ func TestQueriesSurviveTabSwitchDetailRoundTripAndAutoRefresh(t *testing.T) {
 		t.Fatalf("the board lost its query over an auto refresh:\n%s", view)
 	}
 
-	m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("tab")})
 	if view := plainShell(m); !strings.Contains(view, "❯ auth") || strings.Contains(view, "Session notes") {
 		t.Fatalf("docs lost its query over a tab switch:\n%s", view)
 	}
@@ -158,7 +158,7 @@ func TestAQueryKeyRunsNoShellAction(t *testing.T) {
 	})
 	m = typeInto(t, m, "login")
 
-	pasted := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")}
+	pasted := testui.Runes("ab")
 	m = applyMessages(t, m, []tea.Msg{pasted})
 	if m.showHelp {
 		t.Fatal("a query key on the board opened help")
@@ -167,7 +167,7 @@ func TestAQueryKeyRunsNoShellAction(t *testing.T) {
 		t.Fatalf("the query did not take the key:\n%s", view)
 	}
 
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}, testKey("enter")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("ctrl+u"), testui.Press("enter")})
 	if m.active != mode.Detail {
 		t.Fatalf("fixture: on %q, want detail", m.active)
 	}
@@ -181,15 +181,15 @@ func TestAQueryKeyRunsNoShellAction(t *testing.T) {
 // dialog's.
 func TestAnOverlayKeepsTypedKeysFromTheQuery(t *testing.T) {
 	m, _ := filterShell(t)
-	next, _ := m.Update(testKey("alt+h"))
+	next, _ := m.Update(testui.Press("alt+h"))
 	m = next.(Model)
 	if !m.showHelp {
 		t.Fatal("fixture: help is not open")
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("login")})
+	next, _ = m.Update(testui.Runes("login"))
 	m = next.(Model)
-	next, _ = m.Update(testKey("alt+h"))
+	next, _ = m.Update(testui.Press("alt+h"))
 	m = next.(Model)
 	if m.showHelp {
 		t.Fatal("fixture: the help key did not close help")

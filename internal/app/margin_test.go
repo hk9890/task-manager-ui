@@ -396,7 +396,7 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 
 	// Select the row with the keys first, so the press of the drag, which is a
 	// click on it, moves nothing.
-	m = send(t, send(t, m, tea.KeyMsg{Type: tea.KeyRight}), tea.KeyMsg{Type: tea.KeyDown})
+	m = send(t, send(t, m, testui.Press("right")), testui.Press("down"))
 	if got := firstSelectionID(m, mode.Board); got != "tm-2" {
 		t.Fatalf("fixture: the keys selected %q, want tm-2", got)
 	}
@@ -426,7 +426,7 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 	// the margin stays blank and the copy is the line to its end.
 	// On a shell of its own: a second press on the cell would open the row.
 	m, copied = newSelectingShell(t)
-	m = send(t, send(t, m, tea.KeyMsg{Type: tea.KeyRight}), tea.KeyMsg{Type: tea.KeyDown})
+	m = send(t, send(t, m, testui.Press("right")), testui.Press("down"))
 	m = send(t, m, leftClick(x, y))
 	m = send(t, m, leftDrag(159, 29))
 	rows := terminalRows(t, "drag into the margin", m.View(), 160, 30)

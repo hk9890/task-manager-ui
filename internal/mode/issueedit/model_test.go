@@ -15,19 +15,15 @@ import (
 )
 
 var (
-	keyTab      = tea.KeyMsg{Type: tea.KeyTab}
-	keyShiftTab = tea.KeyMsg{Type: tea.KeyShiftTab}
-	keyUp       = tea.KeyMsg{Type: tea.KeyUp}
-	keyDown     = tea.KeyMsg{Type: tea.KeyDown}
-	keyLeft     = tea.KeyMsg{Type: tea.KeyLeft}
-	keyRight    = tea.KeyMsg{Type: tea.KeyRight}
-	keyEnter    = tea.KeyMsg{Type: tea.KeyEnter}
-	keySave     = tea.KeyMsg{Type: tea.KeyCtrlS}
+	keyTab      = testui.Press("tab")
+	keyShiftTab = testui.Press("shift+tab")
+	keyUp       = testui.Press("up")
+	keyDown     = testui.Press("down")
+	keyLeft     = testui.Press("left")
+	keyRight    = testui.Press("right")
+	keyEnter    = testui.Press("enter")
+	keySave     = testui.Press("ctrl+s")
 )
-
-func typed(text string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}
-}
 
 var (
 	statuses = []string{"open", "in_progress", "closed"}
@@ -160,7 +156,7 @@ func TestReasonRowFollowsTheStatus(t *testing.T) {
 	if m.focus != uiissueedit.FieldReason {
 		t.Fatalf("tab from the status lands on %d, want the reason", m.focus)
 	}
-	press(t, m, typed("done"))
+	press(t, m, testui.Runes("done"))
 	if got := m.values().Reason; got != "done" {
 		t.Errorf("the reason holds %q, want done", got)
 	}
@@ -181,7 +177,7 @@ func TestCloseOpensOnTheReasonAndKeepsTheOldStatusAsBaseline(t *testing.T) {
 	if m.focus != uiissueedit.FieldReason {
 		t.Errorf("the focus is on %d, want the reason", m.focus)
 	}
-	submit := press(t, m, typed("done"), keySave).(SubmitMsg)
+	submit := press(t, m, testui.Runes("done"), keySave).(SubmitMsg)
 	if submit.Before.Status != "open" || submit.After.Status != domain.StatusClosed || submit.After.Reason != "done" {
 		t.Errorf("submit carries status %q -> %q with reason %q", submit.Before.Status, submit.After.Status, submit.After.Reason)
 	}
@@ -235,7 +231,7 @@ func TestStepsWrapAndAValueOutsideTheCatalogComesFirst(t *testing.T) {
 		t.Errorf("two steps left from P1 give P%d, want P4", got)
 	}
 
-	press(t, m, tea.KeyMsg{Type: tea.KeyLeft, Alt: true})
+	press(t, m, testui.Press("alt+left"))
 	if got := m.values().Priority; got != 4 {
 		t.Errorf("alt+left stepped the priority to P%d", got)
 	}
@@ -267,7 +263,7 @@ func TestUpAndDownMoveFieldsOnARowAndTheCursorInTheText(t *testing.T) {
 	}
 
 	m = openOn(t, Options{Kind: KindEdit, Values: issueValues()}, uiissueedit.FieldText)
-	press(t, m, keyDown, typed("X"), keyUp, tea.KeyMsg{Type: tea.KeyHome}, typed("Y"))
+	press(t, m, keyDown, testui.Runes("X"), keyUp, testui.Press("home"), testui.Runes("Y"))
 	if m.focus != uiissueedit.FieldText {
 		t.Fatalf("an arrow inside the text left it for %d", m.focus)
 	}
@@ -347,7 +343,7 @@ func TestDownLeavesALastLineThatFillsTheWidthOfTheText(t *testing.T) {
 
 	// At the end of the line the cursor is in the empty row the widget counts
 	// under it.
-	keyEnd := tea.KeyMsg{Type: tea.KeyEnd}
+	keyEnd := testui.Press("end")
 	for _, before := range []string{"", "short\n"} {
 		for _, inLine := range [][]tea.KeyMsg{nil, {keyEnd}} {
 			values := issueValues()
@@ -445,11 +441,11 @@ func TestPageKeysAndTheWheelMoveTheTextCursor(t *testing.T) {
 	m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
 	page := m.text.Height()
 
-	press(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
+	press(t, m, testui.Press("pgdown"))
 	if got := m.text.Line(); got != page {
 		t.Errorf("pgdown moved the cursor to line %d, want %d", got, page)
 	}
-	press(t, m, tea.KeyMsg{Type: tea.KeyPgUp})
+	press(t, m, testui.Press("pgup"))
 	if got := m.text.Line(); got != 0 {
 		t.Errorf("pgup moved the cursor to line %d, want 0", got)
 	}
@@ -474,7 +470,7 @@ func TestAltChordsTypeNothing(t *testing.T) {
 		m := openOn(t, Options{Kind: KindEdit, Values: issueValues()}, focus)
 		before := m.values()
 		for _, letter := range "audclbf" {
-			press(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{letter}, Alt: true})
+			press(t, m, testui.Press("alt+"+string(letter)))
 		}
 		if got := m.values(); got != before {
 			t.Errorf("focus %d: an alt+letter chord changed the values to %+v", focus, got)
@@ -487,30 +483,30 @@ func TestAltChordsTypeNothing(t *testing.T) {
 func TestPasteIsTypedAndCtrlVDoesNothing(t *testing.T) {
 	t.Parallel()
 
-	paste := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("pasted text"), Paste: true}
+	paste := testui.Paste("pasted text")
 
 	m := open(t, Options{Kind: KindCreate})
 	press(t, m, paste)
 	if got := m.values().Title; got != "pasted text" {
 		t.Errorf("a paste into the title gives %q", got)
 	}
-	if msg := press(t, m, tea.KeyMsg{Type: tea.KeyCtrlV}); msg != nil {
+	if msg := press(t, m, testui.Press("ctrl+v")); msg != nil {
 		t.Errorf("ctrl+v in the title produced %T", msg)
 	}
 
 	m = open(t, Options{Kind: KindCommentAdd})
-	lines := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(strings.Repeat("pasted\n", 40) + "the end"), Paste: true}
-	press(t, m, lines)
-	if got := m.values().Text; got != string(lines.Runes) {
+	lines := strings.Repeat("pasted\n", 40) + "the end"
+	press(t, m, testui.Paste(lines))
+	if got := m.values().Text; got != lines {
 		t.Errorf("a paste of lines into the text gives %q", got)
 	}
 	if view := plainView(m); !strings.Contains(view, "the end") {
 		t.Errorf("the text does not show its cursor line after a paste of more lines than it has rows:\n%s", view)
 	}
-	if msg := press(t, m, tea.KeyMsg{Type: tea.KeyCtrlV}); msg != nil {
+	if msg := press(t, m, testui.Press("ctrl+v")); msg != nil {
 		t.Errorf("ctrl+v in the text produced %T", msg)
 	}
-	if got := m.values().Text; got != string(lines.Runes) {
+	if got := m.values().Text; got != lines {
 		t.Errorf("ctrl+v changed the text to %q", got)
 	}
 }
@@ -519,7 +515,7 @@ func TestSaveKeySubmitsFromAnyFieldWithBaselineAndValues(t *testing.T) {
 	t.Parallel()
 
 	m := openEdit(t)
-	press(t, m, typed("!"))
+	press(t, m, testui.Runes("!"))
 	for range m.order() {
 		msg := press(t, m, keySave)
 		submit, ok := msg.(SubmitMsg)
@@ -595,7 +591,7 @@ func TestButtonsPressOnEnterAndOnAClick(t *testing.T) {
 	if msg := click("Assignee"); msg != nil || m.focus != uiissueedit.FieldAssignee {
 		t.Errorf("a click on the assignee row gives %T and the focus on %d", msg, m.focus)
 	}
-	press(t, m, typed("x"))
+	press(t, m, testui.Runes("x"))
 	if got := m.values().Assignee; got != "hansx" {
 		t.Errorf("the clicked field holds %q after a key, want hansx", got)
 	}
@@ -628,7 +624,7 @@ func TestRunesThatArriveTogetherAreTextAlsoWhenTheySpellAKey(t *testing.T) {
 	for _, focus := range []uiissueedit.Field{uiissueedit.FieldAssignee, uiissueedit.FieldText} {
 		for _, word := range words {
 			m := openOn(t, Options{Kind: KindEdit, Values: Values{Status: "open", Type: "task"}}, focus)
-			press(t, m, typed(word))
+			press(t, m, testui.Runes(word))
 
 			got := m.values().Assignee
 			if focus == uiissueedit.FieldText {
@@ -646,19 +642,19 @@ func TestQuitHelpAndEscapeFallThroughAndEveryOtherKeyIsConsumed(t *testing.T) {
 
 	m := openEdit(t)
 	for name, key := range map[string]tea.KeyMsg{
-		"quit":   {Type: tea.KeyCtrlC},
-		"help":   {Type: tea.KeyRunes, Runes: []rune("h"), Alt: true},
-		"escape": {Type: tea.KeyEsc},
+		"quit":   testui.Press("ctrl+c"),
+		"help":   testui.Press("alt+h"),
+		"escape": testui.Press("esc"),
 	} {
 		if consumed, cmd := m.HandleKey(key); consumed || cmd != nil {
 			t.Errorf("%s was consumed; the shell owns it", name)
 		}
 	}
 	for name, key := range map[string]tea.KeyMsg{
-		"a shell action": {Type: tea.KeyRunes, Runes: []rune("n"), Alt: true},
-		"delete":         {Type: tea.KeyDelete},
-		"a tab key":      {Type: tea.KeyCtrlPgDown},
-		"f5":             {Type: tea.KeyF5},
+		"a shell action": testui.Press("alt+n"),
+		"delete":         testui.Press("delete"),
+		"a tab key":      testui.Press("ctrl+pgdown"),
+		"f5":             testui.Press("f5"),
 	} {
 		if consumed, cmd := m.HandleKey(key); !consumed || cmd != nil {
 			t.Errorf("%s: consumed %v, command %v; nothing below the screen is drawn", name, consumed, cmd != nil)
@@ -673,7 +669,7 @@ func TestSavingTakesEveryKeyButQuitAndHelp(t *testing.T) {
 	m.SetSaving(true)
 	before := m.values()
 
-	for _, key := range []tea.KeyMsg{{Type: tea.KeyEsc}, keySave, keyTab, typed("x"), keyEnter, keyLeft} {
+	for _, key := range []tea.KeyMsg{testui.Press("esc"), keySave, keyTab, testui.Runes("x"), keyEnter, keyLeft} {
 		if consumed, cmd := m.HandleKey(key); !consumed || cmd != nil {
 			t.Errorf("%q during a save: consumed %v, command %v", key.String(), consumed, cmd != nil)
 		}
@@ -681,7 +677,7 @@ func TestSavingTakesEveryKeyButQuitAndHelp(t *testing.T) {
 	if m.values() != before || m.focus != uiissueedit.FieldTitle {
 		t.Error("a key during a save changed the screen")
 	}
-	for _, key := range []tea.KeyMsg{{Type: tea.KeyCtrlC}, {Type: tea.KeyRunes, Runes: []rune("h"), Alt: true}} {
+	for _, key := range []tea.KeyMsg{testui.Press("ctrl+c"), testui.Press("alt+h")} {
 		if consumed, _ := m.HandleKey(key); consumed {
 			t.Errorf("%q was consumed during a save", key.String())
 		}

@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	issueeditmode "github.com/hk9890/task-manager-ui/internal/mode/issueedit"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // watchedRepository gives a tracked repository the optional change watch. The
@@ -198,7 +199,7 @@ func TestStoreChangeDuringALoadReloadsWhenThatLoadLands(t *testing.T) {
 	m, _ := watchedModel(t, repo, RuntimeOptions{})
 
 	mark := repo.CallCount()
-	next, load := m.Update(testKey("alt+r"))
+	next, load := m.Update(testui.Press("alt+r"))
 	m = next.(Model)
 	if !m.board.IsLoading() {
 		t.Fatal("setup: the board reload key started no load")
@@ -224,7 +225,7 @@ func TestStoreChangeReloadsTheOpenDetail(t *testing.T) {
 
 	repo := newWatchedRepository()
 	m, _ := watchedModel(t, repo, RuntimeOptions{})
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("enter")})
 	if m.active != mode.Detail {
 		t.Fatalf("setup: active = %v, want Detail", m.active)
 	}
@@ -237,7 +238,7 @@ func TestStoreChangeReloadsTheOpenDetail(t *testing.T) {
 
 	// The board below was not reloaded, so it is still behind the store.
 	mark = repo.CallCount()
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEsc}})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	if got := repo.CallCountSince(mark, fakes.MethodDashboard); got != 1 {
 		t.Errorf("board reads on return from Detail = %d, want 1", got)
 	}
@@ -257,7 +258,7 @@ func TestALoadAStoreChangeStartedLandsUnderAnOverlay(t *testing.T) {
 
 			repo := newWatchedRepository()
 			m, _ := watchedModel(t, repo, RuntimeOptions{})
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+			m = applyMessages(t, m, []tea.Msg{testui.Press("enter")})
 			if m.active != mode.Detail {
 				t.Fatalf("setup: active = %v, want Detail", m.active)
 			}
@@ -322,7 +323,7 @@ func TestSaveResultUnderTheHelpOverlayShowsItsToastAndReloadsWhenTheOverlayClose
 				t.Errorf("board reads under the overlay = %d, want 0", got)
 			}
 
-			m = applyMessages(t, m, []tea.Msg{testKey("alt+h")})
+			m = applyMessages(t, m, []tea.Msg{testui.Press("alt+h")})
 			if m.showHelp {
 				t.Fatal("setup: the help key did not close the overlay")
 			}
@@ -388,7 +389,7 @@ func TestDetailLoadFailureToastShowsOnceForOneIssue(t *testing.T) {
 
 	repo := newWatchedRepository()
 	m, _ := watchedModel(t, repo, RuntimeOptions{})
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("enter")})
 	if m.active != mode.Detail {
 		t.Fatalf("setup: active = %v, want Detail", m.active)
 	}
@@ -421,7 +422,7 @@ func TestDetailLoadFailureToastShowsOnceForOneIssue(t *testing.T) {
 	}
 
 	// The reload key is a question, and the answer is not held back.
-	m = applyMessages(t, m, []tea.Msg{testKey("alt+r")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("alt+r")})
 	if got := m.toast.Seq() - shown; got != 3 {
 		t.Errorf("failure toasts after the reload key = %d, want 3", got)
 	}

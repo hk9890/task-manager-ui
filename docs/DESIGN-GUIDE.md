@@ -53,14 +53,14 @@ shell. Every other package is pure.
 - The 16 colours have no entry between the background and the selection, so both hover roles are
   empty there and draw no band. What is left under the pointer is the bold label of a button and
   the text colour of a tab; a row shows nothing.
-- `applyFlavor` reads `lipgloss.ColorProfile()` for the two cases: a test that sets a 256- or a
-  16-colour profile calls `styles.Apply` after it and restores both in `t.Cleanup`, the profile
-  before the roles (`applyOnEveryTerminal`, `internal/ui/styles/row_highlight_test.go`).
+- `styles.Apply` takes the colour profile for the two cases. `cmd/taskmgr-ui` reads the terminal's
+  profile once and passes it there and in `app.RuntimeOptions.ColorProfile`, which the
+  configuration screen applies a theme on.
 - In true colour and on 256 colours the hover band is neither the selection band nor the entry of
   Base, which a row at rest stands on. On every profile a hovered tab and a hovered button differ
   from the ones at rest, and the key of a hovered button from its background
   (`TestHoverRolesStayDistinctOnEveryTerminal`, `TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal`,
-  in the same file).
+  `internal/ui/styles/row_highlight_test.go`).
 
 ## The issue vocabulary
 

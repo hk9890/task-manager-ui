@@ -255,7 +255,7 @@ func TestModelDetailModeRendersConfigurableFooterHelp(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -386,11 +386,11 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	next, cmd := m.Update(testui.Press("right"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	next, cmd = m.Update(testui.Press("right"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -398,7 +398,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 		t.Fatalf("expected board selection tm-2 before round-trip, got %q", got)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -413,7 +413,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 		t.Fatalf("expected dedicated detail layout without extra shell wrapper heading, got:\n%s", detailView)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd = m.Update(testui.Press("esc"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 

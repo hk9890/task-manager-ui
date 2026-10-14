@@ -11,12 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestModelInitUsesBoardControllerAndBuiltInDashboardQueries(t *testing.T) {
@@ -105,7 +104,7 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 
 	// First switch to search mode: lazy init must fire.
 	mark := gw.CallCount()
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, cmd := m.Update(testui.Press("tab"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -121,12 +120,12 @@ func TestModelFirstSearchModeSwitchTriggersSearchInit(t *testing.T) {
 
 	// Return to board and go back to search: should NOT re-trigger Search
 	// from the lazy init path (auto-refresh may run if stale, but lazy init does not).
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // toggle back to board
+	next, cmd = m.Update(testui.Press("tab")) // toggle back to board
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // toggle to search again
+	next, cmd = m.Update(testui.Press("tab")) // toggle to search again
 	m = next.(Model)
 	// Only run the immediate Update result; don't recurse into auto-refresh
 	// commands — we only want to check that lazyInitActiveTabCmd itself is a no-op.

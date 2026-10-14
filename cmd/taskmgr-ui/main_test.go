@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
+	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -17,6 +18,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/repofixture"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -233,7 +235,7 @@ func noopLogger(logging.Options) *logging.Manager { return nil }
 func restoreStyles(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -580,6 +582,37 @@ func TestRunPassesTheResolvedConfigPathToStartup(t *testing.T) {
 	}
 	if seenOpts.configPath != configPath {
 		t.Errorf("configPath: got %q, want %q", seenOpts.configPath, configPath)
+	}
+}
+
+// TestRunPassesTheTerminalColourProfileToStartup pins the wiring between the
+// one read of the terminal's colour profile and the profile the configuration
+// screen applies a theme on. Not parallel: the profile is process-wide.
+func TestRunPassesTheTerminalColourProfileToStartup(t *testing.T) {
+	restoreStyles(t)
+	testui.UseColorProfile(t, termenv.ANSI256)
+
+	var seenOpts startupOptions
+	var stderr bytes.Buffer
+	code := runWithLogger(
+		[]string{"--cwd", t.TempDir()},
+		&bytes.Buffer{},
+		&stderr,
+		func(config.LoadOptions) (config.Result, error) {
+			return config.Result{Config: config.Default(), Path: "(none)"}, nil
+		},
+		func(cfg config.Model, opts startupOptions) error {
+			seenOpts = opts
+			return nil
+		},
+		noopLogger,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d (stderr=%q)", code, stderr.String())
+	}
+	if seenOpts.colorProfile != termenv.ANSI256 {
+		t.Errorf("colorProfile: got %v, want %v", seenOpts.colorProfile, termenv.ANSI256)
 	}
 }
 

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestKeyLegendDropsTrailingHintsThatDoNotFit(t *testing.T) {
@@ -49,7 +51,7 @@ func TestKeyLegendDropsTrailingHintsThatDoNotFit(t *testing.T) {
 // TestKeyLegendStyledKeepsToTheWidth: the escapes of a styled legend are not
 // cells, so the fit is the same with colour on.
 func TestKeyLegendStyledKeepsToTheWidth(t *testing.T) {
-	forceTrueColor(t)
+	testui.ForceTrueColor(t)
 
 	hints := []KeyHint{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}}
 	got := KeyLegend(hints, 10)
@@ -65,7 +67,7 @@ func TestKeyLegendStyledKeepsToTheWidth(t *testing.T) {
 // description the bright one, the separator is the rule's colour, and the
 // mark of a drop is muted as a key is.
 func TestKeyLegendMutesTheKeyAndNotWhatItDoes(t *testing.T) {
-	forceTrueColor(t)
+	testui.ForceTrueColor(t)
 
 	run := func(role lipgloss.Color, text string) string {
 		return lipgloss.NewStyle().Foreground(role).Render(text)

@@ -17,7 +17,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/hk9890/task-manager/sdk/tasks"
+	"github.com/muesli/termenv"
 	"gopkg.in/yaml.v3"
 
 	"github.com/hk9890/task-manager-ui/internal/app"
@@ -60,6 +62,9 @@ type startupOptions struct {
 	repoFlag    string // "taskmgr" (default) or "memory"
 	repoFile    string // resolved path; source of truth for --repo memory, ignored by taskmgr
 	configPath  string // resolved config file; the configuration screen writes a change there
+	// colorProfile is the terminal's colour profile; the configuration screen
+	// applies a theme on it again.
+	colorProfile termenv.Profile
 }
 
 // buildRepository selects and opens the repository backend for startInteractive.
@@ -191,6 +196,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		DisableAutoRefresh: !opts.autoRefresh,
 		UnresolvedStore:    unresolved,
 		StorelessDir:       selected.createDir,
+		ColorProfile:       opts.colorProfile,
 		Ctx:                ctx,
 	})
 	if err != nil {
@@ -323,7 +329,9 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 
 	// The theme and the glyph set are checked here for the same reason, and
 	// applied here because every surface draws with them from its first frame.
-	if err := styles.Apply(configResult.Config.UI.Theme, configResult.Config.UI.Glyphs); err != nil {
+	// This is the one read of the terminal's colour profile.
+	colorProfile := lipgloss.ColorProfile()
+	if err := styles.Apply(configResult.Config.UI.Theme, configResult.Config.UI.Glyphs, colorProfile); err != nil {
 		if startupLogger != nil {
 			startupLogger.Error("invalid ui configuration", "error", err.Error())
 		} else {
@@ -380,14 +388,15 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 		logManager.SetStderrSuppressed(true)
 	}
 	startErr := start(configResult.Config, startupOptions{
-		projectRoot: resolvedCWD,
-		storeName:   opts.storeName,
-		debug:       opts.debug,
-		autoRefresh: autoRefresh,
-		logManager:  logManager,
-		repoFlag:    opts.repo,
-		repoFile:    resolvedRepoFile,
-		configPath:  configResult.Path,
+		projectRoot:  resolvedCWD,
+		storeName:    opts.storeName,
+		debug:        opts.debug,
+		autoRefresh:  autoRefresh,
+		logManager:   logManager,
+		repoFlag:     opts.repo,
+		repoFile:     resolvedRepoFile,
+		configPath:   configResult.Path,
+		colorProfile: colorProfile,
 	})
 	if logManager != nil {
 		logManager.SetStderrSuppressed(false)

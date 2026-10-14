@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -21,11 +20,7 @@ import (
 var selectedGutter, _ = styles.SelectionPrefix(true, false)
 
 func TestRenderColumnRowsStylesMetadataAndSelectionIndicator(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(previousProfile)
-	})
+	testui.ForceTrueColor(t)
 
 	lines := renderColumnRows(Column{
 		Rows: []domain.IssueSummary{{
@@ -170,11 +165,7 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 // output contains the SkeletonShades[phase] ANSI color sequence, confirming
 // that Dim+Phase are threaded to RenderCompact.
 func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(previousProfile)
-	})
+	testui.ForceTrueColor(t)
 
 	const phase = 1 // pick a non-zero phase for a distinct shade
 
@@ -211,9 +202,7 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 }
 
 func TestSkeletonRows(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	const width = 60
 

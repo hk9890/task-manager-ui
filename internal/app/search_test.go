@@ -187,8 +187,8 @@ func TestSearchEnterDuringASearchOpensTheDetailOfItsResult(t *testing.T) {
 	m, _ := searchShell(t)
 
 	// The key's search is held back: its command is not run yet.
-	next, typed := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("triage")})
-	next, entered := next.(Model).Update(testKey("enter"))
+	next, typed := m.Update(testui.Runes("triage"))
+	next, entered := next.(Model).Update(testui.Press("enter"))
 	m = applyMessages(t, next.(Model), runBatch(entered))
 	if m.active != mode.Search {
 		t.Fatalf("enter left the search for %q before the result arrived", m.active)
@@ -213,8 +213,8 @@ func TestSearchHeldEnterOpensTheResultInEitherMessageOrder(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m, gw := searchShell(t)
 
-			next, typed := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("triage")})
-			next, entered := next.(Model).Update(testKey("enter"))
+			next, typed := m.Update(testui.Runes("triage"))
+			next, entered := next.(Model).Update(testui.Press("enter"))
 			m = applyMessages(t, next.(Model), runBatch(entered))
 
 			// The pause of the edit ends, its search returns and the result is
@@ -441,7 +441,7 @@ func TestSearchReloadsOnAStoreChangeAndKeepsTheSelectedIssue(t *testing.T) {
 // flight still draws the header spinner.
 func TestSearchInFlightSpinsTheHeader(t *testing.T) {
 	m, _ := filterShell(t)
-	next, _ := m.Update(testKey("alt+f"))
+	next, _ := m.Update(testui.Press("alt+f"))
 	opened := next.(Model)
 	if !opened.search.IsLoading() || !opened.workInFlight() {
 		t.Fatalf("the opening search: search loading %v, work in flight %v; want both", opened.search.IsLoading(), opened.workInFlight())
@@ -479,7 +479,7 @@ func TestStoreSwitchDropsAPendingEditPause(t *testing.T) {
 	m := applyMessages(t, s.m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 30}})
 	m = press(t, m, "alt+f")
 
-	next, typed := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("alpha")})
+	next, typed := m.Update(testui.Runes("alpha"))
 	pauseEnded := runBatch(typed)
 	if len(pauseEnded) == 0 {
 		t.Fatal("fixture: the edit started no pause")

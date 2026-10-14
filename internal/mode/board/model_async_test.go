@@ -38,6 +38,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // startCmdSubcmdsAsync executes cmd and, for each sub-cmd found in the result,
@@ -176,7 +177,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 
 	// --- Step 1: press j once → threshold crossed → loadMoreClosedCmd dispatched ---
 
-	cmd1 := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd1 := m.Update(testui.Press("down"))
 	if cmd1 == nil {
 		t.Fatal("step 1: expected non-nil Cmd after first j press (threshold crossed)")
 	}
@@ -201,7 +202,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 	// loadMoreClosedCmd also enters delayed.Dashboard and is visible via InFlight().
 
 	for i := 0; i < 5; i++ {
-		cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		cmd := m.Update(testui.Press("down"))
 		// Start sub-cmds in goroutines. With the guard working these are just
 		// selectionChangedCmds (no load-more); without the guard, extra
 		// loadMoreClosedCmds would accumulate in InFlight().
@@ -259,7 +260,7 @@ func TestDoneLoadMore_InFlightGuard(t *testing.T) {
 	// After merge: doneLoadedCount=85; cursor needs remaining < 5, so row ≥ 81.
 	m.selectedRow[doneColumnIndex] = 81 // remaining = 85-81 = 4 < 5
 
-	cmd7 := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd7 := m.Update(testui.Press("down"))
 	if cmd7 == nil {
 		t.Fatal("step 6: expected non-nil Cmd after 7th j press (new threshold at offset=85)")
 	}
