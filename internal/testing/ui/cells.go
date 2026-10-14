@@ -39,8 +39,17 @@ func FindCell(tb testing.TB, view, text string) (x, y int) {
 // profile is process-wide, so a test that calls this must not be parallel.
 func ForceTrueColor(tb testing.TB) {
 	tb.Helper()
+	UseColorProfile(tb, termenv.TrueColor)
+}
+
+// UseColorProfile renders with profile for the rest of the test, and restores
+// the profile the test had in its cleanup. A test of a 256- or a 16-colour
+// terminal uses it. The profile is process-wide, so a test that calls this
+// must not be parallel.
+func UseColorProfile(tb testing.TB, profile termenv.Profile) {
+	tb.Helper()
 	previous := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	lipgloss.SetColorProfile(profile)
 	tb.Cleanup(func() { lipgloss.SetColorProfile(previous) })
 }
 

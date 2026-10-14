@@ -144,9 +144,14 @@ Shared helpers live under `internal/testing/ui`:
 - `WaitForOutputContainsAll`: waits for real runtime output containing required UI snippets before assertions.
 
 Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `OpenDetailKeys` /
-`DetailBackKeys` / `DetailScrollKeys` instead of literal key structs, and
+`DetailBackKeys` / `DetailScrollKeys`, and
 `DrainCmd` to run a `tea.Cmd` to completion with nested `tea.BatchMsg` values flattened. Draining is
 not always what you want: an open modal schedules a repeating tick, so step those flows by hand.
+
+Build a key in a test with `Press`, `Runes` or `Paste` (`internal/testing/ui/keys.go`),
+never a `tea.KeyMsg{...}` literal. `Press` takes the key's name as a keybinding writes it —
+`"enter"`, `"shift+tab"`, `"alt+x"`, `"space"` — and panics on an unknown one. Pass the result on;
+do not read its fields. The key type changes shape in Bubble Tea v2, and then only `keys.go` changes.
 
 Screen assertions (`internal/testing/ui/assertions.go`): `AssertContainsAll`,
 `AssertStartupBoardLayoutSanity`, `AssertNoObviousRuntimeErrorPanels`, `AssertActionRequest`.
@@ -162,11 +167,11 @@ Size, cells and colour in an `internal/app` test:
   (`internal/app/mouse_test.go`), which adds the margin.
 - Assert a foreground, a background or bold on the escape codes, under `testui.ForceTrueColor`.
   A stripped golden passes with the wrong colour.
-- The hover roles are chosen by the colour profile when `styles.Apply` runs. A test of a 256- or a
-  16-colour terminal sets the profile and then calls `styles.Apply`, as `applyOnEveryTerminal`
-  does (`internal/ui/styles/row_highlight_test.go`). Register the cleanup that applies the start
-  theme before the one that restores the profile: cleanups run last first, and the roles must be
-  applied under the profile the test started on.
+- Set the render profile with `testui.ForceTrueColor` or `testui.UseColorProfile`, never with
+  `lipgloss.SetColorProfile`. The hover roles are chosen by the profile passed to `styles.Apply`,
+  so a test of a 256- or a 16-colour terminal passes that profile to both, as
+  `applyOnEveryTerminal` does (`internal/ui/styles/row_highlight_test.go`). Restore the start theme
+  with `termenv.TrueColor`, the profile the package starts on.
 
 Golden file convention:
 

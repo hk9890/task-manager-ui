@@ -72,19 +72,19 @@ func TestModelReusableDetailToolScenarioCoversEditorAndLaunchersWithFakes(t *tes
 		t.Fatalf("expected open detail scenario before tool actions, got %s", m.active)
 	}
 
-	m = testui.ApplyKeySequence(m, testKey("alt+u")).(Model)
+	m = testui.ApplyKeySequence(m, testui.Press("alt+u")).(Model)
 	if m.active != mode.IssueEdit || m.editorTarget.issueID != "tm-1" {
 		t.Fatalf("expected the issue editor on tm-1, got %q on %q", m.active, m.editorTarget.issueID)
 	}
-	m = testui.ApplyKeySequence(m, testKey("esc")).(Model)
+	m = testui.ApplyKeySequence(m, testui.Press("esc")).(Model)
 	if m.active != mode.Detail {
 		t.Fatalf("expected Escape to return from the editor to detail, got %s", m.active)
 	}
 
 	m = testui.ApplyKeySequence(m,
-		testKey("alt+v"),
-		testKey("alt+p"),
-		testKey("alt+l"),
+		testui.Press("alt+v"),
+		testui.Press("alt+p"),
+		testui.Press("alt+l"),
 	).(Model)
 
 	if len(fakeLauncher.Calls()) != 3 {

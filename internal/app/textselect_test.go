@@ -40,7 +40,7 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 
 	// Focus the column with a key first: at this width the press would
 	// re-centre the board, and the drag is measured on the settled screen.
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyRight})
+	m = send(t, m, testui.Press("right"))
 	x, y := testui.FindCell(t, m.View(), "progress-first")
 	m = send(t, m, leftClick(x, y))
 	frozen := m.View()
@@ -114,10 +114,10 @@ func TestNothingChangesTheScreenUnderASelection(t *testing.T) {
 	for name, msg := range map[string]tea.Msg{
 		"wheel":     wheel(x, y, tea.MouseButtonWheelDown),
 		"click":     tea.MouseMsg{X: 5, Y: 5, Action: tea.MouseActionPress, Button: tea.MouseButtonRight},
-		"move key":  tea.KeyMsg{Type: tea.KeyDown},
-		"tab key":   tea.KeyMsg{Type: tea.KeyTab},
-		"help key":  testKey("alt+h"),
-		"close key": testKey("delete"),
+		"move key":  testui.Press("down"),
+		"tab key":   testui.Press("tab"),
+		"help key":  testui.Press("alt+h"),
+		"close key": testui.Press("delete"),
 	} {
 		next, cmd := m.Update(msg)
 		m = next.(Model)
@@ -126,7 +126,7 @@ func TestNothingChangesTheScreenUnderASelection(t *testing.T) {
 		}
 	}
 
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, testui.Press("esc"))
 	if m.sel.active || m.press != nil || len(*copied) != 0 {
 		t.Fatalf("Escape left the selection up or copied it (copied %q)", *copied)
 	}

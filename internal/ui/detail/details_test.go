@@ -133,9 +133,7 @@ func TestRenderDependencyRichGolden(t *testing.T) {
 
 func TestRenderDependencyRowsHighlightSelectedIssue(t *testing.T) {
 	// Use TrueColor so the subject background style would emit ANSI escapes if present.
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	view := Render(State{
 		SelectionID: "tm-88",
@@ -1101,11 +1099,7 @@ func TestMaxScrollOffsets(t *testing.T) {
 // wrapped with a Faint+Foreground style sourced from SkeletonShades[phase].
 // The stale title must remain visible after ANSI-stripping.
 func TestRefreshDetailsCarriesDimPhaseStyle(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(previousProfile)
-	})
+	testui.ForceTrueColor(t)
 
 	const phase = 0
 
@@ -1422,9 +1416,7 @@ func TestRenderChildrenGroupGolden(t *testing.T) {
 func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 	// Pin the color profile so the golden is deterministic regardless of other
 	// tests mutating the global lipgloss profile.
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	// Render a narrow detail (responsive layout) with cursor=tm-cursor.
 	view := Render(State{
@@ -1458,9 +1450,7 @@ func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
 	// Pin the color profile so the golden is deterministic regardless of other
 	// tests mutating the global lipgloss profile.
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	view := Render(State{
 		SelectionID: "tm-epic",
@@ -1721,13 +1711,13 @@ func TestContentHeaderRuleTakesTheAppliedTheme(t *testing.T) {
 	// Apply and the colour profile are process-wide, so this test is not parallel.
 	testui.ForceTrueColor(t)
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
 
 	started := contentHeaderRule(3)
-	if err := styles.Apply("catppuccin-latte", "unicode"); err != nil {
+	if err := styles.Apply("catppuccin-latte", "unicode", termenv.TrueColor); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	applied := contentHeaderRule(3)

@@ -516,7 +516,7 @@ func TestEscapeDuringASaveLeavesTheEditorOpen(t *testing.T) {
 	m = openEditor(t, m, "alt+u")
 	m = typeInto(t, m, " typed")
 
-	next, submit := m.Update(testKey("ctrl+s"))
+	next, submit := m.Update(testui.Press("ctrl+s"))
 	m = next.(Model)
 	next, save := m.Update(submit())
 	m = next.(Model)
@@ -551,11 +551,11 @@ func TestSecondSaveBeforeTheFirstIsHandledWritesOnce(t *testing.T) {
 
 	m = openEditor(t, m, "alt+n")
 	m = typeInto(t, m, "Written once")
-	next, first := m.Update(testKey("ctrl+s"))
+	next, first := m.Update(testui.Press("ctrl+s"))
 	m = next.(Model)
 	for _, key := range []string{"ctrl+s", "enter", "esc"} {
 		var second tea.Cmd
-		next, second = m.Update(testKey(key))
+		next, second = m.Update(testui.Press(key))
 		m = next.(Model)
 		if msgs := runBatch(second); len(msgs) != 0 {
 			t.Fatalf("%q after the save key produced %v, want nothing", key, msgs)
@@ -578,7 +578,7 @@ func TestSecondSaveBeforeTheFirstIsHandledWritesOnce(t *testing.T) {
 // reading what it opens with cancels the open.
 func TestPendingOpenIsCancelledByAKeyAClickOrTheWheel(t *testing.T) {
 	interrupts := map[string]tea.Msg{
-		"a key":         testKey("down"),
+		"a key":         testui.Press("down"),
 		"a click":       leftClick(40, 10),
 		"a wheel notch": wheel(40, 10, tea.MouseButtonWheelDown),
 	}
@@ -586,7 +586,7 @@ func TestPendingOpenIsCancelledByAKeyAClickOrTheWheel(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m, _ := editorShell(t)
 
-			next, load := m.Update(testKey("alt+u"))
+			next, load := m.Update(testui.Press("alt+u"))
 			m = next.(Model)
 			if m.pendingEditor == 0 {
 				t.Fatal("the update key started no pending open")
@@ -602,7 +602,7 @@ func TestPendingOpenIsCancelledByAKeyAClickOrTheWheel(t *testing.T) {
 
 	t.Run("the pointer moving cancels nothing", func(t *testing.T) {
 		m, _ := editorShell(t)
-		next, load := m.Update(testKey("alt+u"))
+		next, load := m.Update(testui.Press("alt+u"))
 		m = send(t, next.(Model), pointerMove(40, 10))
 		if m = applyMessages(t, m, runBatch(load)); m.active != mode.IssueEdit {
 			t.Errorf("a pointer move cancelled the open; the shell is on %q", m.active)
@@ -619,7 +619,7 @@ func TestEscapeThatCancelsAPendingOpenDoesNotLeaveTheMode(t *testing.T) {
 		t.Fatalf("enter left the shell on %q, want Detail", m.active)
 	}
 
-	next, load := m.Update(testKey("alt+u"))
+	next, load := m.Update(testui.Press("alt+u"))
 	m = pressKey(t, next.(Model), "esc")
 	m = applyMessages(t, m, runBatch(load))
 

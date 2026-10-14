@@ -50,6 +50,15 @@ func ReadGolden(tb testing.TB, name string) []byte {
 	return bts
 }
 
+// downsampleToTestProfile returns rendered output as the active test colour profile
+// shows it. On lipgloss v1 that is the input unchanged: Render already emits
+// codes for the active profile. lipgloss v2 Render always emits truecolour,
+// so there this downsamples through colorprofile — without it, every golden
+// rendered under the Ascii profile would gain escape codes.
+func downsampleToTestProfile(output []byte) []byte {
+	return output
+}
+
 // updateGolden writes got to testdata/name when TASKMGR_UI_UPDATE_GOLDEN=1.
 //
 // Every assertion below regenerates through this with exactly the bytes it
@@ -79,6 +88,7 @@ func updateGolden(tb testing.TB, got []byte, name string) {
 func AssertMatchesGolden(tb testing.TB, output []byte, name string) {
 	tb.Helper()
 
+	output = downsampleToTestProfile(output)
 	updateGolden(tb, output, name)
 
 	want := ReadGolden(tb, name)
@@ -111,7 +121,7 @@ func NormalizeOutput(output []byte) []byte {
 func AssertMatchesGoldenNormalized(tb testing.TB, output []byte, name string) {
 	tb.Helper()
 
-	got := NormalizeOutput(output)
+	got := NormalizeOutput(downsampleToTestProfile(output))
 	updateGolden(tb, got, name)
 
 	want := NormalizeOutput(ReadGolden(tb, name))
@@ -134,7 +144,7 @@ func StripANSI(output []byte) []byte {
 func AssertMatchesGoldenStripANSI(tb testing.TB, output []byte, name string) {
 	tb.Helper()
 
-	got := StripANSI(output)
+	got := StripANSI(downsampleToTestProfile(output))
 	updateGolden(tb, got, name)
 
 	want := StripANSI(ReadGolden(tb, name))

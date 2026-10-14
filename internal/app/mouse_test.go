@@ -79,7 +79,7 @@ func send(t *testing.T, m Model, msg tea.Msg) Model {
 
 func pressKey(t *testing.T, m Model, name string) Model {
 	t.Helper()
-	return send(t, m, testKey(name))
+	return send(t, m, testui.Press(name))
 }
 
 func TestMouseKindMapsOnlyTheEventsTheSurfacesActOn(t *testing.T) {
@@ -282,8 +282,8 @@ func TestClickOnReloadAndQuit(t *testing.T) {
 // TestClickOnReloadReloadsTheSurfaceOnScreen: reload is one button, and the
 // load it starts is the one of the surface under it and of no other.
 func TestClickOnReloadReloadsTheSurfaceOnScreen(t *testing.T) {
-	tab := tea.KeyMsg{Type: tea.KeyTab}
-	detail := testKey("enter")
+	tab := testui.Press("tab")
+	detail := testui.Press("enter")
 
 	for _, tc := range []struct {
 		surface mode.ID
@@ -335,7 +335,7 @@ func TestTheLitButtonIsTheOneUnderThePointerAfterAKeyChangesTheSurface(t *testin
 		t.Fatalf("fixture: pointer over help lights %q", litButton(m))
 	}
 
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyEnter}})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("enter")})
 	if moved, _ := barButton(t, m, "help", config.ShellActionHelp); m.active != mode.Detail || moved == x {
 		t.Fatalf("fixture: on %q with help at column %d, want detail and help moved from column %d", m.active, moved, x)
 	}
@@ -398,7 +398,7 @@ func TestClickOnABarButtonDoesWhatItsKeyDoes(t *testing.T) {
 			x, text := barButton(t, base, tc.label, tc.action)
 			key := base.keys.Primary(config.ShellContext, tc.action)
 
-			byKey := step(base, testKey(key))
+			byKey := step(base, testui.Press(key))
 			tc.check(t, byKey)
 
 			// Every cell of the button is the button: the space on each side
@@ -436,7 +436,7 @@ func TestBarButtonsWorkFromDetail(t *testing.T) {
 	if m.active != mode.StorePicker || m.pickerReturn != mode.Detail {
 		t.Fatalf("click on stores from Detail: on %q returning to %q", m.active, m.pickerReturn)
 	}
-	if m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc}); m.active != mode.Detail {
+	if m = send(t, m, testui.Press("esc")); m.active != mode.Detail {
 		t.Fatalf("escape from the picker landed on %q, want Detail", m.active)
 	}
 
@@ -568,7 +568,7 @@ func TestHoverLightsABarButtonAndLeavingClearsIt(t *testing.T) {
 	// The bar forgets the pointer once the picker is up, and under an overlay.
 	picker := pressKey(t, onButton(m), "alt+s")
 	picker = send(t, picker, onScreen(picker, pointerMove(x+1, 5)))
-	if picker = send(t, picker, tea.KeyMsg{Type: tea.KeyEsc}); picker.active != mode.Board || litButton(picker) != "" {
+	if picker = send(t, picker, testui.Press("esc")); picker.active != mode.Board || litButton(picker) != "" {
 		t.Errorf("back on %q the %q button is lit under a cell the pointer left", picker.active, litButton(picker))
 	}
 	help := pressKey(t, onButton(m), "alt+h")
@@ -737,7 +737,7 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 		t.Fatalf("fixture did not reach Detail, on %q", m.active)
 	}
 	m = send(t, m, pointerMove(x, y+3))
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, testui.Press("esc"))
 	if m.active != mode.Board || testui.RowBand(t, m.View(), "progress-second") != "" {
 		t.Fatalf("back on %q a row is lit under a cell the pointer left", m.active)
 	}
@@ -750,7 +750,7 @@ func TestASurfaceLeftByAKeyForgetsThePointer(t *testing.T) {
 	}
 	m = pressKey(t, m, "alt+s")
 	m = send(t, m, onScreen(m, pointerMove(tabX+1, 5)))
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, testui.Press("esc"))
 	if m.active != mode.Board || m.hoverTab != "" {
 		t.Fatalf("back on %q the %q tab is lit under a cell the pointer left", m.active, m.hoverTab)
 	}

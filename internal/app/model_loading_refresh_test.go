@@ -7,8 +7,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -65,9 +63,7 @@ func stripSpinnerGlyphs(s string) string {
 // View() output before and after. ANSI codes change but the printable ▓ glyphs
 // do not; only the header braille spinner glyph changes (handled by stripping).
 func TestSkeletonPhasePulse(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	// Empty repository — board stays in loading=true, cold-start.
 	gw := fakes.NewTracked()
@@ -243,7 +239,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	// are still visible.
 
 	// Switch to Search (lazy init fires).
-	searchNext, searchCmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	searchNext, searchCmd := m.Update(testui.Press("tab"))
 	m = searchNext.(Model)
 	m = applyMessages(t, m, runBatch(searchCmd))
 
@@ -252,7 +248,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	}
 
 	// Switch back to Board.
-	boardNext, boardBackCmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	boardNext, boardBackCmd := m.Update(testui.Press("tab"))
 	m = boardNext.(Model)
 	m = applyMessages(t, m, runBatch(boardBackCmd))
 
@@ -277,9 +273,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 // animation contract: the dim foreground cycles through all SkeletonShades
 // values during a refresh, not just one or two.
 func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	// Empty repository — board stays in loading=true, cold-start.
 	gw := fakes.NewTracked()
@@ -408,7 +402,7 @@ func TestModelFocusRegainInDetailRefreshesImmediatelyWithoutStaleOrDirty(t *test
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
@@ -448,7 +442,7 @@ func TestModelRefreshTickReloadsOnlyActiveSearchSurface(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, cmd := m.Update(testui.Press("tab"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Docs {
@@ -525,7 +519,7 @@ func TestModelRefreshTickSearchAutoRefreshDoesNotSwitchModeOrClearDetailState(t 
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, cmd := m.Update(testui.Press("tab"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Docs {
@@ -639,7 +633,7 @@ func TestModelMutationResultMarksBrowseDirtyAndRefreshesOnlyActiveSurface(t *tes
 	}
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, cmd = m.Update(testui.Press("tab"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -756,7 +750,7 @@ func TestModelWithNoAutoRefreshSuppressesFocusAndTickButKeepsManualBoardReload(t
 	}
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(testKey("alt+r"))
+	next, cmd = m.Update(testui.Press("alt+r"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -780,7 +774,7 @@ func TestModelRefreshInDetailDoesNotBackgroundPollInactiveBrowseSurfaces(t *test
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
@@ -852,7 +846,7 @@ func TestSpinnerTickRunsOnlyWhileSomethingIsLoading(t *testing.T) {
 	}
 
 	// Any further message must not arm it either.
-	m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyDown}})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("down")})
 	if ticks != armed {
 		t.Errorf("an idle key press armed %d spinner ticks", ticks-armed)
 	}

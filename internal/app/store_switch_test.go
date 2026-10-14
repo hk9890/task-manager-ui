@@ -15,6 +15,7 @@ import (
 	storepickermode "github.com/hk9890/task-manager-ui/internal/mode/storepicker"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
@@ -70,7 +71,7 @@ func newTwoStores(t *testing.T) twoStores {
 func press(t *testing.T, m Model, keys ...string) Model {
 	t.Helper()
 	for _, k := range keys {
-		next, cmd := m.Update(testKey(k))
+		next, cmd := m.Update(testui.Press(k))
 		m = applyMessages(t, next.(Model), runBatch(cmd))
 	}
 	return m
@@ -123,7 +124,7 @@ func TestResultIssuedAgainstThePreviousStoreIsDropped(t *testing.T) {
 
 	// A board reload against alpha: run the command so its result exists, but
 	// hold the messages back until after the switch.
-	next, reload := s.m.Update(testKey("alt+r"))
+	next, reload := s.m.Update(testui.Press("alt+r"))
 	m := next.(Model)
 	stale := runBatch(reload)
 	if len(stale) == 0 {

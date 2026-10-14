@@ -67,7 +67,7 @@ func openForm(t *testing.T, m Model, rows int) Model {
 	for i := 0; i < rows; i++ {
 		m = press(t, m, "down")
 	}
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("Enter on a create row produced no command")

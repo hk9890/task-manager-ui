@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -225,7 +226,7 @@ func TestHelpShowsAReboundKey(t *testing.T) {
 	m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 100})
 
 	// Close through the action that opens it, not through a literal key.
-	if m = send(t, m, tea.KeyMsg{Type: tea.KeyF1}); !m.showHelp {
+	if m = send(t, m, testui.Press("f1")); !m.showHelp {
 		t.Fatal("the rebound key did not open the help screen")
 	}
 	view := plainShell(m)
@@ -239,7 +240,7 @@ func TestHelpShowsAReboundKey(t *testing.T) {
 			t.Errorf("the help screen still shows the default key %q:\n%s", gone, view)
 		}
 	}
-	if m = send(t, m, tea.KeyMsg{Type: tea.KeyF1}); m.showHelp {
+	if m = send(t, m, testui.Press("f1")); m.showHelp {
 		t.Fatal("the rebound key did not close the help screen")
 	}
 }
@@ -253,7 +254,7 @@ func TestEscapeClosesHelpAndLeavesTheSurfaceBelow(t *testing.T) {
 		t.Fatalf("fixture: help %v on %q, want help over detail", m.showHelp, m.active)
 	}
 
-	if m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc}); m.showHelp || m.active != mode.Detail {
+	if m = send(t, m, testui.Press("esc")); m.showHelp || m.active != mode.Detail {
 		t.Fatalf("after Escape: help %v on %q, want detail without help", m.showHelp, m.active)
 	}
 }
@@ -266,7 +267,7 @@ func TestHelpHoldsEveryOtherKey(t *testing.T) {
 	whole := m.View()
 
 	for _, key := range []string{"enter", "tab", "alt+s", "alt+c", "alt+f", "alt+n", "delete", "x", "left"} {
-		next, cmd := m.Update(testKey(key))
+		next, cmd := m.Update(testui.Press(key))
 		m = next.(Model)
 		if cmd != nil {
 			t.Errorf("%q under help returned a command", key)
@@ -298,7 +299,7 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 	if body := helpBody(down); !down.showHelp || body[0] != " … (3 earlier)" || body[1] != all[4] {
 		t.Fatalf("three presses of down drew %q and %q first, want the indicator of 3 lines and %q", body[0], body[1], all[4])
 	}
-	if up := send(t, down, tea.KeyMsg{Type: tea.KeyUp}); helpBody(up)[0] != " … (2 earlier)" || helpBody(up)[1] != all[3] {
+	if up := send(t, down, testui.Press("up")); helpBody(up)[0] != " … (2 earlier)" || helpBody(up)[1] != all[3] {
 		t.Fatal("up did not scroll the help screen back one line")
 	}
 	// The chrome stays where it is.
@@ -308,41 +309,41 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 		}
 	}
 
-	page := send(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
+	page := send(t, m, testui.Press("pgdown"))
 	// A page starts on the line after the last one the page before drew:
 	// the indicators took the first and the last row.
 	if topBody[rows-2] != all[rows-2] || helpBody(page)[1] != all[rows-1] {
 		t.Fatalf("pgdown drew %q first, want the line after %q, %q", helpBody(page)[1], topBody[rows-2], all[rows-1])
 	}
-	if back := send(t, page, tea.KeyMsg{Type: tea.KeyPgUp}); back.View() != top {
+	if back := send(t, page, testui.Press("pgup")); back.View() != top {
 		t.Fatal("pgup did not move the help screen back one page")
 	}
 
-	end := send(t, m, tea.KeyMsg{Type: tea.KeyEnd})
+	end := send(t, m, testui.Press("end"))
 	if body := helpBody(end); body[len(body)-1] != all[len(all)-1] {
 		t.Fatalf("end drew %q last, want the last line of the help, %q", body[len(body)-1], all[len(all)-1])
 	}
 	// Past the end there is nowhere to go, by a line, a page or the wheel.
 	for name, further := range map[string]tea.Msg{
-		"down":   tea.KeyMsg{Type: tea.KeyDown},
-		"pgdown": tea.KeyMsg{Type: tea.KeyPgDown},
+		"down":   testui.Press("down"),
+		"pgdown": testui.Press("pgdown"),
 		"wheel":  wheel(10, 5, tea.MouseButtonWheelDown),
 	} {
 		if got := send(t, end, further); got.View() != end.View() {
 			t.Errorf("%s at the end moved the help screen", name)
 		}
 	}
-	if home := send(t, end, tea.KeyMsg{Type: tea.KeyHome}); home.View() != top {
+	if home := send(t, end, testui.Press("home")); home.View() != top {
 		t.Fatal("home did not return the help screen to its first view")
 	}
-	if got := send(t, m, tea.KeyMsg{Type: tea.KeyUp}); got.View() != top {
+	if got := send(t, m, testui.Press("up")); got.View() != top {
 		t.Error("up at the top moved the help screen")
 	}
 
 	// Closing and reopening starts at the top, by either way out.
 	for name, closeKey := range map[string]tea.KeyMsg{
-		"help key": testKey("alt+h"),
-		"escape":   {Type: tea.KeyEsc},
+		"help key": testui.Press("alt+h"),
+		"escape":   testui.Press("esc"),
 	} {
 		closed := send(t, end, closeKey)
 		if closed.showHelp {
@@ -433,9 +434,9 @@ func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
 		t.Fatalf("fixture: the help screen is clipped at this height:\n%s", whole)
 	}
 	for _, msg := range []tea.Msg{
-		tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeyUp},
-		tea.KeyMsg{Type: tea.KeyPgDown}, tea.KeyMsg{Type: tea.KeyPgUp},
-		tea.KeyMsg{Type: tea.KeyEnd}, tea.KeyMsg{Type: tea.KeyHome},
+		testui.Press("down"), testui.Press("up"),
+		testui.Press("pgdown"), testui.Press("pgup"),
+		testui.Press("end"), testui.Press("home"),
 		wheel(10, 5, tea.MouseButtonWheelDown),
 	} {
 		if m = send(t, m, msg); m.View() != whole || !m.showHelp {
@@ -502,7 +503,7 @@ func TestHelpNamesTheKeysDetailTakesItself(t *testing.T) {
 func TestTheHelpScrollHoldsAfterAResize(t *testing.T) {
 	m := newHelpShell(t, config.Default(), 16)
 	all := helpAllLines(t, m)
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEnd})
+	m = send(t, m, testui.Press("end"))
 
 	taller := send(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
 	body := helpBody(taller)
@@ -519,7 +520,7 @@ func TestTheHelpScrollHoldsAfterAResize(t *testing.T) {
 	if got := len(strings.Split(shorter.View(), "\n")); got != 12 {
 		t.Errorf("the help screen is %d lines on a terminal of 12", got)
 	}
-	if end := send(t, shorter, tea.KeyMsg{Type: tea.KeyEnd}); helpBody(end)[len(helpBody(end))-1] != all[len(all)-1] {
+	if end := send(t, shorter, testui.Press("end")); helpBody(end)[len(helpBody(end))-1] != all[len(all)-1] {
 		t.Error("end after the second resize does not draw the last line of the help")
 	}
 }
@@ -528,7 +529,7 @@ func TestTheHelpScrollHoldsAfterAResize(t *testing.T) {
 // from the roles on every frame, and it scrolls on after the change.
 func TestTheHelpScreenFollowsAThemeChange(t *testing.T) {
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -538,7 +539,7 @@ func TestTheHelpScreenFollowsAThemeChange(t *testing.T) {
 	m = pressKey(t, m, "down")
 	mocha := m.View()
 
-	if err := styles.Apply("catppuccin-latte", "ascii"); err != nil {
+	if err := styles.Apply("catppuccin-latte", "ascii", termenv.TrueColor); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	latte := m.View()

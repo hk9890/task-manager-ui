@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -47,7 +48,7 @@ func openConfigScreen(t *testing.T, m Model) Model {
 func restoreStyles(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -188,7 +189,7 @@ func TestShellActionsAreInertOnTheConfigScreen(t *testing.T) {
 			m = openConfigScreen(t, m)
 			before := plainShell(m)
 
-			next, cmd := m.Update(testKey(key))
+			next, cmd := m.Update(testui.Press(key))
 			if cmd != nil {
 				t.Errorf("%q returned a command from the configuration screen", key)
 			}
@@ -211,7 +212,7 @@ func TestQuitAndHelpWorkOnTheConfigScreen(t *testing.T) {
 	m, _ := configShell(t)
 	m = openConfigScreen(t, m)
 
-	_, cmd := m.Update(testKey("ctrl+c"))
+	_, cmd := m.Update(testui.Press("ctrl+c"))
 	if !isQuitCmd(cmd) {
 		t.Error("the quit key does not quit from the configuration screen")
 	}
@@ -395,6 +396,34 @@ func TestAChangeIsWrittenAppliedAndKept(t *testing.T) {
 		t.Errorf("on %q; the board is drawn as before the change: %v", m.active, m.board.View(0) == boardBefore)
 	}
 	testui.AssertContainsAll(t, plainShell(m), "> filter issues", "> T Fix login prompt")
+}
+
+// A change is applied on the colour profile the app was started with: on a
+// 256-colour terminal the hover is a grey of the ramp, not the true-colour
+// surface (docs/DESIGN-GUIDE.md). Not parallel: it changes the styles.
+func TestAChangeIsAppliedOnTheProfileOfTheTerminal(t *testing.T) {
+	restoreStyles(t)
+	m, _ := configShell(t)
+	m.runtime.ColorProfile = termenv.ANSI256
+	m = openConfigScreen(t, m)
+
+	m = press(t, m, "right")
+	if got := m.services.Config.UI.Theme; got != "catppuccin-frappe" {
+		t.Fatalf("fixture: right on the theme row gives %q, want catppuccin-frappe", got)
+	}
+	applied := styles.RowHoverBgColor
+
+	if err := styles.Apply("catppuccin-frappe", "unicode", termenv.ANSI256); err != nil {
+		t.Fatal(err)
+	}
+	onPalette := styles.RowHoverBgColor
+	if err := styles.Apply("catppuccin-frappe", "unicode", termenv.TrueColor); err != nil {
+		t.Fatal(err)
+	}
+	if applied != onPalette || applied == styles.RowHoverBgColor {
+		t.Errorf("the screen applied the hover %q; want %q, the one of a 256-colour terminal, not the true-colour %q",
+			applied, onPalette, styles.RowHoverBgColor)
+	}
 }
 
 // The screen is opened again on what is in use, not on what it showed last.

@@ -12,6 +12,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // These tests pin the fatal-error screen quit affordances. The fatal screen
@@ -64,7 +65,7 @@ func isQuitCmd(cmd tea.Cmd) bool {
 // Regression guard against future changes accidentally removing this.
 func TestFatalErrorScreen_QKeyQuits(t *testing.T) {
 	m := enterFatalErrorState(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := m.Update(testui.Press("q"))
 	if !isQuitCmd(cmd) {
 		t.Fatalf("expected 'q' to produce tea.Quit on fatal screen; got cmd=%v", cmd)
 	}
@@ -74,7 +75,7 @@ func TestFatalErrorScreen_QKeyQuits(t *testing.T) {
 // default, works on the fatal screen too.
 func TestFatalErrorScreen_QuitKeyQuits(t *testing.T) {
 	m := enterFatalErrorState(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := m.Update(testui.Press("ctrl+c"))
 	if !isQuitCmd(cmd) {
 		t.Fatalf("expected ctrl+c to produce tea.Quit on fatal screen; got cmd=%v", cmd)
 	}
@@ -90,7 +91,7 @@ func TestFatalErrorScreen_CtrlCQuits(t *testing.T) {
 	// handle this identically.
 	_ = runtime.GOOS
 	m := enterFatalErrorState(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := m.Update(testui.Press("ctrl+c"))
 	if !isQuitCmd(cmd) {
 		t.Fatalf("expected ctrl+c to produce tea.Quit on fatal screen; got cmd=%v", cmd)
 	}
@@ -181,7 +182,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	}
 
 	// Quit key should return tea.Quit.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(testui.Runes("q"))
 	if cmd == nil {
 		t.Fatal("expected tea.Quit cmd from 'q' key when fatalErr is set, got nil")
 	}
@@ -191,7 +192,7 @@ func TestModelFatalErrUpdateOnlyHandlesQuitAndResize(t *testing.T) {
 	}
 
 	// Arbitrary key should be swallowed (no cmd).
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	_, cmd = m.Update(testui.Runes("j"))
 	if cmd != nil {
 		t.Fatalf("expected nil cmd for non-quit key when fatalErr is set, got non-nil")
 	}

@@ -123,7 +123,7 @@ func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
 		t.Fatalf("expected initial selection tm-1, got %#v", first)
 	}
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd := m.Update(testui.Press("down"))
 	if cmd == nil {
 		t.Fatal("expected a selection-changed command after moving down")
 	}
@@ -140,11 +140,11 @@ func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
 
 	// The bottom row is the last row: moving down again is a no-op, so no
 	// redundant selection message is emitted.
-	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown}); cmd != nil {
+	if cmd := m.Update(testui.Press("down")); cmd != nil {
 		t.Fatalf("expected no command when the cursor is already on the last row, got %#v", cmd())
 	}
 
-	cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd = m.Update(testui.Press("enter"))
 	if cmd == nil {
 		t.Fatal("expected an action-request command on enter")
 	}
@@ -160,7 +160,7 @@ func TestDocsModeAutoRefreshKeepsTheSelectedDocUnderTheCursor(t *testing.T) {
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-2" {
 		t.Fatalf("expected selection tm-2 before refresh, got %#v", got)
 	}
@@ -183,9 +183,9 @@ func TestDocsModeReloadKeyResetsTheCursorToTheTop(t *testing.T) {
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 
-	resolve(t, m, m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true}))
+	resolve(t, m, m.Update(testui.Press("alt+r")))
 	if got := m.currentSelection(); got == nil || got.Issue.ID != "tm-1" {
 		t.Fatalf("expected manual reload to reset the cursor to tm-1, got %#v", got)
 	}
@@ -221,11 +221,11 @@ func TestDocsModeEmptyStateHasNoSelection(t *testing.T) {
 	if got := m.currentSelection(); got != nil {
 		t.Fatalf("expected no selection when there are no docs, got %#v", got)
 	}
-	if cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
+	if cmd := m.Update(testui.Press("enter")); cmd != nil {
 		t.Fatalf("expected enter to be inert with no docs, got %#v", cmd())
 	}
 
-	cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	cmd := m.Update(testui.Press("down"))
 	if cmd != nil {
 		t.Fatalf("expected movement to be inert with no docs, got %#v", cmd())
 	}
@@ -257,7 +257,7 @@ func TestDocsModeSelectionSurvivesADocDisappearing(t *testing.T) {
 	seedMixed(gw)
 
 	m := loadedModel(t, gw)
-	_ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	_ = m.Update(testui.Press("down"))
 
 	// tm-2 stops being a doc, so it leaves this surface: the cursor must clamp
 	// into range rather than point past the end of the slice.
@@ -345,13 +345,13 @@ func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
 		key  tea.KeyMsg
 		want int
 	}{
-		{tea.KeyMsg{Type: tea.KeyPgDown}, page},
-		{tea.KeyMsg{Type: tea.KeyPgDown}, 2 * page},
-		{tea.KeyMsg{Type: tea.KeyPgUp}, page},
-		{tea.KeyMsg{Type: tea.KeyEnd}, docs - 1},
-		{tea.KeyMsg{Type: tea.KeyPgDown}, docs - 1},
-		{tea.KeyMsg{Type: tea.KeyHome}, 0},
-		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
+		{testui.Press("pgdown"), page},
+		{testui.Press("pgdown"), 2 * page},
+		{testui.Press("pgup"), page},
+		{testui.Press("end"), docs - 1},
+		{testui.Press("pgdown"), docs - 1},
+		{testui.Press("home"), 0},
+		{testui.Press("pgup"), 0},
 	}
 	for _, step := range steps {
 		before := m.list.SelectedRow

@@ -80,11 +80,7 @@ func TestRenderCompactKeepsMetadataWhenVeryNarrow(t *testing.T) {
 }
 
 func TestRenderCompactStyledIncludesANSI(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(previousProfile)
-	})
+	testui.ForceTrueColor(t)
 
 	lines := RenderCompact(RenderConfig{
 		Issue: domain.IssueSummary{
@@ -116,15 +112,13 @@ func TestRenderCompactStyledIncludesANSI(t *testing.T) {
 // set, because an icon that measured two cells would push one line past the
 // other.
 func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
 	// Apply writes package variables, so this test is not parallel.
 	t.Cleanup(func() {
-		lipgloss.SetColorProfile(previousProfile)
-		if err := styles.Apply("catppuccin-mocha", "unicode"); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
+	testui.ForceTrueColor(t)
 
 	issues := []domain.IssueSummary{
 		{ID: "task-manager-ui-very-long-id", Title: strings.Repeat("A long title ", 12), Type: "feature", Status: "in_progress", Priority: 0},
@@ -132,7 +126,7 @@ func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
 	}
 
 	for _, set := range styles.GlyphSets() {
-		if err := styles.Apply("catppuccin-mocha", set); err != nil {
+		if err := styles.Apply("catppuccin-mocha", set, termenv.TrueColor); err != nil {
 			t.Fatalf("Apply(%q): %v", set, err)
 		}
 		cursor := styles.Glyphs.Cursor + " "
@@ -245,9 +239,7 @@ func TestRenderReferenceCompactSelectionDistinct(t *testing.T) {
 // TestRenderCompactSkeletonWidth verifies that the skeleton is Height lines,
 // each opts.Width cells wide, down to the widths where it degrades to bars.
 func TestRenderCompactSkeletonWidth(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	for _, w := range []int{1, 4, 5, 11, 12, 30, 50, 80, 120, 200} {
 		for seed := 0; seed < 6; seed++ {
@@ -283,9 +275,7 @@ func skeletonRuns(lines []string, glyph string) []int {
 // the shape of a real one: an "X" type slot and a title bar on the first line,
 // then "X" priority and state slots and an ID bar on the second.
 func TestRenderCompactSkeletonSegmentStructure(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	for _, styled := range []bool{false, true} {
 		lines := RenderCompactSkeleton(SkeletonOpts{Width: 80, Seed: 0, Styled: styled})
@@ -333,9 +323,7 @@ func TestSkeletonGlyphConstants(t *testing.T) {
 // TestRenderCompactDimFalseIsUnchanged is a regression guard: with Dim==false the
 // output must be byte-identical to the baseline (no Dim field set at all).
 func TestRenderCompactDimFalseIsUnchanged(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	cfg := RenderConfig{
 		Issue: domain.IssueSummary{
@@ -367,9 +355,7 @@ func TestRenderCompactDimFalseIsUnchanged(t *testing.T) {
 // Dim==true && Selected==false both lines carry the SkeletonShades[phase]
 // ANSI sequence as a foreground color code.
 func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	for phase := 0; phase < len(styles.SkeletonShades); phase++ {
 		phase := phase
@@ -436,9 +422,7 @@ func TestRenderCompactDimAppliesSkeletonShadesForeground(t *testing.T) {
 // indicator is preserved in the output AND a dim foreground ANSI code is
 // present in the content portion.
 func TestRenderCompactDimSelectedPreservesSelectionAndDimsForeground(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	dimmedSelected := RenderCompact(RenderConfig{
 		Issue: domain.IssueSummary{
@@ -492,9 +476,7 @@ func TestRenderCompactDimSelectedPreservesSelectionAndDimsForeground(t *testing.
 //   - All three phases (0, 1, 2) produce three distinct styled outputs
 //   - Plain text (ANSI-stripped) is identical across phases for the same Width/Seed
 func TestRenderCompactSkeletonPhaseCyclesColor(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	const width = 80
 	const seed = 0
@@ -538,9 +520,7 @@ func TestRenderCompactSkeletonPhaseCyclesColor(t *testing.T) {
 // The title has the first line to itself after the gutter, the type and a
 // space, so the slot is the same whether the row is styled or not.
 func TestRenderCompactGivesTheTitleEveryCellAfterTheType(t *testing.T) {
-	previousProfile := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	testui.ForceTrueColor(t)
 
 	// Uppercase ID and lowercase title, so a lowercase rune is the title.
 	issue := domain.IssueSummary{ID: "TM-1", Type: "task", Priority: 1, Status: "open"}

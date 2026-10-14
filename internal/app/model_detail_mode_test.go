@@ -45,7 +45,7 @@ func TestModelDetailViewShowsTheConfiguredCommentKeyOnTheAddButton(t *testing.T)
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -83,7 +83,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 90, Height: 16})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -92,7 +92,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 		t.Fatalf("expected metadata section in initial detail view, got:\n%s", viewTop)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	next, cmd = m.Update(testui.Press("pgdown"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -104,7 +104,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 		t.Fatalf("expected first description lines after paging, got:\n%s", viewPaged)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	next, cmd = m.Update(testui.Press("end"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -152,19 +152,19 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	m.detail.ContentScrollOffset = 5
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, cmd = m.Update(testui.Press("left"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	// (Q6a) Down only moves cursor — no preview load command (nil cmd).
 	prevIndex := m.detail.BrowserSelectedIndex
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, cmd = m.Update(testui.Press("down"))
 	m = next.(Model)
 	// cmd may be nil or a no-op batch; it must NOT trigger a detail reload.
 	mark := gw.CallCount()
@@ -185,7 +185,7 @@ func TestModelDetailModeLeftBrowserUpDownMovesCursorOnlyThenEnterLoads(t *testin
 
 	// (Q6b) Enter emits OpenRelatedIssueMsg → loadDetailCmd (non-nil cmd).
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -247,7 +247,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -255,13 +255,13 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 		t.Fatalf("expected dependencies to populate browser items without parent-group, got %d", len(m.detail.BrowserItems))
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, cmd = m.Update(testui.Press("left"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
 	// Down twice: moves cursor to index 2 (tm-4 in the Related group). No load occurs.
 	mark := gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, cmd = m.Update(testui.Press("down"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if gw.HasCallSince(mark, fakes.MethodIssue) {
@@ -269,7 +269,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 	}
 
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, cmd = m.Update(testui.Press("down"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if gw.HasCallSince(mark, fakes.MethodIssue) {
@@ -278,7 +278,7 @@ func TestModelDetailModeDependenciesWithoutParentGroupUpDownMovesCursorOnlyThenE
 
 	// Cursor is now on tm-4 (index 2). Enter triggers reload.
 	mark = gw.CallCount()
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -333,7 +333,7 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 
 	// Open the epic's detail (the ready selection).
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.detail.SelectionID() != "tm-epic" || m.detail.Detail.Summary.ID != "tm-epic" {
@@ -344,10 +344,10 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	}
 
 	// Focus the Dependencies pane and Enter on the child → drill down.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, cmd = m.Update(testui.Press("left"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -360,10 +360,10 @@ func TestModelDetailRoundTripEpicToChildAndBackViaParent(t *testing.T) {
 	}
 
 	// Focus the Dependencies pane and Enter on the Parent row → jump back up.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, cmd = m.Update(testui.Press("left"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -434,7 +434,7 @@ func TestAppHandlerOpenRelatedIssueMsgPerformsReloadFocusMoveAndScrollReset(t *t
 	mark := gw.CallCount()
 
 	// Send Enter: drives HandleKey which should emit OpenRelatedIssueMsg for tm-child.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(testui.Press("enter"))
 	m, cmd = deliverDrill(t, next.(Model), cmd)
 
 	// (Q6c) App handler must: set TargetID, Loading=true, reset all scroll offsets.
@@ -497,7 +497,7 @@ func TestAppHandlerDrillIntoDepWithDepsKeepsFocusOnDependenciesRail(t *testing.T
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 
 	// Send Enter to drill into tm-child (has deps → non-leaf).
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(testui.Press("enter"))
 	m, _ = deliverDrill(t, next.(Model), cmd)
 	if m.detail.TargetID() != "tm-child" || !m.detail.IsLoading() {
 		t.Fatalf("placeholder phase: target %q loading %v, want an in-flight load of tm-child", m.detail.TargetID(), m.detail.IsLoading())
@@ -552,7 +552,7 @@ func TestAppHandlerDrillIntoLeafDepMovesFocusToContent(t *testing.T) {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 
 	// Send Enter to drill into tm-leaf (no deps → leaf).
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(testui.Press("enter"))
 	m, _ = deliverDrill(t, next.(Model), cmd)
 	if m.detail.TargetID() != "tm-leaf" || !m.detail.IsLoading() {
 		t.Fatalf("placeholder phase: target %q loading %v, want an in-flight load of tm-leaf", m.detail.TargetID(), m.detail.IsLoading())
@@ -626,14 +626,14 @@ func drilledIntoChild(t *testing.T, gw *fakes.TrackedRepository) Model {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, cmd = m.Update(testui.Press("left"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -711,7 +711,7 @@ func TestModelEscapeFromDrillReturnsTheSelectionToTheBrowseRow(t *testing.T) {
 	gw := fakes.NewTracked()
 	m := drilledIntoChild(t, gw)
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd := m.Update(testui.Press("esc"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -738,7 +738,7 @@ func TestModelReloadDetailKeyIssuesALoad(t *testing.T) {
 	m := drilledIntoChild(t, gw)
 
 	mark := gw.CallCount()
-	next, cmd := m.Update(testKey("alt+r"))
+	next, cmd := m.Update(testui.Press("alt+r"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("the reload key produced no command")

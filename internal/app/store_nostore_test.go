@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository/nostore"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 type noStoreStart struct {
@@ -137,7 +138,7 @@ func TestNoStoreStartArmsTheRefreshTick(t *testing.T) {
 func TestNoStoreStartEscapeQuits(t *testing.T) {
 	s := newNoStoreStart(t)
 
-	_, cmd := s.m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	_, cmd := s.m.Update(testui.Press("esc"))
 	if !quits(cmd) {
 		t.Error("Escape on the picker with no store open did not quit")
 	}
@@ -158,7 +159,7 @@ func TestNoStoreStartHoldsTheOperatorOnThePicker(t *testing.T) {
 	if !m.showHelp {
 		t.Error("help does not open over the picker with no store open")
 	}
-	next, _ := s.m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, _ := s.m.Update(testui.Press("tab"))
 	if next.(Model).active != mode.StorePicker {
 		t.Error("tab left the picker with no store open")
 	}
@@ -179,7 +180,7 @@ func TestNoStoreStartOpeningAStoreLeavesTheNoStoreState(t *testing.T) {
 	}
 
 	m = press(t, m, "alt+s")
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd := m.Update(testui.Press("esc"))
 	if quits(cmd) {
 		t.Fatal("Escape quit the app with a store open; it must return to the board")
 	}

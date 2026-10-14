@@ -13,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -53,7 +54,7 @@ func run(t *testing.T, m *Model, cmd tea.Cmd) {
 }
 
 // reloadKey is the default board reload key, which the picker reads.
-var reloadKey = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true}
+var reloadKey = testui.Press("alt+r")
 
 func TestInitListsTheCatalog(t *testing.T) {
 	t.Parallel()
@@ -137,7 +138,7 @@ func TestMovementClampsToTheList(t *testing.T) {
 	run(t, m, m.Init())
 
 	for i := 0; i < 5; i++ {
-		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+		m.HandleKey(testui.Press("down"))
 	}
 	selected, _ := m.SelectedEntry()
 	if selected.Name != "charlie" {
@@ -145,7 +146,7 @@ func TestMovementClampsToTheList(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		m.HandleKey(tea.KeyMsg{Type: tea.KeyUp})
+		m.HandleKey(testui.Press("up"))
 	}
 	selected, _ = m.SelectedEntry()
 	if selected.Name != "alpha" {
@@ -169,13 +170,13 @@ func TestPageAndBoundKeysMoveTheSelection(t *testing.T) {
 		key  tea.KeyMsg
 		want int
 	}{
-		{tea.KeyMsg{Type: tea.KeyPgDown}, page},
-		{tea.KeyMsg{Type: tea.KeyPgDown}, 2 * page},
-		{tea.KeyMsg{Type: tea.KeyPgUp}, page},
-		{tea.KeyMsg{Type: tea.KeyEnd}, 29},
-		{tea.KeyMsg{Type: tea.KeyPgDown}, 29},
-		{tea.KeyMsg{Type: tea.KeyHome}, 0},
-		{tea.KeyMsg{Type: tea.KeyPgUp}, 0},
+		{testui.Press("pgdown"), page},
+		{testui.Press("pgdown"), 2 * page},
+		{testui.Press("pgup"), page},
+		{testui.Press("end"), 29},
+		{testui.Press("pgdown"), 29},
+		{testui.Press("home"), 0},
+		{testui.Press("pgup"), 0},
 	}
 	for _, step := range steps {
 		if consumed, _ := m.HandleKey(step.key); !consumed {
@@ -196,7 +197,7 @@ func TestMovementOnAnEmptyListIsSafe(t *testing.T) {
 	m := newModel(t, &fakes.FakeStoreCatalog{})
 	run(t, m, m.Init())
 
-	m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+	m.HandleKey(testui.Press("down"))
 	if _, ok := m.SelectedEntry(); ok {
 		t.Error("an empty registry has no selected entry")
 	}
@@ -353,7 +354,7 @@ func TestFailedReloadKeepsTheChevronOnScreen(t *testing.T) {
 	run(t, m, m.Init())
 
 	for i := 0; i < 40; i++ {
-		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+		m.HandleKey(testui.Press("down"))
 	}
 	if m.scrollOffset == 0 {
 		t.Fatal("expected a scrolled window; the fixture no longer exercises the clamp")
@@ -387,7 +388,7 @@ func TestScrollWindowFollowsTheSelectionThroughALongList(t *testing.T) {
 
 	capacity := m.itemCapacity()
 	for i := 0; i < 49; i++ {
-		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+		m.HandleKey(testui.Press("down"))
 		if m.selectedRow < m.scrollOffset || m.selectedRow >= m.scrollOffset+capacity {
 			t.Fatalf("selection %d left the window [%d,%d) after %d moves", m.selectedRow, m.scrollOffset, m.scrollOffset+capacity, i+1)
 		}
@@ -397,7 +398,7 @@ func TestScrollWindowFollowsTheSelectionThroughALongList(t *testing.T) {
 	}
 
 	for i := 0; i < 49; i++ {
-		m.HandleKey(tea.KeyMsg{Type: tea.KeyUp})
+		m.HandleKey(testui.Press("up"))
 	}
 	if m.scrollOffset != 0 {
 		t.Errorf("scrollOffset back at the top: got %d, want 0", m.scrollOffset)
@@ -420,7 +421,7 @@ func TestSelectionStaysOnScreenBeforeTheFirstResize(t *testing.T) {
 
 	gutter, _ := styles.SelectionPrefix(true, false)
 	for i := 0; i < 29; i++ {
-		m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
+		m.HandleKey(testui.Press("down"))
 		view := ansi.ReplaceAllString(m.View(0, "help"), "")
 		if got := strings.Count(view, "│"+gutter); got != 2 {
 			t.Fatalf("after %d moves the selection bar is on %d lines, want both lines of the selected row:\n%s", i+1, got, view)
@@ -445,7 +446,7 @@ func TestSelectedRowIsDrawnWholeAtEvenAndOddHeights(t *testing.T) {
 		m.SetSize(100, height)
 		run(t, m, m.Init())
 
-		for _, move := range []tea.KeyMsg{{Type: tea.KeyDown}, {Type: tea.KeyUp}} {
+		for _, move := range []tea.KeyMsg{testui.Press("down"), testui.Press("up")} {
 			for i := 0; i < len(names); i++ {
 				m.HandleKey(move)
 				view := ansi.ReplaceAllString(m.View(0, "help"), "")
@@ -468,7 +469,7 @@ func TestUnclaimedKeysFallThroughToTheShell(t *testing.T) {
 	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries("alpha")})
 	run(t, m, m.Init())
 
-	for _, k := range []tea.KeyMsg{{Type: tea.KeyEsc}, {Type: tea.KeyRunes, Runes: []rune("h"), Alt: true}, {Type: tea.KeyRunes, Runes: []rune("s"), Alt: true}, {Type: tea.KeyRunes, Runes: []rune("j")}, {Type: tea.KeyTab}} {
+	for _, k := range []tea.KeyMsg{testui.Press("esc"), testui.Press("alt+h"), testui.Press("alt+s"), testui.Press("j"), testui.Press("tab")} {
 		if consumed, _ := m.HandleKey(k); consumed {
 			t.Errorf("picker consumed %q; it must reach the shell", k.String())
 		}
@@ -490,7 +491,7 @@ func TestCreateRowsAskToCreateAStore(t *testing.T) {
 		if _, ok := m.SelectedEntry(); ok {
 			t.Errorf("row %d is a create row but reports a selected store", row)
 		}
-		consumed, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		consumed, cmd := m.HandleKey(testui.Press("enter"))
 		if !consumed || cmd == nil {
 			t.Fatalf("row %d: Enter was not handled", row)
 		}
@@ -502,7 +503,7 @@ func TestCreateRowsAskToCreateAStore(t *testing.T) {
 
 	// The first store is below the create rows, and still opens as a store.
 	m.selectedRow = 2
-	_, cmd := m.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.HandleKey(testui.Press("enter"))
 	if open, ok := cmd().(OpenMsg); !ok || open.Entry.Name != "alpha" {
 		t.Errorf("the first store below the create rows: got %+v, want it opened", cmd())
 	}
@@ -517,8 +518,8 @@ func TestWithdrawingTheCreateOfferKeepsTheSelectionOnARow(t *testing.T) {
 	m.SetSize(100, 24)
 	m.SetCreateTarget("/home/hans/dev/widget")
 	run(t, m, m.Init())
-	m.HandleKey(tea.KeyMsg{Type: tea.KeyDown})
-	m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}) // on alpha, the third row
+	m.HandleKey(testui.Press("down"))
+	m.HandleKey(testui.Press("down")) // on alpha, the third row
 
 	m.SetCreateTarget("")
 

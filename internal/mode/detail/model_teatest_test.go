@@ -59,20 +59,20 @@ func TestDetailsTeatestFocusSwitchRetainsScrollOffsets(t *testing.T) {
 
 	// Scroll content pane down several times (content pane is default focus).
 	for i := 0; i < 5; i++ {
-		tm.Send(tea.KeyMsg{Type: tea.KeyPgDown})
+		tm.Send(testui.Press("pgdown"))
 	}
 
 	// Switch focus left to dependencies pane.
-	tm.Send(tea.KeyMsg{Type: tea.KeyLeft})
+	tm.Send(testui.Press("left"))
 
 	// Scroll dependencies via page-down (page-down on deps pane scrolls the
 	// rail offset).
 	for i := 0; i < 3; i++ {
-		tm.Send(tea.KeyMsg{Type: tea.KeyPgDown})
+		tm.Send(testui.Press("pgdown"))
 	}
 
 	// Switch focus back to content pane (right key from dependencies).
-	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
+	tm.Send(testui.Press("right"))
 
 	// Wait for the metadata-pane content to appear, confirming all sends
 	// have been processed before we inspect final model state.
@@ -130,17 +130,17 @@ func TestDetailsTeatestSelectionChangeResetsAllScrollOffsets(t *testing.T) {
 
 	// Scroll content pane.
 	for i := 0; i < 4; i++ {
-		tm.Send(tea.KeyMsg{Type: tea.KeyPgDown})
+		tm.Send(testui.Press("pgdown"))
 	}
 
 	// Switch to dependencies and scroll.
-	tm.Send(tea.KeyMsg{Type: tea.KeyLeft})
+	tm.Send(testui.Press("left"))
 	for i := 0; i < 2; i++ {
-		tm.Send(tea.KeyMsg{Type: tea.KeyPgDown})
+		tm.Send(testui.Press("pgdown"))
 	}
 
 	// Back to the content pane.
-	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
+	tm.Send(testui.Press("right"))
 
 	// Wait for the metadata pane to appear in the output, which confirms all
 	// sends have been processed before inspecting final state.

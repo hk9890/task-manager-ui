@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // unsizedModel is a detail model with scrollable content and a non-zero scroll
@@ -43,12 +44,12 @@ func TestHandleKeyDeclinesEveryKeyBeforeThePaneIsSized(t *testing.T) {
 	t.Parallel()
 
 	keys := []tea.KeyMsg{
-		{Type: tea.KeyDown},
-		{Type: tea.KeyUp},
-		{Type: tea.KeyEnter},
-		{Type: tea.KeyLeft},
-		{Type: tea.KeyRight},
-		{Type: tea.KeyPgDown},
+		testui.Press("down"),
+		testui.Press("up"),
+		testui.Press("enter"),
+		testui.Press("left"),
+		testui.Press("right"),
+		testui.Press("pgdown"),
 	}
 
 	for _, height := range []int{0, -1} {
@@ -101,7 +102,7 @@ func TestHandleKeyConsumesTheSameKeyOnceThePaneIsSized(t *testing.T) {
 
 	m := unsizedModel(t)
 
-	consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, 80, 10)
+	consumed, _ := m.HandleKey(testui.Press("down"), 80, 10)
 	if !consumed {
 		t.Fatal("a sized pane declined a scroll key")
 	}

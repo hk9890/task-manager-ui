@@ -12,12 +12,14 @@ import (
 )
 
 // The palette and the glyph set are two choices, because a terminal program
-// cannot ask which font is loaded. The package starts on these two, which is
-// what a test draws with; a run draws with what the configuration names
-// (config.Default), and Apply makes it so.
+// cannot ask which font is loaded. The package starts on these two, with the
+// hover roles of a true-colour terminal, which is what a test draws with; a run
+// draws with what the configuration names (config.Default) on the profile of
+// its terminal, and Apply makes it so.
 const (
-	initialTheme  = "catppuccin-mocha"
-	initialGlyphs = "unicode"
+	initialTheme   = "catppuccin-mocha"
+	initialGlyphs  = "unicode"
+	initialProfile = termenv.TrueColor
 )
 
 var flavors = map[string]catppuccin.Flavor{
@@ -33,7 +35,7 @@ var lightThemes = map[string]bool{"catppuccin-latte": true}
 var darkTheme = true
 
 func init() {
-	if err := Apply(initialTheme, initialGlyphs); err != nil {
+	if err := Apply(initialTheme, initialGlyphs, initialProfile); err != nil {
 		panic("styles: defaults do not resolve: " + err.Error())
 	}
 }
@@ -59,15 +61,15 @@ func Validate(theme, glyphs string) error {
 // Apply makes a theme and a glyph set the ones every surface draws with. It
 // runs at startup, before the first render, and again when the operator
 // changes either on the configuration screen. The hover roles depend on
-// lipgloss.ColorProfile as it is during the call, so a test that sets another
-// profile applies again. The roles are package variables
+// profile, the colour profile of the terminal they are drawn on, so the caller
+// passes the profile it renders with. The roles are package variables
 // and nothing guards them, so a call under a running program comes from the
 // Bubble Tea event loop, which is also the only reader, never from a tea.Cmd.
-func Apply(theme, glyphs string) error {
+func Apply(theme, glyphs string, profile termenv.Profile) error {
 	if err := Validate(theme, glyphs); err != nil {
 		return err
 	}
-	applyFlavor(flavors[theme])
+	applyFlavor(flavors[theme], profile)
 	darkTheme = !lightThemes[theme]
 	Glyphs = glyphSets[glyphs]
 	return nil
@@ -77,9 +79,9 @@ func Apply(theme, glyphs string) error {
 // takes its glamour style from it.
 func Dark() bool { return darkTheme }
 
-// applyFlavor maps a Catppuccin flavour onto the roles. It is the only place a
-// colour is chosen.
-func applyFlavor(f catppuccin.Flavor) {
+// applyFlavor maps a Catppuccin flavour onto the roles for a terminal of the
+// given colour profile. It is the only place a colour is chosen.
+func applyFlavor(f catppuccin.Flavor, profile termenv.Profile) {
 	c := func(col catppuccin.Color) lipgloss.Color { return lipgloss.Color(col.Hex) }
 
 	// The hover is one surface below the selection, so it is lighter than the
@@ -90,7 +92,7 @@ func applyFlavor(f catppuccin.Flavor) {
 	// entry between the background and the selection, so the hover draws no
 	// band on them.
 	hover := c(f.Surface0())
-	switch lipgloss.ColorProfile() {
+	switch profile {
 	case termenv.ANSI256:
 		hover = greyRamp(f.Surface0())
 	case termenv.ANSI:

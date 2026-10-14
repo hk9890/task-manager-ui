@@ -16,6 +16,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
@@ -50,7 +51,7 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 
 	// ModeCyclePrev (shift+tab / ctrl+pgup): prevMode(Board) == Docs, the far
 	// end of the tab strip.
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlPgUp})
+	next, cmd := m.Update(testui.Press("ctrl+pgup"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Docs {
@@ -62,14 +63,14 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 
 	// Back to Board, then drill into Detail: lastBrowse must stay Board so the
 	// board selection is what Detail loads.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlPgDown})
+	next, cmd = m.Update(testui.Press("ctrl+pgdown"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Board {
 		t.Fatalf("expected ModeCycleNext from Docs to wrap to Board, got %s", m.active)
 	}
 
-	next, cmd = m.Update(testKey("enter"))
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
@@ -88,7 +89,7 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 	}
 
 	// Escape must return to the tab we drilled in from, not stay stuck in Detail.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd = m.Update(testui.Press("esc"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Board {

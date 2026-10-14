@@ -161,8 +161,8 @@ func TestNoAndEscapeOnTheDeleteQuestionWriteNothing(t *testing.T) {
 func TestEditorAskedForBeforeTheDeleteQuestionIsUpDoesNotOpenUnderIt(t *testing.T) {
 	m, _ := commentShell(t)
 
-	next, ask := m.Update(testKey("alt+d"))
-	next, load := next.(Model).Update(testKey("alt+u"))
+	next, ask := m.Update(testui.Press("alt+d"))
+	next, load := next.(Model).Update(testui.Press("alt+u"))
 	m = applyMessages(t, next.(Model), runBatch(ask))
 	if !m.showActionModal || m.pendingEditor == 0 {
 		t.Fatalf("setup: question up %v, pending open %d; want the question over a pending open", m.showActionModal, m.pendingEditor)

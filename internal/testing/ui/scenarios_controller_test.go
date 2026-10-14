@@ -94,9 +94,9 @@ func TestApplyControllerKeySequenceDrainsEveryCommandBeforeTheNextKey(t *testing
 	}
 
 	got := ApplyControllerKeySequence(c,
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")},
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")},
-		tea.KeyMsg{Type: tea.KeyEnter},
+		Press("j"),
+		Press("k"),
+		Press("enter"),
 	)
 
 	if got != c {

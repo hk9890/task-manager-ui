@@ -12,11 +12,11 @@ import (
 )
 
 var (
-	keyUp    = tea.KeyMsg{Type: tea.KeyUp}
-	keyDown  = tea.KeyMsg{Type: tea.KeyDown}
-	keyLeft  = tea.KeyMsg{Type: tea.KeyLeft}
-	keyRight = tea.KeyMsg{Type: tea.KeyRight}
-	keyEnter = tea.KeyMsg{Type: tea.KeyEnter}
+	keyUp    = testui.Press("up")
+	keyDown  = testui.Press("down")
+	keyLeft  = testui.Press("left")
+	keyRight = testui.Press("right")
+	keyEnter = testui.Press("enter")
 )
 
 func newModel(t *testing.T, theme, glyphs string) *Model {
@@ -151,15 +151,15 @@ func TestUnclaimedKeysFallThrough(t *testing.T) {
 	t.Parallel()
 
 	unclaimed := map[string]tea.KeyMsg{
-		"esc":       {Type: tea.KeyEsc},
-		"ctrl+c":    {Type: tea.KeyCtrlC},
-		"alt+h":     {Type: tea.KeyRunes, Runes: []rune("h"), Alt: true},
-		"tab":       {Type: tea.KeyTab},
-		"a letter":  {Type: tea.KeyRunes, Runes: []rune("x")},
-		"alt+left":  {Type: tea.KeyLeft, Alt: true},
-		"alt+right": {Type: tea.KeyRight, Alt: true},
-		"alt+enter": {Type: tea.KeyEnter, Alt: true},
-		"pgdown":    {Type: tea.KeyPgDown},
+		"esc":       testui.Press("esc"),
+		"ctrl+c":    testui.Press("ctrl+c"),
+		"alt+h":     testui.Press("alt+h"),
+		"tab":       testui.Press("tab"),
+		"a letter":  testui.Press("x"),
+		"alt+left":  testui.Press("alt+left"),
+		"alt+right": testui.Press("alt+right"),
+		"alt+enter": testui.Press("alt+enter"),
+		"pgdown":    testui.Press("pgdown"),
 	}
 	for name, key := range unclaimed {
 		m := newModel(t, "catppuccin-mocha", "unicode")
@@ -189,7 +189,7 @@ func TestMoveKeysFollowTheBoardBindings(t *testing.T) {
 	if consumed, _ := m.HandleKey(keyDown); consumed {
 		t.Error("down moved the cursor after move_down was rebound")
 	}
-	if consumed, _ := m.HandleKey(tea.KeyMsg{Type: tea.KeyCtrlN}); !consumed || m.selectedRow != rowGlyphs {
+	if consumed, _ := m.HandleKey(testui.Press("ctrl+n")); !consumed || m.selectedRow != rowGlyphs {
 		t.Errorf("ctrl+n: consumed %v, cursor on row %d; want the second row", consumed, m.selectedRow)
 	}
 }

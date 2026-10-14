@@ -7,6 +7,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
@@ -25,11 +26,11 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	next, cmd := m.Update(testKey("enter"))
+	next, cmd := m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	next, cmd = m.Update(testKey("alt+v"))
+	next, cmd = m.Update(testui.Press("alt+v"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
@@ -39,10 +40,10 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 
 	next, _ = m.Update(launchActionResultMsg{action: "nvim", err: nil})
 	m = next.(Model)
-	next, cmd = m.Update(testKey("alt+p"))
+	next, cmd = m.Update(testui.Press("alt+p"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(testKey("alt+l"))
+	next, cmd = m.Update(testui.Press("alt+l"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 

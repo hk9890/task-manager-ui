@@ -38,7 +38,7 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		t.Fatalf("expected initial board selection tm-1, got %q", got)
 	}
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	next, cmd := m.Update(testui.Press("right"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving board column")
@@ -54,7 +54,7 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		t.Fatalf("expected shell detail state to load tm-4, got %q", m.detail.Detail.Summary.ID)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, cmd = m.Update(testui.Press("down"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected selection changed command after moving board row")
@@ -68,7 +68,7 @@ func TestModelBoardNavigationUpdatesShellSelectionAndDetailState(t *testing.T) {
 		t.Fatalf("expected shell detail state to update to tm-2, got %q", m.detail.Detail.Summary.ID)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatalf("expected board open-detail action request command")
@@ -112,8 +112,8 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 		return applyMessages(t, m, runBatch(cmd))
 	}
 
-	tab := tea.KeyMsg{Type: tea.KeyTab}
-	shiftTab := tea.KeyMsg{Type: tea.KeyShiftTab}
+	tab := testui.Press("tab")
+	shiftTab := testui.Press("shift+tab")
 
 	for _, want := range []mode.ID{mode.Docs, mode.Board} {
 		m = press(m, tab)
@@ -133,7 +133,7 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 	}
 
 	// From Detail the cycle resumes from the tab we drilled in from.
-	m = press(m, testKey("enter"))
+	m = press(m, testui.Press("enter"))
 	if m.active != mode.Detail {
 		t.Fatalf("expected detail mode after enter, got %s", m.active)
 	}
@@ -165,7 +165,7 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 	// the assertion would pin fixture behavior, not product behavior. The
 	// fixture parity gap is tracked separately.
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, cmd := m.Update(testui.Press("tab"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Docs {
@@ -180,7 +180,7 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 		t.Fatalf("expected docs selection tm-9, got %q", got)
 	}
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd = m.Update(testui.Press("enter"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Detail {
@@ -191,7 +191,7 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 	}
 
 	// Escape returns to the tab we drilled in from.
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd = m.Update(testui.Press("esc"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Docs {
@@ -229,33 +229,33 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 		t.Fatalf("expected footer to reflect configured bindings, got:\n%s", footer)
 	}
 
-	next, cmd := m.Update(testKey("alt+d"))
+	next, cmd := m.Update(testui.Press("alt+d"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if got := firstSelectionID(m, mode.Board); got != "tm-2" {
 		t.Fatalf("expected configured board move-right key to select tm-2, got %q", got)
 	}
 
-	next, _ = m.Update(testKey("alt+h"))
+	next, _ = m.Update(testui.Press("alt+h"))
 	m = next.(Model)
 	if m.showHelp {
 		t.Fatal("expected default help key to stop working after override")
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("F")})
+	next, _ = m.Update(testui.Runes("F"))
 	m = next.(Model)
 	if m.showHelp {
 		t.Fatal("expected plain F rune not to trigger help")
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	next, _ = m.Update(testui.Press("f1"))
 	m = next.(Model)
 	if !m.showHelp {
 		t.Fatal("expected configured help key to show help")
 	}
 	m.showHelp = false
 
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	next, cmd = m.Update(testui.Press("ctrl+q"))
 	m = next.(Model)
 	if cmd == nil {
 		t.Fatal("expected configured quit key to return quit command")
@@ -352,7 +352,7 @@ func TestBarePrintableKeysTypeIntoTheFilterAndRunNoAction(t *testing.T) {
 
 	for _, tab := range []mode.ID{mode.Board, mode.Docs} {
 		if m.active != tab {
-			m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+			m = applyMessages(t, m, []tea.Msg{testui.Press("tab")})
 		}
 		if m.active != tab {
 			t.Fatalf("fixture: on %q, want %q", m.active, tab)
@@ -360,7 +360,7 @@ func TestBarePrintableKeysTypeIntoTheFilterAndRunNoAction(t *testing.T) {
 
 		for _, r := range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?/>" {
 			mark := len(gw.Calls())
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}})
+			m = applyMessages(t, m, []tea.Msg{testui.Runes(string(r))})
 			if m.active != tab || m.overlayOpen() {
 				t.Errorf("%q on %s: active %q, overlay %v", string(r), tab, m.active, m.overlayOpen())
 			}
@@ -373,7 +373,7 @@ func TestBarePrintableKeysTypeIntoTheFilterAndRunNoAction(t *testing.T) {
 				}
 			}
 
-			m = applyMessages(t, m, []tea.Msg{tea.KeyMsg{Type: tea.KeyCtrlU}})
+			m = applyMessages(t, m, []tea.Msg{testui.Press("ctrl+u")})
 		}
 	}
 }
@@ -389,12 +389,12 @@ func TestEscapeFromDocsReturnsToBoard(t *testing.T) {
 	}
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
-	m = applyMessages(t, m, []tea.Msg{testKey("tab")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("tab")})
 	if m.active != mode.Docs {
 		t.Fatalf("fixture: on %q, want docs", m.active)
 	}
 
-	m = applyMessages(t, m, []tea.Msg{testKey("esc")})
+	m = applyMessages(t, m, []tea.Msg{testui.Press("esc")})
 	if m.active != mode.Board || m.lastBrowse != mode.Board {
 		t.Fatalf("esc from docs left the shell on %q (last browse %q)", m.active, m.lastBrowse)
 	}

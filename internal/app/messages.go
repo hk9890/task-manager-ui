@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/muesli/termenv"
+
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
@@ -79,6 +81,11 @@ type RuntimeOptions struct {
 	// particular when --store-name named an unregistered store, since the
 	// working directory may well have one of its own.
 	StorelessDir string
+
+	// ColorProfile is the colour profile of the terminal the app draws on.
+	// The configuration screen applies a theme on it, because the hover roles
+	// depend on it. The zero value is true colour.
+	ColorProfile termenv.Profile
 
 	// Ctx is the application lifecycle context. Each store the app opens gets
 	// a context derived from it, and repository reads use that one, so both

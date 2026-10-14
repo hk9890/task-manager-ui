@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // bandOf is the background sequence RowHighlight opens a band with.
@@ -19,7 +21,7 @@ func bandOf(color lipgloss.Color) string {
 // survives the reset that ends every styled run inside the row, and is the
 // selection's on a row that is both selected and under the pointer.
 func TestRowHighlightBandsTheWholeRow(t *testing.T) {
-	forceTrueColor(t)
+	testui.ForceTrueColor(t)
 
 	row := lipgloss.NewStyle().Foreground(TextMutedColor).Render("ab") + " " +
 		lipgloss.NewStyle().Bold(true).Render("cd")
@@ -68,20 +70,16 @@ var terminalProfiles = map[string]termenv.Profile{
 }
 
 // applyOnEveryTerminal applies every theme on every colour profile in turn and
-// calls check after each. The hover roles are chosen by the profile, so the
-// profile is set before the theme is applied.
+// calls check after each. The hover roles are chosen by the profile the theme
+// is applied on, and check renders on the same profile.
 func applyOnEveryTerminal(t *testing.T, check func(name, theme string, profile termenv.Profile)) {
 	t.Helper()
-	// Cleanups run last first: the profile is back before the roles are
-	// applied again, so they are the roles of the start profile.
 	restoreInitialStyles(t)
-	previousProfile := lipgloss.ColorProfile()
-	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
 
 	for name, profile := range terminalProfiles {
+		testui.UseColorProfile(t, profile)
 		for _, theme := range Themes() {
-			lipgloss.SetColorProfile(profile)
-			if err := Apply(theme, initialGlyphs); err != nil {
+			if err := Apply(theme, initialGlyphs, profile); err != nil {
 				t.Fatalf("Apply(%q): %v", theme, err)
 			}
 			check(name, theme, profile)
@@ -203,9 +201,8 @@ func TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal(t *testing.T) {
 // a palette profile two times in three, and a later test reads the hover roles
 // without applying a theme.
 func TestApplyOnEveryTerminalLeavesTheRolesOfTheStartProfile(t *testing.T) {
-	forceTrueColor(t)
 	restoreInitialStyles(t)
-	if err := Apply(initialTheme, initialGlyphs); err != nil {
+	if err := Apply(initialTheme, initialGlyphs, initialProfile); err != nil {
 		t.Fatal(err)
 	}
 	before := RowHoverBgColor

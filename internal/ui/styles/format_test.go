@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 func TestSelectionPrefix(t *testing.T) {
@@ -23,7 +25,7 @@ func TestSelectionPrefix(t *testing.T) {
 	})
 
 	t.Run("selected styled", func(t *testing.T) {
-		forceTrueColor(t)
+		testui.ForceTrueColor(t)
 
 		plain, rendered := SelectionPrefix(true, true)
 		if plain != "▌ " {
