@@ -37,9 +37,10 @@ func (q Query) Empty() bool {
 }
 
 // IsQueryKey reports whether msg edits a query: a key that types text, space
-// included, without alt, and backspace, ctrl+w and ctrl+u. A browse surface
-// answers Browse.TakesKey with it, so a key the query took runs no shell
-// action.
+// included, without alt, and backspace, ctrl+w and ctrl+u. A kitty-protocol
+// terminal reports the shift of shift+backspace, which others hide, so that
+// is backspace too. A browse surface answers Browse.TakesKey with it, so a key
+// the query took runs no shell action.
 func IsQueryKey(msg tea.KeyPressMsg) bool {
 	if msg.Mod.Contains(tea.ModAlt) {
 		return false
@@ -48,7 +49,7 @@ func IsQueryKey(msg tea.KeyPressMsg) bool {
 		return true
 	}
 	switch msg.Keystroke() {
-	case "backspace", "ctrl+w", "ctrl+u":
+	case "backspace", "shift+backspace", "ctrl+w", "ctrl+u":
 		return true
 	}
 	return false
@@ -63,7 +64,7 @@ func (q *Query) HandleKey(msg tea.KeyPressMsg) (consumed, changed bool) {
 
 	before := q.text
 	switch msg.Keystroke() {
-	case "backspace":
+	case "backspace", "shift+backspace":
 		if runes := []rune(q.text); len(runes) > 0 {
 			q.set(string(runes[:len(runes)-1]))
 		}
@@ -88,8 +89,12 @@ func (q *Query) Paste(text string) (changed bool) {
 
 // PlainKey reports whether msg is the key code with no modifier but alt, as a
 // surface that matches a key itself rather than through a binding means it.
+// It compares the names a binding matches, so the keypad's Enter and arrows
+// count, and so does a key pressed while Caps Lock or Num Lock is on.
 func PlainKey(msg tea.KeyPressMsg, code rune) bool {
-	return msg.Code == code && msg.Mod&^tea.ModAlt == 0
+	key := msg.Key()
+	key.Mod &^= tea.ModAlt
+	return key.Keystroke() == tea.Key{Code: code}.Keystroke()
 }
 
 // Clear empties the query and reports whether it held text.

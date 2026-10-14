@@ -175,7 +175,9 @@ Size, cells and colour in an `internal/app` test:
 - Assert a foreground, a background or bold on the escape codes, under `testui.ForceTrueColor`.
   A stripped golden passes with the wrong colour.
 - Set the render profile with `testui.ForceTrueColor` or `testui.UseColorProfile`. Without one the
-  suite renders for `colorprofile.ASCII`, which strips every SGR sequence, bold and reverse too.
+  suite renders for `colorprofile.NoTTY`, which strips every SGR sequence, bold and reverse too.
+  `colorprofile.ASCII` is a terminal without colour: it keeps bold, underline and reverse and
+  drops every colour, as the program does under `NO_COLOR`.
   The hover roles are chosen by the profile passed to `styles.Apply`, so a test of a 256- or a
   16-colour terminal passes that profile to both, as
   `applyOnEveryTerminal` does (`internal/ui/styles/row_highlight_test.go`). Restore the start theme

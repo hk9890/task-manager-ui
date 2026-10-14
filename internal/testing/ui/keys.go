@@ -15,11 +15,23 @@ import (
 // Bubble Tea majors; when the construction lives here, this file is the only
 // test code that changes with it.
 
-// modifiers maps each prefix of a key name to its modifier.
+// modifiers maps each prefix of a key name to its modifier. A terminal with the
+// kitty keyboard protocol reports a lock that is on as a modifier of a key
+// that prints nothing.
 var modifiers = map[string]tea.KeyMod{
-	"ctrl":  tea.ModCtrl,
-	"alt":   tea.ModAlt,
-	"shift": tea.ModShift,
+	"ctrl":     tea.ModCtrl,
+	"alt":      tea.ModAlt,
+	"shift":    tea.ModShift,
+	"capslock": tea.ModCapsLock,
+	"numlock":  tea.ModNumLock,
+}
+
+// keypadKeys maps the name of a keypad key to its code. A terminal with the
+// kitty keyboard protocol reports it apart from the main key, which Bubble Tea
+// prints it as.
+var keypadKeys = map[string]rune{
+	"kpenter": tea.KeyKpEnter,
+	"kpleft":  tea.KeyKpLeft,
 }
 
 // namedKeys maps the name of each key that prints nothing to its code.
@@ -63,9 +75,10 @@ func KeyNames() []string {
 
 // Press returns the key message whose name is name, as Bubble Tea prints it
 // and as the keybinding config writes it: "enter", "shift+tab", "ctrl+u",
-// "f1", "alt+left", a single rune such as "j", "J" or "alt+x", and "space" for
-// the space key. It panics on any other name, because that is a bug in the
-// test.
+// "f1", "alt+left", a single rune such as "j", "J", "shift+j" or "alt+x", and
+// "space" for the space key. "numlock+left" and "kpenter" are the keys a
+// kitty-protocol terminal reports with Num Lock on and on the keypad. It panics
+// on any other name, because that is a bug in the test.
 func Press(name string) tea.KeyPressMsg {
 	var mod tea.KeyMod
 	key := name
@@ -79,12 +92,22 @@ func Press(name string) tea.KeyPressMsg {
 		key = rest
 	}
 
+	code, isNamed := namedKeys[key]
+	if !isNamed {
+		code, isNamed = keypadKeys[key]
+	}
+
 	var msg tea.KeyPressMsg
-	switch code, isNamed := namedKeys[key]; {
+	switch {
 	case key == "space":
 		msg = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	case utf8.RuneCountInString(key) == 1:
-		msg = runeKey([]rune(key)[0])
+		r := []rune(key)[0]
+		if mod&tea.ModShift != 0 {
+			// A terminal types the shifted letter.
+			r = unicode.ToUpper(r)
+		}
+		msg = runeKey(r)
 	case isNamed:
 		msg = tea.KeyPressMsg{Code: code}
 	default:

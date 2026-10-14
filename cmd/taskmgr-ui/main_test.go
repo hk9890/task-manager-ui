@@ -592,7 +592,7 @@ func TestRunPassesTheTerminalColourProfileToStartup(t *testing.T) {
 	restoreStyles(t)
 	t.Setenv("TTY_FORCE", "1")
 	t.Setenv("TERM", "xterm-256color")
-	for _, name := range []string{"COLORTERM", "NO_COLOR", "CLICOLOR_FORCE", "TMUX"} {
+	for _, name := range []string{"COLORTERM", "NO_COLOR", "CLICOLOR_FORCE", "TMUX", "WT_SESSION", "GOOGLE_CLOUD_SHELL"} {
 		t.Setenv(name, "")
 	}
 

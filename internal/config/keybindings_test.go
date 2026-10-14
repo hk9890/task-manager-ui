@@ -79,6 +79,9 @@ func TestMatchTakesEveryNameAKeyArrivesUnder(t *testing.T) {
 	if !resolved.Match(ShellContext, ShellActionOpenSearch, testui.Press("alt+shift+f")) {
 		t.Error("the alt+f binding does not match an alt+shift+f press")
 	}
+	if !resolved.Match(ShellContext, ShellActionOpenSearch, testui.Press("capslock+alt+shift+f")) {
+		t.Error("the alt+f binding does not match an alt+shift+f press with caps lock on")
+	}
 	if resolved.Match(ShellContext, ShellActionOpenSearch, testui.Press("ctrl+shift+f")) {
 		t.Error("the alt+f binding matches a ctrl+shift+f press")
 	}

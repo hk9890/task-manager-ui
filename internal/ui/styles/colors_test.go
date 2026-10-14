@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -176,5 +177,21 @@ func TestNormalizeIssueToken(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("normalizeIssueToken(%q) = %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+// TestABoldRoleStaysBoldWithoutColour: a terminal without colour (NO_COLOR)
+// draws the attributes and drops the colours, as the program's colour writer
+// does, so a match still stands out by weight.
+func TestABoldRoleStaysBoldWithoutColour(t *testing.T) {
+	testui.UseColorProfile(t, colorprofile.ASCII)
+
+	got := testui.Downsample(MatchTextStyle.Render("match"))
+
+	if !strings.Contains(got, "\x1b[1m") {
+		t.Errorf("the match is not bold without colour: %q", got)
+	}
+	if strings.Contains(got, "38;") || strings.Contains(got, "48;") {
+		t.Errorf("the match keeps a colour without colour: %q", got)
 	}
 }

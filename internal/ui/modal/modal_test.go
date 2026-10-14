@@ -314,6 +314,23 @@ func TestTypedRunesReachSubmitValues(t *testing.T) {
 	}
 }
 
+// TestShiftBackspaceDeletesInAnInput: a terminal with the kitty keyboard
+// protocol reports the shift of backspace, which others hide. The shifted key
+// deletes as backspace does.
+func TestShiftBackspaceDeletesInAnInput(t *testing.T) {
+	t.Parallel()
+
+	m := New(Config{
+		Title:  "Comment",
+		Inputs: []InputConfig{{Key: "body", Label: "Comment", Value: "looks good"}},
+	})
+	m, _ = m.Update(testui.Press("shift+backspace"))
+
+	if got := m.values()["body"]; got != "looks goo" {
+		t.Fatalf("shift+backspace leaves %q, want the last rune deleted", got)
+	}
+}
+
 // TestSubmitCmdDoesNotRaceWithFurtherTyping pins that the submit Cmd carries a
 // snapshot rather than a view of the live model.
 //

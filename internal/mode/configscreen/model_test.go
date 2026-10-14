@@ -95,6 +95,8 @@ func TestStepKeysAskForTheNeighbourAndWrap(t *testing.T) {
 		{"right steps the glyph set", firstTheme, firstSet, rowGlyphs, keyRight, ChangeMsg{Theme: firstTheme, Glyphs: sets[1]}},
 		{"right wraps after the last glyph set", firstTheme, lastSet, rowGlyphs, keyEnter, ChangeMsg{Theme: firstTheme, Glyphs: firstSet}},
 		{"left wraps before the first glyph set", firstTheme, firstSet, rowGlyphs, keyLeft, ChangeMsg{Theme: firstTheme, Glyphs: lastSet}},
+		{"left with num lock on steps the theme back", themes[1], firstSet, rowTheme, testui.Press("numlock+left"), ChangeMsg{Theme: firstTheme, Glyphs: firstSet}},
+		{"the keypad's enter steps the theme as enter does", firstTheme, firstSet, rowTheme, testui.Press("kpenter"), ChangeMsg{Theme: themes[1], Glyphs: firstSet}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

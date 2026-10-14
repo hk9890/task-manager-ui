@@ -134,6 +134,9 @@ func NewWithKeys(cfg Config, km KeyMap) Model {
 			ti.Placeholder = inputCfg.Placeholder
 			ti.SetWidth(36)
 			ti.Prompt = ""
+			// A terminal with the kitty keyboard protocol reports the shift
+			// of backspace, which others hide.
+			ti.KeyMap.DeleteCharacterBackward.SetKeys(append(ti.KeyMap.DeleteCharacterBackward.Keys(), "shift+backspace")...)
 			if inputCfg.MaxLength > 0 {
 				ti.CharLimit = inputCfg.MaxLength
 			}

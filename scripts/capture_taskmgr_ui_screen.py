@@ -20,14 +20,32 @@ ESC = "\x1b"
 WAIT_POLL_SECONDS = 0.05
 
 
-class ScrollingScreen(pyte.Screen):
-    """A pyte screen that also scrolls a region by SU and SD.
+class RendererScreen(pyte.Screen):
+    """A pyte screen that also runs the sequences of Bubble Tea's renderer
+    that pyte lacks.
 
-    Bubble Tea's renderer moves the rows of a list that scrolls with SU and SD
-    inside the scroll margins, and redraws only the rows that came in. pyte
-    knows neither sequence, so without these the captured screen keeps the old
-    rows next to the new ones.
+    The renderer moves the rows of a list that scrolls with SU and SD inside
+    the scroll margins, and redraws only the rows that came in. It repeats a
+    character with REP, and moves the cursor with HPA and CBT. pyte knows none
+    of these, so without them the captured screen keeps the old rows next to
+    the new ones, drops repeated characters, and draws text in the wrong
+    column. The renderer sends REP and HPA when TERM names a terminal that
+    has them, such as tmux or kitty, and CBT when the terminal keeps tabs.
     """
+
+    last_drawn = " "
+
+    def draw(self, data: str) -> None:
+        super().draw(data)
+        if data:
+            self.last_drawn = data[-1]
+
+    def repeat_last_character(self, count: int | None = None, **_: Any) -> None:
+        self.draw(self.last_drawn * (count or 1))
+
+    def cursor_back_tab(self, count: int | None = None, **_: Any) -> None:
+        for _ in range(count or 1):
+            self.cursor.x = max((stop for stop in self.tabstops if stop < self.cursor.x), default=0)
 
     def scroll_up(self, count: int | None = None, **_: Any) -> None:
         top, bottom = self.margins or pyte.screens.Margins(0, self.lines - 1)
@@ -50,8 +68,15 @@ class ScrollingScreen(pyte.Screen):
                 self.buffer.pop(y, None)
 
 
-class ScrollingStream(pyte.Stream):
-    csi = {**pyte.Stream.csi, "S": "scroll_up", "T": "scroll_down"}
+class RendererStream(pyte.Stream):
+    csi = {
+        **pyte.Stream.csi,
+        "S": "scroll_up",
+        "T": "scroll_down",
+        "b": "repeat_last_character",
+        "`": "cursor_to_column",
+        "Z": "cursor_back_tab",
+    }
 
 
 @dataclass
@@ -344,8 +369,8 @@ def capture(
     startup_wait: float,
     timeout: float,
 ) -> CaptureResult:
-    screen = ScrollingScreen(width, height)
-    stream = ScrollingStream(screen)
+    screen = RendererScreen(width, height)
+    stream = RendererStream(screen)
     # A read can end inside a multi-byte character. Decoding each chunk alone
     # drops that character and draws the rest of its row one cell to the left.
     decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")

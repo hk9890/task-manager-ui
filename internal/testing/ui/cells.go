@@ -34,9 +34,10 @@ func FindCell(tb testing.TB, view, text string) (x, y int) {
 	return x, y
 }
 
-// activeProfile is the colour profile Downsample renders for. The suite
-// renders without colour unless a test asks for a profile.
-var activeProfile = colorprofile.ASCII
+// activeProfile is the colour profile Downsample renders for. Unless a test
+// asks for a profile, the suite renders as output that is not a terminal: no
+// SGR sequence at all.
+var activeProfile = colorprofile.NoTTY
 
 // ForceTrueColor renders with full colour for the rest of the test. The suite
 // otherwise renders without any, which hides what a background says. The
@@ -60,13 +61,14 @@ func UseColorProfile(tb testing.TB, profile colorprofile.Profile) {
 // Downsample returns rendered output as a terminal of the test's colour
 // profile shows it. Lip Gloss renders every colour in true colour and leaves
 // the profile to the program's output, which a test that reads a View
-// directly does not pass through. A terminal without colour shows no SGR
-// sequence at all, bold and reverse included.
+// directly does not pass through. Output that is not a terminal shows no SGR
+// sequence at all; a terminal without colour (ASCII) keeps bold, underline
+// and reverse, as the program's colour writer does.
 func Downsample(s string) string {
 	switch {
 	case activeProfile == colorprofile.TrueColor:
 		return s
-	case activeProfile <= colorprofile.ASCII:
+	case activeProfile <= colorprofile.NoTTY:
 		return AnsiEscapePattern.ReplaceAllString(s, "")
 	}
 	var out strings.Builder

@@ -286,6 +286,29 @@ func TestUpAndDownMoveFieldsOnARowAndTheCursorInTheText(t *testing.T) {
 	}
 }
 
+// TestShiftEnterAndShiftBackspaceActAsTheKeysWithoutShift: a terminal with
+// the kitty keyboard protocol reports the shift of enter and backspace, which
+// others hide. The shifted key does what the plain one does.
+func TestShiftEnterAndShiftBackspaceActAsTheKeysWithoutShift(t *testing.T) {
+	t.Parallel()
+
+	m := open(t, Options{Kind: KindCommentAdd})
+	press(t, m, testui.Runes("ab"), testui.Press("shift+enter"), testui.Runes("c"))
+	if got := m.values().Text; got != "ab\nc" {
+		t.Errorf("shift+enter in the text gives %q, want a line break", got)
+	}
+	press(t, m, testui.Press("shift+backspace"))
+	if got := m.values().Text; got != "ab\n" {
+		t.Errorf("shift+backspace in the text gives %q, want the last rune deleted", got)
+	}
+
+	m = openOn(t, Options{Kind: KindEdit, Values: issueValues()}, uiissueedit.FieldTitle)
+	press(t, m, testui.Press("shift+backspace"))
+	if got := m.values().Title; got != "Fix the heade" {
+		t.Errorf("shift+backspace in the title gives %q, want the last rune deleted", got)
+	}
+}
+
 func TestUpOnTheFirstLineAndDownOnTheLastLineLeaveTheText(t *testing.T) {
 	t.Parallel()
 

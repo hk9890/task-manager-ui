@@ -176,6 +176,7 @@ func newInput(value, placeholder string) textinput.Model {
 	// widget's paste reads the system clipboard, which the screen does not
 	// touch.
 	input.KeyMap.Paste = key.NewBinding()
+	input.KeyMap.DeleteCharacterBackward = withShift(input.KeyMap.DeleteCharacterBackward, "backspace")
 	input.SetValue(value)
 	return input
 }
@@ -207,10 +208,20 @@ func newText(value string) textarea.Model {
 	text.KeyMap.SelectLineDown = key.NewBinding()
 	text.KeyMap.SelectAll = key.NewBinding()
 	text.KeyMap.CopySelection = key.NewBinding()
+	text.KeyMap.InsertNewline = withShift(text.KeyMap.InsertNewline, "enter")
+	text.KeyMap.DeleteCharacterBackward = withShift(text.KeyMap.DeleteCharacterBackward, "backspace")
 	// The widget makes a line break of a CR and of an LF each, so a CRLF is
 	// one LF before the widget gets it.
 	text.SetValue(strings.ReplaceAll(value, "\r\n", "\n"))
 	return text
+}
+
+// withShift adds shift+name to binding. A terminal with the kitty keyboard
+// protocol reports the shift of enter and backspace, which others hide, and
+// the shifted key does what the plain one does.
+func withShift(binding key.Binding, name string) key.Binding {
+	binding.SetKeys(append(binding.Keys(), "shift+"+name)...)
+	return binding
 }
 
 // SetSize updates render dimensions.

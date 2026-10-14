@@ -221,9 +221,10 @@ func (r ResolvedKeyBindings) Match(context, action string, msg tea.KeyPressMsg) 
 
 // keyName is the name a binding writes for a pressed key. A terminal that
 // reports the shift of an alt chord names alt+shift+x what others name alt+X;
-// both match an alt+x binding.
+// both match an alt+x binding, also while Caps Lock or Num Lock is on.
 func keyName(msg tea.KeyPressMsg) string {
-	if msg.Mod == tea.ModAlt|tea.ModShift && unicode.IsLetter(msg.Code) {
+	mod := msg.Mod &^ (tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
+	if mod == tea.ModAlt|tea.ModShift && unicode.IsLetter(msg.Code) {
 		return "alt+" + string(unicode.ToLower(msg.Code))
 	}
 	return msg.String()
