@@ -57,5 +57,6 @@ no hook is served by the main checkout's copy. Installing it is a once-per-clone
    the change made stale.
 2. `commit-commands:commit-push-pr`.
 3. Review the PR against [REVIEWING.md](REVIEWING.md) with `/worktree-flow:worktree-review <pr>`.
-4. `gh pr checks` green.
+4. `gh pr checks --required` green. `govulncheck` is not required: a new advisory turns it red on
+   every PR.
 5. `git status` clean in the worktree.

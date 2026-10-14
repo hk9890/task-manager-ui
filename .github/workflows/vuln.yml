@@ -29,5 +29,12 @@ jobs:
         with:
           version: 2026.10.10
 
-      - name: govulncheck
+      # govulncheck follows calls for one GOOS; scan each OS a release ships.
+      - name: govulncheck (linux)
         run: mise run vuln
+
+      - name: govulncheck (darwin)
+        if: ${{ !cancelled() }}
+        run: mise run vuln
+        env:
+          GOOS: darwin

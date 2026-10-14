@@ -83,8 +83,8 @@ that is now fixed. State the symptom; the cause belongs in the commit message.
 
 ## Local fallback
 
-When Actions can't be used. Needs `goreleaser` v2 in PATH
-(`go install github.com/goreleaser/goreleaser/v2@latest`), a clean tree on the
+When Actions can't be used. Needs in PATH the `goreleaser` that `release.yml` pins
+(`go install github.com/goreleaser/goreleaser/v2@<that version>`), a clean tree on the
 tagged commit, and `mise run ci` green there — that run substitutes for the CI
 provenance.
 
