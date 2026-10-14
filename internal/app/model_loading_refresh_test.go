@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -84,7 +84,7 @@ func TestSkeletonPhasePulse(t *testing.T) {
 
 	// Force spinner frame to 0 (phase 0).
 	m.spinnerFrame = 0
-	viewPhase0 := m.View()
+	viewPhase0 := testui.View(m)
 	// Strip ANSI codes and spinner glyphs before comparing structure.
 	plainPhase0 := stripSpinnerGlyphs(testui.AnsiEscapePattern.ReplaceAllString(viewPhase0, ""))
 
@@ -100,7 +100,7 @@ func TestSkeletonPhasePulse(t *testing.T) {
 		t.Fatalf("expected spinnerFrame=4 after 4 ticks, got %d", m.spinnerFrame)
 	}
 
-	viewPhase1 := m.View()
+	viewPhase1 := testui.View(m)
 	plainPhase1 := stripSpinnerGlyphs(testui.AnsiEscapePattern.ReplaceAllString(viewPhase1, ""))
 
 	// Plain text (minus spinner glyph and ANSI codes) must be identical —
@@ -155,7 +155,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	}
 
 	// Capture the View() and verify the known board issue IDs are present.
-	initialView := m.View()
+	initialView := testui.View(m)
 	initialIDs := extractIssueIDsFromView(initialView)
 
 	for _, wantID := range []string{"tm-10", "tm-11", "tm-12"} {
@@ -189,7 +189,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 
 	// Capture View() BEFORE draining the in-flight repository results.
 	// Stale issue IDs must still be visible — NOT replaced by skeleton or blank.
-	inFlightView := m.View()
+	inFlightView := testui.View(m)
 	inFlightIDs := extractIssueIDsFromView(inFlightView)
 
 	for _, wantID := range []string{"tm-10", "tm-11", "tm-12"} {
@@ -206,7 +206,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	spinnerNext, _ := m.Update(loading.TickMsg{})
 	m = spinnerNext.(Model)
 
-	spinnerView := m.View()
+	spinnerView := testui.View(m)
 	if !containsAnySpinnerGlyph(spinnerView) {
 		t.Fatalf("expected spinner glyph in View() during in-flight board reload\nview:\n%s", spinnerView)
 	}
@@ -221,7 +221,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	}
 
 	// Spinner glyph must be gone once all surfaces are idle.
-	settledView := m.View()
+	settledView := testui.View(m)
 	if containsAnySpinnerGlyph(settledView) {
 		t.Fatalf("spinner glyph still present in View() after board reload settled\nview:\n%s", settledView)
 	}
@@ -257,7 +257,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	}
 
 	// Board rows visible at Phase 1 must still be present after the round-trip.
-	afterCycleView := m.View()
+	afterCycleView := testui.View(m)
 	afterCycleIDs := extractIssueIDsFromView(afterCycleView)
 
 	for wantID := range initialIDs {
@@ -295,7 +295,7 @@ func TestSkeletonPhaseCyclesThroughAllShades(t *testing.T) {
 		next, _ := m.Update(loading.TickMsg{})
 		m = next.(Model)
 		if (tick+1)%4 == 0 {
-			views = append(views, m.View())
+			views = append(views, testui.View(m))
 		}
 	}
 

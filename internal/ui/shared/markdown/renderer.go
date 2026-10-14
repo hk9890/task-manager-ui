@@ -10,7 +10,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/glamour"
+	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -88,8 +88,13 @@ func renderLines(source string, wrap int, dark bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	rendered = hyperlinkPattern.ReplaceAllString(rendered, "")
 	return strings.Split(strings.TrimRight(rendered, "\n"), "\n"), nil
 }
+
+// hyperlinkPattern is an OSC 8 sequence, which glamour opens and closes every
+// link with. The panes draw a link as its text alone.
+var hyperlinkPattern = regexp.MustCompile("\x1b]8;[^\x07\x1b]*(?:\x07|\x1b\\\\)")
 
 // markdownCacheKey identifies one rendered result. dark is part of the key
 // because the style is chosen from the applied theme (styles.Dark).
@@ -168,9 +173,12 @@ func termRendererFor(width int, dark bool) (*lockedRenderer, error) {
 		return renderer, nil
 	}
 
+	// A line end left in a paragraph after joinSoftBreaks is a hard break,
+	// which glamour otherwise draws as a space.
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(glamourStyleName(dark)),
 		glamour.WithWordWrap(width),
+		glamour.WithPreservedNewLines(),
 	)
 	if err != nil {
 		return nil, err

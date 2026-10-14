@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -16,20 +16,23 @@ func TestQueryEditingKeys(t *testing.T) {
 
 	steps := []struct {
 		name string
-		key  tea.KeyMsg
-		want string
+		// A step pastes paste when it is set, and presses key otherwise.
+		key   tea.KeyPressMsg
+		paste string
+		want  string
 		// changed is false for a key the query takes without a new text.
 		changed bool
 	}{
 		{name: "a space before any text is dropped", key: testui.Press("space"), want: ""},
 		{name: "rune", key: testui.Runes("f"), want: "f", changed: true},
-		{name: "paste of several runes", key: testui.Paste("ix\tthe\nlogin"), want: "fix the login", changed: true},
+		{name: "paste of several runes", paste: "ix\tthe\nlogin", want: "fix the login", changed: true},
 		{name: "space", key: testui.Press("space"), want: "fix the login ", changed: true},
 		{name: "backspace drops the last rune", key: testui.Press("backspace"), want: "fix the login", changed: true},
 		{name: "ctrl+w drops the last word", key: testui.Press("ctrl+w"), want: "fix the ", changed: true},
 		{name: "ctrl+w drops the word before trailing spaces", key: testui.Press("ctrl+w"), want: "fix ", changed: true},
 		{name: "a wide rune is one rune", key: testui.Runes("日本"), want: "fix 日本", changed: true},
 		{name: "backspace drops one wide rune", key: testui.Press("backspace"), want: "fix 日", changed: true},
+		{name: "shift+backspace drops the last rune", key: testui.Press("shift+backspace"), want: "fix ", changed: true},
 		{name: "ctrl+u clears", key: testui.Press("ctrl+u"), want: "", changed: true},
 		{name: "backspace on an empty query", key: testui.Press("backspace"), want: ""},
 		{name: "ctrl+w on an empty query", key: testui.Press("ctrl+w"), want: ""},
@@ -37,7 +40,12 @@ func TestQueryEditingKeys(t *testing.T) {
 
 	var q mode.Query
 	for _, step := range steps {
-		consumed, changed := q.HandleKey(step.key)
+		consumed, changed := true, false
+		if step.paste != "" {
+			changed = q.Paste(step.paste)
+		} else {
+			consumed, changed = q.HandleKey(step.key)
+		}
 		if !consumed || changed != step.changed || q.Text() != step.want {
 			t.Fatalf("%s: consumed %v, changed %v, text %q; want consumed, changed %v, text %q",
 				step.name, consumed, changed, q.Text(), step.changed, step.want)
@@ -56,7 +64,7 @@ func TestQueryLeavesEveryOtherKeyToTheSurface(t *testing.T) {
 	var q mode.Query
 	q.HandleKey(testui.Runes("abc"))
 
-	keys := []tea.KeyMsg{
+	keys := []tea.KeyPressMsg{
 		testui.Press("left"), testui.Press("right"), testui.Press("up"), testui.Press("down"),
 		testui.Press("home"), testui.Press("end"), testui.Press("pgup"), testui.Press("pgdown"),
 		testui.Press("enter"), testui.Press("esc"), testui.Press("tab"), testui.Press("shift+tab"),
@@ -71,6 +79,35 @@ func TestQueryLeavesEveryOtherKeyToTheSurface(t *testing.T) {
 		}
 		if consumed, changed := q.HandleKey(key); consumed || changed || q.Text() != "abc" {
 			t.Errorf("%q: consumed %v, changed %v, text %q; the query must leave it", key.String(), consumed, changed, q.Text())
+		}
+	}
+}
+
+// TestPlainKeyNamesTheKeyAsABindingDoes: a kitty-protocol terminal reports a
+// lock that is on, and a key of the keypad apart from the main key. A binding
+// takes both as the main key, and so does a key a surface matches itself.
+func TestPlainKeyNamesTheKeyAsABindingDoes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		code rune
+		want bool
+	}{
+		{"left", tea.KeyLeft, true},
+		{"alt+left", tea.KeyLeft, true},
+		{"numlock+left", tea.KeyLeft, true},
+		{"capslock+left", tea.KeyLeft, true},
+		{"kpleft", tea.KeyLeft, true},
+		{"kpenter", tea.KeyEnter, true},
+		{"numlock+kpenter", tea.KeyEnter, true},
+		{"shift+left", tea.KeyLeft, false},
+		{"ctrl+enter", tea.KeyEnter, false},
+		{"right", tea.KeyLeft, false},
+	}
+	for _, tc := range cases {
+		if got := mode.PlainKey(testui.Press(tc.name), tc.code); got != tc.want {
+			t.Errorf("PlainKey(%q, %s) = %v, want %v", tc.name, tea.Key{Code: tc.code}.Keystroke(), got, tc.want)
 		}
 	}
 }

@@ -11,11 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -43,7 +44,7 @@ func TestFooterLegendDropsTrailingHintsRatherThanOverflow(t *testing.T) {
 
 	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Detail} {
 		hints := footerHints(active, keys)
-		full := styles.KeyLegend(hints, 0)
+		full := testui.Downsample(styles.KeyLegend(hints, 0))
 		fullWidth := lipgloss.Width(full)
 		if got := strings.Count(full, footerSeparator); got != len(hints)-1 {
 			t.Fatalf("%s: the unbounded legend joins %d hints with %d separators: %q", active, len(hints), got, full)
@@ -52,10 +53,10 @@ func TestFooterLegendDropsTrailingHintsRatherThanOverflow(t *testing.T) {
 		// One column either side of the full legend decides whether its last
 		// hint is drawn. The widths are derived from the rendered legend, not
 		// from the hints, so the test measures what the operator sees.
-		if got := styles.KeyLegend(hints, fullWidth); got != full {
+		if got := testui.Downsample(styles.KeyLegend(hints, fullWidth)); got != full {
 			t.Errorf("%s at width %d, exactly the legend's: got %q, want all of %q", active, fullWidth, got, full)
 		}
-		oneShort := styles.KeyLegend(hints, fullWidth-1)
+		oneShort := testui.Downsample(styles.KeyLegend(hints, fullWidth-1))
 		if got := strings.Count(oneShort, footerSeparator); got != len(hints)-2 {
 			t.Errorf("%s at width %d, one short: %d separators, want the last hint and only it dropped: %q",
 				active, fullWidth-1, got, oneShort)
@@ -63,7 +64,7 @@ func TestFooterLegendDropsTrailingHintsRatherThanOverflow(t *testing.T) {
 
 		previous := 0
 		for width := 1; width <= fullWidth+5; width++ {
-			legend := styles.KeyLegend(hints, width)
+			legend := testui.Downsample(styles.KeyLegend(hints, width))
 			if strings.Contains(legend, "\n") {
 				t.Fatalf("%s at width %d: the legend takes more than one line: %q", active, width, legend)
 			}
@@ -119,7 +120,7 @@ func TestFooterIsOneLineNoWiderThanTheTerminal(t *testing.T) {
 			m.projectRootMissing = missing
 			for width := 1; width <= 200; width++ {
 				m.width = width
-				footer := m.renderFooter()
+				footer := testui.Downsample(m.renderFooter())
 				if got := lipgloss.Height(footer); got != 1 {
 					t.Fatalf("%s at width %d: the footer is %d lines: %q", active, width, got, footer)
 				}
@@ -151,7 +152,7 @@ func TestFooterKeepsTheLaunchersOffNoticeAtANarrowWidth(t *testing.T) {
 	m.projectRootMissing = true
 
 	m.width = 200
-	wide := m.renderFooter()
+	wide := testui.Downsample(m.renderFooter())
 	if !strings.HasPrefix(wide, " "+notice+footerSeparator) {
 		t.Fatalf("the notice does not lead the legend: %q", wide)
 	}
@@ -162,7 +163,7 @@ func TestFooterKeepsTheLaunchersOffNoticeAtANarrowWidth(t *testing.T) {
 
 	// Room for the notice and one hint behind it, and no more.
 	m.width = lipgloss.Width(notice) + 16
-	narrow := m.renderFooter()
+	narrow := testui.Downsample(m.renderFooter())
 	if !strings.HasPrefix(narrow, " "+notice) {
 		t.Fatalf("at width %d the notice is gone: %q", m.width, narrow)
 	}
@@ -175,14 +176,14 @@ func TestFooterKeepsTheLaunchersOffNoticeAtANarrowWidth(t *testing.T) {
 
 	// The legend starts one cell in, so the notice needs that cell too.
 	m.width = lipgloss.Width(notice) + 1
-	if got := m.renderFooter(); got != " "+notice {
+	if got := testui.Downsample(m.renderFooter()); got != " "+notice {
 		t.Fatalf("at width %d, exactly the notice's: got %q, want %q", m.width, got, " "+notice)
 	}
 
 	// The notice belongs to Detail: no other surface launches anything.
 	m.active = mode.Board
 	m.width = 200
-	if got := m.renderFooter(); strings.Contains(got, notice) {
+	if got := testui.Downsample(m.renderFooter()); strings.Contains(got, notice) {
 		t.Fatalf("the board's legend carries the notice: %q", got)
 	}
 }

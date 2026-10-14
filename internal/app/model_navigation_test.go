@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -172,7 +172,7 @@ func TestModelDocsTabListsOpenDocsAndOpensThemInDetail(t *testing.T) {
 		t.Fatalf("expected tab from board to enter docs, got %s", m.active)
 	}
 
-	view := m.View()
+	view := testui.View(m)
 	testui.AssertContainsAll(t, view, "Docs", "tm-9", "Auth redesign")
 	testui.AssertNotContainsAny(t, view, "Ready first")
 
@@ -225,7 +225,7 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	if footer := m.renderFooter(); !strings.Contains(footer, "f1 help") || !strings.Contains(footer, "ctrl+q quit") {
+	if footer := testui.Downsample(m.renderFooter()); !strings.Contains(footer, "f1 help") || !strings.Contains(footer, "ctrl+q quit") {
 		t.Fatalf("expected footer to reflect configured bindings, got:\n%s", footer)
 	}
 
@@ -364,8 +364,8 @@ func TestBarePrintableKeysTypeIntoTheFilterAndRunNoAction(t *testing.T) {
 			if m.active != tab || m.overlayOpen() {
 				t.Errorf("%q on %s: active %q, overlay %v", string(r), tab, m.active, m.overlayOpen())
 			}
-			if !strings.Contains(m.View(), "❯ "+string(r)) {
-				t.Errorf("%q on %s is not on the query line:\n%s", string(r), tab, m.View())
+			if !strings.Contains(testui.View(m), "❯ "+string(r)) {
+				t.Errorf("%q on %s is not on the query line:\n%s", string(r), tab, testui.View(m))
 			}
 			for _, call := range gw.Calls()[mark:] {
 				if call.Method != fakes.MethodIssue {

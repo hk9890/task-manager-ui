@@ -4,20 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 )
-
-func leftDrag(x, y int) tea.MouseMsg {
-	return tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft}
-}
-
-func leftRelease(x, y int) tea.MouseMsg {
-	return tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
-}
 
 // newSelectingShell is the mouse shell with the clipboard replaced by a slice.
 func newSelectingShell(t *testing.T) (Model, *[]string) {
@@ -41,17 +33,17 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 	// Focus the column with a key first: at this width the press would
 	// re-centre the board, and the drag is measured on the settled screen.
 	m = send(t, m, testui.Press("right"))
-	x, y := testui.FindCell(t, m.View(), "progress-first")
-	m = send(t, m, leftClick(x, y))
-	frozen := m.View()
+	x, y := testui.FindCell(t, testui.View(m), "progress-first")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	frozen := testui.View(m)
 	endX, endY := testui.FindCell(t, frozen, "progress-second")
 	endX += len("progress-second") - 1
 
-	m = send(t, m, leftDrag(endX, endY))
+	m = send(t, m, testui.Drag(endX, endY))
 	if !m.sel.active {
 		t.Fatal("a drag of more than two cells did not start a selection")
 	}
-	dragging := m.View()
+	dragging := testui.View(m)
 	if !strings.Contains(dragging, "\x1b[0;7m") {
 		t.Fatalf("the selected box is not drawn in reverse video:\n%s", dragging)
 	}
@@ -59,7 +51,7 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 		t.Fatalf("drawing the box moved text on the screen:\n%s", got)
 	}
 
-	m = send(t, m, leftRelease(endX, endY))
+	m = send(t, m, testui.Release(endX, endY))
 	if m.sel.active || m.press != nil {
 		t.Fatal("the selection stayed after the button came up")
 	}
@@ -76,7 +68,7 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 	// OSC 52 has no reply, so the toast says what was sent and names the way
 	// that needs no clipboard support — whole, in an 80-column terminal too.
 	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 30})
-	toast := m.View()
+	toast := testui.View(m)
 	if strings.Contains(toast, "Copied") || !strings.Contains(toast, "Sent") || !strings.Contains(toast, "shift+drag if not copied") {
 		t.Fatalf("the toast must say the text was sent and name shift+drag, without claiming a copy:\n%s", toast)
 	}
@@ -87,10 +79,10 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 func TestAShiftOfOneCellDuringAClickIsStillAClick(t *testing.T) {
 	m, copied := newSelectingShell(t)
 
-	x, y := testui.FindCell(t, m.View(), "progress-second")
-	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(x+1, y))
-	m = send(t, m, leftRelease(x+1, y))
+	x, y := testui.FindCell(t, testui.View(m), "progress-second")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+1, y))
+	m = send(t, m, testui.Release(x+1, y))
 	if m.sel.active || len(*copied) != 0 {
 		t.Fatalf("a one-cell shift selected text (copied %q)", *copied)
 	}
@@ -105,23 +97,24 @@ func TestAShiftOfOneCellDuringAClickIsStillAClick(t *testing.T) {
 func TestNothingChangesTheScreenUnderASelection(t *testing.T) {
 	m, copied := newSelectingShell(t)
 
-	x, y := testui.FindCell(t, m.View(), "progress-first")
-	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(x+10, y+1))
-	selecting := m.View()
+	x, y := testui.FindCell(t, testui.View(m), "progress-first")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+10, y+1))
+	selecting := testui.View(m)
 	selection := firstSelectionID(m, mode.Board)
 
 	for name, msg := range map[string]tea.Msg{
-		"wheel":     wheel(x, y, tea.MouseButtonWheelDown),
-		"click":     tea.MouseMsg{X: 5, Y: 5, Action: tea.MouseActionPress, Button: tea.MouseButtonRight},
+		"wheel":     testui.Wheel(x, y, tea.MouseWheelDown),
+		"click":     testui.Click(5, 5, tea.MouseRight),
 		"move key":  testui.Press("down"),
 		"tab key":   testui.Press("tab"),
 		"help key":  testui.Press("alt+h"),
 		"close key": testui.Press("delete"),
+		"paste":     testui.Paste("login"),
 	} {
 		next, cmd := m.Update(msg)
 		m = next.(Model)
-		if cmd != nil || m.View() != selecting || firstSelectionID(m, mode.Board) != selection || m.active != mode.Board {
+		if cmd != nil || testui.View(m) != selecting || firstSelectionID(m, mode.Board) != selection || m.active != mode.Board {
 			t.Errorf("%s changed the screen under the selection", name)
 		}
 	}
@@ -133,9 +126,12 @@ func TestNothingChangesTheScreenUnderASelection(t *testing.T) {
 	if m.active != mode.Board {
 		t.Fatalf("Escape during a selection also left the surface, now on %q", m.active)
 	}
+	if view := plainShell(m); !strings.Contains(view, "❯ filter issues") {
+		t.Fatalf("a paste during the selection reached the board query:\n%s", view)
+	}
 
 	// The release that follows belongs to no drag.
-	if m = send(t, m, leftRelease(x+10, y+1)); len(*copied) != 0 {
+	if m = send(t, m, testui.Release(x+10, y+1)); len(*copied) != 0 {
 		t.Fatal("a release after Escape copied text")
 	}
 }
@@ -145,10 +141,10 @@ func TestNothingChangesTheScreenUnderASelection(t *testing.T) {
 func TestAReleaseElsewhereForgetsThePress(t *testing.T) {
 	m, copied := newSelectingShell(t)
 
-	x, y := testui.FindCell(t, m.View(), "progress-first")
-	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(x+10, y+1))
-	m = send(t, m, pointerMove(x+12, y+1))
+	x, y := testui.FindCell(t, testui.View(m), "progress-first")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+10, y+1))
+	m = send(t, m, testui.Move(x+12, y+1))
 	if m.sel.active || m.press != nil || len(*copied) != 0 {
 		t.Fatalf("the selection outlived a release in another window (copied %q)", *copied)
 	}
@@ -159,14 +155,14 @@ func TestABoxOfBlankCellsCopiesNothing(t *testing.T) {
 	m, copied := newSelectingShell(t)
 
 	// Inside the Not Ready column, which is empty in this fixture.
-	x, y := testui.FindCell(t, m.View(), "Not Ready")
-	m = send(t, m, leftClick(x+2, y+3))
-	m = send(t, m, leftDrag(x+12, y+5))
+	x, y := testui.FindCell(t, testui.View(m), "Not Ready")
+	m = send(t, m, testui.Click(x+2, y+3, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+12, y+5))
 	if !m.sel.active {
 		t.Fatal("fixture: the drag did not start a selection")
 	}
-	m = send(t, m, leftRelease(x+12, y+5))
-	if len(*copied) != 0 || strings.Contains(m.View(), "clipboard") {
+	m = send(t, m, testui.Release(x+12, y+5))
+	if len(*copied) != 0 || strings.Contains(testui.View(m), "clipboard") {
 		t.Fatalf("a blank box was copied: %q", *copied)
 	}
 }
@@ -212,10 +208,10 @@ func TestSelectingWorksOverTheHelpOverlay(t *testing.T) {
 	m, copied := newSelectingShell(t)
 	m = pressKey(t, m, "alt+h")
 
-	x, y := testui.FindCell(t, m.View(), "Moving and opening")
-	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(x+len("Moving and opening")-1, y))
-	m = send(t, m, leftRelease(x+len("Moving and opening")-1, y))
+	x, y := testui.FindCell(t, testui.View(m), "Moving and opening")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+len("Moving and opening")-1, y))
+	m = send(t, m, testui.Release(x+len("Moving and opening")-1, y))
 	if len(*copied) != 1 || (*copied)[0] != "Moving and opening" {
 		t.Fatalf("copied %q, want the help line", *copied)
 	}
@@ -231,13 +227,13 @@ func TestADragOnAScreenWithoutRowsCopiesNothing(t *testing.T) {
 	m, copied := newSelectingShell(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 0})
 
-	m = send(t, m, leftClick(3, 0))
-	m = send(t, m, leftDrag(9, 4))
+	m = send(t, m, testui.Click(3, 0, tea.MouseLeft))
+	m = send(t, m, testui.Drag(9, 4))
 	if !m.sel.active || m.sel.to.y != 0 {
 		t.Fatalf("the drag ends on row %d (selecting %v), want row 0", m.sel.to.y, m.sel.active)
 	}
-	_ = m.View()
-	if send(t, m, leftRelease(9, 4)); len(*copied) != 0 {
+	_ = testui.View(m)
+	if send(t, m, testui.Release(9, 4)); len(*copied) != 0 {
 		t.Fatalf("copied %q from a screen without rows", *copied)
 	}
 }

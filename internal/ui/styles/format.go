@@ -3,7 +3,8 @@ package styles
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const selectionIdlePrefix = "  "
@@ -43,7 +44,7 @@ func SelectionPrefix(selected, styled bool) (plain string, rendered string) {
 }
 
 // sgrReset is what Lip Gloss ends every styled run with.
-const sgrReset = "\x1b[0m"
+const sgrReset = ansi.ResetStyle
 
 // RowHighlight lays the selection's or the hover's background under a rendered
 // row and pads it to width, so the band spans the row instead of ending at its
@@ -63,8 +64,7 @@ func RowHighlight(row string, width int, selected, hovered bool) string {
 		return row
 	}
 
-	// Lip Gloss writes the sequence for the active colour profile, and nothing
-	// at all on a terminal without colour.
+	// A role with no colour, the hover on 16 colours, writes no sequence.
 	on, _, _ := strings.Cut(lipgloss.NewStyle().Background(color).Render("x"), "x")
 	if on == "" {
 		return row

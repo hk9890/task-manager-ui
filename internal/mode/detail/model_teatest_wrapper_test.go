@@ -6,7 +6,7 @@ package detail
 // so that teatest can drive the model through real Bubble Tea message dispatch.
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // detailsTestWrapper wraps Model for teatest program use.
@@ -27,12 +27,12 @@ func (w detailsTestWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		w.width = msg.Width
 		w.height = msg.Height
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		w.m.HandleKey(msg, w.width, w.height)
 	}
 	return w, nil
 }
 
-func (w detailsTestWrapper) View() string {
-	return w.m.View(w.width, w.height, false, 0)
+func (w detailsTestWrapper) View() tea.View {
+	return tea.NewView(w.m.View(w.width, w.height, false, 0))
 }

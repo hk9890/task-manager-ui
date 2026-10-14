@@ -1,9 +1,10 @@
 package styles
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 const (
@@ -25,7 +26,7 @@ type FormSectionConfig struct {
 	TopRight string
 
 	Focused            bool
-	FocusedBorderColor lipgloss.TerminalColor
+	FocusedBorderColor color.Color
 }
 
 // FormSection renders a rounded section box with optional titles.
@@ -35,8 +36,8 @@ func FormSection(cfg FormSectionConfig) string {
 		return "too narrow"
 	}
 
-	var borderColor lipgloss.TerminalColor = BorderDefaultColor
-	var titleColor lipgloss.TerminalColor = BorderDefaultColor
+	borderColor := BorderDefaultColor
+	titleColor := BorderDefaultColor
 	if cfg.Focused && cfg.FocusedBorderColor != nil {
 		borderColor = cfg.FocusedBorderColor
 		titleColor = cfg.FocusedBorderColor

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -50,7 +50,7 @@ func typeInto(t *testing.T, m Model, text string) Model {
 }
 
 func plainShell(m Model) string {
-	return testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
+	return testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), "")
 }
 
 // TestEscapeClearsTheBoardQueryBeforeItDoesAnythingElse: the first Escape goes
@@ -209,7 +209,7 @@ func TestBrowseLegendsNameTheFilter(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 	for _, active := range []mode.ID{mode.Board, mode.Docs} {
-		legend := styles.KeyLegend(footerHints(active, keys), 0)
+		legend := testui.Downsample(styles.KeyLegend(footerHints(active, keys), 0))
 		filter, clear := strings.Index(legend, "type filter"), strings.Index(legend, "esc clear")
 		if filter < 0 || clear < filter || strings.Index(legend, "new") < clear {
 			t.Errorf("%s legend %q: want type filter, then esc clear, both ahead of new", active, legend)

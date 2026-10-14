@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // TestPlainWrappingCountsATabAsCells pins that a tab-bearing line is wrapped.

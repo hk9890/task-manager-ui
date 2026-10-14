@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 type scenarioCounterModel struct {
@@ -15,14 +15,14 @@ func (m scenarioCounterModel) Init() tea.Cmd {
 }
 
 func (m scenarioCounterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok {
+	if key, ok := msg.(tea.KeyPressMsg); ok {
 		m.count += len(key.String())
 	}
 	return m, nil
 }
 
-func (m scenarioCounterModel) View() string {
-	return ""
+func (m scenarioCounterModel) View() tea.View {
+	return tea.NewView("")
 }
 
 func TestScenarioHelpersProvideDeterministicKeyFlows(t *testing.T) {

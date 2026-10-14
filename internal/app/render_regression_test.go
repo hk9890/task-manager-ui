@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -102,7 +102,7 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
 
 	// Before any WindowSizeMsg, View() must return empty string.
-	got := m.View()
+	got := testui.View(m)
 	if got != "" {
 		t.Errorf("expected View() to return empty string before WindowSizeMsg, got %q (len=%d)", got, len(got))
 	}
@@ -110,7 +110,7 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 	// After Init() completes (repository responses drained), still no WindowSizeMsg
 	// has arrived — View() must still return empty.
 	m = applyMessages(t, m, runBatch(m.Init()))
-	got = m.View()
+	got = testui.View(m)
 	if got != "" {
 		t.Errorf("expected View() to return empty string after init but before WindowSizeMsg, got %q (len=%d)", got, len(got))
 	}
@@ -118,7 +118,7 @@ func TestViewReturnsEmptyBeforeWindowSizeMsg(t *testing.T) {
 	// After WindowSizeMsg, View() must return a non-empty string with exactly
 	// one column-top line.
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 180, Height: 60}})
-	got = m.View()
+	got = testui.View(m)
 	if got == "" {
 		t.Errorf("expected View() to return non-empty string after WindowSizeMsg")
 	}
@@ -153,21 +153,21 @@ func TestNoDoubledColumnHeadersAfterWindowSizeMsg(t *testing.T) {
 	// --- Step 1: send WindowSizeMsg{180, 60} — sets sizeKnown=true ---
 	// Width=180 ensures all 4 columns are visible (at 120 only 3 fit).
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 180, Height: 60}})
-	v := m.View()
+	v := testui.View(m)
 	t.Logf("step1 (after WindowSizeMsg 180x60, before init): %d column-top lines\n%s",
 		countColumnTopLines(v), debugColumnTopReport(v))
 	assertExactlyOneColumnTopLine(t, "step 1: after WindowSizeMsg, before init", v)
 
 	// --- Step 2: run Init() and drain all repository responses ---
 	m = applyMessages(t, m, runBatch(m.Init()))
-	v = m.View()
+	v = testui.View(m)
 	t.Logf("step2 (after init+data 180x60): %d column-top lines\n%s",
 		countColumnTopLines(v), debugColumnTopReport(v))
 	assertExactlyOneColumnTopLine(t, "step 2: after init + data loaded (180x60)", v)
 
 	// --- Step 3: resize to a different (wider, taller) size ---
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 200, Height: 80}})
-	v = m.View()
+	v = testui.View(m)
 	t.Logf("step3 (after WindowSizeMsg 200x80): %d column-top lines\n%s",
 		countColumnTopLines(v), debugColumnTopReport(v))
 	assertExactlyOneColumnTopLine(t, "step 3: after second WindowSizeMsg (200x80)", v)
@@ -191,26 +191,26 @@ func TestNoDoubledColumnHeadersPresizeDataResize(t *testing.T) {
 
 	// Send size before any data.
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 180, Height: 30}})
-	v := m.View()
+	v := testui.View(m)
 	t.Logf("pre-size 180x30 before data: %d column-top lines", countColumnTopLines(v))
 	assertExactlyOneColumnTopLine(t, "pre-size 180x30 before data", v)
 
 	// Load data.
 	m = applyMessages(t, m, runBatch(m.Init()))
-	v = m.View()
+	v = testui.View(m)
 	t.Logf("after data loaded at 180x30: %d column-top lines", countColumnTopLines(v))
 	assertExactlyOneColumnTopLine(t, "after data loaded at 180x30", v)
 
 	// Resize to tall terminal — this is the failing case from the bug report.
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 180, Height: 60}})
-	v = m.View()
+	v = testui.View(m)
 	t.Logf("after resize to 180x60: %d column-top lines\n%s",
 		countColumnTopLines(v), debugColumnTopReport(v))
 	assertExactlyOneColumnTopLine(t, "after resize to 180x60", v)
 
 	// One more resize.
 	m = applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 200, Height: 80}})
-	v = m.View()
+	v = testui.View(m)
 	t.Logf("after resize to 200x80: %d column-top lines", countColumnTopLines(v))
 	assertExactlyOneColumnTopLine(t, "after resize to 200x80", v)
 }
@@ -259,7 +259,7 @@ func TestModelDetailModeRendersConfigurableFooterHelp(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	view := m.View()
+	view := testui.View(m)
 	if !strings.Contains(view, "down/up scroll") || !strings.Contains(view, "home/end bounds") {
 		t.Fatalf("expected detail footer help to include configurable detail bindings, got:\n%s", view)
 	}
@@ -298,7 +298,7 @@ func TestModelWideBoardViewPrioritizesBoardAndResponsiveColumns(t *testing.T) {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 160, Height: 42})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	view := m.View()
+	view := testui.View(m)
 	if strings.Contains(view, "Selected Issue") {
 		t.Fatalf("expected no selected issue sidebar in board view, got:\n%s", view)
 	}
@@ -351,7 +351,7 @@ func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *t
 		t.Fatalf("expected detail to be contextual and absent from top tabs, got:\n%s", header)
 	}
 
-	footer := m.renderFooter()
+	footer := testui.Downsample(m.renderFooter())
 	if strings.Contains(footer, "\n") {
 		t.Fatalf("expected single-line footer, got:\n%s", footer)
 	}
@@ -405,7 +405,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 	if m.active != mode.Detail {
 		t.Fatalf("expected detail mode after enter, got %s", m.active)
 	}
-	detailView := m.View()
+	detailView := testui.View(m)
 	if !strings.Contains(detailView, "In progress one") {
 		t.Fatalf("expected dedicated detail layout with selected issue content, got:\n%s", detailView)
 	}
@@ -424,7 +424,7 @@ func TestModelBoardDetailBoardRoundTripPreservesLayoutAndFocus(t *testing.T) {
 		t.Fatalf("expected board selection to remain on tm-2 after round-trip, got %q", got)
 	}
 
-	boardView := m.View()
+	boardView := testui.View(m)
 	if strings.Contains(boardView, "Selected Issue") {
 		t.Fatalf("expected board layout without detail sidebar after round-trip, got:\n%s", boardView)
 	}
@@ -531,7 +531,7 @@ func TestModelFixtureShapedBoardCaptureGolden(t *testing.T) {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	view := m.View()
+	view := testui.View(m)
 	if strings.Contains(view, "Selected Issue") {
 		t.Fatalf("expected board view without selected issue sidebar, got:\n%s", view)
 	}
@@ -563,7 +563,7 @@ func TestModelStartupBoardLayoutSanityAndNoRuntimeErrors(t *testing.T) {
 	m.setTerminalSize(tea.WindowSizeMsg{Width: 120, Height: 34})
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	view := m.View()
+	view := testui.View(m)
 	testui.AssertStartupBoardLayoutSanity(t, view)
 	testui.AssertContainsAll(t, view, "bwf-1")
 	testui.AssertNoObviousRuntimeErrorPanels(t, view)

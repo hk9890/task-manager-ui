@@ -41,7 +41,7 @@ func registryEntries() []storecatalog.Entry {
 }
 
 func pickerView(m Model) string {
-	return testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
+	return testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), "")
 }
 
 func openPicker(t *testing.T, m Model) Model {
@@ -82,7 +82,7 @@ func TestStorePickerReplacesTheShellChrome(t *testing.T) {
 	m := mustNewModel(t, pickerServices(t, &fakes.FakeStoreCatalog{Entries: registryEntries()}, ""))
 	m = applyMessages(t, m, runBatch(m.Init()))
 
-	before := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
+	before := testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), "")
 	// The header, as the shell draws it, each line on its own.
 	chrome := strings.Split(testui.AnsiEscapePattern.ReplaceAllString(m.renderHeader(), ""), "\n")
 	footer := testui.AnsiEscapePattern.ReplaceAllString(m.renderFooter(), "")
@@ -96,7 +96,7 @@ func TestStorePickerReplacesTheShellChrome(t *testing.T) {
 	}
 
 	m = openPicker(t, m)
-	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
+	view := testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), "")
 	for _, gone := range append(chrome, footer, " Board ", " Docs ", "stores s") {
 		if strings.Contains(view, gone) {
 			t.Errorf("the shell chrome %q is still rendered under the picker:\n%s", gone, view)

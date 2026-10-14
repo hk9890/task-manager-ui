@@ -3,7 +3,7 @@ package app
 import (
 	"slices"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 )
@@ -70,15 +70,15 @@ func (m *Model) forwardModeMessages(msg tea.Msg) tea.Cmd {
 	return batchCmds(cmds...)
 }
 
-// shouldForwardTo reports whether msg goes to the tab with this id. A key
-// belongs to the active tab alone, and a resize to none: a tab is sized to the
-// workspace by applyWorkspaceSizeToBrowseModes, not to the terminal. Everything
-// else reaches all of them. The mouse never arrives here: handleMouse takes it
-// first and gives the surface under the pointer a mode.MouseMsg in its own
-// coordinates.
+// shouldForwardTo reports whether msg goes to the tab with this id. A key and a
+// paste belong to the active tab alone, and a resize to none: a tab is sized to
+// the workspace by applyWorkspaceSizeToBrowseModes, not to the terminal.
+// Everything else reaches all of them. The mouse never arrives here:
+// handleMouse takes it first and gives the surface under the pointer a
+// mode.MouseMsg in its own coordinates.
 func (m Model) shouldForwardTo(id mode.ID, msg tea.Msg) bool {
 	switch msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg, tea.PasteMsg:
 		return m.active == id
 	case tea.WindowSizeMsg:
 		return false
@@ -90,8 +90,11 @@ func (m Model) shouldCaptureKeyForOverlay(msg tea.Msg) bool {
 	if !m.overlayOpen() {
 		return false
 	}
-	_, isKey := msg.(tea.KeyMsg)
-	return isKey
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.PasteMsg:
+		return true
+	}
+	return false
 }
 
 // applyModeCycle switches the active mode to target while preserving the

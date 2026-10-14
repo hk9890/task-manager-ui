@@ -1,10 +1,9 @@
 package styles
 
 import (
+	"image/color"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // restoreInitialStyles puts back the theme and the glyph set the package starts
@@ -34,7 +33,7 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 			t.Errorf("%s: Dark() = %v, want %v", theme, got, want)
 		}
 
-		roles := map[string]lipgloss.Color{
+		roles := map[string]color.Color{
 			"TextPrimaryColor":            TextPrimaryColor,
 			"TextMutedColor":              TextMutedColor,
 			"TextSecondaryColor":          TextSecondaryColor,
@@ -88,9 +87,9 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 			"IssueStatusClosedColor":      IssueStatusClosedColor,
 			"IssueStatusDeferredColor":    IssueStatusDeferredColor,
 		}
-		for name, color := range roles {
-			if !strings.HasPrefix(string(color), "#") {
-				t.Errorf("%s: role %s = %q, want a hex colour", theme, name, color)
+		for name, role := range roles {
+			if _, ok := role.(color.RGBA); !ok {
+				t.Errorf("%s: role %s = %v, want a true colour", theme, name, role)
 			}
 		}
 
@@ -98,8 +97,8 @@ func TestApplyAssignsEveryRoleInEveryTheme(t *testing.T) {
 			t.Fatalf("%s: SkeletonShades has %d shades, want 3", theme, len(SkeletonShades))
 		}
 		for i, shade := range SkeletonShades {
-			if !strings.HasPrefix(string(shade), "#") {
-				t.Errorf("%s: SkeletonShades[%d] = %q, want a hex colour", theme, i, shade)
+			if _, ok := shade.(color.RGBA); !ok {
+				t.Errorf("%s: SkeletonShades[%d] = %v, want a true colour", theme, i, shade)
 			}
 		}
 	}

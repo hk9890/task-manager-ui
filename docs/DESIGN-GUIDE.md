@@ -25,9 +25,10 @@ shell. Every other package is pure.
   on the configuration screen (`Model.applyConfigChange`, `internal/app/config_screen.go`). The
   roles are package variables with no guard, so call it under a running program from `Update`
   only, never inside a `tea.Cmd`: `View` reads them on the same goroutine.
-- After an `Apply` under a running program, clamp the scroll offsets as a resize does
-  (`applyWorkspaceSizeToBrowseModes`, `detail.ClampScroll`): a light theme renders markdown in
-  another glamour style and a glyph set draws tokens of another width.
+- After an `Apply` of another theme or glyph set under a running program, clamp the scroll
+  offsets as a resize does (`applyWorkspaceSizeToBrowseModes`, `detail.ClampScroll`): a light
+  theme renders markdown in another glamour style and a glyph set draws tokens of another width.
+  An `Apply` of another colour profile moves no width and needs no clamp.
 - A test draws with `catppuccin-mocha` and the `unicode` glyphs, which the package starts on; one
   that applies another restores it in `t.Cleanup` and stays out of `t.Parallel`.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
@@ -47,15 +48,16 @@ shell. Every other package is pure.
 - The pointer lights what is under it one surface below the selection: on a true-colour terminal
   `RowHoverBgColor` under a row and `ShellHoverBgColor` under a tab or a menu-bar button are
   Surface0, and `RowSelectedBgColor` is Surface1, so both are lighter than the terminal background.
-- On 256 colours Surface0 and Surface1 of a dark flavour are one palette entry, and Mantle is the
-  entry of Base. Both hover roles are there the grey of the ramp nearest to Surface0 (`greyRamp`,
-  `internal/ui/styles/theme.go`), an entry no other role is drawn in.
+- On 256 colours both hover roles are the grey of the ramp nearest to Surface0 (`greyRamp`,
+  `internal/ui/styles/theme.go`), so the band does not depend on the palette entry the colour
+  conversion picks for Surface0. On a dark flavour no other role is drawn in that entry.
 - The 16 colours have no entry between the background and the selection, so both hover roles are
   empty there and draw no band. What is left under the pointer is the bold label of a button and
   the text colour of a tab; a row shows nothing.
 - `styles.Apply` takes the colour profile for the two cases. `cmd/taskmgr-ui` reads the terminal's
-  profile once and passes it there and in `app.RuntimeOptions.ColorProfile`, which the
-  configuration screen applies a theme on.
+  profile with `colorprofile.Detect` and passes it there and in `app.RuntimeOptions.ColorProfile`,
+  which the configuration screen applies a theme on. The program detects the profile again when it
+  starts; `Model.update` re-applies the theme when its `tea.ColorProfileMsg` reports another one.
 - In true colour and on 256 colours the hover band is neither the selection band nor the entry of
   Base, which a row at rest stands on. On every profile a hovered tab and a hovered button differ
   from the ones at rest, and the key of a hovered button from its background
@@ -222,10 +224,10 @@ taller:
   not consume, and has no arm for it. The board, docs, search and store picker models still have
   an arm for the message; the shell never feeds it.
 - Size every surface, overlay and toast from `Model.width` and `Model.height`. `Model.screen` draws
-  them all for that size, and `Model.View` is the only place the margin is drawn.
-- `Model.update` moves a `tea.MouseMsg` into screen coordinates once, before `mouseHeld` and
-  `handleMouse`. Count every cell after that from the screen's first cell; a cell of the margin is
-  outside every hit test.
+  them all for that size, and `Model.frame` is the only place the margin is drawn.
+- `Model.update` turns a `tea.MouseMsg` into a `pointer` (`internal/app/mouse.go`) and moves it
+  into screen coordinates once, before `mouseHeld` and `handleMouse`. Count every cell after that
+  from the screen's first cell; a cell of the margin is outside every hit test.
 - A line wider than the screen runs through the margin and off the terminal, so a renderer cuts or
   wraps to the width it is given — `fatalerror.Render` and `helpscreen.Render` wrap for that reason.
   `TestEverySurfaceIsDrawnInsideTheMargin` (`internal/app/margin_test.go`) holds each surface to it.
@@ -321,16 +323,19 @@ focuses it.
   the shell switch and gives back only quit, help and Escape (`HandleKey`,
   `internal/mode/issueedit/model.go`):
   - a rune key without Alt is text. The bubbles widgets insert the runes of an `alt+` chord too,
-    so pass a rune key to a widget only when `msg.Alt` is false;
+    so pass a rune key to a widget only when its `Mod` does not contain `tea.ModAlt`;
   - the keys that move between the fields are matched as the keys themselves, as on the
     configuration screen. They do not read the `modal` context: that context allows a printable
     key, and a printable key here is text;
   - an action of the screen is a key that prints nothing, bound in the `shell` context.
     `save_edit` is the one, and it has no case in the shell switch, so it does nothing elsewhere;
   - bind no widget key to the system clipboard (`KeyMap.Paste` is unbound). The terminal's own
-    paste arrives as one key message and is typed.
+    paste arrives as a `tea.PasteMsg`, which `HandlePaste` types into the focused field, and so
+    does a key message that carries more than one rune.
 - The query has no cursor and is edited at its end only, so the arrow keys stay with the list.
   `mode.QueryLimit` caps it.
+- A paste (`tea.PasteMsg`) goes where a typed key goes: the active query (`Query.Paste`), an open
+  dialog's input, or the issue editor. Help and a drag selection drop it, as they drop a key.
 - On a tab or the store search, Escape clears a non-empty query before it leaves the surface or
   hides a toast: the shell calls `Browse.ClearQuery` and acts on Escape itself only when that
   reports nothing cleared. One thing comes first: an Escape that arrives while the issue editor is
@@ -579,7 +584,7 @@ open until the store is created, so a rejected name or prefix is corrected in pl
 
 The mouse repeats what a key already does; it adds no behaviour of its own and no config surface.
 
-- `Model.handleMouse` (`internal/app/mouse.go`) routes every `tea.MouseMsg`, which arrives in
+- `Model.handleMouse` (`internal/app/mouse.go`) routes every `pointer`, which arrives in
   screen coordinates ([The screen margin](#the-screen-margin)). It routes in the keyboard's
   order — help or a dialog, surface above the shell, header, active surface — and hands the
   surface a `mode.MouseMsg` in that surface's own coordinates. A mode never sees the raw event.
@@ -621,7 +626,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   wheel over the text moves its cursor three lines a notch. A read-only row takes no click, and
   nothing does during a save. It lights nothing under the pointer: a lit button there would show
   a focus that Enter does not act on.
-- The program runs with `tea.WithMouseAllMotion()`, which stops the terminal's own drag-select, so
+- `Model.View` asks for `tea.MouseModeAllMotion`, which stops the terminal's own drag-select, so
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release sends the box
   to the clipboard with OSC 52. A drag that runs into the margin stops the box at the screen's

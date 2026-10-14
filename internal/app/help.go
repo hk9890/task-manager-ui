@@ -1,7 +1,7 @@
 package app
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/ui/helpscreen"
@@ -147,7 +147,7 @@ func (m Model) renderHelp() string {
 // press scrolls it or leaves it, and the key that opened it closes it too:
 // matching a literal there left Escape as the only way out for a config that
 // rebinds toggle_help.
-func (m *Model) helpKey(k tea.KeyMsg) {
+func (m *Model) helpKey(k tea.KeyPressMsg) {
 	if m.keys.Match(config.ShellContext, config.ShellActionHelp, k) ||
 		m.keys.Match(config.ShellContext, config.ShellActionEscape, k) {
 		m.showHelp = false
@@ -159,7 +159,7 @@ func (m *Model) helpKey(k tea.KeyMsg) {
 // scrollHelp scrolls the help screen on the keys that scroll a detail pane.
 // The wheel scrolls it too, and the mouse only repeats what a key does
 // (docs/DESIGN-GUIDE.md).
-func (m *Model) scrollHelp(k tea.KeyMsg) {
+func (m *Model) scrollHelp(k tea.KeyPressMsg) {
 	detailKey := func(action string) bool { return m.keys.Match(config.DetailContext, action, k) }
 	page := helpscreen.PageRows(m.height)
 	switch {

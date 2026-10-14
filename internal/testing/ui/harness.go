@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 )
 
 const defaultWidth = 80
@@ -20,7 +20,7 @@ const defaultHeight = 24
 func NewTestModel(tb testing.TB, model tea.Model) *teatest.TestModel {
 	tb.Helper()
 
-	return teatest.NewTestModel(tb, model, teatest.WithInitialTermSize(defaultWidth, defaultHeight))
+	return NewTestModelWithSize(tb, model, defaultWidth, defaultHeight)
 }
 
 // NewTestModelWithSize creates a Bubble Tea test program at an explicit size.
@@ -34,7 +34,10 @@ func NewTestModelWithSize(tb testing.TB, model tea.Model, width, height int) *te
 		height = defaultHeight
 	}
 
-	return teatest.NewTestModel(tb, model, teatest.WithInitialTermSize(width, height))
+	// No environment, so the program detects no colour whoever runs the suite.
+	return teatest.NewTestModel(tb, model,
+		teatest.WithInitialTermSize(width, height),
+		teatest.WithProgramOptions(tea.WithEnvironment([]string{})))
 }
 
 // ReadGolden returns testdata golden bytes for the given package-local test.
@@ -50,13 +53,16 @@ func ReadGolden(tb testing.TB, name string) []byte {
 	return bts
 }
 
-// downsampleToTestProfile returns rendered output as the active test colour profile
-// shows it. On lipgloss v1 that is the input unchanged: Render already emits
-// codes for the active profile. lipgloss v2 Render always emits truecolour,
-// so there this downsamples through colorprofile — without it, every golden
-// rendered under the Ascii profile would gain escape codes.
+// downsampleToTestProfile returns rendered output as the active test colour
+// profile shows it (Downsample).
 func downsampleToTestProfile(output []byte) []byte {
-	return output
+	return []byte(Downsample(string(output)))
+}
+
+// View returns what m draws, as a terminal of the test's colour profile shows
+// it.
+func View(m tea.Model) string {
+	return Downsample(m.View().Content)
 }
 
 // updateGolden writes got to testdata/name when TASKMGR_UI_UPDATE_GOLDEN=1.
@@ -157,7 +163,7 @@ func AssertMatchesGoldenStripANSI(tb testing.TB, output []byte, name string) {
 func AssertModelViewMatchesGolden(tb testing.TB, model tea.Model, name string) {
 	tb.Helper()
 
-	AssertMatchesGolden(tb, []byte(model.View()), name)
+	AssertMatchesGolden(tb, []byte(model.View().Content), name)
 }
 
 // WaitForOutputContainsAll waits until output includes all snippets and returns matched render.

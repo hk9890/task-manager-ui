@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -172,17 +172,19 @@ func TestSearchControllerAsyncContracts(t *testing.T) {
 		}
 	})
 
-	t.Run("a key after the held enter drops it", func(t *testing.T) {
-		m, delayed, _ := inFlightSearch(t, "tri")
+	t.Run("a key or a paste after the held enter drops it", func(t *testing.T) {
+		for name, msg := range map[string]tea.Msg{"key": testui.Runes("a"), "paste": testui.Paste("a")} {
+			m, delayed, _ := inFlightSearch(t, "tri")
 
-		m.Update(enter)
-		retyped := startAsync(typeText(m, "a"))
-		waitForInFlight(t, delayed, 2)
-		// Two searches are out, and settle releases the other one.
-		delayed.Release()
+			m.Update(enter)
+			retyped := startAsync(edit(m, msg))
+			waitForInFlight(t, delayed, 2)
+			// Two searches are out, and settle releases the other one.
+			delayed.Release()
 
-		if got := settle(t, m, delayed, retyped); got != "" {
-			t.Fatalf("a dropped enter still opened the detail of %q", got)
+			if got := settle(t, m, delayed, retyped); got != "" {
+				t.Fatalf("%s: a dropped enter still opened the detail of %q", name, got)
+			}
 		}
 	})
 

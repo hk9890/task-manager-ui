@@ -2,10 +2,9 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -104,12 +103,12 @@ func (s textSelection) view() string {
 // as usual, so a row is selected before a drag off it begins. Motion with no
 // button held says the release went to another window: the press is forgotten
 // and nothing is copied.
-func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled bool) {
+func (m Model) mouseHeld(msg pointer) (next Model, cmd tea.Cmd, handled bool) {
 	// A drag runs on into the margin, and the box stops at the screen's edge.
 	// On a screen with no column or no row the box stops at cell 0: it finds
 	// the lines it covers by its rows, and a row of -1 is no line.
 	at := screenCell{x: textutil.Clamp(msg.X, 0, max(m.width-1, 0)), y: textutil.Clamp(msg.Y, 0, max(m.height-1, 0))}
-	leftPress := msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft
+	leftPress := msg.act == pointerPress && msg.Button == tea.MouseLeft
 
 	switch {
 	case leftPress && !m.sel.active:
@@ -117,7 +116,7 @@ func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled boo
 		return m, nil, false
 	case m.press == nil:
 		return m, nil, false
-	case msg.Action == tea.MouseActionMotion && msg.Button == tea.MouseButtonLeft:
+	case msg.act == pointerMotion && msg.Button == tea.MouseLeft:
 		if !m.sel.active {
 			if max(abs(at.x-m.press.x), abs(at.y-m.press.y)) < dragFrom {
 				return m, nil, true
@@ -126,10 +125,10 @@ func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled boo
 		}
 		m.sel.to = at
 		return m, nil, true
-	case msg.Action == tea.MouseActionMotion && msg.Button == tea.MouseButtonNone:
+	case msg.act == pointerMotion && msg.Button == tea.MouseNone:
 		m.press, m.sel = nil, textSelection{}
 		return m, nil, false
-	case msg.Action == tea.MouseActionRelease:
+	case msg.act == pointerRelease:
 		selected := m.sel
 		m.press, m.sel = nil, textSelection{}
 		if !selected.active {
@@ -152,7 +151,7 @@ func (m Model) mouseHeld(msg tea.MouseMsg) (next Model, cmd tea.Cmd, handled boo
 // selectingKey is a key pressed during a drag. Escape drops the selection and
 // copies nothing, and quit still quits. Every other key is dropped, because it
 // would change a screen the selection stands over.
-func (m Model) selectingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) selectingKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case m.keys.Match(config.ShellContext, config.ShellActionEscape, msg):
 		m.press, m.sel = nil, textSelection{}
@@ -160,17 +159,6 @@ func (m Model) selectingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
-}
-
-// copyToClipboard puts text on the system clipboard with OSC 52, which reaches
-// the clipboard of the machine the terminal runs on, over ssh too. It is one
-// write of a sequence that draws nothing, so it cannot corrupt a frame the
-// renderer is writing.
-func copyToClipboard(text string) tea.Cmd {
-	return func() tea.Msg {
-		_, _ = os.Stdout.WriteString(ansi.SetSystemClipboard(text))
-		return nil
-	}
 }
 
 func abs(n int) int {

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -420,7 +420,7 @@ func TestHoveredTabTakesTheHoverBackgroundTheButtonsTake(t *testing.T) {
 	hovered := m.renderTabs()
 
 	want := lipgloss.NewStyle().Padding(0, headerTabPadding).Foreground(styles.ShellTabHoverColor).Background(styles.ShellHoverBgColor).Render("Docs")
-	pad := hoverBackground() + " \x1b[0m"
+	pad := hoverBackground() + " \x1b[m"
 	if !strings.HasPrefix(want, pad) || !strings.HasSuffix(want, pad) || !strings.Contains(want, strings.TrimPrefix(hoverBackground(), "\x1b[")+"Docs") {
 		t.Fatalf("fixture: the padding and the label of %q do not all carry the hover background", want)
 	}
@@ -476,7 +476,7 @@ func TestWorkspaceFillsTheTerminalUnderTheHeaderWithAndWithoutTheFooter(t *testi
 				t.Errorf("footer %v at %dx%d: the surface draws %d lines into a workspace of %d",
 					showFooter, size.width, size.height, got, workspace)
 			}
-			lines := strings.Split(m.View(), "\n")
+			lines := strings.Split(testui.View(m), "\n")
 			if len(lines) != size.height {
 				t.Errorf("footer %v at %dx%d: the frame is %d lines", showFooter, size.width, size.height, len(lines))
 			}

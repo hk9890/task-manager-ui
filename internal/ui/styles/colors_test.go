@@ -4,16 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // lipgloss.Style has unexported func fields, so == doesn't work — compare via
-// rendered output for the same probe instead.
+// rendered output for the same probe instead, as the test's terminal draws it.
 func sameStyle(a, b lipgloss.Style) bool {
 	const probe = "X"
-	return a.Render(probe) == b.Render(probe)
+	return testui.Downsample(a.Render(probe)) == testui.Downsample(b.Render(probe))
 }
 
 func TestIssueTypeStyle(t *testing.T) {
@@ -176,5 +177,21 @@ func TestNormalizeIssueToken(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("normalizeIssueToken(%q) = %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+// TestABoldRoleStaysBoldWithoutColour: a terminal without colour (NO_COLOR)
+// draws the attributes and drops the colours, as the program's colour writer
+// does, so a match still stands out by weight.
+func TestABoldRoleStaysBoldWithoutColour(t *testing.T) {
+	testui.UseColorProfile(t, colorprofile.ASCII)
+
+	got := testui.Downsample(MatchTextStyle.Render("match"))
+
+	if !strings.Contains(got, "\x1b[1m") {
+		t.Errorf("the match is not bold without colour: %q", got)
+	}
+	if strings.Contains(got, "38;") || strings.Contains(got, "48;") {
+		t.Errorf("the match keeps a colour without colour: %q", got)
 	}
 }

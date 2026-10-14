@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 )
 
 // firstSizeModel renders the first WindowSizeMsg it receives and ignores every
@@ -37,11 +37,11 @@ func (m firstSizeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m firstSizeModel) View() string {
+func (m firstSizeModel) View() tea.View {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return fmt.Sprintf("initial-size w=%d h=%d", m.first.Width, m.first.Height)
+	return tea.NewView(fmt.Sprintf("initial-size w=%d h=%d", m.first.Width, m.first.Height))
 }
 
 func assertInitialTermSize(t *testing.T, tm *teatest.TestModel, wantWidth, wantHeight int) {

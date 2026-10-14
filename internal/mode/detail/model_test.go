@@ -1454,7 +1454,7 @@ func TestModelDetailDependencySelectionStaysVisibleInResponsiveLayout(t *testing
 	gutter, _ := styles.SelectionPrefix(true, false)
 	for step := 0; step < len(items); step++ {
 		selected := items[m.BrowserSelectedIndex]
-		view := m.View(width, height, false, 0)
+		view := testui.Downsample(m.View(width, height, false, 0))
 
 		var chevronLine string
 		for _, line := range strings.Split(view, "\n") {

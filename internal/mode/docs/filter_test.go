@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
@@ -62,6 +62,26 @@ func TestDocsFilterNarrowsTheColumnAndCountsMatchesOfLoaded(t *testing.T) {
 	typeText(m, " tm-3")
 	if got := shownIDs(m); got != "tm-3" {
 		t.Fatalf("the filtered column shows %q, want tm-3", got)
+	}
+}
+
+// TestDocsPasteFiltersAsTypedTextDoes: a paste extends the query as the same
+// text typed does, and a line break in it is a space.
+func TestDocsPasteFiltersAsTypedTextDoes(t *testing.T) {
+	typed, _ := filterDocs(t)
+	typeText(typed, "notes tm-3")
+	pasted, _ := filterDocs(t)
+	_ = pasted.Update(testui.Paste("notes"))
+	_ = pasted.Update(testui.Paste("\ntm-3"))
+
+	if got, want := pasted.query.Text(), typed.query.Text(); got != want {
+		t.Fatalf("the pasted query is %q, the typed one %q", got, want)
+	}
+	if got := shownIDs(pasted); got != "tm-3" {
+		t.Fatalf("the pasted query shows %q, want tm-3", got)
+	}
+	if got, want := pasted.View(0), typed.View(0); got != want {
+		t.Fatalf("the pasted query draws\n%s\nthe typed one\n%s", got, want)
 	}
 }
 

@@ -79,5 +79,5 @@ rg -n 'dep == "|MustCompile' cmd/taskmgr-ui/architecture_guardrails_test.go   # 
 | Resource | Where |
 |---|---|
 | Backing store and SDK | [`github.com/hk9890/task-manager`](https://github.com/hk9890/task-manager) — `sdk/tasks`, pinned in `go.mod`. File repository behavior surprises upstream before working around them in `internal/repository/taskmgr/`. |
-| TUI framework | [Bubble Tea](https://pkg.go.dev/github.com/charmbracelet/bubbletea), with [Lip Gloss](https://pkg.go.dev/github.com/charmbracelet/lipgloss) for styling and [Glamour](https://pkg.go.dev/github.com/charmbracelet/glamour) for markdown |
+| TUI framework | [Bubble Tea v2](https://pkg.go.dev/charm.land/bubbletea/v2), with [Lip Gloss v2](https://pkg.go.dev/charm.land/lipgloss/v2) for styling and [Glamour v2](https://pkg.go.dev/charm.land/glamour/v2) for markdown |
 | Git remote | https://github.com/hk9890/task-manager-ui |

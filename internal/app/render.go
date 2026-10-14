@@ -3,8 +3,8 @@ package app
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -48,10 +48,21 @@ func (m *Model) setTerminalSize(msg tea.WindowSizeMsg) {
 	m.marginTop, m.marginBottom, m.height = splitMargin(msg.Height, marginMinHeight, screenMarginRows)
 }
 
-// View renders the screen inside the margin. It is the only place the margin
+// View is the frame and the terminal modes the program runs in. The modes are
+// set on every frame, the empty one before the size is known included.
+func (m Model) View() tea.View {
+	view := tea.NewView(m.frame())
+	view.AltScreen = true
+	// Every motion, not only a drag: the pointer lights what it is over.
+	view.MouseMode = tea.MouseModeAllMotion
+	view.ReportFocus = true
+	return view
+}
+
+// frame renders the screen inside the margin. It is the only place the margin
 // is drawn: every surface, overlay and toast is on the screen, and so inside
 // it.
-func (m Model) View() string {
+func (m Model) frame() string {
 	// Suppress the very first render until the terminal has sent us its real
 	// dimensions via WindowSizeMsg. Without this guard the TUI emits a short
 	// frame (defaultViewportHeight lines) immediately on startup; when

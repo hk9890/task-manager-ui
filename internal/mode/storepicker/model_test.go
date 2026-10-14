@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
@@ -167,7 +167,7 @@ func TestPageAndBoundKeysMoveTheSelection(t *testing.T) {
 	page := m.itemCapacity()
 
 	steps := []struct {
-		key  tea.KeyMsg
+		key  tea.KeyPressMsg
 		want int
 	}{
 		{testui.Press("pgdown"), page},
@@ -446,7 +446,7 @@ func TestSelectedRowIsDrawnWholeAtEvenAndOddHeights(t *testing.T) {
 		m.SetSize(100, height)
 		run(t, m, m.Init())
 
-		for _, move := range []tea.KeyMsg{testui.Press("down"), testui.Press("up")} {
+		for _, move := range []tea.KeyPressMsg{testui.Press("down"), testui.Press("up")} {
 			for i := 0; i < len(names); i++ {
 				m.HandleKey(move)
 				view := ansi.ReplaceAllString(m.View(0, "help"), "")
@@ -469,7 +469,7 @@ func TestUnclaimedKeysFallThroughToTheShell(t *testing.T) {
 	m := newModel(t, &fakes.FakeStoreCatalog{Entries: entries("alpha")})
 	run(t, m, m.Init())
 
-	for _, k := range []tea.KeyMsg{testui.Press("esc"), testui.Press("alt+h"), testui.Press("alt+s"), testui.Press("j"), testui.Press("tab")} {
+	for _, k := range []tea.KeyPressMsg{testui.Press("esc"), testui.Press("alt+h"), testui.Press("alt+s"), testui.Press("j"), testui.Press("tab")} {
 		if consumed, _ := m.HandleKey(k); consumed {
 			t.Errorf("picker consumed %q; it must reach the shell", k.String())
 		}

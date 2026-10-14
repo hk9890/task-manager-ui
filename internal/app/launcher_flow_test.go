@@ -76,7 +76,7 @@ func TestModelLauncherSuccessToastClarifiesBackgroundLifecycle(t *testing.T) {
 	next, _ := m.Update(launchActionResultMsg{action: "nvim", err: nil})
 	m = next.(Model)
 
-	if view := m.View(); !strings.Contains(view, "background (no return flow)") {
+	if view := testui.View(m); !strings.Contains(view, "background (no return flow)") {
 		t.Fatalf("expected launcher lifecycle guidance toast, got:\n%s", view)
 	}
 }

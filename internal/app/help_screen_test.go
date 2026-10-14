@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -264,7 +264,7 @@ func TestEscapeClosesHelpAndLeavesTheSurfaceBelow(t *testing.T) {
 // it.
 func TestHelpHoldsEveryOtherKey(t *testing.T) {
 	m := newHelpShell(t, config.Default(), 60)
-	whole := m.View()
+	whole := testui.View(m)
 
 	for _, key := range []string{"enter", "tab", "alt+s", "alt+c", "alt+f", "alt+n", "delete", "x", "left"} {
 		next, cmd := m.Update(testui.Press(key))
@@ -272,7 +272,7 @@ func TestHelpHoldsEveryOtherKey(t *testing.T) {
 		if cmd != nil {
 			t.Errorf("%q under help returned a command", key)
 		}
-		if !m.showHelp || m.active != mode.Board || m.showActionModal || m.pendingEditor != 0 || m.View() != whole {
+		if !m.showHelp || m.active != mode.Board || m.showActionModal || m.pendingEditor != 0 || testui.View(m) != whole {
 			t.Fatalf("%q under help: help %v, on %q, modal %v", key, m.showHelp, m.active, m.showActionModal)
 		}
 	}
@@ -282,7 +282,7 @@ func TestHelpHoldsEveryOtherKey(t *testing.T) {
 // the keyboard alone: a line, a page, both ends, and out.
 func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 	m := newHelpShell(t, config.Default(), 16)
-	top := m.View()
+	top := testui.View(m)
 	topBody := helpBody(m)
 	rows := styles.ScreenBodyRows(m.height)
 	all := helpAllLines(t, m)
@@ -315,7 +315,7 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 	if topBody[rows-2] != all[rows-2] || helpBody(page)[1] != all[rows-1] {
 		t.Fatalf("pgdown drew %q first, want the line after %q, %q", helpBody(page)[1], topBody[rows-2], all[rows-1])
 	}
-	if back := send(t, page, testui.Press("pgup")); back.View() != top {
+	if back := send(t, page, testui.Press("pgup")); testui.View(back) != top {
 		t.Fatal("pgup did not move the help screen back one page")
 	}
 
@@ -327,16 +327,16 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 	for name, further := range map[string]tea.Msg{
 		"down":   testui.Press("down"),
 		"pgdown": testui.Press("pgdown"),
-		"wheel":  wheel(10, 5, tea.MouseButtonWheelDown),
+		"wheel":  testui.Wheel(10, 5, tea.MouseWheelDown),
 	} {
-		if got := send(t, end, further); got.View() != end.View() {
+		if got := send(t, end, further); testui.View(got) != testui.View(end) {
 			t.Errorf("%s at the end moved the help screen", name)
 		}
 	}
-	if home := send(t, end, testui.Press("home")); home.View() != top {
+	if home := send(t, end, testui.Press("home")); testui.View(home) != top {
 		t.Fatal("home did not return the help screen to its first view")
 	}
-	if got := send(t, m, testui.Press("up")); got.View() != top {
+	if got := send(t, m, testui.Press("up")); testui.View(got) != top {
 		t.Error("up at the top moved the help screen")
 	}
 
@@ -349,7 +349,7 @@ func TestTheDetailScrollKeysScrollAClippedHelpScreen(t *testing.T) {
 		if closed.showHelp {
 			t.Fatalf("%s did not close a scrolled help screen", name)
 		}
-		if reopened := pressKey(t, closed, "alt+h"); reopened.View() != top {
+		if reopened := pressKey(t, closed, "alt+h"); testui.View(reopened) != top {
 			t.Fatalf("the help screen closed with the %s reopened where it was scrolled to", name)
 		}
 	}
@@ -415,13 +415,13 @@ func TestTheHelpScreenScrollsOnReboundDetailKeys(t *testing.T) {
 		Detail: map[string][]string{config.DetailActionScrollDown: {"alt+z"}},
 	})
 	m := newHelpShell(t, cfg, 16)
-	top := m.View()
+	top := testui.View(m)
 
-	if still := pressKey(t, m, "down"); still.View() != top || !still.showHelp {
+	if still := pressKey(t, m, "down"); testui.View(still) != top || !still.showHelp {
 		t.Fatal("a key no longer bound to detail scroll_down scrolled or closed the help screen")
 	}
 	if down := pressKey(t, m, "alt+z"); helpBody(down)[1] != helpBody(m)[2] {
-		t.Fatalf("the rebound scroll_down key did not scroll the help screen:\n%s", down.View())
+		t.Fatalf("the rebound scroll_down key did not scroll the help screen:\n%s", testui.View(down))
 	}
 }
 
@@ -429,7 +429,7 @@ func TestTheHelpScreenScrollsOnReboundDetailKeys(t *testing.T) {
 // the whole help there is nowhere to scroll to.
 func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
 	m := newHelpShell(t, config.Default(), 100)
-	whole := m.View()
+	whole := testui.View(m)
 	if !strings.Contains(whole, "shift+drag") || !strings.Contains(whole, "Moving and opening") {
 		t.Fatalf("fixture: the help screen is clipped at this height:\n%s", whole)
 	}
@@ -437,9 +437,9 @@ func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
 		testui.Press("down"), testui.Press("up"),
 		testui.Press("pgdown"), testui.Press("pgup"),
 		testui.Press("end"), testui.Press("home"),
-		wheel(10, 5, tea.MouseButtonWheelDown),
+		testui.Wheel(10, 5, tea.MouseWheelDown),
 	} {
-		if m = send(t, m, msg); m.View() != whole || !m.showHelp {
+		if m = send(t, m, msg); testui.View(m) != whole || !m.showHelp {
 			t.Fatalf("%v changed a help screen that fits", msg)
 		}
 	}
@@ -457,7 +457,7 @@ func TestTheWheelSkipsNoHelpLineOnAShortScreen(t *testing.T) {
 			for _, line := range helpBody(m) {
 				drawn[line] = true
 			}
-			m = send(t, m, wheel(10, 5, tea.MouseButtonWheelDown))
+			m = send(t, m, testui.Wheel(10, 5, tea.MouseWheelDown))
 		}
 		for _, line := range all {
 			if !drawn[line] {
@@ -517,7 +517,7 @@ func TestTheHelpScrollHoldsAfterAResize(t *testing.T) {
 	}
 
 	shorter := send(t, taller, tea.WindowSizeMsg{Width: 120, Height: 12})
-	if got := len(strings.Split(shorter.View(), "\n")); got != 12 {
+	if got := len(strings.Split(testui.View(shorter), "\n")); got != 12 {
 		t.Errorf("the help screen is %d lines on a terminal of 12", got)
 	}
 	if end := send(t, shorter, testui.Press("end")); helpBody(end)[len(helpBody(end))-1] != all[len(all)-1] {
@@ -529,7 +529,7 @@ func TestTheHelpScrollHoldsAfterAResize(t *testing.T) {
 // from the roles on every frame, and it scrolls on after the change.
 func TestTheHelpScreenFollowsAThemeChange(t *testing.T) {
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -537,12 +537,12 @@ func TestTheHelpScreenFollowsAThemeChange(t *testing.T) {
 
 	m := newHelpShell(t, config.Default(), 16)
 	m = pressKey(t, m, "down")
-	mocha := m.View()
+	mocha := testui.View(m)
 
-	if err := styles.Apply("catppuccin-latte", "ascii", termenv.TrueColor); err != nil {
+	if err := styles.Apply("catppuccin-latte", "ascii", colorprofile.TrueColor); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	latte := m.View()
+	latte := testui.View(m)
 	if latte == mocha {
 		t.Fatal("the help screen is drawn in the colours of the theme before")
 	}

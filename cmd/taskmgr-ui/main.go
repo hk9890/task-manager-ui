@@ -16,10 +16,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/hk9890/task-manager/sdk/tasks"
-	"github.com/muesli/termenv"
 	"gopkg.in/yaml.v3"
 
 	"github.com/hk9890/task-manager-ui/internal/app"
@@ -64,7 +63,7 @@ type startupOptions struct {
 	configPath  string // resolved config file; the configuration screen writes a change there
 	// colorProfile is the terminal's colour profile; the configuration screen
 	// applies a theme on it again.
-	colorProfile termenv.Profile
+	colorProfile colorprofile.Profile
 }
 
 // buildRepository selects and opens the repository backend for startInteractive.
@@ -203,7 +202,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 		return fmt.Errorf("failed to initialize app model: %w", err)
 	}
 
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus(), tea.WithMouseAllMotion())
+	program := tea.NewProgram(model)
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("taskmgr-ui failed: %w", err)
 	}
@@ -329,8 +328,9 @@ func runWithLogger(args []string, stdout, stderr io.Writer, load func(config.Loa
 
 	// The theme and the glyph set are checked here for the same reason, and
 	// applied here because every surface draws with them from its first frame.
-	// This is the one read of the terminal's colour profile.
-	colorProfile := lipgloss.ColorProfile()
+	// The program reads the terminal's colour profile again when it starts and
+	// reports it to the app (tea.ColorProfileMsg), which applies a change.
+	colorProfile := colorprofile.Detect(os.Stdout, os.Environ())
 	if err := styles.Apply(configResult.Config.UI.Theme, configResult.Config.UI.Glyphs, colorProfile); err != nil {
 		if startupLogger != nil {
 			startupLogger.Error("invalid ui configuration", "error", err.Error())

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // FindCell returns the terminal cell where text starts in a rendered view,
@@ -34,26 +34,53 @@ func FindCell(tb testing.TB, view, text string) (x, y int) {
 	return x, y
 }
 
+// activeProfile is the colour profile Downsample renders for. Unless a test
+// asks for a profile, the suite renders as output that is not a terminal: no
+// SGR sequence at all.
+var activeProfile = colorprofile.NoTTY
+
 // ForceTrueColor renders with full colour for the rest of the test. The suite
 // otherwise renders without any, which hides what a background says. The
 // profile is process-wide, so a test that calls this must not be parallel.
 func ForceTrueColor(tb testing.TB) {
 	tb.Helper()
-	UseColorProfile(tb, termenv.TrueColor)
+	UseColorProfile(tb, colorprofile.TrueColor)
 }
 
 // UseColorProfile renders with profile for the rest of the test, and restores
 // the profile the test had in its cleanup. A test of a 256- or a 16-colour
 // terminal uses it. The profile is process-wide, so a test that calls this
 // must not be parallel.
-func UseColorProfile(tb testing.TB, profile termenv.Profile) {
+func UseColorProfile(tb testing.TB, profile colorprofile.Profile) {
 	tb.Helper()
-	previous := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(profile)
-	tb.Cleanup(func() { lipgloss.SetColorProfile(previous) })
+	previous := activeProfile
+	activeProfile = profile
+	tb.Cleanup(func() { activeProfile = previous })
 }
 
-var backgroundPattern = regexp.MustCompile(`\x1b\[[0-9;]*48;2;(\d+;\d+;\d+)`)
+// Downsample returns rendered output as a terminal of the test's colour
+// profile shows it. Lip Gloss renders every colour in true colour and leaves
+// the profile to the program's output, which a test that reads a View
+// directly does not pass through. Output that is not a terminal shows no SGR
+// sequence at all; a terminal without colour (ASCII) keeps bold, underline
+// and reverse, as the program's colour writer does.
+func Downsample(s string) string {
+	switch {
+	case activeProfile == colorprofile.TrueColor:
+		return s
+	case activeProfile <= colorprofile.NoTTY:
+		return AnsiEscapePattern.ReplaceAllString(s, "")
+	}
+	var out strings.Builder
+	w := colorprofile.Writer{Forward: &out, Profile: activeProfile}
+	_, _ = w.WriteString(s)
+	return out.String()
+}
+
+var (
+	backgroundPattern = regexp.MustCompile(`\x1b\[[0-9;]*48;2;(\d+;\d+;\d+)`)
+	resetPattern      = regexp.MustCompile(`\x1b\[0?m`)
+)
 
 // RowBand returns the background colour drawn immediately before text on its
 // row, as "r;g;b", or "" when that cell has none. It is how a test tells the
@@ -73,7 +100,7 @@ func RowBand(tb testing.TB, view, text string) string {
 		return ""
 	}
 	last := set[len(set)-1]
-	if strings.Contains(before[last[1]:], "\x1b[0m") {
+	if resetPattern.MatchString(before[last[1]:]) {
 		return ""
 	}
 	return before[last[2]:last[3]]

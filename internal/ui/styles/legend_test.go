@@ -1,10 +1,11 @@
 package styles
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -12,16 +13,17 @@ import (
 func TestKeyLegendDropsTrailingHintsThatDoNotFit(t *testing.T) {
 	hints := []KeyHint{{Key: "q", Desc: "quit"}, {Key: "?", Desc: "help"}, {Desc: "read only"}, {Key: "enter", Desc: "open"}}
 	const all = "q quit • ? help • read only • enter open"
+	legend := func(width int) string { return testui.Downsample(KeyLegend(hints, width)) }
 
-	if got := KeyLegend(hints, 0); got != all {
+	if got := legend(0); got != all {
 		t.Fatalf("width 0 draws every hint: got %q, want %q", got, all)
 	}
-	if got := KeyLegend(hints, lipgloss.Width(all)); got != all {
+	if got := legend(lipgloss.Width(all)); got != all {
 		t.Fatalf("a legend that fits exactly was cut: %q", got)
 	}
 
 	for width := lipgloss.Width("q quit"); width < lipgloss.Width(all); width++ {
-		got := KeyLegend(hints, width)
+		got := legend(width)
 		if lipgloss.Width(got) > width {
 			t.Errorf("width %d: legend is %d cells wide: %q", width, lipgloss.Width(got), got)
 		}
@@ -36,14 +38,14 @@ func TestKeyLegendDropsTrailingHintsThatDoNotFit(t *testing.T) {
 		}
 	}
 
-	if got := KeyLegend(hints, lipgloss.Width("q quit • ? help")); got != "q quit • ? help" {
+	if got := legend(lipgloss.Width("q quit • ? help")); got != "q quit • ? help" {
 		t.Errorf("expected the two hints that fit and no room for the mark, got %q", got)
 	}
-	if got := KeyLegend(hints, lipgloss.Width("q quit • ? help …")); got != "q quit • ? help …" {
+	if got := legend(lipgloss.Width("q quit • ? help …")); got != "q quit • ? help …" {
 		t.Errorf("expected the two hints that fit and the mark, got %q", got)
 	}
 	// The first hint is cut rather than dropped: a legend is never empty.
-	if got := KeyLegend(hints, lipgloss.Width("q quit")-1); got != "q qu…" {
+	if got := legend(lipgloss.Width("q quit") - 1); got != "q qu…" {
 		t.Errorf("expected the first hint cut to the width, got %q", got)
 	}
 }
@@ -69,7 +71,7 @@ func TestKeyLegendStyledKeepsToTheWidth(t *testing.T) {
 func TestKeyLegendMutesTheKeyAndNotWhatItDoes(t *testing.T) {
 	testui.ForceTrueColor(t)
 
-	run := func(role lipgloss.Color, text string) string {
+	run := func(role color.Color, text string) string {
 		return lipgloss.NewStyle().Foreground(role).Render(text)
 	}
 	if ShellFooterHelpColor == TextPrimaryColor || ShellRuleColor == ShellFooterHelpColor {

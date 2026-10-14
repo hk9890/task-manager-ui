@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -49,7 +49,7 @@ func TestModelDetailViewShowsTheConfiguredCommentKeyOnTheAddButton(t *testing.T)
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	view := testui.AnsiEscapePattern.ReplaceAllString(m.View(), "")
+	view := testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), "")
 	if !strings.Contains(view, "add ctrl+a") {
 		t.Fatalf("expected the add button to show the configured comment binding, got:\n%s", view)
 	}
@@ -87,7 +87,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	viewTop := m.View()
+	viewTop := testui.View(m)
 	if !strings.Contains(viewTop, "Metadata") || !strings.Contains(viewTop, "Core") || !strings.Contains(viewTop, "Type    : task") {
 		t.Fatalf("expected metadata section in initial detail view, got:\n%s", viewTop)
 	}
@@ -96,7 +96,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	viewPaged := m.View()
+	viewPaged := testui.View(m)
 	if viewPaged == viewTop {
 		t.Fatalf("expected detail view to change after page down")
 	}
@@ -108,7 +108,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 
-	viewEnd := m.View()
+	viewEnd := testui.View(m)
 	if !strings.Contains(viewEnd, "Line 80") {
 		t.Fatalf("expected to reach bottom content after end key, got:\n%s", viewEnd)
 	}

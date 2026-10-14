@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -34,7 +34,7 @@ func newModel(t *testing.T, theme, glyphs string) *Model {
 
 // press sends one key the screen must consume and returns the change it asks
 // the shell for, or nil when it asks for none.
-func press(t *testing.T, m *Model, key tea.KeyMsg) *ChangeMsg {
+func press(t *testing.T, m *Model, key tea.KeyPressMsg) *ChangeMsg {
 	t.Helper()
 
 	consumed, cmd := m.HandleKey(key)
@@ -56,7 +56,7 @@ func TestUpAndDownMoveTheCursorAndStopAtBothEnds(t *testing.T) {
 
 	m := newModel(t, "catppuccin-mocha", "unicode")
 	steps := []struct {
-		key  tea.KeyMsg
+		key  tea.KeyPressMsg
 		want int
 	}{
 		{keyUp, rowTheme}, {keyDown, rowGlyphs}, {keyDown, rowGlyphs}, {keyUp, rowTheme}, {keyUp, rowTheme},
@@ -84,7 +84,7 @@ func TestStepKeysAskForTheNeighbourAndWrap(t *testing.T) {
 		name          string
 		theme, glyphs string
 		row           int
-		key           tea.KeyMsg
+		key           tea.KeyPressMsg
 		want          ChangeMsg
 	}{
 		{"right steps the theme", firstTheme, firstSet, rowTheme, keyRight, ChangeMsg{Theme: themes[1], Glyphs: firstSet}},
@@ -95,6 +95,8 @@ func TestStepKeysAskForTheNeighbourAndWrap(t *testing.T) {
 		{"right steps the glyph set", firstTheme, firstSet, rowGlyphs, keyRight, ChangeMsg{Theme: firstTheme, Glyphs: sets[1]}},
 		{"right wraps after the last glyph set", firstTheme, lastSet, rowGlyphs, keyEnter, ChangeMsg{Theme: firstTheme, Glyphs: firstSet}},
 		{"left wraps before the first glyph set", firstTheme, firstSet, rowGlyphs, keyLeft, ChangeMsg{Theme: firstTheme, Glyphs: lastSet}},
+		{"left with num lock on steps the theme back", themes[1], firstSet, rowTheme, testui.Press("numlock+left"), ChangeMsg{Theme: firstTheme, Glyphs: firstSet}},
+		{"the keypad's enter steps the theme as enter does", firstTheme, firstSet, rowTheme, testui.Press("kpenter"), ChangeMsg{Theme: themes[1], Glyphs: firstSet}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,7 +152,7 @@ func TestOpenPutsTheCursorOnTheFirstRow(t *testing.T) {
 func TestUnclaimedKeysFallThrough(t *testing.T) {
 	t.Parallel()
 
-	unclaimed := map[string]tea.KeyMsg{
+	unclaimed := map[string]tea.KeyPressMsg{
 		"esc":       testui.Press("esc"),
 		"ctrl+c":    testui.Press("ctrl+c"),
 		"alt+h":     testui.Press("alt+h"),

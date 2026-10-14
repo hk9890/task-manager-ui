@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func clearMarkdownCaches() {
@@ -35,7 +36,7 @@ func TestRenderReadOnlyMemoizesRenderedMarkdown(t *testing.T) {
 		t.Fatal("expected rendered markdown")
 	}
 
-	dark := lipgloss.HasDarkBackground()
+	dark := styles.Dark()
 	markdownCacheMu.Lock()
 	cached, ok := markdownCache[markdownCacheKey{content: content, width: width, dark: dark}]
 	markdownCacheMu.Unlock()

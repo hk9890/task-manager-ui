@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 const (
@@ -206,7 +206,7 @@ func ResolveKeyBindings(k KeyBindings) (ResolvedKeyBindings, error) {
 	return resolved, nil
 }
 
-func (r ResolvedKeyBindings) Match(context, action string, msg tea.KeyMsg) bool {
+func (r ResolvedKeyBindings) Match(context, action string, msg tea.KeyPressMsg) bool {
 	ctx, ok := r.contexts[context]
 	if !ok {
 		return false
@@ -215,8 +215,19 @@ func (r ResolvedKeyBindings) Match(context, action string, msg tea.KeyMsg) bool 
 	if !ok {
 		return false
 	}
-	_, exists := binding.Set[canonicalKeyName(msg.String())]
+	_, exists := binding.Set[canonicalKeyName(keyName(msg))]
 	return exists
+}
+
+// keyName is the name a binding writes for a pressed key. A terminal that
+// reports the shift of an alt chord names alt+shift+x what others name alt+X;
+// both match an alt+x binding, also while Caps Lock or Num Lock is on.
+func keyName(msg tea.KeyPressMsg) string {
+	mod := msg.Mod &^ (tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
+	if mod == tea.ModAlt|tea.ModShift && unicode.IsLetter(msg.Code) {
+		return "alt+" + string(unicode.ToLower(msg.Code))
+	}
+	return msg.String()
 }
 
 func (r ResolvedKeyBindings) Keys(context, action string) []string {
@@ -373,7 +384,7 @@ func canonicalKeyName(key string) string {
 	case "space":
 		return "space"
 	case "ctrl+space", "ctrl+@":
-		return "ctrl+@"
+		return "ctrl+space"
 	}
 	if len([]rune(trimmed)) == 1 {
 		return trimmed
@@ -382,12 +393,7 @@ func canonicalKeyName(key string) string {
 }
 
 func DisplayKeyName(key string) string {
-	switch canonicalKeyName(key) {
-	case "ctrl+@":
-		return "ctrl+space"
-	default:
-		return canonicalKeyName(key)
-	}
+	return canonicalKeyName(key)
 }
 
 func allowedActionsForContext(context string) map[string]struct{} {

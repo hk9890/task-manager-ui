@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -75,7 +75,7 @@ func TestSearchOpensByKeyAndByButtonFromBoardDocsAndDetail(t *testing.T) {
 			x, text := barButton(t, base, "search", config.ShellActionOpenSearch)
 
 			byKey := press(t, base, "alt+f")
-			byClick := send(t, base, onScreen(base, leftClick(x+len(text)-1, headerMenuRow)))
+			byClick := send(t, base, onScreen(base, testui.Click(x+len(text)-1, headerMenuRow, tea.MouseLeft)))
 			for name, m := range map[string]Model{"key": byKey, "click": byClick} {
 				if m.active != mode.Search || m.searchFrom != surface.from {
 					t.Fatalf("%s: on %q opened from %q, want search opened from %q", name, m.active, m.searchFrom, surface.from)
@@ -370,7 +370,7 @@ func TestSearchIsLeftForATabByTheTabKeysAndAClick(t *testing.T) {
 	}
 
 	x, _ := testui.FindCell(t, tabLine(base), " Board ")
-	byClick := send(t, base, onScreen(base, leftClick(x+1, headerTabsRow)))
+	byClick := send(t, base, onScreen(base, testui.Click(x+1, headerTabsRow, tea.MouseLeft)))
 	if byClick.active != mode.Board || byClick.searchFrom != "" {
 		t.Fatalf("a click on the board tab went to %q (search from %q)", byClick.active, byClick.searchFrom)
 	}
@@ -505,5 +505,5 @@ func TestStoreSwitchDropsAPendingEditPause(t *testing.T) {
 func TestSearchSurfaceGolden(t *testing.T) {
 	m, _ := searchShell(t)
 	m = typeInto(t, m, "login")
-	testui.AssertMatchesGoldenNormalized(t, []byte(m.View()), "model_search_results_w160.golden")
+	testui.AssertMatchesGoldenNormalized(t, []byte(testui.View(m)), "model_search_results_w160.golden")
 }

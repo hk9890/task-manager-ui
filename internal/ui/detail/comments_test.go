@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -58,7 +58,7 @@ func TestCommentsWithoutTheFocusDrawNoBarAndNoCommentButtons(t *testing.T) {
 	for _, focus := range []FocusPane{FocusPaneContent, FocusPaneDependencies} {
 		state := commentsState(t)
 		state.FocusPane = focus
-		view := Render(state)
+		view := testui.Downsample(Render(state))
 		for _, absent := range []string{bar + "[", "edit enter", "delete alt+d"} {
 			if strings.Contains(view, absent) {
 				t.Errorf("focus %d draws %q:\n%s", focus, absent, view)
@@ -89,7 +89,7 @@ func TestSelectedCommentHasTheBarOnEveryLine(t *testing.T) {
 			t.Fatalf("comment %d selected: %d lines, want the %d of every selection", index, len(content.lines), len(unselected.lines))
 		}
 		for line, owner := range content.comment {
-			if got := strings.HasPrefix(content.lines[line], bar); got != (owner == index) {
+			if got := strings.HasPrefix(testui.Downsample(content.lines[line]), bar); got != (owner == index) {
 				t.Errorf("comment %d selected: line %d of comment %d has the bar: %v\n%q", index, line, owner, got, content.lines[line])
 			}
 		}
@@ -294,7 +294,7 @@ func TestPlaceButtonsDropsTheButtonsWhenTheTextHasNoRoom(t *testing.T) {
 	width := buttonTextFloor + lipgloss.Width(button)
 
 	line, placed := placeButtons("Comments (0)", width, button)
-	if len(placed) != 1 || lipgloss.Width(line) != width || !strings.HasSuffix(line, "add alt+a ") {
+	if len(placed) != 1 || lipgloss.Width(line) != width || !strings.HasSuffix(testui.Downsample(line), "add alt+a ") {
 		t.Errorf("at width %d: %q with cells %v", width, line, placed)
 	}
 

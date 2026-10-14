@@ -2,12 +2,12 @@ package ui
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // A test builds every key message through Press, Runes and Paste, and only
@@ -15,54 +15,134 @@ import (
 // Bubble Tea majors; when the construction lives here, this file is the only
 // test code that changes with it.
 
-const altPrefix = "alt+"
+// modifiers maps each prefix of a key name to its modifier. A terminal with the
+// kitty keyboard protocol reports a lock that is on as a modifier of a key
+// that prints nothing.
+var modifiers = map[string]tea.KeyMod{
+	"ctrl":     tea.ModCtrl,
+	"alt":      tea.ModAlt,
+	"shift":    tea.ModShift,
+	"capslock": tea.ModCapsLock,
+	"numlock":  tea.ModNumLock,
+}
 
-// namedKeys maps each key name Bubble Tea prints to its key type. It holds
-// neither the runes type nor the space key, whose v1 name is " ": Press takes
-// "space" for that key and reads a single rune as typed text.
-var namedKeys = func() map[string]tea.KeyType {
-	keys := map[string]tea.KeyType{}
-	for keyType := tea.KeyF20; keyType <= tea.KeyBackspace; keyType++ {
-		name := keyType.String()
-		if name == "" || keyType == tea.KeyRunes || keyType == tea.KeySpace {
-			continue
-		}
-		keys[name] = keyType
+// keypadKeys maps the name of a keypad key to its code. A terminal with the
+// kitty keyboard protocol reports it apart from the main key, which Bubble Tea
+// prints it as.
+var keypadKeys = map[string]rune{
+	"kpenter": tea.KeyKpEnter,
+	"kpleft":  tea.KeyKpLeft,
+}
+
+// namedKeys maps the name of each key that prints nothing to its code.
+var namedKeys = func() map[string]rune {
+	keys := map[string]rune{
+		"enter":     tea.KeyEnter,
+		"tab":       tea.KeyTab,
+		"backspace": tea.KeyBackspace,
+		"esc":       tea.KeyEscape,
+		"up":        tea.KeyUp,
+		"down":      tea.KeyDown,
+		"left":      tea.KeyLeft,
+		"right":     tea.KeyRight,
+		"home":      tea.KeyHome,
+		"end":       tea.KeyEnd,
+		"pgup":      tea.KeyPgUp,
+		"pgdown":    tea.KeyPgDown,
+		"delete":    tea.KeyDelete,
+		"insert":    tea.KeyInsert,
+	}
+	for n := range 20 {
+		keys[fmt.Sprintf("f%d", n+1)] = tea.KeyF1 + rune(n)
 	}
 	return keys
 }()
 
-// KeyNames returns, sorted, every name Press takes for a key that prints
-// nothing: neither a rune nor "space".
+// KeyNames returns, sorted, every name of a key that prints nothing: each
+// named key alone and under ctrl, ctrl with each letter and with space, and
+// shift+tab.
 func KeyNames() []string {
-	return slices.Sorted(maps.Keys(namedKeys))
+	names := []string{"shift+tab", "ctrl+space"}
+	for name := range namedKeys {
+		names = append(names, name, "ctrl+"+name)
+	}
+	for letter := 'a'; letter <= 'z'; letter++ {
+		names = append(names, "ctrl+"+string(letter))
+	}
+	slices.Sort(names)
+	return names
 }
 
 // Press returns the key message whose name is name, as Bubble Tea prints it
 // and as the keybinding config writes it: "enter", "shift+tab", "ctrl+u",
-// "f1", "alt+left", a single rune such as "j" or "alt+x", and "space" for the
-// space key. It panics on any other name, because that is a bug in the test.
-func Press(name string) tea.KeyMsg {
-	key, alt := strings.CutPrefix(name, altPrefix)
-	if utf8.RuneCountInString(key) == 1 {
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key), Alt: alt}
+// "f1", "alt+left", a single rune such as "j", "J", "shift+j" or "alt+x", and
+// "space" for the space key. "numlock+left" and "kpenter" are the keys a
+// kitty-protocol terminal reports with Num Lock on and on the keypad. It panics
+// on any other name, because that is a bug in the test.
+func Press(name string) tea.KeyPressMsg {
+	var mod tea.KeyMod
+	key := name
+	for {
+		prefix, rest, found := strings.Cut(key, "+")
+		modifier, known := modifiers[prefix]
+		if !found || !known || rest == "" {
+			break
+		}
+		mod |= modifier
+		key = rest
 	}
-	if key == "space" {
-		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}, Alt: alt}
+
+	code, isNamed := namedKeys[key]
+	if !isNamed {
+		code, isNamed = keypadKeys[key]
 	}
-	keyType, ok := namedKeys[key]
-	if !ok {
+
+	var msg tea.KeyPressMsg
+	switch {
+	case key == "space":
+		msg = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	case utf8.RuneCountInString(key) == 1:
+		r := []rune(key)[0]
+		if mod&tea.ModShift != 0 {
+			// A terminal types the shifted letter.
+			r = unicode.ToUpper(r)
+		}
+		msg = runeKey(r)
+	case isNamed:
+		msg = tea.KeyPressMsg{Code: code}
+	default:
 		panic(fmt.Sprintf("testing/ui.Press: unknown key name %q", name))
 	}
-	return tea.KeyMsg{Type: keyType, Alt: alt}
+
+	msg.Mod |= mod
+	// A terminal reports the text of a key only when neither ctrl nor alt
+	// is held.
+	if mod&(tea.ModCtrl|tea.ModAlt) != 0 {
+		msg.Text = ""
+	}
+	return msg
 }
 
-// Runes returns the key message for typed text of any length.
-func Runes(text string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)}
+// runeKey is the press of the key that types r. An upper-case letter is its
+// lower-case key with shift, as a terminal reports it.
+func runeKey(r rune) tea.KeyPressMsg {
+	if unicode.IsUpper(r) {
+		return tea.KeyPressMsg{Code: unicode.ToLower(r), ShiftedCode: r, Mod: tea.ModShift, Text: string(r)}
+	}
+	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }
 
-// Paste returns the key message for text pasted through bracketed paste.
-func Paste(text string) tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text), Paste: true}
+// Runes returns the key message for typed text: one rune is its key, and
+// several are one key that types them all, as an input method sends them.
+func Runes(text string) tea.KeyPressMsg {
+	if utf8.RuneCountInString(text) == 1 {
+		r, _ := utf8.DecodeRuneInString(text)
+		return runeKey(r)
+	}
+	return tea.KeyPressMsg{Code: tea.KeyExtended, Text: text}
+}
+
+// Paste returns the message for text pasted through bracketed paste.
+func Paste(text string) tea.PasteMsg {
+	return tea.PasteMsg{Content: text}
 }

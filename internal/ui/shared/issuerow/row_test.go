@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -114,7 +114,7 @@ func TestRenderCompactStyledIncludesANSI(t *testing.T) {
 func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
 	// Apply writes package variables, so this test is not parallel.
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -126,7 +126,7 @@ func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
 	}
 
 	for _, set := range styles.GlyphSets() {
-		if err := styles.Apply("catppuccin-mocha", set, termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", set, colorprofile.TrueColor); err != nil {
 			t.Fatalf("Apply(%q): %v", set, err)
 		}
 		cursor := styles.Glyphs.Cursor + " "

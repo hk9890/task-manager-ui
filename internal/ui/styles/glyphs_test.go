@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // TestGlyphSetMarkersAreOneCell pins the width every row and frame is laid out

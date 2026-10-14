@@ -1,7 +1,7 @@
 package ui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // InitializeController runs Init and resolves all emitted messages/commands.
@@ -14,7 +14,7 @@ func InitializeController(controller Controller) Controller {
 }
 
 // ApplyControllerKeySequence sends key messages and resolves resulting commands.
-func ApplyControllerKeySequence(controller Controller, keys ...tea.KeyMsg) Controller {
+func ApplyControllerKeySequence(controller Controller, keys ...tea.KeyPressMsg) Controller {
 	current := controller
 	for _, key := range keys {
 		cmd := current.Update(key)

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -311,6 +311,23 @@ func TestTypedRunesReachSubmitValues(t *testing.T) {
 	}
 	if submit.Values["body"] != "looks good" {
 		t.Fatalf("typed text did not reach the submit values: %#v", submit.Values)
+	}
+}
+
+// TestShiftBackspaceDeletesInAnInput: a terminal with the kitty keyboard
+// protocol reports the shift of backspace, which others hide. The shifted key
+// deletes as backspace does.
+func TestShiftBackspaceDeletesInAnInput(t *testing.T) {
+	t.Parallel()
+
+	m := New(Config{
+		Title:  "Comment",
+		Inputs: []InputConfig{{Key: "body", Label: "Comment", Value: "looks good"}},
+	})
+	m, _ = m.Update(testui.Press("shift+backspace"))
+
+	if got := m.values()["body"]; got != "looks goo" {
+		t.Fatalf("shift+backspace leaves %q, want the last rune deleted", got)
 	}
 }
 

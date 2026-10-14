@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/hk9890/task-manager/sdk/tasks"
-	"github.com/muesli/termenv"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -18,7 +18,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/repofixture"
-	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -235,7 +234,7 @@ func noopLogger(logging.Options) *logging.Manager { return nil }
 func restoreStyles(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -586,11 +585,16 @@ func TestRunPassesTheResolvedConfigPathToStartup(t *testing.T) {
 }
 
 // TestRunPassesTheTerminalColourProfileToStartup pins the wiring between the
-// one read of the terminal's colour profile and the profile the configuration
-// screen applies a theme on. Not parallel: the profile is process-wide.
+// read of the terminal's colour profile and the profile the configuration
+// screen applies a theme on. The environment makes the test's output a
+// 256-colour terminal. Not parallel: it sets the environment.
 func TestRunPassesTheTerminalColourProfileToStartup(t *testing.T) {
 	restoreStyles(t)
-	testui.UseColorProfile(t, termenv.ANSI256)
+	t.Setenv("TTY_FORCE", "1")
+	t.Setenv("TERM", "xterm-256color")
+	for _, name := range []string{"COLORTERM", "NO_COLOR", "CLICOLOR_FORCE", "TMUX", "WT_SESSION", "GOOGLE_CLOUD_SHELL"} {
+		t.Setenv(name, "")
+	}
 
 	var seenOpts startupOptions
 	var stderr bytes.Buffer
@@ -611,8 +615,8 @@ func TestRunPassesTheTerminalColourProfileToStartup(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d (stderr=%q)", code, stderr.String())
 	}
-	if seenOpts.colorProfile != termenv.ANSI256 {
-		t.Errorf("colorProfile: got %v, want %v", seenOpts.colorProfile, termenv.ANSI256)
+	if seenOpts.colorProfile != colorprofile.ANSI256 {
+		t.Errorf("colorProfile: got %v, want %v", seenOpts.colorProfile, colorprofile.ANSI256)
 	}
 }
 

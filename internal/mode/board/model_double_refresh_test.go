@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -42,7 +42,7 @@ func boardApplyMessages(t *testing.T, m *Model, msgs []tea.Msg) {
 }
 
 // reloadKeyMsg returns the alt+r key, the BoardActionReload default.
-func reloadKeyMsg() tea.KeyMsg {
+func reloadKeyMsg() tea.KeyPressMsg {
 	return testui.Press("alt+r")
 }
 

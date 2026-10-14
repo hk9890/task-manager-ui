@@ -1,7 +1,7 @@
 package ui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Controller is the minimal concrete-mode contract used by UI tests.
@@ -28,6 +28,6 @@ func (a ControllerAdapter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, a.Controller.Update(msg)
 }
 
-func (a ControllerAdapter) View() string {
-	return a.Controller.View(0)
+func (a ControllerAdapter) View() tea.View {
+	return tea.NewView(a.Controller.View(0))
 }

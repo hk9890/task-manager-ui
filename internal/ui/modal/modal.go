@@ -9,10 +9,10 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/overlay"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // ButtonVariant controls confirm button styling.
@@ -85,6 +85,18 @@ var DefaultKeyMap = KeyMap{
 	Escape: []key.Binding{key.NewBinding(key.WithKeys("esc"))},
 }
 
+// inputStyles draw an input's text and cursor in the terminal's own colours,
+// and its placeholder in the muted role, as every other placeholder is. It
+// reads the role when an input is built, so a dialog follows the theme.
+func inputStyles() textinput.Styles {
+	state := textinput.StyleState{Placeholder: lipgloss.NewStyle().Foreground(styles.TextMutedColor)}
+	return textinput.Styles{
+		Focused: state,
+		Blurred: state,
+		Cursor:  textinput.CursorStyle{Color: lipgloss.NoColor{}, Blink: true},
+	}
+}
+
 // Model stores modal state.
 type Model struct {
 	config       Config
@@ -118,9 +130,13 @@ func NewWithKeys(cfg Config, km KeyMap) Model {
 		m.inputKeys = make([]string, len(cfg.Inputs))
 		for i, inputCfg := range cfg.Inputs {
 			ti := textinput.New()
+			ti.SetStyles(inputStyles())
 			ti.Placeholder = inputCfg.Placeholder
-			ti.Width = 36
+			ti.SetWidth(36)
 			ti.Prompt = ""
+			// A terminal with the kitty keyboard protocol reports the shift
+			// of backspace, which others hide.
+			ti.KeyMap.DeleteCharacterBackward.SetKeys(append(ti.KeyMap.DeleteCharacterBackward.Keys(), "shift+backspace")...)
 			if inputCfg.MaxLength > 0 {
 				ti.CharLimit = inputCfg.MaxLength
 			}
@@ -166,7 +182,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles the keyboard and hands every other message to the focused
 // input. SetSize is what sizes the modal.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(msg, m.keys.Next...):
 			m = m.nextField()
@@ -339,10 +355,11 @@ func (m Model) render() (string, int) {
 	content.WriteString(m.renderButtons())
 
 	body := titleStyle.Render(m.config.Title) + "\n" + divider + "\n" + lipgloss.NewStyle().Padding(1, 1).Render(content.String())
+	// The width of a bordered style counts the border.
 	rendered := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.OverlayBorderColor).
-		Width(boxWidth).
+		Width(boxWidth + 2).
 		Render(body)
 
 	return rendered, contentWidth

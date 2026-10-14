@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -233,7 +233,7 @@ func TestClicksOnTheDetailButtonsDoWhatTheirKeysDo(t *testing.T) {
 	click := func(t *testing.T, m Model, text string) Model {
 		t.Helper()
 		x, y := testui.FindCell(t, plainShell(m), text)
-		return send(t, m, leftClick(x, y))
+		return send(t, m, testui.Click(x, y, tea.MouseLeft))
 	}
 
 	t.Run("edit", func(t *testing.T) {

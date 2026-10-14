@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -485,18 +485,18 @@ func TestCancelButtonClosesTheEditorAndAClickOnSaveWrites(t *testing.T) {
 	m, gw := editorShell(t)
 
 	m = openEditor(t, m, "alt+u")
-	x, y := testui.FindCell(t, m.View(), "Cancel esc")
-	m = send(t, m, leftClick(x, y))
+	x, y := testui.FindCell(t, testui.View(m), "Cancel esc")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
 	if m.active != mode.Board || len(writeCalls(gw)) != 0 {
 		t.Fatalf("a click on Cancel left the shell on %q with writes %v", m.active, writeCalls(gw))
 	}
 
 	m = openEditor(t, m, "alt+u")
-	x, y = testui.FindCell(t, m.View(), "Assignee")
-	m = send(t, m, leftClick(x, y))
+	x, y = testui.FindCell(t, testui.View(m), "Assignee")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
 	m = typeInto(t, m, "-two")
-	x, y = testui.FindCell(t, m.View(), "Save ctrl+s")
-	m = send(t, m, leftClick(x, y))
+	x, y = testui.FindCell(t, testui.View(m), "Save ctrl+s")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
 
 	inputs := updateInputs(t, gw)
 	if len(inputs) != 1 || inputs[0].Assignee == nil || *inputs[0].Assignee != "hans-two" {
@@ -526,8 +526,8 @@ func TestEscapeDuringASaveLeavesTheEditorOpen(t *testing.T) {
 
 	m = pressKey(t, m, "esc")
 	m = typeInto(t, m, "ignored")
-	x, y := testui.FindCell(t, m.View(), "Title")
-	m = send(t, m, leftClick(x, y))
+	x, y := testui.FindCell(t, testui.View(m), "Title")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
 	if m.active != mode.IssueEdit {
 		t.Fatalf("Escape during a save closed the editor; the shell is on %q", m.active)
 	}
@@ -579,8 +579,8 @@ func TestSecondSaveBeforeTheFirstIsHandledWritesOnce(t *testing.T) {
 func TestPendingOpenIsCancelledByAKeyAClickOrTheWheel(t *testing.T) {
 	interrupts := map[string]tea.Msg{
 		"a key":         testui.Press("down"),
-		"a click":       leftClick(40, 10),
-		"a wheel notch": wheel(40, 10, tea.MouseButtonWheelDown),
+		"a click":       testui.Click(40, 10, tea.MouseLeft),
+		"a wheel notch": testui.Wheel(40, 10, tea.MouseWheelDown),
 	}
 	for name, interrupt := range interrupts {
 		t.Run(name, func(t *testing.T) {
@@ -603,7 +603,7 @@ func TestPendingOpenIsCancelledByAKeyAClickOrTheWheel(t *testing.T) {
 	t.Run("the pointer moving cancels nothing", func(t *testing.T) {
 		m, _ := editorShell(t)
 		next, load := m.Update(testui.Press("alt+u"))
-		m = send(t, next.(Model), pointerMove(40, 10))
+		m = send(t, next.(Model), testui.Move(40, 10))
 		if m = applyMessages(t, m, runBatch(load)); m.active != mode.IssueEdit {
 			t.Errorf("a pointer move cancelled the open; the shell is on %q", m.active)
 		}
@@ -797,7 +797,7 @@ func TestIssueEditorGolden(t *testing.T) {
 	if m.editorTarget.kind != issueeditmode.KindEdit || m.editorReturn != mode.Board {
 		t.Fatalf("the editor target is %+v, returning to %q", m.editorTarget, m.editorReturn)
 	}
-	testui.AssertMatchesGoldenNormalized(t, []byte(m.View()), "model_issue_editor_w80.golden")
+	testui.AssertMatchesGoldenNormalized(t, []byte(testui.View(m)), "model_issue_editor_w80.golden")
 }
 
 // A resize while the editor is up sizes it: every line fits the new screen.

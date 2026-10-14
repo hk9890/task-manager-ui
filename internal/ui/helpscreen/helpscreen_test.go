@@ -1,13 +1,14 @@
 package helpscreen
 
 import (
+	"image/color"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -368,7 +369,7 @@ func sgrBefore(line, text string) string {
 }
 
 // foreground is the SGR parameter Lip Gloss writes for a colour role.
-func foreground(role lipgloss.Color) string {
+func foreground(role color.Color) string {
 	return sgrPattern.FindStringSubmatch(lipgloss.NewStyle().Foreground(role).Render("x"))[1]
 }
 
