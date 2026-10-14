@@ -16,14 +16,16 @@ func TestQueryEditingKeys(t *testing.T) {
 
 	steps := []struct {
 		name string
-		key  tea.Msg
-		want string
+		// A step pastes paste when it is set, and presses key otherwise.
+		key   tea.KeyPressMsg
+		paste string
+		want  string
 		// changed is false for a key the query takes without a new text.
 		changed bool
 	}{
 		{name: "a space before any text is dropped", key: testui.Press("space"), want: ""},
 		{name: "rune", key: testui.Runes("f"), want: "f", changed: true},
-		{name: "paste of several runes", key: testui.Paste("ix\tthe\nlogin"), want: "fix the login", changed: true},
+		{name: "paste of several runes", paste: "ix\tthe\nlogin", want: "fix the login", changed: true},
 		{name: "space", key: testui.Press("space"), want: "fix the login ", changed: true},
 		{name: "backspace drops the last rune", key: testui.Press("backspace"), want: "fix the login", changed: true},
 		{name: "ctrl+w drops the last word", key: testui.Press("ctrl+w"), want: "fix the ", changed: true},
@@ -37,12 +39,11 @@ func TestQueryEditingKeys(t *testing.T) {
 
 	var q mode.Query
 	for _, step := range steps {
-		var consumed, changed bool
-		switch msg := step.key.(type) {
-		case tea.KeyPressMsg:
-			consumed, changed = q.HandleKey(msg)
-		case tea.PasteMsg:
-			consumed, changed = true, q.Paste(msg.Content)
+		consumed, changed := true, false
+		if step.paste != "" {
+			changed = q.Paste(step.paste)
+		} else {
+			consumed, changed = q.HandleKey(step.key)
 		}
 		if !consumed || changed != step.changed || q.Text() != step.want {
 			t.Fatalf("%s: consumed %v, changed %v, text %q; want consumed, changed %v, text %q",

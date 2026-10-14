@@ -86,15 +86,16 @@ var DefaultKeyMap = KeyMap{
 }
 
 // inputStyles draw an input's text and cursor in the terminal's own colours,
-// and its placeholder in the grey the widget has always drawn it in.
-var inputStyles = func() textinput.Styles {
-	state := textinput.StyleState{Placeholder: lipgloss.NewStyle().Foreground(lipgloss.Color("240"))}
+// and its placeholder in the muted role, as every other placeholder is. It
+// reads the role when an input is built, so a dialog follows the theme.
+func inputStyles() textinput.Styles {
+	state := textinput.StyleState{Placeholder: lipgloss.NewStyle().Foreground(styles.TextMutedColor)}
 	return textinput.Styles{
 		Focused: state,
 		Blurred: state,
 		Cursor:  textinput.CursorStyle{Color: lipgloss.NoColor{}, Blink: true},
 	}
-}()
+}
 
 // Model stores modal state.
 type Model struct {
@@ -129,7 +130,7 @@ func NewWithKeys(cfg Config, km KeyMap) Model {
 		m.inputKeys = make([]string, len(cfg.Inputs))
 		for i, inputCfg := range cfg.Inputs {
 			ti := textinput.New()
-			ti.SetStyles(inputStyles)
+			ti.SetStyles(inputStyles())
 			ti.Placeholder = inputCfg.Placeholder
 			ti.SetWidth(36)
 			ti.Prompt = ""

@@ -551,13 +551,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// The program reports the terminal's colour profile when it starts, and
 	// again when the terminal tells a better one. The hover roles depend on it.
+	// The theme and the glyph set were applied at startup, so Apply cannot
+	// refuse them here.
 	if profile, ok := msg.(tea.ColorProfileMsg); ok {
 		if profile.Profile != m.runtime.ColorProfile {
 			m.runtime.ColorProfile = profile.Profile
 			ui := m.services.Config.UI
-			if err := styles.Apply(ui.Theme, ui.Glyphs, profile.Profile); err != nil {
-				m.logger().Error("failed to apply the terminal's colour profile", "profile", profile.String(), "error", err.Error())
-			}
+			_ = styles.Apply(ui.Theme, ui.Glyphs, profile.Profile)
 		}
 		return m, nil
 	}

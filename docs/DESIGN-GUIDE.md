@@ -25,9 +25,10 @@ shell. Every other package is pure.
   on the configuration screen (`Model.applyConfigChange`, `internal/app/config_screen.go`). The
   roles are package variables with no guard, so call it under a running program from `Update`
   only, never inside a `tea.Cmd`: `View` reads them on the same goroutine.
-- After an `Apply` under a running program, clamp the scroll offsets as a resize does
-  (`applyWorkspaceSizeToBrowseModes`, `detail.ClampScroll`): a light theme renders markdown in
-  another glamour style and a glyph set draws tokens of another width.
+- After an `Apply` of another theme or glyph set under a running program, clamp the scroll
+  offsets as a resize does (`applyWorkspaceSizeToBrowseModes`, `detail.ClampScroll`): a light
+  theme renders markdown in another glamour style and a glyph set draws tokens of another width.
+  An `Apply` of another colour profile moves no width and needs no clamp.
 - A test draws with `catppuccin-mocha` and the `unicode` glyphs, which the package starts on; one
   that applies another restores it in `t.Cleanup` and stays out of `t.Parallel`.
 - The roles are grouped by what they mean, not by hue: text (`TextPrimaryColor`, `TextMutedColor`,
@@ -223,7 +224,7 @@ taller:
   not consume, and has no arm for it. The board, docs, search and store picker models still have
   an arm for the message; the shell never feeds it.
 - Size every surface, overlay and toast from `Model.width` and `Model.height`. `Model.screen` draws
-  them all for that size, and `Model.View` is the only place the margin is drawn.
+  them all for that size, and `Model.frame` is the only place the margin is drawn.
 - `Model.update` turns a `tea.MouseMsg` into a `pointer` (`internal/app/mouse.go`) and moves it
   into screen coordinates once, before `mouseHeld` and `handleMouse`. Count every cell after that
   from the screen's first cell; a cell of the margin is outside every hit test.
