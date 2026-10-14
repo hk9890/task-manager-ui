@@ -22,6 +22,7 @@ Config path resolution, in order:
 Load semantics:
 
 - A missing config file at the **default** path is allowed; taskmgr-ui starts with defaults.
+- An empty or comment-only file sets nothing: taskmgr-ui starts with defaults, at any path.
 - Explicit config file values override environment-driven defaults.
 - Unknown YAML keys are ignored and surfaced as startup warnings.
 - Invalid YAML, unreadable existing config files, invalid values, and duplicate

@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,7 +137,10 @@ func readConfigFile(path string, requireExists bool) ([]byte, []string, error) {
 func decodeOverride(data []byte) (overrideModel, []string, error) {
 	var node yaml.Node
 	dec := yaml.NewDecoder(bytes.NewReader(data))
-	if err := dec.Decode(&node); err != nil {
+	if err := dec.Decode(&node); err == io.EOF {
+		// An empty or comment-only file holds no document: no overrides.
+		return overrideModel{}, nil, nil
+	} else if err != nil {
 		return overrideModel{}, nil, fmt.Errorf("decode yaml: %w", err)
 	}
 	if len(node.Content) == 0 {
