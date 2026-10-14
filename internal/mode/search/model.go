@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -110,13 +110,13 @@ type Model struct {
 
 // isScopeKey reports whether msg is the key that toggles the scope between
 // open issues and all of them. It is built in, as the query keys are.
-func isScopeKey(msg tea.KeyMsg) bool {
-	return msg.Type == tea.KeyCtrlT && !msg.Alt
+func isScopeKey(msg tea.KeyPressMsg) bool {
+	return msg.Keystroke() == "ctrl+t"
 }
 
 // TakesKey reports whether msg is a key of the query or the scope key, which
 // the search takes before any binding.
-func (m *Model) TakesKey(msg tea.KeyMsg) bool {
+func (m *Model) TakesKey(msg tea.KeyPressMsg) bool {
 	return mode.IsQueryKey(msg) || isScopeKey(msg)
 }
 
@@ -198,7 +198,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case mode.MouseMsg:
 		return m.handleMouse(msg)
 
-	case tea.KeyMsg:
+	case tea.PasteMsg:
+		m.heldOpen = false
+		if !m.query.Paste(msg.Content) {
+			return nil
+		}
+		return m.searchAfterPause()
+
+	case tea.KeyPressMsg:
 		m.heldOpen = false
 		if consumed, changed := m.query.HandleKey(msg); consumed {
 			if !changed {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -64,10 +64,10 @@ func openedModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
 	return m
 }
 
-// edit sends a key that changes the query and lets its pause end. It returns
-// the search for the text.
-func edit(m *Model, key tea.KeyMsg) tea.Cmd {
-	return m.Update(m.Update(key)())
+// edit sends a key or a paste that changes the query and lets its pause end.
+// It returns the search for the text.
+func edit(m *Model, msg tea.Msg) tea.Cmd {
+	return m.Update(m.Update(msg)())
 }
 
 func typeText(m *Model, text string) tea.Cmd {
@@ -182,6 +182,34 @@ func TestEveryEditSearchesTheStoreForTheQuery(t *testing.T) {
 	}
 	if got := len(gw.CallsFor(fakes.MethodSearch)); got != before {
 		t.Fatal("backspace on an empty query ran a search")
+	}
+}
+
+// TestAPasteSearchesAsTypedTextDoes: a paste is one edit, and a line break in
+// it is a space.
+func TestAPasteSearchesAsTypedTextDoes(t *testing.T) {
+	gw := fakes.NewTracked()
+	seedStore(gw)
+	m := openedModel(t, gw)
+
+	before := len(gw.CallsFor(fakes.MethodSearch))
+	resolve(t, m, edit(m, testui.Paste("login\nprompt")))
+	if got := len(gw.CallsFor(fakes.MethodSearch)) - before; got != 1 {
+		t.Fatalf("one paste ran %d searches", got)
+	}
+	if got := lastSearch(t, gw); got.Text != "login prompt" {
+		t.Fatalf("the paste searched for %q, want login prompt", got.Text)
+	}
+	if got := resultIDs(m); got != "tm-1" {
+		t.Fatalf("the results are %q, want tm-1", got)
+	}
+	if view := plainView(m); !strings.Contains(view, "❯ login prompt") {
+		t.Errorf("the query line does not draw the pasted text:\n%s", view)
+	}
+
+	// A paste that leaves the text as it is searches nothing.
+	if cmd := m.Update(testui.Paste("\x07")); cmd != nil {
+		t.Fatal("a paste of nothing printable returned a command")
 	}
 }
 

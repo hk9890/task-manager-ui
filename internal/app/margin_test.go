@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -86,7 +86,7 @@ func TestEverySurfaceIsDrawnInsideTheMargin(t *testing.T) {
 
 	for name, reach := range marginSurfaces {
 		m := reach(t, send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height}))
-		rows := terminalRows(t, name, m.View(), width, height)
+		rows := terminalRows(t, name, testui.View(m), width, height)
 
 		assertSideMargin(t, name, rows, width)
 		if !blank(rows[0]) || !blank(rows[height-1]) {
@@ -102,14 +102,14 @@ func TestEverySurfaceIsDrawnInsideTheMargin(t *testing.T) {
 	// and one row and not more.
 	for _, name := range fullScreenSurfaces {
 		m := marginSurfaces[name](t, send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height}))
-		rows := terminalRows(t, name, m.View(), width, height)
+		rows := terminalRows(t, name, testui.View(m), width, height)
 		if blank(rows[1]) || blank(rows[height-2]) {
 			t.Errorf("%s: the first row of the screen is %q and the last %q, want both drawn", name, rows[1], rows[height-2])
 		}
 	}
 
 	m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height})
-	rows := terminalRows(t, "board", m.View(), width, height)
+	rows := terminalRows(t, "board", testui.View(m), width, height)
 	if rule := strings.TrimRight(rows[2], " "); rule != "   "+strings.Repeat("─", width-5) {
 		t.Errorf("the rule under the menu bar does not run from the bar's first label to the margin: %q", rule)
 	}
@@ -125,8 +125,8 @@ func TestToastAndModalSitInsideTheMargin(t *testing.T) {
 	base := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height})
 
 	toast := marginSurfaces["toast"](t, base)
-	if !strings.Contains(toast.View(), "a toast wider than the terminal") {
-		t.Fatalf("fixture: no toast on screen:\n%s", toast.View())
+	if !strings.Contains(testui.View(toast), "a toast wider than the terminal") {
+		t.Fatalf("fixture: no toast on screen:\n%s", testui.View(toast))
 	}
 	modal := marginSurfaces["modal"](t, base)
 	if !modal.showActionModal {
@@ -134,8 +134,8 @@ func TestToastAndModalSitInsideTheMargin(t *testing.T) {
 	}
 
 	for name, m := range map[string]Model{"toast": toast, "modal": modal} {
-		over := terminalRows(t, name, m.View(), width, height)
-		under := terminalRows(t, name, base.View(), width, height)
+		over := terminalRows(t, name, testui.View(m), width, height)
+		under := terminalRows(t, name, testui.View(base), width, height)
 
 		left, right, top, bottom := changedBox(over, under, width)
 		if left < 2 || right > width-3 || top < 1 || bottom > height-2 {
@@ -177,8 +177,8 @@ func TestAResizeKeepsAnOpenDialogCentredInsideTheMargin(t *testing.T) {
 	under.showActionModal = false
 
 	left, right, top, bottom := changedBox(
-		terminalRows(t, "dialog", resized.View(), width, height),
-		terminalRows(t, "board", under.View(), width, height),
+		terminalRows(t, "dialog", testui.View(resized), width, height),
+		terminalRows(t, "board", testui.View(under), width, height),
 		width,
 	)
 	if left < 2 || right > width-3 || top < 1 || bottom > height-2 {
@@ -197,14 +197,14 @@ func TestATerminalUnderAHundredColumnsKeepsTheRowMarginAlone(t *testing.T) {
 
 	for _, name := range fullScreenSurfaces {
 		m := marginSurfaces[name](t, send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height}))
-		rows := terminalRows(t, name, m.View(), width, height)
+		rows := terminalRows(t, name, testui.View(m), width, height)
 		if !blank(rows[0]) || !blank(rows[height-1]) || blank(rows[1]) || blank(rows[height-2]) {
 			t.Errorf("%s: the screen is not drawn on rows 1 to %d alone", name, height-2)
 		}
 	}
 
 	m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height})
-	rows := terminalRows(t, "board", m.View(), width, height)
+	rows := terminalRows(t, "board", testui.View(m), width, height)
 	if !strings.HasPrefix(rows[1+headerMenuRow], " stores ") {
 		t.Errorf("the menu bar does not start on the terminal's first cell: %q", rows[1+headerMenuRow])
 	}
@@ -213,8 +213,8 @@ func TestATerminalUnderAHundredColumnsKeepsTheRowMarginAlone(t *testing.T) {
 	}
 
 	// A click lands where it is drawn there too.
-	x, y := testui.FindCell(t, m.View(), " Docs ")
-	if m = send(t, m, leftClick(x, y)); y != 1+headerTabsRow || m.active != mode.Docs {
+	x, y := testui.FindCell(t, testui.View(m), " Docs ")
+	if m = send(t, m, testui.Click(x, y, tea.MouseLeft)); y != 1+headerTabsRow || m.active != mode.Docs {
 		t.Errorf("a click on the Docs tab, drawn on row %d, left the shell on %q", y, m.active)
 	}
 }
@@ -224,7 +224,7 @@ func TestATerminalUnderTwentyFourRowsKeepsTheSideMarginAlone(t *testing.T) {
 
 	for _, name := range fullScreenSurfaces {
 		m := marginSurfaces[name](t, send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height}))
-		rows := terminalRows(t, name, m.View(), width, height)
+		rows := terminalRows(t, name, testui.View(m), width, height)
 
 		assertSideMargin(t, name, rows, width)
 		if blank(rows[0]) || blank(rows[height-1]) {
@@ -233,8 +233,8 @@ func TestATerminalUnderTwentyFourRowsKeepsTheSideMarginAlone(t *testing.T) {
 	}
 
 	m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height})
-	x, y := testui.FindCell(t, m.View(), " Docs ")
-	if m = send(t, m, leftClick(x, y)); y != headerTabsRow || x != 2+headerTabsEnd()-len(" Docs ") || m.active != mode.Docs {
+	x, y := testui.FindCell(t, testui.View(m), " Docs ")
+	if m = send(t, m, testui.Click(x, y, tea.MouseLeft)); y != headerTabsRow || x != 2+headerTabsEnd()-len(" Docs ") || m.active != mode.Docs {
 		t.Errorf("a click on the Docs tab, drawn at column %d of row %d, left the shell on %q", x, y, m.active)
 	}
 }
@@ -244,7 +244,7 @@ func TestATerminalUnderTwentyFourRowsKeepsTheSideMarginAlone(t *testing.T) {
 // margin off before it asks what is drawn there.
 func TestTheMouseLandsOnWhatIsDrawnInsideTheMargin(t *testing.T) {
 	base := newMouseShell(t)
-	view := base.View()
+	view := testui.View(base)
 
 	tabX, tabY := testui.FindCell(t, view, " Docs ")
 	if tabY != 1+headerTabsRow || tabX != 2+headerTabsEnd()-len(" Docs ") {
@@ -252,15 +252,15 @@ func TestTheMouseLandsOnWhatIsDrawnInsideTheMargin(t *testing.T) {
 	}
 	// Both padding cells of the tab, and the cell on either side of it.
 	for _, x := range []int{tabX, tabX + len(" Docs ") - 1} {
-		if m := send(t, base, pointerMove(x, tabY)); m.hoverTab != mode.Docs {
+		if m := send(t, base, testui.Move(x, tabY)); m.hoverTab != mode.Docs {
 			t.Errorf("the pointer on column %d of the Docs tab lights %q", x, m.hoverTab)
 		}
-		if m := send(t, base, leftClick(x, tabY)); m.active != mode.Docs {
+		if m := send(t, base, testui.Click(x, tabY, tea.MouseLeft)); m.active != mode.Docs {
 			t.Errorf("a click on column %d of the Docs tab left the shell on %q", x, m.active)
 		}
 	}
 	for _, cell := range [][2]int{{tabX - 1, tabY}, {tabX + len(" Docs "), tabY}, {tabX, tabY - 1}, {tabX, tabY + 1}} {
-		if m := send(t, base, leftClick(cell[0], cell[1])); m.active != mode.Board || m.hoverTab != "" {
+		if m := send(t, base, testui.Click(cell[0], cell[1], tea.MouseLeft)); m.active != mode.Board || m.hoverTab != "" {
 			t.Errorf("a click beside the Docs tab, on column %d of row %d, reached it (surface %q, hover %q)", cell[0], cell[1], m.active, m.hoverTab)
 		}
 	}
@@ -271,32 +271,32 @@ func TestTheMouseLandsOnWhatIsDrawnInsideTheMargin(t *testing.T) {
 	}
 	// The button is a space wider than its words on each side.
 	for _, x := range []int{helpX - 1, helpX, helpX + len("help alt+h")} {
-		if m := send(t, base, pointerMove(x, barY)); litButton(m) != "help" {
+		if m := send(t, base, testui.Move(x, barY)); litButton(m) != "help" {
 			t.Errorf("the pointer on column %d of the help button lights %q", x, litButton(m))
 		}
-		if m := send(t, base, leftClick(x, barY)); !m.showHelp {
+		if m := send(t, base, testui.Click(x, barY, tea.MouseLeft)); !m.showHelp {
 			t.Errorf("a click on column %d of the help button did not open help", x)
 		}
 	}
 	for _, cell := range [][2]int{{helpX - 2, barY}, {helpX + len("help alt+h") + 1, barY}, {helpX, barY - 1}, {helpX, barY + 1}} {
-		if m := send(t, base, leftClick(cell[0], cell[1])); m.showHelp || litButton(m) != "" {
+		if m := send(t, base, testui.Click(cell[0], cell[1], tea.MouseLeft)); m.showHelp || litButton(m) != "" {
 			t.Errorf("a click beside the help button, on column %d of row %d, reached it", cell[0], cell[1])
 		}
 	}
 	// The first button's leading space is the first cell of the screen.
-	if m := send(t, base, leftClick(2, barY)); m.active != mode.StorePicker {
+	if m := send(t, base, testui.Click(2, barY, tea.MouseLeft)); m.active != mode.StorePicker {
 		t.Errorf("a click on the first cell inside the margin left the shell on %q, want the store picker", m.active)
 	}
 
 	rowX, rowY := testui.FindCell(t, view, "progress-second")
-	hovered := send(t, base, pointerMove(rowX, rowY))
-	if testui.RowBand(t, hovered.View(), "progress-second") == "" || testui.RowBand(t, hovered.View(), "progress-first") != "" {
+	hovered := send(t, base, testui.Move(rowX, rowY))
+	if testui.RowBand(t, testui.View(hovered), "progress-second") == "" || testui.RowBand(t, testui.View(hovered), "progress-first") != "" {
 		t.Error("the pointer on a row does not light that row and it alone")
 	}
-	if m := send(t, base, leftClick(rowX, rowY)); firstSelectionID(m, mode.Board) != "tm-2" {
+	if m := send(t, base, testui.Click(rowX, rowY, tea.MouseLeft)); firstSelectionID(m, mode.Board) != "tm-2" {
 		t.Errorf("a click on the row of tm-2 selected %q", firstSelectionID(m, mode.Board))
 	}
-	if m := send(t, base, wheel(rowX, rowY, tea.MouseButtonWheelDown)); firstSelectionID(m, mode.Board) != "tm-2" {
+	if m := send(t, base, testui.Wheel(rowX, rowY, tea.MouseWheelDown)); firstSelectionID(m, mode.Board) != "tm-2" {
 		t.Errorf("a wheel notch over the column of tm-4 and tm-2 selected %q, want tm-2", firstSelectionID(m, mode.Board))
 	}
 }
@@ -307,7 +307,7 @@ func TestTheMarginTakesNoMouseEvent(t *testing.T) {
 	base := newMouseShell(t)
 	// The board and the picker are each one model under every copy of the
 	// shell, so a frame to compare with is kept as a string.
-	rest := base.View()
+	rest := testui.View(base)
 	rowX, rowY := testui.FindCell(t, rest, "progress-second")
 	_, barY := testui.FindCell(t, rest, "help alt+h")
 
@@ -321,14 +321,14 @@ func TestTheMarginTakesNoMouseEvent(t *testing.T) {
 		"the top left corner": {0, 0},
 	}
 	for name, cell := range margin {
-		lit := send(t, base, pointerMove(rowX, rowY))
-		if lit.View() == rest {
+		lit := send(t, base, testui.Move(rowX, rowY))
+		if testui.View(lit) == rest {
 			t.Fatalf("fixture: the pointer on a row lights nothing")
 		}
-		if left := send(t, lit, pointerMove(cell[0], cell[1])); left.View() != rest {
+		if left := send(t, lit, testui.Move(cell[0], cell[1])); testui.View(left) != rest {
 			t.Errorf("%s: the row stayed lit after the pointer moved into the margin", name)
 		}
-		for _, event := range []tea.MouseMsg{leftClick(cell[0], cell[1]), leftClick(cell[0], cell[1]), wheel(cell[0], cell[1], tea.MouseButtonWheelDown)} {
+		for _, event := range []tea.MouseMsg{testui.Click(cell[0], cell[1], tea.MouseLeft), testui.Click(cell[0], cell[1], tea.MouseLeft), testui.Wheel(cell[0], cell[1], tea.MouseWheelDown)} {
 			m := send(t, base, event)
 			if m.active != mode.Board || firstSelectionID(m, mode.Board) != "tm-1" || litButton(m) != "" || m.hoverTab != "" {
 				t.Errorf("%s: an event in the margin reached the shell (surface %q, selection %q, hover %q/%q)",
@@ -340,9 +340,9 @@ func TestTheMarginTakesNoMouseEvent(t *testing.T) {
 	// Detail and the picker are inside the margin as well.
 	for name, key := range map[string]string{"detail": "enter", "the picker": "alt+s"} {
 		under := pressKey(t, base, key)
-		before := under.View()
+		before := testui.View(under)
 		for where, cell := range margin {
-			if m := send(t, send(t, under, leftClick(cell[0], cell[1])), leftClick(cell[0], cell[1])); m.View() != before {
+			if m := send(t, send(t, under, testui.Click(cell[0], cell[1], tea.MouseLeft)), testui.Click(cell[0], cell[1], tea.MouseLeft)); testui.View(m) != before {
 				t.Errorf("%s: a click %s, in the margin, changed the screen", name, where)
 			}
 		}
@@ -367,7 +367,7 @@ func TestTheWheelInTheMarginMovesNothing(t *testing.T) {
 		}
 		// The picker is one model under every copy of the shell, so the frame
 		// at rest is kept as a string.
-		rest := m.View()
+		rest := testui.View(m)
 
 		right, bottom := m.width+2*screenMarginCols-1, m.height+2*screenMarginRows-1
 		for where, cell := range map[string][2]int{
@@ -376,12 +376,12 @@ func TestTheWheelInTheMarginMovesNothing(t *testing.T) {
 			"above the screen":    {10, 0},
 			"under the screen":    {10, bottom},
 		} {
-			if got := send(t, m, wheel(cell[0], cell[1], tea.MouseButtonWheelDown)); got.View() != rest {
+			if got := send(t, m, testui.Wheel(cell[0], cell[1], tea.MouseWheelDown)); testui.View(got) != rest {
 				t.Errorf("%s: a wheel notch %s, in the margin, changed the screen", name, where)
 			}
 		}
 
-		inside := send(t, m, wheel(10, 5, tea.MouseButtonWheelDown))
+		inside := send(t, m, testui.Wheel(10, 5, tea.MouseWheelDown))
 		if plainShell(inside) == testui.AnsiEscapePattern.ReplaceAllString(rest, "") {
 			t.Fatalf("fixture: a wheel notch on %s moved nothing", name)
 		}
@@ -400,24 +400,24 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 	if got := firstSelectionID(m, mode.Board); got != "tm-2" {
 		t.Fatalf("fixture: the keys selected %q, want tm-2", got)
 	}
-	x, y := testui.FindCell(t, m.View(), title)
-	m = send(t, m, leftClick(x, y))
-	frozen := m.View()
+	x, y := testui.FindCell(t, testui.View(m), title)
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	frozen := testui.View(m)
 	if againX, againY := testui.FindCell(t, frozen, title); againX != x || againY != y {
 		t.Fatalf("fixture: the press moved the row from %d,%d to %d,%d", x, y, againX, againY)
 	}
 
-	m = send(t, m, leftDrag(x+len(title)-1, y))
-	line := strings.Split(m.View(), "\n")[y]
+	m = send(t, m, testui.Drag(x+len(title)-1, y))
+	line := strings.Split(testui.View(m), "\n")[y]
 	before, box, found := strings.Cut(line, "\x1b[0;7m")
 	if !found || lipgloss.Width(before) != x || !strings.HasPrefix(box, title+"\x1b[0m") {
 		t.Fatalf("the box is not drawn over the title at column %d:\n%q", x, line)
 	}
-	if got, want := testui.AnsiEscapePattern.ReplaceAllString(m.View(), ""), testui.AnsiEscapePattern.ReplaceAllString(frozen, ""); got != want {
+	if got, want := testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), ""), testui.AnsiEscapePattern.ReplaceAllString(frozen, ""); got != want {
 		t.Fatalf("drawing the box moved text on the screen:\n%s", got)
 	}
 
-	m = send(t, m, leftRelease(x+len(title)-1, y))
+	m = send(t, m, testui.Release(x+len(title)-1, y))
 	if len(*copied) != 1 || (*copied)[0] != title {
 		t.Fatalf("copied %q, want %q", *copied, title)
 	}
@@ -427,12 +427,12 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 	// On a shell of its own: a second press on the cell would open the row.
 	m, copied = newSelectingShell(t)
 	m = send(t, send(t, m, testui.Press("right")), testui.Press("down"))
-	m = send(t, m, leftClick(x, y))
-	m = send(t, m, leftDrag(159, 29))
-	rows := terminalRows(t, "drag into the margin", m.View(), 160, 30)
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(159, 29))
+	rows := terminalRows(t, "drag into the margin", testui.View(m), 160, 30)
 	assertSideMargin(t, "drag into the margin", rows, 160)
 	boxed := 0
-	for _, line := range strings.Split(m.View(), "\n") {
+	for _, line := range strings.Split(testui.View(m), "\n") {
 		before, box, found := strings.Cut(line, "\x1b[0;7m")
 		if !found {
 			continue
@@ -446,7 +446,7 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 	if boxed != 29-y {
 		t.Fatalf("the box covers %d rows, want the %d from the title's row to the last row of the screen", boxed, 29-y)
 	}
-	m = send(t, m, leftRelease(159, 29))
+	m = send(t, m, testui.Release(159, 29))
 	if len(*copied) != 1 || !strings.HasPrefix((*copied)[0], title) {
 		t.Fatalf("copied %q, want the text from the title to the corner of the screen", *copied)
 	}
@@ -457,10 +457,10 @@ func TestDragCopiesTheTextUnderTheBoxInsideTheMargin(t *testing.T) {
 
 	// And one that begins in the margin begins at the screen's first cell.
 	m, copied = newSelectingShell(t)
-	storeX, barY := testui.FindCell(t, m.View(), "stores alt+s")
-	m = send(t, m, leftClick(0, 0))
-	m = send(t, m, leftDrag(storeX+len("stores alt+s")-1, barY))
-	send(t, m, leftRelease(storeX+len("stores alt+s")-1, barY))
+	storeX, barY := testui.FindCell(t, testui.View(m), "stores alt+s")
+	m = send(t, m, testui.Click(0, 0, tea.MouseLeft))
+	m = send(t, m, testui.Drag(storeX+len("stores alt+s")-1, barY))
+	send(t, m, testui.Release(storeX+len("stores alt+s")-1, barY))
 	if len(*copied) != 1 || (*copied)[0] != " stores alt+s" {
 		t.Fatalf("copied %q, want the bar from its first cell to the end of the store button", *copied)
 	}
@@ -498,7 +498,7 @@ func TestTheMarginFillsOneCellAtATime(t *testing.T) {
 
 		// The frame is the terminal's size, and the board starts and ends on
 		// the cells the margin leaves.
-		rows := terminalRows(t, "board", m.View(), tc.width, tc.height)
+		rows := terminalRows(t, "board", testui.View(m), tc.width, tc.height)
 		first, last := rows[tc.top], rows[tc.height-1-tc.bottom]
 		if blank(first) || blank(last) || !blank(strings.Join(rows[:tc.top], "")) || !blank(strings.Join(rows[tc.height-tc.bottom:], "")) {
 			t.Errorf("%dx%d: the screen is not drawn on rows %d to %d alone", tc.width, tc.height, tc.top, tc.height-1-tc.bottom)
@@ -511,8 +511,8 @@ func TestTheMarginFillsOneCellAtATime(t *testing.T) {
 		}
 
 		// A click lands on what is drawn, whatever part of the margin is there.
-		x, y := testui.FindCell(t, m.View(), " Docs ")
-		if m = send(t, m, leftClick(x, y)); m.active != mode.Docs {
+		x, y := testui.FindCell(t, testui.View(m), " Docs ")
+		if m = send(t, m, testui.Click(x, y, tea.MouseLeft)); m.active != mode.Docs {
 			t.Errorf("%dx%d: a click on the Docs tab, drawn at column %d of row %d, left the shell on %q", tc.width, tc.height, x, y, m.active)
 		}
 	}
@@ -541,7 +541,7 @@ func TestTheScreenNeverShrinksWhenTheTerminalGrows(t *testing.T) {
 			if columns, rows := screen(width, height-1); m.width < columns || m.height < rows {
 				t.Errorf("%dx%d: the screen is %dx%d, and %dx%d on a terminal a row shorter", width, height, m.width, m.height, columns, rows)
 			}
-			terminalRows(t, "board", m.View(), width, height)
+			terminalRows(t, "board", testui.View(m), width, height)
 		}
 	}
 }

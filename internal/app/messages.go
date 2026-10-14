@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
@@ -84,8 +84,9 @@ type RuntimeOptions struct {
 
 	// ColorProfile is the colour profile of the terminal the app draws on.
 	// The configuration screen applies a theme on it, because the hover roles
-	// depend on it. The zero value is true colour.
-	ColorProfile termenv.Profile
+	// depend on it. A tea.ColorProfileMsg that reports another one replaces
+	// it. The zero value, Unknown, is drawn as true colour.
+	ColorProfile colorprofile.Profile
 
 	// Ctx is the application lifecycle context. Each store the app opens gets
 	// a context derived from it, and repository reads use that one, so both

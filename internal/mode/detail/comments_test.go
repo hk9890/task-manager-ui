@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -53,7 +53,7 @@ func issueWithComments(count int) domain.IssueDetail {
 	return issue
 }
 
-func key(t *testing.T, m *Model, msg tea.KeyMsg) tea.Cmd {
+func key(t *testing.T, m *Model, msg tea.KeyPressMsg) tea.Cmd {
 	t.Helper()
 	consumed, cmd := m.HandleKey(msg, commentsWidth, commentsHeight)
 	if !consumed {

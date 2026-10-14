@@ -4,55 +4,44 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
-
-// keyFields is the part of a key message the helpers set, comparable with ==.
-type keyFields struct {
-	keyType tea.KeyType
-	runes   string
-	alt     bool
-	paste   bool
-}
-
-func fieldsOf(key tea.KeyMsg) keyFields {
-	return keyFields{key.Type, string(key.Runes), key.Alt, key.Paste}
-}
 
 func TestPressBuildsTheKeyItsNameNames(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name       string
-		want       keyFields
-		wantString string
+		name          string
+		wantString    string
+		wantKeystroke string
 	}{
-		{"enter", keyFields{keyType: tea.KeyEnter}, "enter"},
-		{"esc", keyFields{keyType: tea.KeyEsc}, "esc"},
-		{"tab", keyFields{keyType: tea.KeyTab}, "tab"},
-		{"shift+tab", keyFields{keyType: tea.KeyShiftTab}, "shift+tab"},
-		{"up", keyFields{keyType: tea.KeyUp}, "up"},
-		{"pgdown", keyFields{keyType: tea.KeyPgDown}, "pgdown"},
-		{"home", keyFields{keyType: tea.KeyHome}, "home"},
-		{"end", keyFields{keyType: tea.KeyEnd}, "end"},
-		{"backspace", keyFields{keyType: tea.KeyBackspace}, "backspace"},
-		{"delete", keyFields{keyType: tea.KeyDelete}, "delete"},
-		{"ctrl+u", keyFields{keyType: tea.KeyCtrlU}, "ctrl+u"},
-		{"ctrl+pgup", keyFields{keyType: tea.KeyCtrlPgUp}, "ctrl+pgup"},
-		{"f1", keyFields{keyType: tea.KeyF1}, "f1"},
-		{"alt+left", keyFields{keyType: tea.KeyLeft, alt: true}, "alt+left"},
-		{"j", keyFields{keyType: tea.KeyRunes, runes: "j"}, "j"},
-		{"alt+x", keyFields{keyType: tea.KeyRunes, runes: "x", alt: true}, "alt+x"},
-		{"space", keyFields{keyType: tea.KeySpace, runes: " "}, " "},
+		{"enter", "enter", "enter"},
+		{"esc", "esc", "esc"},
+		{"tab", "tab", "tab"},
+		{"shift+tab", "shift+tab", "shift+tab"},
+		{"up", "up", "up"},
+		{"pgdown", "pgdown", "pgdown"},
+		{"home", "home", "home"},
+		{"end", "end", "end"},
+		{"backspace", "backspace", "backspace"},
+		{"delete", "delete", "delete"},
+		{"ctrl+u", "ctrl+u", "ctrl+u"},
+		{"ctrl+pgup", "ctrl+pgup", "ctrl+pgup"},
+		{"ctrl+space", "ctrl+space", "ctrl+space"},
+		{"f1", "f1", "f1"},
+		{"alt+left", "alt+left", "alt+left"},
+		{"j", "j", "j"},
+		{"J", "J", "shift+j"},
+		{"alt+x", "alt+x", "alt+x"},
+		{"space", "space", "space"},
+		{"alt+space", "alt+space", "alt+space"},
 	}
 	for _, tc := range cases {
 		got := Press(tc.name)
-		if fields := fieldsOf(got); fields != tc.want {
-			t.Errorf("Press(%q) = %+v, want %+v", tc.name, fields, tc.want)
-		}
 		if got.String() != tc.wantString {
 			t.Errorf("Press(%q).String() = %q, want %q", tc.name, got.String(), tc.wantString)
+		}
+		if got.Keystroke() != tc.wantKeystroke {
+			t.Errorf("Press(%q).Keystroke() = %q, want %q", tc.name, got.Keystroke(), tc.wantKeystroke)
 		}
 	}
 }
@@ -86,25 +75,28 @@ func TestEveryKeyNameIsTheNameOfTheKeyPressBuilds(t *testing.T) {
 	}
 }
 
-func TestTextKeyHelpersBuildRuneKeys(t *testing.T) {
+func TestTextKeyHelpersBuildTextKeys(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		helper     string
-		got        tea.KeyMsg
-		want       keyFields
-		wantString string
+		text          string
+		wantKeystroke string
 	}{
-		{"Runes", Runes("hello"), keyFields{keyType: tea.KeyRunes, runes: "hello"}, "hello"},
-		{"Runes", Runes("ü"), keyFields{keyType: tea.KeyRunes, runes: "ü"}, "ü"},
-		{"Paste", Paste("a b"), keyFields{keyType: tea.KeyRunes, runes: "a b", paste: true}, "[a b]"},
+		{"hello", "hello"},
+		{"ü", "ü"},
+		{"Q", "shift+q"},
 	}
 	for _, tc := range cases {
-		if fields := fieldsOf(tc.got); fields != tc.want {
-			t.Errorf("%s = %+v, want %+v", tc.helper, fields, tc.want)
+		got := Runes(tc.text)
+		if got.String() != tc.text {
+			t.Errorf("Runes(%q).String() = %q, want the text", tc.text, got.String())
 		}
-		if tc.got.String() != tc.wantString {
-			t.Errorf("%s.String() = %q, want %q", tc.helper, tc.got.String(), tc.wantString)
+		if got.Keystroke() != tc.wantKeystroke {
+			t.Errorf("Runes(%q).Keystroke() = %q, want %q", tc.text, got.Keystroke(), tc.wantKeystroke)
 		}
+	}
+
+	if got := Paste("a b").Content; got != "a b" {
+		t.Errorf("Paste content = %q, want %q", got, "a b")
 	}
 }

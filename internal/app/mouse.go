@@ -1,25 +1,57 @@
 package app
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/helpscreen"
 )
 
-// mouseKind maps a Bubble Tea mouse event onto the few the surfaces act on:
-// the wheel, the pointer moving, and a press of the left button. A drag is a
-// move, and a release or another button is nothing.
-func mouseKind(msg tea.MouseMsg) (mode.MouseKind, bool) {
+// pointer is one Bubble Tea mouse event as a value: where the pointer is, the
+// button, and what happened. Model.update makes it once and moves it into the
+// screen's coordinates.
+type pointer struct {
+	tea.Mouse
+	act pointerAct
+}
+
+type pointerAct int
+
+const (
+	pointerPress pointerAct = iota
+	pointerRelease
+	pointerMotion
+	pointerWheel
+)
+
+func pointerOf(msg tea.MouseMsg) pointer {
+	var act pointerAct
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		act = pointerPress
+	case tea.MouseReleaseMsg:
+		act = pointerRelease
+	case tea.MouseMotionMsg:
+		act = pointerMotion
+	case tea.MouseWheelMsg:
+		act = pointerWheel
+	}
+	return pointer{Mouse: msg.Mouse(), act: act}
+}
+
+// mouseKind maps a pointer event onto the few the surfaces act on: the wheel,
+// the pointer moving, and a press of the left button. A drag is a move, and a
+// release or another button is nothing.
+func mouseKind(msg pointer) (mode.MouseKind, bool) {
 	switch {
-	case msg.Button == tea.MouseButtonWheelUp:
+	case msg.act == pointerWheel && msg.Button == tea.MouseWheelUp:
 		return mode.MouseWheelUp, true
-	case msg.Button == tea.MouseButtonWheelDown:
+	case msg.act == pointerWheel && msg.Button == tea.MouseWheelDown:
 		return mode.MouseWheelDown, true
-	case msg.Action == tea.MouseActionMotion:
+	case msg.act == pointerMotion:
 		return mode.MouseMove, true
-	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
+	case msg.act == pointerPress && msg.Button == tea.MouseLeft:
 		return mode.MouseClick, true
 	}
 	return 0, false
@@ -32,7 +64,7 @@ func mouseKind(msg tea.MouseMsg) (mode.MouseKind, bool) {
 // An open overlay holds the screen as it holds the keyboard, so nothing below
 // it sees the event — the help screen scrolls under the wheel and a dialog
 // ignores the mouse. Each surface gets the event in its own coordinates.
-func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleMouse(msg pointer) (tea.Model, tea.Cmd) {
 	kind, ok := mouseKind(msg)
 	if !ok {
 		return m, nil

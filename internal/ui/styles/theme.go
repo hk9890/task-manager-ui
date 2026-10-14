@@ -2,13 +2,14 @@ package styles
 
 import (
 	"fmt"
+	"image/color"
 	"sort"
-	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	catppuccin "github.com/catppuccin/go"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // The palette and the glyph set are two choices, because a terminal program
@@ -19,7 +20,7 @@ import (
 const (
 	initialTheme   = "catppuccin-mocha"
 	initialGlyphs  = "unicode"
-	initialProfile = termenv.TrueColor
+	initialProfile = colorprofile.TrueColor
 )
 
 var flavors = map[string]catppuccin.Flavor{
@@ -65,7 +66,7 @@ func Validate(theme, glyphs string) error {
 // passes the profile it renders with. The roles are package variables
 // and nothing guards them, so a call under a running program comes from the
 // Bubble Tea event loop, which is also the only reader, never from a tea.Cmd.
-func Apply(theme, glyphs string, profile termenv.Profile) error {
+func Apply(theme, glyphs string, profile colorprofile.Profile) error {
 	if err := Validate(theme, glyphs); err != nil {
 		return err
 	}
@@ -81,8 +82,8 @@ func Dark() bool { return darkTheme }
 
 // applyFlavor maps a Catppuccin flavour onto the roles for a terminal of the
 // given colour profile. It is the only place a colour is chosen.
-func applyFlavor(f catppuccin.Flavor, profile termenv.Profile) {
-	c := func(col catppuccin.Color) lipgloss.Color { return lipgloss.Color(col.Hex) }
+func applyFlavor(f catppuccin.Flavor, profile colorprofile.Profile) {
+	c := func(col catppuccin.Color) color.Color { return lipgloss.Color(col.Hex) }
 
 	// The hover is one surface below the selection, so it is lighter than the
 	// terminal's background as the selection is. A 256-colour terminal draws
@@ -93,13 +94,13 @@ func applyFlavor(f catppuccin.Flavor, profile termenv.Profile) {
 	// band on them.
 	hover := c(f.Surface0())
 	switch profile {
-	case termenv.ANSI256:
+	case colorprofile.ANSI256:
 		hover = greyRamp(f.Surface0())
-	case termenv.ANSI:
-		hover = ""
+	case colorprofile.ANSI:
+		hover = lipgloss.NoColor{}
 	}
 
-	SkeletonShades = []lipgloss.Color{c(f.Surface1()), c(f.Surface2()), c(f.Overlay0())}
+	SkeletonShades = []color.Color{c(f.Surface1()), c(f.Surface2()), c(f.Overlay0())}
 
 	TextPrimaryColor = c(f.Text())
 	TextMutedColor = c(f.Overlay0())
@@ -171,9 +172,9 @@ func applyFlavor(f catppuccin.Flavor, profile termenv.Profile) {
 
 // greyRamp is the entry of the 256-colour grey ramp nearest to how light col
 // is. The ramp is the entries 232 to 255: 24 greys from 8, 10 apart.
-func greyRamp(col catppuccin.Color) lipgloss.Color {
+func greyRamp(col catppuccin.Color) color.Color {
 	light := int(col.RGB[0]+col.RGB[1]+col.RGB[2]) / 3
-	return lipgloss.Color(strconv.Itoa(232 + (light-3)/10))
+	return ansi.IndexedColor(232 + (light-3)/10)
 }
 
 func sortedKeys[V any](m map[string]V) []string {

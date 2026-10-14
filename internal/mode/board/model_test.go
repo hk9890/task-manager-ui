@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -831,7 +831,7 @@ func TestBoardModeDashboardLayoutGoldensAcrossWidths(t *testing.T) {
 			m.SetSize(tc.width, tc.height)
 			_ = m.Update(dashboardLoadedMsg{data: data})
 
-			view := m.View(0)
+			view := testui.Downsample(m.View(0))
 			for _, snippet := range tc.mustShow {
 				if !strings.Contains(view, snippet) {
 					t.Fatalf("expected view to contain %q\nview:\n%s", snippet, view)
@@ -1142,7 +1142,7 @@ func TestBoardModeScrollTeatestChevronVisible(t *testing.T) {
 
 	// Apply 30 j (down) keypresses synchronously.
 	const steps = 30
-	keys := make([]tea.KeyMsg, steps)
+	keys := make([]tea.KeyPressMsg, steps)
 	for i := range keys {
 		keys[i] = testui.Press("down")
 	}
@@ -2390,7 +2390,7 @@ func TestBoardPageAndBoundKeysMoveTheSelection(t *testing.T) {
 	page := m.pageRows()
 
 	steps := []struct {
-		key  tea.KeyMsg
+		key  tea.KeyPressMsg
 		want int
 	}{
 		{testui.Press("pgdown"), page},

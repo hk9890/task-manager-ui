@@ -1,19 +1,22 @@
 package styles
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// bandOf is the background sequence RowHighlight opens a band with.
-func bandOf(color lipgloss.Color) string {
-	on, _, _ := strings.Cut(lipgloss.NewStyle().Background(color).Render("x"), "x")
+// bandOf is the background sequence RowHighlight opens a band with, as the
+// test's terminal draws it.
+func bandOf(band color.Color) string {
+	on, _, _ := strings.Cut(testui.Downsample(lipgloss.NewStyle().Background(band).Render("x")), "x")
 	return on
 }
 
@@ -65,14 +68,14 @@ func TestRowHighlightBandsTheWholeRow(t *testing.T) {
 }
 
 // terminalProfiles are the colour profiles a band can be drawn on.
-var terminalProfiles = map[string]termenv.Profile{
-	"true colour": termenv.TrueColor, "256 colours": termenv.ANSI256, "16 colours": termenv.ANSI,
+var terminalProfiles = map[string]colorprofile.Profile{
+	"true colour": colorprofile.TrueColor, "256 colours": colorprofile.ANSI256, "16 colours": colorprofile.ANSI,
 }
 
 // applyOnEveryTerminal applies every theme on every colour profile in turn and
 // calls check after each. The hover roles are chosen by the profile the theme
 // is applied on, and check renders on the same profile.
-func applyOnEveryTerminal(t *testing.T, check func(name, theme string, profile termenv.Profile)) {
+func applyOnEveryTerminal(t *testing.T, check func(name, theme string, profile colorprofile.Profile)) {
 	t.Helper()
 	restoreInitialStyles(t)
 
@@ -93,27 +96,27 @@ func applyOnEveryTerminal(t *testing.T, check func(name, theme string, profile t
 // 256-colour terminal draws those two surfaces as one entry, so the hover is a
 // grey of the ramp there, and the 16 colours have no entry for it.
 func TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt(t *testing.T) {
-	applyOnEveryTerminal(t, func(name, theme string, profile termenv.Profile) {
+	applyOnEveryTerminal(t, func(name, theme string, profile colorprofile.Profile) {
 		flavor := flavors[theme]
 		if RowHoverBgColor != ShellHoverBgColor {
-			t.Errorf("%s, %s: the hover is %q on a row and %q on the header", name, theme, RowHoverBgColor, ShellHoverBgColor)
+			t.Errorf("%s, %s: the hover is %v on a row and %v on the header", name, theme, RowHoverBgColor, ShellHoverBgColor)
 		}
 		switch profile {
-		case termenv.TrueColor:
+		case colorprofile.TrueColor:
 			if surface0 := lipgloss.Color(flavor.Surface0().Hex); RowHoverBgColor != surface0 {
-				t.Errorf("%s, %s: the hover is %q, want surface0 %q", name, theme, RowHoverBgColor, surface0)
+				t.Errorf("%s, %s: the hover is %v, want surface0 %v", name, theme, RowHoverBgColor, surface0)
 			}
-		case termenv.ANSI256:
-			if entry, err := strconv.Atoi(string(RowHoverBgColor)); err != nil || entry < 232 || entry > 255 {
-				t.Errorf("%s, %s: the hover is %q, want an entry of the grey ramp", name, theme, RowHoverBgColor)
+		case colorprofile.ANSI256:
+			if entry, ok := RowHoverBgColor.(ansi.IndexedColor); !ok || entry < 232 {
+				t.Errorf("%s, %s: the hover is %v, want an entry of the grey ramp", name, theme, RowHoverBgColor)
 			}
-		case termenv.ANSI:
-			if RowHoverBgColor != "" {
-				t.Errorf("%s, %s: the hover is %q, want no band", name, theme, RowHoverBgColor)
+		case colorprofile.ANSI:
+			if RowHoverBgColor != (lipgloss.NoColor{}) {
+				t.Errorf("%s, %s: the hover is %v, want no band", name, theme, RowHoverBgColor)
 			}
 		}
 		if surface1 := lipgloss.Color(flavor.Surface1().Hex); RowSelectedBgColor != surface1 {
-			t.Errorf("%s, %s: the selection is %q, want surface1 %q", name, theme, RowSelectedBgColor, surface1)
+			t.Errorf("%s, %s: the selection is %v, want surface1 %v", name, theme, RowSelectedBgColor, surface1)
 		}
 	})
 }
@@ -124,7 +127,7 @@ func TestHoverIsOneSurfaceBelowTheSelectionWhereTheTerminalCanDrawIt(t *testing.
 // background, and the hovered tab's light value was the inactive tab's, so on
 // those terminals the pointer marked nothing.
 func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
-	applyOnEveryTerminal(t, func(name, theme string, profile termenv.Profile) {
+	applyOnEveryTerminal(t, func(name, theme string, profile colorprofile.Profile) {
 		hover := bandOf(RowHoverBgColor)
 		if bandOf(RowSelectedBgColor) == hover {
 			t.Errorf("%s, %s: the hover band is the selection band %q", name, theme, hover)
@@ -132,7 +135,7 @@ func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
 		// The app paints no background, so a row at rest stands on the
 		// terminal's, which the user of a theme sets to its base. The 16
 		// colours draw no hover band to compare.
-		if profile != termenv.ANSI && (hover == "" || hover == bandOf(lipgloss.Color(flavors[theme].Base().Hex))) {
+		if profile != colorprofile.ANSI && (hover == "" || hover == bandOf(lipgloss.Color(flavors[theme].Base().Hex))) {
 			t.Errorf("%s, %s: the hover band %q is the background of a row at rest", name, theme, hover)
 		}
 
@@ -152,7 +155,7 @@ func TestHoverRolesStayDistinctOnEveryTerminal(t *testing.T) {
 		if sameStyle(button.Background(ShellHoverBgColor).Bold(true), button) {
 			t.Errorf("%s, %s: a hovered button is drawn as one at rest", name, theme)
 		}
-		if profile != termenv.ANSI && sameStyle(button.Background(ShellHoverBgColor), button) {
+		if profile != colorprofile.ANSI && sameStyle(button.Background(ShellHoverBgColor), button) {
 			t.Errorf("%s, %s: a hovered button has the background of one at rest", name, theme)
 		}
 	})
@@ -166,7 +169,7 @@ func TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal(t *testing.T) {
 	// opens with, without the digits that say foreground or background. A
 	// style that opens with no sequence has no entry.
 	entry := func(style lipgloss.Style) string {
-		on, _, _ := strings.Cut(style.Render("x"), "x")
+		on, _, _ := strings.Cut(testui.Downsample(style.Render("x")), "x")
 		on = strings.TrimSuffix(strings.TrimPrefix(on, "\x1b["), "m")
 		if rest, found := strings.CutPrefix(on, "38;"); found {
 			return rest
@@ -188,7 +191,7 @@ func TestTheKeyOfAHoveredButtonIsReadableOnEveryTerminal(t *testing.T) {
 		return strconv.Itoa(code)
 	}
 
-	applyOnEveryTerminal(t, func(name, theme string, _ termenv.Profile) {
+	applyOnEveryTerminal(t, func(name, theme string, _ colorprofile.Profile) {
 		key := entry(lipgloss.NewStyle().Foreground(ShellFooterHelpColor))
 		under := entry(lipgloss.NewStyle().Background(ShellHoverBgColor))
 		if key == "" || key == under {
@@ -209,18 +212,24 @@ func TestApplyOnEveryTerminalLeavesTheRolesOfTheStartProfile(t *testing.T) {
 
 	for range 6 {
 		t.Run("", func(t *testing.T) {
-			applyOnEveryTerminal(t, func(string, string, termenv.Profile) {})
+			applyOnEveryTerminal(t, func(string, string, colorprofile.Profile) {})
 		})
 		if RowHoverBgColor != before || ShellHoverBgColor != before {
-			t.Fatalf("the hover is %q on a row and %q on the header after the helper, want %q as before it", RowHoverBgColor, ShellHoverBgColor, before)
+			t.Fatalf("the hover is %v on a row and %v on the header after the helper, want %v as before it", RowHoverBgColor, ShellHoverBgColor, before)
 		}
 	}
 }
 
-// TestRowHighlightIsNothingWithoutColour: on a terminal with no colour the
-// band cannot be drawn, and the selection's gutter chevron is what is left.
-func TestRowHighlightIsNothingWithoutColour(t *testing.T) {
-	if got := RowHighlight("row", 10, true, true); got != "row" {
-		t.Fatalf("a colourless terminal changed the row: %q", got)
+// TestRowHighlightIsNothingUnderThePointerOn16Colours: the 16 colours have no
+// hover band, so a row the pointer is on and the keys are not is drawn as it
+// is.
+func TestRowHighlightIsNothingUnderThePointerOn16Colours(t *testing.T) {
+	restoreInitialStyles(t)
+	if err := Apply(initialTheme, initialGlyphs, colorprofile.ANSI); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := RowHighlight("row", 10, false, true); got != "row" {
+		t.Fatalf("a hovered row on 16 colours changed: %q", got)
 	}
 }

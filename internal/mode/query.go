@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
@@ -36,16 +36,19 @@ func (q Query) Empty() bool {
 	return q.text == ""
 }
 
-// IsQueryKey reports whether msg edits a query: a rune key or a space without
-// alt — a paste arrives as one key of several runes — and backspace, ctrl+w
-// and ctrl+u. A browse surface answers Browse.TakesKey with it, so a key the
-// query took runs no shell action.
-func IsQueryKey(msg tea.KeyMsg) bool {
-	if msg.Alt {
+// IsQueryKey reports whether msg edits a query: a key that types text, space
+// included, without alt, and backspace, ctrl+w and ctrl+u. A browse surface
+// answers Browse.TakesKey with it, so a key the query took runs no shell
+// action.
+func IsQueryKey(msg tea.KeyPressMsg) bool {
+	if msg.Mod.Contains(tea.ModAlt) {
 		return false
 	}
-	switch msg.Type {
-	case tea.KeyRunes, tea.KeySpace, tea.KeyBackspace, tea.KeyCtrlW, tea.KeyCtrlU:
+	if msg.Text != "" {
+		return true
+	}
+	switch msg.Keystroke() {
+	case "backspace", "ctrl+w", "ctrl+u":
 		return true
 	}
 	return false
@@ -53,28 +56,40 @@ func IsQueryKey(msg tea.KeyMsg) bool {
 
 // HandleKey applies msg when it is a query key. consumed reports that the key
 // was the query's, changed that the text is different afterwards.
-func (q *Query) HandleKey(msg tea.KeyMsg) (consumed, changed bool) {
+func (q *Query) HandleKey(msg tea.KeyPressMsg) (consumed, changed bool) {
 	if !IsQueryKey(msg) {
 		return false, false
 	}
 
 	before := q.text
-	switch msg.Type {
-	case tea.KeyRunes:
-		q.set(q.text + string(msg.Runes))
-	case tea.KeySpace:
-		q.set(q.text + " ")
-	case tea.KeyBackspace:
+	switch msg.Keystroke() {
+	case "backspace":
 		if runes := []rune(q.text); len(runes) > 0 {
 			q.set(string(runes[:len(runes)-1]))
 		}
-	case tea.KeyCtrlW:
+	case "ctrl+w":
 		word := strings.TrimRight(q.text, " ")
 		q.set(word[:strings.LastIndex(word, " ")+1])
-	case tea.KeyCtrlU:
+	case "ctrl+u":
 		q.set("")
+	default:
+		q.set(q.text + msg.Text)
 	}
 	return true, q.text != before
+}
+
+// Paste types pasted text at the end of the query, and reports whether the
+// text is different afterwards.
+func (q *Query) Paste(text string) (changed bool) {
+	before := q.text
+	q.set(q.text + text)
+	return q.text != before
+}
+
+// PlainKey reports whether msg is the key code with no modifier but alt, as a
+// surface that matches a key itself rather than through a binding means it.
+func PlainKey(msg tea.KeyPressMsg, code rune) bool {
+	return msg.Code == code && msg.Mod&^tea.ModAlt == 0
 }
 
 // Clear empties the query and reports whether it held text.

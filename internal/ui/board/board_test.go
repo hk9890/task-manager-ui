@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -189,11 +189,8 @@ func TestRefreshBoardCarriesDimPhaseStyle(t *testing.T) {
 
 	// Every line of the row must carry SkeletonShades[phase] as a foreground
 	// ANSI escape.
-	var r, g, b int
-	if _, err := fmt.Sscanf(string(styles.SkeletonShades[phase]), "#%02x%02x%02x", &r, &g, &b); err != nil {
-		t.Fatalf("SkeletonShades[%d] = %q is not a hex colour: %v", phase, styles.SkeletonShades[phase], err)
-	}
-	wantANSI := fmt.Sprintf("38;2;%d;%d;%d", r, g, b)
+	r, g, b, _ := styles.SkeletonShades[phase].RGBA()
+	wantANSI := fmt.Sprintf("38;2;%d;%d;%d", r>>8, g>>8, b>>8)
 	for _, row := range rows {
 		if !strings.Contains(row, wantANSI) {
 			t.Fatalf("expected dim ANSI sequence %q in refresh row, got: %q", wantANSI, row)

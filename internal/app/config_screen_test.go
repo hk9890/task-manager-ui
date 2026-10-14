@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -48,7 +48,7 @@ func openConfigScreen(t *testing.T, m Model) Model {
 func restoreStyles(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
@@ -262,9 +262,9 @@ func TestTheMouseIsDeadOnTheConfigScreen(t *testing.T) {
 	if m.active != mode.Config {
 		t.Fatalf("fixture did not open the configuration screen, on %q", m.active)
 	}
-	before := m.View()
+	before := testui.View(m)
 	for name, cell := range cells {
-		for _, event := range []tea.MouseMsg{onScreen(m, pointerMove(cell[0], cell[1])), onScreen(m, leftClick(cell[0], cell[1])), onScreen(m, leftClick(cell[0], cell[1]))} {
+		for _, event := range []tea.MouseMsg{onScreen(m, testui.Move(cell[0], cell[1])), onScreen(m, testui.Click(cell[0], cell[1], tea.MouseLeft)), onScreen(m, testui.Click(cell[0], cell[1], tea.MouseLeft))} {
 			next, cmd := m.Update(event)
 			m = next.(Model)
 			if cmd != nil {
@@ -275,14 +275,14 @@ func TestTheMouseIsDeadOnTheConfigScreen(t *testing.T) {
 			t.Errorf("a click on %s ran under the configuration screen (surface %q, help %v, hover %q/%q)",
 				name, m.active, m.showHelp, m.hoverTab, litButton(m))
 		}
-		if m.View() != before {
+		if testui.View(m) != before {
 			t.Errorf("a click on %s changed the configuration screen", name)
 		}
 	}
 
 	// The wheel moves no cursor either.
-	next, _ := m.Update(tea.MouseMsg{X: 4, Y: 5, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
-	if next.(Model).View() != before {
+	next, _ := m.Update(testui.Wheel(4, 5, tea.MouseWheelDown))
+	if testui.View(next.(Model)) != before {
 		t.Error("the wheel changed the configuration screen")
 	}
 }
@@ -404,7 +404,7 @@ func TestAChangeIsWrittenAppliedAndKept(t *testing.T) {
 func TestAChangeIsAppliedOnTheProfileOfTheTerminal(t *testing.T) {
 	restoreStyles(t)
 	m, _ := configShell(t)
-	m.runtime.ColorProfile = termenv.ANSI256
+	m.runtime.ColorProfile = colorprofile.ANSI256
 	m = openConfigScreen(t, m)
 
 	m = press(t, m, "right")
@@ -413,11 +413,11 @@ func TestAChangeIsAppliedOnTheProfileOfTheTerminal(t *testing.T) {
 	}
 	applied := styles.RowHoverBgColor
 
-	if err := styles.Apply("catppuccin-frappe", "unicode", termenv.ANSI256); err != nil {
+	if err := styles.Apply("catppuccin-frappe", "unicode", colorprofile.ANSI256); err != nil {
 		t.Fatal(err)
 	}
 	onPalette := styles.RowHoverBgColor
-	if err := styles.Apply("catppuccin-frappe", "unicode", termenv.TrueColor); err != nil {
+	if err := styles.Apply("catppuccin-frappe", "unicode", colorprofile.TrueColor); err != nil {
 		t.Fatal(err)
 	}
 	if applied != onPalette || applied == styles.RowHoverBgColor {

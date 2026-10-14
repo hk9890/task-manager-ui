@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
 // lipgloss.Style has unexported func fields, so == doesn't work — compare via
-// rendered output for the same probe instead.
+// rendered output for the same probe instead, as the test's terminal draws it.
 func sameStyle(a, b lipgloss.Style) bool {
 	const probe = "X"
-	return a.Render(probe) == b.Render(probe)
+	return testui.Downsample(a.Render(probe)) == testui.Downsample(b.Render(probe))
 }
 
 func TestIssueTypeStyle(t *testing.T) {

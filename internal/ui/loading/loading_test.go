@@ -3,7 +3,7 @@ package loading
 import (
 	"testing"
 
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -45,13 +45,13 @@ func TestSkeletonPhaseNegativeReturnsZero(t *testing.T) {
 func TestGlyphCyclesTheAppliedSpinnerWithoutAJumpAtTheWrap(t *testing.T) {
 	// Apply writes package variables, so this test is not parallel.
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
 
 	for _, set := range styles.GlyphSets() {
-		if err := styles.Apply("catppuccin-mocha", set, termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", set, colorprofile.TrueColor); err != nil {
 			t.Fatalf("Apply(%q): %v", set, err)
 		}
 		frames := styles.Glyphs.Spinner

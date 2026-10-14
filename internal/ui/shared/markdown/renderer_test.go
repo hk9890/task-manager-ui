@@ -73,6 +73,22 @@ func TestRenderReadOnlyUsesMarkdownRendererWhenMarkdownSyntaxPresent(t *testing.
 	}
 }
 
+// TestRenderReadOnlyDrawsALinkAsItsTextAlone: glamour wraps a link in an OSC 8
+// hyperlink, which the cell wrap and the escape strips of the panes do not
+// know.
+func TestRenderReadOnlyDrawsALinkAsItsTextAlone(t *testing.T) {
+	t.Parallel()
+
+	got := NewRenderer().RenderReadOnly("See [the docs](https://example.com/docs) or <https://example.org>.", 60)
+	if strings.Contains(got, "\x1b]") {
+		t.Fatalf("expected no OSC sequence, got %q", got)
+	}
+	plain := ansiStripPattern.ReplaceAllString(got, "")
+	if !strings.Contains(plain, "the docs") || !strings.Contains(plain, "https://example.org") {
+		t.Fatalf("expected the text of both links, got %q", plain)
+	}
+}
+
 func TestRenderReadOnlyNormalizesInvalidWidthToDefault(t *testing.T) {
 	t.Parallel()
 

@@ -3,7 +3,7 @@ package mode
 import (
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
@@ -89,7 +89,7 @@ type Browse interface {
 	// TakesKey reports whether the tab takes this key for itself before any
 	// binding. The shell asks the tab on screen, and runs no action on a key
 	// it takes.
-	TakesKey(msg tea.KeyMsg) bool
+	TakesKey(msg tea.KeyPressMsg) bool
 }
 
 // RefreshMode distinguishes the two reasons a browse tab reloads. It lives here

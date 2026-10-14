@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/dashboard"
@@ -250,7 +250,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case mode.MouseMsg:
 		return m.handleMouse(msg)
 
-	case tea.KeyMsg:
+	case tea.PasteMsg:
+		if !m.query.Paste(msg.Content) {
+			return nil
+		}
+		return m.queryChanged()
+
+	case tea.KeyPressMsg:
 		if consumed, changed := m.query.HandleKey(msg); consumed {
 			if !changed {
 				return nil
@@ -583,7 +589,7 @@ func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
 
 // TakesKey reports whether msg is a key of the query, which the board takes
 // before any binding.
-func (m *Model) TakesKey(msg tea.KeyMsg) bool {
+func (m *Model) TakesKey(msg tea.KeyPressMsg) bool {
 	return mode.IsQueryKey(msg)
 }
 

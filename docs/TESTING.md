@@ -139,8 +139,9 @@ Shared helpers live under `internal/testing/ui`:
 - `AssertMatchesGoldenNormalized`: **the default.** Compares with trailing-space normalization, colour codes kept.
 - `AssertMatchesGoldenStripANSI`: same, with colour escapes removed. Use only where the golden pins column geometry and colour would be noise.
 - `AssertMatchesGolden`: byte-for-byte comparison. Trailing spaces are invisible in a diff and this helper fails on them, so prefer the normalized variant for rendered layout.
-- `AssertModelViewMatchesGolden`: `tea.Model.View()` through the byte-for-byte comparator — for
-  rendered layout call `AssertMatchesGoldenNormalized(tb, []byte(m.View()), name)` instead.
+- `AssertModelViewMatchesGolden`: the `Content` of `tea.Model.View()` through the byte-for-byte
+  comparator — for rendered layout call
+  `AssertMatchesGoldenNormalized(tb, []byte(testui.View(m)), name)` instead.
 - `WaitForOutputContainsAll`: waits for real runtime output containing required UI snippets before assertions.
 
 Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `OpenDetailKeys` /
@@ -149,9 +150,11 @@ Flow helpers (`internal/testing/ui/scenarios.go`): `ApplyKeySequence` with `Open
 not always what you want: an open modal schedules a repeating tick, so step those flows by hand.
 
 Build a key in a test with `Press`, `Runes` or `Paste` (`internal/testing/ui/keys.go`),
-never a `tea.KeyMsg{...}` literal. `Press` takes the key's name as a keybinding writes it —
+never a `tea.KeyPressMsg{...}` literal. `Press` takes the key's name as a keybinding writes it —
 `"enter"`, `"shift+tab"`, `"alt+x"`, `"space"` — and panics on an unknown one. Pass the result on;
-do not read its fields. The key type changes shape in Bubble Tea v2, and then only `keys.go` changes.
+do not read its fields. The key type changes shape between Bubble Tea majors, and then only
+`keys.go` changes. Build a mouse event the same way, with `Click`, `Release`, `Move`, `Drag` or
+`Wheel` (`internal/testing/ui/mouse.go`); `Offset` moves one by a number of cells.
 
 Screen assertions (`internal/testing/ui/assertions.go`): `AssertContainsAll`,
 `AssertStartupBoardLayoutSanity`, `AssertNoObviousRuntimeErrorPanels`, `AssertActionRequest`.
@@ -162,16 +165,21 @@ Size, cells and colour in an `internal/app` test:
   `m.width` and `m.height` are the screen inside the margin
   ([DESIGN-GUIDE.md](DESIGN-GUIDE.md#the-screen-margin)); set them directly only to measure one
   renderer at a screen width.
-- Send a cell found with `testui.FindCell(m.View(), ...)` as it is: it is a terminal cell. Pass a
-  cell counted on `m.screen()` or on one header line through `onScreen`
+- Read what a model draws with `testui.View(m)`, and a renderer's string through
+  `testui.Downsample`. Lip Gloss draws every colour in true colour and leaves the downsample to the
+  program's output, which a test that reads a view directly skips; both helpers render for the
+  test's profile. Read `m.View().Content` only to assert on the raw escapes.
+- Send a cell found with `testui.FindCell(t, testui.View(m), ...)` as it is: it is a terminal
+  cell. Pass a cell counted on `m.screen()` or on one header line through `onScreen`
   (`internal/app/mouse_test.go`), which adds the margin.
 - Assert a foreground, a background or bold on the escape codes, under `testui.ForceTrueColor`.
   A stripped golden passes with the wrong colour.
-- Set the render profile with `testui.ForceTrueColor` or `testui.UseColorProfile`, never with
-  `lipgloss.SetColorProfile`. The hover roles are chosen by the profile passed to `styles.Apply`,
-  so a test of a 256- or a 16-colour terminal passes that profile to both, as
+- Set the render profile with `testui.ForceTrueColor` or `testui.UseColorProfile`. Without one the
+  suite renders for `colorprofile.ASCII`, which strips every SGR sequence, bold and reverse too.
+  The hover roles are chosen by the profile passed to `styles.Apply`, so a test of a 256- or a
+  16-colour terminal passes that profile to both, as
   `applyOnEveryTerminal` does (`internal/ui/styles/row_highlight_test.go`). Restore the start theme
-  with `termenv.TrueColor`, the profile the package starts on.
+  with `colorprofile.TrueColor`, the profile the package starts on.
 
 Golden file convention:
 
@@ -246,8 +254,9 @@ the real catalog reads and writes the registry of whoever runs the suite. The SD
 itself is tested against a real registry in `internal/storecatalog/taskmgr`, under a
 `TASKMGR_HOME` of the test's own.
 
-The system clipboard is the last: a shell test replaces `Model.copyText`, because the real one
-writes an OSC 52 sequence to the terminal of whoever runs the suite.
+The system clipboard is the last: a shell test replaces `Model.copyText` to read the text a
+selection sends. The real one is `tea.SetClipboard`, whose message only a running program writes
+to the terminal.
 
 - Failure-path tests wrap any `repository.Repository` in `fakes.NewErrorInjecting`
   (`internal/testing/fakes/error_injecting.go`); do not hand-roll an error-returning stub.

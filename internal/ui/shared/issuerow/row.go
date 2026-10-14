@@ -4,11 +4,12 @@
 package issuerow
 
 import (
+	"image/color"
 	"slices"
 	"strings"
 	"unicode"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -59,17 +60,17 @@ type SkeletonOpts struct {
 
 // skeletonSegment renders one fixed-width segment by repeating glyph.
 // When styled is true it applies the given foreground color via lipgloss.
-func skeletonSegment(glyph string, width int, styled bool, color lipgloss.Color) string {
+func skeletonSegment(glyph string, width int, styled bool, shade color.Color) string {
 	block := strings.Repeat(glyph, width)
 	if styled {
-		return lipgloss.NewStyle().Foreground(color).Render(block)
+		return lipgloss.NewStyle().Foreground(shade).Render(block)
 	}
 	return block
 }
 
 // skeletonColor returns the shade for the given phase index.
 // N = len(styles.SkeletonShades); safe-modulo handles any integer phase.
-func skeletonColor(phase int) lipgloss.Color {
+func skeletonColor(phase int) color.Color {
 	n := len(styles.SkeletonShades)
 	idx := ((phase % n) + n) % n
 	return styles.SkeletonShades[idx]

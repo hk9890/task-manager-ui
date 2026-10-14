@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -43,7 +43,7 @@ func unsizedModel(t *testing.T) *Model {
 func TestHandleKeyDeclinesEveryKeyBeforeThePaneIsSized(t *testing.T) {
 	t.Parallel()
 
-	keys := []tea.KeyMsg{
+	keys := []tea.KeyPressMsg{
 		testui.Press("down"),
 		testui.Press("up"),
 		testui.Press("enter"),

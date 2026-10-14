@@ -170,7 +170,7 @@ func TestModelStartupSynchronizesSelectionAfterBoardInitSelectionMessage(t *test
 				if sel := m.currentSelection(); sel != nil && sel.Issue.ID == "tm-1" {
 					observedVisibleBoardState = true
 				}
-				footer := m.renderFooter()
+				footer := testui.Downsample(m.renderFooter())
 				if !strings.Contains(footer, "left/right columns") {
 					t.Fatalf("expected mode-specific help footer in board mode, got:\n%s", footer)
 				}

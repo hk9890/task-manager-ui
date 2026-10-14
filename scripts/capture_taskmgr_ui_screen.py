@@ -20,6 +20,40 @@ ESC = "\x1b"
 WAIT_POLL_SECONDS = 0.05
 
 
+class ScrollingScreen(pyte.Screen):
+    """A pyte screen that also scrolls a region by SU and SD.
+
+    Bubble Tea's renderer moves the rows of a list that scrolls with SU and SD
+    inside the scroll margins, and redraws only the rows that came in. pyte
+    knows neither sequence, so without these the captured screen keeps the old
+    rows next to the new ones.
+    """
+
+    def scroll_up(self, count: int | None = None, **_: Any) -> None:
+        top, bottom = self.margins or pyte.screens.Margins(0, self.lines - 1)
+        count = min(count or 1, bottom - top + 1)
+        self.dirty.update(range(self.lines))
+        for y in range(top, bottom + 1):
+            if y + count <= bottom:
+                self.buffer[y] = self.buffer[y + count]
+            else:
+                self.buffer.pop(y, None)
+
+    def scroll_down(self, count: int | None = None, **_: Any) -> None:
+        top, bottom = self.margins or pyte.screens.Margins(0, self.lines - 1)
+        count = min(count or 1, bottom - top + 1)
+        self.dirty.update(range(self.lines))
+        for y in range(bottom, top - 1, -1):
+            if y - count >= top:
+                self.buffer[y] = self.buffer[y - count]
+            else:
+                self.buffer.pop(y, None)
+
+
+class ScrollingStream(pyte.Stream):
+    csi = {**pyte.Stream.csi, "S": "scroll_up", "T": "scroll_down"}
+
+
 @dataclass
 class CaptureResult:
     ok: bool
@@ -99,6 +133,12 @@ def mouse_reporting_on(output: bytes) -> bool:
     return enabled > disabled
 
 
+def feed_paste(fd: int, text: str) -> None:
+    """Send text as a terminal sends a paste: inside the bracketed-paste
+    markers, with each line break as a carriage return."""
+    os.write(fd, (ESC + "[200~" + text.replace("\n", "\r") + ESC + "[201~").encode())
+
+
 def feed_mouse(fd: int, spec: str) -> None:
     """Send one mouse event as the SGR sequence a terminal reports it with.
 
@@ -158,6 +198,9 @@ def parse_step(step_text: str, default_timeout_ms: int) -> Step:
 
     if raw.startswith("send-key:"):
         return Step(raw=raw, kind="send-key", value=raw[len("send-key:") :])
+
+    if raw.startswith("send-paste:"):
+        return Step(raw=raw, kind="send-paste", value=raw[len("send-paste:") :])
 
     if raw.startswith("send-mouse:"):
         return Step(raw=raw, kind="send-mouse", value=raw[len("send-mouse:") :])
@@ -301,8 +344,8 @@ def capture(
     startup_wait: float,
     timeout: float,
 ) -> CaptureResult:
-    screen = pyte.Screen(width, height)
-    stream = pyte.Stream(screen)
+    screen = ScrollingScreen(width, height)
+    stream = ScrollingStream(screen)
     # A read can end inside a multi-byte character. Decoding each chunk alone
     # drops that character and draws the rest of its row one cell to the left.
     decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
@@ -401,6 +444,10 @@ def capture(
             try:
                 if step.kind == "send-key":
                     feed_keys(master_fd, step.value or "")
+                    read_once(WAIT_POLL_SECONDS)
+                    read_once(WAIT_POLL_SECONDS)
+                elif step.kind == "send-paste":
+                    feed_paste(master_fd, step.value or "")
                     read_once(WAIT_POLL_SECONDS)
                     read_once(WAIT_POLL_SECONDS)
                 elif step.kind == "send-mouse":

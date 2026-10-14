@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -34,7 +34,7 @@ func newModel(t *testing.T, theme, glyphs string) *Model {
 
 // press sends one key the screen must consume and returns the change it asks
 // the shell for, or nil when it asks for none.
-func press(t *testing.T, m *Model, key tea.KeyMsg) *ChangeMsg {
+func press(t *testing.T, m *Model, key tea.KeyPressMsg) *ChangeMsg {
 	t.Helper()
 
 	consumed, cmd := m.HandleKey(key)
@@ -56,7 +56,7 @@ func TestUpAndDownMoveTheCursorAndStopAtBothEnds(t *testing.T) {
 
 	m := newModel(t, "catppuccin-mocha", "unicode")
 	steps := []struct {
-		key  tea.KeyMsg
+		key  tea.KeyPressMsg
 		want int
 	}{
 		{keyUp, rowTheme}, {keyDown, rowGlyphs}, {keyDown, rowGlyphs}, {keyUp, rowTheme}, {keyUp, rowTheme},
@@ -84,7 +84,7 @@ func TestStepKeysAskForTheNeighbourAndWrap(t *testing.T) {
 		name          string
 		theme, glyphs string
 		row           int
-		key           tea.KeyMsg
+		key           tea.KeyPressMsg
 		want          ChangeMsg
 	}{
 		{"right steps the theme", firstTheme, firstSet, rowTheme, keyRight, ChangeMsg{Theme: themes[1], Glyphs: firstSet}},
@@ -150,7 +150,7 @@ func TestOpenPutsTheCursorOnTheFirstRow(t *testing.T) {
 func TestUnclaimedKeysFallThrough(t *testing.T) {
 	t.Parallel()
 
-	unclaimed := map[string]tea.KeyMsg{
+	unclaimed := map[string]tea.KeyPressMsg{
 		"esc":       testui.Press("esc"),
 		"ctrl+c":    testui.Press("ctrl+c"),
 		"alt+h":     testui.Press("alt+h"),

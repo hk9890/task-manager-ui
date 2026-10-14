@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -342,7 +342,7 @@ func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
 	page := uiboard.ContentRows(m.height) / issuerow.Height
 
 	steps := []struct {
-		key  tea.KeyMsg
+		key  tea.KeyPressMsg
 		want int
 	}{
 		{testui.Press("pgdown"), page},

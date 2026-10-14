@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -111,6 +111,27 @@ func TestFilterNarrowsAllFourColumnsAndCountsMatchesOfLoaded(t *testing.T) {
 	}
 	if view := plainView(m); strings.Contains(view, " of ") || !strings.Contains(view, "❯ filter issues") {
 		t.Errorf("an empty query must draw plain counts and the placeholder:\n%s", view)
+	}
+}
+
+// TestPasteFiltersAsTypedTextDoes: a paste extends the query as the same text
+// typed does, and a line break in it is a space.
+func TestPasteFiltersAsTypedTextDoes(t *testing.T) {
+	t.Parallel()
+
+	typed, _ := filterBoard(t)
+	typeText(typed, "login tm-2")
+	pasted, _ := filterBoard(t)
+	if cmd := pasted.Update(testui.Paste("login")); cmd == nil {
+		t.Fatal("the paste moved the selection off tm-10 but reported no change")
+	}
+	_ = pasted.Update(testui.Paste("\ntm-2"))
+
+	if got, want := pasted.query.Text(), typed.query.Text(); got != want {
+		t.Fatalf("the pasted query is %q, the typed one %q", got, want)
+	}
+	if got, want := plainView(pasted), plainView(typed); got != want {
+		t.Fatalf("the pasted query draws\n%s\nthe typed one\n%s", got, want)
 	}
 }
 

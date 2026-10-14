@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -134,7 +134,7 @@ func TestModelFatalErrViewRendersFatalErrorScreen(t *testing.T) {
 	msgs := runBatch(m.Init())
 	m = applyMessages(t, m, msgs)
 
-	view := m.View()
+	view := testui.View(m)
 	if !strings.Contains(view, "no task-manager store here") {
 		t.Fatalf("expected fatal error title in View(), got %q", view)
 	}
@@ -220,7 +220,7 @@ func TestModelStartupHealthCheckSetsFatalErrOnNoDatabaseFound(t *testing.T) {
 	if m.fatalErrTitle == "" {
 		t.Fatal("expected fatalErrTitle to be set after NoDatabaseFound health check")
 	}
-	view := m.View()
+	view := testui.View(m)
 	if !strings.Contains(view, "no task-manager store here") {
 		t.Fatalf("expected no-database title in View(), got %q", view)
 	}

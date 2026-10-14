@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -63,16 +63,25 @@ func openEdit(t *testing.T) *Model {
 	return open(t, Options{Kind: KindEdit, Values: issueValues()})
 }
 
-// press sends keys the screen must consume and returns the message the last
-// one asks the shell with, or nil.
-func press(t *testing.T, m *Model, keys ...tea.KeyMsg) tea.Msg {
+// press sends keys and pastes the screen must consume and returns the
+// message the last one asks the shell with, or nil.
+func press(t *testing.T, m *Model, keys ...tea.Msg) tea.Msg {
 	t.Helper()
 
 	var msg tea.Msg
 	for _, key := range keys {
-		consumed, cmd := m.HandleKey(key)
+		var consumed bool
+		var cmd tea.Cmd
+		switch key := key.(type) {
+		case tea.KeyPressMsg:
+			consumed, cmd = m.HandleKey(key)
+		case tea.PasteMsg:
+			consumed, cmd = m.HandlePaste(key)
+		default:
+			t.Fatalf("press takes a key or a paste, not %T", key)
+		}
 		if !consumed {
-			t.Fatalf("%q was not consumed", key.String())
+			t.Fatalf("%v was not consumed", key)
 		}
 		msg = nil
 		if cmd != nil {
@@ -345,13 +354,13 @@ func TestDownLeavesALastLineThatFillsTheWidthOfTheText(t *testing.T) {
 	// under it.
 	keyEnd := testui.Press("end")
 	for _, before := range []string{"", "short\n"} {
-		for _, inLine := range [][]tea.KeyMsg{nil, {keyEnd}} {
+		for _, inLine := range [][]tea.Msg{nil, {keyEnd}} {
 			values := issueValues()
 			m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
 			values.Text = before + strings.Repeat("x", m.text.Width())
 			m = openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
 
-			press(t, m, slices.Repeat([]tea.KeyMsg{keyDown}, strings.Count(before, "\n"))...)
+			press(t, m, slices.Repeat([]tea.Msg{keyDown}, strings.Count(before, "\n"))...)
 			press(t, m, inLine...)
 			press(t, m, keyDown)
 			if m.focus != uiissueedit.FieldSave {
@@ -386,7 +395,7 @@ func TestDownOnALineThatFillsTheWidthReachesTheLineBelow(t *testing.T) {
 		m := openOn(t, Options{Kind: KindEdit, Values: values}, uiissueedit.FieldText)
 
 		press(t, m, keyRight, keyRight)
-		press(t, m, slices.Repeat([]tea.KeyMsg{keyDown}, tt.rows)...)
+		press(t, m, slices.Repeat([]tea.Msg{keyDown}, tt.rows)...)
 		if m.focus != uiissueedit.FieldText || m.text.Line() != 1 || m.text.LineInfo().ColumnOffset != 2 {
 			t.Errorf("%s: %d times down from the full line: focus %d, line %d, column %d; want the text, line 1 and column 2",
 				tt.name, tt.rows, m.focus, m.text.Line(), m.text.LineInfo().ColumnOffset)
@@ -478,8 +487,8 @@ func TestAltChordsTypeNothing(t *testing.T) {
 	}
 }
 
-// The terminal's own paste arrives as one key message. The widgets' paste
-// key, which reads the system clipboard, is unbound.
+// The terminal's own paste arrives as one message. The widgets' paste key,
+// which reads the system clipboard, is unbound.
 func TestPasteIsTypedAndCtrlVDoesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -508,6 +517,61 @@ func TestPasteIsTypedAndCtrlVDoesNothing(t *testing.T) {
 	}
 	if got := m.values().Text; got != lines {
 		t.Errorf("ctrl+v changed the text to %q", got)
+	}
+}
+
+// A paste is typed as the widget types it: the text makes a TAB 4 spaces and
+// a CR and an LF a line break each, an input makes each of them a space.
+func TestPasteKeepsTheTextHandlingOfTheWidgets(t *testing.T) {
+	t.Parallel()
+
+	paste := testui.Paste("one\ttwo\r\nthree")
+
+	m := open(t, Options{Kind: KindCreate})
+	press(t, m, paste)
+	if got, want := m.values().Title, "one two  three"; got != want {
+		t.Errorf("a paste into the title gives %q, want %q", got, want)
+	}
+
+	m = open(t, Options{Kind: KindCommentAdd})
+	press(t, m, paste)
+	if got, want := m.values().Text, "one    two\n\nthree"; got != want {
+		t.Errorf("a paste into the text gives %q, want %q", got, want)
+	}
+}
+
+func TestPasteIntoASteppedFieldOrDuringASaveChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	m := openOn(t, Options{Kind: KindEdit, Values: issueValues()}, uiissueedit.FieldType)
+	press(t, m, testui.Paste("closed"))
+	if got := m.values(); got != issueValues() {
+		t.Errorf("a paste on the type changed the values to %+v", got)
+	}
+
+	m = openEdit(t)
+	m.SetSaving(true)
+	press(t, m, testui.Paste("x"))
+	if got := m.values(); got != issueValues() {
+		t.Errorf("a paste during a save changed the values to %+v", got)
+	}
+}
+
+// The screen draws no selection, so no key of the text starts one: the key
+// after it would replace text the operator cannot see.
+func TestNoKeyStartsASelectionInTheText(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"shift+right", "shift+left", "shift+up", "shift+down", "ctrl+shift+right", "alt+shift+left", "ctrl+g", "ctrl+shift+c"} {
+		m := openOn(t, Options{Kind: KindEdit, Values: issueValues()}, uiissueedit.FieldText)
+		press(t, m, keyRight, testui.Press(name))
+		if m.text.HasSelection() {
+			t.Errorf("%s started a selection", name)
+		}
+		press(t, m, testui.Runes("X"))
+		if got, want := m.values().Text, "fXirst line\nsecond line"; got != want {
+			t.Errorf("%s, then X gives %q, want %q", name, got, want)
+		}
 	}
 }
 
@@ -641,7 +705,7 @@ func TestQuitHelpAndEscapeFallThroughAndEveryOtherKeyIsConsumed(t *testing.T) {
 	t.Parallel()
 
 	m := openEdit(t)
-	for name, key := range map[string]tea.KeyMsg{
+	for name, key := range map[string]tea.KeyPressMsg{
 		"quit":   testui.Press("ctrl+c"),
 		"help":   testui.Press("alt+h"),
 		"escape": testui.Press("esc"),
@@ -650,7 +714,7 @@ func TestQuitHelpAndEscapeFallThroughAndEveryOtherKeyIsConsumed(t *testing.T) {
 			t.Errorf("%s was consumed; the shell owns it", name)
 		}
 	}
-	for name, key := range map[string]tea.KeyMsg{
+	for name, key := range map[string]tea.KeyPressMsg{
 		"a shell action": testui.Press("alt+n"),
 		"delete":         testui.Press("delete"),
 		"a tab key":      testui.Press("ctrl+pgdown"),
@@ -669,7 +733,7 @@ func TestSavingTakesEveryKeyButQuitAndHelp(t *testing.T) {
 	m.SetSaving(true)
 	before := m.values()
 
-	for _, key := range []tea.KeyMsg{testui.Press("esc"), keySave, keyTab, testui.Runes("x"), keyEnter, keyLeft} {
+	for _, key := range []tea.KeyPressMsg{testui.Press("esc"), keySave, keyTab, testui.Runes("x"), keyEnter, keyLeft} {
 		if consumed, cmd := m.HandleKey(key); !consumed || cmd != nil {
 			t.Errorf("%q during a save: consumed %v, command %v", key.String(), consumed, cmd != nil)
 		}
@@ -677,7 +741,7 @@ func TestSavingTakesEveryKeyButQuitAndHelp(t *testing.T) {
 	if m.values() != before || m.focus != uiissueedit.FieldTitle {
 		t.Error("a key during a save changed the screen")
 	}
-	for _, key := range []tea.KeyMsg{testui.Press("ctrl+c"), testui.Press("alt+h")} {
+	for _, key := range []tea.KeyPressMsg{testui.Press("ctrl+c"), testui.Press("alt+h")} {
 		if consumed, _ := m.HandleKey(key); consumed {
 			t.Errorf("%q was consumed during a save", key.String())
 		}

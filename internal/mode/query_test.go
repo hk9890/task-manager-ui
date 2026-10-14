@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -16,7 +16,7 @@ func TestQueryEditingKeys(t *testing.T) {
 
 	steps := []struct {
 		name string
-		key  tea.KeyMsg
+		key  tea.Msg
 		want string
 		// changed is false for a key the query takes without a new text.
 		changed bool
@@ -37,7 +37,13 @@ func TestQueryEditingKeys(t *testing.T) {
 
 	var q mode.Query
 	for _, step := range steps {
-		consumed, changed := q.HandleKey(step.key)
+		var consumed, changed bool
+		switch msg := step.key.(type) {
+		case tea.KeyPressMsg:
+			consumed, changed = q.HandleKey(msg)
+		case tea.PasteMsg:
+			consumed, changed = true, q.Paste(msg.Content)
+		}
 		if !consumed || changed != step.changed || q.Text() != step.want {
 			t.Fatalf("%s: consumed %v, changed %v, text %q; want consumed, changed %v, text %q",
 				step.name, consumed, changed, q.Text(), step.changed, step.want)
@@ -56,7 +62,7 @@ func TestQueryLeavesEveryOtherKeyToTheSurface(t *testing.T) {
 	var q mode.Query
 	q.HandleKey(testui.Runes("abc"))
 
-	keys := []tea.KeyMsg{
+	keys := []tea.KeyPressMsg{
 		testui.Press("left"), testui.Press("right"), testui.Press("up"), testui.Press("down"),
 		testui.Press("home"), testui.Press("end"), testui.Press("pgup"), testui.Press("pgdown"),
 		testui.Press("enter"), testui.Press("esc"), testui.Press("tab"), testui.Press("shift+tab"),

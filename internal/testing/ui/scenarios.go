@@ -1,6 +1,6 @@
 package ui
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // InitializeModel runs Init and resolves all emitted messages/commands.
 func InitializeModel(model tea.Model) tea.Model {
@@ -12,7 +12,7 @@ func InitializeModel(model tea.Model) tea.Model {
 }
 
 // ApplyKeySequence sends key messages and resolves all resulting commands.
-func ApplyKeySequence(model tea.Model, keys ...tea.KeyMsg) tea.Model {
+func ApplyKeySequence(model tea.Model, keys ...tea.KeyPressMsg) tea.Model {
 	current := model
 	for _, key := range keys {
 		next, cmd := current.Update(key)
@@ -23,18 +23,18 @@ func ApplyKeySequence(model tea.Model, keys ...tea.KeyMsg) tea.Model {
 }
 
 // OpenDetailKeys returns the shell key sequence for opening detail mode.
-func OpenDetailKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{Press("enter")}
+func OpenDetailKeys() []tea.KeyPressMsg {
+	return []tea.KeyPressMsg{Press("enter")}
 }
 
 // DetailBackKeys returns the shell key sequence for leaving detail mode.
-func DetailBackKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{Press("esc")}
+func DetailBackKeys() []tea.KeyPressMsg {
+	return []tea.KeyPressMsg{Press("esc")}
 }
 
 // DetailScrollKeys returns a representative deterministic detail scroll sequence.
-func DetailScrollKeys() []tea.KeyMsg {
-	return []tea.KeyMsg{Press("pgdown"), Press("end")}
+func DetailScrollKeys() []tea.KeyPressMsg {
+	return []tea.KeyPressMsg{Press("pgdown"), Press("end")}
 }
 
 func applyCmd(model tea.Model, cmd tea.Cmd) tea.Model {

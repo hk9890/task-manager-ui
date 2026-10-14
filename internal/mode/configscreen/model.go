@@ -9,10 +9,11 @@ package configscreen
 import (
 	"slices"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	uiconfigscreen "github.com/hk9890/task-manager-ui/internal/ui/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -83,7 +84,7 @@ func (m *Model) SetSize(width, height int) {
 // Row movement reads the board keybinding context, as the store picker does.
 // Left, Right and Enter are the keys themselves: a value has no binding to
 // step it, and alt+ chords stay with the shell.
-func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case m.keys.Match(config.BoardContext, config.BoardActionMoveUp, msg):
 		m.selectedRow = max(m.selectedRow-1, 0)
@@ -91,11 +92,11 @@ func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	case m.keys.Match(config.BoardContext, config.BoardActionMoveDown, msg):
 		m.selectedRow = min(m.selectedRow+1, rowCount-1)
 		return true, nil
-	case msg.Alt:
+	case msg.Mod.Contains(tea.ModAlt):
 		return false, nil
-	case msg.Type == tea.KeyLeft:
+	case mode.PlainKey(msg, tea.KeyLeft):
 		return true, m.step(-1)
-	case msg.Type == tea.KeyRight, msg.Type == tea.KeyEnter:
+	case mode.PlainKey(msg, tea.KeyRight), mode.PlainKey(msg, tea.KeyEnter):
 		return true, m.step(1)
 	}
 	return false, nil

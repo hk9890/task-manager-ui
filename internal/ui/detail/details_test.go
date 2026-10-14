@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -1414,8 +1414,7 @@ func TestRenderChildrenGroupGolden(t *testing.T) {
 // the cursor row carries the app-wide selection prefix and idle rows carry the
 // blank gutter.
 func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
-	// Pin the color profile so the golden is deterministic regardless of other
-	// tests mutating the global lipgloss profile.
+	// Render in true colour: the golden pins the colours of the cursor row.
 	testui.ForceTrueColor(t)
 
 	// Render a narrow detail (responsive layout) with cursor=tm-cursor.
@@ -1448,8 +1447,7 @@ func TestRenderCursorRowUsesSelectionPrefixGolden(t *testing.T) {
 // group; the cursor row carries the selection prefix, the epic itself appears only in the
 // Content pane (never in the deps pane), and no second marker exists.
 func TestRenderEpicChildrenCursorPrefixGolden(t *testing.T) {
-	// Pin the color profile so the golden is deterministic regardless of other
-	// tests mutating the global lipgloss profile.
+	// Render in true colour: the golden pins the colours of the cursor row.
 	testui.ForceTrueColor(t)
 
 	view := Render(State{
@@ -1711,13 +1709,13 @@ func TestContentHeaderRuleTakesTheAppliedTheme(t *testing.T) {
 	// Apply and the colour profile are process-wide, so this test is not parallel.
 	testui.ForceTrueColor(t)
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
 
 	started := contentHeaderRule(3)
-	if err := styles.Apply("catppuccin-latte", "unicode", termenv.TrueColor); err != nil {
+	if err := styles.Apply("catppuccin-latte", "unicode", colorprofile.TrueColor); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	applied := contentHeaderRule(3)

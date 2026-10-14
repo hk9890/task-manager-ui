@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 )
@@ -23,8 +23,8 @@ func (m modalTeaModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return modalTeaModel{inner: next}, cmd
 }
 
-func (m modalTeaModel) View() string {
-	return m.inner.View()
+func (m modalTeaModel) View() tea.View {
+	return tea.NewView(m.inner.View())
 }
 
 func TestHarnessSupportsTeaTestGoldenVerification(t *testing.T) {

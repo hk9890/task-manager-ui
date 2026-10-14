@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -237,7 +237,7 @@ func TestStoreFormGoldens(t *testing.T) {
 			m := openForm(t, next.(Model), tc.rows)
 			m.toast = m.toast.Hide() // the start's "no store" toast, not the form under test
 
-			testui.AssertMatchesGoldenNormalized(t, []byte(m.View()), tc.golden)
+			testui.AssertMatchesGoldenNormalized(t, []byte(testui.View(m)), tc.golden)
 		})
 	}
 }

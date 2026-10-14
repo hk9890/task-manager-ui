@@ -1,7 +1,7 @@
 package rowlist
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -63,7 +63,7 @@ func (l *List) Move(delta int, state uiboard.State) (moved bool) {
 // MoveKey runs msg when it is one of the six move keys of the board context:
 // the column is a board column, so the surfaces must not drift apart. handled
 // is false for every other key.
-func (l *List) MoveKey(keys config.ResolvedKeyBindings, msg tea.KeyMsg, state uiboard.State) (moved, handled bool) {
+func (l *List) MoveKey(keys config.ResolvedKeyBindings, msg tea.KeyPressMsg, state uiboard.State) (moved, handled bool) {
 	rows := len(state.Columns[0].Rows)
 	page := pageRows(state.Height)
 

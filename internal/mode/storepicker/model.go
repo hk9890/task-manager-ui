@@ -13,7 +13,7 @@ import (
 	"log/slog"
 	"strconv"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
@@ -147,7 +147,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // Row movement, open and reload read the board keybinding context: the picker
 // is a single scrolling list of rows, the same shape a board column is, and a
 // context of its own would ask the operator to rebind the same movement twice.
-func (m *Model) HandleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case m.keys.Match(config.BoardContext, config.BoardActionOpenDetail, msg):
 		return true, m.openSelected()

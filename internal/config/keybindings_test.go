@@ -61,6 +61,29 @@ func TestDefaultKeyBindingsResolveAndMatch(t *testing.T) {
 	}
 }
 
+// TestMatchTakesEveryNameAKeyArrivesUnder: ctrl+@ is the older name of
+// ctrl+space, and a terminal that reports the shift of an alt chord sends
+// alt+shift+x for the alt+X an alt+x binding matches.
+func TestMatchTakesEveryNameAKeyArrivesUnder(t *testing.T) {
+	t.Parallel()
+
+	bindings := DefaultKeyBindings()
+	bindings.Shell[ShellActionHelp] = []string{"ctrl+@"}
+	resolved, err := ResolveKeyBindings(bindings)
+	if err != nil {
+		t.Fatalf("ResolveKeyBindings returned error: %v", err)
+	}
+	if !resolved.Match(ShellContext, ShellActionHelp, testui.Press("ctrl+space")) {
+		t.Error("a ctrl+@ binding does not match a ctrl+space press")
+	}
+	if !resolved.Match(ShellContext, ShellActionOpenSearch, testui.Press("alt+shift+f")) {
+		t.Error("the alt+f binding does not match an alt+shift+f press")
+	}
+	if resolved.Match(ShellContext, ShellActionOpenSearch, testui.Press("ctrl+shift+f")) {
+		t.Error("the alt+f binding matches a ctrl+shift+f press")
+	}
+}
+
 func bindingsOf(k KeyBindings, context string) map[string][]string {
 	switch context {
 	case ShellContext:
@@ -353,7 +376,7 @@ func TestResolvedKeyBindingsDisplayPrimary(t *testing.T) {
 
 	r := resolvedDefault(t)
 
-	// ctrl+@ is the canonical name of ctrl+space; DisplayPrimary must return "ctrl+space".
+	// ctrl+@ is another name of ctrl+space; DisplayPrimary must return "ctrl+space".
 	bindings := DefaultKeyBindings()
 	bindings.Shell[ShellActionHelp] = []string{"ctrl+@"}
 	rebound, err := ResolveKeyBindings(bindings)

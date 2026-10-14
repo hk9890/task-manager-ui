@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // controllerStep is one message the recording controller saw, in arrival order.
@@ -38,7 +38,7 @@ func (c *recordingController) View(int) string { return "" }
 // describeMsg names a message compactly enough to assert an arrival order.
 func describeMsg(msg tea.Msg) string {
 	switch m := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return "key:" + m.String()
 	case string:
 		return m

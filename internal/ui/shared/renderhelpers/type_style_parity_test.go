@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/renderhelpers"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -25,13 +25,13 @@ import (
 func forEachGlyphSet(t *testing.T, check func(t *testing.T)) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := styles.Apply("catppuccin-mocha", "unicode", termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", "unicode", colorprofile.TrueColor); err != nil {
 			t.Fatalf("restore the initial styles: %v", err)
 		}
 	})
 
 	for _, set := range styles.GlyphSets() {
-		if err := styles.Apply("catppuccin-mocha", set, termenv.TrueColor); err != nil {
+		if err := styles.Apply("catppuccin-mocha", set, colorprofile.TrueColor); err != nil {
 			t.Fatalf("Apply(%q): %v", set, err)
 		}
 		t.Run(set, check)

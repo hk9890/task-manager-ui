@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
@@ -26,6 +26,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
@@ -100,7 +101,8 @@ type Model struct {
 
 	// press is where the left button went down, until it comes up; sel is the
 	// box a drag from there selects (textselect.go). copyText puts a finished
-	// selection on the clipboard; tests replace it.
+	// selection on the clipboard with OSC 52, which reaches the clipboard of
+	// the machine the terminal runs on, over ssh too; tests replace it.
 	press    *screenCell
 	sel      textSelection
 	copyText func(string) tea.Cmd
@@ -260,7 +262,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleToastDismiss: defaultScheduleToastDismiss,
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
 		awaitStoreChange:     defaultAwaitStoreChange,
-		copyText:             copyToClipboard,
+		copyText:             tea.SetClipboard,
 	}
 	m.bindStore(services)
 	m.storePicker.SetCreateTarget(runtime.StorelessDir)
@@ -547,12 +549,25 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.scoped(m.board.Init())
 	}
 
+	// The program reports the terminal's colour profile when it starts, and
+	// again when the terminal tells a better one. The hover roles depend on it.
+	if profile, ok := msg.(tea.ColorProfileMsg); ok {
+		if profile.Profile != m.runtime.ColorProfile {
+			m.runtime.ColorProfile = profile.Profile
+			ui := m.services.Config.UI
+			if err := styles.Apply(ui.Theme, ui.Glyphs, profile.Profile); err != nil {
+				m.logger().Error("failed to apply the terminal's colour profile", "profile", profile.String(), "error", err.Error())
+			}
+		}
+		return m, nil
+	}
+
 	// When a fatal error is set, only handle window resize and quit.
 	if m.fatalErrTitle != "" {
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
 			m.setTerminalSize(msg)
-		case tea.KeyMsg:
+		case tea.KeyPressMsg:
 			if m.keys.Match(config.ShellContext, config.ShellActionQuit, msg) ||
 				msg.String() == "q" || msg.String() == "ctrl+c" {
 				return m, tea.Quit
@@ -565,16 +580,23 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The one place a mouse event leaves the terminal's coordinates for
 		// the screen's: everything after this counts from the cell the margin
 		// puts the screen's first cell on.
-		mouse.X -= m.marginLeft
-		mouse.Y -= m.marginTop
-		next, cmd, handled := m.mouseHeld(mouse)
+		event := pointerOf(mouse)
+		event.X -= m.marginLeft
+		event.Y -= m.marginTop
+		next, cmd, handled := m.mouseHeld(event)
 		if handled {
 			return next, cmd
 		}
-		return next.handleMouse(mouse)
+		return next.handleMouse(event)
 	}
-	if key, ok := msg.(tea.KeyMsg); ok && m.sel.active {
-		return m.selectingKey(key)
+	if m.sel.active {
+		switch msg := msg.(type) {
+		case tea.KeyPressMsg:
+			return m.selectingKey(msg)
+		case tea.PasteMsg:
+			// A paste would change the screen the selection stands over.
+			return m, nil
+		}
 	}
 
 	modeCmd := tea.Cmd(nil)
@@ -798,8 +820,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toast = m.toast.Hide()
 		}
 		return m, modeCmd
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleShellKey(msg, modeCmd)
+	case tea.PasteMsg:
+		// A paste is typed text: it drops a pending editor open as a key does.
+		// The active tab has it from forwardModeMessages and an open dialog
+		// from handleOverlayMessage, so only the editor is left.
+		m.pendingEditor = 0
+		if m.active == mode.IssueEdit {
+			_, editorCmd := m.editor.HandlePaste(msg)
+			return m, batchCmds(modeCmd, editorCmd)
+		}
+		return m, modeCmd
 	}
 
 	return m, modeCmd
@@ -917,7 +949,7 @@ func (m *Model) reloadActiveSurface() tea.Cmd {
 //
 // It takes the same modeCmd update() would have batched and returns the same
 // (tea.Model, tea.Cmd) pair, so the branch is a move, not a rewrite.
-func (m Model) handleShellKey(msg tea.KeyMsg, modeCmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, tea.Cmd) {
 	// Single choke point: any key press drops a pending request to open the
 	// editor, so the result that arrives later opens nothing. The state is
 	// read first: Escape then cancels the open instead of leaving the mode.
@@ -1099,8 +1131,8 @@ func (m Model) overlayOpen() bool {
 }
 
 // overlayConsumes reports whether an open overlay takes msg from the shell: the
-// keys, and the two messages a modal answers a key with. The mouse never
-// arrives here; handleMouse takes it first.
+// keys and a paste, and the two messages a modal answers a key with. The
+// mouse never arrives here; handleMouse takes it first.
 //
 // Every other message is the result of work the shell started, a tick or the
 // store watch, and its handler in update() is the only thing that ends a
@@ -1112,7 +1144,7 @@ func (m Model) overlayConsumes(msg tea.Msg) bool {
 		return false
 	}
 	switch msg.(type) {
-	case tea.KeyMsg, modal.SubmitMsg, modal.CancelMsg:
+	case tea.KeyPressMsg, tea.PasteMsg, modal.SubmitMsg, modal.CancelMsg:
 		return true
 	}
 	return false
@@ -1142,7 +1174,7 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 		return m, batchCmds(modeCmd, cmd)
 	}
 
-	if k, ok := msg.(tea.KeyMsg); ok {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
 		m.helpKey(k)
 	}
 	return m, modeCmd

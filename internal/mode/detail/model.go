@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -365,7 +365,7 @@ func (m *Model) ClampScroll(maxWidth, viewportHeight int) {
 // consumed, and an optional Cmd for the shell: an OpenRelatedIssueMsg for a
 // drill-in, or a mode.ActionRequestMsg for a shell-owned action (the issue
 // editor, the comment delete question); see internal/mode/contracts.go.
-func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, tea.Cmd) {
+func (m *Model) HandleKey(msg tea.KeyPressMsg, maxWidth, viewportHeight int) (bool, tea.Cmd) {
 	if viewportHeight <= 0 {
 		return false, nil
 	}
@@ -377,17 +377,17 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 		}
 	}
 
-	switch msg.Type {
-	case tea.KeyLeft:
+	switch {
+	case mode.PlainKey(msg, tea.KeyLeft):
 		m.moveFocus(-1, maxWidth, viewportHeight)
 		return true, nil
-	case tea.KeyRight:
+	case mode.PlainKey(msg, tea.KeyRight):
 		m.moveFocus(1, maxWidth, viewportHeight)
 		return true, nil
 	}
 
 	// Enter on a comment is built in, as it is in the Dependencies pane below.
-	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneComments {
+	if mode.PlainKey(msg, tea.KeyEnter) && m.focusPane() == detail.FocusPaneComments {
 		return true, mode.RequestActionCmd(mode.Detail, mode.ActionEditComment)
 	}
 	if m.Keys.Match(config.DetailContext, config.DetailActionDeleteComment, msg) {
@@ -397,7 +397,7 @@ func (m *Model) HandleKey(msg tea.KeyMsg, maxWidth, viewportHeight int) (bool, t
 		return true, mode.RequestActionCmd(mode.Detail, mode.ActionDeleteComment)
 	}
 
-	if msg.Type == tea.KeyEnter && m.focusPane() == detail.FocusPaneDependencies {
+	if mode.PlainKey(msg, tea.KeyEnter) && m.focusPane() == detail.FocusPaneDependencies {
 		// Wire Enter to open the highlighted related/child issue. This is
 		// hardcoded (NOT keymap-driven).
 		if ref, ok := m.selectedRelatedIssue(); ok {

@@ -2,79 +2,80 @@
 package styles
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // SkeletonShades are the three shades a cold-start placeholder cycles through
 // for a ~1.2 s breathing pulse.
-var SkeletonShades []lipgloss.Color
+var SkeletonShades []color.Color
 
 // Every colour role. Apply assigns each from the theme's flavour: a colour is
 // chosen once, in applyFlavor (theme.go), and nowhere else.
 var (
-	TextPrimaryColor            lipgloss.Color
-	TextMutedColor              lipgloss.Color
-	TextSecondaryColor          lipgloss.Color
-	ShellTabActiveTextColor     lipgloss.Color
-	ShellTabActiveBgColor       lipgloss.Color
-	ShellTabInactiveColor       lipgloss.Color
-	ShellTabHoverColor          lipgloss.Color
-	ShellHoverBgColor           lipgloss.Color
-	ShellFooterHelpColor        lipgloss.Color
-	RowSelectedBgColor          lipgloss.Color
-	RowHoverBgColor             lipgloss.Color
-	BorderDefaultColor          lipgloss.Color
-	OverlayTitleColor           lipgloss.Color
-	OverlayBorderColor          lipgloss.Color
-	BorderHighlightFocusColor   lipgloss.Color
-	ButtonTextColor             lipgloss.Color
-	ButtonPrimaryBgColor        lipgloss.Color
-	ButtonPrimaryFocusBgColor   lipgloss.Color
-	ButtonSecondaryBgColor      lipgloss.Color
-	ButtonSecondaryFocusBgColor lipgloss.Color
-	ButtonDangerBgColor         lipgloss.Color
-	ButtonDangerFocusBgColor    lipgloss.Color
-	ToastBorderSuccessColor     lipgloss.Color
-	ToastBorderErrorColor       lipgloss.Color
-	ToastBorderInfoColor        lipgloss.Color
-	ToastBorderWarnColor        lipgloss.Color
-	StoreActiveColor            lipgloss.Color
-	StoreDanglingColor          lipgloss.Color
-	StoreBrokenColor            lipgloss.Color
-	IssueTypeBugColor           lipgloss.Color
-	IssueTypeTaskColor          lipgloss.Color
-	IssueTypeFeatureColor       lipgloss.Color
-	IssueTypeEpicColor          lipgloss.Color
-	IssueTypeChoreColor         lipgloss.Color
-	IssueTypeDocColor           lipgloss.Color
-	IssuePriorityP0Color        lipgloss.Color
-	IssuePriorityP1Color        lipgloss.Color
-	IssuePriorityP2Color        lipgloss.Color
-	IssuePriorityP3Color        lipgloss.Color
-	IssueStatusOpenColor        lipgloss.Color
-	IssueStatusReadyColor       lipgloss.Color
-	IssueStatusInProgressColor  lipgloss.Color
-	IssueStatusBlockedColor     lipgloss.Color
-	IssueStatusClosedColor      lipgloss.Color
-	IssueStatusDeferredColor    lipgloss.Color
+	TextPrimaryColor            color.Color
+	TextMutedColor              color.Color
+	TextSecondaryColor          color.Color
+	ShellTabActiveTextColor     color.Color
+	ShellTabActiveBgColor       color.Color
+	ShellTabInactiveColor       color.Color
+	ShellTabHoverColor          color.Color
+	ShellHoverBgColor           color.Color
+	ShellFooterHelpColor        color.Color
+	RowSelectedBgColor          color.Color
+	RowHoverBgColor             color.Color
+	BorderDefaultColor          color.Color
+	OverlayTitleColor           color.Color
+	OverlayBorderColor          color.Color
+	BorderHighlightFocusColor   color.Color
+	ButtonTextColor             color.Color
+	ButtonPrimaryBgColor        color.Color
+	ButtonPrimaryFocusBgColor   color.Color
+	ButtonSecondaryBgColor      color.Color
+	ButtonSecondaryFocusBgColor color.Color
+	ButtonDangerBgColor         color.Color
+	ButtonDangerFocusBgColor    color.Color
+	ToastBorderSuccessColor     color.Color
+	ToastBorderErrorColor       color.Color
+	ToastBorderInfoColor        color.Color
+	ToastBorderWarnColor        color.Color
+	StoreActiveColor            color.Color
+	StoreDanglingColor          color.Color
+	StoreBrokenColor            color.Color
+	IssueTypeBugColor           color.Color
+	IssueTypeTaskColor          color.Color
+	IssueTypeFeatureColor       color.Color
+	IssueTypeEpicColor          color.Color
+	IssueTypeChoreColor         color.Color
+	IssueTypeDocColor           color.Color
+	IssuePriorityP0Color        color.Color
+	IssuePriorityP1Color        color.Color
+	IssuePriorityP2Color        color.Color
+	IssuePriorityP3Color        color.Color
+	IssueStatusOpenColor        color.Color
+	IssueStatusReadyColor       color.Color
+	IssueStatusInProgressColor  color.Color
+	IssueStatusBlockedColor     color.Color
+	IssueStatusClosedColor      color.Color
+	IssueStatusDeferredColor    color.Color
 	// ShellRuleColor is the rule under the menu bar.
-	ShellRuleColor lipgloss.Color
+	ShellRuleColor color.Color
 	// ShellActionColor is a menu-bar button's label.
-	ShellActionColor lipgloss.Color
+	ShellActionColor color.Color
 	// QueryAccentColor is the prompt and the cursor of a query line.
-	QueryAccentColor lipgloss.Color
+	QueryAccentColor color.Color
 	// MatchTextColor is the text of a row that a query word matched.
-	MatchTextColor lipgloss.Color
+	MatchTextColor color.Color
 	// ScreenSubtitleColor is the line under the title of a full screen.
-	ScreenSubtitleColor lipgloss.Color
+	ScreenSubtitleColor color.Color
 	// SectionHeadingColor is the title of a section of a full screen.
-	SectionHeadingColor lipgloss.Color
+	SectionHeadingColor color.Color
 	// SettingLabelColor is the name of a setting, in front of its value.
-	SettingLabelColor lipgloss.Color
+	SettingLabelColor color.Color
 	// ErrorTextColor is the text of a refused save on the issue editor.
-	ErrorTextColor lipgloss.Color
+	ErrorTextColor color.Color
 )
 
 // The styles built from the roles. Apply rebuilds them with the roles.
@@ -107,11 +108,11 @@ var (
 )
 
 func buildStyles() {
-	fg := func(c lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
-	button := func(bg lipgloss.Color) lipgloss.Style {
+	fg := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
+	button := func(bg color.Color) lipgloss.Style {
 		return lipgloss.NewStyle().Padding(0, 2).Bold(true).Foreground(ButtonTextColor).Background(bg)
 	}
-	focused := func(bg lipgloss.Color) lipgloss.Style {
+	focused := func(bg color.Color) lipgloss.Style {
 		return button(bg).Underline(true).UnderlineSpaces(true)
 	}
 
