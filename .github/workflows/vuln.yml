@@ -1,0 +1,40 @@
+name: Vulnerability scan
+
+# Runs govulncheck against the module and the pinned Go toolchain. Kept out of
+# the CI workflow and out of the required checks: a newly published advisory
+# turns this red without blocking unrelated merges, and the weekly run finds
+# advisories published while nothing is being merged.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install mise (handles Go toolchain via .mise.toml)
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          version: 2026.10.10
+
+      # govulncheck follows calls for one GOOS; scan each OS a release ships.
+      - name: govulncheck (linux)
+        run: mise run vuln
+
+      - name: govulncheck (darwin)
+        if: ${{ !cancelled() }}
+        run: mise run vuln
+        env:
+          GOOS: darwin

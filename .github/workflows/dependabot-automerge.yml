@@ -1,7 +1,8 @@
 name: Dependabot auto-merge
 
 # Auto-merges Dependabot PRs after CI succeeds, but ONLY for patch/minor bumps.
-# Major bumps stay open for manual review.
+# Major bumps, v0 minor bumps and pre-release or pseudo-version bumps stay open
+# for manual review.
 #
 # Trigger is `workflow_run` (rather than `pull_request`) for two reasons:
 #   1. Runs in the context of the default branch, so it gets a write-capable
@@ -63,17 +64,34 @@ jobs:
 
           # Dependabot PR titles include "Bump <pkg> from <from> to <to>" or
           # "build(deps): bump <pkg> from <from> to <to>" — parse both.
-          from=$(printf '%s' "$title" | grep -oE 'from [0-9]+(\.[0-9]+){0,2}' | head -1 | awk '{print $2}' || true)
-          to=$(printf '%s' "$title" | grep -oE 'to [0-9]+(\.[0-9]+){0,2}' | head -1 | awk '{print $2}' || true)
+          # Take the whole version token, so a pre-release or pseudo-version
+          # suffix (0.0.0-20261012121918-43427fdbad12) stays visible below.
+          from=$(printf '%s' "$title" | grep -oE 'from v?[0-9][^ ]*' | head -1 | awk '{print $2}' | sed 's/^v//' || true)
+          to=$(printf '%s' "$title" | grep -oE 'to v?[0-9][^ ]*' | head -1 | awk '{print $2}' | sed 's/^v//' || true)
           if [ -z "${from:-}" ] || [ -z "${to:-}" ]; then
             echo "Could not parse version bump from title: '$title'; leaving PR open"
             exit 0
           fi
 
+          case "$from$to" in
+            *-*)
+              echo "Pre-release or pseudo-version bump ($from → $to) for PR #$pr; leaving open for manual review"
+              exit 0
+              ;;
+          esac
+
+          # Under Go semver a v0 minor bump may break the API, so for major 0
+          # the minor counts as the breaking part.
           from_major=$(printf '%s' "$from" | cut -d. -f1)
           to_major=$(printf '%s' "$to" | cut -d. -f1)
+          from_minor=$(printf '%s' "$from" | cut -d. -f2)
+          to_minor=$(printf '%s' "$to" | cut -d. -f2)
           if [ "$from_major" != "$to_major" ]; then
             echo "Major bump ($from → $to) for PR #$pr; leaving open for manual review"
+            exit 0
+          fi
+          if [ "$from_major" = "0" ] && [ "$from_minor" != "$to_minor" ]; then
+            echo "v0 minor bump ($from → $to) for PR #$pr; leaving open for manual review"
             exit 0
           fi
 

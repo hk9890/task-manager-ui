@@ -11,7 +11,7 @@ signed keyless with cosign (`.sig` + `.pem`), and SLSA build provenance from
 the right asset. Version injection: [CODING.md](CODING.md) → Version/build
 metadata.
 
-Two settings that look wrong and are not: cosign is pinned to **v2.6.3** because
+Two settings that look wrong and are not: cosign is pinned to a **v2** release because
 v3 defaults to `--new-bundle-format`, which the `--output-signature` and
 `--output-certificate` flags in `.goreleaser.yaml` do not accept; and the
 provenance step keeps `continue-on-error` for user-owned **private** forks, where
@@ -83,8 +83,8 @@ that is now fixed. State the symptom; the cause belongs in the commit message.
 
 ## Local fallback
 
-When Actions can't be used. Needs `goreleaser` v2 in PATH
-(`go install github.com/goreleaser/goreleaser/v2@latest`), a clean tree on the
+When Actions can't be used. Needs in PATH the `goreleaser` that `release.yml` pins
+(`go install github.com/goreleaser/goreleaser/v2@<that version>`), a clean tree on the
 tagged commit, and `mise run ci` green there — that run substitutes for the CI
 provenance.
 

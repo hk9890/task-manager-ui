@@ -36,7 +36,7 @@ jobs:
         with:
           # Pin the mise binary to a known-good release rather than auto-floating
           # "latest"; bump deliberately.
-          version: 2026.5.15
+          version: 2026.10.10
 
       - name: Merge gate (linux)
         if: matrix.os == 'ubuntu-latest'
