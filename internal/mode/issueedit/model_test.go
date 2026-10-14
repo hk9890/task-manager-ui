@@ -552,14 +552,21 @@ func TestPasteKeepsTheTextHandlingOfTheWidgets(t *testing.T) {
 
 	m := open(t, Options{Kind: KindCreate})
 	press(t, m, paste)
-	if got, want := m.values().Title, "one two  three"; got != want {
+	if got, want := m.values().Title, "one two three"; got != want {
 		t.Errorf("a paste into the title gives %q, want %q", got, want)
 	}
 
 	m = open(t, Options{Kind: KindCommentAdd})
 	press(t, m, paste)
-	if got, want := m.values().Text, "one    two\n\nthree"; got != want {
+	if got, want := m.values().Text, "one    two\nthree"; got != want {
 		t.Errorf("a paste into the text gives %q, want %q", got, want)
+	}
+
+	m = open(t, Options{Kind: KindCreate})
+	m.setFocus(uiissueedit.FieldText)
+	press(t, m, testui.Paste("one\r\ntwo"))
+	if got, want := m.values().Text, "one\ntwo"; got != want {
+		t.Errorf("a paste into the description gives %q, want %q", got, want)
 	}
 }
 
