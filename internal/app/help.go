@@ -116,7 +116,8 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		}},
 		{Title: "Selection menu", Entries: []helpscreen.Entry{
 			{Key: "up/down", Desc: "the entry above / below"},
-			{Key: "enter", Desc: "run the entry; a click on it does the same"},
+			{Key: "enter", Desc: "run the entry"},
+			{Key: "click", Desc: "run the entry under it"},
 			{Key: shell(config.ShellActionEscape), Desc: "close the menu"},
 			{Key: "click outside", Desc: "close the menu, and do nothing else"},
 		}},

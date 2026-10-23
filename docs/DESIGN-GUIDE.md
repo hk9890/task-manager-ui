@@ -651,7 +651,7 @@ The selection menu is the one exception: no key selects text, so no key reaches 
     configuration screen, the issue editor, help and under a dialog: each would leave the surface
     with work on it.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
-    outside closes it. A click outside does nothing else. Every other key, paste and mouse event is
+    outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
     dropped while it is up, and a resize closes it.
 
 ## Overlays
