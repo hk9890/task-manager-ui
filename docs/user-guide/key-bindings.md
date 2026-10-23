@@ -326,7 +326,7 @@ instead.
   it. A terminal or multiplexer that ignores OSC 52 leaves the clipboard as it
   was: **hold `shift` and drag** there, and copy with the terminal.
 - The menu offers to quote the text in a new comment on the selected issue, to
-  search the store for it, to copy it again, and to close. `up`/`down` and
+  search the store for it, and to close. `up`/`down` and
   `enter` or a click choose; `esc` or a click outside closes it, and the click
   outside does nothing else. Quote and search are off on screens where they
   would drop work in progress, such as the issue editor.

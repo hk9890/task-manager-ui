@@ -639,7 +639,7 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   it. `selectmenu.Place` moves it left of or above the cell where it would leave the screen.
   - Its title says sent, not copied: OSC 52 has no reply.
   - It offers a quote of the text in a new comment on the selected issue, a store search for the
-    text on one line, the copy again, and close. Quote and search are off on the picker, the
+    text on one line, and close. Quote and search are off on the picker, the
     configuration screen, the issue editor, help and under a dialog: each would leave the surface
     with work on it.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click

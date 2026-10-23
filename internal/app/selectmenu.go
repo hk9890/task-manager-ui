@@ -12,7 +12,6 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/overlay"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
-	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
 // selectionMenu is the menu a finished drag opens beside the release cell.
@@ -71,7 +70,6 @@ func (m *Model) selectionActions() []selectionAction {
 			return nil
 		}},
 		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !onStore}, run: (*Model).searchSelection},
-		{entry: selectmenu.Entry{Label: "Copy again"}, run: (*Model).copyAgain},
 		{
 			entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
 			run:   func(*Model, string) tea.Cmd { return nil },
@@ -163,11 +161,6 @@ func (m Model) runSelectionAction(entry int) (tea.Model, tea.Cmd) {
 	text := m.selMenu.text
 	m.selMenu = nil
 	return m, action.run(&m, text)
-}
-
-func (m *Model) copyAgain(text string) tea.Cmd {
-	toast := m.showToast(fmt.Sprintf("Sent %d characters to the clipboard again", sentCount(text)), toaster.StyleInfo)
-	return batchCmds(m.copyText(text), toast)
 }
 
 // quoteInComment opens a new comment on issue with the text in it as a
