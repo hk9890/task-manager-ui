@@ -83,6 +83,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionLaunchNvim), Desc: "launch nvim on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchOpencode), Desc: "launch opencode on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchShell), Desc: "launch the shell command on the issue, in the background"},
+			{Key: shell(config.ShellActionLaunchAgent), Desc: "start a revier agent that implements the issue, in the background"},
 		}},
 		{Title: "Menu bar and stores", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionStorePicker), Desc: "list the task stores on this machine and open one"},

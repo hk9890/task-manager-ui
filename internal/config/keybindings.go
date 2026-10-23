@@ -31,6 +31,7 @@ const (
 	ShellActionLaunchNvim     = "launch_nvim"
 	ShellActionLaunchOpencode = "launch_opencode"
 	ShellActionLaunchShell    = "launch_shell_command"
+	ShellActionLaunchAgent    = "launch_agent"
 	ShellActionStorePicker    = "open_store_picker"
 	ShellActionOpenSearch     = "open_search"
 	ShellActionOpenConfig     = "open_config"
@@ -110,6 +111,7 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionLaunchNvim:     {"alt+v"},
 			ShellActionLaunchOpencode: {"alt+p"},
 			ShellActionLaunchShell:    {"alt+l"},
+			ShellActionLaunchAgent:    {"alt+i"},
 			ShellActionStorePicker:    {"alt+s"},
 			ShellActionOpenSearch:     {"alt+f"},
 			ShellActionOpenConfig:     {"alt+c"},
@@ -415,6 +417,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionLaunchNvim,
 			ShellActionLaunchOpencode,
 			ShellActionLaunchShell,
+			ShellActionLaunchAgent,
 			ShellActionStorePicker,
 			ShellActionOpenSearch,
 			ShellActionOpenConfig,

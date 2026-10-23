@@ -64,6 +64,7 @@ const (
 	LaunchActionNvim         = "nvim"
 	LaunchActionOpencode     = "opencode"
 	LaunchActionShellCommand = "shell-command"
+	LaunchActionAgent        = "agent"
 )
 
 // LaunchableActions is that set as a list. The keybinding action set is fixed
@@ -73,6 +74,7 @@ var LaunchableActions = []string{
 	LaunchActionNvim,
 	LaunchActionOpencode,
 	LaunchActionShellCommand,
+	LaunchActionAgent,
 }
 
 // LauncherDefinitions converts the configured launcher definitions into the

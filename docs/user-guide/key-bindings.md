@@ -29,8 +29,9 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
+- `alt+i` — launch `agent` action in detail mode: a new revier agent is prompted to implement the issue
 
-`alt+v`, `alt+p` and `alt+l` run in the store's project directory. When that
+`alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
 message, and the detail footer reads `launchers off`.
 

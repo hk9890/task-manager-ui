@@ -8,7 +8,7 @@ import (
 func TestDefault_LauncherDefinitions(t *testing.T) {
 	cfg := Default()
 
-	want := []string{"nvim", "opencode", "shell-command"}
+	want := []string{"nvim", "opencode", "shell-command", "agent"}
 	if len(cfg.Launcher.Definitions) != len(want) {
 		t.Fatalf("expected %d default launcher definitions, got %d", len(want), len(cfg.Launcher.Definitions))
 	}

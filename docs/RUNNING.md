@@ -158,7 +158,7 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 - **Comments** — in detail, `right` from Content reaches the comments; `enter` edits the selected
   one, `alt+d` asks before it deletes, and the `add`, `edit` and `delete` buttons do the same on a
   click.
-- **External tools** — `alt+v`, `alt+p` and `alt+l` from detail leave the app alive with the
+- **External tools** — `alt+v`, `alt+p`, `alt+l` and `alt+i` from detail leave the app alive with the
   expected toast.
 
 ## Behaviours that need a real terminal

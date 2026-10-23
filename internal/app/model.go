@@ -1127,6 +1127,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionShellCommand))
+	case m.keys.Match(config.ShellContext, config.ShellActionLaunchAgent, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
 	}
 
 	return m, modeCmd
