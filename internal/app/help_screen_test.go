@@ -132,7 +132,7 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 			entries[section.Title+": "+entry.Desc] = entry.Key
 		}
 	}
-	want := "Moving and opening, Filter and search, Tabs, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse"
+	want := "Moving and opening, Filter and search, Tabs, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse, Selection menu"
 	if got := strings.Join(titles, ", "); got != want {
 		t.Errorf("sections:\n got %s\nwant %s", got, want)
 	}
@@ -144,19 +144,19 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 		"Tabs: next tab: Board, Docs":                                           "tab/ctrl+pgdown",
 		"Issue: close the selected issue: opens the editor on the close reason": "delete",
 		"Issue editor: save": "ctrl+s",
-		"Issue editor: the next / previous field or button":                                 "tab / shift+tab",
-		"Issue editor: leave without a save":                                                "esc",
-		"Detail and launchers: launch nvim on the issue, in the background":                 "alt+v",
-		"Menu bar and stores: open the configuration screen: the theme and the glyph set":   "alt+c",
-		"Menu bar and stores: show and hide this screen":                                    "alt+h",
-		"Mouse: select a box of text; letting go sends it to the terminal clipboard":        "drag",
-		"Filter and search: in the search, switch between open issues and all of them":      "ctrl+t",
-		"Filter and search: filter the rows of a tab by title or ID; every word must match": "type",
-		"Dialogs: the next field or button":                                                 "tab/down",
-		"Dialogs: confirm, while a button has the focus":                                    "y",
-		"Dialogs: cancel the dialog":                                                        "esc",
-		"Configuration screen: the setting above / below":                                   "up / down",
-		"Configuration screen: the value before / after the one shown":                      "left / right",
+		"Issue editor: the next / previous field or button":                                           "tab / shift+tab",
+		"Issue editor: leave without a save":                                                          "esc",
+		"Detail and launchers: launch nvim on the issue, in the background":                           "alt+v",
+		"Menu bar and stores: open the configuration screen: the theme and the glyph set":             "alt+c",
+		"Menu bar and stores: show and hide this screen":                                              "alt+h",
+		"Mouse: select a box of text; letting go sends it to the terminal clipboard and opens a menu": "drag",
+		"Filter and search: in the search, switch between open issues and all of them":                "ctrl+t",
+		"Filter and search: filter the rows of a tab by title or ID; every word must match":           "type",
+		"Dialogs: the next field or button":                                                           "tab/down",
+		"Dialogs: confirm, while a button has the focus":                                              "y",
+		"Dialogs: cancel the dialog":                                                                  "esc",
+		"Configuration screen: the setting above / below":                                             "up / down",
+		"Configuration screen: the value before / after the one shown":                                "left / right",
 	} {
 		if entries[entry] != key {
 			t.Errorf("%q has the key %q, want %q", entry, entries[entry], key)

@@ -584,6 +584,7 @@ open until the store is created, so a rejected name or prefix is corrected in pl
 ## The mouse
 
 The mouse repeats what a key already does; it adds no behaviour of its own and no config surface.
+The selection menu is the one exception: no key selects text, so no key reaches what it offers.
 
 - `Model.handleMouse` (`internal/app/mouse.go`) routes every `pointer`, which arrives in
   screen coordinates ([The screen margin](#the-screen-margin)). It routes in the keyboard's
@@ -631,8 +632,31 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release sends the box
   to the clipboard with OSC 52. A drag that runs into the margin stops the box at the screen's
-  edge (`mouseHeld`). The toast says sent, not copied: OSC 52 has no reply. While the box is up every other mouse event and every key
-  but Escape and quit is dropped — each would change the screen the box stands over.
+  edge (`mouseHeld`). While the box is up every other mouse event and every key
+  but Escape and quit is dropped — each would change the screen the box stands over. A resize
+  that changes the screen's size ends the drag with no copy: the box stands over a screen of the
+  old size. One that changes the margin alone does not (`resizesScreen`).
+- The drag freezes the screen without the toast (`Model.frozenScreen`), and `Model.screen` draws
+  the toast live over the frozen screen: its dismiss timer runs on, so a toast that came meanwhile
+  would otherwise go unseen. The selection menu is drawn over the toast, so a click lands on what
+  is drawn.
+- The release opens the selection menu (`internal/app/selectmenu.go`, drawn by
+  `internal/ui/selectmenu`) beside the release cell, over the frozen screen with the box still on
+  it. `selectmenu.Place` puts it on the side of the cell away from the press, so it leaves the box
+  clear, and on the other side where it would leave the screen.
+  - Its title says sent, not copied: OSC 52 has no reply.
+  - It offers a quote of the text in a new comment on the selected issue, a store search for the
+    text on one line, and close. The quote goes to the issue its label names, taken when the menu
+    opens. Quote and search read the text without the screen's chrome (`quotable`): the border
+    rows at the top and the bottom, the leading columns that hold a side border `│`, the gutter or
+    a space on every line, and the trailing side borders. A tree or a table drawn in the text keeps
+    its glyphs; the clipboard keeps the box as drawn. The search runs once, at once
+    (`search.Model.SetQuery`). Quote and search are off on the picker, the configuration screen,
+    the issue editor, help and under a dialog, where each would leave the surface with work on it,
+    and for a box of chrome alone.
+  - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
+    outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
+    dropped while it is up, and a resize that changes the screen's size closes it.
 
 ## Overlays
 
@@ -641,7 +665,7 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   helpers corrupt already-rendered colour, so they are not an alternative here.
 - A modal is centred (`overlay.Center`); a toast is bottom-centred with `PadY: 1`
   (`overlay.Bottom`). Both are placed on the screen, so the margin stays blank around them.
-- The action modal and the toast are the only overlays. Help is a full screen
+- The action modal, the toast and the selection menu are the only overlays. Help is a full screen
   ([Surfaces above the shell](#surfaces-above-the-shell)).
 - The action modal carries two things: the store form of the picker (`Model.openStoreForm`) and
   the yes or no before a comment is deleted (`Model.confirmCommentDelete`), which has no input,
@@ -732,4 +756,6 @@ The mouse repeats what a key already does; it adds no behaviour of its own and n
   at the width (`spliceTables`), because glamour sizes the columns. Where glamour cut a cell to
   make the table fit, the rows wrap as text instead.
 - Text that is not markdown wraps through `markdown.RenderPlain`, which keeps the line breaks and
-  the indent of the source. A log-like comment body is drawn with it.
+  the indent of the source. A log-like comment body is drawn with it. A line that starts with `>`
+  is a Markdown quote, not a log line, so a comment that quotes a selection is drawn as markdown
+  (`isLogLikeComment`).

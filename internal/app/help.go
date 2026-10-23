@@ -111,8 +111,15 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
 			{Key: "second click", Desc: "open the row"},
 			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the text of the issue editor and this screen"},
-			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard"},
+			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
+		}},
+		{Title: "Selection menu", Entries: []helpscreen.Entry{
+			{Key: "up/down", Desc: "the entry above / below"},
+			{Key: "enter", Desc: "run the entry"},
+			{Key: "click", Desc: "run the entry under it"},
+			{Key: shell(config.ShellActionEscape), Desc: "close the menu"},
+			{Key: "click outside", Desc: "close the menu, and do nothing else"},
 		}},
 	}
 }

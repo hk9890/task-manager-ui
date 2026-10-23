@@ -154,7 +154,12 @@ func (m *Model) SetEditPause(pause time.Duration) {
 }
 
 // Init runs the first search. With nothing typed it lists the open issues.
+// A search already in flight is the first one: SetQuery can start it before
+// the search is first shown.
 func (m *Model) Init() tea.Cmd {
+	if m.loading {
+		return nil
+	}
 	return m.search(landFirst)
 }
 
@@ -398,6 +403,15 @@ func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {
 		return false, nil
 	}
 	return true, m.search(landOnIssue)
+}
+
+// SetQuery puts text in the query in place of what it holds and searches
+// for it at once, with no edit pause. It supersedes the search in flight.
+func (m *Model) SetQuery(text string) tea.Cmd {
+	m.heldOpen = false
+	m.query.Clear()
+	m.query.Paste(text)
+	return m.search(landFirst)
 }
 
 func (m *Model) clampSelection() {

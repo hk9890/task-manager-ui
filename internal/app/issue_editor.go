@@ -115,10 +115,18 @@ func (m *Model) openCommentAdd() tea.Cmd {
 	if selection == nil || selection.Issue.ID == "" {
 		return m.showToast("No selected issue to comment on", toaster.StyleWarn)
 	}
-	m.showEditor(editorTarget{kind: issueeditmode.KindCommentAdd, issueID: selection.Issue.ID}, issueeditmode.Options{
-		Subtitle: selection.Issue.Title,
-	})
+	m.openCommentOn(selection.Issue, "")
 	return nil
+}
+
+// openCommentOn opens the editor for a new comment on issue, with text
+// already in it and the cursor after it.
+func (m *Model) openCommentOn(issue domain.IssueSummary, text string) {
+	m.showEditor(editorTarget{kind: issueeditmode.KindCommentAdd, issueID: issue.ID}, issueeditmode.Options{
+		Subtitle:  issue.Title,
+		Values:    issueeditmode.Values{Text: text},
+		TextAtEnd: true,
+	})
 }
 
 // openCommentEdit opens the editor with the text field alone, on the comment
@@ -345,7 +353,9 @@ func saveEditor(repo repository.Repository, target editorTarget, before, after i
 		})
 		return editorSavedMsg{createdID: result.IssueID, wrote: err == nil, err: err}
 	case issueeditmode.KindCommentAdd:
-		err := repo.AddComment(ctx, target.issueID, domain.AddCommentInput{Body: after.Text})
+		// A quote opens with an empty line under it for the cursor; a comment
+		// saved without more text does not keep it.
+		err := repo.AddComment(ctx, target.issueID, domain.AddCommentInput{Body: strings.TrimRight(after.Text, "\n")})
 		return editorSavedMsg{wrote: err == nil, err: err}
 	case issueeditmode.KindCommentEdit:
 		if after.Text == before.Text {
