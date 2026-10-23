@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
-	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
 // A drag of the left button selects a box of the screen and copies its text.
@@ -140,10 +138,10 @@ func (m Model) mouseHeld(msg pointer) (next Model, cmd tea.Cmd, handled bool) {
 		if strings.TrimSpace(text) == "" {
 			return m, nil, true
 		}
-		count := len([]rune(strings.ReplaceAll(text, "\n", "")))
-		// OSC 52 has no reply: the toast says what was sent, not that it arrived.
-		toast := m.showToast(fmt.Sprintf("Sent %d characters to the clipboard; shift+drag if not copied", count), toaster.StyleInfo)
-		return m, batchCmds(m.copyText(text), toast), true
+		// OSC 52 has no reply: the menu says what was sent, not that it
+		// arrived.
+		m.openSelectionMenu(selected, text, at)
+		return m, m.copyText(text), true
 	}
 	return m, nil, m.sel.active
 }

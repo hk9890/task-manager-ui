@@ -111,12 +111,20 @@ func (m *Model) loadIssueEditor(loaded editorLoadedMsg, issueID string) tea.Cmd 
 // openCommentAdd opens the editor with the text field alone, for a new
 // comment on the selected issue.
 func (m *Model) openCommentAdd() tea.Cmd {
+	return m.openCommentWith("")
+}
+
+// openCommentWith opens the editor for a new comment on the selected issue,
+// with text already in it and the cursor after it.
+func (m *Model) openCommentWith(text string) tea.Cmd {
 	selection := m.currentSelection()
 	if selection == nil || selection.Issue.ID == "" {
 		return m.showToast("No selected issue to comment on", toaster.StyleWarn)
 	}
 	m.showEditor(editorTarget{kind: issueeditmode.KindCommentAdd, issueID: selection.Issue.ID}, issueeditmode.Options{
-		Subtitle: selection.Issue.Title,
+		Subtitle:  selection.Issue.Title,
+		Values:    issueeditmode.Values{Text: text},
+		TextAtEnd: true,
 	})
 	return nil
 }

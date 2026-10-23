@@ -67,6 +67,9 @@ type Options struct {
 	Types    []string
 	// Close steps the status to closed and puts the focus on the reason.
 	Close bool
+	// TextAtEnd opens the text with the cursor after its last character, to
+	// write on from there.
+	TextAtEnd bool
 }
 
 // SubmitMsg asks the shell to write. Before is what the screen opened with, as
@@ -149,9 +152,14 @@ func (m *Model) Open(opts Options) {
 	m.setFocus(focus)
 	m.resize()
 
-	// The text opens on its first character. The widget moves its window to
-	// the cursor only in Update, so the move is a key.
-	m.moveText(tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModCtrl}, 1)
+	// The text opens on its first character, or its last with TextAtEnd. The
+	// widget moves its window to the cursor only in Update, so the move is a
+	// key.
+	if opts.TextAtEnd {
+		m.moveText(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl}, 1)
+	} else {
+		m.moveText(tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModCtrl}, 1)
+	}
 }
 
 // options is the values a stepped field steps through and the index of value

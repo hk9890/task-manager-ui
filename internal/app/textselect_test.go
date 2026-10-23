@@ -65,12 +65,11 @@ func TestDragSelectsABoxOfTheScreenAndCopiesIt(t *testing.T) {
 		!strings.HasPrefix(lines[0], "progress-first") || !strings.HasSuffix(lines[len(lines)-1], "progress-second") {
 		t.Fatalf("copied %q, want the %d lines of the box from one title to the next", (*copied)[0], want)
 	}
-	// OSC 52 has no reply, so the toast says what was sent and names the way
-	// that needs no clipboard support — whole, in an 80-column terminal too.
-	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 30})
-	toast := testui.View(m)
-	if strings.Contains(toast, "Copied") || !strings.Contains(toast, "Sent") || !strings.Contains(toast, "shift+drag if not copied") {
-		t.Fatalf("the toast must say the text was sent and name shift+drag, without claiming a copy:\n%s", toast)
+	// OSC 52 has no reply, so the menu the release opens says what was sent
+	// and names the way that needs no clipboard support.
+	menu := testui.View(m)
+	if strings.Contains(menu, "Copied") || !strings.Contains(menu, "Sent") || !strings.Contains(menu, "shift+drag if not copied") {
+		t.Fatalf("the menu must say the text was sent and name shift+drag, without claiming a copy:\n%s", menu)
 	}
 }
 

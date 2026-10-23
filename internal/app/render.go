@@ -87,6 +87,9 @@ func (m Model) screen() string {
 	if m.sel.active {
 		return m.sel.view()
 	}
+	if m.selMenu != nil {
+		return m.selMenu.view(m.width, m.height)
+	}
 
 	if m.fatalErrTitle != "" {
 		return fatalerror.Render(fatalerror.State{
