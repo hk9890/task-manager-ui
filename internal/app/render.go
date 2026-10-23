@@ -82,24 +82,22 @@ func (m Model) frame() string {
 }
 
 // screen renders the root shell at the size the margin leaves.
+//
+// A drag and the selection menu stand over the screen as it was when the drag
+// began, and the toast is drawn live over them: its timer runs on, so a toast
+// that came during the drag or under the menu would otherwise go unseen.
 func (m Model) screen() string {
-	// A drag selects text on the screen as it was when the drag began.
 	if m.sel.active {
-		return m.sel.view()
+		return m.withToast(m.sel.view())
 	}
 
 	if m.fatalErrTitle != "" {
-		return fatalerror.Render(fatalerror.State{
-			Title:  m.fatalErrTitle,
-			Body:   m.fatalErrBody,
-			Width:  m.width,
-			Height: m.height,
-		})
+		return m.fatalScreen()
 	}
 	// The startup error comes first: with it up, update takes only a resize
 	// and quit, so a menu drawn over it could never be closed.
 	if m.selMenu != nil {
-		return m.selMenu.view(m.width, m.height)
+		return m.withToast(m.selMenu.view(m.width, m.height))
 	}
 
 	view := m.renderSurface()
@@ -107,14 +105,41 @@ func (m Model) screen() string {
 	// Every overlay is applied in one place, for whatever surface is underneath.
 	// An overlay that renders for the shell and not for the picker is still live
 	// and still holds the keyboard — invisible, and with no way out.
-	if m.toast.Visible() {
-		view = m.toast.Overlay(view, m.width, m.height)
-	}
+	view = m.withToast(view)
 	if m.showActionModal {
 		view = m.actionModal.Overlay(view)
 	}
 
 	return view
+}
+
+// frozenScreen is the screen a drag freezes: the screen without the toast,
+// which screen draws live over the freeze.
+func (m Model) frozenScreen() string {
+	if m.fatalErrTitle != "" {
+		return m.fatalScreen()
+	}
+	view := m.renderSurface()
+	if m.showActionModal {
+		view = m.actionModal.Overlay(view)
+	}
+	return view
+}
+
+func (m Model) fatalScreen() string {
+	return fatalerror.Render(fatalerror.State{
+		Title:  m.fatalErrTitle,
+		Body:   m.fatalErrBody,
+		Width:  m.width,
+		Height: m.height,
+	})
+}
+
+func (m Model) withToast(view string) string {
+	if !m.toast.Visible() {
+		return view
+	}
+	return m.toast.Overlay(view, m.width, m.height)
 }
 
 // renderSurface renders whatever surface is active, without overlays.

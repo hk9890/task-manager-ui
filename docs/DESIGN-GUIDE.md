@@ -633,13 +633,21 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   reverse-video box over the screen as it was when the drag began, and the release sends the box
   to the clipboard with OSC 52. A drag that runs into the margin stops the box at the screen's
   edge (`mouseHeld`). While the box is up every other mouse event and every key
-  but Escape and quit is dropped — each would change the screen the box stands over.
+  but Escape and quit is dropped — each would change the screen the box stands over. A resize
+  ends the drag with no copy: the box stands over a screen of the old size.
+- The drag freezes the screen without the toast (`Model.frozenScreen`), and `Model.screen` draws
+  the toast live over the box and over the selection menu: its dismiss timer runs on, so a toast
+  that came meanwhile would otherwise go unseen.
 - The release opens the selection menu (`internal/app/selectmenu.go`, drawn by
   `internal/ui/selectmenu`) beside the release cell, over the frozen screen with the box still on
   it. `selectmenu.Place` moves it left of or above the cell where it would leave the screen.
   - Its title says sent, not copied: OSC 52 has no reply.
   - It offers a quote of the text in a new comment on the selected issue, a store search for the
-    text on one line, and close. Quote and search are off on the picker, the
+    text on one line, and close. The quote goes to the issue its label names, taken when the menu
+    opens. Quote and search read the text without the screen's chrome (`quotable`): the leading
+    columns that hold a border, the gutter or a space on every line, and the trailing borders; the
+    clipboard keeps the box as drawn. The search runs once, at once (`search.Model.SetQuery`).
+    Quote and search are off on the picker, the
     configuration screen, the issue editor, help and under a dialog: each would leave the surface
     with work on it.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click

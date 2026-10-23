@@ -330,6 +330,9 @@ instead.
   `enter` or a click choose; `esc` or a click outside closes it, and the click
   outside does nothing else. Quote and search are off on screens where they
   would drop work in progress, such as the issue editor.
+- Quote and search leave out the pane borders, the selection bar and the
+  indent the screen adds; the clipboard gets the box as drawn. A resize
+  during a drag drops the box and copies nothing.
 
 ## Notes
 

@@ -119,7 +119,7 @@ func (m Model) mouseHeld(msg pointer) (next Model, cmd tea.Cmd, handled bool) {
 			if max(abs(at.x-m.press.x), abs(at.y-m.press.y)) < dragFrom {
 				return m, nil, true
 			}
-			m.sel = textSelection{active: true, from: *m.press, screen: m.screen()}
+			m.sel = textSelection{active: true, from: *m.press, screen: m.frozenScreen()}
 		}
 		m.sel.to = at
 		return m, nil, true

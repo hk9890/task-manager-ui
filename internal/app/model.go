@@ -601,15 +601,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return next.handleMouse(event)
 	}
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		// A drag and the menu stand over a screen of the old size: the drag
+		// ends without a copy, and the menu closes.
+		m.press, m.sel, m.selMenu = nil, textSelection{}, nil
+	}
 	if m.selMenu != nil {
 		switch msg := msg.(type) {
 		case tea.KeyPressMsg:
 			return m.selectionMenuKey(msg)
 		case tea.PasteMsg:
 			return m, nil
-		case tea.WindowSizeMsg:
-			// The menu stands over a screen of the old size.
-			m.selMenu = nil
 		}
 	}
 	if m.sel.active {

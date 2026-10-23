@@ -353,7 +353,9 @@ func saveEditor(repo repository.Repository, target editorTarget, before, after i
 		})
 		return editorSavedMsg{createdID: result.IssueID, wrote: err == nil, err: err}
 	case issueeditmode.KindCommentAdd:
-		err := repo.AddComment(ctx, target.issueID, domain.AddCommentInput{Body: after.Text})
+		// A quote opens with an empty line under it for the cursor; a comment
+		// saved without more text does not keep it.
+		err := repo.AddComment(ctx, target.issueID, domain.AddCommentInput{Body: strings.TrimRight(after.Text, "\n")})
 		return editorSavedMsg{wrote: err == nil, err: err}
 	case issueeditmode.KindCommentEdit:
 		if after.Text == before.Text {

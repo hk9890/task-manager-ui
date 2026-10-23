@@ -12,6 +12,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/overlay"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // selectionMenu is the menu a finished drag opens beside the release cell.
@@ -166,22 +167,71 @@ func (m Model) runSelectionAction(entry int) (tea.Model, tea.Cmd) {
 // quoteInComment opens a new comment on issue with the text in it as a
 // Markdown quote, and the cursor on the line after it.
 func (m *Model) quoteInComment(issue domain.IssueSummary, text string) {
-	lines := strings.Split(text, "\n")
+	lines := quotable(text)
 	for i, line := range lines {
 		lines[i] = strings.TrimRight("> "+line, " ")
 	}
 	m.openCommentOn(issue, strings.Join(lines, "\n")+"\n\n")
 }
 
-// searchSelection opens the store search with the text as its query, on one
-// line.
-func (m *Model) searchSelection(text string) tea.Cmd {
-	open := m.openSearch()
-	if m.active != mode.Search {
-		return open
+// quotable is the text of a selection without the screen's chrome around it:
+// the columns at the start that hold a border, the selection gutter or a
+// space on every line, the borders and spaces at the end of each line, and
+// the lines left empty at the top and the bottom. A line keeps the indent it
+// has over the others. The clipboard gets the box as it is drawn.
+func quotable(text string) []string {
+	lines := strings.Split(text, "\n")
+	cells := make([][]rune, len(lines))
+	for i, line := range lines {
+		cells[i] = []rune(strings.TrimRightFunc(line, isBorder))
 	}
-	_, clear := m.search.ClearQuery()
-	return batchCmds(open, m.scoped(clear), m.scoped(m.search.Update(tea.PasteMsg{Content: strings.Join(strings.Fields(text), " ")})))
+	left := 0
+	for chromeColumn(cells, left) {
+		left++
+	}
+	var out []string
+	for _, line := range cells {
+		out = append(out, string(line[min(left, len(line)):]))
+	}
+	for len(out) > 0 && out[0] == "" {
+		out = out[1:]
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return out
+}
+
+// chromeColumn reports whether column col is chrome on every line that
+// reaches it, and some line does. Each cell before col is chrome, one cell
+// wide, so col counts runes and cells alike.
+func chromeColumn(lines [][]rune, col int) bool {
+	reached := false
+	for _, line := range lines {
+		if col >= len(line) {
+			continue
+		}
+		if !isBorder(line[col]) && string(line[col]) != styles.Glyphs.Cursor {
+			return false
+		}
+		reached = true
+	}
+	return reached
+}
+
+// isBorder reports a space, or a box-drawing or block glyph: what the panes
+// draw their borders and the selection bar with.
+func isBorder(r rune) bool {
+	return r == ' ' || (r >= '─' && r <= '▟')
+}
+
+// searchSelection opens the store search with the text as its query, on one
+// line. The query is set before the search opens, so the one search it runs
+// is for the text: the first open's Init and the open's auto refresh both
+// leave a search in flight alone.
+func (m *Model) searchSelection(text string) tea.Cmd {
+	search := m.scoped(m.search.SetQuery(strings.Join(strings.Fields(strings.Join(quotable(text), " ")), " ")))
+	return batchCmds(search, m.openSearch())
 }
 
 // sentCount is the characters of a selection, its line breaks not counted.
